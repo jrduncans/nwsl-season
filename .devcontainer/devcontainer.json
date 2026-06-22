@@ -1,0 +1,43 @@
+{
+  "name": "NWSL season explorer",
+  "image": "mcr.microsoft.com/devcontainers/go:1.26-bookworm",
+  "runArgs": [
+    "--init",
+    "--name=nwsl-season",
+    "--label=dev.orbstack.http-port=8080"
+  ],
+  "forwardPorts": [
+    8080
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "NWSL season explorer",
+      "onAutoForward": "notify"
+    }
+  },
+  "containerEnv": {
+    "NWSL_HTTP_ADDR": ":8080",
+    "NWSL_DATA_DIR": "${containerWorkspaceFolder}/data"
+  },
+  "mounts": [
+    "source=nwsl-season-go-pkg,target=/go/pkg,type=volume",
+    "source=nwsl-season-go-build-cache,target=/home/vscode/.cache/go-build,type=volume"
+  ],
+  "postCreateCommand": "sudo chown -R vscode:vscode /go/pkg /home/vscode/.cache/go-build && go mod download",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "go.toolsManagement.autoUpdate": true,
+        "go.useLanguageServer": true,
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit"
+        }
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}

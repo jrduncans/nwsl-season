@@ -39,3 +39,20 @@ go vet ./...
 
 No ASA request or SQLite database is created yet. Those are the next two
 learning phases.
+
+## Dev container
+
+With Docker running and a dev-container-compatible editor installed, open this
+repository in its container. The container includes Go 1.26, the Go editor
+extension, persistent module and build caches, and forwards port 8080.
+
+Once the container is ready:
+
+```sh
+go test ./...
+go run ./cmd/server
+```
+
+Then visit <http://localhost:8080>. When Docker is provided by OrbStack, the
+server is also available at <https://nwsl-season.orb.local>. Runtime data is
+written to the repository's ignored `data/` directory.
