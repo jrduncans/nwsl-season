@@ -1,0 +1,13 @@
+# Local runtime data
+data/
+
+# Local configuration
+.env
+
+# Build and test output
+bin/
+coverage.out
+work/
+
+# macOS
+.DS_Store
