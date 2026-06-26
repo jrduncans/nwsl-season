@@ -39,6 +39,27 @@ go fmt ./...
 go vet ./...
 ```
 
+Or use the Makefile wrappers:
+
+```sh
+make test
+make fmt
+make vet
+```
+
+To build the server for a Linux virtual machine:
+
+```sh
+make build-linux-server
+```
+
+That writes `bin/nwsl-season-server-linux-arm64`, suitable for the target ARM64
+Linux VM. For an x86_64 VM, run:
+
+```sh
+make build-linux-server TARGET_ARCH=amd64
+```
+
 No ASA request or SQLite database is created yet. Those are the next two
 learning phases.
 
