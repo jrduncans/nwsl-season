@@ -1,9 +1,15 @@
 package config
 
-import "os"
+import (
+	"net"
+	"os"
+	"strings"
+)
 
 const (
-	defaultHTTPAddr = ":8080"
+	defaultHTTPHost = "127.0.0.1"
+	defaultHTTPPort = "8080"
+	defaultHTTPAddr = defaultHTTPHost + ":" + defaultHTTPPort
 	defaultDataDir  = "data"
 )
 
@@ -16,9 +22,19 @@ type Config struct {
 // FromEnvironment reads configuration, applying local-development defaults.
 func FromEnvironment() Config {
 	return Config{
-		HTTPAddr: valueOrDefault("NWSL_HTTP_ADDR", defaultHTTPAddr),
+		HTTPAddr: httpAddrFromEnvironment(),
 		DataDir:  valueOrDefault("NWSL_DATA_DIR", defaultDataDir),
 	}
+}
+
+func httpAddrFromEnvironment() string {
+	if value := os.Getenv("NWSL_HTTP_ADDR"); value != "" {
+		return value
+	}
+
+	host := valueOrDefault("HOST", defaultHTTPHost)
+	port := strings.TrimPrefix(valueOrDefault("PORT", defaultHTTPPort), ":")
+	return net.JoinHostPort(host, port)
 }
 
 func valueOrDefault(name, fallback string) string {

@@ -26,7 +26,9 @@ Configuration:
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `NWSL_HTTP_ADDR` | `:8080` | Address on which the server listens |
+| `NWSL_HTTP_ADDR` | `127.0.0.1:8080` | Full address on which the server listens |
+| `HOST` | `127.0.0.1` | Host used to build the listen address when `NWSL_HTTP_ADDR` is unset |
+| `PORT` | `8080` | Port used to build the listen address when `NWSL_HTTP_ADDR` is unset |
 | `NWSL_DATA_DIR` | `data` | Future home of the SQLite cache |
 
 ## Useful commands
