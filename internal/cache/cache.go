@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/standings"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -323,6 +325,73 @@ func (c *DB) GameByID(ctx context.Context, id string) (Game, error) {
 	return game, nil
 }
 
+// StandingsInputs loads teams and games for a season and stage.
+func (c *DB) StandingsInputs(ctx context.Context, season, stage string) ([]standings.Team, []standings.Game, error) {
+	teams, err := c.standingsTeams(ctx, season, stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	games, err := c.standingsGames(ctx, season, stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	return teams, games, nil
+}
+
+func (c *DB) standingsTeams(ctx context.Context, season, stage string) ([]standings.Team, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT DISTINCT
+		t.asa_team_id, t.name, t.short_name, t.abbreviation
+		FROM teams t
+		JOIN games g ON g.home_team_id = t.asa_team_id OR g.away_team_id = t.asa_team_id
+		WHERE g.season = ? AND g.stage = ?
+		ORDER BY t.name, t.asa_team_id`, season, stage)
+	if err != nil {
+		return nil, fmt.Errorf("load standings teams: %w", err)
+	}
+	defer rows.Close()
+
+	teams := []standings.Team{}
+	for rows.Next() {
+		var team standings.Team
+		if err := rows.Scan(&team.ID, &team.Name, &team.ShortName, &team.Abbreviation); err != nil {
+			return nil, fmt.Errorf("scan standings team: %w", err)
+		}
+		teams = append(teams, team)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate standings teams: %w", err)
+	}
+	return teams, nil
+}
+
+func (c *DB) standingsGames(ctx context.Context, season, stage string) ([]standings.Game, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT
+		asa_game_id, status, home_team_id, away_team_id, home_score, away_score
+		FROM games
+		WHERE season = ? AND stage = ?
+		ORDER BY kickoff_utc, asa_game_id`, season, stage)
+	if err != nil {
+		return nil, fmt.Errorf("load standings games: %w", err)
+	}
+	defer rows.Close()
+
+	games := []standings.Game{}
+	for rows.Next() {
+		var game standings.Game
+		var homeScore, awayScore sql.NullInt64
+		if err := rows.Scan(&game.ID, &game.Status, &game.HomeTeamID, &game.AwayTeamID, &homeScore, &awayScore); err != nil {
+			return nil, fmt.Errorf("scan standings game: %w", err)
+		}
+		game.HomeScore = intPtrFromNull(homeScore)
+		game.AwayScore = intPtrFromNull(awayScore)
+		games = append(games, game)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate standings games: %w", err)
+	}
+	return games, nil
+}
+
 func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*SyncRun, error) {
 	query := `SELECT id, started_at, finished_at, season, stage, outcome, error_summary,
 		teams_upserted, games_upserted, games_deleted, games_seen FROM sync_runs`
@@ -430,6 +499,14 @@ func nullableInt(value sql.NullInt64) any {
 		return nil
 	}
 	return value.Int64
+}
+
+func intPtrFromNull(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+	converted := int(value.Int64)
+	return &converted
 }
 
 func formatTime(t time.Time) string {

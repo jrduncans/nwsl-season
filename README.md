@@ -12,8 +12,9 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 3 is scaffolded: the app has a minimal HTTP server, an ASA client, and a
-SQLite cache that can be refreshed by a separate sync command.
+Phase 4 is scaffolded: the app has a minimal HTTP server, an ASA client, a
+SQLite cache that can be refreshed by a separate sync command, and a standings
+calculator that can print a cached regular-season table.
 
 ```sh
 go run ./cmd/server
@@ -44,6 +45,12 @@ To refresh the local ASA cache:
 
 ```sh
 go run ./cmd/sync -season 2026
+```
+
+To print standings from the local cache:
+
+```sh
+go run ./cmd/standings -season 2026
 ```
 
 Or use the Makefile wrappers:
