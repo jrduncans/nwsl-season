@@ -16,6 +16,9 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	if got.DataDir != defaultDataDir {
 		t.Errorf("DataDir = %q, want %q", got.DataDir, defaultDataDir)
 	}
+	if got.DBPath != "data/nwsl-season.sqlite" {
+		t.Errorf("DBPath = %q, want %q", got.DBPath, "data/nwsl-season.sqlite")
+	}
 }
 
 func TestFromEnvironmentUsesOverrides(t *testing.T) {
@@ -31,6 +34,9 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	}
 	if got.DataDir != "testdata" {
 		t.Errorf("DataDir = %q, want %q", got.DataDir, "testdata")
+	}
+	if got.DBPath != "testdata/nwsl-season.sqlite" {
+		t.Errorf("DBPath = %q, want %q", got.DBPath, "testdata/nwsl-season.sqlite")
 	}
 }
 

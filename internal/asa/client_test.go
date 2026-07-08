@@ -93,6 +93,96 @@ func TestGamesSendsQueryParameters(t *testing.T) {
 	}
 }
 
+func TestTeamsDecodesResponse(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/teams.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fixture)
+	}))
+	defer server.Close()
+
+	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+
+	teams, err := client.Teams(context.Background(), TeamsFilters{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(teams) != 4 {
+		t.Fatalf("len(teams) = %d, want 4", len(teams))
+	}
+	if teams[0].TeamID != "7VqG1lYMvW" {
+		t.Errorf("first team ID = %q, want %q", teams[0].TeamID, "7VqG1lYMvW")
+	}
+	if teams[0].TeamName != "Gotham FC" {
+		t.Errorf("first team name = %q, want Gotham FC", teams[0].TeamName)
+	}
+}
+
+func TestTeamsSendsQueryParameters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nwsl/teams" {
+			t.Errorf("path = %q, want %q", r.URL.Path, "/nwsl/teams")
+		}
+		if got := r.URL.Query().Get("team_id"); got != "team-1,team-2" {
+			t.Errorf("team_id query = %q, want team-1,team-2", got)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+
+	_, err := client.Teams(context.Background(), TeamsFilters{TeamID: "team-1,team-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTeamsReturnsErrorForNon2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad upstream", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+
+	_, err := client.Teams(context.Background(), TeamsFilters{})
+	if err == nil {
+		t.Fatal("err = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "asa teams") {
+		t.Errorf("error = %q, want operation", err.Error())
+	}
+	if !strings.Contains(err.Error(), "502") {
+		t.Errorf("error = %q, want HTTP status", err.Error())
+	}
+}
+
+func TestTeamsReturnsErrorForMalformedJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"not": "an array"`))
+	}))
+	defer server.Close()
+
+	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+
+	_, err := client.Teams(context.Background(), TeamsFilters{})
+	if err == nil {
+		t.Fatal("err = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "decode response") {
+		t.Errorf("error = %q, want decode response", err.Error())
+	}
+}
+
 func TestGamesReturnsErrorForNon2xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, strings.Repeat("x", maxErrorBodyBytes*2), http.StatusBadGateway)

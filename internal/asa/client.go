@@ -32,6 +32,11 @@ type GamesFilters struct {
 	EndDate    string
 }
 
+// TeamsFilters contains the supported /nwsl/teams query parameters.
+type TeamsFilters struct {
+	TeamID string
+}
+
 // Game is the ASA /nwsl/games wire representation.
 type Game struct {
 	GameID          string `json:"game_id"`
@@ -51,13 +56,31 @@ type Game struct {
 	KnockoutGame    bool   `json:"knockout_game"`
 	Status          string `json:"status"`
 	LastUpdatedUTC  string `json:"last_updated_utc"`
+	RawJSON         string `json:"-"`
+}
+
+// Team is the ASA /nwsl/teams wire representation.
+type Team struct {
+	TeamID           string `json:"team_id"`
+	TeamName         string `json:"team_name"`
+	TeamShortName    string `json:"team_short_name"`
+	TeamAbbreviation string `json:"team_abbreviation"`
+	RawJSON          string `json:"-"`
 }
 
 // Games fetches NWSL games from ASA.
 func (c Client) Games(ctx context.Context, filters GamesFilters) ([]Game, error) {
 	const op = "asa games"
 
-	endpoint, err := c.gamesURL(filters)
+	endpoint, err := c.resourceURL("/nwsl/games", func(query url.Values) {
+		addQuery(query, "game_id", filters.GameID)
+		addQuery(query, "team_id", filters.TeamID)
+		addQuery(query, "season_name", filters.SeasonName)
+		addQuery(query, "stage_name", filters.StageName)
+		addQuery(query, "status", filters.Status)
+		addQuery(query, "start_date", filters.StartDate)
+		addQuery(query, "end_date", filters.EndDate)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
 	}
@@ -77,33 +100,97 @@ func (c Client) Games(ctx context.Context, filters GamesFilters) ([]Game, error)
 		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))
 	}
 
-	var games []Game
-	if err := json.NewDecoder(response.Body).Decode(&games); err != nil {
+	games, err := decodeGames(response.Body)
+	if err != nil {
 		return nil, fmt.Errorf("%s: decode response: %w", op, err)
 	}
 
 	return games, nil
 }
 
-func (c Client) gamesURL(filters GamesFilters) (string, error) {
+// Teams fetches NWSL teams from ASA.
+func (c Client) Teams(ctx context.Context, filters TeamsFilters) ([]Team, error) {
+	const op = "asa teams"
+
+	endpoint, err := c.resourceURL("/nwsl/teams", func(query url.Values) {
+		addQuery(query, "team_id", filters.TeamID)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request: %w", op, err)
+	}
+
+	response, err := c.httpClient().Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("%s: send request: %w", op, err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))
+	}
+
+	teams, err := decodeTeams(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: decode response: %w", op, err)
+	}
+
+	return teams, nil
+}
+
+func decodeGames(body io.Reader) ([]Game, error) {
+	var rawObjects []json.RawMessage
+	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
+		return nil, err
+	}
+
+	values := make([]Game, 0, len(rawObjects))
+	for _, raw := range rawObjects {
+		var value Game
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, err
+		}
+		value.RawJSON = string(raw)
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func decodeTeams(body io.Reader) ([]Team, error) {
+	var rawObjects []json.RawMessage
+	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
+		return nil, err
+	}
+
+	values := make([]Team, 0, len(rawObjects))
+	for _, raw := range rawObjects {
+		var value Team
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, err
+		}
+		value.RawJSON = string(raw)
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func (c Client) resourceURL(path string, add func(url.Values)) (string, error) {
 	baseURL := c.BaseURL
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
 
-	parsed, err := url.Parse(strings.TrimRight(baseURL, "/") + "/nwsl/games")
+	parsed, err := url.Parse(strings.TrimRight(baseURL, "/") + path)
 	if err != nil {
 		return "", err
 	}
 
 	query := parsed.Query()
-	addQuery(query, "game_id", filters.GameID)
-	addQuery(query, "team_id", filters.TeamID)
-	addQuery(query, "season_name", filters.SeasonName)
-	addQuery(query, "stage_name", filters.StageName)
-	addQuery(query, "status", filters.Status)
-	addQuery(query, "start_date", filters.StartDate)
-	addQuery(query, "end_date", filters.EndDate)
+	add(query)
 	parsed.RawQuery = query.Encode()
 
 	return parsed.String(), nil

@@ -3,6 +3,7 @@ package config
 import (
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -17,13 +18,16 @@ const (
 type Config struct {
 	HTTPAddr string
 	DataDir  string
+	DBPath   string
 }
 
 // FromEnvironment reads configuration, applying local-development defaults.
 func FromEnvironment() Config {
+	dataDir := valueOrDefault("NWSL_DATA_DIR", defaultDataDir)
 	return Config{
 		HTTPAddr: httpAddrFromEnvironment(),
-		DataDir:  valueOrDefault("NWSL_DATA_DIR", defaultDataDir),
+		DataDir:  dataDir,
+		DBPath:   filepath.Join(dataDir, "nwsl-season.sqlite"),
 	}
 }
 

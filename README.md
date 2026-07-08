@@ -12,15 +12,16 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 1 is scaffolded: a minimal HTTP server with a home page and health check.
-It uses only Go's standard library.
+Phase 3 is scaffolded: the app has a minimal HTTP server, an ASA client, and a
+SQLite cache that can be refreshed by a separate sync command.
 
 ```sh
 go run ./cmd/server
 ```
 
 Then visit <http://localhost:8080>. The health endpoint is
-<http://localhost:8080/healthz>.
+<http://localhost:8080/healthz>. Cache freshness is available at
+<http://localhost:8080/cache/status>.
 
 Configuration:
 
@@ -29,7 +30,7 @@ Configuration:
 | `NWSL_HTTP_ADDR` | `127.0.0.1:8080` | Full address on which the server listens |
 | `HOST` | `127.0.0.1` | Host used to build the listen address when `NWSL_HTTP_ADDR` is unset |
 | `PORT` | `8080` | Port used to build the listen address when `NWSL_HTTP_ADDR` is unset |
-| `NWSL_DATA_DIR` | `data` | Future home of the SQLite cache |
+| `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache |
 
 ## Useful commands
 
@@ -37,6 +38,12 @@ Configuration:
 go test ./...
 go fmt ./...
 go vet ./...
+```
+
+To refresh the local ASA cache:
+
+```sh
+go run ./cmd/sync -season 2026
 ```
 
 Or use the Makefile wrappers:
@@ -60,8 +67,8 @@ Linux VM. For an x86_64 VM, run:
 make build-linux-server TARGET_ARCH=amd64
 ```
 
-No ASA request or SQLite database is created yet. Those are the next two
-learning phases.
+The server reads cache status from `NWSL_DATA_DIR/nwsl-season.sqlite`; normal
+page requests never refresh ASA data.
 
 ## Dev container
 

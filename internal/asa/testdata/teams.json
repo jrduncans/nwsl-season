@@ -1,0 +1,26 @@
+[
+  {
+    "team_id": "7VqG1lYMvW",
+    "team_name": "Gotham FC",
+    "team_short_name": "Gotham",
+    "team_abbreviation": "NJY"
+  },
+  {
+    "team_id": "eV5DR6YQKn",
+    "team_name": "Orlando Pride",
+    "team_short_name": "Orlando",
+    "team_abbreviation": "ORL"
+  },
+  {
+    "team_id": "home123",
+    "team_name": "Home FC",
+    "team_short_name": "Home",
+    "team_abbreviation": "HOM"
+  },
+  {
+    "team_id": "away123",
+    "team_name": "Away FC",
+    "team_short_name": "Away",
+    "team_abbreviation": "AWY"
+  }
+]
