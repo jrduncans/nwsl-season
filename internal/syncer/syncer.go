@@ -26,6 +26,7 @@ type ASAClient interface {
 type Store interface {
 	ReplaceSeason(context.Context, string, string, []cache.Team, []cache.Game, time.Time) (cache.SyncRun, error)
 	RecordFailure(context.Context, string, string, time.Time, error) error
+	LastSuccess(context.Context, string, string) (*cache.SyncRun, error)
 }
 
 // Service refreshes the persistent cache from ASA.
@@ -36,8 +37,9 @@ type Service struct {
 
 // RunOptions configures one sync run.
 type RunOptions struct {
-	Season string
-	Stage  string
+	Season          string
+	Stage           string
+	MinimumInterval time.Duration
 }
 
 // Run fetches one complete ASA season/stage and atomically stores it.
@@ -57,6 +59,16 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 	}
 	if strings.TrimSpace(options.Stage) == "" {
 		return cache.SyncRun{}, errors.New("sync stage is required")
+	}
+	if options.MinimumInterval > 0 {
+		run, err := s.Store.LastSuccess(ctx, options.Season, options.Stage)
+		if err != nil {
+			return cache.SyncRun{}, fmt.Errorf("check recent sync: %w", err)
+		}
+		if run != nil && !run.FinishedAt.Add(options.MinimumInterval).Before(startedAt) {
+			run.Skipped = true
+			return *run, nil
+		}
 	}
 
 	teams, err := s.ASA.Teams(ctx, asa.TeamsFilters{})

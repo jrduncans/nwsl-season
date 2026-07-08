@@ -57,6 +57,7 @@ type SyncRun struct {
 	GamesUpserted int
 	GamesDeleted  int
 	GamesSeen     int
+	Skipped       bool
 }
 
 // Status is the latest cache freshness summary.
@@ -279,15 +280,20 @@ func (c *DB) RecordFailure(ctx context.Context, season, stage string, startedAt 
 
 // Status returns the last attempted and successful sync runs.
 func (c *DB) Status(ctx context.Context) (Status, error) {
-	attempt, err := c.latestRun(ctx, "")
+	attempt, err := c.latestRun(ctx, "", "", "")
 	if err != nil {
 		return Status{}, err
 	}
-	success, err := c.latestRun(ctx, "success")
+	success, err := c.latestRun(ctx, "success", "", "")
 	if err != nil {
 		return Status{}, err
 	}
 	return Status{LastAttempt: attempt, LastSuccess: success}, nil
+}
+
+// LastSuccess returns the latest successful sync for a season and stage.
+func (c *DB) LastSuccess(ctx context.Context, season, stage string) (*SyncRun, error) {
+	return c.latestRun(ctx, "success", season, stage)
 }
 
 // CountGames returns cached games for tests and diagnostics.
@@ -317,13 +323,21 @@ func (c *DB) GameByID(ctx context.Context, id string) (Game, error) {
 	return game, nil
 }
 
-func (c *DB) latestRun(ctx context.Context, outcome string) (*SyncRun, error) {
+func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*SyncRun, error) {
 	query := `SELECT id, started_at, finished_at, season, stage, outcome, error_summary,
 		teams_upserted, games_upserted, games_deleted, games_seen FROM sync_runs`
 	args := []any{}
 	if outcome != "" {
 		query += ` WHERE outcome = ?`
 		args = append(args, outcome)
+	}
+	if season != "" {
+		query += conjunction(args) + ` season = ?`
+		args = append(args, season)
+	}
+	if stage != "" {
+		query += conjunction(args) + ` stage = ?`
+		args = append(args, stage)
 	}
 	query += ` ORDER BY finished_at DESC, id DESC LIMIT 1`
 
@@ -347,6 +361,13 @@ func (c *DB) latestRun(ctx context.Context, outcome string) (*SyncRun, error) {
 		return nil, fmt.Errorf("parse sync finish time: %w", err)
 	}
 	return &run, nil
+}
+
+func conjunction(args []any) string {
+	if len(args) == 0 {
+		return " WHERE"
+	}
+	return " AND"
 }
 
 func deleteMissingGames(ctx context.Context, tx *sql.Tx, season, stage string, gameIDs []string) (int, error) {

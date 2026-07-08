@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -56,6 +57,52 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	}
 	if !game.AwayScore.Valid || game.AwayScore.Int64 != 2 {
 		t.Fatalf("away score = %+v, want 2", game.AwayScore)
+	}
+}
+
+func TestRunSkipsRecentSuccessfulSync(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	service := Service{ASA: &client, Store: db}
+
+	first, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.teamsCalls != 1 || client.gamesCalls != 1 {
+		t.Fatalf("ASA calls after first run = teams %d games %d, want 1 and 1", client.teamsCalls, client.gamesCalls)
+	}
+
+	client.games[0] = testGame("game-1", "FullTime", ptr(3), ptr(0))
+	second, err := service.Run(ctx, RunOptions{
+		Season:          "2024",
+		Stage:           "Regular Season",
+		MinimumInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second run ID = %d, want skipped run to return previous ID %d", second.ID, first.ID)
+	}
+	if !second.Skipped {
+		t.Fatal("second run was not marked skipped")
+	}
+	if client.teamsCalls != 1 || client.gamesCalls != 1 {
+		t.Fatalf("ASA calls after skipped run = teams %d games %d, want still 1 and 1", client.teamsCalls, client.gamesCalls)
+	}
+
+	game, err := db.GameByID(ctx, "game-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !game.HomeScore.Valid || game.HomeScore.Int64 != 1 {
+		t.Fatalf("home score = %+v, want cached score preserved", game.HomeScore)
 	}
 }
 
@@ -173,13 +220,16 @@ func newTestDB(t *testing.T) *cache.DB {
 }
 
 type fakeASA struct {
-	teams    []asa.Team
-	teamsErr error
-	games    []asa.Game
-	gamesErr error
+	teams      []asa.Team
+	teamsErr   error
+	teamsCalls int
+	games      []asa.Game
+	gamesErr   error
+	gamesCalls int
 }
 
 func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
+	f.teamsCalls++
 	if f.teamsErr != nil {
 		return nil, f.teamsErr
 	}
@@ -187,6 +237,7 @@ func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
 }
 
 func (f *fakeASA) Games(context.Context, asa.GamesFilters) ([]asa.Game, error) {
+	f.gamesCalls++
 	if f.gamesErr != nil {
 		return nil, f.gamesErr
 	}
