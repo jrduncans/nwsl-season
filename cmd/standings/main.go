@@ -48,10 +48,10 @@ func run() error {
 
 func printTable(output *os.File, table []standings.TableRow) {
 	writer := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "#\tTeam\tP\tW\tD\tL\tGF\tGA\tGD\tPts")
+	fmt.Fprintln(writer, "#\tTeam\tP\tW\tD\tL\tGF\tGA\tGD\tPts\tTB")
 	for i, row := range table {
 		record := row.Record
-		fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+		fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n",
 			i+1,
 			displayName(row.Team),
 			record.Played,
@@ -61,7 +61,8 @@ func printTable(output *os.File, table []standings.TableRow) {
 			record.GoalsFor,
 			record.GoalsAgainst,
 			record.GoalDifference(),
-			record.Points)
+			record.Points,
+			tieBreakNote(row.TieBreak))
 	}
 	writer.Flush()
 }
@@ -77,4 +78,11 @@ func displayName(team standings.Team) string {
 	default:
 		return team.ID
 	}
+}
+
+func tieBreakNote(status standings.TieBreakStatus) string {
+	if !status.Undetermined {
+		return ""
+	}
+	return fmt.Sprintf("undetermined at %s", status.Rule)
 }

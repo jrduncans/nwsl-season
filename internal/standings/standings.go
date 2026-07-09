@@ -40,8 +40,9 @@ func (r Record) GoalDifference() int {
 
 // TableRow combines a team with its accumulated record.
 type TableRow struct {
-	Team   Team
-	Record Record
+	Team     Team
+	Record   Record
+	TieBreak TieBreakStatus
 }
 
 // Rules contains the ordering policy for a standings table.
@@ -49,9 +50,17 @@ type Rules struct {
 	Less func(a, b TableRow) bool
 }
 
-// DefaultRules returns the initial deterministic table order.
+// TieBreakStatus describes whether official rules fully determined a row's rank.
+type TieBreakStatus struct {
+	Undetermined bool
+	Rule         string
+	Reason       string
+	TiedTeamIDs  []string
+}
+
+// DefaultRules returns the 2026 NWSL regular-season table order.
 func DefaultRules() Rules {
-	return Rules{Less: defaultLess}
+	return Rules{}
 }
 
 // Calculate derives a table from teams and games.
@@ -80,13 +89,13 @@ func Calculate(teams []Team, games []Game, rules Rules) []TableRow {
 	}
 
 	less := rules.Less
-	if less == nil {
-		less = defaultLess
+	if less != nil {
+		sort.SliceStable(rows, func(i, j int) bool {
+			return less(rows[i], rows[j])
+		})
+		return rows
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		return less(rows[i], rows[j])
-	})
-	return rows
+	return officialOrder(rows, games)
 }
 
 func applyResult(record *Record, goalsFor, goalsAgainst int) {
@@ -105,16 +114,156 @@ func applyResult(record *Record, goalsFor, goalsAgainst int) {
 	}
 }
 
-func defaultLess(a, b TableRow) bool {
-	if a.Record.Points != b.Record.Points {
-		return a.Record.Points > b.Record.Points
+type tieBreakCriterion struct {
+	value func(TableRow, []TableRow, []Game) int
+}
+
+func officialOrder(rows []TableRow, games []Game) []TableRow {
+	ordered := make([]TableRow, len(rows))
+	copy(ordered, rows)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Record.Points != ordered[j].Record.Points {
+			return ordered[i].Record.Points > ordered[j].Record.Points
+		}
+		return deterministicLess(ordered[i], ordered[j])
+	})
+
+	result := make([]TableRow, 0, len(ordered))
+	for _, group := range splitByValue(ordered, func(row TableRow) int {
+		return row.Record.Points
+	}) {
+		if len(group) == 1 {
+			result = append(result, group...)
+			continue
+		}
+		result = append(result, resolveTieGroup(group, games, defaultTieBreakCriteria(), 0)...)
 	}
-	if a.Record.GoalDifference() != b.Record.GoalDifference() {
-		return a.Record.GoalDifference() > b.Record.GoalDifference()
+	return result
+}
+
+func defaultTieBreakCriteria() []tieBreakCriterion {
+	return []tieBreakCriterion{
+		{
+			value: func(row TableRow, _ []TableRow, _ []Game) int {
+				return row.Record.GoalDifference()
+			},
+		},
+		{
+			value: func(row TableRow, _ []TableRow, _ []Game) int {
+				return row.Record.Wins
+			},
+		},
+		{
+			value: func(row TableRow, _ []TableRow, _ []Game) int {
+				return row.Record.GoalsFor
+			},
+		},
+		{
+			value: func(row TableRow, group []TableRow, games []Game) int {
+				return headToHeadRecord(row.Team.ID, group, games).Points
+			},
+		},
+		{
+			value: func(row TableRow, group []TableRow, games []Game) int {
+				return headToHeadRecord(row.Team.ID, group, games).GoalsFor
+			},
+		},
 	}
-	if a.Record.GoalsFor != b.Record.GoalsFor {
-		return a.Record.GoalsFor > b.Record.GoalsFor
+}
+
+func resolveTieGroup(group []TableRow, games []Game, criteria []tieBreakCriterion, index int) []TableRow {
+	if len(group) <= 1 {
+		return group
 	}
+	if index >= len(criteria) {
+		return markUndetermined(group)
+	}
+
+	criterion := criteria[index]
+	sort.SliceStable(group, func(i, j int) bool {
+		left := criterion.value(group[i], group, games)
+		right := criterion.value(group[j], group, games)
+		if left != right {
+			return left > right
+		}
+		return deterministicLess(group[i], group[j])
+	})
+
+	result := make([]TableRow, 0, len(group))
+	for _, subgroup := range splitByValue(group, func(row TableRow) int {
+		return criterion.value(row, group, games)
+	}) {
+		if len(subgroup) == 1 {
+			result = append(result, subgroup...)
+			continue
+		}
+		result = append(result, resolveTieGroup(subgroup, games, criteria, index+1)...)
+	}
+	return result
+}
+
+func splitByValue(rows []TableRow, value func(TableRow) int) [][]TableRow {
+	if len(rows) == 0 {
+		return nil
+	}
+	groups := [][]TableRow{}
+	start := 0
+	for i := 1; i < len(rows); i++ {
+		if value(rows[i]) == value(rows[start]) {
+			continue
+		}
+		groups = append(groups, rows[start:i])
+		start = i
+	}
+	return append(groups, rows[start:])
+}
+
+func headToHeadRecord(teamID string, group []TableRow, games []Game) Record {
+	groupTeamIDs := make(map[string]bool, len(group))
+	for _, row := range group {
+		groupTeamIDs[row.Team.ID] = true
+	}
+
+	var record Record
+	for _, game := range games {
+		if game.Status != CompletedStatus || game.HomeScore == nil || game.AwayScore == nil {
+			continue
+		}
+		if !groupTeamIDs[game.HomeTeamID] || !groupTeamIDs[game.AwayTeamID] {
+			continue
+		}
+		switch teamID {
+		case game.HomeTeamID:
+			applyResult(&record, *game.HomeScore, *game.AwayScore)
+		case game.AwayTeamID:
+			applyResult(&record, *game.AwayScore, *game.HomeScore)
+		}
+	}
+	return record
+}
+
+func markUndetermined(group []TableRow) []TableRow {
+	tiedTeamIDs := make([]string, 0, len(group))
+	for _, row := range group {
+		tiedTeamIDs = append(tiedTeamIDs, row.Team.ID)
+	}
+	sort.Strings(tiedTeamIDs)
+
+	sort.SliceStable(group, func(i, j int) bool {
+		return deterministicLess(group[i], group[j])
+	})
+	for i := range group {
+		group[i].TieBreak = TieBreakStatus{
+			Undetermined: true,
+			Rule:         "least disciplinary points",
+			Reason:       "disciplinary points are not available from cached game data",
+			TiedTeamIDs:  append([]string(nil), tiedTeamIDs...),
+		}
+	}
+	return group
+}
+
+func deterministicLess(a, b TableRow) bool {
 	if a.Team.Name != b.Team.Name {
 		return a.Team.Name < b.Team.Name
 	}

@@ -123,6 +123,76 @@ func TestCalculateOrdersEqualPointsByDefaultTiebreaks(t *testing.T) {
 	assertBefore(t, table, "same-a", "same-b")
 }
 
+func TestCalculateUsesWinsBeforeGoalsScored(t *testing.T) {
+	teams := []Team{
+		{ID: "wins", Name: "Wins FC"},
+		{ID: "draws", Name: "Draws FC"},
+		{ID: "sink-1", Name: "Sink 1"},
+		{ID: "sink-2", Name: "Sink 2"},
+		{ID: "sink-3", Name: "Sink 3"},
+		{ID: "sink-4", Name: "Sink 4"},
+		{ID: "sink-5", Name: "Sink 5"},
+	}
+	games := []Game{
+		game("wins", "sink-1", CompletedStatus, 2, 0),
+		game("sink-2", "wins", CompletedStatus, 2, 0),
+		game("draws", "sink-3", CompletedStatus, 1, 1),
+		game("sink-4", "draws", CompletedStatus, 1, 1),
+		game("draws", "sink-5", CompletedStatus, 0, 0),
+	}
+
+	table := Calculate(teams, games, DefaultRules())
+
+	assertBefore(t, table, "wins", "draws")
+}
+
+func TestCalculateUsesHeadToHeadPointsAfterOverallGoalsScored(t *testing.T) {
+	teams := []Team{
+		{ID: "alpha", Name: "Alpha FC"},
+		{ID: "bravo", Name: "Bravo FC"},
+		{ID: "sink", Name: "Sink FC"},
+	}
+	games := []Game{
+		game("alpha", "bravo", CompletedStatus, 1, 0),
+		game("bravo", "sink", CompletedStatus, 1, 0),
+		game("sink", "alpha", CompletedStatus, 1, 0),
+	}
+
+	table := Calculate(teams, games, DefaultRules())
+
+	assertBefore(t, table, "alpha", "bravo")
+}
+
+func TestCalculateMarksDisciplinaryTiebreakAsUndetermined(t *testing.T) {
+	teams := []Team{
+		{ID: "alpha", Name: "Alpha FC"},
+		{ID: "bravo", Name: "Bravo FC"},
+		{ID: "sink-1", Name: "Sink 1"},
+		{ID: "sink-2", Name: "Sink 2"},
+		{ID: "sink-3", Name: "Sink 3"},
+		{ID: "sink-4", Name: "Sink 4"},
+	}
+	games := []Game{
+		game("alpha", "sink-1", CompletedStatus, 1, 0),
+		game("sink-2", "alpha", CompletedStatus, 1, 0),
+		game("bravo", "sink-3", CompletedStatus, 1, 0),
+		game("sink-4", "bravo", CompletedStatus, 1, 0),
+	}
+
+	table := Calculate(teams, games, DefaultRules())
+
+	alpha := findRow(t, table, "alpha")
+	if !alpha.TieBreak.Undetermined {
+		t.Fatalf("alpha tiebreak = %+v, want undetermined", alpha.TieBreak)
+	}
+	if alpha.TieBreak.Rule != "least disciplinary points" {
+		t.Fatalf("alpha tiebreak rule = %q, want least disciplinary points", alpha.TieBreak.Rule)
+	}
+	if !reflect.DeepEqual(alpha.TieBreak.TiedTeamIDs, []string{"alpha", "bravo"}) {
+		t.Fatalf("alpha tied team IDs = %+v, want alpha/bravo", alpha.TieBreak.TiedTeamIDs)
+	}
+}
+
 func game(homeID, awayID, status string, homeScore, awayScore int) Game {
 	return Game{
 		HomeTeamID: homeID,
@@ -135,6 +205,17 @@ func game(homeID, awayID, status string, homeScore, awayScore int) Game {
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func findRow(t *testing.T, table []TableRow, teamID string) TableRow {
+	t.Helper()
+	for _, row := range table {
+		if row.Team.ID == teamID {
+			return row
+		}
+	}
+	t.Fatalf("team %q not found in table %+v", teamID, table)
+	return TableRow{}
 }
 
 func assertRecord(t *testing.T, table []TableRow, teamID string, want Record) {

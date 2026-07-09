@@ -14,6 +14,14 @@ Start with played, wins, draws, losses, goals for, goals against, goal differenc
 and points. Keep ranking/tiebreak policy separate from accumulation so rules can
 vary by season.
 
+For the 2026 NWSL regular season, the default ranking uses points, then the
+official accessible tiebreakers: goal differential, total wins, goals scored,
+head-to-head points, and head-to-head goals scored. If teams remain tied after
+those steps, the next official rule is least disciplinary points. ASA cached game
+data does not currently include the card-level inputs needed to calculate that
+rule, so rows still tied at that point should be marked as undetermined rather
+than silently treated as officially separated by a deterministic fallback.
+
 ## Test cases
 
 - Home win, away win, and draw.
