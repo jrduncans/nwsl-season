@@ -14,9 +14,11 @@ Start with played, wins, draws, losses, goals for, goals against, goal differenc
 and points. Keep ranking/tiebreak policy separate from accumulation so rules can
 vary by season.
 
-For the 2026 NWSL regular season, the default ranking uses points, then the
+For the 2026 NWSL regular season, the full-season ranking uses points, then the
 official accessible tiebreakers: goal differential, total wins, goals scored,
-head-to-head points, and head-to-head goals scored. If teams remain tied after
+head-to-head points, and head-to-head goals scored. During the season, when
+teams may have played different numbers of games, the default ranking uses the
+per-game version of those same accessible criteria. If teams remain tied after
 those steps, the next official rule is least disciplinary points. ASA cached game
 data does not currently include the card-level inputs needed to calculate that
 rule, so rows still tied at that point should be marked as undetermined rather
@@ -29,6 +31,7 @@ than silently treated as officially separated by a deterministic fallback.
 - Every participating team appears, including teams with zero points.
 - Input order does not affect output.
 - Equal points exercise the documented tiebreak order.
+- Per-game ordering is the default, with total-points ordering still available.
 
 Use tiny invented leagues. They make failures comprehensible and avoid baking a
 historical ASA snapshot into basic arithmetic tests.

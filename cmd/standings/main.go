@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"text/tabwriter"
 	"time"
@@ -25,6 +26,7 @@ func run() error {
 	season := flag.String("season", "2026", "NWSL season year to read from cache")
 	stage := flag.String("stage", "Regular Season", "NWSL competition stage to read from cache")
 	dbPath := flag.String("db", cfg.DBPath, "SQLite cache database path")
+	order := flag.String("order", "per-game", "standings order: per-game or total")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -41,17 +43,33 @@ func run() error {
 		return fmt.Errorf("load %s %s standings inputs: %w", *season, *stage, err)
 	}
 
-	table := standings.Calculate(teams, games, standings.DefaultRules())
+	rules, err := standingsRules(*order)
+	if err != nil {
+		return err
+	}
+
+	table := standings.Calculate(teams, games, rules)
 	printTable(os.Stdout, table)
 	return nil
 }
 
-func printTable(output *os.File, table []standings.TableRow) {
+func standingsRules(order string) (standings.Rules, error) {
+	switch order {
+	case "per-game":
+		return standings.PerGameRules(), nil
+	case "total":
+		return standings.OfficialTotalRules(), nil
+	default:
+		return standings.Rules{}, fmt.Errorf("unknown standings order %q: use per-game or total", order)
+	}
+}
+
+func printTable(output io.Writer, table []standings.TableRow) {
 	writer := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "#\tTeam\tP\tW\tD\tL\tGF\tGA\tGD\tPts\tTB")
+	fmt.Fprintln(writer, "#\tTeam\tP\tW\tD\tL\tGF\tGA\tGD\tPts\tPPG\tTB")
 	for i, row := range table {
 		record := row.Record
-		fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\n",
+		fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.2f\t%s\n",
 			i+1,
 			displayName(row.Team),
 			record.Played,
@@ -62,9 +80,17 @@ func printTable(output *os.File, table []standings.TableRow) {
 			record.GoalsAgainst,
 			record.GoalDifference(),
 			record.Points,
+			pointsPerGame(record),
 			tieBreakNote(row.TieBreak))
 	}
 	writer.Flush()
+}
+
+func pointsPerGame(record standings.Record) float64 {
+	if record.Played == 0 {
+		return 0
+	}
+	return float64(record.Points) / float64(record.Played)
 }
 
 func displayName(team standings.Team) string {

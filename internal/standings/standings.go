@@ -47,8 +47,17 @@ type TableRow struct {
 
 // Rules contains the ordering policy for a standings table.
 type Rules struct {
-	Less func(a, b TableRow) bool
+	Order Order
+	Less  func(a, b TableRow) bool
 }
+
+// Order identifies a built-in standings ordering policy.
+type Order int
+
+const (
+	OrderOfficialTotal Order = iota
+	OrderOfficialPerGame
+)
 
 // TieBreakStatus describes whether official rules fully determined a row's rank.
 type TieBreakStatus struct {
@@ -58,9 +67,19 @@ type TieBreakStatus struct {
 	TiedTeamIDs  []string
 }
 
-// DefaultRules returns the 2026 NWSL regular-season table order.
+// DefaultRules returns the default in-season 2026 NWSL regular-season table order.
 func DefaultRules() Rules {
-	return Rules{}
+	return PerGameRules()
+}
+
+// OfficialTotalRules returns the 2026 NWSL regular-season table order by total points.
+func OfficialTotalRules() Rules {
+	return Rules{Order: OrderOfficialTotal}
+}
+
+// PerGameRules returns an in-season table order using official criteria per game played.
+func PerGameRules() Rules {
+	return Rules{Order: OrderOfficialPerGame}
 }
 
 // Calculate derives a table from teams and games.
@@ -95,7 +114,7 @@ func Calculate(teams []Team, games []Game, rules Rules) []TableRow {
 		})
 		return rows
 	}
-	return officialOrder(rows, games)
+	return officialOrder(rows, games, rules.Order)
 }
 
 func applyResult(record *Record, goalsFor, goalsAgainst int) {
@@ -115,57 +134,143 @@ func applyResult(record *Record, goalsFor, goalsAgainst int) {
 }
 
 type tieBreakCriterion struct {
-	value func(TableRow, []TableRow, []Game) int
+	value func(TableRow, []TableRow, []Game) rankingValue
 }
 
-func officialOrder(rows []TableRow, games []Game) []TableRow {
+type rankingValue struct {
+	numerator   int
+	denominator int
+}
+
+func wholeValue(value int) rankingValue {
+	return rankingValue{numerator: value, denominator: 1}
+}
+
+func perGameValue(value, played int) rankingValue {
+	if played == 0 {
+		return wholeValue(0)
+	}
+	return rankingValue{numerator: value, denominator: played}
+}
+
+func compareRankingValues(left, right rankingValue) int {
+	switch {
+	case left.denominator == 0 && right.denominator == 0:
+		return 0
+	case left.denominator == 0:
+		return -1
+	case right.denominator == 0:
+		return 1
+	}
+
+	leftScaled := left.numerator * right.denominator
+	rightScaled := right.numerator * left.denominator
+	switch {
+	case leftScaled > rightScaled:
+		return 1
+	case leftScaled < rightScaled:
+		return -1
+	default:
+		return 0
+	}
+}
+
+func officialOrder(rows []TableRow, games []Game, order Order) []TableRow {
 	ordered := make([]TableRow, len(rows))
 	copy(ordered, rows)
 	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].Record.Points != ordered[j].Record.Points {
-			return ordered[i].Record.Points > ordered[j].Record.Points
+		left := primaryRankingValue(ordered[i], order)
+		right := primaryRankingValue(ordered[j], order)
+		if comparison := compareRankingValues(left, right); comparison != 0 {
+			return comparison > 0
 		}
 		return deterministicLess(ordered[i], ordered[j])
 	})
 
 	result := make([]TableRow, 0, len(ordered))
-	for _, group := range splitByValue(ordered, func(row TableRow) int {
-		return row.Record.Points
+	for _, group := range splitByValue(ordered, func(row TableRow) rankingValue {
+		return primaryRankingValue(row, order)
 	}) {
 		if len(group) == 1 {
 			result = append(result, group...)
 			continue
 		}
-		result = append(result, resolveTieGroup(group, games, defaultTieBreakCriteria(), 0)...)
+		result = append(result, resolveTieGroup(group, games, defaultTieBreakCriteria(order), 0)...)
 	}
 	return result
 }
 
-func defaultTieBreakCriteria() []tieBreakCriterion {
+func primaryRankingValue(row TableRow, order Order) rankingValue {
+	if order == OrderOfficialPerGame {
+		return perGameValue(row.Record.Points, row.Record.Played)
+	}
+	return wholeValue(row.Record.Points)
+}
+
+func defaultTieBreakCriteria(order Order) []tieBreakCriterion {
+	if order == OrderOfficialPerGame {
+		return perGameTieBreakCriteria()
+	}
+	return totalTieBreakCriteria()
+}
+
+func totalTieBreakCriteria() []tieBreakCriterion {
 	return []tieBreakCriterion{
 		{
-			value: func(row TableRow, _ []TableRow, _ []Game) int {
-				return row.Record.GoalDifference()
+			value: func(row TableRow, _ []TableRow, _ []Game) rankingValue {
+				return wholeValue(row.Record.GoalDifference())
 			},
 		},
 		{
-			value: func(row TableRow, _ []TableRow, _ []Game) int {
-				return row.Record.Wins
+			value: func(row TableRow, _ []TableRow, _ []Game) rankingValue {
+				return wholeValue(row.Record.Wins)
 			},
 		},
 		{
-			value: func(row TableRow, _ []TableRow, _ []Game) int {
-				return row.Record.GoalsFor
+			value: func(row TableRow, _ []TableRow, _ []Game) rankingValue {
+				return wholeValue(row.Record.GoalsFor)
 			},
 		},
 		{
-			value: func(row TableRow, group []TableRow, games []Game) int {
-				return headToHeadRecord(row.Team.ID, group, games).Points
+			value: func(row TableRow, group []TableRow, games []Game) rankingValue {
+				return wholeValue(headToHeadRecord(row.Team.ID, group, games).Points)
 			},
 		},
 		{
-			value: func(row TableRow, group []TableRow, games []Game) int {
-				return headToHeadRecord(row.Team.ID, group, games).GoalsFor
+			value: func(row TableRow, group []TableRow, games []Game) rankingValue {
+				return wholeValue(headToHeadRecord(row.Team.ID, group, games).GoalsFor)
+			},
+		},
+	}
+}
+
+func perGameTieBreakCriteria() []tieBreakCriterion {
+	return []tieBreakCriterion{
+		{
+			value: func(row TableRow, _ []TableRow, _ []Game) rankingValue {
+				return perGameValue(row.Record.GoalDifference(), row.Record.Played)
+			},
+		},
+		{
+			value: func(row TableRow, _ []TableRow, _ []Game) rankingValue {
+				return perGameValue(row.Record.Wins, row.Record.Played)
+			},
+		},
+		{
+			value: func(row TableRow, _ []TableRow, _ []Game) rankingValue {
+				return perGameValue(row.Record.GoalsFor, row.Record.Played)
+			},
+		},
+		{
+			value: func(row TableRow, group []TableRow, games []Game) rankingValue {
+				record := headToHeadRecord(row.Team.ID, group, games)
+				return perGameValue(record.Points, record.Played)
+			},
+		},
+		{
+			value: func(row TableRow, group []TableRow, games []Game) rankingValue {
+				record := headToHeadRecord(row.Team.ID, group, games)
+				return perGameValue(record.GoalsFor, record.Played)
 			},
 		},
 	}
@@ -183,14 +288,14 @@ func resolveTieGroup(group []TableRow, games []Game, criteria []tieBreakCriterio
 	sort.SliceStable(group, func(i, j int) bool {
 		left := criterion.value(group[i], group, games)
 		right := criterion.value(group[j], group, games)
-		if left != right {
-			return left > right
+		if comparison := compareRankingValues(left, right); comparison != 0 {
+			return comparison > 0
 		}
 		return deterministicLess(group[i], group[j])
 	})
 
 	result := make([]TableRow, 0, len(group))
-	for _, subgroup := range splitByValue(group, func(row TableRow) int {
+	for _, subgroup := range splitByValue(group, func(row TableRow) rankingValue {
 		return criterion.value(row, group, games)
 	}) {
 		if len(subgroup) == 1 {
@@ -202,14 +307,14 @@ func resolveTieGroup(group []TableRow, games []Game, criteria []tieBreakCriterio
 	return result
 }
 
-func splitByValue(rows []TableRow, value func(TableRow) int) [][]TableRow {
+func splitByValue(rows []TableRow, value func(TableRow) rankingValue) [][]TableRow {
 	if len(rows) == 0 {
 		return nil
 	}
 	groups := [][]TableRow{}
 	start := 0
 	for i := 1; i < len(rows); i++ {
-		if value(rows[i]) == value(rows[start]) {
+		if compareRankingValues(value(rows[i]), value(rows[start])) == 0 {
 			continue
 		}
 		groups = append(groups, rows[start:i])

@@ -62,6 +62,69 @@ func TestCalculateIncludesTeamsWithNoCompletedGames(t *testing.T) {
 	assertRecord(t, table, "charlie", Record{})
 }
 
+func TestDefaultRulesOrderByPointsPerGame(t *testing.T) {
+	teams := []Team{
+		{ID: "ahead", Name: "Ahead FC"},
+		{ID: "behind", Name: "Behind FC"},
+		{ID: "sink-1", Name: "Sink 1"},
+		{ID: "sink-2", Name: "Sink 2"},
+		{ID: "sink-3", Name: "Sink 3"},
+	}
+	games := []Game{
+		game("ahead", "sink-1", CompletedStatus, 1, 0),
+		game("behind", "sink-2", CompletedStatus, 1, 0),
+		game("behind", "sink-3", CompletedStatus, 1, 0),
+		game("sink-1", "behind", CompletedStatus, 1, 0),
+	}
+
+	table := Calculate(teams, games, DefaultRules())
+
+	assertBefore(t, table, "ahead", "behind")
+}
+
+func TestOfficialTotalRulesOrderByTotalPoints(t *testing.T) {
+	teams := []Team{
+		{ID: "ahead", Name: "Ahead FC"},
+		{ID: "behind", Name: "Behind FC"},
+		{ID: "sink-1", Name: "Sink 1"},
+		{ID: "sink-2", Name: "Sink 2"},
+		{ID: "sink-3", Name: "Sink 3"},
+	}
+	games := []Game{
+		game("ahead", "sink-1", CompletedStatus, 1, 0),
+		game("behind", "sink-2", CompletedStatus, 1, 0),
+		game("behind", "sink-3", CompletedStatus, 1, 0),
+		game("sink-1", "behind", CompletedStatus, 1, 0),
+	}
+
+	table := Calculate(teams, games, OfficialTotalRules())
+
+	assertBefore(t, table, "behind", "ahead")
+}
+
+func TestPerGameRulesUsePerGameTiebreaks(t *testing.T) {
+	teams := []Team{
+		{ID: "efficient", Name: "Efficient FC"},
+		{ID: "volume", Name: "Volume FC"},
+		{ID: "sink-1", Name: "Sink 1"},
+		{ID: "sink-2", Name: "Sink 2"},
+		{ID: "sink-3", Name: "Sink 3"},
+		{ID: "sink-4", Name: "Sink 4"},
+		{ID: "sink-5", Name: "Sink 5"},
+	}
+	games := []Game{
+		game("efficient", "sink-1", CompletedStatus, 2, 0),
+		game("volume", "sink-2", CompletedStatus, 2, 0),
+		game("volume", "sink-3", CompletedStatus, 2, 0),
+		game("sink-4", "volume", CompletedStatus, 3, 0),
+		game("sink-5", "efficient", CompletedStatus, 1, 1),
+	}
+
+	table := Calculate(teams, games, PerGameRules())
+
+	assertBefore(t, table, "efficient", "volume")
+}
+
 func TestCalculateIsIndependentOfInputOrder(t *testing.T) {
 	teams := []Team{
 		{ID: "alpha", Name: "Alpha FC"},

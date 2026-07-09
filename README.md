@@ -53,6 +53,9 @@ To print standings from the local cache:
 go run ./cmd/standings -season 2026
 ```
 
+Standings default to per-game order while teams have played uneven schedules.
+Use `-order total` to print the full-season total-points order.
+
 Or use the Makefile wrappers:
 
 ```sh
