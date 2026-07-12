@@ -27,6 +27,9 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got, want := client.gamesFilters.Status, "Abandoned,FullTime,PreMatch"; got != want {
+		t.Fatalf("game status filter = %q, want %q", got, want)
+	}
 	if first.GamesUpserted != 2 || first.GamesDeleted != 0 {
 		t.Fatalf("first run counts = %+v, want 2 upserted and 0 deleted", first)
 	}
@@ -220,12 +223,13 @@ func newTestDB(t *testing.T) *cache.DB {
 }
 
 type fakeASA struct {
-	teams      []asa.Team
-	teamsErr   error
-	teamsCalls int
-	games      []asa.Game
-	gamesErr   error
-	gamesCalls int
+	teams        []asa.Team
+	teamsErr     error
+	teamsCalls   int
+	games        []asa.Game
+	gamesErr     error
+	gamesCalls   int
+	gamesFilters asa.GamesFilters
 }
 
 func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
@@ -236,8 +240,9 @@ func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
 	return f.teams, nil
 }
 
-func (f *fakeASA) Games(context.Context, asa.GamesFilters) ([]asa.Game, error) {
+func (f *fakeASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game, error) {
 	f.gamesCalls++
+	f.gamesFilters = filters
 	if f.gamesErr != nil {
 		return nil, f.gamesErr
 	}

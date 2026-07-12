@@ -16,6 +16,8 @@ import (
 
 var runMu stdsync.Mutex
 
+const allGameStatuses = "Abandoned,FullTime,PreMatch"
+
 // ASAClient is the ASA surface required by the sync service.
 type ASAClient interface {
 	Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error)
@@ -79,6 +81,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 	games, err := s.ASA.Games(ctx, asa.GamesFilters{
 		SeasonName: options.Season,
 		StageName:  options.Stage,
+		Status:     allGameStatuses,
 	})
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch games: %w", err))
