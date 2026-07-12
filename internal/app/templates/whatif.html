@@ -1,0 +1,45 @@
+{{define "whatif"}}{{template "head" .}}
+<p><a href="{{.SeasonPath}}">← Back to {{.Season}} season</a></p>
+<p class="eyebrow">Scenario builder</p>
+<h1>{{.Season}} what-if</h1>
+<div class="projection-notice"><strong>Hypothetical projection</strong><p>Selected wins use a 1–0 score and draws use 0–0 so score-based tiebreakers can be calculated. These are assumptions, not predictions.</p></div>
+<p class="freshness">Source: {{.Source}}{{if .Freshness}} · Cache refreshed {{.Freshness}}{{end}}</p>
+{{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}} Projections include only fixtures present in the cache.</p>{{end}}
+
+{{if .Projected}}
+<section class="projected" aria-labelledby="projected-title">
+  <h2 id="projected-title">Projected standings</h2>
+  <p>{{.Selections}} hypothetical {{if eq .Selections 1}}result{{else}}results{{end}} applied. <a href="{{.WhatIfPath}}">Reset scenario</a></p>
+  {{$rows := .Projected}}{{template "projectionTable" $rows}}
+</section>
+{{else}}
+<section aria-labelledby="current-title"><h2 id="current-title">Current standings</h2>{{template "currentTable" .Standings}}</section>
+{{end}}
+
+<section aria-labelledby="choices-title">
+  <h2 id="choices-title">Choose future results</h2>
+  {{if eq .Remaining 0}}<p>No remaining fixtures are present in the current cache. Refresh the cache when ASA publishes more schedule data.</p>{{else}}
+  <form class="whatif-form" method="get" action="{{.WhatIfPath}}" data-auto-submit>
+    {{range .FixtureGroups}}
+      {{$group := .}}
+      {{range .Games}}{{if .Remaining}}
+      <div class="choice">
+        <div><span class="choice-date">{{.Kickoff}}</span><strong>{{.HomeTeam}} vs {{.AwayTeam}}</strong></div>
+        <label for="game-{{.ID}}">Result</label>
+        <select id="game-{{.ID}}" name="g.{{.ID}}">
+          <option value="">Unset</option>
+          <option value="h" {{if .SelectedHome}}selected{{end}}>{{.HomeTeam}} win</option>
+          <option value="d" {{if .SelectedDraw}}selected{{end}}>Draw</option>
+          <option value="a" {{if .SelectedAway}}selected{{end}}>{{.AwayTeam}} win</option>
+        </select>
+      </div>
+      {{end}}{{end}}
+    {{end}}
+    <button class="button" type="submit">Update projection</button>
+  </form>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}
+
+{{define "projectionTable"}}<div class="table-scroll"><table class="standings projected-table"><caption>Projected standings</caption><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>PPG</th></tr></thead><tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}"><td>{{.Position}}</td><th scope="row">{{.Team}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td></tr>{{end}}</tbody></table></div>{{end}}
+{{define "currentTable"}}<div class="table-scroll"><table class="standings"><caption>Current standings</caption><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>PPG</th></tr></thead><tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}"><td>{{.Position}}</td><th scope="row">{{.Team}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td></tr>{{end}}</tbody></table></div>{{end}}

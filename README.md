@@ -12,9 +12,10 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 4 is scaffolded: the app has a minimal HTTP server, an ASA client, a
-SQLite cache that can be refreshed by a separate sync command, and a standings
-calculator that can print a cached regular-season table.
+Phase 6 is implemented: the server renders cached standings, results, remaining
+fixtures, cache freshness, and shareable what-if projections. The calculations
+remain independent of HTTP and SQLite, and normal page requests never contact
+ASA.
 
 ```sh
 go run ./cmd/server
@@ -23,6 +24,15 @@ go run ./cmd/server
 Then visit <http://localhost:8080>. The health endpoint is
 <http://localhost:8080/healthz>. Cache freshness is available at
 <http://localhost:8080/cache/status>.
+
+The current season redirects to <http://localhost:8080/seasons/2026>. The
+scenario builder is at <http://localhost:8080/seasons/2026/what-if> and works
+with or without JavaScript. Its selected outcomes are encoded in a versioned URL
+so a scenario can be bookmarked or shared.
+
+What-if selections specify only home win, draw, or away win. The projection uses
+canonical 1-0, 0-0, and 0-1 scorelines so the existing standings service can
+apply goal-based tiebreakers. The page labels that assumption explicitly.
 
 Configuration:
 
@@ -79,6 +89,11 @@ make build-linux-server TARGET_ARCH=amd64
 
 The server reads cache status from `NWSL_DATA_DIR/nwsl-season.sqlite`; normal
 page requests never refresh ASA data.
+
+The website expects the 2026 format of 16 teams, 30 regular-season games per
+team, and eight playoff places. It suppresses clinching indicators when the
+cache does not contain the complete 240-game regular-season schedule, and it
+reports incomplete fixture data on both season pages.
 
 ## Dev container
 

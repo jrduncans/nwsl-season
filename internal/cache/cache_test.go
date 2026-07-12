@@ -84,6 +84,41 @@ func TestStandingsInputsLoadSeasonStageValues(t *testing.T) {
 	assertStandingsRecord(t, table, "charlie", standings.Record{})
 }
 
+func TestSeasonLoadsFixturesAndFreshness(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{
+		{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"},
+		{ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"},
+	}
+	game := cachedGame("game-1", "2026", "Regular Season", "PreMatch", "alpha", "bravo", sql.NullInt64{}, sql.NullInt64{})
+	game.KickoffUTC = "2026-07-11 23:30:00 UTC"
+	game.Matchday = sql.NullInt64{Int64: 14, Valid: true}
+	started := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	if _, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, started); err != nil {
+		t.Fatal(err)
+	}
+
+	season, err := db.Season(ctx, "2026", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(season.Teams) != 2 || len(season.Games) != 1 {
+		t.Fatalf("season = %+v, want two teams and one game", season)
+	}
+	if season.Games[0].KickoffUTC != game.KickoffUTC || season.Games[0].Matchday.Int64 != 14 {
+		t.Fatalf("game = %+v, want presentation metadata", season.Games[0])
+	}
+	if season.LastSuccess == nil || season.LastSuccess.Season != "2026" {
+		t.Fatalf("last success = %+v, want 2026 sync", season.LastSuccess)
+	}
+}
+
 func cachedGame(id, season, stage, status, homeID, awayID string, homeScore, awayScore sql.NullInt64) Game {
 	return Game{
 		ASAID:          id,

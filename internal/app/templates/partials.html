@@ -1,0 +1,37 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · NWSL season explorer</title>
+  <link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">NWSL season explorer</a>
+  </header>
+  <main class="page">{{end}}
+
+{{define "foot"}}</main>
+  <footer class="site-footer">Independent season explorer. Data source: American Soccer Analysis.</footer>
+  <script src="/static/whatif.js" defer></script>
+</body>
+</html>{{end}}
+
+{{define "table"}}
+<div class="table-scroll">
+  <table class="standings">
+    <caption>{{if .Projected}}Projected standings{{else}}Current standings{{end}}</caption>
+    <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">P</th><th scope="col">W</th><th scope="col">D</th><th scope="col">L</th><th scope="col">GF</th><th scope="col">GA</th><th scope="col">GD</th><th scope="col">Pts</th><th scope="col">PPG</th></tr></thead>
+    <tbody>
+    {{range .Rows}}
+      <tr class="{{if .PlayoffLine}}playoff-line {{end}}{{if .Clinched}}clinched{{end}}">
+        <td>{{.Position}}</td>
+        <th scope="row">{{.Team}}{{if .Clinched}} <span class="badge" title="Mathematically clinched a playoff place">Clinched</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th>
+        <td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

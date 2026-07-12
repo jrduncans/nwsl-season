@@ -68,6 +68,14 @@ type Status struct {
 	LastSuccess *SyncRun
 }
 
+// SeasonData is the cached input needed to render one season and calculate its
+// standings. Games retain their presentation metadata as well as their scores.
+type SeasonData struct {
+	Teams       []standings.Team
+	Games       []Game
+	LastSuccess *SyncRun
+}
+
 // Open opens a SQLite cache and applies migrations.
 func Open(ctx context.Context, path string) (*DB, error) {
 	if path == "" {
@@ -338,6 +346,24 @@ func (c *DB) StandingsInputs(ctx context.Context, season, stage string) ([]stand
 	return teams, games, nil
 }
 
+// Season loads the teams, fixtures, and freshness information for a season and
+// stage. It never refreshes data from the upstream source.
+func (c *DB) Season(ctx context.Context, season, stage string) (SeasonData, error) {
+	teams, err := c.standingsTeams(ctx, season, stage)
+	if err != nil {
+		return SeasonData{}, err
+	}
+	games, err := c.seasonGames(ctx, season, stage)
+	if err != nil {
+		return SeasonData{}, err
+	}
+	lastSuccess, err := c.LastSuccess(ctx, season, stage)
+	if err != nil {
+		return SeasonData{}, err
+	}
+	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess}, nil
+}
+
 func (c *DB) standingsTeams(ctx context.Context, season, stage string) ([]standings.Team, error) {
 	rows, err := c.db.QueryContext(ctx, `SELECT DISTINCT
 		t.asa_team_id, t.name, t.short_name, t.abbreviation
@@ -388,6 +414,36 @@ func (c *DB) standingsGames(ctx context.Context, season, stage string) ([]standi
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate standings games: %w", err)
+	}
+	return games, nil
+}
+
+func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT
+		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
+		home_score, away_score, matchday, last_updated_utc, raw_json
+		FROM games
+		WHERE season = ? AND stage = ?
+		ORDER BY kickoff_utc, asa_game_id`, season, stage)
+	if err != nil {
+		return nil, fmt.Errorf("load season games: %w", err)
+	}
+	defer rows.Close()
+
+	games := []Game{}
+	for rows.Next() {
+		var game Game
+		if err := rows.Scan(
+			&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status,
+			&game.HomeTeamID, &game.AwayTeamID, &game.HomeScore, &game.AwayScore,
+			&game.Matchday, &game.LastUpdatedUTC, &game.RawJSON,
+		); err != nil {
+			return nil, fmt.Errorf("scan season game: %w", err)
+		}
+		games = append(games, game)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate season games: %w", err)
 	}
 	return games, nil
 }
