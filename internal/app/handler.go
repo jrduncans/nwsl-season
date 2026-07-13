@@ -17,6 +17,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/standings"
+	"github.com/jrduncans/nwsl-season/internal/strength"
 	"github.com/jrduncans/nwsl-season/internal/whatif"
 )
 
@@ -192,11 +193,13 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 
 	domainGames := standingsGames(data.Games)
 	actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
+	scheduleStrength := strength.Calculate(data.Teams, domainGames)
 	page := seasonPage{
 		Title:         season + " NWSL season",
 		Season:        season,
 		Stage:         a.options.Stage,
 		Standings:     tableViews(actualTable, a.options.PlayoffPlaces, nil),
+		Strength:      strengthViewFrom(scheduleStrength),
 		FixtureGroups: fixtureGroups(data, selections, a.options.Location),
 		WhatIfPath:    "/seasons/" + url.PathEscape(season) + "/what-if",
 		SeasonPath:    "/seasons/" + url.PathEscape(season),

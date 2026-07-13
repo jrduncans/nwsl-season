@@ -6,6 +6,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/standings"
+	"github.com/jrduncans/nwsl-season/internal/strength"
 	"github.com/jrduncans/nwsl-season/internal/whatif"
 )
 
@@ -20,10 +21,33 @@ type seasonPage struct {
 	ClinchingNote string
 	ScheduleNote  string
 	Standings     []tableRowView
+	Strength      strengthView
 	Projected     []tableRowView
 	FixtureGroups []fixtureGroupView
 	Selections    int
 	Remaining     int
+}
+
+type strengthView struct {
+	Rows             []strengthRowView
+	CompletedMatches int
+	RemainingMatches int
+	HomePPG          string
+	AwayPPG          string
+	VenueGap         string
+}
+
+type strengthRowView struct {
+	Position                 int
+	Team                     string
+	RemainingFixtures        int
+	RemainingHome            int
+	RemainingAway            int
+	HomeOpponentPPG          string
+	AwayOpponentPPG          string
+	RawOpponentPPG           string
+	VenueAdjustedOpponentPPG string
+	Available                bool
 }
 
 type tableRowView struct {
@@ -89,6 +113,30 @@ func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[stri
 		})
 	}
 	return rows
+}
+
+func strengthViewFrom(result strength.Result) strengthView {
+	rows := make([]strengthRowView, 0, len(result.Rows))
+	for index, row := range result.Rows {
+		view := strengthRowView{
+			Position: index + 1, Team: displayName(row.Team), RemainingFixtures: row.RemainingFixtures,
+			RemainingHome: row.RemainingHome, RemainingAway: row.RemainingAway, Available: row.Available,
+		}
+		if row.Available {
+			view.HomeOpponentPPG = fmt.Sprintf("%.2f", row.HomeOpponentPPG)
+			view.AwayOpponentPPG = fmt.Sprintf("%.2f", row.AwayOpponentPPG)
+			view.RawOpponentPPG = fmt.Sprintf("%.2f", row.RawOpponentPPG)
+			view.VenueAdjustedOpponentPPG = fmt.Sprintf("%.2f", row.VenueAdjustedOpponentPPG)
+		} else {
+			view.HomeOpponentPPG, view.AwayOpponentPPG = "—", "—"
+			view.RawOpponentPPG, view.VenueAdjustedOpponentPPG = "—", "—"
+		}
+		rows = append(rows, view)
+	}
+	return strengthView{
+		Rows: rows, CompletedMatches: result.CompletedMatches, RemainingMatches: result.RemainingMatches,
+		HomePPG: fmt.Sprintf("%.2f", result.HomePPG), AwayPPG: fmt.Sprintf("%.2f", result.AwayPPG), VenueGap: fmt.Sprintf("%.2f", result.VenueGap),
+	}
 }
 
 func fixtureGroups(data cache.SeasonData, selections map[string]whatif.Outcome, location *time.Location) []fixtureGroupView {

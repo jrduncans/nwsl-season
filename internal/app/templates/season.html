@@ -13,6 +13,27 @@
   {{template "currentTable" .Standings}}
 </section>
 
+<section aria-labelledby="strength-title">
+  <h2 id="strength-title">Remaining schedule strength</h2>
+  {{if eq .Strength.RemainingMatches 0}}
+    <p class="note">No remaining regular-season fixtures are present in the cache.</p>
+  {{else}}
+    <p class="note" id="strength-definition">Higher values mean a harder remaining schedule. Raw opponent PPG averages each remaining opponent's current points per game, counting each fixture. Venue-adjusted PPG applies half of the observed league home-advantage gap to each fixture.</p>
+    <p class="note">The venue adjustment is derived from {{.Strength.CompletedMatches}} completed matches: home teams average {{.Strength.HomePPG}} points per game, away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap. This is a model estimate, not a fact about future results.</p>
+    <div class="table-scroll">
+      <table class="strength-table" aria-describedby="strength-definition">
+        <caption>Remaining opponent strength</caption>
+        <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">Remaining</th><th scope="col">Home</th><th scope="col">Away</th><th scope="col">Home opp PPG</th><th scope="col">Away opp PPG</th><th scope="col">Raw opp PPG</th><th scope="col">Venue-adjusted PPG</th></tr></thead>
+        <tbody>
+        {{range .Strength.Rows}}
+          <tr><td>{{.Position}}</td><th scope="row">{{.Team}}</th><td>{{.RemainingFixtures}}</td><td>{{.RemainingHome}}</td><td>{{.RemainingAway}}</td><td>{{.HomeOpponentPPG}}</td><td>{{.AwayOpponentPPG}}</td><td>{{.RawOpponentPPG}}</td><td><strong>{{.VenueAdjustedOpponentPPG}}</strong></td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{end}}
+</section>
+
 <section aria-labelledby="fixtures-title">
   <h2 id="fixtures-title">Results and fixtures</h2>
   {{range .FixtureGroups}}

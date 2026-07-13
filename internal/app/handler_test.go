@@ -53,7 +53,7 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "2–1", "Build a what-if scenario", "Cache refreshed Jul 9, 2026"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "2–1", "Build a what-if scenario", "Cache refreshed Jul 9, 2026", "Remaining schedule strength", "Raw opp PPG", "Venue-adjusted PPG", "4.50"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -63,6 +63,25 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), "Clinching is not evaluated") || strings.Contains(response.Body.String(), `class="badge"`) {
 		t.Fatal("incomplete schedule produced misleading clinching indicators")
+	}
+}
+
+func TestSeasonRendersStrengthEmptyStateWhenScheduleIsComplete(t *testing.T) {
+	data := testSeasonData()
+	data.Games = data.Games[:1]
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: data}, Options{PlayoffPlaces: 1, GamesPerTeam: 2, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "No remaining regular-season fixtures are present in the cache.") {
+		t.Fatal("complete schedule did not render the strength empty state")
+	}
+	if strings.Contains(response.Body.String(), "Venue-adjusted PPG</th>") {
+		t.Fatal("strength table rendered despite no remaining fixtures")
 	}
 }
 

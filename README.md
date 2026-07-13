@@ -12,10 +12,10 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 6 is implemented: the server renders cached standings, results, remaining
-fixtures, cache freshness, and shareable what-if projections. The calculations
-remain independent of HTTP and SQLite, and normal page requests never contact
-ASA.
+Phase 7 is implemented: the server renders cached standings, results, remaining
+fixtures, cache freshness, shareable what-if projections, and transparent raw
+and venue-adjusted remaining schedule strength. The strength calculations remain
+independent of HTTP and SQLite, and normal page requests never contact ASA.
 
 ```sh
 go run ./cmd/server
