@@ -45,18 +45,17 @@ separately if possible.
 
 Support the same synchronization service from two thin entry points:
 
-- `go run ./cmd/sync -season 2026` for development, cron, and recovery.
-- An optional background scheduler in the deployed process later.
+- `go run ./cmd/sync -season 2026` for development, recovery, and the rare
+  operator-forced refresh of historical corrections.
+- A background scheduler in the single deployed server process.
 
-Keeping the refresh logic in `internal/sync` prevents the command and scheduler
+Keeping the refresh logic in `internal/syncer` prevents the command and scheduler
 from drifting apart. Avoid refreshing during normal page requests.
 
-Useful refresh policy later:
-
-- More often around match windows.
-- Less often on quiet days and during the offseason.
-- A manual refresh command at all times.
-- A visible “data updated at” timestamp on the site.
+The Phase 8 scheduler uses cached kickoff times to make network requests only
+when a fixture could plausibly have completed and the cache is not yet final.
+It rate-limits every attempt, including failures. See
+[`08-operations.md`](08-operations.md) for the full policy.
 
 ## Concurrency and resilience
 

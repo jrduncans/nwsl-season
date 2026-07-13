@@ -28,8 +28,8 @@ complete when its exit criteria pass; it does not need every possible refinement
    outcomes. See [`06-website-and-what-if.md`](06-website-and-what-if.md).
 7. **Strength of schedule** — Add transparent alternative measures.
    See [`07-strength-of-schedule.md`](07-strength-of-schedule.md).
-8. **Operations** — Automate refreshes, expose freshness, and deploy.
-   See [`08-operations.md`](08-operations.md).
+8. **Operations** — Refresh the current-season cache from the server process,
+   expose freshness, and deploy. See [`08-operations.md`](08-operations.md).
 
 The order is intentional, but not sacred. Styling can happen whenever it keeps
 the project fun. The key dependency chain is games → cache → standings → clinching.
@@ -38,7 +38,8 @@ the project fun. The key dependency chain is games → cache → standings → c
 
 - Which SQLite driver to use. Prefer a pure-Go driver unless measurements show a
   reason to accept CGO.
-- Whether refresh runs inside the web process, as a separate command, or both.
+- What ASA's post-match publication delay is, and whether the initial
+  three-hour completion grace needs adjustment.
 - How official tiebreak rules differ by season.
 - Whether exact clinching needs a custom search or an optimization solver.
 - Whether what-if state belongs in the URL, browser storage, or server sessions.
