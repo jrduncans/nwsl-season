@@ -24,13 +24,13 @@
       {{$group := .}}
       {{range .Games}}{{if .Remaining}}
       <div class="choice">
-        <div><span class="choice-date">{{.Kickoff}}</span><strong>{{.HomeTeam}} vs {{.AwayTeam}}</strong></div>
+        <div><span class="choice-date">{{.Kickoff}}</span><strong>{{template "teamName" .HomeTeam}} vs {{template "teamName" .AwayTeam}}</strong></div>
         <label for="game-{{.ID}}">Result</label>
         <select id="game-{{.ID}}" name="g.{{.ID}}">
           <option value="">Unset</option>
-          <option value="h" {{if .SelectedHome}}selected{{end}}>{{.HomeTeam}} win</option>
+          <option value="h" {{if .SelectedHome}}selected{{end}}>{{.HomeTeam.Name}} win</option>
           <option value="d" {{if .SelectedDraw}}selected{{end}}>Draw</option>
-          <option value="a" {{if .SelectedAway}}selected{{end}}>{{.AwayTeam}} win</option>
+          <option value="a" {{if .SelectedAway}}selected{{end}}>{{.AwayTeam.Name}} win</option>
         </select>
       </div>
       {{end}}{{end}}
@@ -41,5 +41,5 @@
 </section>
 {{template "foot" .}}{{end}}
 
-{{define "projectionTable"}}<div class="table-scroll"><table class="standings projected-table"><caption>Projected standings</caption><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>PPG</th></tr></thead><tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}"><td>{{.Position}}</td><th scope="row">{{.Team}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td></tr>{{end}}</tbody></table></div>{{end}}
-{{define "currentTable"}}<div class="table-scroll"><table class="standings"><caption>Current standings</caption><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>PPG</th></tr></thead><tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}"><td>{{.Position}}</td><th scope="row">{{.Team}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td></tr>{{end}}</tbody></table></div>{{end}}
+{{define "projectionTable"}}<div class="table-scroll"><table class="standings projected-table"><caption>Projected standings</caption><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>PPG</th></tr></thead><tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}"><td>{{.Position}}</td><th scope="row">{{template "teamName" .Team}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td></tr>{{end}}</tbody></table></div>{{end}}
+{{define "currentTable"}}<div class="table-scroll"><table class="standings"><caption>Current standings</caption><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>PPG</th></tr></thead><tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}"><td>{{.Position}}</td><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td></tr>{{end}}</tbody></table></div>{{end}}

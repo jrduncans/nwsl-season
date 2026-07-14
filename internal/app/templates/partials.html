@@ -27,7 +27,7 @@
     {{range .Rows}}
       <tr class="{{if .PlayoffLine}}playoff-line {{end}}{{if .Clinched}}clinched{{end}}">
         <td>{{.Position}}</td>
-        <th scope="row">{{.Team}}{{if .Clinched}} <span class="badge" title="Mathematically clinched a playoff place">Clinched</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th>
+        <th scope="row">{{template "teamName" .Team}}{{if .Clinched}} <span class="badge" title="Mathematically clinched a playoff place">Clinched</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th>
         <td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td>
       </tr>
     {{end}}
@@ -35,3 +35,5 @@
   </table>
 </div>
 {{end}}
+
+{{define "teamName"}}<span class="team-name">{{if .LogoURL}}<img class="team-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span>{{.Name}}</span></span>{{end}}

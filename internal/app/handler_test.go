@@ -120,6 +120,14 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 			t.Errorf("body does not contain %q", text)
 		}
 	}
+	for _, logo := range []string{
+		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
+		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
+	} {
+		if got := strings.Count(response.Body.String(), logo); got != 8 {
+			t.Errorf("%s appears %d times, want 8 for standings, strength, and fixtures", logo, got)
+		}
+	}
 	if strings.Contains(response.Body.String(), "<script>alert") {
 		t.Fatal("team name was not escaped")
 	}
@@ -202,6 +210,23 @@ func TestWhatIfRendersProjectedTableAndSelectedFixture(t *testing.T) {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
+	}
+	for _, logo := range []string{
+		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
+		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
+	} {
+		if got := strings.Count(response.Body.String(), logo); got != 6 {
+			t.Errorf("%s appears %d times, want 6 for projected standings and what-if matchups", logo, got)
+		}
+	}
+}
+
+func TestClubLogoURLPathEscapesTeamID(t *testing.T) {
+	if got, want := clubLogoURL("team/id ?"), clubLogoBaseURL+"team%2Fid%20%3F.png"; got != want {
+		t.Fatalf("clubLogoURL = %q, want %q", got, want)
+	}
+	if got := clubLogoURL(""); got != "" {
+		t.Fatalf("clubLogoURL for empty team ID = %q, want empty", got)
 	}
 }
 

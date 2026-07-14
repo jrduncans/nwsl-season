@@ -26,7 +26,7 @@
         <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">Remaining</th><th scope="col">Home</th><th scope="col">Away</th><th scope="col">Home opp PPG</th><th scope="col">Away opp PPG</th><th scope="col">Raw opp PPG</th><th scope="col">Venue-adjusted PPG</th></tr></thead>
         <tbody>
         {{range .Strength.Rows}}
-          <tr><td>{{.Position}}</td><th scope="row">{{.Team}}</th><td>{{.RemainingFixtures}}</td><td>{{.RemainingHome}}</td><td>{{.RemainingAway}}</td><td>{{.HomeOpponentPPG}}</td><td>{{.AwayOpponentPPG}}</td><td>{{.RawOpponentPPG}}</td><td><strong>{{.VenueAdjustedOpponentPPG}}</strong></td></tr>
+          <tr><td>{{.Position}}</td><th scope="row">{{template "teamName" .Team}}</th><td>{{.RemainingFixtures}}</td><td>{{.RemainingHome}}</td><td>{{.RemainingAway}}</td><td>{{.HomeOpponentPPG}}</td><td>{{.AwayOpponentPPG}}</td><td>{{.RawOpponentPPG}}</td><td><strong>{{.VenueAdjustedOpponentPPG}}</strong></td></tr>
         {{end}}
         </tbody>
       </table>
@@ -38,7 +38,7 @@
   <h2 id="fixtures-title">Results and fixtures</h2>
   {{range .FixtureGroups}}
     <section class="fixture-group"><h3>{{.Label}}</h3>
-      <ul class="fixtures">{{range .Games}}<li><time>{{.Kickoff}}</time><span>{{.HomeTeam}}</span><strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong><span>{{.AwayTeam}}</span>{{if .Remaining}}<span class="scheduled">Scheduled</span>{{else if not .Completed}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul>
+      <ul class="fixtures">{{range .Games}}<li><time>{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{if .Remaining}}<span class="scheduled">Scheduled</span>{{else if not .Completed}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul>
     </section>
   {{end}}
 </section>

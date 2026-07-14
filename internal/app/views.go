@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -9,6 +10,8 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/strength"
 	"github.com/jrduncans/nwsl-season/internal/whatif"
 )
+
+const clubLogoBaseURL = "https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/"
 
 type seasonPage struct {
 	Title          string
@@ -42,7 +45,7 @@ type strengthView struct {
 
 type strengthRowView struct {
 	Position                 int
-	Team                     string
+	Team                     teamNameView
 	RemainingFixtures        int
 	RemainingHome            int
 	RemainingAway            int
@@ -56,7 +59,7 @@ type strengthRowView struct {
 type tableRowView struct {
 	Position       int
 	TeamID         string
-	Team           string
+	Team           teamNameView
 	Played         int
 	Wins           int
 	Draws          int
@@ -79,8 +82,8 @@ type fixtureGroupView struct {
 type fixtureView struct {
 	ID           string
 	Kickoff      string
-	HomeTeam     string
-	AwayTeam     string
+	HomeTeam     teamNameView
+	AwayTeam     teamNameView
 	Score        string
 	Completed    bool
 	Remaining    bool
@@ -88,6 +91,11 @@ type fixtureView struct {
 	SelectedHome bool
 	SelectedDraw bool
 	SelectedAway bool
+}
+
+type teamNameView struct {
+	Name    string
+	LogoURL string
 }
 
 type errorPage struct {
@@ -111,7 +119,7 @@ func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[stri
 			tieBreak = "Official order unresolved: " + row.TieBreak.Reason
 		}
 		rows = append(rows, tableRowView{
-			Position: index + 1, TeamID: row.Team.ID, Team: displayName(row.Team),
+			Position: index + 1, TeamID: row.Team.ID, Team: teamName(row.Team),
 			Played: row.Record.Played, Wins: row.Record.Wins, Draws: row.Record.Draws, Losses: row.Record.Losses,
 			GoalsFor: row.Record.GoalsFor, GoalsAgainst: row.Record.GoalsAgainst, GoalDifference: gdText,
 			Points: row.Record.Points, PointsPerGame: fmt.Sprintf("%.2f", pointsPerGame(row.Record)),
@@ -125,7 +133,7 @@ func strengthViewFrom(result strength.Result) strengthView {
 	rows := make([]strengthRowView, 0, len(result.Rows))
 	for index, row := range result.Rows {
 		view := strengthRowView{
-			Position: index + 1, Team: displayName(row.Team), RemainingFixtures: row.RemainingFixtures,
+			Position: index + 1, Team: teamName(row.Team), RemainingFixtures: row.RemainingFixtures,
 			RemainingHome: row.RemainingHome, RemainingAway: row.RemainingAway, Available: row.Available,
 		}
 		if row.Available {
@@ -146,9 +154,9 @@ func strengthViewFrom(result strength.Result) strengthView {
 }
 
 func fixtureGroups(data cache.SeasonData, selections map[string]whatif.Outcome, location *time.Location) []fixtureGroupView {
-	teams := make(map[string]string, len(data.Teams))
+	teams := make(map[string]teamNameView, len(data.Teams))
 	for _, team := range data.Teams {
-		teams[team.ID] = displayName(team)
+		teams[team.ID] = teamName(team)
 	}
 	groups := []fixtureGroupView{}
 	groupIndex := map[string]int{}
@@ -195,6 +203,17 @@ func displayName(team standings.Team) string {
 		}
 	}
 	return "Unknown team"
+}
+
+func teamName(team standings.Team) teamNameView {
+	return teamNameView{Name: displayName(team), LogoURL: clubLogoURL(team.ID)}
+}
+
+func clubLogoURL(teamID string) string {
+	if teamID == "" {
+		return ""
+	}
+	return clubLogoBaseURL + url.PathEscape(teamID) + ".png"
 }
 
 func pointsPerGame(record standings.Record) float64 {

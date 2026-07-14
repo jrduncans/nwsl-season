@@ -17,6 +17,8 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 caption { padding: .75rem; text-align: left; font-weight: 800; }
 th, td { padding: .65rem .75rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
 th:nth-child(2) { text-align: left; }
+.team-name { display: inline-flex; align-items: center; gap: .45rem; }
+.team-logo { width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; object-fit: contain; vertical-align: middle; }
 .playoff-line td, .playoff-line th { border-bottom: 3px solid var(--green); }
 .badge { padding: .15rem .35rem; border-radius: 1rem; color: var(--green); background: var(--green-soft); font-size: .7rem; }
 .warning { color: var(--gold); }
