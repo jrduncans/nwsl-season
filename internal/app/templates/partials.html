@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · NWSL season explorer</title>
-  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="{{.StylesheetPath}}">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="/">NWSL season explorer</a>
+    <a class="brand" href="{{.HomePath}}">NWSL season explorer</a>
   </header>
   <main class="page">{{end}}
 
 {{define "foot"}}</main>
   <footer class="site-footer">Independent season explorer. Data source: American Soccer Analysis.</footer>
-  <script src="/static/whatif.js" defer></script>
+  <script src="{{.ScriptPath}}" defer></script>
 </body>
 </html>{{end}}
 

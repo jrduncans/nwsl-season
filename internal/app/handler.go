@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,7 +67,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
-	return mux
+	return withBasePath(mux)
 }
 
 type application struct {
@@ -106,13 +107,13 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/seasons/"+url.PathEscape(a.options.CurrentSeason), http.StatusSeeOther)
+	redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason), http.StatusSeeOther)
 }
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
 	page, err := a.loadSeasonPage(r, nil)
 	if err != nil {
-		a.renderError(w, err)
+		a.renderError(w, r, err)
 		return
 	}
 	a.render(w, "season", page)
@@ -120,25 +121,25 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 
 func (a *application) whatIf(w http.ResponseWriter, r *http.Request) {
 	if canonical, ok, err := canonicalWhatIfURL(r); err != nil {
-		a.renderBadRequest(w, err)
+		a.renderBadRequest(w, r, err)
 		return
 	} else if ok {
-		http.Redirect(w, r, canonical, http.StatusSeeOther)
+		redirectRelative(w, canonical, http.StatusSeeOther)
 		return
 	}
 
 	selections, err := whatif.Parse(r.URL.Query().Get("v"), r.URL.Query()["p"])
 	if err != nil {
-		a.renderBadRequest(w, err)
+		a.renderBadRequest(w, r, err)
 		return
 	}
 	page, err := a.loadSeasonPage(r, selections)
 	if err != nil {
 		if errors.Is(err, whatif.ErrNotRemaining) {
-			a.renderBadRequest(w, err)
+			a.renderBadRequest(w, r, err)
 			return
 		}
-		a.renderError(w, err)
+		a.renderError(w, r, err)
 		return
 	}
 	a.render(w, "whatif", page)
@@ -172,7 +173,7 @@ func canonicalWhatIfURL(r *http.Request) (string, bool, error) {
 		}
 		values.Add("p", gameID+":"+selected)
 	}
-	return r.URL.Path + "?" + values.Encode(), true, nil
+	return path.Base(r.URL.EscapedPath()) + "?" + values.Encode(), true, nil
 }
 
 func (a *application) loadSeasonPage(r *http.Request, selections map[string]whatif.Outcome) (seasonPage, error) {
@@ -195,15 +196,18 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 	actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
 	scheduleStrength := strength.Calculate(data.Teams, domainGames)
 	page := seasonPage{
-		Title:         season + " NWSL season",
-		Season:        season,
-		Stage:         a.options.Stage,
-		Standings:     tableViews(actualTable, a.options.PlayoffPlaces, nil),
-		Strength:      strengthViewFrom(scheduleStrength),
-		FixtureGroups: fixtureGroups(data, selections, a.options.Location),
-		WhatIfPath:    "/seasons/" + url.PathEscape(season) + "/what-if",
-		SeasonPath:    "/seasons/" + url.PathEscape(season),
-		Source:        "American Soccer Analysis (ASA)",
+		Title:          season + " NWSL season",
+		Season:         season,
+		Stage:          a.options.Stage,
+		HomePath:       relativeURL(r.URL.Path, "/"),
+		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
+		ScriptPath:     relativeURL(r.URL.Path, "/static/whatif.js"),
+		Standings:      tableViews(actualTable, a.options.PlayoffPlaces, nil),
+		Strength:       strengthViewFrom(scheduleStrength),
+		FixtureGroups:  fixtureGroups(data, selections, a.options.Location),
+		WhatIfPath:     relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/what-if"),
+		SeasonPath:     relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)),
+		Source:         "American Soccer Analysis (ASA)",
 	}
 	for _, game := range data.Games {
 		if game.Status == whatif.RemainingStatus {
@@ -291,16 +295,118 @@ func (a *application) render(w http.ResponseWriter, name string, data any) {
 	}
 }
 
-func (a *application) renderBadRequest(w http.ResponseWriter, err error) {
+func (a *application) renderBadRequest(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{Title: "Invalid what-if scenario", Message: err.Error()})
+	a.render(w, "error", errorPage{
+		Title: "Invalid what-if scenario", Message: err.Error(),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/whatif.js"),
+	})
 }
 
-func (a *application) renderError(w http.ResponseWriter, err error) {
+func (a *application) renderError(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusInternalServerError)
-	a.render(w, "error", errorPage{Title: "Season unavailable", Message: err.Error()})
+	a.render(w, "error", errorPage{
+		Title: "Season unavailable", Message: err.Error(),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/whatif.js"),
+	})
+}
+
+// withBasePath lets a reverse proxy forward its mount path unchanged. The
+// application routes remain rooted internally, while links and redirects are
+// relative so the browser retains that mount path.
+func withBasePath(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		internalPath, ok := stripBasePath(r.URL.Path)
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if canonicalPath, ok := trimRouteTrailingSlash(internalPath); ok {
+			location := "../" + path.Base(canonicalPath)
+			if r.URL.RawQuery != "" {
+				location += "?" + r.URL.RawQuery
+			}
+			redirectRelative(w, location, http.StatusSeeOther)
+			return
+		}
+		if internalPath == r.URL.Path {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		request := r.Clone(r.Context())
+		request.URL.Path = internalPath
+		request.URL.RawPath = ""
+		request.RequestURI = request.URL.RequestURI()
+		next.ServeHTTP(w, request)
+	})
+}
+
+func trimRouteTrailingSlash(requestPath string) (string, bool) {
+	if requestPath == "/" || !strings.HasSuffix(requestPath, "/") {
+		return requestPath, false
+	}
+	parts := strings.Split(strings.Trim(strings.TrimSuffix(requestPath, "/"), "/"), "/")
+	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
+		return "/" + strings.Join(parts, "/"), true
+	}
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && parts[2] == "what-if" {
+		return "/" + strings.Join(parts, "/"), true
+	}
+	return requestPath, false
+}
+
+func stripBasePath(requestPath string) (string, bool) {
+	if requestPath == "/" || strings.HasPrefix(requestPath, "/seasons/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
+		return requestPath, true
+	}
+	for _, suffix := range []string{"/seasons/", "/static/"} {
+		if index := strings.Index(requestPath, suffix); index > 0 {
+			return requestPath[index:], true
+		}
+	}
+	for _, suffix := range []string{"/healthz", "/cache/status"} {
+		if strings.HasSuffix(requestPath, suffix) {
+			return suffix, true
+		}
+	}
+	if strings.HasSuffix(requestPath, "/") {
+		return "/", true
+	}
+	return requestPath, false
+}
+
+func relativeURL(fromPath, targetPath string) string {
+	fromParts := urlPathParts(path.Dir(fromPath))
+	targetParts := urlPathParts(targetPath)
+	common := 0
+	for common < len(fromParts) && common < len(targetParts) && fromParts[common] == targetParts[common] {
+		common++
+	}
+	parts := make([]string, 0, len(fromParts)-common+len(targetParts)-common)
+	for range fromParts[common:] {
+		parts = append(parts, "..")
+	}
+	parts = append(parts, targetParts[common:]...)
+	if len(parts) == 0 {
+		return "."
+	}
+	return strings.Join(parts, "/")
+}
+
+func redirectRelative(w http.ResponseWriter, location string, status int) {
+	w.Header().Set("Location", location)
+	w.WriteHeader(status)
+}
+
+func urlPathParts(value string) []string {
+	value = path.Clean(value)
+	if value == "." || value == "/" {
+		return nil
+	}
+	return strings.Split(strings.Trim(value, "/"), "/")
 }
 
 func health(w http.ResponseWriter, _ *http.Request) {

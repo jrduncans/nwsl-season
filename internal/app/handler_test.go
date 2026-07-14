@@ -38,8 +38,70 @@ func TestHome(t *testing.T) {
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
 	}
-	if location := response.Header().Get("Location"); location != "/seasons/2026" {
+	if location := response.Header().Get("Location"); location != "seasons/2026" {
 		t.Fatalf("location = %q, want current season", location)
+	}
+}
+
+func TestRenderedHTTPPathsAreRelative(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
+	response := httptest.NewRecorder()
+
+	NewHandler(fakeStore{season: testSeasonData()}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	body := response.Body.String()
+	for _, absolutePath := range []string{`href="/`, `src="/`, `href="/static/`, `src="/static/`} {
+		if strings.Contains(body, absolutePath) {
+			t.Fatalf("body contains absolute HTTP path %q", absolutePath)
+		}
+	}
+	for _, relativePath := range []string{`href="2026/what-if"`, `href="../static/site.css"`, `src="../static/whatif.js"`} {
+		if !strings.Contains(body, relativePath) {
+			t.Errorf("body does not contain relative path %q", relativePath)
+		}
+	}
+}
+
+func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+
+	rootRequest := httptest.NewRequest(http.MethodGet, "/explorer/", nil)
+	rootResponse := httptest.NewRecorder()
+	handler.ServeHTTP(rootResponse, rootRequest)
+	if rootResponse.Code != http.StatusSeeOther || rootResponse.Header().Get("Location") != "seasons/2026" {
+		t.Fatalf("base-path root = status %d, location %q", rootResponse.Code, rootResponse.Header().Get("Location"))
+	}
+
+	pageRequest := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026", nil)
+	pageResponse := httptest.NewRecorder()
+	handler.ServeHTTP(pageResponse, pageRequest)
+	if pageResponse.Code != http.StatusOK {
+		t.Fatalf("base-path season status = %d, want 200", pageResponse.Code)
+	}
+
+	staticRequest := httptest.NewRequest(http.MethodGet, "/explorer/static/site.css", nil)
+	staticResponse := httptest.NewRecorder()
+	handler.ServeHTTP(staticResponse, staticRequest)
+	if staticResponse.Code != http.StatusOK {
+		t.Fatalf("base-path static status = %d, want 200", staticResponse.Code)
+	}
+}
+
+func TestTrailingSlashSeasonPathRedirectsToCanonicalRelativePath(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/?v=1", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want redirect", response.Code)
+	}
+	if location := response.Header().Get("Location"); location != "../2026?v=1" {
+		t.Fatalf("location = %q, want relative canonical path", location)
 	}
 }
 
@@ -122,7 +184,7 @@ func TestWhatIfFormCanonicalizesToShareableURL(t *testing.T) {
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want redirect", response.Code)
 	}
-	if location := response.Header().Get("Location"); location != "/seasons/2026/what-if?p=future-1%3Ah&v=1" {
+	if location := response.Header().Get("Location"); location != "what-if?p=future-1%3Ah&v=1" {
 		t.Fatalf("location = %q, want canonical state URL", location)
 	}
 }

@@ -11,21 +11,24 @@ import (
 )
 
 type seasonPage struct {
-	Title         string
-	Season        string
-	Stage         string
-	SeasonPath    string
-	WhatIfPath    string
-	Source        string
-	Freshness     string
-	ClinchingNote string
-	ScheduleNote  string
-	Standings     []tableRowView
-	Strength      strengthView
-	Projected     []tableRowView
-	FixtureGroups []fixtureGroupView
-	Selections    int
-	Remaining     int
+	Title          string
+	Season         string
+	Stage          string
+	HomePath       string
+	StylesheetPath string
+	ScriptPath     string
+	SeasonPath     string
+	WhatIfPath     string
+	Source         string
+	Freshness      string
+	ClinchingNote  string
+	ScheduleNote   string
+	Standings      []tableRowView
+	Strength       strengthView
+	Projected      []tableRowView
+	FixtureGroups  []fixtureGroupView
+	Selections     int
+	Remaining      int
 }
 
 type strengthView struct {
@@ -88,8 +91,11 @@ type fixtureView struct {
 }
 
 type errorPage struct {
-	Title   string
-	Message string
+	Title          string
+	Message        string
+	HomePath       string
+	StylesheetPath string
+	ScriptPath     string
 }
 
 func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[string]bool) []tableRowView {
