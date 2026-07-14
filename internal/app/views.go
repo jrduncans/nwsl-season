@@ -57,21 +57,38 @@ type strengthRowView struct {
 }
 
 type tableRowView struct {
-	Position       int
-	TeamID         string
-	Team           teamNameView
-	Played         int
-	Wins           int
-	Draws          int
-	Losses         int
-	GoalsFor       int
-	GoalsAgainst   int
-	GoalDifference string
-	Points         int
-	PointsPerGame  string
-	PlayoffLine    bool
-	Clinched       bool
-	TieBreak       string
+	Position              int
+	TeamID                string
+	Team                  teamNameView
+	Played                int
+	Wins                  int
+	Draws                 int
+	Losses                int
+	GoalsFor              int
+	GoalsAgainst          int
+	GoalDifference        string
+	Points                int
+	PointsPerGame         string
+	GoalsForPerGame       string
+	GoalsAgainstPerGame   string
+	GoalDifferencePerGame string
+	PlayoffLine           bool
+	TotalPosition         int
+	TotalPlayoffLine      bool
+	Clinched              bool
+	TieBreak              string
+}
+
+func addTotalPositions(rows []tableRowView, totalTable []standings.TableRow, playoffPlaces int) []tableRowView {
+	positions := make(map[string]int, len(totalTable))
+	for index, row := range totalTable {
+		positions[row.Team.ID] = index + 1
+	}
+	for index := range rows {
+		rows[index].TotalPosition = positions[rows[index].TeamID]
+		rows[index].TotalPlayoffLine = rows[index].TotalPosition == playoffPlaces
+	}
+	return rows
 }
 
 type fixtureGroupView struct {
@@ -123,7 +140,10 @@ func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[stri
 			Played: row.Record.Played, Wins: row.Record.Wins, Draws: row.Record.Draws, Losses: row.Record.Losses,
 			GoalsFor: row.Record.GoalsFor, GoalsAgainst: row.Record.GoalsAgainst, GoalDifference: gdText,
 			Points: row.Record.Points, PointsPerGame: fmt.Sprintf("%.2f", pointsPerGame(row.Record)),
-			PlayoffLine: index+1 == playoffPlaces, Clinched: clinched != nil && clinched[row.Team.ID], TieBreak: tieBreak,
+			GoalsForPerGame:       perGameText(row.Record.GoalsFor, row.Record.Played),
+			GoalsAgainstPerGame:   perGameText(row.Record.GoalsAgainst, row.Record.Played),
+			GoalDifferencePerGame: signedPerGameText(gd, row.Record.Played),
+			PlayoffLine:           index+1 == playoffPlaces, Clinched: clinched != nil && clinched[row.Team.ID], TieBreak: tieBreak,
 		})
 	}
 	return rows
@@ -221,4 +241,19 @@ func pointsPerGame(record standings.Record) float64 {
 		return 0
 	}
 	return float64(record.Points) / float64(record.Played)
+}
+
+func perGameText(value, played int) string {
+	if played == 0 {
+		return "0.00"
+	}
+	return fmt.Sprintf("%.2f", float64(value)/float64(played))
+}
+
+func signedPerGameText(value, played int) string {
+	text := perGameText(value, played)
+	if value > 0 {
+		return "+" + text
+	}
+	return text
 }

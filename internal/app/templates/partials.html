@@ -19,21 +19,34 @@
 </html>{{end}}
 
 {{define "table"}}
-<div class="table-scroll">
-  <table class="standings">
+<div class="standings-display" data-standings data-standings-mode="per-game">
+  {{template "standingsToggle"}}
+  <div class="table-scroll">
+  <table class="standings" data-standings-table>
     <caption>{{if .Projected}}Projected standings{{else}}Current standings{{end}}</caption>
-    <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">P</th><th scope="col">W</th><th scope="col">D</th><th scope="col">L</th><th scope="col">GF</th><th scope="col">GA</th><th scope="col">GD</th><th scope="col">Pts</th><th scope="col">PPG</th></tr></thead>
+    <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">P</th><th scope="col">W</th><th scope="col">D</th><th scope="col">L</th><th scope="col">GF</th><th scope="col">GA</th><th scope="col">GD</th><th scope="col">Pts</th></tr></thead>
     <tbody>
     {{range .Rows}}
-      <tr class="{{if .PlayoffLine}}playoff-line {{end}}{{if .Clinched}}clinched{{end}}">
-        <td>{{.Position}}</td>
+      <tr class="{{if .PlayoffLine}}playoff-line {{end}}{{if .Clinched}}clinched{{end}}" data-per-game-playoff-line="{{.PlayoffLine}}" data-total-playoff-line="{{.TotalPlayoffLine}}">
+        <td data-standings-position data-per-game="{{.Position}}" data-total="{{.TotalPosition}}">{{.Position}}</td>
         <th scope="row">{{template "teamName" .Team}}{{if .Clinched}} <span class="badge" title="Mathematically clinched a playoff place">Clinched</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th>
-        <td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td>{{.GoalsFor}}</td><td>{{.GoalsAgainst}}</td><td>{{.GoalDifference}}</td><td><strong>{{.Points}}</strong></td><td>{{.PointsPerGame}}</td>
+        <td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td data-total="{{.GoalsFor}}" data-per-game="{{.GoalsForPerGame}}"><span data-standings-value>{{.GoalsForPerGame}}</span></td><td data-total="{{.GoalsAgainst}}" data-per-game="{{.GoalsAgainstPerGame}}"><span data-standings-value>{{.GoalsAgainstPerGame}}</span></td><td data-total="{{.GoalDifference}}" data-per-game="{{.GoalDifferencePerGame}}"><span data-standings-value>{{.GoalDifferencePerGame}}</span></td><td data-total="{{.Points}}" data-per-game="{{.PointsPerGame}}"><strong data-standings-value>{{.PointsPerGame}}</strong></td>
       </tr>
     {{end}}
     </tbody>
   </table>
+  </div>
 </div>
+{{end}}
+
+{{define "standingsToggle"}}
+  <div class="standings-toolbar">
+    <p class="standings-view-label">Stat view</p>
+    <div class="standings-toggle" role="group" aria-label="Standings statistic display">
+      <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="per-game" aria-pressed="true">Per game</button>
+      <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="total" aria-pressed="false">Totals</button>
+    </div>
+  </div>
 {{end}}
 
 {{define "teamName"}}<span class="team-name">{{if .LogoURL}}<img class="team-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span>{{.Name}}</span></span>{{end}}

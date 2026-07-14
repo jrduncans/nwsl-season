@@ -194,6 +194,7 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 
 	domainGames := standingsGames(data.Games)
 	actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
+	totalTable := standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
 	scheduleStrength := strength.Calculate(data.Teams, domainGames)
 	page := seasonPage{
 		Title:          season + " NWSL season",
@@ -202,7 +203,7 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 		HomePath:       relativeURL(r.URL.Path, "/"),
 		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:     relativeURL(r.URL.Path, "/static/whatif.js"),
-		Standings:      tableViews(actualTable, a.options.PlayoffPlaces, nil),
+		Standings:      addTotalPositions(tableViews(actualTable, a.options.PlayoffPlaces, nil), totalTable, a.options.PlayoffPlaces),
 		Strength:       strengthViewFrom(scheduleStrength),
 		FixtureGroups:  fixtureGroups(data, selections, a.options.Location),
 		WhatIfPath:     relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/what-if"),
@@ -232,7 +233,8 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 		page.Selections = len(selections)
 		if len(selections) > 0 {
 			projected := standings.Calculate(data.Teams, projectedGames, standings.PerGameRules())
-			page.Projected = tableViews(projected, a.options.PlayoffPlaces, nil)
+			projectedTotals := standings.Calculate(data.Teams, projectedGames, standings.OfficialTotalRules())
+			page.Projected = addTotalPositions(tableViews(projected, a.options.PlayoffPlaces, nil), projectedTotals, a.options.PlayoffPlaces)
 		}
 	}
 	return page, nil

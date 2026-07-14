@@ -120,6 +120,11 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 			t.Errorf("body does not contain %q", text)
 		}
 	}
+	for _, text := range []string{`data-standings-mode="per-game"`, ">Per game</button>", ">Totals</button>", "<th>GF</th>", `data-total="2" data-per-game="2.00"`} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain default per-game standings control %q", text)
+		}
+	}
 	for _, logo := range []string{
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
@@ -133,6 +138,19 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), "Clinching is not evaluated") || strings.Contains(response.Body.String(), `class="badge"`) {
 		t.Fatal("incomplete schedule produced misleading clinching indicators")
+	}
+}
+
+func TestAddTotalPositionsUsesTotalStandingsOrder(t *testing.T) {
+	rows := []tableRowView{{TeamID: "alpha", Position: 1, PlayoffLine: true}, {TeamID: "bravo", Position: 2}}
+	totals := []standings.TableRow{{Team: standings.Team{ID: "bravo"}}, {Team: standings.Team{ID: "alpha"}}}
+
+	got := addTotalPositions(rows, totals, 1)
+	if got[0].TotalPosition != 2 || got[0].TotalPlayoffLine {
+		t.Fatalf("alpha total placement = %#v, want second and below playoff line", got[0])
+	}
+	if got[1].TotalPosition != 1 || !got[1].TotalPlayoffLine {
+		t.Fatalf("bravo total placement = %#v, want first and on playoff line", got[1])
 	}
 }
 
