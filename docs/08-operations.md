@@ -120,14 +120,26 @@ deployment project. It must run exactly one server instance and provide:
 Build artifacts are intentionally simple:
 
 ```sh
-make build-server                    # bin/nwsl-season-server for this host
-make build-linux-server              # bin/nwsl-season-server-linux-arm64
-make build-linux-server TARGET_ARCH=amd64
+make build                            # both binaries for this host
+make build-linux                      # both Linux binaries, ARM64 by default
+make build-linux TARGET_ARCH=amd64    # both Linux binaries for x86_64
 ```
 
-The binary embeds its HTML, CSS, and JavaScript assets. No repository deployment
-assets are required alongside it. The host can put a proxy in front of
-`NWSL_HTTP_ADDR`; proxy and TLS configuration are not part of this project.
+The individual `build-server`, `build-linux-server`, `build-sync`, and
+`build-linux-sync` targets remain available when only one artifact is needed.
+
+The server binary embeds its HTML, CSS, and JavaScript assets. No repository
+deployment assets are required alongside either binary. Deploy the server and
+maintenance binaries together. Run the maintenance binary manually as the same
+user as the server, with the same persistent `NWSL_DATA_DIR`, for example:
+
+```sh
+NWSL_DATA_DIR=/var/lib/nwsl-season \
+  /opt/nwsl-season/nwsl-season-sync -season 2026 -force
+```
+
+The host can put a proxy in front of `NWSL_HTTP_ADDR`; proxy and TLS
+configuration are not part of this project.
 
 ## Exit criteria
 

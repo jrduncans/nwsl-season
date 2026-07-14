@@ -16,7 +16,7 @@
     }
   },
   "containerEnv": {
-    "NWSL_HTTP_ADDR": "127.0.0.1:8080",
+    "NWSL_HTTP_ADDR": "0.0.0.0:8080",
     "NWSL_DATA_DIR": "${containerWorkspaceFolder}/data"
   },
   "mounts": [

@@ -93,15 +93,28 @@ make vet
 To build the server for a Linux virtual machine:
 
 ```sh
-make build-linux-server
+make build-linux
 ```
 
-That writes `bin/nwsl-season-server-linux-arm64`, suitable for the target ARM64
-Linux VM. For an x86_64 VM, run:
+That writes both `bin/nwsl-season-server-linux-arm64` and
+`bin/nwsl-season-sync-linux-arm64`, suitable for the target ARM64 Linux VM. For
+an x86_64 VM, run:
 
 ```sh
-make build-linux-server TARGET_ARCH=amd64
+make build-linux TARGET_ARCH=amd64
 ```
+
+Install the maintenance binary alongside the server and run it as the same
+user, with the same persistent `NWSL_DATA_DIR`:
+
+```sh
+NWSL_DATA_DIR=/var/lib/nwsl-season \
+  /opt/nwsl-season/nwsl-season-sync -season 2026 -force
+```
+
+The maintenance binary is intended for operator-led recovery or corrections;
+it is not a second long-running service. The server's built-in scheduler
+handles normal refreshes.
 
 The server reads cache status from `NWSL_DATA_DIR/nwsl-season.sqlite`; normal
 page requests never refresh ASA data. `/cache/status` reports the latest
@@ -124,6 +137,11 @@ and backups.
 `make build-linux-server` writes
 `bin/nwsl-season-server-linux-<arch>` (ARM64 by default; set
 `TARGET_ARCH=amd64` for x86_64).
+`make build-sync` writes `bin/nwsl-season-sync` for the host platform, and
+`make build-linux-sync` writes
+`bin/nwsl-season-sync-linux-<arch>` using the same architecture settings.
+`make build` builds both host-platform binaries, and `make build-linux` builds
+both Linux binaries.
 
 The runtime must provide exactly one server instance, a writable and persistent
 `NWSL_DATA_DIR`, network access to ASA, and graceful `SIGINT`/`SIGTERM`
@@ -131,6 +149,10 @@ delivery. Back up the SQLite data directory even though ASA can rebuild the
 cache; it retains refresh history and shortens recovery. The process must be
 allowed to bind `NWSL_HTTP_ADDR`; the deployment project may proxy it and should
 probe `/healthz` and `/cache/status`.
+
+The maintenance binary must be run with the same `NWSL_DATA_DIR` and operating
+system user as the server so it updates the live SQLite cache and can share the
+server's sync lease safely.
 
 ## Dev container
 
