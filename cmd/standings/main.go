@@ -22,7 +22,10 @@ func main() {
 }
 
 func run() error {
-	cfg := config.FromEnvironment()
+	cfg, err := config.FromEnvironment()
+	if err != nil {
+		return fmt.Errorf("configuration: %w", err)
+	}
 	season := flag.String("season", "2026", "NWSL season year to read from cache")
 	stage := flag.String("stage", "Regular Season", "NWSL competition stage to read from cache")
 	dbPath := flag.String("db", cfg.DBPath, "SQLite cache database path")

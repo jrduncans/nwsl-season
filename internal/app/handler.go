@@ -31,7 +31,7 @@ const (
 
 // Store reads page data from the local cache.
 type Store interface {
-	Status(context.Context) (cache.Status, error)
+	Status(context.Context, string, string) (cache.Status, error)
 	Season(context.Context, string, string) (cache.SeasonData, error)
 }
 
@@ -64,7 +64,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /seasons/{season}", application.season)
 	mux.HandleFunc("GET /seasons/{season}/what-if", application.whatIf)
 	mux.HandleFunc("GET /healthz", health)
-	mux.HandleFunc("GET /cache/status", cacheStatus(store))
+	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return mux
 }
@@ -309,7 +309,7 @@ func health(w http.ResponseWriter, _ *http.Request) {
 	_, _ = fmt.Fprintln(w, "ok")
 }
 
-func cacheStatus(reader Store) http.HandlerFunc {
+func cacheStatus(reader Store, season, stage string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if reader == nil {
@@ -317,7 +317,7 @@ func cacheStatus(reader Store) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: "cache status unavailable"})
 			return
 		}
-		status, err := reader.Status(r.Context())
+		status, err := reader.Status(r.Context(), season, stage)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: err.Error()})
@@ -342,17 +342,24 @@ type cacheStatusResponse struct {
 }
 
 type syncRunResponse struct {
-	ID            int64  `json:"id"`
-	StartedAt     string `json:"started_at"`
-	FinishedAt    string `json:"finished_at"`
-	Season        string `json:"season"`
-	Stage         string `json:"stage"`
-	Outcome       string `json:"outcome"`
-	ErrorSummary  string `json:"error_summary,omitempty"`
-	TeamsUpserted int    `json:"teams_upserted"`
-	GamesUpserted int    `json:"games_upserted"`
-	GamesDeleted  int    `json:"games_deleted"`
-	GamesSeen     int    `json:"games_seen"`
+	ID             int64  `json:"id"`
+	StartedAt      string `json:"started_at"`
+	FinishedAt     string `json:"finished_at"`
+	Season         string `json:"season"`
+	Stage          string `json:"stage"`
+	Outcome        string `json:"outcome"`
+	ErrorSummary   string `json:"error_summary,omitempty"`
+	TeamsUpserted  int    `json:"teams_upserted"`
+	GamesUpserted  int    `json:"games_upserted"`
+	GamesDeleted   int    `json:"games_deleted"`
+	GamesSeen      int    `json:"games_seen"`
+	DurationMS     int64  `json:"duration_ms"`
+	TeamsInserted  int    `json:"teams_inserted"`
+	TeamsUpdated   int    `json:"teams_updated"`
+	TeamsUnchanged int    `json:"teams_unchanged"`
+	GamesInserted  int    `json:"games_inserted"`
+	GamesUpdated   int    `json:"games_updated"`
+	GamesUnchanged int    `json:"games_unchanged"`
 }
 
 func syncRunResponseFrom(run *cache.SyncRun) *syncRunResponse {
@@ -360,6 +367,9 @@ func syncRunResponseFrom(run *cache.SyncRun) *syncRunResponse {
 		ID: run.ID, StartedAt: run.StartedAt.UTC().Format(time.RFC3339), FinishedAt: run.FinishedAt.UTC().Format(time.RFC3339),
 		Season: run.Season, Stage: run.Stage, Outcome: run.Outcome, ErrorSummary: run.ErrorSummary,
 		TeamsUpserted: run.TeamsUpserted, GamesUpserted: run.GamesUpserted, GamesDeleted: run.GamesDeleted, GamesSeen: run.GamesSeen,
+		DurationMS:    run.FinishedAt.Sub(run.StartedAt).Milliseconds(),
+		TeamsInserted: run.TeamsInserted, TeamsUpdated: run.TeamsUpdated, TeamsUnchanged: run.TeamsUnchanged,
+		GamesInserted: run.GamesInserted, GamesUpdated: run.GamesUpdated, GamesUnchanged: run.GamesUnchanged,
 	}
 }
 

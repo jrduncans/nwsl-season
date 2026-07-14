@@ -17,7 +17,7 @@ func TestMigrationsCreateFreshDatabase(t *testing.T) {
 	}
 	defer db.Close()
 
-	status, err := db.Status(ctx)
+	status, err := db.Status(ctx, "2026", "Regular Season")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +116,110 @@ func TestSeasonLoadsFixturesAndFreshness(t *testing.T) {
 	}
 	if season.LastSuccess == nil || season.LastSuccess.Season != "2026" {
 		t.Fatalf("last success = %+v, want 2026 sync", season.LastSuccess)
+	}
+}
+
+func TestReplaceSeasonTracksRowChanges(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{
+		{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"},
+		{ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"},
+	}
+	game := cachedGame("game-1", "2026", "Regular Season", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Valid: true})
+
+	first, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.TeamsInserted != 2 || first.GamesInserted != 1 || first.TeamsUpdated != 0 || first.GamesUpdated != 0 {
+		t.Fatalf("first run = %+v, want inserts only", first)
+	}
+
+	second, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.TeamsUnchanged != 2 || second.GamesUnchanged != 1 {
+		t.Fatalf("second run = %+v, want unchanged rows", second)
+	}
+
+	game.HomeScore = sql.NullInt64{Int64: 2, Valid: true}
+	third, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.TeamsUnchanged != 2 || third.GamesUpdated != 1 || third.GamesInserted != 0 {
+		t.Fatalf("third run = %+v, want one updated game", third)
+	}
+}
+
+func TestSyncLeaseExcludesConcurrentHolder(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	expires := time.Now().Add(time.Minute)
+	acquired, err := db.TryAcquireSyncLease(ctx, "2026\x00Regular Season", "first", expires)
+	if err != nil || !acquired {
+		t.Fatalf("first lease = %t, %v; want acquired", acquired, err)
+	}
+	acquired, err = db.TryAcquireSyncLease(ctx, "2026\x00Regular Season", "second", expires)
+	if err != nil || acquired {
+		t.Fatalf("second lease = %t, %v; want not acquired", acquired, err)
+	}
+	if err := db.ReleaseSyncLease(ctx, "2026\x00Regular Season", "first"); err != nil {
+		t.Fatal(err)
+	}
+	acquired, err = db.TryAcquireSyncLease(ctx, "2026\x00Regular Season", "second", expires)
+	if err != nil || !acquired {
+		t.Fatalf("lease after release = %t, %v; want acquired", acquired, err)
+	}
+}
+
+func TestMigrateVersionOneDatabase(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/cache.sqlite"
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`,
+		`INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-01-01T00:00:00Z')`,
+		`CREATE TABLE sync_runs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, finished_at TEXT NOT NULL,
+			season TEXT NOT NULL, stage TEXT NOT NULL, outcome TEXT NOT NULL, error_summary TEXT NOT NULL,
+			teams_upserted INTEGER NOT NULL, games_upserted INTEGER NOT NULL, games_deleted INTEGER NOT NULL, games_seen INTEGER NOT NULL
+		)`,
+	} {
+		if _, err := legacy.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.RecordFailure(ctx, "2026", "Regular Season", time.Now(), context.DeadlineExceeded); err != nil {
+		t.Fatal(err)
+	}
+	status, err := db.Status(ctx, "2026", "Regular Season")
+	if err != nil || status.LastAttempt == nil {
+		t.Fatalf("status = %+v, %v; want migrated audit row", status, err)
 	}
 }
 

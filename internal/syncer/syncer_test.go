@@ -83,9 +83,9 @@ func TestRunSkipsRecentSuccessfulSync(t *testing.T) {
 
 	client.games[0] = testGame("game-1", "FullTime", ptr(3), ptr(0))
 	second, err := service.Run(ctx, RunOptions{
-		Season:          "2024",
-		Stage:           "Regular Season",
-		MinimumInterval: time.Hour,
+		Season:                 "2024",
+		Stage:                  "Regular Season",
+		MinimumAttemptInterval: time.Hour,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func TestRunRejectsEmptyGamesAndPreservesExistingRows(t *testing.T) {
 		t.Fatalf("cached game count = %d, want existing row preserved", count)
 	}
 
-	status, err := db.Status(ctx)
+	status, err := db.Status(ctx, "2024", "Regular Season")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,6 +205,38 @@ func TestRunRecordsFetchFailureAndPreservesExistingRows(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("cached game count = %d, want existing row preserved", count)
+	}
+}
+
+func TestRunRateLimitsFailedAttemptAndForceBypassesIt(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{teams: testTeams(), games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}}
+	service := Service{ASA: &client, Store: db}
+
+	client.teamsErr = errors.New("upstream down")
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err == nil {
+		t.Fatal("first run error = nil, want failure")
+	}
+	if client.teamsCalls != 1 {
+		t.Fatalf("teams calls = %d, want 1", client.teamsCalls)
+	}
+
+	client.teamsErr = nil
+	skipped, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", MinimumAttemptInterval: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !skipped.Skipped || skipped.Outcome != "failure" || client.teamsCalls != 1 {
+		t.Fatalf("rate-limited run = %+v; teams calls = %d, want skipped failed attempt and 1 call", skipped, client.teamsCalls)
+	}
+
+	forced, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", MinimumAttemptInterval: time.Hour, Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forced.Skipped || client.teamsCalls != 2 || client.gamesCalls != 1 {
+		t.Fatalf("forced run = %+v; calls teams=%d games=%d, want completed refresh", forced, client.teamsCalls, client.gamesCalls)
 	}
 }
 

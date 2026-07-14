@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	stdsync "sync"
 	"time"
@@ -29,6 +30,9 @@ type Store interface {
 	ReplaceSeason(context.Context, string, string, []cache.Team, []cache.Game, time.Time) (cache.SyncRun, error)
 	RecordFailure(context.Context, string, string, time.Time, error) error
 	LastSuccess(context.Context, string, string) (*cache.SyncRun, error)
+	LastAttempt(context.Context, string, string) (*cache.SyncRun, error)
+	TryAcquireSyncLease(context.Context, string, string, time.Time) (bool, error)
+	ReleaseSyncLease(context.Context, string, string) error
 }
 
 // Service refreshes the persistent cache from ASA.
@@ -39,9 +43,10 @@ type Service struct {
 
 // RunOptions configures one sync run.
 type RunOptions struct {
-	Season          string
-	Stage           string
-	MinimumInterval time.Duration
+	Season                 string
+	Stage                  string
+	MinimumAttemptInterval time.Duration
+	Force                  bool
 }
 
 // Run fetches one complete ASA season/stage and atomically stores it.
@@ -62,12 +67,27 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 	if strings.TrimSpace(options.Stage) == "" {
 		return cache.SyncRun{}, errors.New("sync stage is required")
 	}
-	if options.MinimumInterval > 0 {
-		run, err := s.Store.LastSuccess(ctx, options.Season, options.Stage)
+
+	holder := fmt.Sprintf("%d-%d", os.Getpid(), startedAt.UnixNano())
+	acquired, err := s.Store.TryAcquireSyncLease(ctx, leaseKey(options), holder, leaseExpiry(ctx, startedAt))
+	if err != nil {
+		return cache.SyncRun{}, err
+	}
+	if !acquired {
+		return cache.SyncRun{}, cache.ErrSyncInProgress
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Store.ReleaseSyncLease(releaseCtx, leaseKey(options), holder)
+	}()
+
+	if !options.Force && options.MinimumAttemptInterval > 0 {
+		run, err := s.Store.LastAttempt(ctx, options.Season, options.Stage)
 		if err != nil {
 			return cache.SyncRun{}, fmt.Errorf("check recent sync: %w", err)
 		}
-		if run != nil && !run.FinishedAt.Add(options.MinimumInterval).Before(startedAt) {
+		if run != nil && !run.FinishedAt.Add(options.MinimumAttemptInterval).Before(startedAt) {
 			run.Skipped = true
 			return *run, nil
 		}
@@ -108,10 +128,27 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 }
 
 func (s Service) fail(ctx context.Context, options RunOptions, startedAt time.Time, cause error) error {
-	if err := s.Store.RecordFailure(ctx, options.Season, options.Stage, startedAt, cause); err != nil {
+	recordCtx := ctx
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		recordCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+	}
+	if err := s.Store.RecordFailure(recordCtx, options.Season, options.Stage, startedAt, cause); err != nil {
 		return fmt.Errorf("%w; additionally failed to record sync failure: %v", cause, err)
 	}
 	return cause
+}
+
+func leaseKey(options RunOptions) string {
+	return options.Season + "\x00" + options.Stage
+}
+
+func leaseExpiry(ctx context.Context, startedAt time.Time) time.Time {
+	if deadline, ok := ctx.Deadline(); ok && deadline.After(startedAt) {
+		return deadline
+	}
+	return startedAt.Add(time.Minute)
 }
 
 func validate(options RunOptions, teams []asa.Team, games []asa.Game) error {

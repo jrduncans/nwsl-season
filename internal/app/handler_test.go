@@ -184,6 +184,8 @@ func TestCacheStatusWithLastSuccessfulSync(t *testing.T) {
 			TeamsUpserted: 14,
 			GamesUpserted: 182,
 			GamesSeen:     182,
+			GamesInserted: 2,
+			GamesUpdated:  3,
 		},
 		LastSuccess: &cache.SyncRun{
 			ID:            1,
@@ -195,6 +197,8 @@ func TestCacheStatusWithLastSuccessfulSync(t *testing.T) {
 			TeamsUpserted: 14,
 			GamesUpserted: 182,
 			GamesSeen:     182,
+			GamesInserted: 2,
+			GamesUpdated:  3,
 		},
 	}}
 
@@ -221,6 +225,9 @@ func TestCacheStatusWithLastSuccessfulSync(t *testing.T) {
 	if lastSuccess["season"] != "2026" {
 		t.Fatalf("season = %v, want 2026", lastSuccess["season"])
 	}
+	if lastSuccess["duration_ms"] != float64(1000) || lastSuccess["games_inserted"] != float64(2) || lastSuccess["games_updated"] != float64(3) {
+		t.Fatalf("status metrics = %#v, want duration and row counts", lastSuccess)
+	}
 }
 
 type fakeStore struct {
@@ -229,7 +236,7 @@ type fakeStore struct {
 	err    error
 }
 
-func (f fakeStore) Status(context.Context) (cache.Status, error) {
+func (f fakeStore) Status(context.Context, string, string) (cache.Status, error) {
 	return f.status, f.err
 }
 

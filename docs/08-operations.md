@@ -54,8 +54,9 @@ configuration so production timing can be adjusted without a code change:
 
 The rate limit applies to failures too, so an ASA outage cannot create a request
 loop. Once an eligible fixture is returned as `FullTime` with both scores, it no
-longer causes refreshes. The current sync service's single-writer protection
-remains the final guard against overlapping manual and scheduled syncs.
+longer causes refreshes. An in-process mutex and a short-lived SQLite lease keep
+manual and scheduled syncs from overlapping, including when the maintenance
+command runs in a separate process.
 
 This policy relies on ASA returning scheduled fixtures before they are played.
 If that assumption proves false, record the observed behavior and extend the
@@ -99,6 +100,34 @@ Track and expose:
 - Gracefully shut down the HTTP server and its active refresh.
 - Run migrations before serving traffic.
 - Pin dependency versions and automate tests.
+
+## Runtime integration contract
+
+This repository does not provision a machine, process manager, proxy, TLS,
+configuration delivery, or backups. Those concerns belong to the separate
+deployment project. It must run exactly one server instance and provide:
+
+- A writable, persistent `NWSL_DATA_DIR`; this contains
+  `nwsl-season.sqlite`, its WAL files, and refresh audit history.
+- Network access to ASA and a graceful `SIGINT` or `SIGTERM` shutdown path. The
+  server stops new scheduler checks, lets its active bounded refresh finish,
+  then closes SQLite.
+- Backups of the SQLite data directory and probes for `/healthz` and
+  `/cache/status`.
+- The server configuration documented in the README, including the automatic
+  sync season/stage and timing controls.
+
+Build artifacts are intentionally simple:
+
+```sh
+make build-server                    # bin/nwsl-season-server for this host
+make build-linux-server              # bin/nwsl-season-server-linux-arm64
+make build-linux-server TARGET_ARCH=amd64
+```
+
+The binary embeds its HTML, CSS, and JavaScript assets. No repository deployment
+assets are required alongside it. The host can put a proxy in front of
+`NWSL_HTTP_ADDR`; proxy and TLS configuration are not part of this project.
 
 ## Exit criteria
 

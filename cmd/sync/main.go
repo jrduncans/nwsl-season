@@ -16,12 +16,17 @@ import (
 )
 
 func main() {
-	cfg := config.FromEnvironment()
-	season := flag.String("season", "2026", "NWSL season year to fetch")
-	stage := flag.String("stage", "Regular Season", "NWSL competition stage to fetch")
+	cfg, err := config.FromEnvironment()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sync: configuration: %v\n", err)
+		os.Exit(1)
+	}
+	season := flag.String("season", cfg.SyncSeason, "NWSL season year to fetch")
+	stage := flag.String("stage", cfg.SyncStage, "NWSL competition stage to fetch")
 	baseURL := flag.String("base-url", asa.DefaultBaseURL, "ASA API base URL")
 	dbPath := flag.String("db", cfg.DBPath, "SQLite cache database path")
-	minInterval := flag.Duration("min-interval", 10*time.Minute, "skip if the same season and stage synced successfully within this duration")
+	minInterval := flag.Duration("min-interval", cfg.SyncMinAttemptInterval, "skip if the same season and stage was attempted within this duration")
+	force := flag.Bool("force", false, "bypass the minimum attempt interval")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -32,7 +37,7 @@ func main() {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.SyncTimeout)
 	defer cancel()
 
 	db, err := cache.Open(ctx, *dbPath)
@@ -47,9 +52,10 @@ func main() {
 		Store: db,
 	}
 	run, err := service.Run(ctx, syncer.RunOptions{
-		Season:          *season,
-		Stage:           *stage,
-		MinimumInterval: *minInterval,
+		Season:                 *season,
+		Stage:                  *stage,
+		MinimumAttemptInterval: *minInterval,
+		Force:                  *force,
 	})
 	if err != nil {
 		logger.Error("sync ASA cache", "error", err)
@@ -57,8 +63,8 @@ func main() {
 	}
 
 	if run.Skipped {
-		fmt.Printf("Skipped sync for %s %s because the cache was refreshed recently.\n", *season, *stage)
-		fmt.Printf("Last successful sync: %s.\n", run.FinishedAt.Format(time.RFC3339))
+		fmt.Printf("Skipped sync for %s %s because the cache was attempted recently.\n", *season, *stage)
+		fmt.Printf("Last attempt: %s (%s).\n", run.FinishedAt.Format(time.RFC3339), run.Outcome)
 		return
 	}
 	fmt.Printf("Synced %d games and %d teams for %s %s into %s.\n", run.GamesUpserted, run.TeamsUpserted, *season, *stage, *dbPath)

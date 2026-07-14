@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 // DB wraps the SQLite cache.
 type DB struct {
@@ -48,18 +48,24 @@ type Game struct {
 
 // SyncRun contains the audit row for a refresh attempt.
 type SyncRun struct {
-	ID            int64
-	StartedAt     time.Time
-	FinishedAt    time.Time
-	Season        string
-	Stage         string
-	Outcome       string
-	ErrorSummary  string
-	TeamsUpserted int
-	GamesUpserted int
-	GamesDeleted  int
-	GamesSeen     int
-	Skipped       bool
+	ID             int64
+	StartedAt      time.Time
+	FinishedAt     time.Time
+	Season         string
+	Stage          string
+	Outcome        string
+	ErrorSummary   string
+	TeamsUpserted  int
+	GamesUpserted  int
+	GamesDeleted   int
+	GamesSeen      int
+	TeamsInserted  int
+	TeamsUpdated   int
+	TeamsUnchanged int
+	GamesInserted  int
+	GamesUpdated   int
+	GamesUnchanged int
+	Skipped        bool
 }
 
 // Status is the latest cache freshness summary.
@@ -67,6 +73,16 @@ type Status struct {
 	LastAttempt *SyncRun
 	LastSuccess *SyncRun
 }
+
+// RefreshSnapshot is the minimal cached state the background scheduler needs.
+type RefreshSnapshot struct {
+	Games       []Game
+	LastAttempt *SyncRun
+	LastSuccess *SyncRun
+}
+
+// ErrSyncInProgress means another process holds the lease for this cache stream.
+var ErrSyncInProgress = errors.New("cache sync already in progress")
 
 // SeasonData is the cached input needed to render one season and calculate its
 // standings. Games retain their presentation metadata as well as their scores.
@@ -124,7 +140,7 @@ func (c *DB) configure(ctx context.Context) error {
 	return nil
 }
 
-// Migrate creates the cache schema.
+// Migrate creates the cache schema and upgrades earlier versions in place.
 func (c *DB) Migrate(ctx context.Context) error {
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -132,61 +148,104 @@ func (c *DB) Migrate(ctx context.Context) error {
 	}
 	defer rollback(tx)
 
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS teams (
-			asa_team_id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			short_name TEXT NOT NULL,
-			abbreviation TEXT NOT NULL,
-			raw_json TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS games (
-			asa_game_id TEXT PRIMARY KEY,
-			season TEXT NOT NULL,
-			stage TEXT NOT NULL,
-			kickoff_utc TEXT NOT NULL,
-			status TEXT NOT NULL,
-			home_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
-			away_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
-			home_score INTEGER,
-			away_score INTEGER,
-			matchday INTEGER,
-			last_updated_utc TEXT NOT NULL,
-			raw_json TEXT NOT NULL,
-			synced_at TEXT NOT NULL
-		)`,
-		`CREATE INDEX IF NOT EXISTS games_season_stage_idx ON games (season, stage)`,
-		`CREATE TABLE IF NOT EXISTS sync_runs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			started_at TEXT NOT NULL,
-			finished_at TEXT NOT NULL,
-			season TEXT NOT NULL,
-			stage TEXT NOT NULL,
-			outcome TEXT NOT NULL,
-			error_summary TEXT NOT NULL,
-			teams_upserted INTEGER NOT NULL,
-			games_upserted INTEGER NOT NULL,
-			games_deleted INTEGER NOT NULL,
-			games_seen INTEGER NOT NULL
-		)`,
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version INTEGER PRIMARY KEY,
+		applied_at TEXT NOT NULL
+	)`); err != nil {
+		return fmt.Errorf("create migration table: %w", err)
 	}
-
-	for _, statement := range statements[:len(statements)-1] {
-		if _, err := tx.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("apply migration: %w", err)
+	version, err := migrationVersion(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if version < 1 {
+		for _, statement := range []string{
+			`CREATE TABLE teams (
+				asa_team_id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				short_name TEXT NOT NULL,
+				abbreviation TEXT NOT NULL,
+				raw_json TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)`,
+			`CREATE TABLE games (
+				asa_game_id TEXT PRIMARY KEY,
+				season TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				kickoff_utc TEXT NOT NULL,
+				status TEXT NOT NULL,
+				home_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
+				away_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
+				home_score INTEGER,
+				away_score INTEGER,
+				matchday INTEGER,
+				last_updated_utc TEXT NOT NULL,
+				raw_json TEXT NOT NULL,
+				synced_at TEXT NOT NULL
+			)`,
+			`CREATE INDEX games_season_stage_idx ON games (season, stage)`,
+			`CREATE TABLE sync_runs (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				started_at TEXT NOT NULL,
+				finished_at TEXT NOT NULL,
+				season TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				outcome TEXT NOT NULL,
+				error_summary TEXT NOT NULL,
+				teams_upserted INTEGER NOT NULL,
+				games_upserted INTEGER NOT NULL,
+				games_deleted INTEGER NOT NULL,
+				games_seen INTEGER NOT NULL
+			)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 1: %w", err)
+			}
 		}
+		if err := recordMigration(ctx, tx, 1); err != nil {
+			return err
+		}
+		version = 1
 	}
-	if _, err := tx.ExecContext(ctx, statements[len(statements)-1], schemaVersion, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		return fmt.Errorf("record migration: %w", err)
+	if version < schemaVersion {
+		for _, statement := range []string{
+			`ALTER TABLE sync_runs ADD COLUMN teams_inserted INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE sync_runs ADD COLUMN teams_updated INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE sync_runs ADD COLUMN teams_unchanged INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE sync_runs ADD COLUMN games_inserted INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE sync_runs ADD COLUMN games_updated INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE sync_runs ADD COLUMN games_unchanged INTEGER NOT NULL DEFAULT 0`,
+			`CREATE TABLE sync_leases (
+				lock_key TEXT PRIMARY KEY,
+				holder TEXT NOT NULL,
+				expires_at_unix_nano INTEGER NOT NULL
+			)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 2: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 2); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
+	}
+	return nil
+}
+
+func migrationVersion(ctx context.Context, tx *sql.Tx) (int, error) {
+	var version int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("read migration version: %w", err)
+	}
+	return version, nil
+}
+
+func recordMigration(ctx context.Context, tx *sql.Tx, version int) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, version, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return fmt.Errorf("record migration %d: %w", version, err)
 	}
 	return nil
 }
@@ -212,43 +271,34 @@ func (c *DB) ReplaceSeason(ctx context.Context, season, stage string, teams []Te
 	defer rollback(tx)
 
 	for _, team := range teams {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO teams (
-			asa_team_id, name, short_name, abbreviation, raw_json, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(asa_team_id) DO UPDATE SET
-			name = excluded.name,
-			short_name = excluded.short_name,
-			abbreviation = excluded.abbreviation,
-			raw_json = excluded.raw_json,
-			updated_at = excluded.updated_at`,
-			team.ASAID, team.Name, team.ShortName, team.Abbreviation, team.RawJSON, now.Format(time.RFC3339)); err != nil {
-			return SyncRun{}, fmt.Errorf("upsert team %q: %w", team.ASAID, err)
+		change, err := writeTeam(ctx, tx, team, now)
+		if err != nil {
+			return SyncRun{}, err
+		}
+		switch change {
+		case rowInserted:
+			run.TeamsInserted++
+		case rowUpdated:
+			run.TeamsUpdated++
+		case rowUnchanged:
+			run.TeamsUnchanged++
 		}
 	}
 
 	gameIDs := make([]string, 0, len(games))
 	for _, game := range games {
 		gameIDs = append(gameIDs, game.ASAID)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO games (
-			asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-			home_score, away_score, matchday, last_updated_utc, raw_json, synced_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(asa_game_id) DO UPDATE SET
-			season = excluded.season,
-			stage = excluded.stage,
-			kickoff_utc = excluded.kickoff_utc,
-			status = excluded.status,
-			home_team_id = excluded.home_team_id,
-			away_team_id = excluded.away_team_id,
-			home_score = excluded.home_score,
-			away_score = excluded.away_score,
-			matchday = excluded.matchday,
-			last_updated_utc = excluded.last_updated_utc,
-			raw_json = excluded.raw_json,
-			synced_at = excluded.synced_at`,
-			game.ASAID, game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
-			nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), game.LastUpdatedUTC, game.RawJSON, now.Format(time.RFC3339)); err != nil {
-			return SyncRun{}, fmt.Errorf("upsert game %q: %w", game.ASAID, err)
+		change, err := writeGame(ctx, tx, game, now)
+		if err != nil {
+			return SyncRun{}, err
+		}
+		switch change {
+		case rowInserted:
+			run.GamesInserted++
+		case rowUpdated:
+			run.GamesUpdated++
+		case rowUnchanged:
+			run.GamesUnchanged++
 		}
 	}
 
@@ -267,6 +317,85 @@ func (c *DB) ReplaceSeason(ctx context.Context, season, stage string, teams []Te
 	return run, nil
 }
 
+type rowChange int
+
+const (
+	rowInserted rowChange = iota
+	rowUpdated
+	rowUnchanged
+)
+
+func writeTeam(ctx context.Context, tx *sql.Tx, team Team, now time.Time) (rowChange, error) {
+	var existing Team
+	err := tx.QueryRowContext(ctx, `SELECT asa_team_id, name, short_name, abbreviation, raw_json FROM teams WHERE asa_team_id = ?`, team.ASAID).Scan(
+		&existing.ASAID, &existing.Name, &existing.ShortName, &existing.Abbreviation, &existing.RawJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO teams (
+			asa_team_id, name, short_name, abbreviation, raw_json, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?)`, team.ASAID, team.Name, team.ShortName, team.Abbreviation, team.RawJSON, formatTime(now)); err != nil {
+			return 0, fmt.Errorf("insert team %q: %w", team.ASAID, err)
+		}
+		return rowInserted, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("load team %q: %w", team.ASAID, err)
+	}
+	if existing == team {
+		return rowUnchanged, nil
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE teams SET
+		name = ?, short_name = ?, abbreviation = ?, raw_json = ?, updated_at = ?
+		WHERE asa_team_id = ?`, team.Name, team.ShortName, team.Abbreviation, team.RawJSON, formatTime(now), team.ASAID); err != nil {
+		return 0, fmt.Errorf("update team %q: %w", team.ASAID, err)
+	}
+	return rowUpdated, nil
+}
+
+func writeGame(ctx context.Context, tx *sql.Tx, game Game, now time.Time) (rowChange, error) {
+	var existing Game
+	err := tx.QueryRowContext(ctx, `SELECT
+		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
+		home_score, away_score, matchday, last_updated_utc, raw_json
+		FROM games WHERE asa_game_id = ?`, game.ASAID).Scan(
+		&existing.ASAID, &existing.Season, &existing.Stage, &existing.KickoffUTC, &existing.Status,
+		&existing.HomeTeamID, &existing.AwayTeamID, &existing.HomeScore, &existing.AwayScore,
+		&existing.Matchday, &existing.LastUpdatedUTC, &existing.RawJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO games (
+			asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
+			home_score, away_score, matchday, last_updated_utc, raw_json, synced_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			game.ASAID, game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
+			nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), game.LastUpdatedUTC, game.RawJSON, formatTime(now)); err != nil {
+			return 0, fmt.Errorf("insert game %q: %w", game.ASAID, err)
+		}
+		return rowInserted, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("load game %q: %w", game.ASAID, err)
+	}
+	if equalGame(existing, game) {
+		return rowUnchanged, nil
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE games SET
+		season = ?, stage = ?, kickoff_utc = ?, status = ?, home_team_id = ?, away_team_id = ?,
+		home_score = ?, away_score = ?, matchday = ?, last_updated_utc = ?, raw_json = ?, synced_at = ?
+		WHERE asa_game_id = ?`,
+		game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
+		nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), game.LastUpdatedUTC, game.RawJSON, formatTime(now), game.ASAID); err != nil {
+		return 0, fmt.Errorf("update game %q: %w", game.ASAID, err)
+	}
+	return rowUpdated, nil
+}
+
+func equalGame(left, right Game) bool {
+	return left.ASAID == right.ASAID && left.Season == right.Season && left.Stage == right.Stage &&
+		left.KickoffUTC == right.KickoffUTC && left.Status == right.Status &&
+		left.HomeTeamID == right.HomeTeamID && left.AwayTeamID == right.AwayTeamID &&
+		left.HomeScore == right.HomeScore && left.AwayScore == right.AwayScore &&
+		left.Matchday == right.Matchday && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
+}
+
 // RecordFailure records a failed refresh attempt without mutating cached data.
 func (c *DB) RecordFailure(ctx context.Context, season, stage string, startedAt time.Time, cause error) error {
 	run := SyncRun{
@@ -279,31 +408,74 @@ func (c *DB) RecordFailure(ctx context.Context, season, stage string, startedAt 
 	}
 	if _, err := c.db.ExecContext(ctx, `INSERT INTO sync_runs (
 		started_at, finished_at, season, stage, outcome, error_summary,
-		teams_upserted, games_upserted, games_deleted, games_seen
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		teams_upserted, games_upserted, games_deleted, games_seen,
+		teams_inserted, teams_updated, teams_unchanged, games_inserted, games_updated, games_unchanged
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Season, run.Stage, run.Outcome, run.ErrorSummary,
-		0, 0, 0, 0); err != nil {
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0); err != nil {
 		return fmt.Errorf("record failed sync run: %w", err)
 	}
 	return nil
 }
 
-// Status returns the last attempted and successful sync runs.
-func (c *DB) Status(ctx context.Context) (Status, error) {
-	attempt, err := c.latestRun(ctx, "", "", "")
+// Status returns the last attempted and successful sync runs for a season and stage.
+func (c *DB) Status(ctx context.Context, season, stage string) (Status, error) {
+	attempt, err := c.LastAttempt(ctx, season, stage)
 	if err != nil {
 		return Status{}, err
 	}
-	success, err := c.latestRun(ctx, "success", "", "")
+	success, err := c.LastSuccess(ctx, season, stage)
 	if err != nil {
 		return Status{}, err
 	}
 	return Status{LastAttempt: attempt, LastSuccess: success}, nil
 }
 
+// LastAttempt returns the latest attempted sync for a season and stage.
+func (c *DB) LastAttempt(ctx context.Context, season, stage string) (*SyncRun, error) {
+	return c.latestRun(ctx, "", season, stage)
+}
+
 // LastSuccess returns the latest successful sync for a season and stage.
 func (c *DB) LastSuccess(ctx context.Context, season, stage string) (*SyncRun, error) {
 	return c.latestRun(ctx, "success", season, stage)
+}
+
+// RefreshSnapshot returns the fixtures and audit data needed for a refresh decision.
+func (c *DB) RefreshSnapshot(ctx context.Context, season, stage string) (RefreshSnapshot, error) {
+	games, err := c.seasonGames(ctx, season, stage)
+	if err != nil {
+		return RefreshSnapshot{}, err
+	}
+	status, err := c.Status(ctx, season, stage)
+	if err != nil {
+		return RefreshSnapshot{}, err
+	}
+	return RefreshSnapshot{Games: games, LastAttempt: status.LastAttempt, LastSuccess: status.LastSuccess}, nil
+}
+
+// TryAcquireSyncLease atomically obtains a short-lived cross-process sync lease.
+func (c *DB) TryAcquireSyncLease(ctx context.Context, key, holder string, expiresAt time.Time) (bool, error) {
+	result, err := c.db.ExecContext(ctx, `INSERT INTO sync_leases (lock_key, holder, expires_at_unix_nano)
+		VALUES (?, ?, ?)
+		ON CONFLICT(lock_key) DO UPDATE SET holder = excluded.holder, expires_at_unix_nano = excluded.expires_at_unix_nano
+		WHERE sync_leases.expires_at_unix_nano <= ?`, key, holder, expiresAt.UnixNano(), time.Now().UTC().UnixNano())
+	if err != nil {
+		return false, fmt.Errorf("acquire sync lease: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("inspect sync lease: %w", err)
+	}
+	return changed == 1, nil
+}
+
+// ReleaseSyncLease releases a lease held by this run and leaves another holder untouched.
+func (c *DB) ReleaseSyncLease(ctx context.Context, key, holder string) error {
+	if _, err := c.db.ExecContext(ctx, `DELETE FROM sync_leases WHERE lock_key = ? AND holder = ?`, key, holder); err != nil {
+		return fmt.Errorf("release sync lease: %w", err)
+	}
+	return nil
 }
 
 // CountGames returns cached games for tests and diagnostics.
@@ -450,7 +622,8 @@ func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, err
 
 func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*SyncRun, error) {
 	query := `SELECT id, started_at, finished_at, season, stage, outcome, error_summary,
-		teams_upserted, games_upserted, games_deleted, games_seen FROM sync_runs`
+		teams_upserted, games_upserted, games_deleted, games_seen,
+		teams_inserted, teams_updated, teams_unchanged, games_inserted, games_updated, games_unchanged FROM sync_runs`
 	args := []any{}
 	if outcome != "" {
 		query += ` WHERE outcome = ?`
@@ -470,7 +643,9 @@ func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*Syn
 	var startedAt, finishedAt string
 	err := c.db.QueryRowContext(ctx, query, args...).Scan(
 		&run.ID, &startedAt, &finishedAt, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary,
-		&run.TeamsUpserted, &run.GamesUpserted, &run.GamesDeleted, &run.GamesSeen)
+		&run.TeamsUpserted, &run.GamesUpserted, &run.GamesDeleted, &run.GamesSeen,
+		&run.TeamsInserted, &run.TeamsUpdated, &run.TeamsUnchanged,
+		&run.GamesInserted, &run.GamesUpdated, &run.GamesUnchanged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -536,10 +711,13 @@ func deleteMissingGames(ctx context.Context, tx *sql.Tx, season, stage string, g
 func insertSyncRun(ctx context.Context, tx *sql.Tx, run *SyncRun) error {
 	result, err := tx.ExecContext(ctx, `INSERT INTO sync_runs (
 		started_at, finished_at, season, stage, outcome, error_summary,
-		teams_upserted, games_upserted, games_deleted, games_seen
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		teams_upserted, games_upserted, games_deleted, games_seen,
+		teams_inserted, teams_updated, teams_unchanged, games_inserted, games_updated, games_unchanged
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Season, run.Stage, run.Outcome, run.ErrorSummary,
-		run.TeamsUpserted, run.GamesUpserted, run.GamesDeleted, run.GamesSeen)
+		run.TeamsUpserted, run.GamesUpserted, run.GamesDeleted, run.GamesSeen,
+		run.TeamsInserted, run.TeamsUpdated, run.TeamsUnchanged,
+		run.GamesInserted, run.GamesUpdated, run.GamesUnchanged)
 	if err != nil {
 		return fmt.Errorf("record successful sync run: %w", err)
 	}
