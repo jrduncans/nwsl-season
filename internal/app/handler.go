@@ -202,7 +202,7 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 		Stage:          a.options.Stage,
 		HomePath:       relativeURL(r.URL.Path, "/"),
 		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
-		ScriptPath:     relativeURL(r.URL.Path, "/static/whatif.js"),
+		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
 		Standings:      addTotalPositions(tableViews(actualTable, a.options.PlayoffPlaces, nil), totalTable, a.options.PlayoffPlaces),
 		Strength:       strengthViewFrom(scheduleStrength),
 		FixtureGroups:  fixtureGroups(data, selections, a.options.Location),
@@ -302,7 +302,7 @@ func (a *application) renderBadRequest(w http.ResponseWriter, r *http.Request, e
 	w.WriteHeader(http.StatusBadRequest)
 	a.render(w, "error", errorPage{
 		Title: "Invalid what-if scenario", Message: err.Error(),
-		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/whatif.js"),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 	})
 }
 
@@ -311,7 +311,7 @@ func (a *application) renderError(w http.ResponseWriter, r *http.Request, err er
 	w.WriteHeader(http.StatusInternalServerError)
 	a.render(w, "error", errorPage{
 		Title: "Season unavailable", Message: err.Error(),
-		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/whatif.js"),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 	})
 }
 

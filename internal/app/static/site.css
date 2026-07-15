@@ -22,6 +22,10 @@ h2 { margin-top: 3rem; }
 [data-standings-value] { transition: opacity .12s ease, transform .12s ease; }
 .standings-display.is-switching [data-standings-value] { opacity: .35; transform: translateY(1px); }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+/* Keep the stat columns from being remeasured when the display switches modes. */
+.standings { min-width: 44rem; table-layout: fixed; }
+.standings :is(th, td):first-child { width: 4rem; }
+.standings :is(th, td):nth-child(2) { width: 38%; }
 caption { padding: .75rem; text-align: left; font-weight: 800; }
 th, td { padding: .65rem .75rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
 th:nth-child(2) { text-align: left; }
