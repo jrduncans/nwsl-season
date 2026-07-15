@@ -24,9 +24,8 @@ type seasonPage struct {
 	FixturesPath           string
 	ScheduleDifficultyPath string
 	ForecastPath           string
-	Source                 string
 	Freshness              string
-	ClinchingNote          string
+	FreshnessFallback      string
 	ScheduleNote           string
 	Standings              []tableRowView
 	Strength               strengthView

@@ -106,6 +106,10 @@ func defaultOptions(options Options) Options {
 	return options
 }
 
+func freshnessValues(finishedAt time.Time, location *time.Location) (string, string) {
+	return finishedAt.UTC().Format(time.RFC3339), finishedAt.In(location).Format("Jan 2, 2006 at 3:04 PM MST")
+}
+
 func (a *application) root(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -177,7 +181,6 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
-		Source:                 "American Soccer Analysis (ASA)",
 	}
 	for _, game := range data.Games {
 		if game.Status == remainingStatus {
@@ -185,21 +188,21 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		}
 	}
 	if data.LastSuccess != nil {
-		page.Freshness = data.LastSuccess.FinishedAt.In(a.options.Location).Format("Jan 2, 2006 at 3:04 PM MST")
+		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 	}
 	expectedGames := len(data.Teams) * a.options.GamesPerTeam / 2
 	scheduleComplete := len(data.Games) == expectedGames
 	if !scheduleComplete {
 		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures.", len(data.Games), expectedGames)
 	}
-	page.ClinchingNote, page.Standings = clinchingViews(data.Teams, domainGames, page.Standings, a.options.PlayoffPlaces, scheduleComplete)
+	page.Standings = clinchingViews(data.Teams, domainGames, page.Standings, a.options.PlayoffPlaces, scheduleComplete)
 
 	return page, nil
 }
 
-func clinchingViews(teams []standings.Team, games []standings.Game, rows []tableRowView, playoffPlaces int, scheduleComplete bool) (string, []tableRowView) {
+func clinchingViews(teams []standings.Team, games []standings.Game, rows []tableRowView, playoffPlaces int, scheduleComplete bool) []tableRowView {
 	if !scheduleComplete {
-		return "Clinching is not evaluated until the complete regular-season schedule is cached.", rows
+		return rows
 	}
 	remaining := 0
 	for _, game := range games {
@@ -208,7 +211,7 @@ func clinchingViews(teams []standings.Team, games []standings.Game, rows []table
 		}
 	}
 	if remaining > maxClinchingFixtures {
-		return fmt.Sprintf("Exact clinching is evaluated once %d or fewer fixtures remain; %d remain.", maxClinchingFixtures, remaining), rows
+		return rows
 	}
 	byTeam := make(map[string]clinching.Result, len(teams))
 	for _, team := range teams {
@@ -222,7 +225,7 @@ func clinchingViews(teams []standings.Team, games []standings.Game, rows []table
 			rows[index].Clinched = true
 		}
 	}
-	return "Clinching indicators use exact feasible-result evaluation.", rows
+	return rows
 }
 
 func standingsGames(games []cache.Game) []standings.Game {

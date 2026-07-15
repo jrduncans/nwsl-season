@@ -101,7 +101,8 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		Rows: forecastRows(result), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(),
 	}
 	if data.LastSuccess != nil {
-		page.DataCutoff = data.LastSuccess.FinishedAt.In(a.options.Location).Format("Jan 2, 2006 at 3:04 PM MST")
+		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
+		page.DataCutoff = page.FreshnessFallback
 	} else {
 		page.DataCutoff = "Unavailable"
 	}

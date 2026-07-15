@@ -4,7 +4,6 @@
   <div><p class="eyebrow">{{.Stage}}</p><h1>Remaining schedule difficulty</h1></div>
   <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a class="button" href="{{.ForecastPath}}">Forecast Lab</a></div>
 </div>
-<p class="freshness">Source: {{.Source}}{{if .Freshness}} · Cache refreshed {{.Freshness}}{{else}} · Refresh time unavailable{{end}}</p>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .Strength.HasCallouts}}
   <section class="schedule-summary" aria-labelledby="schedule-overview-title">
@@ -21,7 +20,7 @@
 {{else}}
   <p class="note" id="schedule-definition">Higher values mean a harder remaining schedule. The recommended venue-adjusted opponent PPG averages each opponent’s current PPG and applies half of the observed league home-advantage gap for the fixture venue. This is an estimate, not a forecast, adjusted ranking, or power rating.</p>
   <p class="note">The venue adjustment is derived from {{.Strength.CompletedMatches}} completed matches: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
-  <p class="note">The data cutoff is the cached season data identified by the refresh time above; future results are not included.</p>
+  <p class="note">The data cutoff is the cached season data identified by the cache refresh time in the footer; future results are not included.</p>
   {{if .Strength.HasBaseline}}
     <section aria-labelledby="adjusted-title">
       <div class="section-heading"><div><h2 id="adjusted-title">Venue-adjusted comparison</h2><p class="note">Sorted hardest to easiest. The vertical marker is the league baseline of {{.Strength.Baseline}} adjusted opponent PPG.</p></div></div>

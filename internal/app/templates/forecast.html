@@ -7,7 +7,7 @@
 <p class="forecast-intro">This is a forecast, not official standings. Fixed results are your assumptions; every other remaining fixture is simulated.</p>
 <dl class="forecast-meta">
   <div><dt>Model</dt><dd>{{.ModelName}} <code>{{.ModelID}}</code></dd></div>
-  <div><dt>Data cutoff</dt><dd>{{.DataCutoff}}</dd></div>
+  <div><dt>Data cutoff</dt><dd>{{if .Freshness}}<time datetime="{{.Freshness}}" data-local-time="{{.Freshness}}">{{.FreshnessFallback}}</time>{{else}}{{.DataCutoff}}{{end}}</dd></div>
   <div><dt>Simulated seasons</dt><dd>{{.Iterations}}</dd></div>
   <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>
   <div><dt>Remaining fixtures</dt><dd>{{.Remaining}}</dd></div>

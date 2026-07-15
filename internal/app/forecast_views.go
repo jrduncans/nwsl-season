@@ -12,33 +12,35 @@ import (
 )
 
 type forecastPage struct {
-	Title           string
-	Season          string
-	HomePath        string
-	StylesheetPath  string
-	ScriptPath      string
-	SeasonPath      string
-	ForecastPath    string
-	CanonicalPath   string
-	ResetPath       string
-	ModelName       string
-	ModelID         string
-	ModelDetail     string
-	DataCutoff      string
-	Iterations      int
-	FixedCount      int
-	Remaining       int
-	ScheduleNote    string
-	Rows            []forecastRowView
-	Assumptions     []forecastAssumptionView
-	Teams           []forecastTeamOption
-	FilteredTeam    string
-	HasTeamFilter   bool
-	StateValues     []string
-	Fixtures        []forecastFixtureOption
-	CanAdd          bool
-	DefaultHomeTeam string
-	DefaultAwayTeam string
+	Title             string
+	Season            string
+	HomePath          string
+	StylesheetPath    string
+	ScriptPath        string
+	SeasonPath        string
+	ForecastPath      string
+	CanonicalPath     string
+	ResetPath         string
+	ModelName         string
+	ModelID           string
+	ModelDetail       string
+	Freshness         string
+	FreshnessFallback string
+	DataCutoff        string
+	Iterations        int
+	FixedCount        int
+	Remaining         int
+	ScheduleNote      string
+	Rows              []forecastRowView
+	Assumptions       []forecastAssumptionView
+	Teams             []forecastTeamOption
+	FilteredTeam      string
+	HasTeamFilter     bool
+	StateValues       []string
+	Fixtures          []forecastFixtureOption
+	CanAdd            bool
+	DefaultHomeTeam   string
+	DefaultAwayTeam   string
 }
 
 type forecastRowView struct {

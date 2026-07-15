@@ -39,7 +39,7 @@ function formatLocalTime(utc) {
   }).format(date);
 }
 
-function localizeForecastTimes() {
+function localizeTimes() {
   document.querySelectorAll("[data-local-time]").forEach((element) => {
     if (element.tagName === "OPTION") return;
     const localTime = formatLocalTime(element.dataset.localTime);
@@ -154,7 +154,7 @@ function setupForecastAssumptionBuilder() {
   updateFixtures();
 }
 
-localizeForecastTimes();
+localizeTimes();
 setupForecastAssumptionBuilder();
 
 function sortStandings(display, mode) {
