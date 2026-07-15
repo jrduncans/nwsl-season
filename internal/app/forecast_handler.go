@@ -109,8 +109,14 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	if len(data.Games) != expectedGames {
 		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures. This forecast includes only fixtures currently in the cache.", len(data.Games), expectedGames)
 	}
-	page.Fixtures = forecastFixtures(data, state, teamID, a.options.Location)
+	// Keep every fixture in the page so the browser can update the selector
+	// immediately when the team filter changes.
+	page.Fixtures = forecastFixtures(data, state, a.options.Location)
 	page.CanAdd = len(page.Fixtures) > 0
+	if page.CanAdd {
+		page.DefaultHomeTeam = page.Fixtures[0].Home.Name
+		page.DefaultAwayTeam = page.Fixtures[0].Away.Name
+	}
 	page.Assumptions = forecastAssumptions(data, state, func(gameID string) string {
 		return forecastURL(r.URL.Path, season, state.Without(gameID), "")
 	}, a.options.Location)

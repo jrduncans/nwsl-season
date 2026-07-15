@@ -38,28 +38,38 @@
 <section aria-labelledby="assumptions-title">
   <h2 id="assumptions-title">Your assumptions</h2>
   {{if .Assumptions}}
-  <ul class="forecast-assumptions">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
+  <ul class="forecast-assumptions">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · <time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
   <p><a href="{{.ResetPath}}">Reset all assumptions</a></p>
   {{else}}<p>No results are fixed. This forecast simulates every remaining cached fixture.</p>{{end}}
 </section>
 
-<section aria-labelledby="add-result-title">
-  <h2 id="add-result-title">Add a result</h2>
+<section aria-labelledby="assumption-builder-title">
+  <h2 id="assumption-builder-title">Build assumptions</h2>
+  <p class="note">Add any results you want to fix, then update the forecast once you are ready.</p>
   {{if .CanAdd}}
-  <form class="forecast-filter" method="get" action="{{.ForecastPath}}">
+  <form id="forecast-update" method="get" action="{{.ForecastPath}}">
+    <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
+  </form>
+  <form class="forecast-filter" method="get" action="{{.ForecastPath}}" data-fixture-filter>
     <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
     <label for="forecast-team">Filter fixtures by team</label>
     <select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
-    <button type="submit">Filter</button>
+    <noscript><button type="submit">Filter</button></noscript>
   </form>
-  <form class="forecast-add" method="get" action="{{.ForecastPath}}">
+  <form class="forecast-add" method="get" action="{{.ForecastPath}}" data-assumption-builder>
     <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}"><input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
     <label for="forecast-fixture">Fixture</label>
-    <select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}<option value="{{.ID}}">{{.Kickoff}} · {{.Home.Name}} vs {{.Away.Name}}</option>{{end}}</select>
+    <select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}<option value="{{.ID}}" data-local-time="{{.KickoffUTC}}" data-kickoff-fallback="{{.Kickoff}}" data-home-team-id="{{.HomeTeamID}}" data-away-team-id="{{.AwayTeamID}}" data-home-team="{{.Home.Name}}" data-away-team="{{.Away.Name}}" data-fixture-label="{{.Home.Name}} vs {{.Away.Name}}" data-home-label="Home vs {{.Away.Name}}" data-away-label="Away at {{.Home.Name}}">{{.Kickoff}} · {{.Home.Name}} vs {{.Away.Name}}</option>{{end}}</select>
     <label for="forecast-outcome">Outcome</label>
-    <select id="forecast-outcome" name="outcome" required><option value="h">Home win</option><option value="d">Draw</option><option value="a">Away win</option></select>
-    <button class="button" type="submit">Add result</button>
+    <select id="forecast-outcome" name="outcome" required><option value="h">{{.DefaultHomeTeam}} win</option><option value="d">Draw</option><option value="a">{{.DefaultAwayTeam}} win</option></select>
+    <button class="button" type="submit">Add assumption</button>
+    <button class="button" id="forecast-update-button" type="submit" form="forecast-update" disabled>Update forecast</button>
   </form>
+  <p id="forecast-filter-empty" class="note" hidden>No available fixtures match this team filter.</p>
+  <section id="forecast-pending" class="forecast-pending" aria-labelledby="forecast-pending-title" hidden>
+    <h3 id="forecast-pending-title">New assumptions</h3>
+    <ul id="forecast-pending-list" class="forecast-assumptions" aria-live="polite"></ul>
+  </section>
   {{else if .HasTeamFilter}}<p>No unfixed remaining fixtures match this team filter.</p>
   {{else if eq .Remaining 0}}<p>No remaining fixtures are present in the current cache. The outlook is the final table under the available tiebreak information.</p>
   {{else}}<p>All currently available remaining fixtures are already fixed.</p>{{end}}

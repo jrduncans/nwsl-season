@@ -12,31 +12,33 @@ import (
 )
 
 type forecastPage struct {
-	Title          string
-	Season         string
-	HomePath       string
-	StylesheetPath string
-	ScriptPath     string
-	SeasonPath     string
-	ForecastPath   string
-	CanonicalPath  string
-	ResetPath      string
-	ModelName      string
-	ModelID        string
-	ModelDetail    string
-	DataCutoff     string
-	Iterations     int
-	FixedCount     int
-	Remaining      int
-	ScheduleNote   string
-	Rows           []forecastRowView
-	Assumptions    []forecastAssumptionView
-	Teams          []forecastTeamOption
-	FilteredTeam   string
-	HasTeamFilter  bool
-	StateValues    []string
-	Fixtures       []forecastFixtureOption
-	CanAdd         bool
+	Title           string
+	Season          string
+	HomePath        string
+	StylesheetPath  string
+	ScriptPath      string
+	SeasonPath      string
+	ForecastPath    string
+	CanonicalPath   string
+	ResetPath       string
+	ModelName       string
+	ModelID         string
+	ModelDetail     string
+	DataCutoff      string
+	Iterations      int
+	FixedCount      int
+	Remaining       int
+	ScheduleNote    string
+	Rows            []forecastRowView
+	Assumptions     []forecastAssumptionView
+	Teams           []forecastTeamOption
+	FilteredTeam    string
+	HasTeamFilter   bool
+	StateValues     []string
+	Fixtures        []forecastFixtureOption
+	CanAdd          bool
+	DefaultHomeTeam string
+	DefaultAwayTeam string
 }
 
 type forecastRowView struct {
@@ -56,9 +58,11 @@ type forecastPositionView struct {
 }
 
 type forecastAssumptionView struct {
-	Fixture string
-	Outcome string
-	Remove  string
+	Fixture    string
+	Kickoff    string
+	KickoffUTC string
+	Outcome    string
+	Remove     string
 }
 
 type forecastTeamOption struct {
@@ -67,10 +71,13 @@ type forecastTeamOption struct {
 }
 
 type forecastFixtureOption struct {
-	ID      string
-	Kickoff string
-	Home    teamNameView
-	Away    teamNameView
+	ID         string
+	Kickoff    string
+	KickoffUTC string
+	HomeTeamID string
+	AwayTeamID string
+	Home       teamNameView
+	Away       teamNameView
 }
 
 func forecastRows(result simulation.Result) []forecastRowView {
@@ -112,7 +119,7 @@ func forecastTeamOptions(teams []standings.Team) []forecastTeamOption {
 	return options
 }
 
-func forecastFixtures(data cache.SeasonData, state forecaststate.State, teamID string, location *time.Location) []forecastFixtureOption {
+func forecastFixtures(data cache.SeasonData, state forecaststate.State, location *time.Location) []forecastFixtureOption {
 	teams := make(map[string]teamNameView, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
@@ -125,16 +132,14 @@ func forecastFixtures(data cache.SeasonData, state forecaststate.State, teamID s
 		if _, fixed := state.Fixed[game.ASAID]; fixed {
 			continue
 		}
-		if teamID != "" && game.HomeTeamID != teamID && game.AwayTeamID != teamID {
-			continue
-		}
 		kickoff, err := parseKickoff(game.KickoffUTC)
 		if err != nil {
 			continue
 		}
+		home, away := teams[game.HomeTeamID], teams[game.AwayTeamID]
 		fixtures = append(fixtures, forecastFixtureOption{
-			ID: game.ASAID, Kickoff: kickoff.In(location).Format("Mon Jan 2, 3:04 PM MST"),
-			Home: teams[game.HomeTeamID], Away: teams[game.AwayTeamID],
+			ID: game.ASAID, Kickoff: kickoff.In(location).Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),
+			HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, Home: home, Away: away,
 		})
 	}
 	return fixtures
@@ -149,8 +154,11 @@ func forecastAssumptions(data cache.SeasonData, state forecaststate.State, remov
 	for gameID, outcome := range state.Fixed {
 		game := byID[gameID]
 		kickoff, _ := parseKickoff(game.KickoffUTC)
-		fixture := fmt.Sprintf("%s · %s vs %s", kickoff.In(location).Format("Mon Jan 2"), teamDisplay(data.Teams, game.HomeTeamID), teamDisplay(data.Teams, game.AwayTeamID))
-		values = append(values, forecastAssumptionView{fixture, outcomeLabel(data.Teams, game, outcome), removeURL(gameID)})
+		fixture := fmt.Sprintf("%s vs %s", teamDisplay(data.Teams, game.HomeTeamID), teamDisplay(data.Teams, game.AwayTeamID))
+		values = append(values, forecastAssumptionView{
+			Fixture: fixture, Kickoff: kickoff.In(location).Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),
+			Outcome: outcomeLabel(data.Teams, game, outcome), Remove: removeURL(gameID),
+		})
 	}
 	sort.Slice(values, func(i, j int) bool { return values[i].Fixture < values[j].Fixture })
 	return values
