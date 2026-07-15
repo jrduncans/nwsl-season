@@ -63,6 +63,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", application.root)
 	mux.HandleFunc("GET /seasons/{season}", application.season)
+	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
 	mux.HandleFunc("GET /seasons/{season}/what-if", application.whatIf)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
@@ -117,6 +118,15 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, "season", page)
+}
+
+func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
+	page, err := a.loadSeasonPage(r, nil)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	a.render(w, "fixtures", page)
 }
 
 func (a *application) whatIf(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +217,8 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 		Strength:       strengthViewFrom(scheduleStrength),
 		FixtureGroups:  fixtureGroups(data, selections, a.options.Location),
 		WhatIfPath:     relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/what-if"),
-		SeasonPath:     relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)),
+		SeasonPath:     seasonURL(r.URL.Path, season),
+		FixturesPath:   relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		Source:         "American Soccer Analysis (ASA)",
 	}
 	for _, game := range data.Games {
@@ -354,7 +365,7 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && parts[2] == "what-if" {
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "what-if") {
 		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false
@@ -396,6 +407,16 @@ func relativeURL(fromPath, targetPath string) string {
 		return "."
 	}
 	return strings.Join(parts, "/")
+}
+
+// seasonURL avoids a trailing-slash redirect when returning from a nested
+// season page such as /seasons/{season}/fixtures.
+func seasonURL(fromPath, season string) string {
+	target := "/seasons/" + url.PathEscape(season)
+	if path.Dir(fromPath) == target {
+		return "../" + path.Base(target)
+	}
+	return relativeURL(fromPath, target)
 }
 
 func redirectRelative(w http.ResponseWriter, location string, status int) {

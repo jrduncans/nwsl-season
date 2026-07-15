@@ -58,7 +58,7 @@ func TestRenderedHTTPPathsAreRelative(t *testing.T) {
 			t.Fatalf("body contains absolute HTTP path %q", absolutePath)
 		}
 	}
-	for _, relativePath := range []string{`href="2026/what-if"`, `href="../static/site.css"`, `src="../static/standings.js"`} {
+	for _, relativePath := range []string{`href="2026/fixtures"`, `href="2026/what-if"`, `href="../static/site.css"`, `src="../static/standings.js"`} {
 		if !strings.Contains(body, relativePath) {
 			t.Errorf("body does not contain relative path %q", relativePath)
 		}
@@ -105,7 +105,22 @@ func TestTrailingSlashSeasonPathRedirectsToCanonicalRelativePath(t *testing.T) {
 	}
 }
 
-func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
+func TestTrailingSlashFixturesPathRedirectsToCanonicalRelativePath(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/fixtures/", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want redirect", response.Code)
+	}
+	if location := response.Header().Get("Location"); location != "../fixtures" {
+		t.Fatalf("location = %q, want relative canonical path", location)
+	}
+}
+
+func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	store := fakeStore{season: testSeasonData()}
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
 	response := httptest.NewRecorder()
@@ -115,7 +130,7 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "2–1", "Build a what-if scenario", "Cache refreshed Jul 9, 2026", "Remaining schedule strength", "Raw opp PPG", "Venue-adjusted PPG", "4.50"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Build a what-if scenario", "Results and fixtures", "Cache refreshed Jul 9, 2026", "Remaining schedule strength", "Raw opp PPG", "Venue-adjusted PPG", "4.50"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -129,15 +144,34 @@ func TestSeasonRendersStandingsFixturesAndFreshness(t *testing.T) {
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
 	} {
-		if got := strings.Count(response.Body.String(), logo); got != 8 {
-			t.Errorf("%s appears %d times, want 8 for standings, strength, and fixtures", logo, got)
+		if got := strings.Count(response.Body.String(), logo); got != 2 {
+			t.Errorf("%s appears %d times, want 2 for standings and strength", logo, got)
 		}
+	}
+	if strings.Contains(response.Body.String(), "2–1") {
+		t.Fatal("season page still renders fixture results")
 	}
 	if strings.Contains(response.Body.String(), "<script>alert") {
 		t.Fatal("team name was not escaped")
 	}
 	if !strings.Contains(response.Body.String(), "Clinching is not evaluated") || strings.Contains(response.Body.String(), `class="badge"`) {
 		t.Fatal("incomplete schedule produced misleading clinching indicators")
+	}
+}
+
+func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/fixtures", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	for _, text := range []string{"Results and fixtures", "2–1", "Matchday 1", "Scheduled", `href="../2026"`, `href="what-if"`} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain %q", text)
+		}
 	}
 }
 
@@ -192,7 +226,7 @@ func TestSeasonRouteReadsTemporarySQLiteCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/fixtures", nil)
 	response := httptest.NewRecorder()
 	NewHandlerWithOptions(db, Options{PlayoffPlaces: 1, GamesPerTeam: 2, Location: time.UTC}).ServeHTTP(response, request)
 

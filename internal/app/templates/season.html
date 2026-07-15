@@ -1,7 +1,7 @@
 {{define "season"}}{{template "head" .}}
 <div class="title-row">
   <div><p class="eyebrow">{{.Stage}}</p><h1>{{.Season}} season</h1></div>
-  <a class="button" href="{{.WhatIfPath}}">Build a what-if scenario</a>
+  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a class="button" href="{{.WhatIfPath}}">Build a what-if scenario</a></div>
 </div>
 <p class="freshness">Source: {{.Source}}{{if .Freshness}} · Cache refreshed {{.Freshness}}{{else}} · Refresh time unavailable{{end}}</p>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
@@ -34,12 +34,4 @@
   {{end}}
 </section>
 
-<section aria-labelledby="fixtures-title">
-  <h2 id="fixtures-title">Results and fixtures</h2>
-  {{range .FixtureGroups}}
-    <section class="fixture-group"><h3>{{.Label}}</h3>
-      <ul class="fixtures">{{range .Games}}<li><time>{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{if .Remaining}}<span class="scheduled">Scheduled</span>{{else if not .Completed}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul>
-    </section>
-  {{end}}
-</section>
 {{template "foot" .}}{{end}}

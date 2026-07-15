@@ -1,0 +1,15 @@
+{{define "fixtures"}}{{template "head" .}}
+<p><a href="{{.SeasonPath}}">← Back to {{.Season}} season</a></p>
+<div class="title-row">
+  <div><p class="eyebrow">{{.Stage}}</p><h1>Results and fixtures</h1></div>
+  <a class="button" href="{{.WhatIfPath}}">Build a what-if scenario</a>
+</div>
+<p class="freshness">Source: {{.Source}}{{if .Freshness}} · Cache refreshed {{.Freshness}}{{else}} · Refresh time unavailable{{end}}</p>
+{{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
+
+{{range .FixtureGroups}}
+  <section class="fixture-group"><h2>{{.Label}}</h2>
+    <ul class="fixtures">{{range .Games}}<li><time>{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{if .Remaining}}<span class="scheduled">Scheduled</span>{{else if not .Completed}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul>
+  </section>
+{{end}}
+{{template "foot" .}}{{end}}

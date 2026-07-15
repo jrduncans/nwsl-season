@@ -21,6 +21,7 @@ type seasonPage struct {
 	StylesheetPath string
 	ScriptPath     string
 	SeasonPath     string
+	FixturesPath   string
 	WhatIfPath     string
 	Source         string
 	Freshness      string
