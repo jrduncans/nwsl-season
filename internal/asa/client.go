@@ -37,6 +37,23 @@ type TeamsFilters struct {
 	TeamID string
 }
 
+// XGoalsFilters contains the supported /nwsl/games/xgoals query parameters.
+type XGoalsFilters struct {
+	SeasonName string
+	StageName  string
+}
+
+// GameXGoals is ASA's game-level xG response. The field names are captured
+// from the live endpoint; RawJSON preserves the complete source object.
+type GameXGoals struct {
+	GameID         string  `json:"game_id"`
+	HomeTeamID     string  `json:"home_team_id"`
+	AwayTeamID     string  `json:"away_team_id"`
+	HomeTeamXGoals float64 `json:"home_team_xgoals"`
+	AwayTeamXGoals float64 `json:"away_team_xgoals"`
+	RawJSON        string  `json:"-"`
+}
+
 // Game is the ASA /nwsl/games wire representation.
 type Game struct {
 	GameID          string `json:"game_id"`
@@ -142,6 +159,35 @@ func (c Client) Teams(ctx context.Context, filters TeamsFilters) ([]Team, error)
 	return teams, nil
 }
 
+// GameXGoals fetches ASA's team-model game expected-goals observations.
+func (c Client) GameXGoals(ctx context.Context, filters XGoalsFilters) ([]GameXGoals, error) {
+	const op = "asa game xgoals"
+	endpoint, err := c.resourceURL("/nwsl/games/xgoals", func(query url.Values) {
+		addQuery(query, "season_name", filters.SeasonName)
+		addQuery(query, "stage_name", filters.StageName)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request: %w", op, err)
+	}
+	response, err := c.httpClient().Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("%s: send request: %w", op, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))
+	}
+	values, err := decodeXGoals(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: decode response: %w", op, err)
+	}
+	return values, nil
+}
+
 func decodeGames(body io.Reader) ([]Game, error) {
 	var rawObjects []json.RawMessage
 	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
@@ -169,6 +215,23 @@ func decodeTeams(body io.Reader) ([]Team, error) {
 	values := make([]Team, 0, len(rawObjects))
 	for _, raw := range rawObjects {
 		var value Team
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, err
+		}
+		value.RawJSON = string(raw)
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func decodeXGoals(body io.Reader) ([]GameXGoals, error) {
+	var rawObjects []json.RawMessage
+	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
+		return nil, err
+	}
+	values := make([]GameXGoals, 0, len(rawObjects))
+	for _, raw := range rawObjects {
+		var value GameXGoals
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, err
 		}

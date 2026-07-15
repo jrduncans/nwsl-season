@@ -36,6 +36,7 @@ func (o Outcome) Valid() bool { return o == HomeWin || o == Draw || o == AwayWin
 type Request struct {
 	Teams         []standings.Team
 	Games         []standings.Game
+	XGoals        map[string]forecast.ExpectedGoals
 	Model         forecast.Model
 	Fixed         map[string]Outcome
 	Iterations    int
@@ -48,12 +49,18 @@ type TeamResult struct {
 	ExpectedPoints      float64
 	PointsLow           int
 	PointsHigh          int
+	PointsProbability   []PointsProbability
 	ExpectedPosition    float64
 	PositionLow         int
 	PositionHigh        int
 	PositionProbability []float64
 	PlayoffProbability  float64
 	ShieldProbability   float64
+}
+
+type PointsProbability struct {
+	Points      int
+	Probability float64
 }
 
 // Result is a complete forecast result.
@@ -84,7 +91,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	predictor, err := request.Model.Fit(request.Teams, request.Games)
+	predictor, err := request.Model.Fit(forecast.FitInput{Teams: request.Teams, Games: request.Games, XGoals: request.XGoals})
 	if err != nil {
 		return Result{}, fmt.Errorf("fit forecast model: %w", err)
 	}
@@ -96,7 +103,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		prepared.remaining[index].distribution = distribution
 	}
 
-	seed := Seed(request.Model.Info().ID, request.Teams, request.Games, request.Fixed)
+	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, predictor.SeedMaterial())
 	rng := rand.New(rand.NewSource(int64(seed)))
 	byID := make(map[string]*accumulator, len(request.Teams))
 	for _, team := range request.Teams {
@@ -310,6 +317,14 @@ func resultFromAccumulator(value *accumulator, iterations, playoffPlaces int) Te
 	}
 	result.PointsLow = weightedQuantile(value.points, total, 0.10)
 	result.PointsHigh = weightedQuantile(value.points, total, 0.90)
+	points := make([]int, 0, len(value.points))
+	for point := range value.points {
+		points = append(points, point)
+	}
+	sort.Ints(points)
+	for _, point := range points {
+		result.PointsProbability = append(result.PointsProbability, PointsProbability{Points: point, Probability: value.points[point] / total})
+	}
 	positionValues := make(map[int]float64, len(value.positions))
 	for index, count := range value.positions {
 		position := index + 1

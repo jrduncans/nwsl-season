@@ -5,6 +5,18 @@
   <a class="button" href="{{.CanonicalPath}}">Share this scenario</a>
 </div>
 <p class="forecast-intro">This is a forecast, not official standings. Fixed results are your assumptions; every other remaining fixture is simulated.</p>
+<section aria-labelledby="forecast-model-title">
+  <h2 id="forecast-model-title">Model selection</h2>
+  <form method="get" action="{{.ForecastPath}}">
+    <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+    <label for="forecast-model">Active model</label><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Recommended}} (Recommended){{end}}</option>{{end}}</select>
+    {{if .HasComparison}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}<button type="submit">Use model</button>
+  </form>
+  <form method="get" action="{{.ForecastPath}}"><input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<label for="forecast-comparison">Compare with</label><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}{{if ne .ID $.ModelID}}<option value="{{.ID}}" {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select><button type="submit">Update comparison</button></form>
+  <p><a href="{{.ForecastPath}}">Use recommended model</a></p>
+  {{range .Models}}{{if .Selected}}<p><strong>{{.Name}}</strong>{{if .Recommended}} <span class="badge">Recommended</span>{{end}} · {{.Detail}} <a href="{{.MethodPath}}">Formula</a> · <a href="../../docs/model-evaluation-v1.md">Evidence</a></p>{{end}}{{end}}
+  {{if .XGCoverage}}<p{{if .XGWarning}} class="data-warning"{{end}}>ASA team-model xG coverage: {{.XGCoverage}}{{if .XGWarning}} (below 95%; missing xG is not replaced with results){{end}}.</p>{{end}}
+</section>
 <dl class="forecast-meta">
   <div><dt>Model</dt><dd>{{.ModelName}} <code>{{.ModelID}}</code></dd></div>
   <div><dt>Data cutoff</dt><dd>{{if .Freshness}}<time datetime="{{.Freshness}}" data-local-time="{{.Freshness}}">{{.FreshnessFallback}}</time>{{else}}{{.DataCutoff}}{{end}}</dd></div>
@@ -20,7 +32,7 @@
   <div class="table-scroll">
     <table class="forecast-table">
       <caption>{{.Season}} regular-season forecast</caption>
-      <thead><tr><th>Team</th><th>Expected points</th><th>Playoffs</th><th>Expected finish</th><th>Shield</th><th>Position distribution</th></tr></thead>
+      <thead><tr><th>Team</th><th>Expected points</th><th>Playoffs</th><th>Expected finish</th><th>Shield</th>{{if .HasComparison}}<th>{{.ComparisonName}} comparison</th><th>Δ comparison − active</th>{{end}}<th>Position distribution</th></tr></thead>
       <tbody>{{range .Rows}}
         <tr>
           <th scope="row">{{template "teamName" .Team}}</th>
@@ -28,6 +40,7 @@
           <td>{{.PlayoffChance}}</td>
           <td><strong>{{.ExpectedFinish}}</strong><span class="forecast-range">80%: {{.FinishInterval}}</span></td>
           <td>{{.ShieldChance}}</td>
+          {{if $.HasComparison}}<td>{{with .Comparison}}<strong>{{.ExpectedPoints}}</strong> pts · {{.PlayoffChance}} playoffs · {{.ExpectedFinish}} finish · {{.ShieldChance}} Shield{{end}}</td><td>Points {{.ExpectedPointsDelta}}<br>Playoffs {{.PlayoffDelta}}<br>Finish {{.FinishDelta}} (negative is better)<br>Shield {{.ShieldDelta}}</td>{{end}}
           <td><details class="forecast-distribution"><summary>View positions</summary><ul>{{range .PositionBreakdown}}<li>{{.Position}}: {{.Probability}}</li>{{end}}</ul></details></td>
         </tr>
       {{end}}</tbody>
@@ -48,16 +61,16 @@
   <p class="note">Add any results you want to fix, then update the forecast once you are ready.</p>
   {{if .CanAdd}}
   <form id="forecast-update" method="get" action="{{.ForecastPath}}">
-    <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
+    <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
   </form>
   <form class="forecast-filter" method="get" action="{{.ForecastPath}}" data-fixture-filter>
-    <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+    <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
     <label for="forecast-team">Filter fixtures by team</label>
     <select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
     <noscript><button type="submit">Filter</button></noscript>
   </form>
   <form class="forecast-add" method="get" action="{{.ForecastPath}}" data-assumption-builder>
-    <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}"><input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+    <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}<input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
     <label for="forecast-fixture">Fixture</label>
     <select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}<option value="{{.ID}}" data-local-time="{{.KickoffUTC}}" data-kickoff-fallback="{{.Kickoff}}" data-home-team-id="{{.HomeTeamID}}" data-away-team-id="{{.AwayTeamID}}" data-home-team="{{.Home.Name}}" data-away-team="{{.Away.Name}}" data-fixture-label="{{.Home.Name}} vs {{.Away.Name}}" data-home-label="Home vs {{.Away.Name}}" data-away-label="Away at {{.Home.Name}}">{{.Kickoff}} · {{.Home.Name}} vs {{.Away.Name}}</option>{{end}}</select>
     <label for="forecast-outcome">Outcome</label>
@@ -76,7 +89,7 @@
 </section>
 
 <details class="forecast-method"><summary>Methodology and limitations</summary>
-  <p><strong>{{.ModelName}}</strong> uses completed goals, team attacking and defensive records, league scoring rates, observed home advantage, and explicit shrinkage toward league averages. {{.ModelDetail}}</p>
+  <p><strong>{{.ModelName}}</strong> {{.ModelDetail}}</p>
   <p>Unfixed scores are independent Poisson samples. A fixed win, draw, or loss samples a plausible scoreline conditional on that outcome, so goal-based tiebreakers retain uncertainty.</p>
   <p>The random seed comes from the model version, cached fixture snapshot, and fixed assumptions. Shared links use the latest cached data rather than preserving a historical snapshot; assumptions for a completed fixture become stale.</p>
   <p>Where cached data cannot resolve an official disciplinary-points tiebreak, the forecast splits probability across the tied positions. Forecast probabilities are not mathematical clinching proofs.</p>

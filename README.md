@@ -12,14 +12,14 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 10 is implemented: the server renders cached standings, results,
-remaining fixtures, cache freshness, schedule difficulty, and a forecast-first
-season simulator. Forecast Lab at `/seasons/2026/forecast` immediately simulates
-the remaining cached regular-season fixtures with a transparent results-based
-model, uncertainty intervals, playoff and Shield probabilities. Visitors can
-fix up to 12 outcomes, share the versioned scenario URL, and revisit it against
-the latest cache. A single server process also checks the local cache on a schedule
-and refreshes the current season only when it is missing or plausibly stale.
+Phase 11 is implemented: the cache retains ASA team-model game xG separately
+from fixtures, including raw payloads, availability markers, and independent
+refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
+pace, Results Poisson, and xG Poisson presets; it defaults to the catalog’s
+evidence-backed recommendation, preserves fixed outcomes while models change,
+and can compare two models side by side. `/seasons/2026?view=outlook` shows the
+recommended forecast without changing official standings, while
+`/seasons/2026/xg` is descriptive xG analysis—not a table or power rating.
 Normal page requests never contact ASA.
 
 ```sh
@@ -32,8 +32,8 @@ Then visit <http://localhost:8080>. The health endpoint is
 
 The current season redirects to <http://localhost:8080/seasons/2026>. Forecast
 Lab is at <http://localhost:8080/seasons/2026/forecast> and works with or
-without JavaScript. Its selected outcomes are encoded with the model version in
-a shareable URL. Fixed outcomes sample plausible conditional scorelines, so
+without JavaScript. Its selected model, optional comparison, and outcomes are
+encoded in a versioned shareable URL. Fixed outcomes sample plausible conditional scorelines, so
 goal-based tiebreakers retain uncertainty. Shared forecast URLs use the latest
 cached fixture snapshot; an assumption becomes stale when its fixture completes.
 
@@ -79,6 +79,13 @@ To print standings from the local cache:
 
 ```sh
 go run ./cmd/standings -season 2026
+```
+
+To regenerate the deterministic evaluation-artifact envelope (after auditing
+the historical cache), run:
+
+```sh
+go run ./cmd/backtest -generated-at 2026-07-15T00:00:00Z
 ```
 
 Standings default to per-game order while teams have played uneven schedules.

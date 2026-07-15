@@ -178,6 +178,28 @@ func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.
 		}
 		return Decision{Name: decisionEligible, Reason: "plausibly_complete_fixture", FixtureID: game.ASAID}
 	}
+	// A migrated fixture cache has no xG audit row yet. Treat that as an
+	// incomplete snapshot, then keep retrying explicit unavailable games so ASA
+	// publication lag can heal. The service's attempt interval still rate-limits
+	// both cases.
+	if snapshot.XGStatus.LastSuccess == nil {
+		return Decision{Name: decisionEligible, Reason: "missing_successful_xg_snapshot"}
+	}
+	if snapshot.XGStatus.LastAttempt != nil {
+		byID := map[string]cache.GameXG{}
+		for _, value := range snapshot.XGoals {
+			byID[value.GameID] = value
+		}
+		for _, game := range snapshot.Games {
+			if game.Status != "FullTime" {
+				continue
+			}
+			value, ok := byID[game.ASAID]
+			if !ok || value.Availability == cache.XGUnavailable {
+				return Decision{Name: decisionEligible, Reason: "xg_unavailable", FixtureID: game.ASAID}
+			}
+		}
+	}
 	return Decision{Name: decisionCurrent, Reason: "known_match_window_is_current"}
 }
 

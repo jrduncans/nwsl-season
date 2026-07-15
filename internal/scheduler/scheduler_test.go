@@ -14,6 +14,7 @@ import (
 func TestAssess(t *testing.T) {
 	now := time.Date(2026, 7, 13, 20, 0, 0, 0, time.UTC)
 	success := &cache.SyncRun{FinishedAt: now.Add(-time.Hour)}
+	xgSuccess := &cache.XGSyncRun{FinishedAt: now.Add(-time.Hour), Outcome: "success"}
 	final := schedulerGame("final", "2026-07-13 12:00:00 UTC", "FullTime", true, true)
 
 	for _, test := range []struct {
@@ -64,8 +65,13 @@ func TestAssess(t *testing.T) {
 			wantName: decisionEligible, wantReason: "unsupported_status", wantID: "unknown",
 		},
 		{
+			name:     "missing successful xg snapshot",
+			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{final}},
+			wantName: decisionEligible, wantReason: "missing_successful_xg_snapshot",
+		},
+		{
 			name: "current known window",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{
+			snapshot: cache.RefreshSnapshot{LastSuccess: success, XGStatus: cache.XGStatus{LastSuccess: xgSuccess}, Games: []cache.Game{
 				final,
 				schedulerGame("future", "2026-07-20 15:00:00 UTC", "PreMatch", false, false),
 			}},

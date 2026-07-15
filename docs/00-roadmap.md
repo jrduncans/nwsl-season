@@ -39,6 +39,8 @@ complete when its exit criteria pass; it does not need every possible refinement
     assumptions. See [`10-forecast-simulator.md`](10-forecast-simulator.md).
 11. **xG and model comparison** — Cache game-level xG, back-test forecast models,
     select an opinionated default, and let interested users compare alternatives.
+    The initial recommended model is `results-poisson-v1` (evidence
+    `model-evaluation-v1`) pending an audited replacement run.
     See [`11-xg-and-models.md`](11-xg-and-models.md).
 12. **Season-scale clinching status** — Generalize exact qualification proofs to
     the Shield, a home playoff place, and a playoff place; use cheap bounds and a

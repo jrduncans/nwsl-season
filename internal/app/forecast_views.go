@@ -24,6 +24,14 @@ type forecastPage struct {
 	ModelName         string
 	ModelID           string
 	ModelDetail       string
+	Models            []forecastModelView
+	HasComparison     bool
+	ComparisonName    string
+	ComparisonID      string
+	XGAvailable       int
+	XGCompleted       int
+	XGCoverage        string
+	XGWarning         bool
 	Freshness         string
 	FreshnessFallback string
 	DataCutoff        string
@@ -44,14 +52,27 @@ type forecastPage struct {
 }
 
 type forecastRowView struct {
-	Team              teamNameView
-	ExpectedPoints    string
-	PointsInterval    string
-	PlayoffChance     string
-	ExpectedFinish    string
-	FinishInterval    string
-	ShieldChance      string
-	PositionBreakdown []forecastPositionView
+	Team                teamNameView
+	ExpectedPoints      string
+	PointsInterval      string
+	PlayoffChance       string
+	ExpectedFinish      string
+	FinishInterval      string
+	ShieldChance        string
+	PositionBreakdown   []forecastPositionView
+	Comparison          *forecastRowMetrics
+	ExpectedPointsDelta string
+	PlayoffDelta        string
+	FinishDelta         string
+	ShieldDelta         string
+}
+type forecastRowMetrics struct {
+	ExpectedPoints, PlayoffChance, ExpectedFinish, ShieldChance string
+	PositionBreakdown                                           []forecastPositionView
+}
+type forecastModelView struct {
+	ID, Name, Detail, Inputs, Assumptions, MethodPath, EvidenceID string
+	Recommended, Selected, Comparison                             bool
 }
 
 type forecastPositionView struct {
@@ -104,6 +125,34 @@ func forecastRows(result simulation.Result) []forecastRowView {
 	}
 	return rows
 }
+
+func forecastComparisonRows(active simulation.Result, comparison *simulation.Result) []forecastRowView {
+	rows := forecastRows(active)
+	if comparison == nil {
+		return rows
+	}
+	byID := map[string]simulation.TeamResult{}
+	for _, row := range comparison.Teams {
+		byID[row.Team.ID] = row
+	}
+	for i := range rows {
+		other := byID[active.Teams[i].Team.ID]
+		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), PlayoffChance: percent(other.PlayoffProbability), ExpectedFinish: fmt.Sprintf("%.1f", other.ExpectedPosition), ShieldChance: percent(other.ShieldProbability)}
+		for p, prob := range other.PositionProbability {
+			if prob > 0 {
+				metrics.PositionBreakdown = append(metrics.PositionBreakdown, forecastPositionView{Position: p + 1, Probability: percent(prob)})
+			}
+		}
+		rows[i].Comparison = &metrics
+		source := active.Teams[i]
+		rows[i].ExpectedPointsDelta = signedOne(other.ExpectedPoints - source.ExpectedPoints)
+		rows[i].PlayoffDelta = signedOne((other.PlayoffProbability-source.PlayoffProbability)*100) + " pp"
+		rows[i].FinishDelta = signedOne(other.ExpectedPosition - source.ExpectedPosition)
+		rows[i].ShieldDelta = signedOne((other.ShieldProbability-source.ShieldProbability)*100) + " pp"
+	}
+	return rows
+}
+func signedOne(value float64) string { return fmt.Sprintf("%+.1f", value) }
 
 func percent(value float64) string { return fmt.Sprintf("%.1f%%", value*100) }
 

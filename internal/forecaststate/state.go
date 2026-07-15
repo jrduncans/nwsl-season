@@ -12,15 +12,17 @@ import (
 
 const (
 	// EncodingVersion identifies the Forecast Lab URL format.
-	EncodingVersion = "1"
+	EncodingVersion       = "2"
+	LegacyEncodingVersion = "1"
 	// MaxFixed keeps user assumptions small enough to remain readable.
 	MaxFixed = 12
 )
 
 // State is a versioned model choice and its fixed outcomes.
 type State struct {
-	ModelID string
-	Fixed   map[string]simulation.Outcome
+	ModelID           string
+	ComparisonModelID string
+	Fixed             map[string]simulation.Outcome
 }
 
 // Parse decodes v, m, and repeated p query values. An entirely empty state is
@@ -29,7 +31,7 @@ func Parse(version, modelID string, values []string, supportedModelID string) (S
 	if version == "" && modelID == "" && len(values) == 0 {
 		return State{ModelID: supportedModelID, Fixed: map[string]simulation.Outcome{}}, nil
 	}
-	if version != EncodingVersion {
+	if version != LegacyEncodingVersion {
 		return State{}, fmt.Errorf("unsupported forecast version %q", version)
 	}
 	if modelID != supportedModelID {
@@ -51,6 +53,48 @@ func Parse(version, modelID string, values []string, supportedModelID string) (S
 		fixed[gameID] = outcome
 	}
 	return State{ModelID: modelID, Fixed: fixed}, nil
+}
+
+// ParseV2 decodes the model-comparison format using a caller-owned catalog.
+func ParseV2(version, modelID, comparisonID string, values []string, supported func(string) bool, recommended string) (State, error) {
+	if version == "" && modelID == "" && comparisonID == "" && len(values) == 0 {
+		return State{ModelID: recommended, Fixed: map[string]simulation.Outcome{}}, nil
+	}
+	if version == LegacyEncodingVersion {
+		if comparisonID != "" || modelID != "results-poisson-v1" {
+			return State{}, fmt.Errorf("unsupported forecast model %q", modelID)
+		}
+		return parseFixed(modelID, "", values)
+	}
+	if version != EncodingVersion {
+		return State{}, fmt.Errorf("unsupported forecast version %q", version)
+	}
+	if modelID == "" || !supported(modelID) {
+		return State{}, fmt.Errorf("unsupported forecast model %q", modelID)
+	}
+	if comparisonID != "" && (!supported(comparisonID) || comparisonID == modelID) {
+		return State{}, fmt.Errorf("invalid comparison forecast model %q", comparisonID)
+	}
+	return parseFixed(modelID, comparisonID, values)
+}
+
+func parseFixed(modelID, comparisonID string, values []string) (State, error) {
+	if len(values) > MaxFixed {
+		return State{}, fmt.Errorf("at most %d fixed results are allowed", MaxFixed)
+	}
+	fixed := make(map[string]simulation.Outcome, len(values))
+	for _, value := range values {
+		gameID, encoded, ok := strings.Cut(value, ":")
+		outcome := simulation.Outcome(encoded)
+		if !ok || gameID == "" || !outcome.Valid() {
+			return State{}, fmt.Errorf("invalid forecast selection %q", value)
+		}
+		if _, exists := fixed[gameID]; exists {
+			return State{}, fmt.Errorf("duplicate forecast selection for game %q", gameID)
+		}
+		fixed[gameID] = outcome
+	}
+	return State{ModelID: modelID, ComparisonModelID: comparisonID, Fixed: fixed}, nil
 }
 
 // Values returns sorted p query values.
@@ -92,5 +136,16 @@ func (s State) copy() State {
 	for id, outcome := range s.Fixed {
 		fixed[id] = outcome
 	}
-	return State{ModelID: s.ModelID, Fixed: fixed}
+	return State{ModelID: s.ModelID, ComparisonModelID: s.ComparisonModelID, Fixed: fixed}
 }
+
+func (s State) WithModel(id string) State {
+	c := s.copy()
+	c.ModelID = id
+	if c.ComparisonModelID == id {
+		c.ComparisonModelID = ""
+	}
+	return c
+}
+func (s State) WithComparison(id string) State { c := s.copy(); c.ComparisonModelID = id; return c }
+func (s State) WithoutComparison() State       { c := s.copy(); c.ComparisonModelID = ""; return c }

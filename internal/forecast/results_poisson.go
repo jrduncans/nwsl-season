@@ -29,6 +29,9 @@ func (resultsPoissonV1) Info() Info {
 		ID:          resultsPoissonID,
 		Name:        "Results Poisson",
 		Description: "Completed goals with league and team shrinkage plus observed home advantage.",
+		Inputs:      "Completed match scores and the published fixture list.",
+		Assumptions: "Independent Poisson scoring, league/team shrinkage, and observed home advantage.",
+		MethodPath:  "/docs/11-xg-and-models.md#results-poisson-v1",
 	}
 }
 
@@ -45,7 +48,8 @@ type resultsPredictor struct {
 	leagueRate float64
 }
 
-func (resultsPoissonV1) Fit(teams []standings.Team, games []standings.Game) (Predictor, error) {
+func (resultsPoissonV1) Fit(input FitInput) (Predictor, error) {
+	teams, games := input.Teams, input.Games
 	teamTotalsByID := make(map[string]teamTotals, len(teams))
 	for _, team := range teams {
 		if team.ID == "" {
@@ -96,6 +100,8 @@ func (resultsPoissonV1) Fit(teams []standings.Team, games []standings.Game) (Pre
 	}, nil
 }
 
+func (p resultsPredictor) SeedMaterial() []byte { return []byte{} }
+
 func (p resultsPredictor) Distribution(game standings.Game) (Distribution, error) {
 	if game.Status != "PreMatch" {
 		return nil, fmt.Errorf("fixture %q is not remaining", game.ID)
@@ -130,6 +136,43 @@ type poissonDistribution struct {
 
 func (d poissonDistribution) Sample(rng *rand.Rand) Scoreline {
 	return Scoreline{Home: poisson(rng, d.homeRate), Away: poisson(rng, d.awayRate)}
+}
+
+func (d poissonDistribution) Outcomes() OutcomeProbabilities {
+	// Recurrence avoids factorial overflow and retains tail mass well below the
+	// displayed precision. The defensive cap covers every rate accepted here.
+	home, away := poissonMasses(d.homeRate), poissonMasses(d.awayRate)
+	var outcomes OutcomeProbabilities
+	for h, hp := range home {
+		for a, ap := range away {
+			if h > a {
+				outcomes.HomeWin += hp * ap
+			} else if h == a {
+				outcomes.Draw += hp * ap
+			} else {
+				outcomes.AwayWin += hp * ap
+			}
+		}
+	}
+	total := outcomes.HomeWin + outcomes.Draw + outcomes.AwayWin
+	outcomes.HomeWin /= total
+	outcomes.Draw /= total
+	outcomes.AwayWin /= total
+	return outcomes
+}
+
+func poissonMasses(rate float64) []float64 {
+	values := []float64{math.Exp(-rate)}
+	sum := values[0]
+	for goal := 1; goal <= 100; goal++ {
+		next := values[goal-1] * rate / float64(goal)
+		values = append(values, next)
+		sum += next
+		if 1-sum < 1e-12 {
+			break
+		}
+	}
+	return values
 }
 
 // poisson uses Knuth's algorithm. Phase 10 clamps rates to a small value, so

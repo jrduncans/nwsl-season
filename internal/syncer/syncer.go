@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	stdsync "sync"
@@ -23,6 +24,13 @@ const allGameStatuses = "Abandoned,FullTime,PreMatch"
 type ASAClient interface {
 	Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error)
 	Games(context.Context, asa.GamesFilters) ([]asa.Game, error)
+}
+type xgASAClient interface {
+	GameXGoals(context.Context, asa.XGoalsFilters) ([]asa.GameXGoals, error)
+}
+type xgStore interface {
+	ReplaceGameXG(context.Context, string, string, []cache.Game, []cache.GameXG, time.Time) (cache.XGSyncRun, error)
+	RecordXGFailure(context.Context, string, string, time.Time, error) error
 }
 
 // Store is the cache surface required by the sync service.
@@ -124,7 +132,42 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
+	// Fixture success is independent from xG. Keep the good fixture snapshot if
+	// xG is delayed, malformed, or unavailable, and audit that separately.
+	xgClient, hasXGClient := s.ASA.(xgASAClient)
+	xgCache, hasXGCache := s.Store.(xgStore)
+	if !hasXGClient || !hasXGCache {
+		return run, nil
+	}
+	xg, err := xgClient.GameXGoals(ctx, asa.XGoalsFilters{SeasonName: options.Season, StageName: options.Stage})
+	if err != nil {
+		return s.xgWarning(ctx, xgCache, options, startedAt, run, fmt.Errorf("fetch game xG: %w", err)), nil
+	}
+	values, err := mapXGoals(xg)
+	if err != nil {
+		return s.xgWarning(ctx, xgCache, options, startedAt, run, err), nil
+	}
+	xgRun, err := xgCache.ReplaceGameXG(ctx, options.Season, options.Stage, cacheGames, values, startedAt)
+	if err != nil {
+		return s.xgWarning(ctx, xgCache, options, startedAt, run, err), nil
+	}
+	run.XGRun = &xgRun
 	return run, nil
+}
+
+func (s Service) xgWarning(ctx context.Context, store xgStore, options RunOptions, startedAt time.Time, run cache.SyncRun, cause error) cache.SyncRun {
+	recordCtx := ctx
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		recordCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+	}
+	if err := store.RecordXGFailure(recordCtx, options.Season, options.Stage, startedAt, cause); err != nil {
+		run.XGError = cause.Error() + "; additionally failed to record xG failure: " + err.Error()
+	} else {
+		run.XGError = cause.Error()
+	}
+	return run
 }
 
 func (s Service) fail(ctx context.Context, options RunOptions, startedAt time.Time, cause error) error {
@@ -260,6 +303,28 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 		})
 	}
 	return cacheGames, nil
+}
+
+func mapXGoals(values []asa.GameXGoals) ([]cache.GameXG, error) {
+	result := make([]cache.GameXG, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value.GameID) == "" || strings.TrimSpace(value.HomeTeamID) == "" || strings.TrimSpace(value.AwayTeamID) == "" {
+			return nil, fmt.Errorf("validate ASA xG response: required identity is missing")
+		}
+		if math.IsNaN(value.HomeTeamXGoals) || math.IsInf(value.HomeTeamXGoals, 0) || value.HomeTeamXGoals < 0 || math.IsNaN(value.AwayTeamXGoals) || math.IsInf(value.AwayTeamXGoals, 0) || value.AwayTeamXGoals < 0 {
+			return nil, fmt.Errorf("validate ASA xG response: invalid xG for game %q", value.GameID)
+		}
+		raw := value.RawJSON
+		if raw == "" {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return nil, err
+			}
+			raw = string(encoded)
+		}
+		result = append(result, cache.GameXG{GameID: value.GameID, Availability: cache.XGAvailable, HomeTeamID: value.HomeTeamID, AwayTeamID: value.AwayTeamID, HomeXG: sql.NullFloat64{Float64: value.HomeTeamXGoals, Valid: true}, AwayXG: sql.NullFloat64{Float64: value.AwayTeamXGoals, Valid: true}, RawJSON: raw})
+	}
+	return result, nil
 }
 
 func nullInt(value *int) sql.NullInt64 {

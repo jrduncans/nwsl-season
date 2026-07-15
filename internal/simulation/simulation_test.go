@@ -15,7 +15,7 @@ import (
 type fixedModel struct{ score forecast.Scoreline }
 
 func (m fixedModel) Info() forecast.Info { return forecast.Info{ID: "fixed-v1", Name: "Fixed"} }
-func (m fixedModel) Fit([]standings.Team, []standings.Game) (forecast.Predictor, error) {
+func (m fixedModel) Fit(forecast.FitInput) (forecast.Predictor, error) {
 	return fixedPredictor{score: m.score}, nil
 }
 
@@ -24,10 +24,14 @@ type fixedPredictor struct{ score forecast.Scoreline }
 func (p fixedPredictor) Distribution(standings.Game) (forecast.Distribution, error) {
 	return fixedDistribution{score: p.score}, nil
 }
+func (p fixedPredictor) SeedMaterial() []byte { return nil }
 
 type fixedDistribution struct{ score forecast.Scoreline }
 
 func (d fixedDistribution) Sample(*rand.Rand) forecast.Scoreline { return d.score }
+func (d fixedDistribution) Outcomes() forecast.OutcomeProbabilities {
+	return forecast.OutcomeProbabilities{HomeWin: 1}
+}
 
 func TestRunSamplesSharedFixtureOnceAndUsesTotalStandings(t *testing.T) {
 	result, err := Run(context.Background(), Request{

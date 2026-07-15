@@ -12,6 +12,11 @@ import (
 // Seed returns a stable seed for the model, cached fixture snapshot, and fixed
 // scenario. Display names and refresh timestamps are deliberately excluded.
 func Seed(modelID string, teams []standings.Team, games []standings.Game, fixed map[string]Outcome) uint64 {
+	return SeedWithMaterial(modelID, teams, games, fixed, nil)
+}
+
+// SeedWithMaterial adds canonical fitted-model input to the Phase 10 seed.
+func SeedWithMaterial(modelID string, teams []standings.Team, games []standings.Game, fixed map[string]Outcome, material []byte) uint64 {
 	h := sha256.New()
 	writeText(h, modelID)
 
@@ -44,6 +49,8 @@ func Seed(modelID string, teams []standings.Team, games []standings.Game, fixed 
 		writeText(h, id)
 		writeText(h, string(fixed[id]))
 	}
+	writeUint(h, uint64(len(material)))
+	_, _ = h.Write(material)
 
 	return binary.BigEndian.Uint64(h.Sum(nil)[:8])
 }

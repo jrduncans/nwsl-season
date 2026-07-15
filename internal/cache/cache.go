@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,7 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 // DB wraps the SQLite cache.
 type DB struct {
@@ -66,6 +67,9 @@ type SyncRun struct {
 	GamesUpdated   int
 	GamesUnchanged int
 	Skipped        bool
+	// XGRun/XGError describe the independent second refresh when available.
+	XGRun   *XGSyncRun
+	XGError string
 }
 
 // Status is the latest cache freshness summary.
@@ -74,11 +78,40 @@ type Status struct {
 	LastSuccess *SyncRun
 }
 
+type XGAvailability string
+
+const (
+	XGAvailable   XGAvailability = "available"
+	XGUnavailable XGAvailability = "unavailable"
+)
+
+type GameXG struct {
+	GameID                 string
+	Availability           XGAvailability
+	HomeTeamID, AwayTeamID string
+	HomeXG, AwayXG         sql.NullFloat64
+	RawJSON                string
+	FirstObservedAt        *time.Time
+	LastCheckedAt          time.Time
+}
+type XGSyncRun struct {
+	ID, RowsSeen, AvailableGames, UnavailableGames int64
+	RowsInserted, RowsUpdated, RowsUnchanged       int64
+	StartedAt, FinishedAt                          time.Time
+	Season, Stage, Outcome, ErrorSummary           string
+}
+type XGStatus struct {
+	LastAttempt *XGSyncRun
+	LastSuccess *XGSyncRun
+}
+
 // RefreshSnapshot is the minimal cached state the background scheduler needs.
 type RefreshSnapshot struct {
 	Games       []Game
 	LastAttempt *SyncRun
 	LastSuccess *SyncRun
+	XGoals      []GameXG
+	XGStatus    XGStatus
 }
 
 // ErrSyncInProgress means another process holds the lease for this cache stream.
@@ -90,6 +123,8 @@ type SeasonData struct {
 	Teams       []standings.Team
 	Games       []Game
 	LastSuccess *SyncRun
+	XGoals      []GameXG
+	XGStatus    XGStatus
 }
 
 // Open opens a SQLite cache and applies migrations.
@@ -207,7 +242,7 @@ func (c *DB) Migrate(ctx context.Context) error {
 		}
 		version = 1
 	}
-	if version < schemaVersion {
+	if version < 2 {
 		for _, statement := range []string{
 			`ALTER TABLE sync_runs ADD COLUMN teams_inserted INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE sync_runs ADD COLUMN teams_updated INTEGER NOT NULL DEFAULT 0`,
@@ -226,6 +261,33 @@ func (c *DB) Migrate(ctx context.Context) error {
 			}
 		}
 		if err := recordMigration(ctx, tx, 2); err != nil {
+			return err
+		}
+		version = 2
+	}
+	if version < 3 {
+		for _, statement := range []string{
+			`CREATE TABLE game_xg (
+				asa_game_id TEXT PRIMARY KEY REFERENCES games(asa_game_id) ON DELETE CASCADE,
+				availability TEXT NOT NULL CHECK (availability IN ('available', 'unavailable')),
+				home_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
+				away_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
+				home_xg REAL, away_xg REAL, raw_json TEXT NOT NULL,
+				first_observed_at TEXT, last_checked_at TEXT NOT NULL,
+				CHECK ((availability = 'available' AND home_xg IS NOT NULL AND away_xg IS NOT NULL AND first_observed_at IS NOT NULL) OR (availability = 'unavailable' AND home_xg IS NULL AND away_xg IS NULL AND first_observed_at IS NULL AND raw_json = ''))
+			)`,
+			`CREATE TABLE xg_sync_runs (
+				id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, finished_at TEXT NOT NULL,
+				season TEXT NOT NULL, stage TEXT NOT NULL, outcome TEXT NOT NULL CHECK (outcome IN ('success','failure')),
+				error_summary TEXT NOT NULL, rows_seen INTEGER NOT NULL, available_games INTEGER NOT NULL, unavailable_games INTEGER NOT NULL,
+				rows_inserted INTEGER NOT NULL, rows_updated INTEGER NOT NULL, rows_unchanged INTEGER NOT NULL
+			)`, `CREATE INDEX xg_sync_runs_season_stage_idx ON xg_sync_runs (season, stage, finished_at)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 3: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 3); err != nil {
 			return err
 		}
 	}
@@ -451,7 +513,15 @@ func (c *DB) RefreshSnapshot(ctx context.Context, season, stage string) (Refresh
 	if err != nil {
 		return RefreshSnapshot{}, err
 	}
-	return RefreshSnapshot{Games: games, LastAttempt: status.LastAttempt, LastSuccess: status.LastSuccess}, nil
+	xgoals, err := c.seasonXGoals(ctx, season, stage)
+	if err != nil {
+		return RefreshSnapshot{}, err
+	}
+	xgStatus, err := c.XGStatus(ctx, season, stage)
+	if err != nil {
+		return RefreshSnapshot{}, err
+	}
+	return RefreshSnapshot{Games: games, LastAttempt: status.LastAttempt, LastSuccess: status.LastSuccess, XGoals: xgoals, XGStatus: xgStatus}, nil
 }
 
 // TryAcquireSyncLease atomically obtains a short-lived cross-process sync lease.
@@ -533,7 +603,251 @@ func (c *DB) Season(ctx context.Context, season, stage string) (SeasonData, erro
 	if err != nil {
 		return SeasonData{}, err
 	}
-	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess}, nil
+	xgoals, err := c.seasonXGoals(ctx, season, stage)
+	if err != nil {
+		return SeasonData{}, err
+	}
+	xgStatus, err := c.XGStatus(ctx, season, stage)
+	if err != nil {
+		return SeasonData{}, err
+	}
+	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess, XGoals: xgoals, XGStatus: xgStatus}, nil
+}
+
+// ReplaceGameXG atomically replaces a complete xG response after validating it
+// against the already committed fixture snapshot. Missing newly completed games
+// become explicit unavailable markers; previously available values may not be
+// omitted by a later response.
+func (c *DB) ReplaceGameXG(ctx context.Context, season, stage string, games []Game, values []GameXG, startedAt time.Time) (XGSyncRun, error) {
+	now := time.Now().UTC()
+	run := XGSyncRun{StartedAt: startedAt.UTC(), FinishedAt: now, Season: season, Stage: stage, Outcome: "success", RowsSeen: int64(len(values))}
+	fixtures := map[string]Game{}
+	teams := map[string]struct{}{}
+	for _, game := range games {
+		if game.Season != season || game.Stage != stage || game.ASAID == "" {
+			return XGSyncRun{}, fmt.Errorf("invalid xG fixture snapshot")
+		}
+		fixtures[game.ASAID] = game
+		teams[game.HomeTeamID] = struct{}{}
+		teams[game.AwayTeamID] = struct{}{}
+	}
+	seen := map[string]GameXG{}
+	for _, value := range values {
+		if value.GameID == "" {
+			return XGSyncRun{}, errors.New("xG row has empty game ID")
+		}
+		if _, ok := seen[value.GameID]; ok {
+			return XGSyncRun{}, fmt.Errorf("duplicate xG game %q", value.GameID)
+		}
+		game, ok := fixtures[value.GameID]
+		if !ok {
+			return XGSyncRun{}, fmt.Errorf("xG game %q is not in fixture snapshot", value.GameID)
+		}
+		if game.Status != "FullTime" {
+			return XGSyncRun{}, fmt.Errorf("xG game %q is not completed", value.GameID)
+		}
+		if value.HomeTeamID != game.HomeTeamID || value.AwayTeamID != game.AwayTeamID {
+			return XGSyncRun{}, fmt.Errorf("xG game %q team identity mismatch", value.GameID)
+		}
+		if _, ok := teams[value.HomeTeamID]; !ok {
+			return XGSyncRun{}, fmt.Errorf("xG game %q has unknown team", value.GameID)
+		}
+		if value.Availability != XGAvailable || !value.HomeXG.Valid || !value.AwayXG.Valid || !finiteNonnegative(value.HomeXG.Float64) || !finiteNonnegative(value.AwayXG.Float64) {
+			return XGSyncRun{}, fmt.Errorf("xG game %q has invalid values", value.GameID)
+		}
+		seen[value.GameID] = value
+	}
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return XGSyncRun{}, fmt.Errorf("begin xG refresh: %w", err)
+	}
+	defer rollback(tx)
+	// An upstream omission must never erase a previously good value.
+	for id, game := range fixtures {
+		if game.Status != "FullTime" {
+			continue
+		}
+		var availability string
+		err := tx.QueryRowContext(ctx, `SELECT availability FROM game_xg WHERE asa_game_id=?`, id).Scan(&availability)
+		if err == nil && availability == string(XGAvailable) {
+			if _, ok := seen[id]; !ok {
+				return XGSyncRun{}, fmt.Errorf("xG response omitted previously available game %q", id)
+			}
+		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return XGSyncRun{}, fmt.Errorf("check existing xG %q: %w", id, err)
+		}
+	}
+	for id, game := range fixtures {
+		if game.Status != "FullTime" {
+			continue
+		}
+		value, available := seen[id]
+		if !available {
+			value = GameXG{GameID: id, Availability: XGUnavailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID}
+			run.UnavailableGames++
+		} else {
+			run.AvailableGames++
+		}
+		change, err := writeGameXG(ctx, tx, value, now)
+		if err != nil {
+			return XGSyncRun{}, err
+		}
+		switch change {
+		case rowInserted:
+			run.RowsInserted++
+		case rowUpdated:
+			run.RowsUpdated++
+		case rowUnchanged:
+			run.RowsUnchanged++
+		}
+	}
+	if err := insertXGSyncRun(ctx, tx, &run); err != nil {
+		return XGSyncRun{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return XGSyncRun{}, fmt.Errorf("commit xG refresh: %w", err)
+	}
+	return run, nil
+}
+
+func finiteNonnegative(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 }
+func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (rowChange, error) {
+	var old GameXG
+	var first sql.NullString
+	var checked string
+	err := tx.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,raw_json,first_observed_at,last_checked_at FROM game_xg WHERE asa_game_id=?`, value.GameID).Scan(&old.Availability, &old.HomeTeamID, &old.AwayTeamID, &old.HomeXG, &old.AwayXG, &old.RawJSON, &first, &checked)
+	if first.Valid {
+		parsed, e := time.Parse(time.RFC3339, first.String)
+		if e != nil {
+			return 0, e
+		}
+		old.FirstObservedAt = &parsed
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		firstValue := any(nil)
+		home, away := any(nil), any(nil)
+		raw := ""
+		if value.Availability == XGAvailable {
+			firstValue = formatTime(now)
+			home = value.HomeXG.Float64
+			away = value.AwayXG.Float64
+			raw = value.RawJSON
+		}
+		_, e := tx.ExecContext(ctx, `INSERT INTO game_xg (asa_game_id,availability,home_team_id,away_team_id,home_xg,away_xg,raw_json,first_observed_at,last_checked_at) VALUES (?,?,?,?,?,?,?,?,?)`, value.GameID, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, raw, firstValue, formatTime(now))
+		if e != nil {
+			return 0, fmt.Errorf("insert xG %q: %w", value.GameID, e)
+		}
+		return rowInserted, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("load xG %q: %w", value.GameID, err)
+	}
+	material := old.Availability != value.Availability || old.HomeTeamID != value.HomeTeamID || old.AwayTeamID != value.AwayTeamID || old.HomeXG != value.HomeXG || old.AwayXG != value.AwayXG || (value.Availability == XGAvailable && old.RawJSON != value.RawJSON)
+	firstValue := any(nil)
+	home, away := any(nil), any(nil)
+	raw := ""
+	if value.Availability == XGAvailable {
+		if old.FirstObservedAt != nil {
+			firstValue = formatTime(*old.FirstObservedAt)
+		} else {
+			firstValue = formatTime(now)
+		}
+		home = value.HomeXG.Float64
+		away = value.AwayXG.Float64
+		raw = value.RawJSON
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE game_xg SET availability=?,home_team_id=?,away_team_id=?,home_xg=?,away_xg=?,raw_json=?,first_observed_at=?,last_checked_at=? WHERE asa_game_id=?`, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, raw, firstValue, formatTime(now), value.GameID)
+	if err != nil {
+		return 0, fmt.Errorf("update xG %q: %w", value.GameID, err)
+	}
+	if material {
+		return rowUpdated, nil
+	}
+	return rowUnchanged, nil
+}
+
+func (c *DB) RecordXGFailure(ctx context.Context, season, stage string, startedAt time.Time, cause error) error {
+	run := XGSyncRun{StartedAt: startedAt.UTC(), FinishedAt: time.Now().UTC(), Season: season, Stage: stage, Outcome: "failure", ErrorSummary: summarizeError(cause)}
+	if err := insertXGSyncRun(ctx, c.db, &run); err != nil {
+		return err
+	}
+	return nil
+}
+func insertXGSyncRun(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, run *XGSyncRun) error {
+	result, err := exec.ExecContext(ctx, `INSERT INTO xg_sync_runs (started_at,finished_at,season,stage,outcome,error_summary,rows_seen,available_games,unavailable_games,rows_inserted,rows_updated,rows_unchanged) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Season, run.Stage, run.Outcome, run.ErrorSummary, run.RowsSeen, run.AvailableGames, run.UnavailableGames, run.RowsInserted, run.RowsUpdated, run.RowsUnchanged)
+	if err != nil {
+		return fmt.Errorf("record xG sync run: %w", err)
+	}
+	if id, e := result.LastInsertId(); e == nil {
+		run.ID = id
+	}
+	return nil
+}
+func (c *DB) XGStatus(ctx context.Context, season, stage string) (XGStatus, error) {
+	a, e := c.latestXGRun(ctx, "", season, stage)
+	if e != nil {
+		return XGStatus{}, e
+	}
+	s, e := c.latestXGRun(ctx, "success", season, stage)
+	return XGStatus{a, s}, e
+}
+func (c *DB) latestXGRun(ctx context.Context, outcome, season, stage string) (*XGSyncRun, error) {
+	q := `SELECT id,started_at,finished_at,season,stage,outcome,error_summary,rows_seen,available_games,unavailable_games,rows_inserted,rows_updated,rows_unchanged FROM xg_sync_runs WHERE season=? AND stage=?`
+	args := []any{season, stage}
+	if outcome != "" {
+		q += ` AND outcome=?`
+		args = append(args, outcome)
+	}
+	q += ` ORDER BY finished_at DESC,id DESC LIMIT 1`
+	var run XGSyncRun
+	var st, fi string
+	err := c.db.QueryRowContext(ctx, q, args...).Scan(&run.ID, &st, &fi, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary, &run.RowsSeen, &run.AvailableGames, &run.UnavailableGames, &run.RowsInserted, &run.RowsUpdated, &run.RowsUnchanged)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load xG status: %w", err)
+	}
+	run.StartedAt, err = time.Parse(time.RFC3339, st)
+	if err != nil {
+		return nil, err
+	}
+	run.FinishedAt, err = time.Parse(time.RFC3339, fi)
+	if err != nil {
+		return nil, err
+	}
+	return &run, nil
+}
+func (c *DB) seasonXGoals(ctx context.Context, season, stage string) ([]GameXG, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
+	if err != nil {
+		return nil, fmt.Errorf("load xG: %w", err)
+	}
+	defer rows.Close()
+	values := []GameXG{}
+	for rows.Next() {
+		var v GameXG
+		var first sql.NullString
+		var checked string
+		if err := rows.Scan(&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.RawJSON, &first, &checked); err != nil {
+			return nil, err
+		}
+		if first.Valid {
+			t, e := time.Parse(time.RFC3339, first.String)
+			if e != nil {
+				return nil, e
+			}
+			v.FirstObservedAt = &t
+		}
+		v.LastCheckedAt, err = time.Parse(time.RFC3339, checked)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, v)
+	}
+	return values, rows.Err()
 }
 
 func (c *DB) standingsTeams(ctx context.Context, season, stage string) ([]standings.Team, error) {

@@ -27,6 +27,7 @@ func main() {
 	dbPath := flag.String("db", cfg.DBPath, "SQLite cache database path")
 	minInterval := flag.Duration("min-interval", cfg.SyncMinAttemptInterval, "skip if the same season and stage was attempted within this duration")
 	force := flag.Bool("force", false, "bypass the minimum attempt interval")
+	requireXG := flag.Bool("require-xg", false, "exit nonzero when fixtures sync but xG refresh fails")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -69,4 +70,13 @@ func main() {
 	}
 	fmt.Printf("Synced %d games and %d teams for %s %s into %s.\n", run.GamesUpserted, run.TeamsUpserted, *season, *stage, *dbPath)
 	fmt.Printf("Deleted %d stale games. Last successful sync: %s.\n", run.GamesDeleted, run.FinishedAt.Format(time.RFC3339))
+	if run.XGRun != nil {
+		fmt.Printf("xG refresh: %d available, %d unavailable (%d inserted, %d updated, %d unchanged).\n", run.XGRun.AvailableGames, run.XGRun.UnavailableGames, run.XGRun.RowsInserted, run.XGRun.RowsUpdated, run.XGRun.RowsUnchanged)
+	}
+	if run.XGError != "" {
+		logger.Warn("fixture sync succeeded but xG refresh failed", "error", run.XGError)
+		if *requireXG {
+			os.Exit(1)
+		}
+	}
 }

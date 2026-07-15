@@ -15,6 +15,8 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/forecast"
+	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
 )
@@ -64,6 +66,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /seasons/{season}", application.season)
 	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
 	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
+	mux.HandleFunc("GET /seasons/{season}/xg", application.xg)
 	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
@@ -119,12 +122,50 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
+	view := r.URL.Query().Get("view")
+	if view != "" && view != "outlook" {
+		a.renderScenarioBadRequest(w, r, "Invalid season view", fmt.Errorf("unsupported season view %q", view))
+		return
+	}
 	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
 	}
+	if view == "outlook" {
+		data, err := a.store.Season(r.Context(), page.Season, a.options.Stage)
+		if err != nil {
+			a.renderError(w, r, err)
+			return
+		}
+		entry := forecast.Recommended()
+		result, err := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: forecastXGoals(data), Model: entry.Model, Iterations: a.options.ForecastIterations, PlayoffPlaces: a.options.PlayoffPlaces})
+		if err != nil {
+			if r.Context().Err() != nil {
+				return
+			}
+			a.renderError(w, r, err)
+			return
+		}
+		page.Outlook = true
+		page.OutlookModel = result.Model.Name
+		page.OutlookRows = forecastRows(result)
+	}
 	a.render(w, "season", page)
+}
+
+func (a *application) xg(w http.ResponseWriter, r *http.Request) {
+	if a.store == nil {
+		a.renderError(w, r, fmt.Errorf("season cache unavailable"))
+		return
+	}
+	season := r.PathValue("season")
+	data, err := a.store.Season(r.Context(), season, a.options.Stage)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	a.render(w, "xg", xgPageFrom(data, season, r.URL.Path))
 }
 
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +219,9 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		Strength:               scheduleView,
 		FixtureGroups:          fixtureGroups(data, a.options.Location),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
+		XGPath:                 relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/xg"),
+		CurrentPath:            seasonURL(r.URL.Path, season),
+		OutlookPath:            seasonURL(r.URL.Path, season) + "?view=outlook",
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
@@ -305,7 +349,7 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast") {
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "xg") {
 		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false
@@ -399,15 +443,53 @@ func cacheStatus(reader Store, season, stage string) http.HandlerFunc {
 		if status.LastSuccess != nil {
 			response.LastSuccess = syncRunResponseFrom(status.LastSuccess)
 		}
+		if xgReader, ok := reader.(interface {
+			XGStatus(context.Context, string, string) (cache.XGStatus, error)
+		}); ok {
+			xg, err := xgReader.XGStatus(r.Context(), season, stage)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: err.Error()})
+				return
+			}
+			response.XG = &xgStatusResponse{}
+			if xg.LastAttempt != nil {
+				response.XG.LastAttempt = xgRunResponseFrom(xg.LastAttempt)
+			}
+			if xg.LastSuccess != nil {
+				response.XG.LastSuccess = xgRunResponseFrom(xg.LastSuccess)
+			}
+		}
 		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
 type cacheStatusResponse struct {
-	OK          bool             `json:"ok"`
-	Error       string           `json:"error,omitempty"`
-	LastAttempt *syncRunResponse `json:"last_attempt,omitempty"`
-	LastSuccess *syncRunResponse `json:"last_success,omitempty"`
+	OK          bool              `json:"ok"`
+	Error       string            `json:"error,omitempty"`
+	LastAttempt *syncRunResponse  `json:"last_attempt,omitempty"`
+	LastSuccess *syncRunResponse  `json:"last_success,omitempty"`
+	XG          *xgStatusResponse `json:"xg,omitempty"`
+}
+type xgStatusResponse struct {
+	LastAttempt *xgRunResponse `json:"last_attempt,omitempty"`
+	LastSuccess *xgRunResponse `json:"last_success,omitempty"`
+}
+type xgRunResponse struct {
+	ID               int64     `json:"id"`
+	FinishedAt       time.Time `json:"finished_at"`
+	Outcome          string    `json:"outcome"`
+	ErrorSummary     string    `json:"error_summary"`
+	RowsSeen         int64     `json:"rows_seen"`
+	AvailableGames   int64     `json:"available_games"`
+	UnavailableGames int64     `json:"unavailable_games"`
+	RowsInserted     int64     `json:"rows_inserted"`
+	RowsUpdated      int64     `json:"rows_updated"`
+	RowsUnchanged    int64     `json:"rows_unchanged"`
+}
+
+func xgRunResponseFrom(run *cache.XGSyncRun) *xgRunResponse {
+	return &xgRunResponse{ID: run.ID, FinishedAt: run.FinishedAt, Outcome: run.Outcome, ErrorSummary: run.ErrorSummary, RowsSeen: run.RowsSeen, AvailableGames: run.AvailableGames, UnavailableGames: run.UnavailableGames, RowsInserted: run.RowsInserted, RowsUpdated: run.RowsUpdated, RowsUnchanged: run.RowsUnchanged}
 }
 
 type syncRunResponse struct {

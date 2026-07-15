@@ -394,7 +394,7 @@ func TestForecastAddResultRedirectsToCanonicalState(t *testing.T) {
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want redirect", response.Code)
 	}
-	if got, want := response.Header().Get("Location"), "forecast?m=results-poisson-v1&p=future-1%3Ah&p=future-2%3Ad&v=1"; got != want {
+	if got, want := response.Header().Get("Location"), "forecast?m=results-poisson-v1&p=future-1%3Ah&p=future-2%3Ad&v=2"; got != want {
 		t.Fatalf("location = %q, want %q", got, want)
 	}
 }

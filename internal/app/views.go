@@ -24,6 +24,12 @@ type seasonPage struct {
 	FixturesPath           string
 	ScheduleDifficultyPath string
 	ForecastPath           string
+	XGPath                 string
+	CurrentPath            string
+	OutlookPath            string
+	Outlook                bool
+	OutlookModel           string
+	OutlookRows            []forecastRowView
 	Freshness              string
 	FreshnessFallback      string
 	ScheduleNote           string

@@ -9,7 +9,7 @@ import (
 )
 
 func TestResultsPoissonUsesPriorsWithoutCompletedGames(t *testing.T) {
-	predictor, err := NewResultsPoissonV1().Fit(teams(), nil)
+	predictor, err := NewResultsPoissonV1().Fit(FitInput{Teams: teams()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,9 +26,9 @@ func TestResultsPoissonUsesPriorsWithoutCompletedGames(t *testing.T) {
 func TestResultsPoissonStrengthsAndClamp(t *testing.T) {
 	goals := 20
 	zero := 0
-	predictor, err := NewResultsPoissonV1().Fit(teams(), []standings.Game{
+	predictor, err := NewResultsPoissonV1().Fit(FitInput{Teams: teams(), Games: []standings.Game{
 		{ID: "done", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: &goals, AwayScore: &zero},
-	})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestResultsPoissonStrengthsAndClamp(t *testing.T) {
 }
 
 func TestResultsPoissonRejectsMalformedCompletedGame(t *testing.T) {
-	_, err := NewResultsPoissonV1().Fit(teams(), []standings.Game{{ID: "bad", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo"}})
+	_, err := NewResultsPoissonV1().Fit(FitInput{Teams: teams(), Games: []standings.Game{{ID: "bad", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo"}}})
 	if err == nil {
 		t.Fatal("Fit accepted a completed game without scores")
 	}
