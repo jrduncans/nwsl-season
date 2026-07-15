@@ -8,6 +8,12 @@ remaining fixtures.
 Begin with server-rendered `html/template` pages. Add small amounts of JavaScript
 or HTMX only when a specific interaction needs them.
 
+## Status
+
+Superseded and removed in Phase 10. Forecast Lab at
+`/seasons/{season}/forecast` is the only scenario surface; this document is a
+historical record of the Phase 6 checkpoint, not an active route contract.
+
 ## First pages
 
 - Season table with clinching indicators and data freshness.

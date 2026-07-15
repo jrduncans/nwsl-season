@@ -85,7 +85,7 @@ clinching assignment.
 
 “A win” describes an outcome, not a 1–0 score. A published outcome-only clause
 must remain true for every scoreline compatible with its words. Do not silently
-use the what-if page's canonical 1–0, 0–0, and 0–1 scores for this purpose.
+reduce an outcome-only claim to one representative scoreline for this purpose.
 
 The initial scenario release should prefer conditions certified by the Phase 12
 points layer. If a possible clinch depends on goal difference or another
@@ -177,5 +177,5 @@ universal quantification over the rest of the slate.
   states are visible and tested.
 - The standings show achieved status compactly, while a dedicated view provides
   current status, no-help paths, and complete next-slate conditions.
-- Forecast probability, what-if assumptions, and mathematical clinching claims
+- Forecast probability, visitor assumptions, and mathematical clinching claims
   remain distinct in language and presentation.

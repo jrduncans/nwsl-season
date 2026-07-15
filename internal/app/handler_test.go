@@ -58,7 +58,7 @@ func TestRenderedHTTPPathsAreRelative(t *testing.T) {
 			t.Fatalf("body contains absolute HTTP path %q", absolutePath)
 		}
 	}
-	for _, relativePath := range []string{`href="2026/fixtures"`, `href="2026/schedule-difficulty"`, `href="2026/what-if"`, `href="../static/site.css"`, `src="../static/standings.js"`} {
+	for _, relativePath := range []string{`href="2026/fixtures"`, `href="2026/schedule-difficulty"`, `href="2026/forecast"`, `href="../static/site.css"`, `src="../static/standings.js"`} {
 		if !strings.Contains(body, relativePath) {
 			t.Errorf("body does not contain relative path %q", relativePath)
 		}
@@ -145,7 +145,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Build a what-if scenario", "Results and fixtures", "Schedule difficulty", "Cache refreshed Jul 9, 2026", ">Ahead</th>", "Harder"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast Lab", "Results and fixtures", "Schedule difficulty", "Cache refreshed Jul 9, 2026", ">Ahead</th>", "Harder"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -186,7 +186,7 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "Matchday 1", "Scheduled", `href="../2026"`, `href="what-if"`} {
+	for _, text := range []string{"Results and fixtures", "2–1", "Matchday 1", "Scheduled", `href="../2026"`, `href="forecast"`} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -299,44 +299,6 @@ func TestSeasonRouteReadsTemporarySQLiteCache(t *testing.T) {
 	}
 }
 
-func TestWhatIfFormCanonicalizesToShareableURL(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/what-if?g.future-2=&g.future-1=h", nil)
-	response := httptest.NewRecorder()
-
-	NewHandler(fakeStore{season: testSeasonData()}).ServeHTTP(response, request)
-
-	if response.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want redirect", response.Code)
-	}
-	if location := response.Header().Get("Location"); location != "what-if?p=future-1%3Ah&v=1" {
-		t.Fatalf("location = %q, want canonical state URL", location)
-	}
-}
-
-func TestWhatIfRendersProjectedTableAndSelectedFixture(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/what-if?v=1&p=future-1:h", nil)
-	response := httptest.NewRecorder()
-
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
-	}
-	for _, text := range []string{"Hypothetical projection", "Projected standings", "1 hypothetical result applied", `value="h" selected`, "1–0 score"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
-	for _, logo := range []string{
-		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
-		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
-	} {
-		if got := strings.Count(response.Body.String(), logo); got != 6 {
-			t.Errorf("%s appears %d times, want 6 for projected standings and what-if matchups", logo, got)
-		}
-	}
-}
-
 func TestClubLogoURLPathEscapesTeamID(t *testing.T) {
 	if got, want := clubLogoURL("team/id ?"), clubLogoBaseURL+"team%2Fid%20%3F.png"; got != want {
 		t.Fatalf("clubLogoURL = %q, want %q", got, want)
@@ -346,17 +308,71 @@ func TestClubLogoURLPathEscapesTeamID(t *testing.T) {
 	}
 }
 
-func TestWhatIfRejectsStaleOrInvalidState(t *testing.T) {
+func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Simulated seasons", ">20</dd>", "Expected points", "Playoffs", "Shield", "View positions", "Add a result", "Data cutoff"} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain %q", text)
+		}
+	}
+	if strings.Contains(response.Body.String(), "Build a what-if scenario") {
+		t.Fatal("Forecast Lab still uses legacy visible navigation")
+	}
+}
+
+func TestForecastAddResultRedirectsToCanonicalState(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?v=1&m=results-poisson-v1&p=future-2:d&action=add&fixture=future-1&outcome=h", nil)
+	response := httptest.NewRecorder()
+
+	NewHandler(fakeStore{season: testSeasonData()}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want redirect", response.Code)
+	}
+	if got, want := response.Header().Get("Location"), "forecast?m=results-poisson-v1&p=future-1%3Ah&p=future-2%3Ad&v=1"; got != want {
+		t.Fatalf("location = %q, want %q", got, want)
+	}
+}
+
+func TestForecastPreservesReverseProxyBasePath(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/forecast", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if strings.Contains(response.Body.String(), `href="/`) || !strings.Contains(response.Body.String(), `href="../2026"`) {
+		t.Fatalf("forecast page does not preserve relative base-path links: %s", response.Body.String())
+	}
+}
+
+func TestForecastRejectsStaleStateAndUnknownModel(t *testing.T) {
 	for _, target := range []string{
-		"/seasons/2026/what-if?v=2&p=future-1:h",
-		"/seasons/2026/what-if?v=1&p=completed:h",
+		"/seasons/2026/forecast?v=1&m=results-poisson-v1&p=completed:h",
+		"/seasons/2026/forecast?v=1&m=other&p=future-1:h",
 	} {
-		request := httptest.NewRequest(http.MethodGet, target, nil)
 		response := httptest.NewRecorder()
-		NewHandler(fakeStore{season: testSeasonData()}).ServeHTTP(response, request)
+		NewHandler(fakeStore{season: testSeasonData()}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("%s status = %d, want 400", target, response.Code)
 		}
+	}
+}
+
+func TestRemovedWhatIfRouteReturnsNotFound(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewHandler(fakeStore{season: testSeasonData()}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/what-if", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.Code)
 	}
 }
 

@@ -1,7 +1,7 @@
 {{define "season"}}{{template "head" .}}
 <div class="title-row">
   <div><p class="eyebrow">{{.Stage}}</p><h1>{{.Season}} season</h1></div>
-  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a href="{{.ScheduleDifficultyPath}}">Schedule difficulty</a><a class="button" href="{{.WhatIfPath}}">Build a what-if scenario</a></div>
+  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a href="{{.ScheduleDifficultyPath}}">Schedule difficulty</a><a class="button" href="{{.ForecastPath}}">Forecast Lab</a></div>
 </div>
 <p class="freshness">Source: {{.Source}}{{if .Freshness}} · Cache refreshed {{.Freshness}}{{else}} · Refresh time unavailable{{end}}</p>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}

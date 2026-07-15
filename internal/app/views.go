@@ -9,7 +9,6 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
-	"github.com/jrduncans/nwsl-season/internal/whatif"
 )
 
 const clubLogoBaseURL = "https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/"
@@ -24,16 +23,14 @@ type seasonPage struct {
 	SeasonPath             string
 	FixturesPath           string
 	ScheduleDifficultyPath string
-	WhatIfPath             string
+	ForecastPath           string
 	Source                 string
 	Freshness              string
 	ClinchingNote          string
 	ScheduleNote           string
 	Standings              []tableRowView
 	Strength               strengthView
-	Projected              []tableRowView
 	FixtureGroups          []fixtureGroupView
-	Selections             int
 	Remaining              int
 }
 
@@ -139,17 +136,14 @@ type fixtureGroupView struct {
 }
 
 type fixtureView struct {
-	ID           string
-	Kickoff      string
-	HomeTeam     teamNameView
-	AwayTeam     teamNameView
-	Score        string
-	Completed    bool
-	Remaining    bool
-	Status       string
-	SelectedHome bool
-	SelectedDraw bool
-	SelectedAway bool
+	ID        string
+	Kickoff   string
+	HomeTeam  teamNameView
+	AwayTeam  teamNameView
+	Score     string
+	Completed bool
+	Remaining bool
+	Status    string
 }
 
 type teamNameView struct {
@@ -352,7 +346,7 @@ func addScheduleIndicators(rows []tableRowView, strength strengthView) []tableRo
 	return rows
 }
 
-func fixtureGroups(data cache.SeasonData, selections map[string]whatif.Outcome, location *time.Location) []fixtureGroupView {
+func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGroupView {
 	teams := make(map[string]teamNameView, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
@@ -376,19 +370,11 @@ func fixtureGroups(data cache.SeasonData, selections map[string]whatif.Outcome, 
 			ID: game.ASAID, Kickoff: localKickoff.Format("Mon Jan 2, 3:04 PM MST"),
 			HomeTeam: teams[game.HomeTeamID], AwayTeam: teams[game.AwayTeamID],
 			Completed: game.Status == standings.CompletedStatus,
-			Remaining: game.Status == whatif.RemainingStatus,
+			Remaining: game.Status == remainingStatus,
 			Status:    game.Status,
 		}
 		if view.Completed && game.HomeScore.Valid && game.AwayScore.Valid {
 			view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
-		}
-		switch selections[game.ASAID] {
-		case whatif.HomeWin:
-			view.SelectedHome = true
-		case whatif.Draw:
-			view.SelectedDraw = true
-		case whatif.AwayWin:
-			view.SelectedAway = true
 		}
 		groups[index].Games = append(groups[index].Games, view)
 	}

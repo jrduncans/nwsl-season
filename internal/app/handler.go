@@ -3,14 +3,12 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +17,6 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
-	"github.com/jrduncans/nwsl-season/internal/whatif"
 )
 
 const (
@@ -28,6 +25,7 @@ const (
 	defaultPlayoffPlaces = 8
 	defaultGamesPerTeam  = 30
 	maxClinchingFixtures = 4
+	remainingStatus      = "PreMatch"
 )
 
 // Store reads page data from the local cache.
@@ -38,11 +36,12 @@ type Store interface {
 
 // Options contains season rules that are intentionally explicit at the HTTP boundary.
 type Options struct {
-	CurrentSeason string
-	Stage         string
-	PlayoffPlaces int
-	GamesPerTeam  int
-	Location      *time.Location
+	CurrentSeason      string
+	Stage              string
+	PlayoffPlaces      int
+	GamesPerTeam       int
+	ForecastIterations int
+	Location           *time.Location
 }
 
 // NewHandler wires the application routes using the current-season defaults.
@@ -65,7 +64,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /seasons/{season}", application.season)
 	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
 	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
-	mux.HandleFunc("GET /seasons/{season}/what-if", application.whatIf)
+	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
@@ -98,6 +97,9 @@ func defaultOptions(options Options) Options {
 	if options.GamesPerTeam <= 0 {
 		options.GamesPerTeam = defaultGamesPerTeam
 	}
+	if options.ForecastIterations <= 0 {
+		options.ForecastIterations = defaultForecastIterations
+	}
 	if options.Location == nil {
 		options.Location = time.Local
 	}
@@ -113,7 +115,7 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
-	page, err := a.loadSeasonPage(r, nil)
+	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -122,7 +124,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
-	page, err := a.loadSeasonPage(r, nil)
+	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -131,7 +133,7 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request) {
-	page, err := a.loadSeasonPage(r, nil)
+	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -139,64 +141,7 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 	a.render(w, "schedule-difficulty", page)
 }
 
-func (a *application) whatIf(w http.ResponseWriter, r *http.Request) {
-	if canonical, ok, err := canonicalWhatIfURL(r); err != nil {
-		a.renderBadRequest(w, r, err)
-		return
-	} else if ok {
-		redirectRelative(w, canonical, http.StatusSeeOther)
-		return
-	}
-
-	selections, err := whatif.Parse(r.URL.Query().Get("v"), r.URL.Query()["p"])
-	if err != nil {
-		a.renderBadRequest(w, r, err)
-		return
-	}
-	page, err := a.loadSeasonPage(r, selections)
-	if err != nil {
-		if errors.Is(err, whatif.ErrNotRemaining) {
-			a.renderBadRequest(w, r, err)
-			return
-		}
-		a.renderError(w, r, err)
-		return
-	}
-	a.render(w, "whatif", page)
-}
-
-func canonicalWhatIfURL(r *http.Request) (string, bool, error) {
-	query := r.URL.Query()
-	values := url.Values{}
-	values.Set("v", whatif.EncodingVersion)
-	found := false
-	keys := make([]string, 0)
-	for key := range query {
-		if strings.HasPrefix(key, "g.") {
-			found = true
-			keys = append(keys, key)
-		}
-	}
-	if !found {
-		return "", false, nil
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		gameID := strings.TrimPrefix(key, "g.")
-		selected := query.Get(key)
-		if selected == "" {
-			continue
-		}
-		outcome := whatif.Outcome(selected)
-		if gameID == "" || !outcome.Valid() {
-			return "", false, fmt.Errorf("invalid outcome for fixture %q", gameID)
-		}
-		values.Add("p", gameID+":"+selected)
-	}
-	return path.Base(r.URL.EscapedPath()) + "?" + values.Encode(), true, nil
-}
-
-func (a *application) loadSeasonPage(r *http.Request, selections map[string]whatif.Outcome) (seasonPage, error) {
+func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	if a.store == nil {
 		return seasonPage{}, fmt.Errorf("season cache unavailable")
 	}
@@ -227,15 +172,15 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
 		Standings:              addTotalPositions(standingsView, totalTable, a.options.PlayoffPlaces),
 		Strength:               scheduleView,
-		FixtureGroups:          fixtureGroups(data, selections, a.options.Location),
-		WhatIfPath:             relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/what-if"),
+		FixtureGroups:          fixtureGroups(data, a.options.Location),
+		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
 		Source:                 "American Soccer Analysis (ASA)",
 	}
 	for _, game := range data.Games {
-		if game.Status == whatif.RemainingStatus {
+		if game.Status == remainingStatus {
 			page.Remaining++
 		}
 	}
@@ -249,18 +194,6 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 	}
 	page.ClinchingNote, page.Standings = clinchingViews(data.Teams, domainGames, page.Standings, a.options.PlayoffPlaces, scheduleComplete)
 
-	if selections != nil {
-		projectedGames, err := whatif.Apply(domainGames, selections)
-		if err != nil {
-			return seasonPage{}, err
-		}
-		page.Selections = len(selections)
-		if len(selections) > 0 {
-			projected := standings.Calculate(data.Teams, projectedGames, standings.PerGameRules())
-			projectedTotals := standings.Calculate(data.Teams, projectedGames, standings.OfficialTotalRules())
-			page.Projected = addTotalPositions(tableViews(projected, a.options.PlayoffPlaces, nil), projectedTotals, a.options.PlayoffPlaces)
-		}
-	}
 	return page, nil
 }
 
@@ -270,7 +203,7 @@ func clinchingViews(teams []standings.Team, games []standings.Game, rows []table
 	}
 	remaining := 0
 	for _, game := range games {
-		if game.Status == whatif.RemainingStatus {
+		if game.Status == remainingStatus {
 			remaining++
 		}
 	}
@@ -321,15 +254,6 @@ func (a *application) render(w http.ResponseWriter, name string, data any) {
 	}
 }
 
-func (a *application) renderBadRequest(w http.ResponseWriter, r *http.Request, err error) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{
-		Title: "Invalid what-if scenario", Message: err.Error(),
-		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
-	})
-}
-
 func (a *application) renderError(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusInternalServerError)
@@ -378,7 +302,7 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "what-if") {
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast") {
 		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false

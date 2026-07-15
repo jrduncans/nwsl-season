@@ -2,7 +2,7 @@
 
 A learning project written in Go for exploring NWSL seasons. The eventual site will
 show results and standings, determine when teams have mathematically clinched a
-playoff place, support what-if scenarios, and compare remaining strength of
+playoff place, forecast the rest of a season, and compare remaining strength of
 schedule.
 
 This repository intentionally grows in small phases. Start with
@@ -12,14 +12,15 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 9 is implemented: the server renders cached standings, results, remaining
-fixtures, cache freshness, shareable what-if projections, and transparent raw
-and venue-adjusted remaining schedule strength. The main season page keeps a
-compact visual `Ahead` indicator, while `/seasons/{season}/schedule-difficulty`
-provides schedule callouts, comparisons, and fixture-level detail. A single
-server process also checks the local cache on a schedule and refreshes the
-current season only when it is missing or plausibly stale. Normal page requests
-never contact ASA.
+Phase 10 is implemented: the server renders cached standings, results,
+remaining fixtures, cache freshness, schedule difficulty, and a forecast-first
+season simulator. Forecast Lab at `/seasons/2026/forecast` immediately simulates
+the remaining cached regular-season fixtures with a transparent results-based
+model, uncertainty intervals, playoff and Shield probabilities. Visitors can
+fix up to 12 outcomes, share the versioned scenario URL, and revisit it against
+the latest cache. A single server process also checks the local cache on a schedule
+and refreshes the current season only when it is missing or plausibly stale.
+Normal page requests never contact ASA.
 
 ```sh
 go run ./cmd/server
@@ -29,14 +30,12 @@ Then visit <http://localhost:8080>. The health endpoint is
 <http://localhost:8080/healthz>. Cache freshness is available at
 <http://localhost:8080/cache/status>.
 
-The current season redirects to <http://localhost:8080/seasons/2026>. The
-scenario builder is at <http://localhost:8080/seasons/2026/what-if> and works
-with or without JavaScript. Its selected outcomes are encoded in a versioned URL
-so a scenario can be bookmarked or shared.
-
-What-if selections specify only home win, draw, or away win. The projection uses
-canonical 1-0, 0-0, and 0-1 scorelines so the existing standings service can
-apply goal-based tiebreakers. The page labels that assumption explicitly.
+The current season redirects to <http://localhost:8080/seasons/2026>. Forecast
+Lab is at <http://localhost:8080/seasons/2026/forecast> and works with or
+without JavaScript. Its selected outcomes are encoded with the model version in
+a shareable URL. Fixed outcomes sample plausible conditional scorelines, so
+goal-based tiebreakers retain uncertainty. Shared forecast URLs use the latest
+cached fixture snapshot; an assumption becomes stale when its fixture completes.
 
 Configuration:
 

@@ -1,0 +1,74 @@
+{{define "forecast"}}{{template "head" .}}
+<p><a href="{{.SeasonPath}}">← Back to {{.Season}} season</a></p>
+<div class="title-row">
+  <div><p class="eyebrow">Season outlook</p><h1>Forecast Lab</h1></div>
+  <a class="button" href="{{.CanonicalPath}}">Share this scenario</a>
+</div>
+<p class="forecast-intro">This is a forecast, not official standings. Fixed results are your assumptions; every other remaining fixture is simulated.</p>
+<dl class="forecast-meta">
+  <div><dt>Model</dt><dd>{{.ModelName}} <code>{{.ModelID}}</code></dd></div>
+  <div><dt>Data cutoff</dt><dd>{{.DataCutoff}}</dd></div>
+  <div><dt>Simulated seasons</dt><dd>{{.Iterations}}</dd></div>
+  <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>
+  <div><dt>Remaining fixtures</dt><dd>{{.Remaining}}</dd></div>
+</dl>
+{{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
+
+<section aria-labelledby="forecast-title">
+  <h2 id="forecast-title">Projected finish</h2>
+  <p class="note">Intervals show the middle 80% of simulated outcomes. Playoff and Shield chances account for the full distribution.</p>
+  <div class="table-scroll">
+    <table class="forecast-table">
+      <caption>{{.Season}} regular-season forecast</caption>
+      <thead><tr><th>Team</th><th>Expected points</th><th>Playoffs</th><th>Expected finish</th><th>Shield</th><th>Position distribution</th></tr></thead>
+      <tbody>{{range .Rows}}
+        <tr>
+          <th scope="row">{{template "teamName" .Team}}</th>
+          <td><strong>{{.ExpectedPoints}}</strong><span class="forecast-range">80%: {{.PointsInterval}}</span></td>
+          <td>{{.PlayoffChance}}</td>
+          <td><strong>{{.ExpectedFinish}}</strong><span class="forecast-range">80%: {{.FinishInterval}}</span></td>
+          <td>{{.ShieldChance}}</td>
+          <td><details class="forecast-distribution"><summary>View positions</summary><ul>{{range .PositionBreakdown}}<li>{{.Position}}: {{.Probability}}</li>{{end}}</ul></details></td>
+        </tr>
+      {{end}}</tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="assumptions-title">
+  <h2 id="assumptions-title">Your assumptions</h2>
+  {{if .Assumptions}}
+  <ul class="forecast-assumptions">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
+  <p><a href="{{.ResetPath}}">Reset all assumptions</a></p>
+  {{else}}<p>No results are fixed. This forecast simulates every remaining cached fixture.</p>{{end}}
+</section>
+
+<section aria-labelledby="add-result-title">
+  <h2 id="add-result-title">Add a result</h2>
+  {{if .CanAdd}}
+  <form class="forecast-filter" method="get" action="{{.ForecastPath}}">
+    <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+    <label for="forecast-team">Filter fixtures by team</label>
+    <select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
+    <button type="submit">Filter</button>
+  </form>
+  <form class="forecast-add" method="get" action="{{.ForecastPath}}">
+    <input type="hidden" name="v" value="1"><input type="hidden" name="m" value="{{.ModelID}}"><input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+    <label for="forecast-fixture">Fixture</label>
+    <select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}<option value="{{.ID}}">{{.Kickoff}} · {{.Home.Name}} vs {{.Away.Name}}</option>{{end}}</select>
+    <label for="forecast-outcome">Outcome</label>
+    <select id="forecast-outcome" name="outcome" required><option value="h">Home win</option><option value="d">Draw</option><option value="a">Away win</option></select>
+    <button class="button" type="submit">Add result</button>
+  </form>
+  {{else if .HasTeamFilter}}<p>No unfixed remaining fixtures match this team filter.</p>
+  {{else if eq .Remaining 0}}<p>No remaining fixtures are present in the current cache. The outlook is the final table under the available tiebreak information.</p>
+  {{else}}<p>All currently available remaining fixtures are already fixed.</p>{{end}}
+</section>
+
+<details class="forecast-method"><summary>Methodology and limitations</summary>
+  <p><strong>{{.ModelName}}</strong> uses completed goals, team attacking and defensive records, league scoring rates, observed home advantage, and explicit shrinkage toward league averages. {{.ModelDetail}}</p>
+  <p>Unfixed scores are independent Poisson samples. A fixed win, draw, or loss samples a plausible scoreline conditional on that outcome, so goal-based tiebreakers retain uncertainty.</p>
+  <p>The random seed comes from the model version, cached fixture snapshot, and fixed assumptions. Shared links use the latest cached data rather than preserving a historical snapshot; assumptions for a completed fixture become stale.</p>
+  <p>Where cached data cannot resolve an official disciplinary-points tiebreak, the forecast splits probability across the tied positions. Forecast probabilities are not mathematical clinching proofs.</p>
+</details>
+{{template "foot" .}}{{end}}

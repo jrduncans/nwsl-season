@@ -72,7 +72,9 @@ that reusable proof rather than introducing a second scenario calculator.
   representative scorelines as an exhaustive mathematical domain.
 - Whether ASA or another maintainable source can supply disciplinary points, the
   first official tiebreak input not currently available in the cache.
-- Whether what-if state belongs in the URL, browser storage, or server sessions.
+- Scenario state uses versioned URLs. Forecast URLs also include the model ID
+  and intentionally resolve against the latest cache rather than preserving a
+  historical source snapshot.
 - Whether schedule difficulty remains useful as a dedicated page after its most
   important signals are incorporated into the season overview.
 - Which forecast model earns the recommended default after walk-forward
