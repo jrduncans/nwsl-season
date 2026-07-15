@@ -49,4 +49,6 @@
   </div>
 {{end}}
 
-{{define "teamName"}}<span class="team-name">{{if .LogoURL}}<img class="team-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span>{{.Name}}</span></span>{{end}}
+{{define "teamName"}}<span class="team-name" title="{{.Name}}">{{if .LogoURL}}<img class="team-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span>{{.Name}}</span></span>{{end}}
+
+{{define "scheduleAhead"}}{{if .ScheduleAvailable}}<details class="schedule-cell"><summary aria-label="{{.Team.Name}} schedule ahead: {{.ScheduleLabel}}, {{.ScheduleDelta}} PPG from baseline" title="{{.ScheduleLabel}}, {{.ScheduleDelta}} PPG from baseline"><span class="schedule-mini-track" aria-hidden="true"><span class="schedule-mini-baseline"></span><span class="schedule-mini-marker schedule-marker-{{.ScheduleDirection}}" style="left: {{.SchedulePosition}}%; --schedule-scale: {{.ScheduleScale}}; --schedule-opacity: {{.ScheduleOpacity}};"></span></span><span class="visually-hidden">{{.ScheduleLabel}}</span></summary><div class="schedule-explanation"><p><strong>{{.ScheduleLabel}}</strong>, {{.ScheduleDelta}} PPG from the league baseline.</p><p>{{.ScheduleRemaining}} remaining matches · {{.ScheduleHome}} home · {{.ScheduleAway}} away.</p></div></details>{{else}}<span class="schedule-unavailable" aria-label="Schedule ahead unavailable" title="Schedule ahead unavailable">—</span>{{end}}{{end}}

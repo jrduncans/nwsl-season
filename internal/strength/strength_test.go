@@ -48,8 +48,57 @@ func TestCalculateMarksRowsUnavailableWithoutOpponentHistory(t *testing.T) {
 	if result.Rows[0].Available || result.Rows[1].Available {
 		t.Fatal("rows with no completed opponent history should be unavailable")
 	}
+	if result.AvailableRows != 0 || len(result.Rows[0].Fixtures) != 1 || result.Rows[0].Fixtures[0].Available {
+		t.Fatal("unavailable fixture detail should preserve the fixture without a zero estimate")
+	}
 	if result.RemainingMatches != 1 {
 		t.Fatalf("remaining matches = %d, want 1", result.RemainingMatches)
+	}
+}
+
+func TestCalculateBaselineAndScheduleLabels(t *testing.T) {
+	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}, {ID: "c", Name: "Charlie"}, {ID: "d", Name: "Delta"}}
+	games := []standings.Game{
+		game("a", "b", standings.CompletedStatus, 3, 0), // a=3, b=0
+		game("c", "d", standings.CompletedStatus, 1, 1), // c=1, d=1
+		{ID: "a-easy", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "c"},
+		{ID: "b-easy", Status: RemainingStatus, HomeTeamID: "b", AwayTeamID: "d"},
+		{ID: "c-hard", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "c"},
+		{ID: "d-easy", Status: RemainingStatus, HomeTeamID: "b", AwayTeamID: "d"},
+	}
+	result := Calculate(teams, games)
+	if result.AvailableRows != 4 {
+		t.Fatalf("available rows = %d, want 4", result.AvailableRows)
+	}
+	rows := byID(result.Rows)
+	if rows["a"].ScheduleLabel != LabelEasier {
+		t.Fatalf("a label = %q, want %q", rows["a"].ScheduleLabel, LabelEasier)
+	}
+	if rows["b"].ScheduleLabel != LabelEasier {
+		t.Fatalf("b label = %q, want %q", rows["b"].ScheduleLabel, LabelEasier)
+	}
+	if rows["c"].ScheduleLabel != LabelHarder {
+		t.Fatalf("c label = %q, want %q", rows["c"].ScheduleLabel, LabelHarder)
+	}
+	assertFloat(t, result.Baseline, 1.25)
+	if len(rows["a"].Fixtures) != 2 || !rows["a"].Fixtures[0].Available {
+		t.Fatal("available fixture detail missing")
+	}
+}
+
+func TestLabelForDeltaTreatsThresholdAsNearAverage(t *testing.T) {
+	for _, test := range []struct {
+		delta float64
+		want  string
+	}{
+		{QualitativeThreshold, LabelNearAverage},
+		{-QualitativeThreshold, LabelNearAverage},
+		{QualitativeThreshold + 0.001, LabelHarder},
+		{-QualitativeThreshold - 0.001, LabelEasier},
+	} {
+		if got := LabelForDelta(test.delta); got != test.want {
+			t.Errorf("LabelForDelta(%f) = %q, want %q", test.delta, got, test.want)
+		}
 	}
 }
 

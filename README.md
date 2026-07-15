@@ -12,11 +12,14 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 8 is implemented: the server renders cached standings, results, remaining
+Phase 9 is implemented: the server renders cached standings, results, remaining
 fixtures, cache freshness, shareable what-if projections, and transparent raw
-and venue-adjusted remaining schedule strength. A single server process also
-checks the local cache on a schedule and refreshes the current season only when
-it is missing or plausibly stale. Normal page requests never contact ASA.
+and venue-adjusted remaining schedule strength. The main season page keeps a
+compact visual `Ahead` indicator, while `/seasons/{season}/schedule-difficulty`
+provides schedule callouts, comparisons, and fixture-level detail. A single
+server process also checks the local cache on a schedule and refreshes the
+current season only when it is missing or plausibly stale. Normal page requests
+never contact ASA.
 
 ```sh
 go run ./cmd/server

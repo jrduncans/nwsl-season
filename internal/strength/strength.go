@@ -11,16 +11,48 @@ import (
 // RemainingStatus is the upstream status used for an unplayed fixture.
 const RemainingStatus = "PreMatch"
 
+const (
+	// LabelHarder is used when a team's remaining opponents are meaningfully
+	// above the league baseline.
+	LabelHarder = "Harder"
+	// LabelNearAverage is used when a team's remaining opponents are close to
+	// the league baseline.
+	LabelNearAverage = "Near average"
+	// LabelEasier is used when a team's remaining opponents are meaningfully
+	// below the league baseline.
+	LabelEasier = "Easier"
+
+	// QualitativeThreshold is the smallest absolute baseline delta that gets a
+	// qualitative label other than Near average.
+	QualitativeThreshold = 0.10
+)
+
+// Fixture contains the opponent and venue contribution for one remaining
+// fixture. Available is false when the opponent has no completed-match
+// history, so callers can explain missing values without treating zero as a
+// real estimate.
+type Fixture struct {
+	ID                       string
+	Opponent                 standings.Team
+	Home                     bool
+	OpponentPPG              float64
+	VenueAdjustedOpponentPPG float64
+	Available                bool
+}
+
 // Row contains the strength measures for one team.
 type Row struct {
 	Team                     standings.Team
 	RemainingFixtures        int
 	RemainingHome            int
 	RemainingAway            int
+	Fixtures                 []Fixture
 	HomeOpponentPPG          float64
 	AwayOpponentPPG          float64
 	RawOpponentPPG           float64
 	VenueAdjustedOpponentPPG float64
+	DeltaFromBaseline        float64
+	ScheduleLabel            string
 	Available                bool
 }
 
@@ -30,6 +62,8 @@ type Result struct {
 	Rows             []Row
 	CompletedMatches int
 	RemainingMatches int
+	AvailableRows    int
+	Baseline         float64
 	HomePPG          float64
 	AwayPPG          float64
 	VenueGap         float64
@@ -101,6 +135,10 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 			default:
 				continue
 			}
+			opponentTeam, opponentKnown := teamByID[opponentID]
+			if !opponentKnown {
+				opponentTeam = standings.Team{ID: opponentID}
+			}
 			row.RemainingFixtures++
 			if homeFixture {
 				row.RemainingHome++
@@ -110,16 +148,27 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 			opponent, ok := allRecords[opponentID]
 			if !ok || opponent.played == 0 {
 				row.Available = false
+				row.Fixtures = append(row.Fixtures, Fixture{ID: game.ID, Opponent: opponentTeam, Home: homeFixture})
 				continue
 			}
 			opponentPPG := float64(opponent.points) / float64(opponent.played)
+			adjustedPPG := opponentPPG
+			if homeFixture {
+				adjustedPPG -= result.VenueGap / 2
+			} else {
+				adjustedPPG += result.VenueGap / 2
+			}
+			row.Fixtures = append(row.Fixtures, Fixture{
+				ID: game.ID, Opponent: opponentTeam, Home: homeFixture,
+				OpponentPPG: opponentPPG, VenueAdjustedOpponentPPG: adjustedPPG, Available: true,
+			})
 			rawSum += opponentPPG
 			if homeFixture {
 				homeSum += opponentPPG
-				adjustedSum += opponentPPG - result.VenueGap/2
+				adjustedSum += adjustedPPG
 			} else {
 				awaySum += opponentPPG
-				adjustedSum += opponentPPG + result.VenueGap/2
+				adjustedSum += adjustedPPG
 			}
 		}
 		if row.RemainingFixtures == 0 {
@@ -129,8 +178,25 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 			row.AwayOpponentPPG = average(awaySum, row.RemainingAway)
 			row.RawOpponentPPG = rawSum / float64(row.RemainingFixtures)
 			row.VenueAdjustedOpponentPPG = adjustedSum / float64(row.RemainingFixtures)
+			result.AvailableRows++
 		}
 		rows = append(rows, row)
+	}
+	if result.AvailableRows > 0 {
+		for _, row := range rows {
+			if !row.Available {
+				continue
+			}
+			result.Baseline += row.VenueAdjustedOpponentPPG
+		}
+		result.Baseline /= float64(result.AvailableRows)
+		for index := range rows {
+			if !rows[index].Available {
+				continue
+			}
+			rows[index].DeltaFromBaseline = rows[index].VenueAdjustedOpponentPPG - result.Baseline
+			rows[index].ScheduleLabel = LabelForDelta(rows[index].DeltaFromBaseline)
+		}
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -150,6 +216,20 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 	})
 	result.Rows = rows
 	return result
+}
+
+// LabelForDelta maps a signed difference from the league baseline to a plain
+// language label. Exact deltas remain available to prevent the label from
+// overstating small differences.
+func LabelForDelta(delta float64) string {
+	switch {
+	case delta > QualitativeThreshold:
+		return LabelHarder
+	case delta < -QualitativeThreshold:
+		return LabelEasier
+	default:
+		return LabelNearAverage
+	}
 }
 
 func addRecord(value record, points int) record {

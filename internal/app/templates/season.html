@@ -1,7 +1,7 @@
 {{define "season"}}{{template "head" .}}
 <div class="title-row">
   <div><p class="eyebrow">{{.Stage}}</p><h1>{{.Season}} season</h1></div>
-  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a class="button" href="{{.WhatIfPath}}">Build a what-if scenario</a></div>
+  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a href="{{.ScheduleDifficultyPath}}">Schedule difficulty</a><a class="button" href="{{.WhatIfPath}}">Build a what-if scenario</a></div>
 </div>
 <p class="freshness">Source: {{.Source}}{{if .Freshness}} · Cache refreshed {{.Freshness}}{{else}} · Refresh time unavailable{{end}}</p>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
@@ -11,27 +11,6 @@
   <p class="note">Ranked by points per game during the season. The line marks the configured playoff field.</p>
   <p class="note">{{.ClinchingNote}}</p>
   {{template "currentTable" .Standings}}
-</section>
-
-<section aria-labelledby="strength-title">
-  <h2 id="strength-title">Remaining schedule strength</h2>
-  {{if eq .Strength.RemainingMatches 0}}
-    <p class="note">No remaining regular-season fixtures are present in the cache.</p>
-  {{else}}
-    <p class="note" id="strength-definition">Higher values mean a harder remaining schedule. Raw opponent PPG averages each remaining opponent's current points per game, counting each fixture. Venue-adjusted PPG applies half of the observed league home-advantage gap to each fixture.</p>
-    <p class="note">The venue adjustment is derived from {{.Strength.CompletedMatches}} completed matches: home teams average {{.Strength.HomePPG}} points per game, away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap. This is a model estimate, not a fact about future results.</p>
-    <div class="table-scroll">
-      <table class="strength-table" aria-describedby="strength-definition">
-        <caption>Remaining opponent strength</caption>
-        <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">Remaining</th><th scope="col">Home</th><th scope="col">Away</th><th scope="col">Home opp PPG</th><th scope="col">Away opp PPG</th><th scope="col">Raw opp PPG</th><th scope="col">Venue-adjusted PPG</th></tr></thead>
-        <tbody>
-        {{range .Strength.Rows}}
-          <tr><td>{{.Position}}</td><th scope="row">{{template "teamName" .Team}}</th><td>{{.RemainingFixtures}}</td><td>{{.RemainingHome}}</td><td>{{.RemainingAway}}</td><td>{{.HomeOpponentPPG}}</td><td>{{.AwayOpponentPPG}}</td><td>{{.RawOpponentPPG}}</td><td><strong>{{.VenueAdjustedOpponentPPG}}</strong></td></tr>
-        {{end}}
-        </tbody>
-      </table>
-    </div>
-  {{end}}
 </section>
 
 {{template "foot" .}}{{end}}

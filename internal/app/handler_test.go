@@ -58,7 +58,7 @@ func TestRenderedHTTPPathsAreRelative(t *testing.T) {
 			t.Fatalf("body contains absolute HTTP path %q", absolutePath)
 		}
 	}
-	for _, relativePath := range []string{`href="2026/fixtures"`, `href="2026/what-if"`, `href="../static/site.css"`, `src="../static/standings.js"`} {
+	for _, relativePath := range []string{`href="2026/fixtures"`, `href="2026/schedule-difficulty"`, `href="2026/what-if"`, `href="../static/site.css"`, `src="../static/standings.js"`} {
 		if !strings.Contains(body, relativePath) {
 			t.Errorf("body does not contain relative path %q", relativePath)
 		}
@@ -120,6 +120,21 @@ func TestTrailingSlashFixturesPathRedirectsToCanonicalRelativePath(t *testing.T)
 	}
 }
 
+func TestTrailingSlashScheduleDifficultyPathRedirectsToCanonicalRelativePath(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/schedule-difficulty/", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want redirect", response.Code)
+	}
+	if location := response.Header().Get("Location"); location != "../schedule-difficulty" {
+		t.Fatalf("location = %q, want relative canonical path", location)
+	}
+}
+
 func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	store := fakeStore{season: testSeasonData()}
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
@@ -130,10 +145,13 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Build a what-if scenario", "Results and fixtures", "Cache refreshed Jul 9, 2026", "Remaining schedule strength", "Raw opp PPG", "Venue-adjusted PPG", "4.50"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Build a what-if scenario", "Results and fixtures", "Schedule difficulty", "Cache refreshed Jul 9, 2026", ">Ahead</th>", "Harder"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
+	}
+	if strings.Contains(response.Body.String(), "Remaining schedule difficulty") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
+		t.Fatal("main season page still renders the prominent schedule-difficulty summary")
 	}
 	for _, text := range []string{`data-standings-mode="per-game"`, ">Per game</button>", ">Totals</button>", "<th>GF</th>", `data-total="2" data-per-game="2.00"`} {
 		if !strings.Contains(response.Body.String(), text) {
@@ -144,8 +162,8 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
 	} {
-		if got := strings.Count(response.Body.String(), logo); got != 2 {
-			t.Errorf("%s appears %d times, want 2 for standings and strength", logo, got)
+		if got := strings.Count(response.Body.String(), logo); got != 1 {
+			t.Errorf("%s appears %d times, want 1 in the standings", logo, got)
 		}
 	}
 	if strings.Contains(response.Body.String(), "2–1") {
@@ -188,7 +206,16 @@ func TestAddTotalPositionsUsesTotalStandingsOrder(t *testing.T) {
 	}
 }
 
-func TestSeasonRendersStrengthEmptyStateWhenScheduleIsComplete(t *testing.T) {
+func TestPlotPositionLeavesVisualMarginAtTrackEdges(t *testing.T) {
+	if got := plotPosition(10, 0, 10); got != "95.0" {
+		t.Fatalf("maximum plot position = %q, want 95.0", got)
+	}
+	if got := plotPosition(0, 0, 10); got != "5.0" {
+		t.Fatalf("minimum plot position = %q, want 5.0", got)
+	}
+}
+
+func TestSeasonKeepsScheduleIndicatorWhenScheduleIsComplete(t *testing.T) {
 	data := testSeasonData()
 	data.Games = data.Games[:1]
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
@@ -199,11 +226,48 @@ func TestSeasonRendersStrengthEmptyStateWhenScheduleIsComplete(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), "No remaining regular-season fixtures are present in the cache.") {
-		t.Fatal("complete schedule did not render the strength empty state")
+	if !strings.Contains(response.Body.String(), ">Ahead</th>") || !strings.Contains(response.Body.String(), `aria-label="Schedule ahead unavailable"`) {
+		t.Fatal("complete schedule did not render unavailable schedule indicators")
 	}
-	if strings.Contains(response.Body.String(), "Venue-adjusted PPG</th>") {
-		t.Fatal("strength table rendered despite no remaining fixtures")
+	if strings.Contains(response.Body.String(), "Remaining schedule difficulty") {
+		t.Fatal("main season page rendered schedule-difficulty detail")
+	}
+}
+
+func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/schedule-difficulty", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Venue-adjusted comparison", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Adjusted contribution", "Home", "Away", "Alpha &amp; Co"} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain %q", text)
+		}
+	}
+	if !strings.Contains(response.Body.String(), `class="comparison-disclosure"`) || !strings.Contains(response.Body.String(), `class="team-schedule-detail"`) {
+		t.Fatal("schedule detail does not use native disclosures")
+	}
+}
+
+func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
+	data := testSeasonData()
+	data.Games = data.Games[1:2]
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/schedule-difficulty", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: data}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, text := range []string{"Schedule difficulty is unavailable", "Remaining fixtures for Alpha &amp; Co", "Bravo FC", "Unavailable"} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain %q", text)
+		}
 	}
 }
 

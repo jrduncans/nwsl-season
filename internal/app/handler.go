@@ -64,6 +64,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /", application.root)
 	mux.HandleFunc("GET /seasons/{season}", application.season)
 	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
+	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
 	mux.HandleFunc("GET /seasons/{season}/what-if", application.whatIf)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
@@ -127,6 +128,15 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, "fixtures", page)
+}
+
+func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request) {
+	page, err := a.loadSeasonPage(r, nil)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	a.render(w, "schedule-difficulty", page)
 }
 
 func (a *application) whatIf(w http.ResponseWriter, r *http.Request) {
@@ -206,20 +216,23 @@ func (a *application) loadSeasonPage(r *http.Request, selections map[string]what
 	actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
 	totalTable := standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
 	scheduleStrength := strength.Calculate(data.Teams, domainGames)
+	scheduleView := strengthViewFrom(scheduleStrength)
+	standingsView := addScheduleIndicators(tableViews(actualTable, a.options.PlayoffPlaces, nil), scheduleView)
 	page := seasonPage{
-		Title:          season + " NWSL season",
-		Season:         season,
-		Stage:          a.options.Stage,
-		HomePath:       relativeURL(r.URL.Path, "/"),
-		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
-		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
-		Standings:      addTotalPositions(tableViews(actualTable, a.options.PlayoffPlaces, nil), totalTable, a.options.PlayoffPlaces),
-		Strength:       strengthViewFrom(scheduleStrength),
-		FixtureGroups:  fixtureGroups(data, selections, a.options.Location),
-		WhatIfPath:     relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/what-if"),
-		SeasonPath:     seasonURL(r.URL.Path, season),
-		FixturesPath:   relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
-		Source:         "American Soccer Analysis (ASA)",
+		Title:                  season + " NWSL season",
+		Season:                 season,
+		Stage:                  a.options.Stage,
+		HomePath:               relativeURL(r.URL.Path, "/"),
+		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
+		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
+		Standings:              addTotalPositions(standingsView, totalTable, a.options.PlayoffPlaces),
+		Strength:               scheduleView,
+		FixtureGroups:          fixtureGroups(data, selections, a.options.Location),
+		WhatIfPath:             relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/what-if"),
+		SeasonPath:             seasonURL(r.URL.Path, season),
+		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
+		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
+		Source:                 "American Soccer Analysis (ASA)",
 	}
 	for _, game := range data.Games {
 		if game.Status == whatif.RemainingStatus {
@@ -365,7 +378,7 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "what-if") {
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "what-if") {
 		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false

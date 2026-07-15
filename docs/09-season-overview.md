@@ -1,5 +1,12 @@
 # Phase 9: season overview and schedule difficulty
 
+## Status
+
+Implemented. The main season page keeps the official standings primary and adds
+only a compact visual schedule-ahead indicator. Numeric explanation and
+schedule-difficulty exploration live at
+`/seasons/{season}/schedule-difficulty`.
+
 ## Goal
 
 Make remaining schedule difficulty discoverable in the primary season view
@@ -15,7 +22,8 @@ Use plain, consistent labels:
 
 - **Schedule difficulty** for compact navigation.
 - **Remaining schedule difficulty** for the full heading.
-- **Schedule ahead** for a compact standings-row label or column.
+- **Ahead** for the compact standings column; use **Schedule ahead** in the
+  accessible explanation and supporting copy.
 - **Toughest remaining schedule** and **Easiest remaining schedule** for summary
   callouts.
 
@@ -26,25 +34,25 @@ results.
 ## Season overview
 
 The official standings remain the default and most prominent data. Incorporate
-schedule context into that area rather than asking the visitor to discover a
-second table farther down the page.
+only a compact schedule signal into that area; the full schedule presentation
+is on the dedicated detail page.
 
-The initial overview should provide:
+The implemented overview provides:
 
-- A compact, above-the-fold callout identifying the toughest and easiest
-  remaining schedules.
-- A schedule-ahead indicator for each standings row. Prefer an understandable
-  relative label such as `Harder`, `Near average`, or `Easier` over displaying
-  another bare PPG value.
-- A hover, focus, tap, or row-expansion explanation with the team's exact
-  difference from the league baseline, remaining match count, and home/away
-  split.
-- A clear route to inspect the supporting schedule detail.
+- A short `Ahead` standings column with a baseline-centered marker for each
+  available team. Marker position shows easier/harder direction; color,
+  opacity, and marker size supplement the relative magnitude.
+- A hover title and keyboard/click disclosure with the exact baseline delta,
+  qualitative label, remaining match count, and home/away split.
+- An unavailable state when remaining opponent history cannot support an
+  estimate.
+- A clear `Schedule difficulty` route to inspect the supporting detail.
 
-Labels must not rely on color alone. Define and test the league baseline and any
-qualitative thresholds before using them. Do not let ranks exaggerate negligible
-differences: the exact delta from the league baseline remains available wherever
-a category or rank is shown.
+The marker is not color-only: its position and shape communicate direction,
+while exact values remain available on hover or disclosure. The qualitative
+threshold is ±0.10 PPG (`Harder` above +0.10, `Easier` below −0.10, and `Near
+average` within the band), with exact deltas retained so close values are not
+overstated. The main table does not print another PPG column.
 
 The default measure is the existing venue-adjusted opponent PPG. The overview
 does not place raw and venue-adjusted values side by side as if visitors must
@@ -52,19 +60,19 @@ choose a formula before understanding the result.
 
 ## Detailed presentation
 
-Begin with a dedicated route such as
-`/seasons/{season}/schedule-difficulty`. This is an initial information
-architecture choice, not a commitment that schedule difficulty will always
-deserve its own page. Usage and the resulting layout may justify folding the
-detail back into the overview later.
+The dedicated route is `/seasons/{season}/schedule-difficulty`. The initial
+overview callouts were moved here after review so they do not compete with the
+official standings.
 
-Replace the current wide table with a comparison centered on the league
-baseline. A horizontal bar or dot plot should make relative differences visible
-while also printing the values. Sort by hardest-to-easiest by default and offer
-the raw opponent-PPG measure as a comparison to the recommended venue-adjusted
-measure.
+The detail page uses a venue-adjusted comparison centered on the league
+baseline. Its dot plot is sorted hardest-to-easiest, prints the values, and
+keeps a small visual inset at the plot edges. A native disclosure offers raw
+opponent PPG as a comparison to the recommended venue-adjusted measure.
 
-Expanding a team should show:
+The page begins with toughest/easiest remaining-schedule callouts and explains
+that these are estimates, not forecasts or standings adjustments.
+
+Expanding a team shows:
 
 - Every remaining opponent and venue.
 - A readable difficulty contribution for each fixture.
@@ -72,9 +80,9 @@ Expanding a team should show:
 - Raw and venue-adjusted values.
 - The observed league home and away PPG used by the adjustment.
 
-Keep the formula, data cutoff, and caveats on the same page. The detail should
-explain the compact overview indicator rather than introduce a separate notion
-of team quality.
+The page keeps the formula, cache refresh/data cutoff, observed home/away PPG,
+and caveats alongside the comparison. It explains the compact overview marker
+rather than introducing a separate notion of team quality.
 
 ## Boundaries
 
@@ -82,21 +90,22 @@ of team quality.
 - Remaining schedule difficulty is not called an adjusted ranking or a power
   rating.
 - Do not add projection probabilities in this phase.
-- Preserve useful output without JavaScript; enhancement may provide expansion
-  and view switching.
+- Preserve useful output without JavaScript; native disclosures provide
+  expansion and comparison behavior.
 - Keep a single source of truth in `internal/strength`; HTTP view code should not
   recalculate the metric.
 
 ## Exit criteria
 
-- Schedule difficulty is visible without scrolling below the standings.
-- Every team has an accessible, non-color-only schedule-ahead indicator with an
-  exact supporting value.
-- The venue-adjusted measure is the clearly labeled default, with raw opponent
-  PPG available in the detail.
-- Visitors can inspect the opponents and venues behind a team's measure.
-- The former dense table is no longer the primary presentation.
-- Tests cover the league baseline, qualitative labels, unavailable data, HTML
-  escaping, and keyboard-accessible disclosure.
-- The project records that the dedicated detail page may be consolidated after
-  observing the implementation.
+- [x] Schedule difficulty is available through the compact overview marker and
+  dedicated detail route.
+- [x] Every team has an accessible, non-color-only indicator or unavailable
+  state with an exact supporting value when data permits.
+- [x] The venue-adjusted measure is the clearly labeled default, with raw
+  opponent PPG available in the detail.
+- [x] Visitors can inspect the opponents and venues behind a team's measure.
+- [x] The former dense table is no longer the primary presentation.
+- [x] Tests cover the league baseline, qualitative labels, unavailable data,
+  HTML escaping, routing, and keyboard-accessible disclosure.
+- [x] The dedicated detail page is recorded as a presentation choice to
+  reconsider after observing usage.
