@@ -82,3 +82,13 @@ explaining the result to users.
   reported under an explicitly named accessible-rules result.
 - The optimized result agrees with brute force on generated small schedules.
 - Runtime is measured on realistic remaining schedules.
+
+## Later generalization
+
+This phase is the small-schedule correctness oracle. The current website limits
+it to four remaining league fixtures to protect request latency, and its finite
+representative-score universe is not a proof over arbitrary scorelines.
+[`12-season-scale-clinching.md`](12-season-scale-clinching.md) plans the bounded
+points optimization, tiebreak-frontier contract, Shield and home-playoff
+thresholds, and snapshot computation needed to remove that gate. Phase 13 then
+uses the same oracle for reporter-style upcoming-slate conditions.

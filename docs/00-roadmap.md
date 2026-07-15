@@ -40,13 +40,24 @@ complete when its exit criteria pass; it does not need every possible refinement
 11. **xG and model comparison** — Cache game-level xG, back-test forecast models,
     select an opinionated default, and let interested users compare alternatives.
     See [`11-xg-and-models.md`](11-xg-and-models.md).
+12. **Season-scale clinching status** — Generalize exact qualification proofs to
+    the Shield, a home playoff place, and a playoff place; use cheap bounds and a
+    coupled-fixture optimizer so status can be calculated throughout the season.
+    See [`12-season-scale-clinching.md`](12-season-scale-clinching.md).
+13. **Clinching scenarios** — Turn the qualification proof into minimal,
+    reporter-style conditions for an upcoming slate, and present both current
+    status and future opportunities without crowding the standings. See
+    [`13-clinching-scenarios.md`](13-clinching-scenarios.md).
 
 The order is intentional, but not sacred. Styling can happen whenever it keeps
 the project fun. The original dependency chain is games → cache → standings
 → clinching. The next sequence is schedule context → forecast simulation →
-validated model comparison. Phase 9 can reuse the existing schedule-strength
-domain result; Phases 10 and 11 should preserve the same separation between
-domain calculations, persistence, and HTTP presentation.
+validated model comparison → season-scale qualification proofs → explainable
+match-week scenarios. Phase 9 can reuse the existing schedule-strength domain
+result; Phases 10 and 11 should preserve the same separation between domain
+calculations, persistence, and HTTP presentation. Phase 12 replaces the current
+four-fixture clinching gate with bounded optimization, and Phase 13 depends on
+that reusable proof rather than introducing a second scenario calculator.
 
 ## Decisions to revisit
 
@@ -55,7 +66,12 @@ domain calculations, persistence, and HTTP presentation.
 - What ASA's post-match publication delay is, and whether the initial
   three-hour completion grace needs adjustment.
 - How official tiebreak rules differ by season.
-- Whether exact clinching needs a custom search or an optimization solver.
+- Which optimization approach best handles coupled-fixture qualification proofs
+  after the Phase 12 points bounds have reduced the problem.
+- How to model the score-based tiebreak frontier without treating a small set of
+  representative scorelines as an exhaustive mathematical domain.
+- Whether ASA or another maintainable source can supply disciplinary points, the
+  first official tiebreak input not currently available in the cache.
 - Whether what-if state belongs in the URL, browser storage, or server sessions.
 - Whether schedule difficulty remains useful as a dedicated page after its most
   important signals are incorporated into the season overview.

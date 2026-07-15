@@ -55,6 +55,13 @@ clinching has not been evaluated rather than showing an approximate result.
 The season values are explicit `app.Options` so later seasons can supply their
 own format.
 
+This is a checkpoint constraint, not the desired final availability.
+[`12-season-scale-clinching.md`](12-season-scale-clinching.md) plans cheap
+always-on bounds, coupled-fixture optimization, and snapshot-level computation
+for the Shield, home playoff places, and playoff places. Phase 13 adds
+upcoming-slate clinching conditions without turning the what-if form into an
+official proof surface.
+
 The 30-match and eight-playoff-place assumptions come from the official
 [2026 NWSL competition rules](https://images.nwslsoccer.com/image/private/t_q-good/prd/tstudhfledlk7z8ygtzd.pdf).
 
