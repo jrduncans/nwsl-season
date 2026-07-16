@@ -17,7 +17,7 @@ func TestCalculateAccumulatesHomeWinAwayWinAndDraw(t *testing.T) {
 		game("charlie", "alpha", CompletedStatus, 1, 1),
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertRecord(t, table, "charlie", Record{
 		Played: 2, Wins: 1, Draws: 1, GoalsFor: 4, GoalsAgainst: 2, Points: 4,
@@ -43,7 +43,7 @@ func TestCalculateIgnoresUnplayedPostponedAndIncompleteGames(t *testing.T) {
 		{HomeTeamID: "alpha", AwayTeamID: "bravo", Status: CompletedStatus, AwayScore: intPtr(1)},
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertRecord(t, table, "alpha", Record{})
 	assertRecord(t, table, "bravo", Record{})
@@ -57,12 +57,12 @@ func TestCalculateIncludesTeamsWithNoCompletedGames(t *testing.T) {
 	}
 	games := []Game{game("alpha", "bravo", CompletedStatus, 1, 0)}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertRecord(t, table, "charlie", Record{})
 }
 
-func TestDefaultRulesOrderByPointsPerGame(t *testing.T) {
+func TestPerGameRulesOrderByPointsPerGame(t *testing.T) {
 	teams := []Team{
 		{ID: "ahead", Name: "Ahead FC"},
 		{ID: "behind", Name: "Behind FC"},
@@ -77,7 +77,7 @@ func TestDefaultRulesOrderByPointsPerGame(t *testing.T) {
 		game("sink-1", "behind", CompletedStatus, 1, 0),
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertBefore(t, table, "ahead", "behind")
 }
@@ -139,8 +139,8 @@ func TestCalculateIsIndependentOfInputOrder(t *testing.T) {
 	reversedTeams := []Team{teams[2], teams[1], teams[0]}
 	reversedGames := []Game{forwardGames[2], forwardGames[1], forwardGames[0]}
 
-	forward := Calculate(teams, forwardGames, DefaultRules())
-	reversed := Calculate(reversedTeams, reversedGames, DefaultRules())
+	forward := Calculate(teams, forwardGames, PerGameRules())
+	reversed := Calculate(reversedTeams, reversedGames, PerGameRules())
 
 	if !reflect.DeepEqual(forward, reversed) {
 		t.Fatalf("tables differ by input order\nforward:  %+v\nreversed: %+v", forward, reversed)
@@ -178,7 +178,7 @@ func TestCalculateOrdersEqualPointsByDefaultTiebreaks(t *testing.T) {
 		game("sink-6", "same-a", CompletedStatus, 1, 0),
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertBefore(t, table, "plus", "goals")
 	assertBefore(t, table, "goals", "name-a")
@@ -204,7 +204,7 @@ func TestCalculateUsesWinsBeforeGoalsScored(t *testing.T) {
 		game("draws", "sink-5", CompletedStatus, 0, 0),
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertBefore(t, table, "wins", "draws")
 }
@@ -221,7 +221,7 @@ func TestCalculateUsesHeadToHeadPointsAfterOverallGoalsScored(t *testing.T) {
 		game("sink", "alpha", CompletedStatus, 1, 0),
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	assertBefore(t, table, "alpha", "bravo")
 }
@@ -242,7 +242,7 @@ func TestCalculateMarksDisciplinaryTiebreakAsUndetermined(t *testing.T) {
 		game("sink-4", "bravo", CompletedStatus, 1, 0),
 	}
 
-	table := Calculate(teams, games, DefaultRules())
+	table := Calculate(teams, games, PerGameRules())
 
 	alpha := findRow(t, table, "alpha")
 	if !alpha.TieBreak.Undetermined {

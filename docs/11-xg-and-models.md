@@ -2,6 +2,13 @@
 
 ## Status
 
+The catalog, xG cache, and Forecast Lab are implemented. The historical
+walk-forward evaluator described below is still roadmap work: the repository
+retains tested scoring helpers but does not publish an evidence-backed model
+recommendation. References below to “recommended,” `MethodPath`, or the
+`cmd/backtest` runner describe the original implementation packet, not the
+current runtime contract.
+
 Planned. This document is the implementation contract. Phase 10 is the
 baseline: preserve its simulation, fixed-result, tiebreak, and latest-cache URL
 semantics unless this document explicitly changes them.

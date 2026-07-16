@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
@@ -26,6 +27,7 @@ type seasonPage struct {
 	ScheduleDifficultyPath string
 	ForecastPath           string
 	XGPath                 string
+	ClinchingPath          string
 	CurrentPath            string
 	OutlookPath            string
 	Outlook                bool
@@ -92,38 +94,37 @@ type strengthFixtureView struct {
 }
 
 type tableRowView struct {
-	Position                  int
-	TeamID                    string
-	Team                      teamNameView
-	Played                    int
-	Wins                      int
-	Draws                     int
-	Losses                    int
-	GoalsFor                  int
-	GoalsAgainst              int
-	GoalDifference            string
-	Points                    int
-	PointsPerGame             string
-	GoalsForPerGame           string
-	GoalsAgainstPerGame       string
-	GoalDifferencePerGame     string
-	PlayoffLine               bool
-	TotalPosition             int
-	TotalPlayoffLine          bool
-	QualificationBadge        string
-	QualificationTitle        string
-	QualificationAchievements string
-	TieBreak                  string
-	ScheduleAvailable         bool
-	ScheduleLabel             string
-	ScheduleDelta             string
-	SchedulePosition          string
-	ScheduleDirection         string
-	ScheduleScale             string
-	ScheduleOpacity           string
-	ScheduleRemaining         int
-	ScheduleHome              int
-	ScheduleAway              int
+	Position              int
+	TeamID                string
+	Team                  teamNameView
+	Played                int
+	Wins                  int
+	Draws                 int
+	Losses                int
+	GoalsFor              int
+	GoalsAgainst          int
+	GoalDifference        string
+	Points                int
+	PointsPerGame         string
+	GoalsForPerGame       string
+	GoalsAgainstPerGame   string
+	GoalDifferencePerGame string
+	PlayoffLine           bool
+	TotalPosition         int
+	TotalPlayoffLine      bool
+	QualificationBadge    string
+	QualificationTitle    string
+	TieBreak              string
+	ScheduleAvailable     bool
+	ScheduleLabel         string
+	ScheduleDelta         string
+	SchedulePosition      string
+	ScheduleDirection     string
+	ScheduleScale         string
+	ScheduleOpacity       string
+	ScheduleRemaining     int
+	ScheduleHome          int
+	ScheduleAway          int
 }
 
 func addTotalPositions(rows []tableRowView, totalTable []standings.TableRow, playoffPlaces int) []tableRowView {
@@ -168,18 +169,20 @@ type errorPage struct {
 }
 type clinchingPage struct {
 	seasonPage
-	ClinchingPath string
 	State         string
 	Slate         scenarios.Slate
-	Rows          []clinchingRowView
+	SlateFixtures []string
+	Actionable    []clinchingRowView
+	Other         []clinchingRowView
 }
 type clinchingRowView struct {
 	Team, Achievement, State, Limitation string
-	Already                              bool
+	Already, CanClinch                   bool
 	Clauses, Necessary                   []string
+	NoHelp                               string
 }
 
-func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[string]bool) []tableRowView {
+func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {
 	rows := make([]tableRowView, 0, len(table))
 	for index, row := range table {
 		gd := row.Record.GoalDifference()
@@ -374,7 +377,7 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 	groups := []fixtureGroupView{}
 	groupIndex := map[string]int{}
 	for _, game := range data.Games {
-		kickoff, _ := parseKickoff(game.KickoffUTC)
+		kickoff, _ := fixtures.ParseKickoff(game.KickoffUTC)
 		localKickoff := kickoff.In(location)
 		label := localKickoff.Format("Monday, January 2")
 		if game.Matchday.Valid {
@@ -401,14 +404,7 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 	return groups
 }
 
-func displayName(team standings.Team) string {
-	for _, value := range []string{team.Name, team.ShortName, team.Abbreviation, team.ID} {
-		if value != "" {
-			return value
-		}
-	}
-	return "Unknown team"
-}
+func displayName(team standings.Team) string { return standings.DisplayName(team) }
 
 func teamName(team standings.Team) teamNameView {
 	return teamNameView{Name: displayName(team), LogoURL: clubLogoURL(team.ID)}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -71,8 +72,8 @@ type forecastRowMetrics struct {
 	PositionBreakdown                                           []forecastPositionView
 }
 type forecastModelView struct {
-	ID, Name, Detail, Inputs, Assumptions, MethodPath, EvidenceID string
-	Recommended, Selected, Comparison                             bool
+	ID, Name, Detail, Inputs, Assumptions string
+	Default, Selected, Comparison         bool
 }
 
 type forecastPositionView struct {
@@ -175,7 +176,7 @@ func forecastFixtures(data cache.SeasonData, state forecaststate.State, location
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
 	}
-	fixtures := make([]forecastFixtureOption, 0)
+	options := make([]forecastFixtureOption, 0)
 	for _, game := range data.Games {
 		if game.Status != simulation.RemainingStatus {
 			continue
@@ -183,17 +184,17 @@ func forecastFixtures(data cache.SeasonData, state forecaststate.State, location
 		if _, fixed := state.Fixed[game.ASAID]; fixed {
 			continue
 		}
-		kickoff, err := parseKickoff(game.KickoffUTC)
+		kickoff, err := fixtures.ParseKickoff(game.KickoffUTC)
 		if err != nil {
 			continue
 		}
 		home, away := teams[game.HomeTeamID], teams[game.AwayTeamID]
-		fixtures = append(fixtures, forecastFixtureOption{
+		options = append(options, forecastFixtureOption{
 			ID: game.ASAID, Kickoff: kickoff.In(location).Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),
 			HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, Home: home, Away: away,
 		})
 	}
-	return fixtures
+	return options
 }
 
 func forecastAssumptions(data cache.SeasonData, state forecaststate.State, removeURL func(string) string, location *time.Location) []forecastAssumptionView {
@@ -204,7 +205,7 @@ func forecastAssumptions(data cache.SeasonData, state forecaststate.State, remov
 	values := make([]forecastAssumptionView, 0, len(state.Fixed))
 	for gameID, outcome := range state.Fixed {
 		game := byID[gameID]
-		kickoff, _ := parseKickoff(game.KickoffUTC)
+		kickoff, _ := fixtures.ParseKickoff(game.KickoffUTC)
 		fixture := fmt.Sprintf("%s vs %s", teamDisplay(data.Teams, game.HomeTeamID), teamDisplay(data.Teams, game.AwayTeamID))
 		values = append(values, forecastAssumptionView{
 			Fixture: fixture, Kickoff: kickoff.In(location).Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),

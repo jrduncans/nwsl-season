@@ -12,7 +12,7 @@ func NewCurrentPaceV1() Model { return currentPaceV1{} }
 type currentPaceV1 struct{}
 
 func (currentPaceV1) Info() Info {
-	return Info{ID: currentPaceID, Name: "Current pace", Description: "Observed points pace translated into a scoring-rate multiplier.", Inputs: "Completed match scores, points, and the published fixture list.", Assumptions: "Independent Poisson scoring; all past success becomes scoring pace, without opponent defensive adjustment.", MethodPath: "/docs/11-xg-and-models.md#current-pace-v1"}
+	return Info{ID: currentPaceID, Name: "Current pace", Description: "Observed points pace translated into a scoring-rate multiplier.", Inputs: "Completed match scores, points, and the published fixture list.", Assumptions: "Independent Poisson scoring; all past success becomes scoring pace, without opponent defensive adjustment."}
 }
 
 type paceTotals struct{ played, points int }

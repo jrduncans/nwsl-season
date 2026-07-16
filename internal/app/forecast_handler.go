@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
@@ -15,7 +16,7 @@ const defaultForecastIterations = 50000
 
 func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	state, err := forecaststate.ParseV2(query.Get("v"), query.Get("m"), query.Get("c"), query["p"], func(id string) bool { _, ok := forecast.Lookup(id); return ok }, forecast.Recommended().Model.Info().ID)
+	state, err := forecaststate.ParseV2(query.Get("v"), query.Get("m"), query.Get("c"), query["p"], func(id string) bool { _, ok := forecast.Lookup(id); return ok }, forecast.Default().Model.Info().ID)
 	if err != nil {
 		a.renderScenarioBadRequest(w, r, "Invalid forecast scenario", err)
 		return
@@ -62,7 +63,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	xgoals := forecastXGoals(data)
 	result, err := simulation.Run(r.Context(), simulation.Request{
 		Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: active.Model, Fixed: state.Fixed,
-		Iterations: a.options.ForecastIterations, PlayoffPlaces: a.options.PlayoffPlaces,
+		Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules),
 	})
 	if err != nil {
 		if r.Context().Err() != nil {
@@ -74,7 +75,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	var comparison *simulation.Result
 	if state.ComparisonModelID != "" {
 		entry, _ := forecast.Lookup(state.ComparisonModelID)
-		value, runErr := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: a.options.PlayoffPlaces})
+		value, runErr := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)})
 		if runErr != nil {
 			if r.Context().Err() != nil {
 				return
@@ -118,7 +119,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		Rows: forecastComparisonRows(result, comparison), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(),
 	}
 	for _, entry := range forecast.Catalog() {
-		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Recommended: entry.Recommended, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions, MethodPath: relativeURL(r.URL.Path, entry.Model.Info().MethodPath), EvidenceID: entry.EvidenceID})
+		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})
 	}
 	page.HasComparison = comparison != nil
 	if comparison != nil {
@@ -136,7 +137,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	} else {
 		page.DataCutoff = "Unavailable"
 	}
-	expectedGames := len(data.Teams) * a.options.GamesPerTeam / 2
+	expectedGames := len(data.Teams) * a.options.Rules.GamesPerTeam / 2
 	if len(data.Games) != expectedGames {
 		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures. This forecast includes only fixtures currently in the cache.", len(data.Games), expectedGames)
 	}
@@ -165,7 +166,7 @@ func forecastXGoals(data cache.SeasonData) map[string]forecast.ExpectedGoals {
 }
 func forecastXGCoverage(data cache.SeasonData) (available, completed int) {
 	for _, game := range data.Games {
-		if game.Status == "FullTime" {
+		if game.Status == fixtures.CompletedStatus {
 			completed++
 		}
 	}

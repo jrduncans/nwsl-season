@@ -15,7 +15,7 @@ func NewXGPoissonV1() Model { return xgPoissonV1{} }
 type xgPoissonV1 struct{}
 
 func (xgPoissonV1) Info() Info {
-	return Info{ID: xgPoissonID, Name: "xG Poisson", Description: "ASA team-model expected goals with the Results Poisson formula.", Inputs: "Available ASA team-model xG for completed matches and the published fixture list.", Assumptions: "Independent Poisson scoring, league/team shrinkage, and observed home advantage; missing xG is not replaced with scores.", MethodPath: "/docs/11-xg-and-models.md#xg-poisson-v1"}
+	return Info{ID: xgPoissonID, Name: "xG Poisson", Description: "ASA team-model expected goals with the Results Poisson formula.", Inputs: "Available ASA team-model xG for completed matches and the published fixture list.", Assumptions: "Independent Poisson scoring, league/team shrinkage, and observed home advantage; missing xG is not replaced with scores."}
 }
 
 type xgTotals struct {

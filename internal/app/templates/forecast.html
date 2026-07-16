@@ -9,12 +9,12 @@
   <h2 id="forecast-model-title">Model selection</h2>
   <form method="get" action="{{.ForecastPath}}">
     <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
-    <label for="forecast-model">Active model</label><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Recommended}} (Recommended){{end}}</option>{{end}}</select>
+    <label for="forecast-model">Active model</label><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (Default){{end}}</option>{{end}}</select>
     {{if .HasComparison}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}<button type="submit">Use model</button>
   </form>
   <form method="get" action="{{.ForecastPath}}"><input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<label for="forecast-comparison">Compare with</label><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}{{if ne .ID $.ModelID}}<option value="{{.ID}}" {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select><button type="submit">Update comparison</button></form>
-  <p><a href="{{.ForecastPath}}">Use recommended model</a></p>
-  {{range .Models}}{{if .Selected}}<p><strong>{{.Name}}</strong>{{if .Recommended}} <span class="badge">Recommended</span>{{end}} · {{.Detail}} <a href="{{.MethodPath}}">Formula</a> · <a href="../../docs/model-evaluation-v1.md">Evidence</a></p>{{end}}{{end}}
+  <p><a href="{{.ForecastPath}}">Use default model</a></p>
+  {{range .Models}}{{if .Selected}}<p><strong>{{.Name}}</strong>{{if .Default}} <span class="badge">Default</span>{{end}} · {{.Detail}}</p>{{end}}{{end}}
   {{if .XGCoverage}}<p{{if .XGWarning}} class="data-warning"{{end}}>ASA team-model xG coverage: {{.XGCoverage}}{{if .XGWarning}} (below 95%; missing xG is not replaced with results){{end}}.</p>{{end}}
 </section>
 <dl class="forecast-meta">
@@ -89,7 +89,7 @@
 </section>
 
 <details class="forecast-method"><summary>Methodology and limitations</summary>
-  <p><strong>{{.ModelName}}</strong> {{.ModelDetail}}</p>
+  {{range .Models}}{{if .Selected}}<p><strong>{{.Name}}</strong> {{.Detail}}</p><p><strong>Inputs:</strong> {{.Inputs}}</p><p><strong>Assumptions:</strong> {{.Assumptions}}</p>{{end}}{{end}}
   <p>Unfixed scores are independent Poisson samples. A fixed win, draw, or loss samples a plausible scoreline conditional on that outcome, so goal-based tiebreakers retain uncertainty.</p>
   <p>The random seed comes from the model version, cached fixture snapshot, and fixed assumptions. Shared links use the latest cached data rather than preserving a historical snapshot; assumptions for a completed fixture become stale.</p>
   <p>Where cached data cannot resolve an official disciplinary-points tiebreak, the forecast splits probability across the tied positions. Forecast probabilities are not mathematical clinching proofs.</p>

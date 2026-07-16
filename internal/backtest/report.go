@@ -8,16 +8,15 @@ import (
 
 // Report is intentionally small and stable enough for checked-in evidence.
 type Report struct {
-	EvidenceID       string    `json:"evidence_id"`
-	RecommendedModel string    `json:"recommended_model"`
-	GeneratedAt      time.Time `json:"generated_at"`
-	Iterations       int       `json:"iterations"`
-	Limitations      []string  `json:"limitations"`
+	Status              string    `json:"status"`
+	CurrentDefaultModel string    `json:"current_default_model"`
+	GeneratedAt         time.Time `json:"generated_at"`
+	Limitations         []string  `json:"limitations"`
 }
 
 func JSON(report Report) ([]byte, error) { return json.MarshalIndent(report, "", "  ") }
 func Markdown(report Report) string {
-	return fmt.Sprintf("# Model evaluation v1\n\nRecommended model: **%s**. Evidence ID: `%s`.\n\nGenerated: %s. Back-test iterations: %d.\n\n## Limitations\n\n- %s\n", report.RecommendedModel, report.EvidenceID, report.GeneratedAt.UTC().Format(time.RFC3339), report.Iterations, join(report.Limitations, "\n- "))
+	return fmt.Sprintf("# Model evaluation v1\n\nStatus: **%s**. Current default model: **%s**.\n\nGenerated: %s.\n\n## Limitations\n\n- %s\n", report.Status, report.CurrentDefaultModel, report.GeneratedAt.UTC().Format(time.RFC3339), join(report.Limitations, "\n- "))
 }
 func join(values []string, separator string) string {
 	if len(values) == 0 {

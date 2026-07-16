@@ -74,7 +74,7 @@ func TestStandingsInputsLoadSeasonStageValues(t *testing.T) {
 		}
 	}
 
-	table := standings.Calculate(loadedTeams, loadedGames, standings.DefaultRules())
+	table := standings.Calculate(loadedTeams, loadedGames, standings.PerGameRules())
 	assertStandingsRecord(t, table, "alpha", standings.Record{
 		Played: 1, Wins: 1, GoalsFor: 2, Points: 3,
 	})

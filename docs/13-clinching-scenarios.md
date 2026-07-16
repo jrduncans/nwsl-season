@@ -2,9 +2,13 @@
 
 ## Status
 
-Planned. The implementation packet below is the authoritative build order for
-this phase. When it is more specific than the design discussion, follow the
-implementation packet.
+Implemented. The implementation packet below records the build contract for
+the current feature and remains useful when revisiting its proof or persistence
+design.
+
+The live page only reads the exact current snapshot. The older optional
+`LatestScenario` fallback described below was intentionally not retained,
+because presenting a stale proof as current would be misleading.
 
 ## Goal
 

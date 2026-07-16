@@ -3,12 +3,11 @@ SERVER_PACKAGE := ./cmd/server
 SERVER_BINARY := nwsl-season-server
 SYNC_PACKAGE := ./cmd/sync
 SYNC_BINARY := nwsl-season-sync
-BACKTEST_PACKAGE := ./cmd/backtest
 
 TARGET_OS ?= linux
 TARGET_ARCH ?= arm64
 
-.PHONY: test fmt vet backtest build build-server build-linux build-linux-server build-sync build-linux-sync clean
+.PHONY: test fmt vet build build-server build-linux build-linux-server build-sync build-linux-sync clean
 
 test:
 	go test ./...
@@ -18,9 +17,6 @@ fmt:
 
 vet:
 	go vet ./...
-
-backtest:
-	go run $(BACKTEST_PACKAGE)
 
 build: build-server build-sync
 

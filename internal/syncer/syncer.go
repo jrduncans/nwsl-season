@@ -14,11 +14,12 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 )
 
 var runMu stdsync.Mutex
 
-const allGameStatuses = "Abandoned,FullTime,PreMatch"
+const allGameStatuses = fixtures.AbandonedStatus + "," + fixtures.CompletedStatus + "," + fixtures.PreMatchStatus
 
 // ASAClient is the ASA surface required by the sync service.
 type ASAClient interface {
@@ -283,7 +284,7 @@ func validate(options RunOptions, teams []asa.Team, games []asa.Game) error {
 		if game.AwayScore != nil && *game.AwayScore < 0 {
 			return fmt.Errorf("validate ASA response: %s has negative away score", label)
 		}
-		if game.Status == "FullTime" && (game.HomeScore == nil || game.AwayScore == nil) {
+		if game.Status == fixtures.CompletedStatus && (game.HomeScore == nil || game.AwayScore == nil) {
 			return fmt.Errorf("validate ASA response: %s is FullTime without both scores", label)
 		}
 	}

@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
@@ -19,7 +22,7 @@ func TestHealth(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	response := httptest.NewRecorder()
 
-	NewHandler().ServeHTTP(response, request)
+	NewHandler(nil).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
@@ -33,13 +36,20 @@ func TestHome(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	response := httptest.NewRecorder()
 
-	NewHandler().ServeHTTP(response, request)
+	NewHandler(nil).ServeHTTP(response, request)
 
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
 	}
 	if location := response.Header().Get("Location"); location != "seasons/2026" {
 		t.Fatalf("location = %q, want current season", location)
+	}
+}
+
+func TestHandlerUsesPresentationRulesForUnknownSeason(t *testing.T) {
+	options := defaultOptions(Options{CurrentSeason: "2027", Stage: "Regular Season"})
+	if options.Rules.Version != "presentation-fallback-v1" || playoffPlaces(options.Rules) != 8 || options.Rules.GamesPerTeam != 30 {
+		t.Fatalf("fallback rules = %+v", options.Rules)
 	}
 }
 
@@ -120,6 +130,17 @@ func TestTrailingSlashFixturesPathRedirectsToCanonicalRelativePath(t *testing.T)
 	}
 }
 
+func TestTrailingSlashClinchingPathRedirectsToCanonicalRelativePath(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/clinching/", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "../clinching" {
+		t.Fatalf("status = %d, location = %q; want canonical clinching redirect", response.Code, response.Header().Get("Location"))
+	}
+}
+
 func TestTrailingSlashScheduleDifficultyPathRedirectsToCanonicalRelativePath(t *testing.T) {
 	handler := NewHandler(fakeStore{season: testSeasonData()})
 	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/schedule-difficulty/", nil)
@@ -140,7 +161,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
@@ -188,11 +209,67 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	}
 }
 
+func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	store := fullFakeStore{fakeStore: fakeStore{season: data}, qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.Clinched}}}}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	for _, value := range []string{`class="badge qualification-badge"`, "✓ Shield", "Guaranteed achievements: Shield"} {
+		if !strings.Contains(response.Body.String(), value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+}
+
+func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	store := fullFakeStore{
+		fakeStore:     fakeStore{season: data},
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}}}},
+		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
+			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}}}}},
+			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch}},
+		}},
+	}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/clinching", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, value := range []string{"Current opportunities", "All qualification statuses", "Alpha &amp; Co", "Can guarantee this without help"} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+	if strings.Index(body, "Current opportunities") > strings.Index(body, "All qualification statuses") {
+		t.Fatal("non-actionable statuses appear before opportunities")
+	}
+}
+
+func TestXGPageShowsIndependentFreshness(t *testing.T) {
+	data := testSeasonData()
+	data.XGStatus.LastSuccess = &cache.XGSyncRun{FinishedAt: time.Date(2026, 7, 10, 18, 0, 0, 0, time.UTC)}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/xg", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	if !strings.Contains(response.Body.String(), "xG last fetched at") || !strings.Contains(response.Body.String(), "Jul 10, 2026 at 6:00 PM UTC") {
+		t.Fatalf("xG page does not display independent freshness: %s", response.Body.String())
+	}
+}
+
 func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/fixtures", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
@@ -232,7 +309,7 @@ func TestSeasonKeepsScheduleIndicatorWhenScheduleIsComplete(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: data}, Options{PlayoffPlaces: 1, GamesPerTeam: 2, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(2), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
@@ -249,7 +326,7 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/schedule-difficulty", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
@@ -270,7 +347,7 @@ func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/schedule-difficulty", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: data}, Options{PlayoffPlaces: 1, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
@@ -303,7 +380,7 @@ func TestSeasonRouteReadsTemporarySQLiteCache(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/fixtures", nil)
 	response := httptest.NewRecorder()
-	NewHandlerWithOptions(db, Options{PlayoffPlaces: 1, GamesPerTeam: 2, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(db, Options{Rules: testRules(2), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Alpha FC") || !strings.Contains(response.Body.String(), "3–1") {
 		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
@@ -323,12 +400,12 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Simulated seasons", ">20</dd>", "Expected points", "Playoffs", "Shield", "View positions", "Build assumptions", "Add assumption", "Update forecast", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data cutoff", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win"} {
+	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Simulated seasons", ">20</dd>", "Expected points", "Playoffs", "Shield", "View positions", "Build assumptions", "Add assumption", "Update forecast", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data cutoff", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -341,6 +418,9 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), "Build a what-if scenario") {
 		t.Fatal("Forecast Lab still uses legacy visible navigation")
+	}
+	if strings.Contains(response.Body.String(), "docs/model-evaluation") || strings.Contains(response.Body.String(), "Formula</a>") {
+		t.Fatal("Forecast Lab links to repository documentation that the server does not expose")
 	}
 }
 
@@ -355,7 +435,7 @@ func TestForecastTeamFilterKeepsAllFixturesForClientSideFiltering(t *testing.T) 
 		request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?team="+test.team, nil)
 		response := httptest.NewRecorder()
 
-		NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+		NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
 
 		if response.Code != http.StatusOK {
 			t.Fatalf("team %s: status = %d, want 200; body=%s", test.team, response.Code, response.Body.String())
@@ -373,7 +453,7 @@ func TestForecastAssumptionsIncludeBrowserLocalTimeData(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?v=1&m=results-poisson-v1&p=future-1:h", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
@@ -403,7 +483,7 @@ func TestForecastPreservesReverseProxyBasePath(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/forecast", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{PlayoffPlaces: 1, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
@@ -438,7 +518,7 @@ func TestCacheStatusWithoutReader(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/cache/status", nil)
 	response := httptest.NewRecorder()
 
-	NewHandler().ServeHTTP(response, request)
+	NewHandler(nil).ServeHTTP(response, request)
 
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
@@ -511,6 +591,27 @@ type fakeStore struct {
 	status cache.Status
 	season cache.SeasonData
 	err    error
+}
+
+type fullFakeStore struct {
+	fakeStore
+	qualification cache.QualificationSnapshot
+	scenario      cache.ScenarioSnapshot
+}
+
+func (f fullFakeStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
+	return f.qualification, true, nil
+}
+
+func (f fullFakeStore) ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error) {
+	return f.scenario, true, nil
+}
+
+func testRules(gamesPerTeam int) competition.Rules {
+	return competition.Rules{
+		Season: "test", Stage: "Regular Season", Version: "test-v1", ExpectedTeams: 2, GamesPerTeam: gamesPerTeam,
+		Achievements: []competition.Achievement{{ID: competition.AchievementPlayoffs, Label: "Playoffs", TopK: 1}},
+	}
 }
 
 func (f fakeStore) Status(context.Context, string, string) (cache.Status, error) {

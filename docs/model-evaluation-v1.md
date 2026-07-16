@@ -1,12 +1,10 @@
 # Model evaluation v1
 
-Evidence ID: `model-evaluation-v1`
+Status: `not_run`
 
-The catalog currently recommends **Results Poisson** (`results-poisson-v1`). It
-remains the incumbent until a deterministic, leakage-safe 2016–2025
-walk-forward evaluation satisfies the replacement rule documented in
-[Phase 11](11-xg-and-models.md). The evaluation command records its generation
-time, iteration count, and explicit limitations in the adjacent JSON artifact.
+The catalog currently defaults to **Results Poisson** (`results-poisson-v1`). A
+deterministic, leakage-safe 2016–2025 walk-forward evaluation remains roadmap
+work; the adjacent JSON records that this evaluation has not been run.
 
 Historical ASA xG availability represents current published values; it cannot
 reconstruct when each historical value first became available.

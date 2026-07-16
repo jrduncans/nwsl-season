@@ -12,19 +12,19 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 12 is implemented: qualification is calculated after each durable fixture
+Phase 13 is implemented: qualification is calculated after each durable fixture
 refresh, stored by immutable fixture snapshot and rules version, and displayed
 as the strongest accessible achievement badge (Shield, Home playoff, or
-Playoffs). The points engine is conservative whenever a future score tiebreak
-cannot be proved.
+Playoffs). Clinching scenarios use the same conservative proof engine and
+prioritize actionable next-slate opportunities.
 
 Phase 11 also retains ASA team-model game xG separately
 from fixtures, including raw payloads, availability markers, and independent
 refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
 pace, Results Poisson, and xG Poisson presets; it defaults to the catalog’s
-evidence-backed recommendation, preserves fixed outcomes while models change,
+provisional default, preserves fixed outcomes while models change,
 and can compare two models side by side. `/seasons/2026?view=outlook` shows the
-recommended forecast without changing official standings, while
+default forecast without changing official standings, while
 `/seasons/2026/xg` is descriptive xG analysis—not a table or power rating.
 Normal page requests never contact ASA.
 
@@ -89,12 +89,10 @@ To print standings from the local cache:
 go run ./cmd/standings -season 2026
 ```
 
-To regenerate the deterministic evaluation-artifact envelope (after auditing
-the historical cache), run:
-
-```sh
-go run ./cmd/backtest -generated-at 2026-07-15T00:00:00Z
-```
+The model-evaluation report is roadmap material. The repository contains tested
+scoring helpers, but it does not yet run the documented historical walk-forward
+evaluation; the Forecast Lab therefore labels Results Poisson as the default,
+not an evidence-backed recommendation.
 
 Standings default to per-game order while teams have played uneven schedules.
 Use `-order total` to print the full-season total-points order.

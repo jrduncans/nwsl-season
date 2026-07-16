@@ -11,6 +11,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
@@ -250,11 +251,11 @@ func (r Refresher) report(value Progress) {
 func safeFixtureStates(games []cache.Game) bool {
 	for _, g := range games {
 		switch g.Status {
-		case "FullTime":
+		case fixtures.CompletedStatus:
 			if !g.HomeScore.Valid || !g.AwayScore.Valid {
 				return false
 			}
-		case "PreMatch":
+		case fixtures.PreMatchStatus:
 			if g.HomeScore.Valid || g.AwayScore.Valid {
 				return false
 			}
@@ -283,16 +284,16 @@ func completeInventory(r competition.Rules, teams []standings.Team, games []stan
 func fixtureOrder(games []cache.Game) ([]string, error) {
 	pending := []cache.Game{}
 	for _, g := range games {
-		if g.Status == "PreMatch" {
-			if _, err := parseKickoff(g.KickoffUTC); err != nil {
+		if g.Status == fixtures.PreMatchStatus {
+			if _, err := fixtures.ParseKickoff(g.KickoffUTC); err != nil {
 				return nil, err
 			}
 			pending = append(pending, g)
 		}
 	}
 	sort.Slice(pending, func(i, j int) bool {
-		a, _ := parseKickoff(pending[i].KickoffUTC)
-		b, _ := parseKickoff(pending[j].KickoffUTC)
+		a, _ := fixtures.ParseKickoff(pending[i].KickoffUTC)
+		b, _ := fixtures.ParseKickoff(pending[j].KickoffUTC)
 		if a.Equal(b) {
 			return pending[i].ASAID < pending[j].ASAID
 		}
@@ -305,14 +306,6 @@ func fixtureOrder(games []cache.Game) ([]string, error) {
 	return out, nil
 }
 
-func parseKickoff(value string) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05 MST"} {
-		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("parse kickoff %q", value)
-}
 func unresolvedRows(teams []standings.Team, r competition.Rules, m clinching.ProofMethod, reason string) []cache.QualificationStatus {
 	out := []cache.QualificationStatus{}
 	for _, t := range teams {

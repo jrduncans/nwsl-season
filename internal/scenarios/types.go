@@ -147,25 +147,50 @@ func (r Result) Validate(slate Slate) error {
 	if !validOpportunityState(r.State) || r.TeamID == "" || r.Achievement == "" || r.TopK < 1 || r.Clauses == nil || r.Necessary == nil || r.ProofMethods == nil {
 		return fmt.Errorf("invalid scenario result")
 	}
-	if r.State == OpportunityAlreadyClinched && (!r.AlreadyClinched || r.CanClinch || len(r.Clauses) > 0) {
-		return fmt.Errorf("invalid already-clinched result")
+	if r.State == OpportunityAlreadyClinched {
+		if !r.AlreadyClinched || r.CanClinch || len(r.Clauses) > 0 {
+			return fmt.Errorf("invalid already-clinched result")
+		}
+	} else if r.AlreadyClinched || r.CanClinch != (r.State == OpportunityCanClinch) {
+		return fmt.Errorf("invalid scenario state flags")
 	}
-	if r.State == OpportunityCanClinch && (!r.CanClinch || len(r.Clauses) == 0 || r.CertifiedAssignments <= 0) {
+	if r.State == OpportunityCanClinch && (len(r.Clauses) == 0 || r.CertifiedAssignments <= 0) {
 		return fmt.Errorf("invalid can-clinch result")
 	}
 	if r.CertifiedAssignments < 0 || r.UnresolvedAssignments < 0 || r.TotalAssignments < 0 || r.CertifiedAssignments+r.UnresolvedAssignments > r.TotalAssignments {
 		return fmt.Errorf("invalid assignment counts")
+	}
+	if slate.State == SlateReady && r.State != OpportunityAlreadyClinched && r.TotalAssignments != pow3(len(slate.FixtureIDs)) {
+		return fmt.Errorf("invalid total assignment count")
 	}
 	fixture := map[string]bool{}
 	for _, id := range slate.FixtureIDs {
 		fixture[id] = true
 	}
 	for _, c := range r.Clauses {
-		for _, f := range c.Conditions {
-			if !fixture[f.GameID] || len(canonicalOutcomes(f.AllowedOutcomes)) != len(f.AllowedOutcomes) || len(f.AllowedOutcomes) == 3 {
-				return fmt.Errorf("invalid clause condition")
-			}
+		if c.RepresentedAssignments <= 0 || len(c.ProofMethods) == 0 {
+			return fmt.Errorf("invalid clause")
 		}
+		if err := validateConditions(c.Conditions, fixture); err != nil {
+			return fmt.Errorf("invalid clause condition: %w", err)
+		}
+	}
+	if err := validateConditions(r.Necessary, fixture); err != nil {
+		return fmt.Errorf("invalid necessary condition: %w", err)
+	}
+	return nil
+}
+
+func validateConditions(conditions []FixtureCondition, fixture map[string]bool) error {
+	seen := map[string]bool{}
+	for _, condition := range conditions {
+		if !fixture[condition.GameID] || seen[condition.GameID] {
+			return fmt.Errorf("unknown or duplicate fixture %q", condition.GameID)
+		}
+		if len(condition.AllowedOutcomes) == 0 || len(condition.AllowedOutcomes) == 3 || len(canonicalOutcomes(condition.AllowedOutcomes)) != len(condition.AllowedOutcomes) {
+			return fmt.Errorf("invalid outcomes for fixture %q", condition.GameID)
+		}
+		seen[condition.GameID] = true
 	}
 	return nil
 }

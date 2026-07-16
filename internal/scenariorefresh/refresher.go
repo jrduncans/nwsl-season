@@ -11,6 +11,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -131,7 +132,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			d.AwayScore = &x
 		}
 		domainGames = append(domainGames, d)
-		k, err := parseKickoff(g.KickoffUTC)
+		k, err := fixtures.ParseKickoff(g.KickoffUTC)
 		if err != nil {
 			return calculated{}, err
 		}
@@ -150,7 +151,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	pending := append([]scenarios.ScheduledGame(nil), scheduled...)
 	sort.Slice(pending, func(i, j int) bool { return pending[i].KickoffUTC.Before(pending[j].KickoffUTC) })
 	for _, g := range pending {
-		if g.Status == "PreMatch" {
+		if g.Status == fixtures.PreMatchStatus {
 			order = append(order, g.ID)
 		}
 	}
@@ -204,16 +205,4 @@ func (r Refresher) report(value Progress) {
 	if r.Progress != nil {
 		r.Progress(value)
 	}
-}
-
-// ASA has historically returned both RFC3339 and the equivalent UTC display
-// form. The cache preserves the source value, so derived refreshes must accept
-// both representations.
-func parseKickoff(value string) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05 MST"} {
-		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("parse kickoff %q", value)
 }

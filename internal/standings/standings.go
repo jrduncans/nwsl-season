@@ -1,8 +1,12 @@
 package standings
 
-import "sort"
+import (
+	"sort"
 
-const CompletedStatus = "FullTime"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
+)
+
+const CompletedStatus = fixtures.CompletedStatus
 
 // Team is a standings-domain team value.
 type Team struct {
@@ -67,11 +71,6 @@ type TieBreakStatus struct {
 	TiedTeamIDs  []string
 }
 
-// DefaultRules returns the default in-season 2026 NWSL regular-season table order.
-func DefaultRules() Rules {
-	return PerGameRules()
-}
-
 // OfficialTotalRules returns the 2026 NWSL regular-season table order by total points.
 func OfficialTotalRules() Rules {
 	return Rules{Order: OrderOfficialTotal}
@@ -80,6 +79,16 @@ func OfficialTotalRules() Rules {
 // PerGameRules returns an in-season table order using official criteria per game played.
 func PerGameRules() Rules {
 	return Rules{Order: OrderOfficialPerGame}
+}
+
+// DisplayName returns the most useful available club name.
+func DisplayName(team Team) string {
+	for _, value := range []string{team.Name, team.ShortName, team.Abbreviation, team.ID} {
+		if value != "" {
+			return value
+		}
+	}
+	return "Unknown team"
 }
 
 // Calculate derives a table from teams and games.

@@ -18,27 +18,6 @@
 </body>
 </html>{{end}}
 
-{{define "table"}}
-<div class="standings-display" data-standings data-standings-mode="per-game">
-  {{template "standingsToggle"}}
-  <div class="table-scroll">
-  <table class="standings" data-standings-table>
-    <caption>Current standings</caption>
-    <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col">P</th><th scope="col">W</th><th scope="col">D</th><th scope="col">L</th><th scope="col">GF</th><th scope="col">GA</th><th scope="col">GD</th><th scope="col">Pts</th></tr></thead>
-    <tbody>
-    {{range .Rows}}
-      <tr class="{{if .PlayoffLine}}playoff-line {{end}}" data-per-game-playoff-line="{{.PlayoffLine}}" data-total-playoff-line="{{.TotalPlayoffLine}}">
-        <td data-standings-position data-per-game="{{.Position}}" data-total="{{.TotalPosition}}">{{.Position}}</td>
-        <th scope="row">{{template "teamName" .Team}}{{if .QualificationBadge}} <span class="badge qualification-badge">✓ {{.QualificationBadge}}</span><span class="visually-hidden">{{.QualificationTitle}}</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th>
-        <td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td data-total="{{.GoalsFor}}" data-per-game="{{.GoalsForPerGame}}"><span data-standings-value>{{.GoalsForPerGame}}</span></td><td data-total="{{.GoalsAgainst}}" data-per-game="{{.GoalsAgainstPerGame}}"><span data-standings-value>{{.GoalsAgainstPerGame}}</span></td><td data-total="{{.GoalDifference}}" data-per-game="{{.GoalDifferencePerGame}}"><span data-standings-value>{{.GoalDifferencePerGame}}</span></td><td data-total="{{.Points}}" data-per-game="{{.PointsPerGame}}"><strong data-standings-value>{{.PointsPerGame}}</strong></td>
-      </tr>
-    {{end}}
-    </tbody>
-  </table>
-  </div>
-</div>
-{{end}}
-
 {{define "currentTable"}}
 <div class="standings-display" data-standings data-standings-mode="per-game">
   {{template "standingsToggle"}}
@@ -46,7 +25,7 @@
     <table class="standings" data-standings-table>
       <caption>Current standings</caption>
       <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th title="Schedule difficulty relative to the league baseline">Ahead</th></tr></thead>
-      <tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}" data-per-game-playoff-line="{{.PlayoffLine}}" data-total-playoff-line="{{.TotalPlayoffLine}}"><td data-standings-position data-per-game="{{.Position}}" data-total="{{.TotalPosition}}">{{.Position}}</td><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td data-total="{{.GoalsFor}}" data-per-game="{{.GoalsForPerGame}}"><span data-standings-value>{{.GoalsForPerGame}}</span></td><td data-total="{{.GoalsAgainst}}" data-per-game="{{.GoalsAgainstPerGame}}"><span data-standings-value>{{.GoalsAgainstPerGame}}</span></td><td data-total="{{.GoalDifference}}" data-per-game="{{.GoalDifferencePerGame}}"><span data-standings-value>{{.GoalDifferencePerGame}}</span></td><td data-total="{{.Points}}" data-per-game="{{.PointsPerGame}}"><strong data-standings-value>{{.PointsPerGame}}</strong></td><td>{{template "scheduleAhead" .}}</td></tr>{{end}}</tbody>
+      <tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}" data-per-game-playoff-line="{{.PlayoffLine}}" data-total-playoff-line="{{.TotalPlayoffLine}}"><td data-standings-position data-per-game="{{.Position}}" data-total="{{.TotalPosition}}">{{.Position}}</td><th scope="row">{{template "teamName" .Team}}{{if .QualificationBadge}} <span class="badge qualification-badge">✓ {{.QualificationBadge}}</span><span class="visually-hidden">{{.QualificationTitle}}</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td data-total="{{.GoalsFor}}" data-per-game="{{.GoalsForPerGame}}"><span data-standings-value>{{.GoalsForPerGame}}</span></td><td data-total="{{.GoalsAgainst}}" data-per-game="{{.GoalsAgainstPerGame}}"><span data-standings-value>{{.GoalsAgainstPerGame}}</span></td><td data-total="{{.GoalDifference}}" data-per-game="{{.GoalDifferencePerGame}}"><span data-standings-value>{{.GoalDifferencePerGame}}</span></td><td data-total="{{.Points}}" data-per-game="{{.PointsPerGame}}"><strong data-standings-value>{{.PointsPerGame}}</strong></td><td>{{template "scheduleAhead" .}}</td></tr>{{end}}</tbody>
     </table>
   </div>
 </div>

@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 )
 
 // DefineSlate chooses a deterministic, safe next fixture slate.
@@ -19,11 +21,11 @@ func DefineSlate(games []ScheduledGame) (Slate, error) {
 		}
 		seen[g.ID] = true
 		switch g.Status {
-		case "FullTime":
+		case fixtures.CompletedStatus:
 			if g.HomeScore == nil || g.AwayScore == nil {
 				return Slate{}, fmt.Errorf("completed game %q lacks score", g.ID)
 			}
-		case "PreMatch":
+		case fixtures.PreMatchStatus:
 			if g.HomeScore != nil || g.AwayScore != nil {
 				return Slate{}, fmt.Errorf("prematch game %q has score", g.ID)
 			}
@@ -33,7 +35,7 @@ func DefineSlate(games []ScheduledGame) (Slate, error) {
 	}
 	pending := []ScheduledGame{}
 	for _, g := range all {
-		if g.Status == "PreMatch" {
+		if g.Status == fixtures.PreMatchStatus {
 			pending = append(pending, g)
 		}
 	}

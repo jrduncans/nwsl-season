@@ -25,36 +25,6 @@ type State struct {
 	Fixed             map[string]simulation.Outcome
 }
 
-// Parse decodes v, m, and repeated p query values. An entirely empty state is
-// the default forecast using supportedModelID.
-func Parse(version, modelID string, values []string, supportedModelID string) (State, error) {
-	if version == "" && modelID == "" && len(values) == 0 {
-		return State{ModelID: supportedModelID, Fixed: map[string]simulation.Outcome{}}, nil
-	}
-	if version != LegacyEncodingVersion {
-		return State{}, fmt.Errorf("unsupported forecast version %q", version)
-	}
-	if modelID != supportedModelID {
-		return State{}, fmt.Errorf("unsupported forecast model %q", modelID)
-	}
-	if len(values) > MaxFixed {
-		return State{}, fmt.Errorf("at most %d fixed results are allowed", MaxFixed)
-	}
-	fixed := make(map[string]simulation.Outcome, len(values))
-	for _, value := range values {
-		gameID, encoded, ok := strings.Cut(value, ":")
-		outcome := simulation.Outcome(encoded)
-		if !ok || gameID == "" || !outcome.Valid() {
-			return State{}, fmt.Errorf("invalid forecast selection %q", value)
-		}
-		if _, exists := fixed[gameID]; exists {
-			return State{}, fmt.Errorf("duplicate forecast selection for game %q", gameID)
-		}
-		fixed[gameID] = outcome
-	}
-	return State{ModelID: modelID, Fixed: fixed}, nil
-}
-
 // ParseV2 decodes the model-comparison format using a caller-owned catalog.
 func ParseV2(version, modelID, comparisonID string, values []string, supported func(string) bool, recommended string) (State, error) {
 	if version == "" && modelID == "" && comparisonID == "" && len(values) == 0 {

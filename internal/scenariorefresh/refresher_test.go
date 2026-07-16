@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 )
 
 func TestParseKickoffAcceptsCacheFormats(t *testing.T) {
 	for _, value := range []string{"2026-11-01T22:00:00Z", "2026-11-01 22:00:00 UTC"} {
-		got, err := parseKickoff(value)
+		got, err := fixtures.ParseKickoff(value)
 		if err != nil {
 			t.Fatalf("parseKickoff(%q): %v", value, err)
 		}

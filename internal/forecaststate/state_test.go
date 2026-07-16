@@ -7,8 +7,8 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 )
 
-func TestParseAndValuesAreCanonical(t *testing.T) {
-	state, err := Parse("1", "results-poisson-v1", []string{"two:a", "one:h"}, "results-poisson-v1")
+func TestParseV2KeepsLegacyURLsAndCanonicalValues(t *testing.T) {
+	state, err := ParseV2("1", "results-poisson-v1", "", []string{"two:a", "one:h"}, func(id string) bool { return id == "results-poisson-v1" }, "results-poisson-v1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,18 +17,18 @@ func TestParseAndValuesAreCanonical(t *testing.T) {
 	}
 }
 
-func TestParseRejectsInvalidState(t *testing.T) {
+func TestParseV2RejectsInvalidState(t *testing.T) {
 	for _, test := range []struct {
 		version, model string
 		values         []string
 	}{
-		{"2", "results-poisson-v1", []string{"one:h"}},
+		{"2", "", []string{"one:h"}},
 		{"1", "other", []string{"one:h"}},
 		{"1", "results-poisson-v1", []string{"one:x"}},
 		{"1", "results-poisson-v1", []string{"one:h", "one:a"}},
 	} {
-		if _, err := Parse(test.version, test.model, test.values, "results-poisson-v1"); err == nil {
-			t.Fatalf("Parse(%q, %q, %#v) succeeded", test.version, test.model, test.values)
+		if _, err := ParseV2(test.version, test.model, "", test.values, func(id string) bool { return id == "results-poisson-v1" }, "results-poisson-v1"); err == nil {
+			t.Fatalf("ParseV2(%q, %q, %#v) succeeded", test.version, test.model, test.values)
 		}
 	}
 }

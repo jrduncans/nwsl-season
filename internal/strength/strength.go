@@ -5,11 +5,12 @@ package strength
 import (
 	"sort"
 
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 // RemainingStatus is the upstream status used for an unplayed fixture.
-const RemainingStatus = "PreMatch"
+const RemainingStatus = fixtures.PreMatchStatus
 
 const (
 	// LabelHarder is used when a team's remaining opponents are meaningfully

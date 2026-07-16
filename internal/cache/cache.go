@@ -636,33 +636,6 @@ func (c *DB) ReleaseSyncLease(ctx context.Context, key, holder string) error {
 	return nil
 }
 
-// CountGames returns cached games for tests and diagnostics.
-func (c *DB) CountGames(ctx context.Context, season, stage string) (int, error) {
-	var count int
-	if err := c.db.QueryRowContext(ctx, `SELECT count(*) FROM games WHERE season = ? AND stage = ?`, season, stage).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count games: %w", err)
-	}
-	return count, nil
-}
-
-// GameByID returns one cached game for tests and diagnostics.
-func (c *DB) GameByID(ctx context.Context, id string) (Game, error) {
-	var game Game
-	var homeScore, awayScore, matchday sql.NullInt64
-	if err := c.db.QueryRowContext(ctx, `SELECT
-		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-		home_score, away_score, matchday, last_updated_utc, raw_json
-		FROM games WHERE asa_game_id = ?`, id).Scan(
-		&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status, &game.HomeTeamID, &game.AwayTeamID,
-		&homeScore, &awayScore, &matchday, &game.LastUpdatedUTC, &game.RawJSON); err != nil {
-		return Game{}, fmt.Errorf("load game %q: %w", id, err)
-	}
-	game.HomeScore = homeScore
-	game.AwayScore = awayScore
-	game.Matchday = matchday
-	return game, nil
-}
-
 // StandingsInputs loads teams and games for a season and stage.
 func (c *DB) StandingsInputs(ctx context.Context, season, stage string) ([]standings.Team, []standings.Game, error) {
 	teams, err := c.standingsTeams(ctx, season, stage)
@@ -1342,9 +1315,6 @@ func (c *DB) ScenarioForSnapshot(ctx context.Context, snapshotID, rulesVersion, 
 	// completed qualification batch for the same snapshot and rules. This avoids
 	// surfacing an older complete scenario batch after qualification was rebuilt.
 	return c.loadScenario(ctx, `WHERE fixture_snapshot_id=? AND rules_version=? AND definition_version=? AND outcome='complete' AND qualification_run_id=(SELECT id FROM qualification_runs WHERE fixture_snapshot_id=? AND rules_version=? AND outcome='complete' ORDER BY finished_at DESC,id DESC LIMIT 1)`, snapshotID, rulesVersion, definitionVersion, snapshotID, rulesVersion)
-}
-func (c *DB) LatestScenario(ctx context.Context, season, stage, rulesVersion, definitionVersion string) (ScenarioSnapshot, bool, error) {
-	return c.loadScenario(ctx, `WHERE season=? AND stage=? AND rules_version=? AND definition_version=? AND outcome='complete'`, season, stage, rulesVersion, definitionVersion)
 }
 func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (ScenarioSnapshot, bool, error) {
 	q := `SELECT id,fixture_snapshot_id,qualification_run_id,source_sync_run_id,season,stage,rules_version,definition_version,slate_id,slate_state,slate_source,matchday,starts_at_utc,latest_kickoff_utc,cutoff_utc,fixture_ids_json,slate_reason,started_at,finished_at,outcome,error_summary,expected_results,written_results FROM scenario_runs ` + where + ` ORDER BY finished_at DESC,id DESC LIMIT 1`

@@ -11,12 +11,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 // RemainingStatus is the source status for an unplayed fixture.
-const RemainingStatus = "PreMatch"
+const RemainingStatus = fixtures.PreMatchStatus
 
 const conditionalAttempts = 10000
 
@@ -140,7 +141,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		if rows[i].ExpectedPoints != rows[j].ExpectedPoints {
 			return rows[i].ExpectedPoints > rows[j].ExpectedPoints
 		}
-		left, right := displayName(rows[i].Team), displayName(rows[j].Team)
+		left, right := standings.DisplayName(rows[i].Team), standings.DisplayName(rows[j].Team)
 		if left != right {
 			return left < right
 		}
@@ -361,13 +362,4 @@ func weightedQuantile(values map[int]float64, total, percentile float64) int {
 		}
 	}
 	return keys[len(keys)-1]
-}
-
-func displayName(team standings.Team) string {
-	for _, value := range []string{team.Name, team.ShortName, team.Abbreviation, team.ID} {
-		if value != "" {
-			return value
-		}
-	}
-	return "Unknown team"
 }

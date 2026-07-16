@@ -8,6 +8,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
@@ -24,9 +25,9 @@ type Request struct {
 
 // Generate searches all three-outcome completions, pruning only statements
 // which the Phase 12 points oracle has already certified.
-func Generate(ctx context.Context, r Request) (Result, error) {
+func Generate(ctx context.Context, r Request) (out Result, err error) {
 	started := time.Now()
-	out := Result{TeamID: r.TargetTeamID, Achievement: r.Achievement.ID, TopK: r.Achievement.TopK, Clauses: []Clause{}, Necessary: []FixtureCondition{}, ProofMethods: []clinching.ProofMethod{}}
+	out = Result{TeamID: r.TargetTeamID, Achievement: r.Achievement.ID, TopK: r.Achievement.TopK, Clauses: []Clause{}, Necessary: []FixtureCondition{}, ProofMethods: []clinching.ProofMethod{}}
 	defer func() { out.Diagnostics.ElapsedMicroseconds = time.Since(started).Microseconds() }()
 	if r.Evaluator == nil || r.TargetTeamID == "" || r.Achievement.ID == "" || r.Achievement.TopK < 1 {
 		return out, fmt.Errorf("invalid scenario request")
@@ -71,7 +72,7 @@ func Generate(ctx context.Context, r Request) (Result, error) {
 	slateGames := make([]standings.Game, 0, len(r.Slate.FixtureIDs))
 	for _, id := range r.Slate.FixtureIDs {
 		g, ok := games[id]
-		if !ok || g.Status != "PreMatch" {
+		if !ok || g.Status != fixtures.PreMatchStatus {
 			out.State = OpportunityUnresolved
 			out.Limitation = "slate fixture is unavailable"
 			return out, nil

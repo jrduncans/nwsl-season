@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
@@ -27,7 +29,7 @@ import (
 const (
 	defaultSeason   = "2026"
 	defaultStage    = "Regular Season"
-	remainingStatus = "PreMatch"
+	remainingStatus = fixtures.PreMatchStatus
 )
 
 // Store reads page data from the local cache.
@@ -38,19 +40,16 @@ type Store interface {
 
 // Options contains season rules that are intentionally explicit at the HTTP boundary.
 type Options struct {
-	CurrentSeason string
-	Stage         string
-	Rules         competition.Rules
-	// Deprecated test compatibility fields. Production supplies Rules.
-	PlayoffPlaces      int
-	GamesPerTeam       int
+	CurrentSeason      string
+	Stage              string
+	Rules              competition.Rules
 	ForecastIterations int
 	Location           *time.Location
 }
 
 // NewHandler wires the application routes using the current-season defaults.
-func NewHandler(stores ...Store) http.Handler {
-	return NewHandlerWithOptions(firstStore(stores), Options{})
+func NewHandler(store Store) http.Handler {
+	return NewHandlerWithOptions(store, Options{})
 }
 
 // NewHandlerWithOptions wires the application routes with explicit season rules.
@@ -84,7 +83,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.Title = page.Season + " clinching scenarios"
-	view := clinchingPage{seasonPage: page, ClinchingPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(page.Season)+"/clinching"), Rows: []clinchingRowView{}}
+	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, Other: []clinchingRowView{}, SlateFixtures: []string{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
 	})
@@ -111,36 +110,65 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	view.Slate = snapshot.Run.Slate
 	teams := map[string]string{}
 	for _, t := range data.Teams {
-		teams[t.ID] = t.Name
+		teams[t.ID] = standings.DisplayName(t)
 	}
 	games := map[string]cache.Game{}
 	for _, g := range data.Games {
 		games[g.ASAID] = g
 	}
+	qualification := map[string]cache.QualificationStatus{}
+	if store, ok := a.store.(interface {
+		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
+	}); ok {
+		value, found, err := store.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version)
+		if err != nil {
+			a.renderError(w, r, err)
+			return
+		}
+		if found {
+			for _, status := range value.Statuses {
+				qualification[status.TeamID+"\x00"+string(status.Achievement)] = status
+			}
+		}
+	}
+	for _, id := range snapshot.Run.Slate.FixtureIDs {
+		if game, ok := games[id]; ok {
+			view.SlateFixtures = append(view.SlateFixtures, fixtureLabel(game, teams, a.options.Location))
+		}
+	}
 	for _, v := range snapshot.Results {
-		row := clinchingRowView{Team: teams[v.TeamID], Achievement: labelAchievement(v.Achievement), State: string(v.State), Limitation: v.Limitation, Already: v.AlreadyClinched, Clauses: []string{}, Necessary: []string{}}
+		row := clinchingRowView{Team: teams[v.TeamID], Achievement: labelAchievement(v.Achievement), State: string(v.State), Limitation: v.Limitation, Already: v.AlreadyClinched, CanClinch: v.CanClinch, Clauses: []string{}, Necessary: []string{}}
 		for _, c := range v.Clauses {
 			row.Clauses = append(row.Clauses, clauseSentence(c, teams, games))
 		}
 		for _, n := range v.Necessary {
 			row.Necessary = append(row.Necessary, conditionText(n, teams, games))
 		}
-		view.Rows = append(view.Rows, row)
+		if status, ok := qualification[v.TeamID+"\x00"+string(v.Achievement)]; ok {
+			row.NoHelp = noHelpText(status.NoHelp, games, teams)
+		}
+		if row.Already || row.CanClinch {
+			view.Actionable = append(view.Actionable, row)
+		} else {
+			view.Other = append(view.Other, row)
+		}
 	}
+	sort.Slice(view.Actionable, func(i, j int) bool { return clinchingRowLess(view.Actionable[i], view.Actionable[j]) })
+	sort.Slice(view.Other, func(i, j int) bool { return clinchingRowLess(view.Other[i], view.Other[j]) })
 	a.render(w, "clinching", view)
+}
+
+func clinchingRowLess(left, right clinchingRowView) bool {
+	if left.Team != right.Team {
+		return left.Team < right.Team
+	}
+	return left.Achievement < right.Achievement
 }
 
 type application struct {
 	store   Store
 	options Options
 	pages   *template.Template
-}
-
-func firstStore(stores []Store) Store {
-	if len(stores) == 0 {
-		return nil
-	}
-	return stores[0]
 }
 
 func defaultOptions(options Options) Options {
@@ -153,25 +181,12 @@ func defaultOptions(options Options) Options {
 	if options.Rules.Season == "" {
 		if rules, ok := competition.ForSeason(options.CurrentSeason, options.Stage); ok {
 			options.Rules = rules
+		} else {
+			options.Rules = presentationFallbackRules(options.CurrentSeason, options.Stage)
 		}
 	}
-	if options.PlayoffPlaces <= 0 {
-		if options.Rules.ExpectedTeams > 0 {
-			for _, a := range options.Rules.Achievements {
-				if a.ID == competition.AchievementPlayoffs {
-					options.PlayoffPlaces = a.TopK
-				}
-			}
-		} else {
-			options.PlayoffPlaces = 8
-		}
-	}
-	if options.GamesPerTeam <= 0 {
-		if options.Rules.GamesPerTeam > 0 {
-			options.GamesPerTeam = options.Rules.GamesPerTeam
-		} else {
-			options.GamesPerTeam = 30
-		}
+	if err := options.Rules.Validate(); err != nil {
+		panic(fmt.Sprintf("invalid application rules: %v", err))
 	}
 	if options.ForecastIterations <= 0 {
 		options.ForecastIterations = defaultForecastIterations
@@ -180,6 +195,29 @@ func defaultOptions(options Options) Options {
 		options.Location = time.Local
 	}
 	return options
+}
+
+// presentationFallbackRules retains the pre-rules behavior for an unknown
+// configured season. It supports page rendering but uses a distinct version,
+// so no persisted qualification result can be mistaken for a verified rule set.
+func presentationFallbackRules(season, stage string) competition.Rules {
+	return competition.Rules{
+		Season: season, Stage: stage, Version: "presentation-fallback-v1", ExpectedTeams: 16, GamesPerTeam: 30,
+		Achievements: []competition.Achievement{
+			{ID: competition.AchievementShield, Label: "Shield", TopK: 1},
+			{ID: competition.AchievementHomePlayoff, Label: "Home playoff", TopK: 4},
+			{ID: competition.AchievementPlayoffs, Label: "Playoffs", TopK: 8},
+		},
+	}
+}
+
+func playoffPlaces(rules competition.Rules) int {
+	for _, achievement := range rules.Achievements {
+		if achievement.ID == competition.AchievementPlayoffs {
+			return achievement.TopK
+		}
+	}
+	panic("competition rules have no playoff achievement")
 }
 
 func freshnessValues(finishedAt time.Time, location *time.Location) (string, string) {
@@ -211,8 +249,8 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 			a.renderError(w, r, err)
 			return
 		}
-		entry := forecast.Recommended()
-		result, err := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: forecastXGoals(data), Model: entry.Model, Iterations: a.options.ForecastIterations, PlayoffPlaces: a.options.PlayoffPlaces})
+		entry := forecast.Default()
+		result, err := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: forecastXGoals(data), Model: entry.Model, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)})
 		if err != nil {
 			if r.Context().Err() != nil {
 				return
@@ -238,7 +276,7 @@ func (a *application) xg(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	a.render(w, "xg", xgPageFrom(data, season, r.URL.Path))
+	a.render(w, "xg", xgPageFrom(data, season, r.URL.Path, a.options.Location))
 }
 
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
@@ -280,7 +318,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	totalTable := standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
 	scheduleStrength := strength.Calculate(data.Teams, domainGames)
 	scheduleView := strengthViewFrom(scheduleStrength)
-	standingsView := addScheduleIndicators(tableViews(actualTable, a.options.PlayoffPlaces, nil), scheduleView)
+	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(a.options.Rules)), scheduleView)
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
@@ -288,11 +326,12 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		HomePath:               relativeURL(r.URL.Path, "/"),
 		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
-		Standings:              addTotalPositions(standingsView, totalTable, a.options.PlayoffPlaces),
+		Standings:              addTotalPositions(standingsView, totalTable, playoffPlaces(a.options.Rules)),
 		Strength:               scheduleView,
 		FixtureGroups:          fixtureGroups(data, a.options.Location),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
 		XGPath:                 relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/xg"),
+		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),
 		OutlookPath:            seasonURL(r.URL.Path, season) + "?view=outlook",
 		SeasonPath:             seasonURL(r.URL.Path, season),
@@ -307,7 +346,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 	}
-	expectedGames := len(data.Teams) * a.options.GamesPerTeam / 2
+	expectedGames := len(data.Teams) * a.options.Rules.GamesPerTeam / 2
 	scheduleComplete := len(data.Games) == expectedGames
 	if !scheduleComplete {
 		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures.", len(data.Games), expectedGames)
@@ -340,8 +379,7 @@ func qualificationViews(rows []tableRowView, values []cache.QualificationStatus)
 		for _, v := range values {
 			labels = append(labels, labelAchievement(v.Achievement))
 		}
-		rows[i].QualificationAchievements = strings.Join(labels, ", ")
-		rows[i].QualificationTitle = "Guaranteed achievements: " + rows[i].QualificationAchievements
+		rows[i].QualificationTitle = "Guaranteed achievements: " + strings.Join(labels, ", ")
 	}
 	return rows
 }
@@ -380,10 +418,13 @@ func standingsGames(games []cache.Game) []standings.Game {
 }
 
 func (a *application) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := a.pages.ExecuteTemplate(w, name, data); err != nil {
+	var body bytes.Buffer
+	if err := a.pages.ExecuteTemplate(&body, name, data); err != nil {
 		http.Error(w, "render page", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(body.Bytes())
 }
 
 func (a *application) renderError(w http.ResponseWriter, r *http.Request, err error) {
@@ -434,7 +475,7 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "xg") {
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "xg" || parts[2] == "clinching") {
 		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false
@@ -632,15 +673,6 @@ func syncRunResponseFrom(run *cache.SyncRun) *syncRunResponse {
 		TeamsInserted: run.TeamsInserted, TeamsUpdated: run.TeamsUpdated, TeamsUnchanged: run.TeamsUnchanged,
 		GamesInserted: run.GamesInserted, GamesUpdated: run.GamesUpdated, GamesUnchanged: run.GamesUnchanged,
 	}
-}
-
-func parseKickoff(value string) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05 MST"} {
-		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("parse kickoff %q", value)
 }
 
 func intText(value int) string { return strconv.Itoa(value) }

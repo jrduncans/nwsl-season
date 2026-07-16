@@ -1,10 +1,9 @@
 {
-  "evidence_id": "model-evaluation-v1",
-  "recommended_model": "results-poisson-v1",
+  "status": "not_run",
+  "current_default_model": "results-poisson-v1",
   "generated_at": "2026-07-15T00:00:00Z",
-  "iterations": 20000,
   "limitations": [
-    "Results Poisson remains the recommended model until an audited 2016–2025 walk-forward run meets the documented replacement rule.",
+    "Results Poisson remains the default model until an audited 2016–2025 walk-forward run meets the documented replacement rule.",
     "Historic ASA xG reflects currently published values, not a reconstruction of historical publication timing."
   ]
 }

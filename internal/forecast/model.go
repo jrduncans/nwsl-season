@@ -17,7 +17,6 @@ type Info struct {
 	Description string
 	Inputs      string
 	Assumptions string
-	MethodPath  string
 }
 
 // ExpectedGoals is the normalized team-model xG observation for one game.

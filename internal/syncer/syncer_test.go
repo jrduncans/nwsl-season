@@ -44,18 +44,12 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 		t.Fatalf("second run counts = %+v, want 2 upserted and 0 deleted", second)
 	}
 
-	count, err := db.CountGames(ctx, "2024", "Regular Season")
-	if err != nil {
-		t.Fatal(err)
-	}
+	count := cachedGameCount(t, ctx, db, "2024", "Regular Season")
 	if count != 2 {
 		t.Fatalf("cached game count = %d, want 2", count)
 	}
 
-	game, err := db.GameByID(ctx, "game-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	game := cachedGame(t, ctx, db, "2024", "Regular Season", "game-1")
 	if !game.HomeScore.Valid || game.HomeScore.Int64 != 2 {
 		t.Fatalf("home score = %+v, want 2", game.HomeScore)
 	}
@@ -123,10 +117,7 @@ func TestRunSkipsRecentSuccessfulSync(t *testing.T) {
 		t.Fatalf("ASA calls after skipped run = teams %d games %d, want still 1 and 1", client.teamsCalls, client.gamesCalls)
 	}
 
-	game, err := db.GameByID(ctx, "game-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	game := cachedGame(t, ctx, db, "2024", "Regular Season", "game-1")
 	if !game.HomeScore.Valid || game.HomeScore.Int64 != 1 {
 		t.Fatalf("home score = %+v, want cached score preserved", game.HomeScore)
 	}
@@ -157,10 +148,7 @@ func TestRunHardDeletesMissingGamesAfterSuccessfulFetch(t *testing.T) {
 		t.Fatalf("deleted games = %d, want 1", run.GamesDeleted)
 	}
 
-	count, err := db.CountGames(ctx, "2024", "Regular Season")
-	if err != nil {
-		t.Fatal(err)
-	}
+	count := cachedGameCount(t, ctx, db, "2024", "Regular Season")
 	if count != 1 {
 		t.Fatalf("cached game count = %d, want 1", count)
 	}
@@ -184,10 +172,7 @@ func TestRunRejectsEmptyGamesAndPreservesExistingRows(t *testing.T) {
 		t.Fatal("err = nil, want validation error")
 	}
 
-	count, err := db.CountGames(ctx, "2024", "Regular Season")
-	if err != nil {
-		t.Fatal(err)
-	}
+	count := cachedGameCount(t, ctx, db, "2024", "Regular Season")
 	if count != 1 {
 		t.Fatalf("cached game count = %d, want existing row preserved", count)
 	}
@@ -222,10 +207,7 @@ func TestRunRecordsFetchFailureAndPreservesExistingRows(t *testing.T) {
 		t.Fatal("err = nil, want fetch error")
 	}
 
-	count, err := db.CountGames(ctx, "2024", "Regular Season")
-	if err != nil {
-		t.Fatal(err)
-	}
+	count := cachedGameCount(t, ctx, db, "2024", "Regular Season")
 	if count != 1 {
 		t.Fatalf("cached game count = %d, want existing row preserved", count)
 	}
@@ -261,6 +243,30 @@ func TestRunRateLimitsFailedAttemptAndForceBypassesIt(t *testing.T) {
 	if forced.Skipped || client.teamsCalls != 2 || client.gamesCalls != 1 {
 		t.Fatalf("forced run = %+v; calls teams=%d games=%d, want completed refresh", forced, client.teamsCalls, client.gamesCalls)
 	}
+}
+
+func cachedGameCount(t *testing.T, ctx context.Context, db *cache.DB, season, stage string) int {
+	t.Helper()
+	data, err := db.Season(ctx, season, stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(data.Games)
+}
+
+func cachedGame(t *testing.T, ctx context.Context, db *cache.DB, season, stage, id string) cache.Game {
+	t.Helper()
+	data, err := db.Season(ctx, season, stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, game := range data.Games {
+		if game.ASAID == id {
+			return game
+		}
+	}
+	t.Fatalf("cached game %q not found", id)
+	return cache.Game{}
 }
 
 func newTestDB(t *testing.T) *cache.DB {

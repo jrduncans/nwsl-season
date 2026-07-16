@@ -74,7 +74,7 @@ func printTable(output io.Writer, table []standings.TableRow) {
 		record := row.Record
 		fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.2f\t%s\n",
 			i+1,
-			displayName(row.Team),
+			standings.DisplayName(row.Team),
 			record.Played,
 			record.Wins,
 			record.Draws,
@@ -94,19 +94,6 @@ func pointsPerGame(record standings.Record) float64 {
 		return 0
 	}
 	return float64(record.Points) / float64(record.Played)
-}
-
-func displayName(team standings.Team) string {
-	switch {
-	case team.Name != "":
-		return team.Name
-	case team.ShortName != "":
-		return team.ShortName
-	case team.Abbreviation != "":
-		return team.Abbreviation
-	default:
-		return team.ID
-	}
 }
 
 func tieBreakNote(status standings.TieBreakStatus) string {

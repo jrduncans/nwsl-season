@@ -31,7 +31,6 @@ func (resultsPoissonV1) Info() Info {
 		Description: "Completed goals with league and team shrinkage plus observed home advantage.",
 		Inputs:      "Completed match scores and the published fixture list.",
 		Assumptions: "Independent Poisson scoring, league/team shrinkage, and observed home advantage.",
-		MethodPath:  "/docs/11-xg-and-models.md#results-poisson-v1",
 	}
 }
 

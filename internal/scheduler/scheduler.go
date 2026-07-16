@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
 
@@ -169,7 +170,7 @@ func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.
 		if !knownStatus(game.Status) {
 			return Decision{Name: decisionEligible, Reason: "unsupported_status", FixtureID: game.ASAID}
 		}
-		kickoff, err := parseKickoff(game.KickoffUTC)
+		kickoff, err := fixtures.ParseKickoff(game.KickoffUTC)
 		if err != nil {
 			return Decision{Name: decisionEligible, Reason: "invalid_kickoff", FixtureID: game.ASAID}
 		}
@@ -191,7 +192,7 @@ func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.
 			byID[value.GameID] = value
 		}
 		for _, game := range snapshot.Games {
-			if game.Status != "FullTime" {
+			if game.Status != fixtures.CompletedStatus {
 				continue
 			}
 			value, ok := byID[game.ASAID]
@@ -205,7 +206,7 @@ func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.
 
 func knownStatus(status string) bool {
 	switch status {
-	case "FullTime", "PreMatch", "Abandoned":
+	case fixtures.CompletedStatus, fixtures.PreMatchStatus, fixtures.AbandonedStatus:
 		return true
 	default:
 		return false
@@ -213,14 +214,5 @@ func knownStatus(status string) bool {
 }
 
 func settled(game cache.Game) bool {
-	return game.Status == "FullTime" && game.HomeScore.Valid && game.AwayScore.Valid
-}
-
-func parseKickoff(value string) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05 MST"} {
-		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("parse kickoff %q", value)
+	return game.Status == fixtures.CompletedStatus && game.HomeScore.Valid && game.AwayScore.Valid
 }

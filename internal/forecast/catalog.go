@@ -1,13 +1,12 @@
 package forecast
 
 type CatalogEntry struct {
-	Model       Model
-	Recommended bool
-	EvidenceID  string
+	Model   Model
+	Default bool
 }
 
 func Catalog() []CatalogEntry {
-	return []CatalogEntry{{Model: NewCurrentPaceV1(), EvidenceID: "model-evaluation-v1"}, {Model: NewResultsPoissonV1(), Recommended: true, EvidenceID: "model-evaluation-v1"}, {Model: NewXGPoissonV1(), EvidenceID: "model-evaluation-v1"}}
+	return []CatalogEntry{{Model: NewCurrentPaceV1()}, {Model: NewResultsPoissonV1(), Default: true}, {Model: NewXGPoissonV1()}}
 }
 func Lookup(id string) (CatalogEntry, bool) {
 	for _, entry := range Catalog() {
@@ -17,11 +16,11 @@ func Lookup(id string) (CatalogEntry, bool) {
 	}
 	return CatalogEntry{}, false
 }
-func Recommended() CatalogEntry {
+func Default() CatalogEntry {
 	for _, entry := range Catalog() {
-		if entry.Recommended {
+		if entry.Default {
 			return entry
 		}
 	}
-	panic("forecast catalog has no recommended model")
+	panic("forecast catalog has no default model")
 }
