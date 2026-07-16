@@ -37,6 +37,7 @@ th:nth-child(2) { text-align: left; }
 .team-logo { width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; object-fit: contain; vertical-align: middle; }
 .playoff-line td, .playoff-line th { border-bottom: 3px solid var(--green); }
 .badge { padding: .15rem .35rem; border-radius: 1rem; color: var(--green); background: var(--green-soft); font-size: .7rem; }
+.qualification-badge { font-weight: 800; }
 .warning { color: var(--gold); }
 .fixtures { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .fixtures li { display: grid; grid-template-columns: minmax(10rem, 1.4fr) 1fr auto 1fr auto; align-items: center; gap: 1rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }

@@ -45,8 +45,16 @@ type Store interface {
 
 // Service refreshes the persistent cache from ASA.
 type Service struct {
-	ASA   ASAClient
-	Store Store
+	ASA           ASAClient
+	Store         Store
+	Qualification QualificationRefresher
+}
+
+// QualificationRefresher runs after the durable fixture transaction. It is
+// intentionally separate from Store so a qualification failure cannot relabel
+// a successful fixture refresh.
+type QualificationRefresher interface {
+	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
 }
 
 // RunOptions configures one sync run.
@@ -131,6 +139,14 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 	run, err := s.Store.ReplaceSeason(ctx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
+	}
+	if s.Qualification != nil {
+		derivedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		err := s.Qualification.Refresh(derivedCtx, run, cacheTeams, cacheGames)
+		cancel()
+		if err != nil {
+			run.QualificationError = err.Error()
+		}
 	}
 	// Fixture success is independent from xG. Keep the good fixture snapshot if
 	// xG is delayed, malformed, or unavailable, and audit that separately.

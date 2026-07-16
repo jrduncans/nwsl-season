@@ -2,20 +2,28 @@ package cache
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 // DB wraps the SQLite cache.
 type DB struct {
@@ -49,24 +57,26 @@ type Game struct {
 
 // SyncRun contains the audit row for a refresh attempt.
 type SyncRun struct {
-	ID             int64
-	StartedAt      time.Time
-	FinishedAt     time.Time
-	Season         string
-	Stage          string
-	Outcome        string
-	ErrorSummary   string
-	TeamsUpserted  int
-	GamesUpserted  int
-	GamesDeleted   int
-	GamesSeen      int
-	TeamsInserted  int
-	TeamsUpdated   int
-	TeamsUnchanged int
-	GamesInserted  int
-	GamesUpdated   int
-	GamesUnchanged int
-	Skipped        bool
+	ID                 int64
+	StartedAt          time.Time
+	FinishedAt         time.Time
+	Season             string
+	Stage              string
+	Outcome            string
+	ErrorSummary       string
+	TeamsUpserted      int
+	GamesUpserted      int
+	GamesDeleted       int
+	GamesSeen          int
+	TeamsInserted      int
+	TeamsUpdated       int
+	TeamsUnchanged     int
+	GamesInserted      int
+	GamesUpdated       int
+	GamesUnchanged     int
+	Skipped            bool
+	FixtureSnapshotID  string
+	QualificationError string
 	// XGRun/XGError describe the independent second refresh when available.
 	XGRun   *XGSyncRun
 	XGError string
@@ -120,11 +130,38 @@ var ErrSyncInProgress = errors.New("cache sync already in progress")
 // SeasonData is the cached input needed to render one season and calculate its
 // standings. Games retain their presentation metadata as well as their scores.
 type SeasonData struct {
-	Teams       []standings.Team
-	Games       []Game
-	LastSuccess *SyncRun
-	XGoals      []GameXG
-	XGStatus    XGStatus
+	Teams             []standings.Team
+	Games             []Game
+	LastSuccess       *SyncRun
+	XGoals            []GameXG
+	XGStatus          XGStatus
+	FixtureSnapshotID string
+}
+
+type QualificationRun struct {
+	ID                                int64
+	FixtureSnapshotID                 string
+	SourceSyncRunID                   int64
+	Season, Stage, RulesVersion       string
+	StartedAt, FinishedAt             time.Time
+	Outcome, ErrorSummary             string
+	ExpectedStatuses, WrittenStatuses int
+}
+type QualificationStatus struct {
+	TeamID                           string
+	Achievement                      competition.AchievementID
+	TopK                             int
+	Status                           clinching.Status
+	Method                           clinching.ProofMethod
+	Reason                           string
+	StrictlyAhead, AtLeastLevel      clinching.CountEvidence
+	BlockingWitness, FrontierWitness []clinching.WitnessGame
+	NoHelp                           clinching.NoHelpPath
+	Diagnostics                      clinching.Diagnostics
+}
+type QualificationSnapshot struct {
+	Run      QualificationRun
+	Statuses []QualificationStatus
 }
 
 // Open opens a SQLite cache and applies migrations.
@@ -291,6 +328,21 @@ func (c *DB) Migrate(ctx context.Context) error {
 			return err
 		}
 	}
+	if version < 4 {
+		for _, statement := range []string{
+			`ALTER TABLE sync_runs ADD COLUMN fixture_snapshot_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE TABLE qualification_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, fixture_snapshot_id TEXT NOT NULL, source_sync_run_id INTEGER NOT NULL REFERENCES sync_runs(id), season TEXT NOT NULL, stage TEXT NOT NULL, rules_version TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT NOT NULL, outcome TEXT NOT NULL CHECK (outcome IN ('complete','failure')), error_summary TEXT NOT NULL, expected_statuses INTEGER NOT NULL, written_statuses INTEGER NOT NULL)`,
+			`CREATE INDEX qualification_runs_lookup_idx ON qualification_runs (fixture_snapshot_id, rules_version, finished_at)`,
+			`CREATE TABLE qualification_statuses (qualification_run_id INTEGER NOT NULL REFERENCES qualification_runs(id) ON DELETE CASCADE, team_id TEXT NOT NULL REFERENCES teams(asa_team_id), achievement TEXT NOT NULL, top_k INTEGER NOT NULL, status TEXT NOT NULL CHECK (status IN ('clinched','not_clinched','unresolved')), proof_method TEXT NOT NULL, reason TEXT NOT NULL, strictly_ahead_value INTEGER NOT NULL, strictly_ahead_kind TEXT NOT NULL CHECK (strictly_ahead_kind IN ('exact','lower_bound','upper_bound')), at_least_level_value INTEGER NOT NULL, at_least_level_kind TEXT NOT NULL CHECK (at_least_level_kind IN ('exact','lower_bound','upper_bound')), blocking_witness_json TEXT NOT NULL, frontier_witness_json TEXT NOT NULL, no_help_state TEXT NOT NULL, no_help_fixture_ids_json TEXT NOT NULL, no_help_reason TEXT NOT NULL, diagnostics_json TEXT NOT NULL, PRIMARY KEY (qualification_run_id,team_id,achievement))`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 4: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 4); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
@@ -325,6 +377,11 @@ func (c *DB) ReplaceSeason(ctx context.Context, season, stage string, teams []Te
 		GamesUpserted: len(games),
 		GamesSeen:     len(games),
 	}
+	snapshotID, err := FixtureSnapshotID(teams, games)
+	if err != nil {
+		return SyncRun{}, err
+	}
+	run.FixtureSnapshotID = snapshotID
 
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -611,7 +668,11 @@ func (c *DB) Season(ctx context.Context, season, stage string) (SeasonData, erro
 	if err != nil {
 		return SeasonData{}, err
 	}
-	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess, XGoals: xgoals, XGStatus: xgStatus}, nil
+	snapshotID := ""
+	if lastSuccess != nil {
+		snapshotID = lastSuccess.FixtureSnapshotID
+	}
+	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess, XGoals: xgoals, XGStatus: xgStatus, FixtureSnapshotID: snapshotID}, nil
 }
 
 // ReplaceGameXG atomically replaces a complete xG response after validating it
@@ -935,7 +996,7 @@ func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, err
 }
 
 func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*SyncRun, error) {
-	query := `SELECT id, started_at, finished_at, season, stage, outcome, error_summary,
+	query := `SELECT id, started_at, finished_at, season, stage, outcome, error_summary, fixture_snapshot_id,
 		teams_upserted, games_upserted, games_deleted, games_seen,
 		teams_inserted, teams_updated, teams_unchanged, games_inserted, games_updated, games_unchanged FROM sync_runs`
 	args := []any{}
@@ -956,7 +1017,7 @@ func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*Syn
 	var run SyncRun
 	var startedAt, finishedAt string
 	err := c.db.QueryRowContext(ctx, query, args...).Scan(
-		&run.ID, &startedAt, &finishedAt, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary,
+		&run.ID, &startedAt, &finishedAt, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary, &run.FixtureSnapshotID,
 		&run.TeamsUpserted, &run.GamesUpserted, &run.GamesDeleted, &run.GamesSeen,
 		&run.TeamsInserted, &run.TeamsUpdated, &run.TeamsUnchanged,
 		&run.GamesInserted, &run.GamesUpdated, &run.GamesUnchanged)
@@ -1024,11 +1085,11 @@ func deleteMissingGames(ctx context.Context, tx *sql.Tx, season, stage string, g
 
 func insertSyncRun(ctx context.Context, tx *sql.Tx, run *SyncRun) error {
 	result, err := tx.ExecContext(ctx, `INSERT INTO sync_runs (
-		started_at, finished_at, season, stage, outcome, error_summary,
+		started_at, finished_at, season, stage, outcome, error_summary, fixture_snapshot_id,
 		teams_upserted, games_upserted, games_deleted, games_seen,
 		teams_inserted, teams_updated, teams_unchanged, games_inserted, games_updated, games_unchanged
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Season, run.Stage, run.Outcome, run.ErrorSummary,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Season, run.Stage, run.Outcome, run.ErrorSummary, run.FixtureSnapshotID,
 		run.TeamsUpserted, run.GamesUpserted, run.GamesDeleted, run.GamesSeen,
 		run.TeamsInserted, run.TeamsUpdated, run.TeamsUnchanged,
 		run.GamesInserted, run.GamesUpdated, run.GamesUnchanged)
@@ -1055,6 +1116,190 @@ func intPtrFromNull(value sql.NullInt64) *int {
 	}
 	converted := int(value.Int64)
 	return &converted
+}
+
+// FixtureSnapshotID is a stable identity for the season's participating clubs
+// and fixture state. It deliberately excludes presentation and fetch metadata.
+func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
+	participants := map[string]bool{}
+	for _, g := range games {
+		if g.ASAID == "" || g.HomeTeamID == "" || g.AwayTeamID == "" {
+			return "", errors.New("invalid fixture snapshot game")
+		}
+		participants[g.HomeTeamID], participants[g.AwayTeamID] = true, true
+	}
+	known := map[string]bool{}
+	for _, t := range teams {
+		if t.ASAID == "" || known[t.ASAID] {
+			return "", errors.New("invalid fixture snapshot team")
+		}
+		known[t.ASAID] = true
+	}
+	ids := make([]string, 0, len(participants))
+	for id := range participants {
+		if !known[id] {
+			return "", fmt.Errorf("fixture references unknown team %q", id)
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	ordered := append([]Game(nil), games...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].ASAID < ordered[j].ASAID })
+	h := sha256.New()
+	writeSnapshotString := func(s string) {
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], uint64(len(s)))
+		h.Write(b[:])
+		h.Write([]byte(s))
+	}
+	writeNull := func(v sql.NullInt64) {
+		if v.Valid {
+			writeSnapshotString("1")
+			writeSnapshotString(strconv.FormatInt(v.Int64, 10))
+		} else {
+			writeSnapshotString("0")
+		}
+	}
+	for _, id := range ids {
+		writeSnapshotString(id)
+	}
+	for _, g := range ordered {
+		writeSnapshotString(g.ASAID)
+		writeSnapshotString(g.Status)
+		writeSnapshotString(g.HomeTeamID)
+		writeSnapshotString(g.AwayTeamID)
+		writeNull(g.HomeScore)
+		writeNull(g.AwayScore)
+		writeSnapshotString(g.KickoffUTC)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func (c *DB) QualificationForSnapshot(ctx context.Context, snapshotID, rulesVersion string) (QualificationSnapshot, bool, error) {
+	var out QualificationSnapshot
+	var started, finished string
+	err := c.db.QueryRowContext(ctx, `SELECT id,fixture_snapshot_id,source_sync_run_id,season,stage,rules_version,started_at,finished_at,outcome,error_summary,expected_statuses,written_statuses FROM qualification_runs WHERE fixture_snapshot_id=? AND rules_version=? AND outcome='complete' ORDER BY finished_at DESC,id DESC LIMIT 1`, snapshotID, rulesVersion).Scan(&out.Run.ID, &out.Run.FixtureSnapshotID, &out.Run.SourceSyncRunID, &out.Run.Season, &out.Run.Stage, &out.Run.RulesVersion, &started, &finished, &out.Run.Outcome, &out.Run.ErrorSummary, &out.Run.ExpectedStatuses, &out.Run.WrittenStatuses)
+	if errors.Is(err, sql.ErrNoRows) {
+		return QualificationSnapshot{}, false, nil
+	}
+	if err != nil {
+		return out, false, fmt.Errorf("load qualification run: %w", err)
+	}
+	out.Run.StartedAt, err = time.Parse(time.RFC3339, started)
+	if err != nil {
+		return out, false, err
+	}
+	out.Run.FinishedAt, err = time.Parse(time.RFC3339, finished)
+	if err != nil {
+		return out, false, err
+	}
+	rows, err := c.db.QueryContext(ctx, `SELECT team_id,achievement,top_k,status,proof_method,reason,strictly_ahead_value,strictly_ahead_kind,at_least_level_value,at_least_level_kind,blocking_witness_json,frontier_witness_json,no_help_state,no_help_fixture_ids_json,no_help_reason,diagnostics_json FROM qualification_statuses WHERE qualification_run_id=? ORDER BY team_id,achievement`, out.Run.ID)
+	if err != nil {
+		return out, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var v QualificationStatus
+		var achievement, status, method, nohelp string
+		var block, frontier, fixtureIDs, diagnostics string
+		if err := rows.Scan(&v.TeamID, &achievement, &v.TopK, &status, &method, &v.Reason, &v.StrictlyAhead.Value, &v.StrictlyAhead.Kind, &v.AtLeastLevel.Value, &v.AtLeastLevel.Kind, &block, &frontier, &nohelp, &fixtureIDs, &v.NoHelp.Reason, &diagnostics); err != nil {
+			return out, false, err
+		}
+		v.Achievement = competition.AchievementID(achievement)
+		v.Status = clinching.Status(status)
+		v.Method = clinching.ProofMethod(method)
+		v.NoHelp.State = clinching.NoHelpState(nohelp)
+		if err := json.Unmarshal([]byte(block), &v.BlockingWitness); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(frontier), &v.FrontierWitness); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(fixtureIDs), &v.NoHelp.FixtureIDs); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(diagnostics), &v.Diagnostics); err != nil {
+			return out, false, err
+		}
+		out.Statuses = append(out.Statuses, v)
+	}
+	if err := rows.Err(); err != nil {
+		return out, false, err
+	}
+	return out, true, nil
+}
+
+func (c *DB) ReplaceQualification(ctx context.Context, run QualificationRun, values []QualificationStatus) (QualificationSnapshot, error) {
+	if run.FixtureSnapshotID == "" || run.RulesVersion == "" || run.SourceSyncRunID == 0 || run.ExpectedStatuses != len(values) || run.WrittenStatuses != len(values) {
+		return QualificationSnapshot{}, errors.New("invalid qualification batch counts")
+	}
+	seen := map[string]bool{}
+	for _, v := range values {
+		if v.TeamID == "" || v.Achievement == "" || v.TopK < 1 || !validQualification(v) {
+			return QualificationSnapshot{}, errors.New("invalid qualification status")
+		}
+		k := v.TeamID + "\x00" + string(v.Achievement)
+		if seen[k] {
+			return QualificationSnapshot{}, errors.New("duplicate qualification status")
+		}
+		seen[k] = true
+	}
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return QualificationSnapshot{}, err
+	}
+	defer rollback(tx)
+	run.Outcome = "complete"
+	run.FinishedAt = time.Now().UTC()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = run.FinishedAt
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO qualification_runs(fixture_snapshot_id,source_sync_run_id,season,stage,rules_version,started_at,finished_at,outcome,error_summary,expected_statuses,written_statuses) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, run.FixtureSnapshotID, run.SourceSyncRunID, run.Season, run.Stage, run.RulesVersion, formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Outcome, run.ErrorSummary, run.ExpectedStatuses, run.WrittenStatuses)
+	if err != nil {
+		return QualificationSnapshot{}, err
+	}
+	run.ID, _ = res.LastInsertId()
+	for _, v := range values {
+		block, _ := json.Marshal(nonNilWitness(v.BlockingWitness))
+		frontier, _ := json.Marshal(nonNilWitness(v.FrontierWitness))
+		fixtures, _ := json.Marshal(nonNilStrings(v.NoHelp.FixtureIDs))
+		diagnostics, _ := json.Marshal(v.Diagnostics)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO qualification_statuses VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, v.TeamID, v.Achievement, v.TopK, v.Status, v.Method, v.Reason, v.StrictlyAhead.Value, v.StrictlyAhead.Kind, v.AtLeastLevel.Value, v.AtLeastLevel.Kind, string(block), string(frontier), v.NoHelp.State, string(fixtures), v.NoHelp.Reason, string(diagnostics)); err != nil {
+			return QualificationSnapshot{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return QualificationSnapshot{}, err
+	}
+	return QualificationSnapshot{Run: run, Statuses: append([]QualificationStatus(nil), values...)}, nil
+}
+func (c *DB) RecordQualificationFailure(ctx context.Context, run QualificationRun, cause error) error {
+	run.Outcome = "failure"
+	run.ErrorSummary = summarizeError(cause)
+	run.FinishedAt = time.Now().UTC()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = run.FinishedAt
+	}
+	_, err := c.db.ExecContext(ctx, `INSERT INTO qualification_runs(fixture_snapshot_id,source_sync_run_id,season,stage,rules_version,started_at,finished_at,outcome,error_summary,expected_statuses,written_statuses) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, run.FixtureSnapshotID, run.SourceSyncRunID, run.Season, run.Stage, run.RulesVersion, formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Outcome, run.ErrorSummary, run.ExpectedStatuses, run.WrittenStatuses)
+	return err
+}
+func nonNilWitness(v []clinching.WitnessGame) []clinching.WitnessGame {
+	if v == nil {
+		return []clinching.WitnessGame{}
+	}
+	return v
+}
+func nonNilStrings(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+func validQualification(v QualificationStatus) bool {
+	return clinching.ValidStatus(v.Status) && clinching.ValidMethod(v.Method) && clinching.ValidEvidence(v.StrictlyAhead) && clinching.ValidEvidence(v.AtLeastLevel) && validNoHelp(v.NoHelp.State)
+}
+func validNoHelp(v clinching.NoHelpState) bool {
+	return v == clinching.NoHelpNotApplicable || v == clinching.NoHelpGuaranteed || v == clinching.NoHelpImpossible || v == clinching.NoHelpUnresolved
 }
 
 func formatTime(t time.Time) string {

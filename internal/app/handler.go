@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -22,12 +24,9 @@ import (
 )
 
 const (
-	defaultSeason        = "2026"
-	defaultStage         = "Regular Season"
-	defaultPlayoffPlaces = 8
-	defaultGamesPerTeam  = 30
-	maxClinchingFixtures = 4
-	remainingStatus      = "PreMatch"
+	defaultSeason   = "2026"
+	defaultStage    = "Regular Season"
+	remainingStatus = "PreMatch"
 )
 
 // Store reads page data from the local cache.
@@ -38,8 +37,10 @@ type Store interface {
 
 // Options contains season rules that are intentionally explicit at the HTTP boundary.
 type Options struct {
-	CurrentSeason      string
-	Stage              string
+	CurrentSeason string
+	Stage         string
+	Rules         competition.Rules
+	// Deprecated test compatibility fields. Production supplies Rules.
 	PlayoffPlaces      int
 	GamesPerTeam       int
 	ForecastIterations int
@@ -69,7 +70,7 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /seasons/{season}/xg", application.xg)
 	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
 	mux.HandleFunc("GET /healthz", health)
-	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage))
+	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return withBasePath(mux)
 }
@@ -94,11 +95,28 @@ func defaultOptions(options Options) Options {
 	if options.Stage == "" {
 		options.Stage = defaultStage
 	}
+	if options.Rules.Season == "" {
+		if rules, ok := competition.ForSeason(options.CurrentSeason, options.Stage); ok {
+			options.Rules = rules
+		}
+	}
 	if options.PlayoffPlaces <= 0 {
-		options.PlayoffPlaces = defaultPlayoffPlaces
+		if options.Rules.ExpectedTeams > 0 {
+			for _, a := range options.Rules.Achievements {
+				if a.ID == competition.AchievementPlayoffs {
+					options.PlayoffPlaces = a.TopK
+				}
+			}
+		} else {
+			options.PlayoffPlaces = 8
+		}
 	}
 	if options.GamesPerTeam <= 0 {
-		options.GamesPerTeam = defaultGamesPerTeam
+		if options.Rules.GamesPerTeam > 0 {
+			options.GamesPerTeam = options.Rules.GamesPerTeam
+		} else {
+			options.GamesPerTeam = 30
+		}
 	}
 	if options.ForecastIterations <= 0 {
 		options.ForecastIterations = defaultForecastIterations
@@ -239,37 +257,49 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	if !scheduleComplete {
 		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures.", len(data.Games), expectedGames)
 	}
-	page.Standings = clinchingViews(data.Teams, domainGames, page.Standings, a.options.PlayoffPlaces, scheduleComplete)
+	if qualificationStore, ok := a.store.(interface {
+		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
+	}); ok && data.FixtureSnapshotID != "" && a.options.Rules.Version != "" {
+		if snapshot, found, lookupErr := qualificationStore.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
+			page.Standings = qualificationViews(page.Standings, snapshot.Statuses)
+		}
+	}
 
 	return page, nil
 }
-
-func clinchingViews(teams []standings.Team, games []standings.Game, rows []tableRowView, playoffPlaces int, scheduleComplete bool) []tableRowView {
-	if !scheduleComplete {
-		return rows
-	}
-	remaining := 0
-	for _, game := range games {
-		if game.Status == remainingStatus {
-			remaining++
+func qualificationViews(rows []tableRowView, values []cache.QualificationStatus) []tableRowView {
+	byTeam := map[string][]cache.QualificationStatus{}
+	for _, v := range values {
+		if v.Status == clinching.Clinched {
+			byTeam[v.TeamID] = append(byTeam[v.TeamID], v)
 		}
 	}
-	if remaining > maxClinchingFixtures {
-		return rows
-	}
-	byTeam := make(map[string]clinching.Result, len(teams))
-	for _, team := range teams {
-		result, err := clinching.Evaluate(teams, games, team.ID, playoffPlaces)
-		if err == nil {
-			byTeam[team.ID] = result
+	for i := range rows {
+		values := byTeam[rows[i].TeamID]
+		if len(values) == 0 {
+			continue
 		}
-	}
-	for index := range rows {
-		if result, ok := byTeam[rows[index].TeamID]; ok && result.Clinched {
-			rows[index].Clinched = true
+		sort.Slice(values, func(a, b int) bool { return values[a].TopK < values[b].TopK })
+		rows[i].QualificationBadge = labelAchievement(values[0].Achievement)
+		labels := make([]string, 0, len(values))
+		for _, v := range values {
+			labels = append(labels, labelAchievement(v.Achievement))
 		}
+		rows[i].QualificationAchievements = strings.Join(labels, ", ")
+		rows[i].QualificationTitle = "Guaranteed achievements: " + rows[i].QualificationAchievements
 	}
 	return rows
+}
+func labelAchievement(a competition.AchievementID) string {
+	switch a {
+	case competition.AchievementShield:
+		return "Shield"
+	case competition.AchievementHomePlayoff:
+		return "Home playoff"
+	case competition.AchievementPlayoffs:
+		return "Playoffs"
+	}
+	return string(a)
 }
 
 func standingsGames(games []cache.Game) []standings.Game {
@@ -422,7 +452,7 @@ func health(w http.ResponseWriter, _ *http.Request) {
 	_, _ = fmt.Fprintln(w, "ok")
 }
 
-func cacheStatus(reader Store, season, stage string) http.HandlerFunc {
+func cacheStatus(reader Store, season, stage, rulesVersion string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if reader == nil {
@@ -442,6 +472,22 @@ func cacheStatus(reader Store, season, stage string) http.HandlerFunc {
 		}
 		if status.LastSuccess != nil {
 			response.LastSuccess = syncRunResponseFrom(status.LastSuccess)
+		}
+		if qualificationStore, ok := reader.(interface {
+			QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
+		}); ok && status.LastSuccess != nil && status.LastSuccess.FixtureSnapshotID != "" && rulesVersion != "" {
+			qualification, found, err := qualificationStore.QualificationForSnapshot(r.Context(), status.LastSuccess.FixtureSnapshotID, rulesVersion)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: err.Error()})
+				return
+			}
+			response.Qualification = &qualificationStatusResponse{FixtureSnapshotID: status.LastSuccess.FixtureSnapshotID, RulesVersion: rulesVersion, MatchesCurrent: found}
+			if found {
+				response.Qualification.Outcome = qualification.Run.Outcome
+				response.Qualification.FinishedAt = qualification.Run.FinishedAt
+				response.Qualification.WrittenStatuses = qualification.Run.WrittenStatuses
+			}
 		}
 		if xgReader, ok := reader.(interface {
 			XGStatus(context.Context, string, string) (cache.XGStatus, error)
@@ -465,11 +511,20 @@ func cacheStatus(reader Store, season, stage string) http.HandlerFunc {
 }
 
 type cacheStatusResponse struct {
-	OK          bool              `json:"ok"`
-	Error       string            `json:"error,omitempty"`
-	LastAttempt *syncRunResponse  `json:"last_attempt,omitempty"`
-	LastSuccess *syncRunResponse  `json:"last_success,omitempty"`
-	XG          *xgStatusResponse `json:"xg,omitempty"`
+	OK            bool                         `json:"ok"`
+	Error         string                       `json:"error,omitempty"`
+	LastAttempt   *syncRunResponse             `json:"last_attempt,omitempty"`
+	LastSuccess   *syncRunResponse             `json:"last_success,omitempty"`
+	XG            *xgStatusResponse            `json:"xg,omitempty"`
+	Qualification *qualificationStatusResponse `json:"qualification,omitempty"`
+}
+type qualificationStatusResponse struct {
+	FixtureSnapshotID string    `json:"fixture_snapshot_id"`
+	RulesVersion      string    `json:"rules_version"`
+	Outcome           string    `json:"outcome,omitempty"`
+	FinishedAt        time.Time `json:"finished_at,omitempty"`
+	WrittenStatuses   int       `json:"written_statuses,omitempty"`
+	MatchesCurrent    bool      `json:"matches_current"`
 }
 type xgStatusResponse struct {
 	LastAttempt *xgRunResponse `json:"last_attempt,omitempty"`

@@ -16,7 +16,7 @@ func TestEvaluateClinchedWhenNoScenarioCanPushEnoughTeamsAhead(t *testing.T) {
 		remaining("last", "bravo", "charlie"),
 	}
 
-	result, err := Evaluate(teams, games, "target", 1)
+	result, err := EvaluateOracle(teams, games, "target", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestEvaluateNotClinchedReturnsWitnessScenario(t *testing.T) {
 		remaining("bravo-sink", "bravo", "sink"),
 	}
 
-	result, err := Evaluate(teams, games, "target", 1)
+	result, err := EvaluateOracle(teams, games, "target", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestEvaluateHandlesCoupledRemainingFixture(t *testing.T) {
 		remaining("coupled", "bravo", "charlie"),
 	}
 
-	result, err := Evaluate(teams, games, "target", 2)
+	result, err := EvaluateOracle(teams, games, "target", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestEvaluateUsesAccessibleTiebreakersForPointsTie(t *testing.T) {
 		remaining("bravo-sink", "bravo", "sink"),
 	}
 
-	result, err := Evaluate(teams, games, "target", 2)
+	result, err := EvaluateOracle(teams, games, "target", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestEvaluateUsesHeadToHeadTiebreaker(t *testing.T) {
 		completedGame("bravo", "sink", 1, 0),
 	}
 
-	result, err := Evaluate(teams, games, "target", 1)
+	result, err := EvaluateOracle(teams, games, "target", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestEvaluateConservativelyBlocksUnresolvedDisciplinaryTie(t *testing.T) {
 		completedGame("sink-2", "bravo", 1, 0),
 	}
 
-	result, err := Evaluate(teams, games, "target", 2)
+	result, err := EvaluateOracle(teams, games, "target", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestEvaluateSimulatesTargetRemainingGamesAsLossesOnly(t *testing.T) {
 		remaining("target-bravo", "target", "bravo"),
 	}
 
-	result, err := Evaluate(teams, games, "target", 1)
+	result, err := EvaluateOracle(teams, games, "target", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,11 +200,11 @@ func TestOptimizedEvaluateMatchesBruteForceOnSmallSchedules(t *testing.T) {
 	}
 
 	for _, games := range fixtures {
-		optimized, err := Evaluate(teams, games, "target", 2, WithScorelines(scorelines))
+		optimized, err := EvaluateOracle(teams, games, "target", 2, WithScorelines(scorelines))
 		if err != nil {
 			t.Fatal(err)
 		}
-		brute, err := Evaluate(teams, games, "target", 2, WithScorelines(scorelines), WithBruteForce())
+		brute, err := EvaluateOracle(teams, games, "target", 2, WithScorelines(scorelines), WithBruteForce())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -236,7 +236,7 @@ func BenchmarkEvaluateLateSeason(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if _, err := Evaluate(teams, games, "target", 4); err != nil {
+		if _, err := EvaluateOracle(teams, games, "target", 4); err != nil {
 			b.Fatal(err)
 		}
 	}

@@ -87,8 +87,9 @@ func DefaultScorelines() []Scoreline {
 	}
 }
 
-// Evaluate proves whether targetTeamID has clinched one of playoffPlaces places.
-func Evaluate(teams []standings.Team, games []standings.Game, targetTeamID string, playoffPlaces int, options ...Option) (Result, error) {
+// EvaluateOracle is the Phase 5 representative-scoreline oracle.  Production
+// qualification uses Evaluate; this is retained for small-season tests.
+func EvaluateOracle(teams []standings.Team, games []standings.Game, targetTeamID string, playoffPlaces int, options ...Option) (Result, error) {
 	cfg := config{scorelines: DefaultScorelines()}
 	for _, option := range options {
 		option(&cfg)

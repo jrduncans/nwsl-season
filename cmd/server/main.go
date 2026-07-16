@@ -14,7 +14,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/app"
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/scheduler"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
@@ -45,6 +47,12 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		ASA:   asa.Client{HTTPClient: &http.Client{Timeout: cfg.SyncTimeout}},
 		Store: db,
 	}
+	rules, knownRules := competition.ForSeason(cfg.SyncSeason, cfg.SyncStage)
+	if knownRules {
+		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget}
+	} else {
+		logger.Warn("qualification unavailable: no configured season rules", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
+	}
 	refreshScheduler, err := scheduler.New(db, service, scheduler.Config{
 		Season: cfg.SyncSeason, Stage: cfg.SyncStage, CheckInterval: cfg.SyncCheckInterval,
 		CompletionGrace: cfg.SyncCompletionGrace, MinimumAttemptInterval: cfg.SyncMinAttemptInterval,
@@ -59,7 +67,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Addr: cfg.HTTPAddr,
 		Handler: app.NewHandlerWithOptions(db, app.Options{
 			CurrentSeason: cfg.SyncSeason,
-			Stage:         cfg.SyncStage,
+			Stage:         cfg.SyncStage, Rules: rules,
 		}),
 	}
 	serverErrors := make(chan error, 1)

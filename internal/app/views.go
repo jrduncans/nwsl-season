@@ -91,36 +91,38 @@ type strengthFixtureView struct {
 }
 
 type tableRowView struct {
-	Position              int
-	TeamID                string
-	Team                  teamNameView
-	Played                int
-	Wins                  int
-	Draws                 int
-	Losses                int
-	GoalsFor              int
-	GoalsAgainst          int
-	GoalDifference        string
-	Points                int
-	PointsPerGame         string
-	GoalsForPerGame       string
-	GoalsAgainstPerGame   string
-	GoalDifferencePerGame string
-	PlayoffLine           bool
-	TotalPosition         int
-	TotalPlayoffLine      bool
-	Clinched              bool
-	TieBreak              string
-	ScheduleAvailable     bool
-	ScheduleLabel         string
-	ScheduleDelta         string
-	SchedulePosition      string
-	ScheduleDirection     string
-	ScheduleScale         string
-	ScheduleOpacity       string
-	ScheduleRemaining     int
-	ScheduleHome          int
-	ScheduleAway          int
+	Position                  int
+	TeamID                    string
+	Team                      teamNameView
+	Played                    int
+	Wins                      int
+	Draws                     int
+	Losses                    int
+	GoalsFor                  int
+	GoalsAgainst              int
+	GoalDifference            string
+	Points                    int
+	PointsPerGame             string
+	GoalsForPerGame           string
+	GoalsAgainstPerGame       string
+	GoalDifferencePerGame     string
+	PlayoffLine               bool
+	TotalPosition             int
+	TotalPlayoffLine          bool
+	QualificationBadge        string
+	QualificationTitle        string
+	QualificationAchievements string
+	TieBreak                  string
+	ScheduleAvailable         bool
+	ScheduleLabel             string
+	ScheduleDelta             string
+	SchedulePosition          string
+	ScheduleDirection         string
+	ScheduleScale             string
+	ScheduleOpacity           string
+	ScheduleRemaining         int
+	ScheduleHome              int
+	ScheduleAway              int
 }
 
 func addTotalPositions(rows []tableRowView, totalTable []standings.TableRow, playoffPlaces int) []tableRowView {
@@ -184,7 +186,7 @@ func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[stri
 			GoalsForPerGame:       perGameText(row.Record.GoalsFor, row.Record.Played),
 			GoalsAgainstPerGame:   perGameText(row.Record.GoalsAgainst, row.Record.Played),
 			GoalDifferencePerGame: signedPerGameText(gd, row.Record.Played),
-			PlayoffLine:           index+1 == playoffPlaces, Clinched: clinched != nil && clinched[row.Team.ID], TieBreak: tieBreak,
+			PlayoffLine:           index+1 == playoffPlaces, TieBreak: tieBreak,
 		})
 	}
 	return rows

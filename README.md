@@ -12,7 +12,13 @@ exploring in the code.
 
 ## Current checkpoint
 
-Phase 11 is implemented: the cache retains ASA team-model game xG separately
+Phase 12 is implemented: qualification is calculated after each durable fixture
+refresh, stored by immutable fixture snapshot and rules version, and displayed
+as the strongest accessible achievement badge (Shield, Home playoff, or
+Playoffs). The points engine is conservative whenever a future score tiebreak
+cannot be proved.
+
+Phase 11 also retains ASA team-model game xG separately
 from fixtures, including raw payloads, availability markers, and independent
 refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
 pace, Results Poisson, and xG Poisson presets; it defaults to the catalog’s
@@ -51,6 +57,7 @@ Configuration:
 | `NWSL_SYNC_COMPLETION_GRACE` | `3h` | Time after kickoff before an unfinished fixture is stale |
 | `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction |
+| `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum total time for a persisted qualification batch |
 
 ## Useful commands
 

@@ -21,6 +21,7 @@ const (
 	defaultSyncCompletionGrace    = 3 * time.Hour
 	defaultSyncMinAttemptInterval = 30 * time.Minute
 	defaultSyncTimeout            = 20 * time.Second
+	defaultQualificationBudget    = 5 * time.Second
 )
 
 // Config holds values that vary between local development and deployment.
@@ -35,6 +36,7 @@ type Config struct {
 	SyncCompletionGrace    time.Duration
 	SyncMinAttemptInterval time.Duration
 	SyncTimeout            time.Duration
+	QualificationBudget    time.Duration
 }
 
 // FromEnvironment reads configuration, applying local-development defaults.
@@ -56,6 +58,10 @@ func FromEnvironment() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	qualificationBudget, err := durationFromEnvironment("NWSL_QUALIFICATION_BUDGET", defaultQualificationBudget)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		HTTPAddr: httpAddrFromEnvironment(),
@@ -68,6 +74,7 @@ func FromEnvironment() (Config, error) {
 		SyncCompletionGrace:    completionGrace,
 		SyncMinAttemptInterval: minimumAttemptInterval,
 		SyncTimeout:            timeout,
+		QualificationBudget:    qualificationBudget,
 	}, nil
 }
 

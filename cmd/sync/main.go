@@ -11,7 +11,9 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
 
@@ -52,6 +54,11 @@ func main() {
 		ASA:   client,
 		Store: db,
 	}
+	if rules, ok := competition.ForSeason(*season, *stage); ok {
+		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget}
+	} else {
+		logger.Warn("qualification unavailable: no configured season rules", "season", *season, "stage", *stage)
+	}
 	run, err := service.Run(ctx, syncer.RunOptions{
 		Season:                 *season,
 		Stage:                  *stage,
@@ -78,5 +85,8 @@ func main() {
 		if *requireXG {
 			os.Exit(1)
 		}
+	}
+	if run.QualificationError != "" {
+		logger.Warn("fixture sync succeeded but qualification refresh failed", "error", run.QualificationError)
 	}
 }
