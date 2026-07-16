@@ -18,6 +18,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
+	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
@@ -69,10 +70,64 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
 	mux.HandleFunc("GET /seasons/{season}/xg", application.xg)
 	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
+	mux.HandleFunc("GET /seasons/{season}/clinching", application.clinching)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return withBasePath(mux)
+}
+
+func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
+	page, err := a.loadSeasonPage(r)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	page.Title = page.Season + " clinching scenarios"
+	view := clinchingPage{seasonPage: page, ClinchingPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(page.Season)+"/clinching"), Rows: []clinchingRowView{}}
+	store, ok := a.store.(interface {
+		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
+	})
+	if !ok || page.Season == "" {
+		view.State = "Scenario calculations are unavailable."
+		a.render(w, "clinching", view)
+		return
+	}
+	data, err := a.store.Season(r.Context(), page.Season, a.options.Stage)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version, scenarios.DefinitionVersion)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	if !found {
+		view.State = "Recalculation pending."
+		a.render(w, "clinching", view)
+		return
+	}
+	view.Slate = snapshot.Run.Slate
+	teams := map[string]string{}
+	for _, t := range data.Teams {
+		teams[t.ID] = t.Name
+	}
+	games := map[string]cache.Game{}
+	for _, g := range data.Games {
+		games[g.ASAID] = g
+	}
+	for _, v := range snapshot.Results {
+		row := clinchingRowView{Team: teams[v.TeamID], Achievement: labelAchievement(v.Achievement), State: string(v.State), Limitation: v.Limitation, Already: v.AlreadyClinched, Clauses: []string{}, Necessary: []string{}}
+		for _, c := range v.Clauses {
+			row.Clauses = append(row.Clauses, clauseSentence(c, teams, games))
+		}
+		for _, n := range v.Necessary {
+			row.Necessary = append(row.Necessary, conditionText(n, teams, games))
+		}
+		view.Rows = append(view.Rows, row)
+	}
+	a.render(w, "clinching", view)
 }
 
 type application struct {

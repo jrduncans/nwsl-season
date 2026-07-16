@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
 )
@@ -164,6 +165,18 @@ type errorPage struct {
 	HomePath       string
 	StylesheetPath string
 	ScriptPath     string
+}
+type clinchingPage struct {
+	seasonPage
+	ClinchingPath string
+	State         string
+	Slate         scenarios.Slate
+	Rows          []clinchingRowView
+}
+type clinchingRowView struct {
+	Team, Achievement, State, Limitation string
+	Already                              bool
+	Clauses, Necessary                   []string
 }
 
 func tableViews(table []standings.TableRow, playoffPlaces int, clinched map[string]bool) []tableRowView {

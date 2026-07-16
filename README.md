@@ -58,6 +58,7 @@ Configuration:
 | `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum total time for a persisted qualification batch |
+| `NWSL_SCENARIO_BUDGET` | `30s` | Maximum total time for a persisted clinching-scenario batch |
 
 ## Useful commands
 

@@ -14,6 +14,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/qualification"
+	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
 
@@ -51,11 +52,14 @@ func main() {
 	defer db.Close()
 
 	service := syncer.Service{
-		ASA:   client,
-		Store: db,
+		ASA:                  client,
+		Store:                db,
+		QualificationTimeout: cfg.QualificationBudget,
+		ScenarioTimeout:      cfg.ScenarioBudget,
 	}
 	if rules, ok := competition.ForSeason(*season, *stage); ok {
-		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget}
+		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget, Progress: qualificationTelemetry(logger)}
+		service.Scenarios = scenariorefresh.Refresher{Store: db, Rules: rules, Budget: cfg.ScenarioBudget, Progress: scenarioTelemetry(logger)}
 	} else {
 		logger.Warn("qualification unavailable: no configured season rules", "season", *season, "stage", *stage)
 	}
@@ -88,5 +92,26 @@ func main() {
 	}
 	if run.QualificationError != "" {
 		logger.Warn("fixture sync succeeded but qualification refresh failed", "error", run.QualificationError)
+	}
+	if run.ScenarioError != "" {
+		logger.Warn("fixture sync succeeded but scenario refresh failed", "error", run.ScenarioError)
+	}
+}
+
+func qualificationTelemetry(logger *slog.Logger) func(qualification.Progress) {
+	return func(value qualification.Progress) {
+		logger.Info("qualification proof "+value.Phase,
+			"team_id", value.TeamID, "achievement", value.Achievement.ID, "top_k", value.Achievement.TopK,
+			"completed", value.Completed, "total", value.Total, "elapsed", value.Elapsed,
+			"batch_elapsed", value.BatchElapsed, "status", value.Status, "method", value.Method, "no_help_state", value.NoHelpState)
+	}
+}
+
+func scenarioTelemetry(logger *slog.Logger) func(scenariorefresh.Progress) {
+	return func(value scenariorefresh.Progress) {
+		logger.Info("clinching scenario "+value.Phase,
+			"team_id", value.TeamID, "achievement", value.Achievement.ID, "top_k", value.Achievement.TopK,
+			"completed", value.Completed, "total", value.Total, "elapsed", value.Elapsed,
+			"batch_elapsed", value.BatchElapsed, "state", value.State)
 	}
 }

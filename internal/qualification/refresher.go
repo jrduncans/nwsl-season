@@ -20,9 +20,25 @@ type Store interface {
 	RecordQualificationFailure(context.Context, cache.QualificationRun, error) error
 }
 type Refresher struct {
-	Store  Store
-	Rules  competition.Rules
-	Budget time.Duration
+	Store    Store
+	Rules    competition.Rules
+	Budget   time.Duration
+	Progress func(Progress)
+}
+
+// Progress reports one qualification proof boundary. Callers can use it for
+// operational telemetry without coupling the proof package to a logger.
+type Progress struct {
+	Phase        string
+	TeamID       string
+	Achievement  competition.Achievement
+	Completed    int
+	Total        int
+	Elapsed      time.Duration
+	BatchElapsed time.Duration
+	Status       clinching.Status
+	Method       clinching.ProofMethod
+	NoHelpState  clinching.NoHelpState
 }
 
 func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game) error {
@@ -38,9 +54,9 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	if r.Budget <= 0 {
 		r.Budget = 5 * time.Second
 	}
-	if _, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version); err != nil {
+	if snapshot, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version); err != nil {
 		return err
-	} else if ok {
+	} else if ok && !shouldRetryKickoffOrder(snapshot, games) && !shouldRetryComputeBudget(snapshot) {
 		return nil
 	}
 	run := cache.QualificationRun{FixtureSnapshotID: syncRun.FixtureSnapshotID, SourceSyncRunID: syncRun.ID, Season: syncRun.Season, Stage: syncRun.Stage, RulesVersion: r.Rules.Version, StartedAt: time.Now().UTC(), ExpectedStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
@@ -56,7 +72,38 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}
 	return nil
 }
+
+// Older batches could be marked complete after the refresher rejected ASA's
+// legacy "YYYY-MM-DD HH:MM:SS UTC" timestamp form. Once the parser accepts the
+// current schedule, retry that narrowly identified batch instead of treating
+// its unresolved rows as a valid prerequisite forever.
+func shouldRetryKickoffOrder(snapshot cache.QualificationSnapshot, games []cache.Game) bool {
+	if len(snapshot.Statuses) == 0 {
+		return false
+	}
+	for _, status := range snapshot.Statuses {
+		if status.Method != clinching.ProofIncompleteSchedule || status.Reason != "fixture kickoff order is invalid" {
+			return false
+		}
+	}
+	_, err := fixtureOrder(games)
+	return err == nil
+}
+
+// Compute-budget rows are transient: a later run may be configured with a
+// larger budget after profiling or deployment configuration changes. Retry
+// such a batch instead of permanently treating its unresolved rows as the
+// current qualification baseline.
+func shouldRetryComputeBudget(snapshot cache.QualificationSnapshot) bool {
+	for _, status := range snapshot.Statuses {
+		if status.Method == clinching.ProofComputeBudget {
+			return true
+		}
+	}
+	return false
+}
 func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game) ([]cache.QualificationStatus, error) {
+	batchStarted := time.Now()
 	participants := map[string]bool{}
 	for _, g := range games {
 		participants[g.HomeTeamID] = true
@@ -97,22 +144,34 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	}
 	ctx, cancel := context.WithTimeout(parent, r.Budget)
 	defer cancel()
+	evaluator, err := clinching.NewEvaluator(domainTeams, domainGames, order)
+	if err != nil {
+		return nil, err
+	}
 	table := standings.Calculate(domainTeams, domainGames, standings.OfficialTotalRules())
 	achievements := append([]competition.Achievement(nil), r.Rules.Achievements...)
 	sort.Slice(achievements, func(i, j int) bool { return achievements[i].TopK > achievements[j].TopK })
 	results := map[string]map[competition.AchievementID]cache.QualificationStatus{}
+	completed := 0
+	total := len(table) * len(achievements)
 	for _, row := range table {
 		results[row.Team.ID] = map[competition.AchievementID]cache.QualificationStatus{}
 		for _, a := range achievements {
 			if ctx.Err() != nil {
 				results[row.Team.ID][a.ID] = unresolved(row.Team.ID, a, clinching.ProofComputeBudget, "calculation budget exhausted")
+				completed++
+				r.report(Progress{Phase: "skipped", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, BatchElapsed: time.Since(batchStarted), Status: clinching.Unresolved, Method: clinching.ProofComputeBudget})
 				continue
 			}
-			value, err := clinching.Evaluate(ctx, clinching.Request{Teams: domainTeams, Games: domainGames, FixtureOrder: order, TargetTeamID: row.Team.ID, Achievement: a})
+			probeStarted := time.Now()
+			r.report(Progress{Phase: "status_started", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, BatchElapsed: time.Since(batchStarted)})
+			value, err := evaluator.EvaluateStatus(ctx, row.Team.ID, a, nil)
 			if err != nil {
 				return nil, err
 			}
 			results[row.Team.ID][a.ID] = toCache(value)
+			completed++
+			r.report(Progress{Phase: "status_finished", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method})
 		}
 	}
 	// Stronger guarantees imply weaker guarantees, never the reverse.
@@ -134,6 +193,41 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		}
 		results[id] = byAchievement
 	}
+	noHelpTotal := 0
+	for _, byAchievement := range results {
+		for _, value := range byAchievement {
+			if value.Status == clinching.NotClinched {
+				noHelpTotal++
+			}
+		}
+	}
+	noHelpCompleted := 0
+	for _, row := range table {
+		for _, a := range achievements {
+			value := results[row.Team.ID][a.ID]
+			if value.Status != clinching.NotClinched {
+				continue
+			}
+			if ctx.Err() != nil {
+				value.NoHelp = clinching.NoHelpPath{State: clinching.NoHelpUnresolved, FixtureIDs: []string{}, Reason: "calculation budget exhausted"}
+				results[row.Team.ID][a.ID] = value
+				noHelpCompleted++
+				r.report(Progress{Phase: "no_help_skipped", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: value.NoHelp.State})
+				continue
+			}
+			probeStarted := time.Now()
+			r.report(Progress{Phase: "no_help_started", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method})
+			base := clinching.AchievementResult{TeamID: value.TeamID, Achievement: value.Achievement, TopK: value.TopK, Status: value.Status, Method: value.Method, Reason: value.Reason}
+			path, err := evaluator.EvaluateNoHelp(ctx, row.Team.ID, a, nil, base)
+			if err != nil {
+				return nil, err
+			}
+			value.NoHelp = path
+			results[row.Team.ID][a.ID] = value
+			noHelpCompleted++
+			r.report(Progress{Phase: "no_help_finished", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: path.State})
+		}
+	}
 	out := []cache.QualificationStatus{}
 	ids := make([]string, 0, len(results))
 	for id := range results {
@@ -146,6 +240,12 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		}
 	}
 	return out, nil
+}
+
+func (r Refresher) report(value Progress) {
+	if r.Progress != nil {
+		r.Progress(value)
+	}
 }
 func safeFixtureStates(games []cache.Game) bool {
 	for _, g := range games {
@@ -184,15 +284,15 @@ func fixtureOrder(games []cache.Game) ([]string, error) {
 	pending := []cache.Game{}
 	for _, g := range games {
 		if g.Status == "PreMatch" {
-			if _, err := time.Parse(time.RFC3339, g.KickoffUTC); err != nil {
+			if _, err := parseKickoff(g.KickoffUTC); err != nil {
 				return nil, err
 			}
 			pending = append(pending, g)
 		}
 	}
 	sort.Slice(pending, func(i, j int) bool {
-		a, _ := time.Parse(time.RFC3339, pending[i].KickoffUTC)
-		b, _ := time.Parse(time.RFC3339, pending[j].KickoffUTC)
+		a, _ := parseKickoff(pending[i].KickoffUTC)
+		b, _ := parseKickoff(pending[j].KickoffUTC)
 		if a.Equal(b) {
 			return pending[i].ASAID < pending[j].ASAID
 		}
@@ -203,6 +303,15 @@ func fixtureOrder(games []cache.Game) ([]string, error) {
 		out[i] = g.ASAID
 	}
 	return out, nil
+}
+
+func parseKickoff(value string) (time.Time, error) {
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05 MST"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("parse kickoff %q", value)
 }
 func unresolvedRows(teams []standings.Team, r competition.Rules, m clinching.ProofMethod, reason string) []cache.QualificationStatus {
 	out := []cache.QualificationStatus{}

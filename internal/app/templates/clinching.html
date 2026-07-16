@@ -1,0 +1,7 @@
+{{define "clinching"}}{{template "head" .}}
+<p><a href="{{.SeasonPath}}">← Back to {{.Season}} season</a></p>
+<div class="title-row"><div><p class="eyebrow">Deterministic qualification proofs</p><h1>Clinching scenarios</h1></div><a class="button" href="{{.ForecastPath}}">Forecast Lab</a></div>
+<p>These are mathematical guarantees, not forecast probabilities. Each applies once every included fixture result is final.</p>
+{{if .State}}<p class="data-warning">{{.State}}</p>{{else}}<section><h2>Included slate</h2><p>Source: {{.Slate.Source}}{{if .Slate.Matchday}} · Matchday {{.Slate.Matchday}}{{end}}. Scheduled kickoff range: {{.Slate.StartsAtUTC}} to {{.Slate.LatestKickoffUTC}}; cutoff: {{.Slate.CutoffUTC}}.</p><details><summary>Included fixture IDs</summary><ul>{{range .Slate.FixtureIDs}}<li>{{.}}</li>{{end}}</ul></details></section>{{end}}
+{{range .Rows}}<section><h2>{{.Team}} — {{.Achievement}}</h2>{{if .Already}}<p><strong>Already clinched.</strong></p>{{else if .Clauses}}{{range .Clauses}}<p>{{.}}</p>{{end}}{{else}}<p>{{.State}}</p>{{end}}{{if .Necessary}}<p>Every clinching path requires:</p><ul>{{range .Necessary}}<li>{{.}}</li>{{end}}</ul>{{end}}{{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}</section>{{end}}
+{{template "foot" .}}{{end}}

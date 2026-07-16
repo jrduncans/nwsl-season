@@ -124,8 +124,219 @@ func completeWitness(p preparedSeason, assigned map[string]Outcome) []WitnessGam
 
 type queryResult struct {
 	count    int
+	score    int
 	outcomes map[string]Outcome
 	diag     Diagnostics
+}
+
+// feasibleThresholdWitness quickly constructs one complete set of remaining
+// results. Unlike solveThreshold it does not attempt to prove the maximum
+// number of teams that can reach threshold. It is therefore safe only as a
+// not-clinched witness: when it finds TopK teams at or above threshold, that
+// one feasible completion is enough to disprove a clinch.
+func feasibleThresholdWitness(p preparedSeason, threshold int) queryResult {
+	return feasibleThresholdWitnessAtLeast(p, threshold, len(p.points)-1)
+}
+
+// feasibleThresholdWitnessAtLeast is the early-exit variant used by the
+// status oracle. A qualification proof needs only TopK blocking opponents, so
+// continuing to improve an already-sufficient witness wastes work at every
+// scenario-tree node.
+func feasibleThresholdWitnessAtLeast(p preparedSeason, threshold, atLeast int) queryResult {
+	if len(p.decision) == 0 {
+		return countThresholdWitness(p, threshold, map[string]Outcome{})
+	}
+
+	teams := make([]string, 0, len(p.points)-1)
+	for id := range p.points {
+		if id != p.target {
+			teams = append(teams, id)
+		}
+	}
+	sort.Strings(teams)
+
+	// The all-draw, all-home-win, and all-away-win starts cover the obvious
+	// distributions. The focused starts bias every fixture involving one team
+	// toward that team and are useful when several direct rivals share fixtures.
+	seeds := make([]map[string]Outcome, 0, len(teams)+3)
+	for _, defaultOutcome := range []Outcome{Draw, HomeWin, AwayWin} {
+		seed := map[string]Outcome{}
+		for _, game := range p.decision {
+			seed[game.ID] = defaultOutcome
+		}
+		seeds = append(seeds, seed)
+	}
+	for _, focus := range teams {
+		seed := map[string]Outcome{}
+		for _, game := range p.decision {
+			switch {
+			case game.HomeTeamID == focus:
+				seed[game.ID] = HomeWin
+			case game.AwayTeamID == focus:
+				seed[game.ID] = AwayWin
+			default:
+				seed[game.ID] = Draw
+			}
+		}
+		seeds = append(seeds, seed)
+	}
+
+	best := queryResult{count: -1, outcomes: map[string]Outcome{}}
+	for _, seed := range seeds {
+		candidate := improveThresholdWitness(p, threshold, seed)
+		if candidate.count >= atLeast {
+			return candidate
+		}
+		if betterThresholdWitness(candidate, best) {
+			best = candidate
+		}
+	}
+	return best
+}
+
+func improveThresholdWitness(p preparedSeason, threshold int, outcomes map[string]Outcome) queryResult {
+	current := cloneOutcomes(outcomes)
+	points := make(map[string]int, len(p.points))
+	for id, value := range p.points {
+		points[id] = value
+	}
+	for _, game := range p.decision {
+		applyOutcome(points, game, current[game.ID])
+	}
+	count, score := thresholdScore(points, p.target, threshold)
+	// One deterministic coordinate-ascent pass is enough for this fast-path:
+	// it needs only one valid counterexample, not the optimal assignment. More
+	// passes turn a shortcut used at every scenario-tree node into a second
+	// expensive solver; the exact solver below remains the fallback.
+	for pass := 0; pass < 1; pass++ {
+		changed := false
+		for _, game := range p.decision {
+			bestOutcome := current[game.ID]
+			bestCount, bestScore := count, score
+			for _, outcome := range []Outcome{HomeWin, Draw, AwayWin} {
+				if outcome == current[game.ID] {
+					continue
+				}
+				candidateCount, candidateScore := trialThresholdScore(points, game, current[game.ID], outcome, p.target, threshold, count, score)
+				if candidateCount > bestCount || candidateCount == bestCount && candidateScore > bestScore {
+					bestOutcome, bestCount, bestScore = outcome, candidateCount, candidateScore
+				}
+			}
+			if bestOutcome != current[game.ID] {
+				applyOutcomeChange(points, game, current[game.ID], bestOutcome)
+				current[game.ID] = bestOutcome
+				count, score = bestCount, bestScore
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	return queryResult{count: count, score: score, outcomes: current}
+}
+
+func trialThresholdScore(points map[string]int, game standings.Game, from, to Outcome, target string, threshold, count, score int) (int, int) {
+	if game.HomeTeamID != target {
+		wasCount, wasScore := thresholdContribution(points[game.HomeTeamID], threshold)
+		points[game.HomeTeamID] -= outcomePoints(from, true)
+		points[game.HomeTeamID] += outcomePoints(to, true)
+		nowCount, nowScore := thresholdContribution(points[game.HomeTeamID], threshold)
+		count += nowCount - wasCount
+		score += nowScore - wasScore
+	}
+	if game.AwayTeamID != target {
+		wasCount, wasScore := thresholdContribution(points[game.AwayTeamID], threshold)
+		points[game.AwayTeamID] -= outcomePoints(from, false)
+		points[game.AwayTeamID] += outcomePoints(to, false)
+		nowCount, nowScore := thresholdContribution(points[game.AwayTeamID], threshold)
+		count += nowCount - wasCount
+		score += nowScore - wasScore
+	}
+	// Restore the caller's point vector. This keeps each alternative probe
+	// allocation-free and limits rescoring to the two affected teams.
+	if game.HomeTeamID != target {
+		points[game.HomeTeamID] -= outcomePoints(to, true)
+		points[game.HomeTeamID] += outcomePoints(from, true)
+	}
+	if game.AwayTeamID != target {
+		points[game.AwayTeamID] -= outcomePoints(to, false)
+		points[game.AwayTeamID] += outcomePoints(from, false)
+	}
+	return count, score
+}
+
+func applyOutcomeChange(points map[string]int, game standings.Game, from, to Outcome) {
+	points[game.HomeTeamID] -= outcomePoints(from, true)
+	points[game.AwayTeamID] -= outcomePoints(from, false)
+	points[game.HomeTeamID] += outcomePoints(to, true)
+	points[game.AwayTeamID] += outcomePoints(to, false)
+}
+
+func outcomePoints(outcome Outcome, home bool) int {
+	switch outcome {
+	case HomeWin:
+		if home {
+			return 3
+		}
+	case AwayWin:
+		if !home {
+			return 3
+		}
+	case Draw:
+		return 1
+	}
+	return 0
+}
+
+func countThresholdWitness(p preparedSeason, threshold int, outcomes map[string]Outcome) queryResult {
+	points := make(map[string]int, len(p.points))
+	for id, value := range p.points {
+		points[id] = value
+	}
+	for _, game := range p.decision {
+		applyOutcome(points, game, outcomes[game.ID])
+	}
+	count, progress := thresholdScore(points, p.target, threshold)
+	return queryResult{count: count, score: progress, outcomes: cloneOutcomes(outcomes)}
+}
+
+func thresholdScore(points map[string]int, target string, threshold int) (count, progress int) {
+	for id, value := range points {
+		if id == target {
+			continue
+		}
+		teamCount, teamScore := thresholdContribution(value, threshold)
+		count += teamCount
+		progress += teamScore
+	}
+	return count, progress
+}
+
+func thresholdContribution(points, threshold int) (count, score int) {
+	if points >= threshold {
+		count = 1
+	}
+	if points > threshold {
+		points = threshold
+	}
+	return count, points
+}
+
+func betterThresholdWitness(left, right queryResult) bool {
+	if left.count != right.count {
+		return left.count > right.count
+	}
+	// Prefer spreading points toward the threshold when counts tie.
+	return left.score > right.score
+}
+
+func cloneOutcomes(values map[string]Outcome) map[string]Outcome {
+	copy := make(map[string]Outcome, len(values))
+	for id, outcome := range values {
+		copy[id] = outcome
+	}
+	return copy
 }
 
 func solveThreshold(ctx context.Context, p preparedSeason, threshold int) (queryResult, error) {

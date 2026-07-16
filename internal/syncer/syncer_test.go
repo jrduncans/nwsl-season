@@ -3,6 +3,7 @@ package syncer
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -60,6 +61,28 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	}
 	if !game.AwayScore.Valid || game.AwayScore.Int64 != 2 {
 		t.Fatalf("away score = %+v, want 2", game.AwayScore)
+	}
+}
+
+func TestRunRefreshesXGBeforeDerivedCalculations(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	order := []string{}
+	client := traceASA{fakeASA: fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}, order: &order, xg: []asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6}}}
+	service := Service{
+		ASA:           &client,
+		Store:         db,
+		Qualification: orderedRefresher{order: &order, label: "qualification"},
+		Scenarios:     orderedRefresher{order: &order, label: "scenarios"},
+	}
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"xg", "qualification", "scenarios"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("refresh order = %v, want %v", order, want)
 	}
 }
 
@@ -262,6 +285,27 @@ type fakeASA struct {
 	gamesErr     error
 	gamesCalls   int
 	gamesFilters asa.GamesFilters
+}
+
+type traceASA struct {
+	fakeASA
+	order *[]string
+	xg    []asa.GameXGoals
+}
+
+func (f *traceASA) GameXGoals(context.Context, asa.XGoalsFilters) ([]asa.GameXGoals, error) {
+	*f.order = append(*f.order, "xg")
+	return f.xg, nil
+}
+
+type orderedRefresher struct {
+	order *[]string
+	label string
+}
+
+func (r orderedRefresher) Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error {
+	*r.order = append(*r.order, r.label)
+	return nil
 }
 
 func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {

@@ -18,12 +18,13 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 // DB wraps the SQLite cache.
 type DB struct {
@@ -77,6 +78,7 @@ type SyncRun struct {
 	Skipped            bool
 	FixtureSnapshotID  string
 	QualificationError string
+	ScenarioError      string
 	// XGRun/XGError describe the independent second refresh when available.
 	XGRun   *XGSyncRun
 	XGError string
@@ -162,6 +164,20 @@ type QualificationStatus struct {
 type QualificationSnapshot struct {
 	Run      QualificationRun
 	Statuses []QualificationStatus
+}
+type ScenarioRun struct {
+	ID, QualificationRunID, SourceSyncRunID        int64
+	FixtureSnapshotID, Season, Stage, RulesVersion string
+	DefinitionVersion                              string
+	Slate                                          scenarios.Slate
+	StartedAt, FinishedAt                          time.Time
+	Outcome, ErrorSummary                          string
+	ExpectedResults, WrittenResults                int
+}
+type ScenarioResult struct{ scenarios.Result }
+type ScenarioSnapshot struct {
+	Run     ScenarioRun
+	Results []ScenarioResult
 }
 
 // Open opens a SQLite cache and applies migrations.
@@ -340,6 +356,21 @@ func (c *DB) Migrate(ctx context.Context) error {
 			}
 		}
 		if err := recordMigration(ctx, tx, 4); err != nil {
+			return err
+		}
+	}
+	if version < 5 {
+		for _, statement := range []string{
+			`CREATE TABLE scenario_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, fixture_snapshot_id TEXT NOT NULL, qualification_run_id INTEGER NOT NULL REFERENCES qualification_runs(id), source_sync_run_id INTEGER NOT NULL REFERENCES sync_runs(id), season TEXT NOT NULL, stage TEXT NOT NULL, rules_version TEXT NOT NULL, definition_version TEXT NOT NULL, slate_id TEXT NOT NULL, slate_state TEXT NOT NULL CHECK (slate_state IN ('ready','no_upcoming_fixtures','unavailable')), slate_source TEXT NOT NULL, matchday INTEGER NOT NULL, starts_at_utc TEXT NOT NULL, latest_kickoff_utc TEXT NOT NULL, cutoff_utc TEXT NOT NULL, fixture_ids_json TEXT NOT NULL, slate_reason TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT NOT NULL, outcome TEXT NOT NULL CHECK (outcome IN ('complete','failure')), error_summary TEXT NOT NULL, expected_results INTEGER NOT NULL, written_results INTEGER NOT NULL)`,
+			`CREATE INDEX scenario_runs_exact_idx ON scenario_runs (fixture_snapshot_id,rules_version,definition_version,finished_at)`,
+			`CREATE INDEX scenario_runs_latest_idx ON scenario_runs (season,stage,rules_version,finished_at)`,
+			`CREATE TABLE scenario_results (scenario_run_id INTEGER NOT NULL REFERENCES scenario_runs(id) ON DELETE CASCADE, team_id TEXT NOT NULL REFERENCES teams(asa_team_id), achievement TEXT NOT NULL, top_k INTEGER NOT NULL, opportunity_state TEXT NOT NULL CHECK (opportunity_state IN ('already_clinched','can_clinch','cannot_clinch','tiebreak_dependent','unresolved')), already_clinched INTEGER NOT NULL CHECK (already_clinched IN (0,1)), can_clinch INTEGER NOT NULL CHECK (can_clinch IN (0,1)), clauses_json TEXT NOT NULL, necessary_json TEXT NOT NULL, proof_methods_json TEXT NOT NULL, limitation TEXT NOT NULL, total_assignments INTEGER NOT NULL, certified_assignments INTEGER NOT NULL, unresolved_assignments INTEGER NOT NULL, diagnostics_json TEXT NOT NULL, PRIMARY KEY (scenario_run_id,team_id,achievement))`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 5: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 5); err != nil {
 			return err
 		}
 	}
@@ -1160,6 +1191,7 @@ func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
 			writeSnapshotString("0")
 		}
 	}
+	writeSnapshotString("fixture-snapshot-v2")
 	for _, id := range ids {
 		writeSnapshotString(id)
 	}
@@ -1171,6 +1203,7 @@ func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
 		writeNull(g.HomeScore)
 		writeNull(g.AwayScore)
 		writeSnapshotString(g.KickoffUTC)
+		writeNull(g.Matchday)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -1300,6 +1333,178 @@ func validQualification(v QualificationStatus) bool {
 }
 func validNoHelp(v clinching.NoHelpState) bool {
 	return v == clinching.NoHelpNotApplicable || v == clinching.NoHelpGuaranteed || v == clinching.NoHelpImpossible || v == clinching.NoHelpUnresolved
+}
+
+// ScenarioForSnapshot returns the latest completed batch for the exact input
+// identity. Scenario clauses are never mixed across fixture snapshots.
+func (c *DB) ScenarioForSnapshot(ctx context.Context, snapshotID, rulesVersion, definitionVersion string) (ScenarioSnapshot, bool, error) {
+	// A scenario batch is current only when it was proved against the latest
+	// completed qualification batch for the same snapshot and rules. This avoids
+	// surfacing an older complete scenario batch after qualification was rebuilt.
+	return c.loadScenario(ctx, `WHERE fixture_snapshot_id=? AND rules_version=? AND definition_version=? AND outcome='complete' AND qualification_run_id=(SELECT id FROM qualification_runs WHERE fixture_snapshot_id=? AND rules_version=? AND outcome='complete' ORDER BY finished_at DESC,id DESC LIMIT 1)`, snapshotID, rulesVersion, definitionVersion, snapshotID, rulesVersion)
+}
+func (c *DB) LatestScenario(ctx context.Context, season, stage, rulesVersion, definitionVersion string) (ScenarioSnapshot, bool, error) {
+	return c.loadScenario(ctx, `WHERE season=? AND stage=? AND rules_version=? AND definition_version=? AND outcome='complete'`, season, stage, rulesVersion, definitionVersion)
+}
+func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (ScenarioSnapshot, bool, error) {
+	q := `SELECT id,fixture_snapshot_id,qualification_run_id,source_sync_run_id,season,stage,rules_version,definition_version,slate_id,slate_state,slate_source,matchday,starts_at_utc,latest_kickoff_utc,cutoff_utc,fixture_ids_json,slate_reason,started_at,finished_at,outcome,error_summary,expected_results,written_results FROM scenario_runs ` + where + ` ORDER BY finished_at DESC,id DESC LIMIT 1`
+	var out ScenarioSnapshot
+	var state, source, starts, latest, cutoff, fixtures, started, finished string
+	err := c.db.QueryRowContext(ctx, q, args...).Scan(&out.Run.ID, &out.Run.FixtureSnapshotID, &out.Run.QualificationRunID, &out.Run.SourceSyncRunID, &out.Run.Season, &out.Run.Stage, &out.Run.RulesVersion, &out.Run.DefinitionVersion, &out.Run.Slate.ID, &state, &source, &out.Run.Slate.Matchday, &starts, &latest, &cutoff, &fixtures, &out.Run.Slate.Reason, &started, &finished, &out.Run.Outcome, &out.Run.ErrorSummary, &out.Run.ExpectedResults, &out.Run.WrittenResults)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ScenarioSnapshot{}, false, nil
+	}
+	if err != nil {
+		return out, false, err
+	}
+	out.Run.Slate.DefinitionVersion = out.Run.DefinitionVersion
+	out.Run.Slate.State = scenarios.SlateState(state)
+	out.Run.Slate.Source = scenarios.SlateSource(source)
+	if err := json.Unmarshal([]byte(fixtures), &out.Run.Slate.FixtureIDs); err != nil {
+		return out, false, err
+	}
+	if out.Run.Slate.FixtureIDs == nil {
+		out.Run.Slate.FixtureIDs = []string{}
+	}
+	if starts != "" {
+		if out.Run.Slate.StartsAtUTC, err = time.Parse(time.RFC3339, starts); err != nil {
+			return out, false, err
+		}
+		if out.Run.Slate.LatestKickoffUTC, err = time.Parse(time.RFC3339, latest); err != nil {
+			return out, false, err
+		}
+		if out.Run.Slate.CutoffUTC, err = time.Parse(time.RFC3339, cutoff); err != nil {
+			return out, false, err
+		}
+	}
+	if out.Run.StartedAt, err = time.Parse(time.RFC3339, started); err != nil {
+		return out, false, err
+	}
+	if out.Run.FinishedAt, err = time.Parse(time.RFC3339, finished); err != nil {
+		return out, false, err
+	}
+	rows, err := c.db.QueryContext(ctx, `SELECT team_id,achievement,top_k,opportunity_state,already_clinched,can_clinch,clauses_json,necessary_json,proof_methods_json,limitation,total_assignments,certified_assignments,unresolved_assignments,diagnostics_json FROM scenario_results WHERE scenario_run_id=? ORDER BY team_id,achievement`, out.Run.ID)
+	if err != nil {
+		return out, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var v ScenarioResult
+		var achievement, state string
+		var already, can int
+		var clauses, necessary, methods, diag string
+		if err := rows.Scan(&v.TeamID, &achievement, &v.TopK, &state, &already, &can, &clauses, &necessary, &methods, &v.Limitation, &v.TotalAssignments, &v.CertifiedAssignments, &v.UnresolvedAssignments, &diag); err != nil {
+			return out, false, err
+		}
+		v.Achievement = competition.AchievementID(achievement)
+		v.State = scenarios.OpportunityState(state)
+		v.AlreadyClinched = already != 0
+		v.CanClinch = can != 0
+		if err := json.Unmarshal([]byte(clauses), &v.Clauses); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(necessary), &v.Necessary); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(methods), &v.ProofMethods); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(diag), &v.Diagnostics); err != nil {
+			return out, false, err
+		}
+		if v.Clauses == nil {
+			v.Clauses = []scenarios.Clause{}
+		}
+		if v.Necessary == nil {
+			v.Necessary = []scenarios.FixtureCondition{}
+		}
+		if v.ProofMethods == nil {
+			v.ProofMethods = []clinching.ProofMethod{}
+		}
+		out.Results = append(out.Results, v)
+	}
+	return out, true, rows.Err()
+}
+func (c *DB) ReplaceScenario(ctx context.Context, run ScenarioRun, values []ScenarioResult) (ScenarioSnapshot, error) {
+	if run.FixtureSnapshotID == "" || run.RulesVersion == "" || run.DefinitionVersion != scenarios.DefinitionVersion || run.QualificationRunID == 0 || run.SourceSyncRunID == 0 || run.ExpectedResults != len(values) || run.WrittenResults != len(values) {
+		return ScenarioSnapshot{}, errors.New("invalid scenario batch counts")
+	}
+	if err := run.Slate.Validate(); err != nil {
+		return ScenarioSnapshot{}, err
+	}
+	seen := map[string]bool{}
+	for _, v := range values {
+		if err := v.Result.Validate(run.Slate); err != nil {
+			return ScenarioSnapshot{}, err
+		}
+		k := v.TeamID + "\x00" + string(v.Achievement)
+		if seen[k] {
+			return ScenarioSnapshot{}, errors.New("duplicate scenario result")
+		}
+		seen[k] = true
+	}
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ScenarioSnapshot{}, err
+	}
+	defer rollback(tx)
+	var n int
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM qualification_runs WHERE id=? AND fixture_snapshot_id=? AND rules_version=? AND outcome='complete'`, run.QualificationRunID, run.FixtureSnapshotID, run.RulesVersion).Scan(&n)
+	if err != nil {
+		return ScenarioSnapshot{}, err
+	}
+	if n != 1 {
+		return ScenarioSnapshot{}, errors.New("scenario qualification prerequisite does not match")
+	}
+	run.Outcome = "complete"
+	run.FinishedAt = time.Now().UTC()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = run.FinishedAt
+	}
+	fixtures, _ := json.Marshal(nonNilStrings(run.Slate.FixtureIDs))
+	starts, latest, cutoff := "", "", ""
+	source := ""
+	if run.Slate.State == scenarios.SlateReady {
+		starts = formatTime(run.Slate.StartsAtUTC)
+		latest = formatTime(run.Slate.LatestKickoffUTC)
+		cutoff = formatTime(run.Slate.CutoffUTC)
+		source = string(run.Slate.Source)
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO scenario_runs(fixture_snapshot_id,qualification_run_id,source_sync_run_id,season,stage,rules_version,definition_version,slate_id,slate_state,slate_source,matchday,starts_at_utc,latest_kickoff_utc,cutoff_utc,fixture_ids_json,slate_reason,started_at,finished_at,outcome,error_summary,expected_results,written_results) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.FixtureSnapshotID, run.QualificationRunID, run.SourceSyncRunID, run.Season, run.Stage, run.RulesVersion, run.DefinitionVersion, run.Slate.ID, run.Slate.State, source, run.Slate.Matchday, starts, latest, cutoff, string(fixtures), run.Slate.Reason, formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Outcome, run.ErrorSummary, run.ExpectedResults, run.WrittenResults)
+	if err != nil {
+		return ScenarioSnapshot{}, err
+	}
+	run.ID, _ = res.LastInsertId()
+	for _, v := range values {
+		clauses, _ := json.Marshal(v.Clauses)
+		necessary, _ := json.Marshal(v.Necessary)
+		methods, _ := json.Marshal(v.ProofMethods)
+		diag, _ := json.Marshal(v.Diagnostics)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, v.TeamID, v.Achievement, v.TopK, v.State, boolInt(v.AlreadyClinched), boolInt(v.CanClinch), string(clauses), string(necessary), string(methods), v.Limitation, v.TotalAssignments, v.CertifiedAssignments, v.UnresolvedAssignments, string(diag)); err != nil {
+			return ScenarioSnapshot{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return ScenarioSnapshot{}, err
+	}
+	return ScenarioSnapshot{Run: run, Results: append([]ScenarioResult(nil), values...)}, nil
+}
+func (c *DB) RecordScenarioFailure(ctx context.Context, run ScenarioRun, cause error) error {
+	run.Outcome = "failure"
+	run.ErrorSummary = summarizeError(cause)
+	run.FinishedAt = time.Now().UTC()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = run.FinishedAt
+	}
+	fixtures, _ := json.Marshal([]string{})
+	_, err := c.db.ExecContext(ctx, `INSERT INTO scenario_runs(fixture_snapshot_id,qualification_run_id,source_sync_run_id,season,stage,rules_version,definition_version,slate_id,slate_state,slate_source,matchday,starts_at_utc,latest_kickoff_utc,cutoff_utc,fixture_ids_json,slate_reason,started_at,finished_at,outcome,error_summary,expected_results,written_results) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.FixtureSnapshotID, run.QualificationRunID, run.SourceSyncRunID, run.Season, run.Stage, run.RulesVersion, run.DefinitionVersion, "", scenarios.SlateUnavailable, "", 0, "", "", "", string(fixtures), "", formatTime(run.StartedAt), formatTime(run.FinishedAt), run.Outcome, run.ErrorSummary, run.ExpectedResults, 0)
+	return err
+}
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func formatTime(t time.Time) string {

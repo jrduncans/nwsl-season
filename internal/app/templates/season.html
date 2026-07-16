@@ -1,7 +1,7 @@
 {{define "season"}}{{template "head" .}}
 <div class="title-row">
   <div><p class="eyebrow">{{.Stage}}</p><h1>{{.Season}} season</h1></div>
-  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a href="{{.ScheduleDifficultyPath}}">Schedule difficulty</a><a href="{{.XGPath}}">Expected goals</a><a class="button" href="{{.ForecastPath}}">Forecast Lab</a></div>
+  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a href="{{.ScheduleDifficultyPath}}">Schedule difficulty</a><a href="{{.XGPath}}">Expected goals</a><a href="{{.SeasonPath}}/clinching">Clinching scenarios</a><a class="button" href="{{.ForecastPath}}">Forecast Lab</a></div>
 </div>
 <p class="view-control"><a href="{{.CurrentPath}}"{{if not .Outlook}} aria-current="page"{{end}}>Current</a> | <a href="{{.OutlookPath}}"{{if .Outlook}} aria-current="page"{{end}}>Outlook</a></p>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}

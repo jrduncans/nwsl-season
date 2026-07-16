@@ -15,18 +15,14 @@ var ErrComputeBudget = errors.New("clinching compute budget exceeded")
 // treats any unresolved score tiebreak as unresolved rather than guessing a
 // score cap.
 func Evaluate(ctx context.Context, request Request) (AchievementResult, error) {
-	result, err := evaluateStatus(ctx, request)
+	evaluator, err := NewEvaluator(request.Teams, request.Games, request.FixtureOrder)
 	if err != nil {
-		return result, err
+		return AchievementResult{}, err
 	}
-	if result.Status == Clinched {
-		result.NoHelp = NoHelpPath{State: NoHelpNotApplicable, FixtureIDs: []string{}}
-		return result, nil
-	}
-	return addNoHelp(ctx, request, result)
+	return evaluator.Evaluate(ctx, request.TargetTeamID, request.Achievement, request.Fixed)
 }
 
-func evaluateStatus(ctx context.Context, request Request) (AchievementResult, error) {
+func evaluateStatusRequest(ctx context.Context, request Request) (AchievementResult, error) {
 	started := time.Now()
 	if err := validateRequest(request); err != nil {
 		return AchievementResult{}, err
@@ -70,6 +66,18 @@ func evaluateStatus(ctx context.Context, request Request) (AchievementResult, er
 		result.Status, result.Method = Clinched, ProofCheapBound
 		result.StrictlyAhead = CountEvidence{Value: strictAhead, Kind: "upper_bound"}
 		result.AtLeastLevel = CountEvidence{Value: prepared.capable, Kind: "upper_bound"}
+		return finish(), nil
+	}
+	// A concrete feasible completion is sufficient to establish that the
+	// target has not clinched. Try this inexpensive witness before invoking the
+	// exact component optimizer, which is only needed when no easy blocker is
+	// found.
+	if witness := feasibleThresholdWitnessAtLeast(prepared, prepared.frontier+1, request.Achievement.TopK); witness.count >= request.Achievement.TopK {
+		result.Status = NotClinched
+		result.Method = ProofPointsOptimization
+		result.StrictlyAhead = CountEvidence{Value: witness.count, Kind: "lower_bound"}
+		result.AtLeastLevel = CountEvidence{Value: witness.count, Kind: "lower_bound"}
+		result.BlockingWitness = completeWitness(prepared, witness.outcomes)
 		return finish(), nil
 	}
 	strict, err := solveThreshold(ctx, prepared, prepared.frontier+1)
@@ -187,7 +195,7 @@ func addNoHelp(ctx context.Context, r Request, base AchievementResult) (Achievem
 		prefix = append(prefix, id)
 		probe := r
 		probe.Fixed = fixed
-		value, err := evaluateStatus(ctx, probe)
+		value, err := evaluateStatusRequest(ctx, probe)
 		if err != nil {
 			return base, err
 		}
@@ -198,7 +206,7 @@ func addNoHelp(ctx context.Context, r Request, base AchievementResult) (Achievem
 	}
 	probe := r
 	probe.Fixed = fixed
-	value, err := evaluateStatus(ctx, probe)
+	value, err := evaluateStatusRequest(ctx, probe)
 	if err != nil {
 		return base, err
 	}

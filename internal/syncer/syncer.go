@@ -45,15 +45,21 @@ type Store interface {
 
 // Service refreshes the persistent cache from ASA.
 type Service struct {
-	ASA           ASAClient
-	Store         Store
-	Qualification QualificationRefresher
+	ASA                  ASAClient
+	Store                Store
+	Qualification        QualificationRefresher
+	Scenarios            ScenarioRefresher
+	QualificationTimeout time.Duration
+	ScenarioTimeout      time.Duration
 }
 
 // QualificationRefresher runs after the durable fixture transaction. It is
 // intentionally separate from Store so a qualification failure cannot relabel
 // a successful fixture refresh.
 type QualificationRefresher interface {
+	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
+}
+type ScenarioRefresher interface {
 	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
 }
 
@@ -140,34 +146,48 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
+	// Fetch xG while the main sync context still has its full budget. The
+	// qualification and scenario passes can legitimately outlive that context
+	// through their independent derived budgets, so placing xG after them would
+	// make its HTTP request begin already cancelled.
+	xgClient, hasXGClient := s.ASA.(xgASAClient)
+	xgCache, hasXGCache := s.Store.(xgStore)
+	if hasXGClient && hasXGCache {
+		xg, err := xgClient.GameXGoals(ctx, asa.XGoalsFilters{SeasonName: options.Season, StageName: options.Stage})
+		if err != nil {
+			run = s.xgWarning(ctx, xgCache, options, startedAt, run, fmt.Errorf("fetch game xG: %w", err))
+		} else if values, err := mapXGoals(xg); err != nil {
+			run = s.xgWarning(ctx, xgCache, options, startedAt, run, err)
+		} else if xgRun, err := xgCache.ReplaceGameXG(ctx, options.Season, options.Stage, cacheGames, values, startedAt); err != nil {
+			run = s.xgWarning(ctx, xgCache, options, startedAt, run, err)
+		} else {
+			run.XGRun = &xgRun
+		}
+	}
 	if s.Qualification != nil {
-		derivedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		budget := s.QualificationTimeout
+		if budget <= 0 {
+			budget = 5 * time.Second
+		}
+		derivedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
 		err := s.Qualification.Refresh(derivedCtx, run, cacheTeams, cacheGames)
 		cancel()
 		if err != nil {
 			run.QualificationError = err.Error()
 		}
 	}
-	// Fixture success is independent from xG. Keep the good fixture snapshot if
-	// xG is delayed, malformed, or unavailable, and audit that separately.
-	xgClient, hasXGClient := s.ASA.(xgASAClient)
-	xgCache, hasXGCache := s.Store.(xgStore)
-	if !hasXGClient || !hasXGCache {
-		return run, nil
+	if run.QualificationError == "" && s.Scenarios != nil {
+		budget := s.ScenarioTimeout
+		if budget <= 0 {
+			budget = 30 * time.Second
+		}
+		derivedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
+		err := s.Scenarios.Refresh(derivedCtx, run, cacheTeams, cacheGames)
+		cancel()
+		if err != nil {
+			run.ScenarioError = err.Error()
+		}
 	}
-	xg, err := xgClient.GameXGoals(ctx, asa.XGoalsFilters{SeasonName: options.Season, StageName: options.Stage})
-	if err != nil {
-		return s.xgWarning(ctx, xgCache, options, startedAt, run, fmt.Errorf("fetch game xG: %w", err)), nil
-	}
-	values, err := mapXGoals(xg)
-	if err != nil {
-		return s.xgWarning(ctx, xgCache, options, startedAt, run, err), nil
-	}
-	xgRun, err := xgCache.ReplaceGameXG(ctx, options.Season, options.Stage, cacheGames, values, startedAt)
-	if err != nil {
-		return s.xgWarning(ctx, xgCache, options, startedAt, run, err), nil
-	}
-	run.XGRun = &xgRun
 	return run, nil
 }
 

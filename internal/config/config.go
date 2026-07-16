@@ -22,6 +22,7 @@ const (
 	defaultSyncMinAttemptInterval = 30 * time.Minute
 	defaultSyncTimeout            = 20 * time.Second
 	defaultQualificationBudget    = 5 * time.Second
+	defaultScenarioBudget         = 30 * time.Second
 )
 
 // Config holds values that vary between local development and deployment.
@@ -37,6 +38,7 @@ type Config struct {
 	SyncMinAttemptInterval time.Duration
 	SyncTimeout            time.Duration
 	QualificationBudget    time.Duration
+	ScenarioBudget         time.Duration
 }
 
 // FromEnvironment reads configuration, applying local-development defaults.
@@ -62,6 +64,10 @@ func FromEnvironment() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	scenarioBudget, err := durationFromEnvironment("NWSL_SCENARIO_BUDGET", defaultScenarioBudget)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		HTTPAddr: httpAddrFromEnvironment(),
@@ -75,6 +81,7 @@ func FromEnvironment() (Config, error) {
 		SyncMinAttemptInterval: minimumAttemptInterval,
 		SyncTimeout:            timeout,
 		QualificationBudget:    qualificationBudget,
+		ScenarioBudget:         scenarioBudget,
 	}, nil
 }
 
