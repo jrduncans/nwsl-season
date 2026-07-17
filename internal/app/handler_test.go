@@ -167,7 +167,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast Lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", ">Ahead</th>", "Harder"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast Lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", ">SD</th>", "Harder"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -182,7 +182,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	if !strings.Contains(body[footerStart:], `Data last fetched on <time datetime="2026-07-09T20:00:00Z" data-local-time="2026-07-09T20:00:00Z">Jul 9, 2026 at 8:00 PM UTC</time>.`) {
 		t.Fatal("site footer does not render the data fetch time with a browser-local timestamp")
 	}
-	if strings.Contains(response.Body.String(), "Remaining schedule difficulty") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
+	if strings.Contains(response.Body.String(), "<h1>Remaining schedule difficulty</h1>") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
 		t.Fatal("main season page still renders the prominent schedule-difficulty summary")
 	}
 	for _, text := range []string{`data-standings-mode="per-game"`, ">Per game</button>", ">Totals</button>", `title="Goals for / against">+/-</th>`, `data-total="2/1" data-per-game="2.00/1.00"`, "Incomplete xG data:"} {
@@ -333,10 +333,10 @@ func TestSeasonKeepsScheduleIndicatorWhenScheduleIsComplete(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), ">Ahead</th>") || !strings.Contains(response.Body.String(), `aria-label="Schedule ahead unavailable"`) {
+	if !strings.Contains(response.Body.String(), `title="Remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
 		t.Fatal("complete schedule did not render unavailable schedule indicators")
 	}
-	if strings.Contains(response.Body.String(), "Remaining schedule difficulty") {
+	if strings.Contains(response.Body.String(), "<h1>Remaining schedule difficulty</h1>") {
 		t.Fatal("main season page rendered schedule-difficulty detail")
 	}
 }

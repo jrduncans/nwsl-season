@@ -22,7 +22,7 @@ Use plain, consistent labels:
 
 - **Schedule difficulty** for compact navigation.
 - **Remaining schedule difficulty** for the full heading.
-- **Ahead** for the compact standings column; use **Schedule ahead** in the
+- **SD** for the compact standings column; use **Schedule difficulty** in the
   accessible explanation and supporting copy.
 - **Toughest remaining schedule** and **Easiest remaining schedule** for summary
   callouts.
@@ -39,7 +39,7 @@ is on the dedicated detail page.
 
 The implemented overview provides:
 
-- A short `Ahead` standings column with a baseline-centered marker for each
+- A short `SD` standings column with a baseline-centered marker for each
   available team. Marker position shows easier/harder direction; color,
   opacity, and marker size supplement the relative magnitude.
 - A hover title and keyboard/click disclosure with the exact baseline delta,
