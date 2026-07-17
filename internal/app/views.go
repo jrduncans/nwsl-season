@@ -170,14 +170,15 @@ type fixtureGroupView struct {
 }
 
 type fixtureView struct {
-	ID        string
-	Kickoff   string
-	HomeTeam  teamNameView
-	AwayTeam  teamNameView
-	Score     string
-	Completed bool
-	Remaining bool
-	Status    string
+	ID         string
+	Kickoff    string
+	KickoffUTC string
+	HomeTeam   teamNameView
+	AwayTeam   teamNameView
+	Score      string
+	Completed  bool
+	Remaining  bool
+	Status     string
 }
 
 type teamNameView struct {
@@ -195,11 +196,17 @@ type errorPage struct {
 }
 type clinchingPage struct {
 	seasonPage
-	State         string
-	Slate         scenarios.Slate
-	SlateFixtures []string
-	Actionable    []clinchingRowView
-	Other         []clinchingRowView
+	State            string
+	Slate            scenarios.Slate
+	SlateStartsAtUTC string
+	SlateStartsAt    string
+	SlateLatestUTC   string
+	SlateLatest      string
+	SlateCutoffUTC   string
+	SlateCutoff      string
+	SlateGroups      []fixtureGroupView
+	Actionable       []clinchingRowView
+	Other            []clinchingRowView
 }
 type clinchingRowView struct {
 	Team, Achievement, State, Limitation string
@@ -416,7 +423,7 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 			groups = append(groups, fixtureGroupView{Label: label})
 		}
 		view := fixtureView{
-			ID: game.ASAID, Kickoff: localKickoff.Format("Mon Jan 2, 3:04 PM MST"),
+			ID: game.ASAID, Kickoff: localKickoff.Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),
 			HomeTeam: teams[game.HomeTeamID], AwayTeam: teams[game.AwayTeamID],
 			Completed: game.Status == standings.CompletedStatus,
 			Remaining: game.Status == remainingStatus,

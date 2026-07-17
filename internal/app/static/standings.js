@@ -29,14 +29,17 @@ document.addEventListener("click", (event) => {
 function formatLocalTime(utc) {
   const date = new Date(utc);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, {
+  const datePart = new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
   }).format(date);
+  return `${datePart} at ${timePart}`;
 }
 
 function localizeTimes() {

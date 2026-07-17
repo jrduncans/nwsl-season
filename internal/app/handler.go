@@ -81,7 +81,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.Title = page.Season + " clinching scenarios"
-	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, Other: []clinchingRowView{}, SlateFixtures: []string{}}
+	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, Other: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
 	})
@@ -106,6 +106,12 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view.Slate = snapshot.Run.Slate
+	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
+	view.SlateStartsAt = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
+	view.SlateLatestUTC = snapshot.Run.Slate.LatestKickoffUTC.UTC().Format(time.RFC3339)
+	view.SlateLatest = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
+	view.SlateCutoffUTC = snapshot.Run.Slate.CutoffUTC.UTC().Format(time.RFC3339)
+	view.SlateCutoff = snapshot.Run.Slate.CutoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
 	teams := map[string]string{}
 	for _, t := range data.Teams {
 		teams[t.ID] = standings.DisplayName(t)
@@ -129,11 +135,18 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	slateIDs := map[string]bool{}
 	for _, id := range snapshot.Run.Slate.FixtureIDs {
-		if game, ok := games[id]; ok {
-			view.SlateFixtures = append(view.SlateFixtures, fixtureLabel(game, teams, a.options.Location))
+		slateIDs[id] = true
+	}
+	slateData := data
+	slateData.Games = make([]cache.Game, 0, len(snapshot.Run.Slate.FixtureIDs))
+	for _, game := range data.Games {
+		if slateIDs[game.ASAID] {
+			slateData.Games = append(slateData.Games, game)
 		}
 	}
+	view.SlateGroups = fixtureGroups(slateData, a.options.Location)
 	for _, v := range snapshot.Results {
 		row := clinchingRowView{Team: teams[v.TeamID], Achievement: labelAchievement(v.Achievement), State: string(v.State), Limitation: v.Limitation, Already: v.AlreadyClinched, CanClinch: v.CanClinch, Clauses: []string{}, Necessary: []string{}}
 		for _, c := range v.Clauses {

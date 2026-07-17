@@ -1,13 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
-	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 )
 
@@ -50,14 +47,6 @@ func conditionText(c scenarios.FixtureCondition, teams map[string]string, games 
 		return away + " beats " + home
 	}
 	return home + " draws with " + away
-}
-
-func fixtureLabel(game cache.Game, teams map[string]string, location *time.Location) string {
-	home, away := teams[game.HomeTeamID], teams[game.AwayTeamID]
-	if kickoff, err := fixtures.ParseKickoff(game.KickoffUTC); err == nil {
-		return fmt.Sprintf("%s — %s vs %s", kickoff.In(location).Format("Mon Jan 2, 3:04 PM MST"), home, away)
-	}
-	return home + " vs " + away
 }
 
 func noHelpText(path clinching.NoHelpPath, games map[string]cache.Game, teams map[string]string) string {
