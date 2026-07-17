@@ -12,6 +12,7 @@ import (
 
 type xgPage struct {
 	Title, Season, HomePath, StylesheetPath, ScriptPath, SeasonPath, ScheduleDifficultyPath string
+	Navigation                                                                              []navigationItem
 	Rows                                                                                    []xgRowView
 	Available, Completed                                                                    int
 	Freshness, FreshnessFallback, XGFreshness, XGFreshnessFallback                          string
@@ -25,7 +26,7 @@ type xgRowView struct {
 }
 
 func xgPageFrom(data cache.SeasonData, season, from string, location *time.Location) xgPage {
-	p := xgPage{Title: "Expected goals · " + season + " NWSL season", Season: season, HomePath: relativeURL(from, "/"), StylesheetPath: relativeURL(from, "/static/site.css"), ScriptPath: relativeURL(from, "/static/standings.js"), SeasonPath: seasonURL(from, season), ScheduleDifficultyPath: relativeURL(from, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty")}
+	p := xgPage{Title: "Expected goals · " + season + " NWSL season", Season: season, HomePath: relativeURL(from, "/"), StylesheetPath: relativeURL(from, "/static/site.css"), ScriptPath: relativeURL(from, "/static/standings.js"), SeasonPath: seasonURL(from, season), ScheduleDifficultyPath: relativeURL(from, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"), Navigation: seasonNavigation(from, season, "/seasons/"+url.PathEscape(season)+"/xg")}
 	type total struct {
 		matches, missing int
 		forXG, against   float64

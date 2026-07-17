@@ -1,8 +1,6 @@
 {{define "schedule-difficulty"}}{{template "head" .}}
-<p><a href="{{.SeasonPath}}">← Back to {{.Season}} season</a></p>
 <div class="title-row">
   <div><p class="eyebrow">{{.Stage}}</p><h1>Remaining schedule difficulty</h1></div>
-  <div class="title-actions"><a href="{{.FixturesPath}}">Results and fixtures</a><a class="button" href="{{.ForecastPath}}">Forecast Lab</a></div>
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .Strength.HasCallouts}}

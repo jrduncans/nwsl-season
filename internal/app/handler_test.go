@@ -167,7 +167,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast Lab", "Results and fixtures", "Schedule difficulty", "Data last fetched at", ">Ahead</th>", "Harder"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast Lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", ">Ahead</th>", "Harder"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -176,10 +176,10 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	if footerStart < 0 {
 		t.Fatal("body does not contain the site footer")
 	}
-	if strings.Contains(body[:footerStart], "Data last fetched at") {
+	if strings.Contains(body[:footerStart], "Data last fetched on") {
 		t.Fatal("season page renders the data fetch time above the footer")
 	}
-	if !strings.Contains(body[footerStart:], `Data last fetched at <time datetime="2026-07-09T20:00:00Z" data-local-time="2026-07-09T20:00:00Z">Jul 9, 2026 at 8:00 PM UTC</time>.`) {
+	if !strings.Contains(body[footerStart:], `Data last fetched on <time datetime="2026-07-09T20:00:00Z" data-local-time="2026-07-09T20:00:00Z">Jul 9, 2026 at 8:00 PM UTC</time>.`) {
 		t.Fatal("site footer does not render the data fetch time with a browser-local timestamp")
 	}
 	if strings.Contains(response.Body.String(), "Remaining schedule difficulty") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
@@ -274,7 +274,7 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "Matchday 1", "Scheduled", `href="../2026"`, `href="forecast"`} {
+	for _, text := range []string{"Results and fixtures", "2–1", "Matchday 1", "Scheduled", `href="."`, `href="forecast"`} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -488,8 +488,42 @@ func TestForecastPreservesReverseProxyBasePath(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
-	if strings.Contains(response.Body.String(), `href="/`) || !strings.Contains(response.Body.String(), `href="../2026"`) {
+	if strings.Contains(response.Body.String(), `href="/`) || !strings.Contains(response.Body.String(), `href="."`) {
 		t.Fatalf("forecast page does not preserve relative base-path links: %s", response.Body.String())
+	}
+}
+
+func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
+	paths := []struct {
+		path, current string
+	}{
+		{"/seasons/2026", "Standings"},
+		{"/seasons/2026/fixtures", "Results &amp; fixtures"},
+		{"/seasons/2026/schedule-difficulty", "Schedule difficulty"},
+		{"/seasons/2026/xg", "Expected goals"},
+		{"/seasons/2026/clinching", "Clinching scenarios"},
+		{"/seasons/2026/forecast", "Forecast Lab"},
+	}
+	for _, test := range paths {
+		t.Run(test.current, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+			}
+			body := response.Body.String()
+			if !strings.Contains(body, `<nav class="site-nav" aria-label="Season sections">`) {
+				t.Fatal("page does not render the shared season navigation")
+			}
+			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Expected goals", "Clinching scenarios", "Forecast Lab"} {
+				if !strings.Contains(body, ">"+label+"</a>") {
+					t.Errorf("navigation does not contain %q", label)
+				}
+			}
+			if !strings.Contains(body, `aria-current="page">`+test.current+"</a>") {
+				t.Errorf("navigation does not mark %q as current", test.current)
+			}
+		})
 	}
 }
 

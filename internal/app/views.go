@@ -29,10 +29,7 @@ type seasonPage struct {
 	XGPath                 string
 	ClinchingPath          string
 	CurrentPath            string
-	OutlookPath            string
-	Outlook                bool
-	OutlookModel           string
-	OutlookRows            []forecastRowView
+	Navigation             []navigationItem
 	Freshness              string
 	FreshnessFallback      string
 	ScheduleNote           string
@@ -40,6 +37,34 @@ type seasonPage struct {
 	Strength               strengthView
 	FixtureGroups          []fixtureGroupView
 	Remaining              int
+}
+
+type navigationItem struct {
+	Label   string
+	Path    string
+	Current bool
+}
+
+func seasonNavigation(from, season, current string) []navigationItem {
+	base := "/seasons/" + url.PathEscape(season)
+	items := []struct {
+		label string
+		path  string
+	}{
+		{"Standings", base},
+		{"Results & fixtures", base + "/fixtures"},
+		{"Schedule difficulty", base + "/schedule-difficulty"},
+		{"Expected goals", base + "/xg"},
+		{"Clinching scenarios", base + "/clinching"},
+		{"Forecast Lab", base + "/forecast"},
+	}
+	navigation := make([]navigationItem, 0, len(items))
+	for _, item := range items {
+		navigation = append(navigation, navigationItem{
+			Label: item.label, Path: relativeURL(from, item.path), Current: current == item.path,
+		})
+	}
+	return navigation
 }
 
 type strengthView struct {
@@ -166,6 +191,7 @@ type errorPage struct {
 	HomePath       string
 	StylesheetPath string
 	ScriptPath     string
+	Navigation     []navigationItem
 }
 type clinchingPage struct {
 	seasonPage

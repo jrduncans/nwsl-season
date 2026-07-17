@@ -113,6 +113,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		Title: "Forecast Lab · " + season + " NWSL season", Season: season,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 		SeasonPath: seasonURL(r.URL.Path, season), ForecastPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
+		Navigation:    seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+"/forecast"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,

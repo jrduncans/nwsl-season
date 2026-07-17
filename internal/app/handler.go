@@ -19,9 +19,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
-	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
-	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
 )
@@ -234,7 +232,7 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
 	view := r.URL.Query().Get("view")
-	if view != "" && view != "outlook" {
+	if view != "" {
 		a.renderScenarioBadRequest(w, r, "Invalid season view", fmt.Errorf("unsupported season view %q", view))
 		return
 	}
@@ -242,25 +240,6 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.renderError(w, r, err)
 		return
-	}
-	if view == "outlook" {
-		data, err := a.store.Season(r.Context(), page.Season, a.options.Stage)
-		if err != nil {
-			a.renderError(w, r, err)
-			return
-		}
-		entry := forecast.Default()
-		result, err := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: forecastXGoals(data), Model: entry.Model, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)})
-		if err != nil {
-			if r.Context().Err() != nil {
-				return
-			}
-			a.renderError(w, r, err)
-			return
-		}
-		page.Outlook = true
-		page.OutlookModel = result.Model.Name
-		page.OutlookRows = forecastRows(result)
 	}
 	a.render(w, "season", page)
 }
@@ -333,11 +312,11 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		XGPath:                 relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/xg"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),
-		OutlookPath:            seasonURL(r.URL.Path, season) + "?view=outlook",
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
 	}
+	page.Navigation = seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)))
 	for _, game := range data.Games {
 		if game.Status == remainingStatus {
 			page.Remaining++

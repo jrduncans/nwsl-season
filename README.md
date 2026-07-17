@@ -23,8 +23,8 @@ from fixtures, including raw payloads, availability markers, and independent
 refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
 pace, Results Poisson, and xG Poisson presets; it defaults to the catalog’s
 provisional default, preserves fixed outcomes while models change,
-and can compare two models side by side. `/seasons/2026?view=outlook` shows the
-default forecast without changing official standings, while
+and can compare two models side by side. The season standings page remains
+official-results-only, while
 `/seasons/2026/xg` is descriptive xG analysis—not a table or power rating.
 Normal page requests never contact ASA.
 

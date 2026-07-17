@@ -19,6 +19,7 @@ type forecastPage struct {
 	StylesheetPath    string
 	ScriptPath        string
 	SeasonPath        string
+	Navigation        []navigationItem
 	ForecastPath      string
 	CanonicalPath     string
 	ResetPath         string
