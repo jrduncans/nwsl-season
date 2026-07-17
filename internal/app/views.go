@@ -26,13 +26,13 @@ type seasonPage struct {
 	FixturesPath           string
 	ScheduleDifficultyPath string
 	ForecastPath           string
-	XGPath                 string
 	ClinchingPath          string
 	CurrentPath            string
 	Navigation             []navigationItem
 	Freshness              string
 	FreshnessFallback      string
 	ScheduleNote           string
+	XGWarning              string
 	Standings              []tableRowView
 	Strength               strengthView
 	FixtureGroups          []fixtureGroupView
@@ -54,7 +54,6 @@ func seasonNavigation(from, season, current string) []navigationItem {
 		{"Standings", base},
 		{"Results & fixtures", base + "/fixtures"},
 		{"Schedule difficulty", base + "/schedule-difficulty"},
-		{"Expected goals", base + "/xg"},
 		{"Clinching scenarios", base + "/clinching"},
 		{"Forecast Lab", base + "/forecast"},
 	}
@@ -134,6 +133,10 @@ type tableRowView struct {
 	GoalsForPerGame       string
 	GoalsAgainstPerGame   string
 	GoalDifferencePerGame string
+	XGForAgainst          string
+	XGForAgainstPerGame   string
+	XGDifference          string
+	XGDifferencePerGame   string
 	PlayoffLine           bool
 	TotalPosition         int
 	TotalPlayoffLine      bool
@@ -239,6 +242,61 @@ func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {
 		})
 	}
 	return rows
+}
+
+// addXGValues adds team-model xG only for completed fixtures. A partial xG
+// refresh must never make an incomplete total look like a complete one.
+func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, int, int) {
+	type total struct {
+		matches      int
+		goalsFor     float64
+		goalsAgainst float64
+	}
+
+	completed := make(map[string]cache.Game)
+	for _, game := range data.Games {
+		if game.Status == fixtures.CompletedStatus {
+			completed[game.ASAID] = game
+		}
+	}
+	totals := make(map[string]*total, len(data.Teams))
+	for _, team := range data.Teams {
+		totals[team.ID] = &total{}
+	}
+	available := 0
+	seen := make(map[string]bool)
+	for _, xg := range data.XGoals {
+		game, completedGame := completed[xg.GameID]
+		if !completedGame || seen[xg.GameID] || xg.Availability != cache.XGAvailable || !xg.HomeXG.Valid || !xg.AwayXG.Valid {
+			continue
+		}
+		home, away := totals[game.HomeTeamID], totals[game.AwayTeamID]
+		if home == nil || away == nil {
+			continue
+		}
+		seen[xg.GameID] = true
+		available++
+		home.matches++
+		home.goalsFor += xg.HomeXG.Float64
+		home.goalsAgainst += xg.AwayXG.Float64
+		away.matches++
+		away.goalsFor += xg.AwayXG.Float64
+		away.goalsAgainst += xg.HomeXG.Float64
+	}
+	for index := range rows {
+		value := totals[rows[index].TeamID]
+		if value == nil || value.matches == 0 {
+			rows[index].XGForAgainst, rows[index].XGForAgainstPerGame = "—", "—"
+			rows[index].XGDifference, rows[index].XGDifferencePerGame = "—", "—"
+			continue
+		}
+		difference := value.goalsFor - value.goalsAgainst
+		rows[index].XGForAgainst = fmt.Sprintf("%.2f/%.2f", value.goalsFor, value.goalsAgainst)
+		rows[index].XGForAgainstPerGame = fmt.Sprintf("%.2f/%.2f", value.goalsFor/float64(value.matches), value.goalsAgainst/float64(value.matches))
+		rows[index].XGDifference = signedFloatText(difference)
+		rows[index].XGDifferencePerGame = signedFloatText(difference / float64(value.matches))
+	}
+	return rows, available, len(completed)
 }
 
 func strengthViewFrom(result strength.Result) strengthView {

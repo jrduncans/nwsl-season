@@ -185,7 +185,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	if strings.Contains(response.Body.String(), "Remaining schedule difficulty") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
 		t.Fatal("main season page still renders the prominent schedule-difficulty summary")
 	}
-	for _, text := range []string{`data-standings-mode="per-game"`, ">Per game</button>", ">Totals</button>", "<th>GF</th>", `data-total="2" data-per-game="2.00"`} {
+	for _, text := range []string{`data-standings-mode="per-game"`, ">Per game</button>", ">Totals</button>", `title="Goals for / against">+/-</th>`, `data-total="2/1" data-per-game="2.00/1.00"`, "Incomplete xG data:"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain default per-game standings control %q", text)
 		}
@@ -225,6 +225,30 @@ func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	}
 }
 
+func TestSeasonRendersXGInStandingsWithoutCoverageWarning(t *testing.T) {
+	data := testSeasonData()
+	data.XGoals = []cache.GameXG{{
+		GameID: "completed", Availability: cache.XGAvailable,
+		HomeXG: sql.NullFloat64{Float64: 2.36, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.11, Valid: true},
+	}}
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	body := response.Body.String()
+	for _, value := range []string{`data-total="2.36/1.11" data-per-game="2.36/1.11"`, `data-total="&#43;1.25" data-per-game="&#43;1.25"`} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain xG value %q", value)
+		}
+	}
+	if strings.Contains(body, "Incomplete xG data:") {
+		t.Fatal("season page warns about xG coverage when every completed match has xG")
+	}
+}
+
 func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
@@ -252,16 +276,11 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	}
 }
 
-func TestXGPageShowsIndependentFreshness(t *testing.T) {
-	data := testSeasonData()
-	data.XGStatus.LastSuccess = &cache.XGSyncRun{FinishedAt: time.Date(2026, 7, 10, 18, 0, 0, 0, time.UTC)}
+func TestRemovedXGRouteReturnsNotFound(t *testing.T) {
 	response := httptest.NewRecorder()
-	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/xg", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", response.Code)
-	}
-	if !strings.Contains(response.Body.String(), "xG last fetched at") || !strings.Contains(response.Body.String(), "Jul 10, 2026 at 6:00 PM UTC") {
-		t.Fatalf("xG page does not display independent freshness: %s", response.Body.String())
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/xg", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.Code)
 	}
 }
 
@@ -500,7 +519,6 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 		{"/seasons/2026", "Standings"},
 		{"/seasons/2026/fixtures", "Results &amp; fixtures"},
 		{"/seasons/2026/schedule-difficulty", "Schedule difficulty"},
-		{"/seasons/2026/xg", "Expected goals"},
 		{"/seasons/2026/clinching", "Clinching scenarios"},
 		{"/seasons/2026/forecast", "Forecast Lab"},
 	}
@@ -515,7 +533,7 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 			if !strings.Contains(body, `<nav class="site-nav" aria-label="Season sections">`) {
 				t.Fatal("page does not render the shared season navigation")
 			}
-			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Expected goals", "Clinching scenarios", "Forecast Lab"} {
+			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast Lab"} {
 				if !strings.Contains(body, ">"+label+"</a>") {
 					t.Errorf("navigation does not contain %q", label)
 				}

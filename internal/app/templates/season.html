@@ -3,6 +3,7 @@
   <div><p class="eyebrow">{{.Stage}}</p><h1>{{.Season}} season</h1></div>
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
+{{if .XGWarning}}<p class="data-warning"><strong>Incomplete xG data:</strong> {{.XGWarning}}</p>{{end}}
 <section aria-label="Standings">
   {{template "currentTable" .Standings}}
 </section>

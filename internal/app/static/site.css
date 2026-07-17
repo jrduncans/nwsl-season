@@ -29,14 +29,14 @@ h2 { margin-top: 3rem; }
 .standings-display.is-switching [data-standings-value] { opacity: .35; transform: translateY(1px); }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 /* Keep the stat columns from being remeasured when the display switches modes. */
-.standings { min-width: 40rem; table-layout: fixed; }
+.standings { min-width: 52rem; table-layout: fixed; font-size: .875rem; }
 .standings :is(th, td):first-child { width: 4rem; }
 .standings :is(th, td):nth-child(2) { width: 28%; }
 .standings :is(th, td):last-child { width: 5.25rem; }
 .standings th:nth-child(2) .team-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .standings th:nth-child(2) .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 caption { padding: .75rem; text-align: left; font-weight: 800; }
-th, td { padding: .65rem .75rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th, td { padding: .55rem .6rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
 th:nth-child(2) { text-align: left; }
 .team-name { display: inline-flex; align-items: center; gap: .45rem; }
 .team-logo { width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; object-fit: contain; vertical-align: middle; }

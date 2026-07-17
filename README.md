@@ -24,9 +24,10 @@ refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
 pace, Results Poisson, and xG Poisson presets; it defaults to the catalog’s
 provisional default, preserves fixed outcomes while models change,
 and can compare two models side by side. The season standings page remains
-official-results-only, while
-`/seasons/2026/xg` is descriptive xG analysis—not a table or power rating.
-Normal page requests never contact ASA.
+the primary home for results and descriptive xG: goals for/against and xG
+for/against are compact paired columns, alongside their respective
+differences. If completed-match xG coverage is incomplete, the page displays
+a coverage warning. Normal page requests never contact ASA.
 
 ```sh
 go run ./cmd/server

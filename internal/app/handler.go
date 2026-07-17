@@ -65,7 +65,6 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 	mux.HandleFunc("GET /seasons/{season}", application.season)
 	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
 	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
-	mux.HandleFunc("GET /seasons/{season}/xg", application.xg)
 	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
 	mux.HandleFunc("GET /seasons/{season}/clinching", application.clinching)
 	mux.HandleFunc("GET /healthz", health)
@@ -257,20 +256,6 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 	a.render(w, "season", page)
 }
 
-func (a *application) xg(w http.ResponseWriter, r *http.Request) {
-	if a.store == nil {
-		a.renderError(w, r, fmt.Errorf("season cache unavailable"))
-		return
-	}
-	season := r.PathValue("season")
-	data, err := a.store.Season(r.Context(), season, a.options.Stage)
-	if err != nil {
-		a.renderError(w, r, err)
-		return
-	}
-	a.render(w, "xg", xgPageFrom(data, season, r.URL.Path, a.options.Location))
-}
-
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 	page, err := a.loadSeasonPage(r)
 	if err != nil {
@@ -311,6 +296,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	scheduleStrength := strength.Calculate(data.Teams, domainGames)
 	scheduleView := strengthViewFrom(scheduleStrength)
 	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(a.options.Rules)), scheduleView)
+	standingsView, xgAvailable, completedMatches := addXGValues(standingsView, data)
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
@@ -322,12 +308,14 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		Strength:               scheduleView,
 		FixtureGroups:          fixtureGroups(data, a.options.Location),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		XGPath:                 relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/xg"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
+	}
+	if completedMatches > 0 && xgAvailable < completedMatches {
+		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)
 	}
 	page.Navigation = seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)))
 	for _, game := range data.Games {
@@ -467,7 +455,7 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "seasons" && parts[1] != "" {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "xg" || parts[2] == "clinching") {
+	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "clinching") {
 		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false
