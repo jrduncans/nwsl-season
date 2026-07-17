@@ -5,7 +5,7 @@
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .Strength.HasCallouts}}
   <section class="schedule-summary" aria-labelledby="schedule-overview-title">
-    <div class="section-heading"><div><h2 id="schedule-overview-title">Schedule overview</h2><p class="note">Higher values indicate a harder remaining schedule. These estimates do not change the official standings.</p></div></div>
+    <div class="section-heading"><div><h2 id="schedule-overview-title">Schedule overview</h2></div></div>
     <div class="schedule-callouts">
       <article class="schedule-callout"><p class="eyebrow">Toughest remaining schedule</p><h3>{{template "teamName" .Strength.Toughest.Team}}</h3><p><strong>{{.Strength.Toughest.VenueAdjustedOpponentPPG}}</strong> adjusted opponent PPG <span class="schedule-delta">({{.Strength.Toughest.DeltaFromBaseline}} vs {{.Strength.Baseline}} baseline)</span></p><p class="note">{{.Strength.Toughest.RemainingFixtures}} remaining · {{.Strength.Toughest.RemainingHome}} home · {{.Strength.Toughest.RemainingAway}} away</p></article>
       <article class="schedule-callout"><p class="eyebrow">Easiest remaining schedule</p><h3>{{template "teamName" .Strength.Easiest.Team}}</h3><p><strong>{{.Strength.Easiest.VenueAdjustedOpponentPPG}}</strong> adjusted opponent PPG <span class="schedule-delta">({{.Strength.Easiest.DeltaFromBaseline}} vs {{.Strength.Baseline}} baseline)</span></p><p class="note">{{.Strength.Easiest.RemainingFixtures}} remaining · {{.Strength.Easiest.RemainingHome}} home · {{.Strength.Easiest.RemainingAway}} away</p></article>
@@ -16,9 +16,8 @@
 {{if eq .Strength.RemainingMatches 0}}
   <p class="note">No remaining regular-season fixtures are present in the cache.</p>
 {{else}}
-  <p class="note" id="schedule-definition">Higher values mean a harder remaining schedule. The recommended venue-adjusted opponent PPG averages each opponent’s current PPG and applies half of the observed league home-advantage gap for the fixture venue. This is an estimate, not a forecast, adjusted ranking, or power rating.</p>
-  <p class="note">The venue adjustment is derived from {{.Strength.CompletedMatches}} completed matches: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
-  <p class="note">The data cutoff is the cached season data identified by the cache refresh time in the footer; future results are not included.</p>
+  <p class="note" id="schedule-definition">Schedule difficulty is the average points per game (PPG) of a team’s remaining opponents, adjusted for where each match is played. For each fixture, we start with the opponent’s current PPG. Each remaining fixture is adjusted separately: in a home match, the opponent is playing away, so we subtract half the difference between the league’s average home and away PPG from the opponent’s value. In an away match, the opponent is playing at home, so we add half that difference. Higher values mean a harder remaining schedule.</p>
+  <p class="note">The adjustment uses {{.Strength.CompletedMatches}} completed matches: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
   {{if .Strength.HasBaseline}}
     <section aria-labelledby="adjusted-title">
       <div class="section-heading"><div><h2 id="adjusted-title">Venue-adjusted comparison</h2><p class="note">Sorted hardest to easiest. The vertical marker is the league baseline of {{.Strength.Baseline}} adjusted opponent PPG.</p></div></div>
@@ -32,7 +31,7 @@
 
     <section aria-labelledby="raw-title">
       <details class="comparison-disclosure"><summary id="raw-title">Compare raw opponent PPG</summary>
-        <p class="note">Raw opponent PPG does not adjust for fixture venue. Its available-row average is {{.Strength.RawBaseline}}; it is shown as a comparison, not a second recommended ranking.</p>
+        <p class="note">Raw opponent PPG does not adjust for fixture venue. Its available-row average is {{.Strength.RawBaseline}}; it is shown for comparison.</p>
         <div class="schedule-plot" aria-label="Raw opponent PPG comparison">
           <div class="schedule-axis"><span>Lower</span><span class="schedule-axis-baseline" style="left: {{.Strength.RawBaselinePosition}}%;">Raw average</span><span>Higher</span></div>
           {{range .Strength.Rows}}{{if .Available}}

@@ -355,6 +355,17 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 			t.Errorf("body does not contain %q", text)
 		}
 	}
+	body := response.Body.String()
+	for _, text := range []string{"average points per game (PPG) of a team’s remaining opponents", "Each remaining fixture is adjusted separately", "the opponent is playing away", "league’s average home and away PPG", "shown for comparison"} {
+		if !strings.Contains(body, text) {
+			t.Errorf("body does not contain schedule explanation %q", text)
+		}
+	}
+	for _, text := range []string{"These estimates do not change the official standings", "recommended venue-adjusted", "not a forecast, adjusted ranking, or power rating", "The data cutoff is"} {
+		if strings.Contains(body, text) {
+			t.Errorf("body still contains removed schedule wording %q", text)
+		}
+	}
 	if !strings.Contains(response.Body.String(), `class="comparison-disclosure"`) || !strings.Contains(response.Body.String(), `class="team-schedule-detail"`) {
 		t.Fatal("schedule detail does not use native disclosures")
 	}
