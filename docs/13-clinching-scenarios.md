@@ -858,7 +858,7 @@ Extend `syncer.Service` with a second post-refresh interface and warning:
 
 ```go
 type ScenarioRefresher interface {
-    Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
+    Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (bool, error)
 }
 
 type Service struct {

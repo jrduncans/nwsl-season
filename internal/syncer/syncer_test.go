@@ -80,6 +80,53 @@ func TestRunRefreshesXGBeforeDerivedCalculations(t *testing.T) {
 	}
 }
 
+func TestRecalculateUsesCachedFixturesWithoutCallingASA(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	if _, err := (Service{ASA: &client, Store: db}).Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+	lastSync, err := db.LastAttempt(ctx, "2024", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	order := []string{}
+	qualificationForced, scenariosForced := false, false
+	service := Service{
+		Store:         db,
+		Qualification: orderedRefresher{order: &order, label: "qualification", forced: &qualificationForced},
+		Scenarios:     orderedRefresher{order: &order, label: "scenarios", forced: &scenariosForced},
+	}
+	run, err := service.Recalculate(ctx, RecalculateOptions{Season: "2024", Stage: "Regular Season", Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"qualification", "scenarios"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("refresh order = %v, want %v", order, want)
+	}
+	if !run.QualificationRecalculated || !run.ScenarioRecalculated {
+		t.Fatalf("recalculation flags = qualification %t scenarios %t, want both true", run.QualificationRecalculated, run.ScenarioRecalculated)
+	}
+	if !qualificationForced || !scenariosForced {
+		t.Fatalf("force flags = qualification %t scenarios %t, want both true", qualificationForced, scenariosForced)
+	}
+	if client.teamsCalls != 1 || client.gamesCalls != 1 {
+		t.Fatalf("ASA calls = teams %d games %d, want unchanged at 1 each", client.teamsCalls, client.gamesCalls)
+	}
+	after, err := db.LastAttempt(ctx, "2024", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after == nil || lastSync == nil || after.ID != lastSync.ID {
+		t.Fatalf("last sync changed from %+v to %+v", lastSync, after)
+	}
+}
+
 func TestRunSkipsRecentSuccessfulSync(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
@@ -305,13 +352,17 @@ func (f *traceASA) GameXGoals(context.Context, asa.XGoalsFilters) ([]asa.GameXGo
 }
 
 type orderedRefresher struct {
-	order *[]string
-	label string
+	order  *[]string
+	label  string
+	forced *bool
 }
 
-func (r orderedRefresher) Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error {
+func (r orderedRefresher) Refresh(_ context.Context, _ cache.SyncRun, _ []cache.Team, _ []cache.Game, force bool) (bool, error) {
 	*r.order = append(*r.order, r.label)
-	return nil
+	if r.forced != nil {
+		*r.forced = force
+	}
+	return true, nil
 }
 
 func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {

@@ -42,36 +42,36 @@ type Progress struct {
 	NoHelpState  clinching.NoHelpState
 }
 
-func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game) error {
+func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (bool, error) {
 	if r.Store == nil {
-		return fmt.Errorf("qualification store is required")
+		return false, fmt.Errorf("qualification store is required")
 	}
 	if err := r.Rules.Validate(); err != nil {
-		return err
+		return false, err
 	}
 	if syncRun.FixtureSnapshotID == "" {
-		return fmt.Errorf("fixture snapshot ID is required")
+		return false, fmt.Errorf("fixture snapshot ID is required")
 	}
 	if r.Budget <= 0 {
 		r.Budget = 5 * time.Second
 	}
 	if snapshot, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version); err != nil {
-		return err
-	} else if ok && !shouldRetryKickoffOrder(snapshot, games) && !shouldRetryComputeBudget(snapshot) {
-		return nil
+		return false, err
+	} else if ok && !force && !shouldRetryKickoffOrder(snapshot, games) && !shouldRetryComputeBudget(snapshot) {
+		return false, nil
 	}
 	run := cache.QualificationRun{FixtureSnapshotID: syncRun.FixtureSnapshotID, SourceSyncRunID: syncRun.ID, Season: syncRun.Season, Stage: syncRun.Stage, RulesVersion: r.Rules.Version, StartedAt: time.Now().UTC(), ExpectedStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games)
 	if err != nil {
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
-		return err
+		return true, err
 	}
 	_, err = r.Store.ReplaceQualification(context.Background(), run, values)
 	if err != nil {
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
-		return err
+		return true, err
 	}
-	return nil
+	return true, nil
 }
 
 // Older batches could be marked complete after the refresher rejected ASA's
@@ -97,7 +97,8 @@ func shouldRetryKickoffOrder(snapshot cache.QualificationSnapshot, games []cache
 // current qualification baseline.
 func shouldRetryComputeBudget(snapshot cache.QualificationSnapshot) bool {
 	for _, status := range snapshot.Statuses {
-		if status.Method == clinching.ProofComputeBudget {
+		if status.Method == clinching.ProofComputeBudget ||
+			(status.NoHelp.State == clinching.NoHelpUnresolved && status.NoHelp.Reason == "calculation budget exhausted") {
 			return true
 		}
 	}

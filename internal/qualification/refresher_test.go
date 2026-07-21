@@ -21,3 +21,24 @@ func TestShouldRetryLegacyKickoffOrderBatch(t *testing.T) {
 		t.Fatal("achievement metadata should not affect retry detection")
 	}
 }
+
+func TestShouldRetryComputeBudgetBatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   cache.QualificationStatus
+		expected bool
+	}{
+		{name: "status proof exhausted", status: cache.QualificationStatus{Method: clinching.ProofComputeBudget}, expected: true},
+		{name: "no-help proof exhausted", status: cache.QualificationStatus{Method: clinching.ProofCheapBound, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpUnresolved, Reason: "calculation budget exhausted"}}, expected: true},
+		{name: "other no-help limitation", status: cache.QualificationStatus{Method: clinching.ProofCheapBound, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpUnresolved, Reason: "missing tiebreak data"}}, expected: false},
+		{name: "completed no-help proof", status: cache.QualificationStatus{Method: clinching.ProofCheapBound, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed}}, expected: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := shouldRetryComputeBudget(cache.QualificationSnapshot{Statuses: []cache.QualificationStatus{test.status}})
+			if got != test.expected {
+				t.Fatalf("shouldRetryComputeBudget() = %t, want %t", got, test.expected)
+			}
+		})
+	}
+}

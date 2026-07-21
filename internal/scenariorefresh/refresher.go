@@ -41,40 +41,40 @@ type Progress struct {
 	State        scenarios.OpportunityState
 }
 
-func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game) error {
+func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (bool, error) {
 	if r.Store == nil {
-		return fmt.Errorf("scenario store is required")
+		return false, fmt.Errorf("scenario store is required")
 	}
 	if err := r.Rules.Validate(); err != nil {
-		return err
+		return false, err
 	}
 	if sync.FixtureSnapshotID == "" {
-		return fmt.Errorf("fixture snapshot ID is required")
+		return false, fmt.Errorf("fixture snapshot ID is required")
 	}
 	if snapshot, ok, err := r.Store.ScenarioForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version, scenarios.DefinitionVersion); err != nil {
-		return err
-	} else if ok && !shouldRetryComputeBudget(snapshot) {
-		return nil
+		return false, err
+	} else if ok && !force && !shouldRetryComputeBudget(snapshot) {
+		return false, nil
 	}
 	q, ok, err := r.Store.QualificationForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !ok {
-		return fmt.Errorf("matching qualification batch is required")
+		return false, fmt.Errorf("matching qualification batch is required")
 	}
 	run := cache.ScenarioRun{FixtureSnapshotID: sync.FixtureSnapshotID, QualificationRunID: q.Run.ID, SourceSyncRunID: sync.ID, Season: sync.Season, Stage: sync.Stage, RulesVersion: r.Rules.Version, DefinitionVersion: scenarios.DefinitionVersion, StartedAt: time.Now().UTC(), ExpectedResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games, q)
 	if err != nil {
 		_ = r.Store.RecordScenarioFailure(context.Background(), run, err)
-		return err
+		return true, err
 	}
 	run.Slate = values.slate
 	_, err = r.Store.ReplaceScenario(context.Background(), run, values.rows)
 	if err != nil {
 		_ = r.Store.RecordScenarioFailure(context.Background(), run, err)
 	}
-	return err
+	return true, err
 }
 
 // A timeout is a transient computational limitation, not a mathematical

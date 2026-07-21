@@ -209,13 +209,14 @@ type clinchingPage struct {
 	SlateCutoff      string
 	SlateGroups      []fixtureGroupView
 	Actionable       []clinchingRowView
-	Other            []clinchingRowView
+	NoHelp           []clinchingRowView
 }
 type clinchingRowView struct {
-	Team, Achievement, State, Limitation string
-	Already, CanClinch                   bool
-	Clauses, Necessary                   []string
-	NoHelp                               string
+	Team, Achievement, Limitation string
+	Clauses, Necessary            []string
+	NoHelp                        string
+	NoHelpFixtures                string
+	NoHelpFixtureCount            int
 }
 
 func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {

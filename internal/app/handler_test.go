@@ -253,11 +253,17 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	store := fullFakeStore{
-		fakeStore:     fakeStore{season: data},
-		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}}}},
+		fakeStore: fakeStore{season: data},
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
+			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpUnresolved, Reason: "calculation budget exhausted"}},
+		}},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
 			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}}}}},
+			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityAlreadyClinched, AlreadyClinched: true}},
 			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch}},
+			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"}},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -266,13 +272,74 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Current opportunities", "All qualification statuses", "Alpha &amp; Co", "Can guarantee this without help"} {
+	for _, value := range []string{"Included slate", "Possible clinching scenarios", "Paths without outside help", "can clinch the playoffs", "With Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; beats Bravo FC.", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
 	}
-	if strings.Index(body, "Current opportunities") > strings.Index(body, "All qualification statuses") {
-		t.Fatal("non-actionable statuses appear before opportunities")
+	for _, value := range []string{"Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield"} {
+		if strings.Contains(body, value) {
+			t.Errorf("body contains removed or internal text %q", value)
+		}
+	}
+}
+
+func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	store := fullFakeStore{
+		fakeStore: fakeStore{season: data},
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
+		}},
+		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
+			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch}},
+		}},
+	}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/clinching", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, value := range []string{"Paths without outside help", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+	if strings.Contains(body, "Included slate") {
+		t.Error("body contains an irrelevant included slate")
+	}
+}
+
+func TestNoHelpTextUsesWinCountAndHidesUnresolvedReason(t *testing.T) {
+	got := noHelpText(clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: make([]string, 13)}, "San Diego Wave FC", "the playoffs")
+	if got != "San Diego Wave FC can clinch the playoffs with 13 wins." {
+		t.Fatalf("no-help text = %q", got)
+	}
+	if got := noHelpText(clinching.NoHelpPath{State: clinching.NoHelpUnresolved, Reason: "calculation budget exhausted"}, "San Diego Wave FC", "the playoffs"); got != "" {
+		t.Fatalf("unresolved no-help text = %q, want empty", got)
+	}
+}
+
+func TestNoHelpFixtureTextUsesVenueAndOpponent(t *testing.T) {
+	got := noHelpFixtureText(
+		clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"away", "home"}},
+		"target",
+		map[string]cache.Game{
+			"away": {ASAID: "away", HomeTeamID: "kc", AwayTeamID: "target"},
+			"home": {ASAID: "home", HomeTeamID: "target", AwayTeamID: "seattle"},
+		},
+		map[string]string{"kc": "Kansas City Current", "seattle": "Seattle Reign FC"},
+	)
+	if got != "at Kansas City Current and vs Seattle Reign FC" {
+		t.Fatalf("no-help fixture text = %q", got)
+	}
+}
+
+func TestJoinConditionsHandlesEmptyList(t *testing.T) {
+	if got := joinConditions(nil); got != "" {
+		t.Fatalf("joinConditions(nil) = %q, want empty string", got)
 	}
 }
 

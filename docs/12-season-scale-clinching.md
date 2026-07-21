@@ -670,7 +670,8 @@ and a total calculation budget.
 The refresher:
 
 1. Returns the existing complete batch immediately when snapshot ID and rules
-   version already exist.
+   version already exist, unless the operator forces recalculation or a status
+   or no-help result exhausted its calculation budget.
 2. Verifies exact team and fixture counts and the expected per-team fixture
    count. For an incomplete inventory, writes all expected team/achievement
    rows as `unresolved`/`ProofIncompleteSchedule`; it does not call the solver.
@@ -693,7 +694,7 @@ Add a post-fixture-refresh interface to `syncer.Service`, for example:
 
 ```go
 type QualificationRefresher interface {
-    Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
+    Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (bool, error)
 }
 ```
 

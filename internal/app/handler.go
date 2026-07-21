@@ -80,7 +80,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.Title = page.Season + " clinching scenarios"
-	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, Other: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
+	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
 	})
@@ -147,24 +147,41 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	}
 	view.SlateGroups = fixtureGroups(slateData, a.options.Location)
 	for _, v := range snapshot.Results {
-		row := clinchingRowView{Team: teams[v.TeamID], Achievement: labelAchievement(v.Achievement), State: string(v.State), Limitation: v.Limitation, Already: v.AlreadyClinched, CanClinch: v.CanClinch, Clauses: []string{}, Necessary: []string{}}
+		team := teams[v.TeamID]
+		achievement := achievementPhrase(v.Achievement)
+		noHelp := ""
+		noHelpGuaranteed := false
+		noHelpPath := clinching.NoHelpPath{}
+		if status, ok := qualification[v.TeamID+"\x00"+string(v.Achievement)]; ok {
+			noHelpPath = status.NoHelp
+			noHelp = noHelpText(status.NoHelp, team, achievement)
+			noHelpGuaranteed = status.NoHelp.State == clinching.NoHelpGuaranteed && len(status.NoHelp.FixtureIDs) > 0
+		}
+		if !v.CanClinch && !noHelpGuaranteed {
+			continue
+		}
+		row := clinchingRowView{Team: team, Achievement: achievement, NoHelp: noHelp, Clauses: []string{}, Necessary: []string{}}
+		if noHelpGuaranteed {
+			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teams)
+			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
+		}
 		for _, c := range v.Clauses {
 			row.Clauses = append(row.Clauses, clauseSentence(c, teams, games))
 		}
 		for _, n := range v.Necessary {
 			row.Necessary = append(row.Necessary, conditionText(n, teams, games))
 		}
-		if status, ok := qualification[v.TeamID+"\x00"+string(v.Achievement)]; ok {
-			row.NoHelp = noHelpText(status.NoHelp, games, teams)
+		if !v.CanClinch {
+			view.NoHelp = append(view.NoHelp, row)
+			continue
 		}
-		if row.Already || row.CanClinch {
-			view.Actionable = append(view.Actionable, row)
-		} else {
-			view.Other = append(view.Other, row)
+		if v.Limitation != "" {
+			row.Limitation = "Some additional clinching paths may not be shown."
 		}
+		view.Actionable = append(view.Actionable, row)
 	}
 	sort.Slice(view.Actionable, func(i, j int) bool { return clinchingRowLess(view.Actionable[i], view.Actionable[j]) })
-	sort.Slice(view.Other, func(i, j int) bool { return clinchingRowLess(view.Other[i], view.Other[j]) })
+	sort.Slice(view.NoHelp, func(i, j int) bool { return clinchingRowLess(view.NoHelp[i], view.NoHelp[j]) })
 	a.render(w, "clinching", view)
 }
 
@@ -373,6 +390,18 @@ func labelAchievement(a competition.AchievementID) string {
 		return "Playoffs"
 	}
 	return string(a)
+}
+
+func achievementPhrase(a competition.AchievementID) string {
+	switch a {
+	case competition.AchievementShield:
+		return "the Shield"
+	case competition.AchievementHomePlayoff:
+		return "a home playoff place"
+	case competition.AchievementPlayoffs:
+		return "the playoffs"
+	}
+	return "the " + strings.ToLower(string(a))
 }
 
 func standingsGames(games []cache.Game) []standings.Game {

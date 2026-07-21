@@ -71,11 +71,27 @@ Provide an explicit `-force` mode on `cmd/sync`:
 go run ./cmd/sync -season 2026 -force
 ```
 
-It bypasses only the scheduler/interval eligibility checks and performs the
-normal complete-season fetch and atomic replacement. It is intended for rare
-ASA corrections to old results, initial recovery, or diagnosis—not for routine
-operation. It must not delete the existing cache before a validated replacement
-is ready; a failed forced refresh leaves the last good snapshot intact.
+It bypasses the scheduler/interval eligibility checks, performs the normal
+complete-season fetch and atomic replacement, and rebuilds qualification and
+scenario batches even if complete batches already exist for the resulting
+snapshot. It is intended for rare ASA corrections, algorithm changes, initial
+recovery, or diagnosis—not for routine operation. It must not delete the
+existing cache before a validated replacement is ready; a failed forced refresh
+leaves the last good snapshot intact.
+
+Derived clinching data can also be recalculated without an ASA request or any
+mutation to synchronized fixture, team, xG, or sync-audit data:
+
+```sh
+NWSL_QUALIFICATION_BUDGET=10m \
+NWSL_SCENARIO_BUDGET=10m \
+go run ./cmd/sync -season 2026 -recalculate
+```
+
+The command retries status, no-help, and scenario results that exhausted their
+calculation budget. Add `-force` to ignore all completed derived-data batches.
+`NWSL_SYNC_TIMEOUT` applies only to upstream synchronization; the qualification
+and scenario passes use their own independently configured budgets.
 
 Do not add a public HTTP endpoint for force refresh. Operators run the command
 from the deployment environment, where access to the persistent database is

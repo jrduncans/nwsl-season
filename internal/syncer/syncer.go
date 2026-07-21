@@ -17,7 +17,10 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 )
 
-var runMu stdsync.Mutex
+var (
+	runMu         stdsync.Mutex
+	calculationMu stdsync.Mutex
+)
 
 const allGameStatuses = fixtures.AbandonedStatus + "," + fixtures.CompletedStatus + "," + fixtures.PreMatchStatus
 
@@ -44,6 +47,10 @@ type Store interface {
 	ReleaseSyncLease(context.Context, string, string) error
 }
 
+type calculationStore interface {
+	ClinchingInputs(context.Context, string, string) (cache.CalculationInputs, error)
+}
+
 // Service refreshes the persistent cache from ASA.
 type Service struct {
 	ASA                  ASAClient
@@ -58,10 +65,10 @@ type Service struct {
 // intentionally separate from Store so a qualification failure cannot relabel
 // a successful fixture refresh.
 type QualificationRefresher interface {
-	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
+	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (bool, error)
 }
 type ScenarioRefresher interface {
-	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game) error
+	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (bool, error)
 }
 
 // RunOptions configures one sync run.
@@ -70,6 +77,14 @@ type RunOptions struct {
 	Stage                  string
 	MinimumAttemptInterval time.Duration
 	Force                  bool
+}
+
+// RecalculateOptions selects one already-cached season and stage. It never
+// performs an ASA request or mutates synchronized source data.
+type RecalculateOptions struct {
+	Season string
+	Stage  string
+	Force  bool
 }
 
 // Run fetches one complete ASA season/stage and atomically stores it.
@@ -165,14 +180,45 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 			run.XGRun = &xgRun
 		}
 	}
+	return s.refreshCalculations(context.WithoutCancel(ctx), run, cacheTeams, cacheGames, options.Force), nil
+}
+
+// Recalculate reruns derived clinching calculations from the last successful
+// fixture snapshot without performing a data or xG sync.
+func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (cache.SyncRun, error) {
+	if s.Store == nil {
+		return cache.SyncRun{}, errors.New("sync store is required")
+	}
+	if strings.TrimSpace(options.Season) == "" {
+		return cache.SyncRun{}, errors.New("recalculation season is required")
+	}
+	if strings.TrimSpace(options.Stage) == "" {
+		return cache.SyncRun{}, errors.New("recalculation stage is required")
+	}
+	store, ok := s.Store.(calculationStore)
+	if !ok {
+		return cache.SyncRun{}, errors.New("sync store does not support cached clinching inputs")
+	}
+	inputs, err := store.ClinchingInputs(ctx, options.Season, options.Stage)
+	if err != nil {
+		return cache.SyncRun{}, fmt.Errorf("load cached clinching inputs: %w", err)
+	}
+	return s.refreshCalculations(ctx, inputs.SyncRun, inputs.Teams, inputs.Games, options.Force), nil
+}
+
+func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) cache.SyncRun {
+	calculationMu.Lock()
+	defer calculationMu.Unlock()
+
 	if s.Qualification != nil {
 		budget := s.QualificationTimeout
 		if budget <= 0 {
 			budget = 5 * time.Second
 		}
-		derivedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
-		err := s.Qualification.Refresh(derivedCtx, run, cacheTeams, cacheGames)
+		derivedCtx, cancel := context.WithTimeout(parent, budget)
+		recalculated, err := s.Qualification.Refresh(derivedCtx, run, teams, games, force)
 		cancel()
+		run.QualificationRecalculated = recalculated
 		if err != nil {
 			run.QualificationError = err.Error()
 		}
@@ -182,14 +228,15 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 		if budget <= 0 {
 			budget = 30 * time.Second
 		}
-		derivedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
-		err := s.Scenarios.Refresh(derivedCtx, run, cacheTeams, cacheGames)
+		derivedCtx, cancel := context.WithTimeout(parent, budget)
+		recalculated, err := s.Scenarios.Refresh(derivedCtx, run, teams, games, force)
 		cancel()
+		run.ScenarioRecalculated = recalculated
 		if err != nil {
 			run.ScenarioError = err.Error()
 		}
 	}
-	return run, nil
+	return run
 }
 
 func (s Service) xgWarning(ctx context.Context, store xgStore, options RunOptions, startedAt time.Time, run cache.SyncRun, cause error) cache.SyncRun {

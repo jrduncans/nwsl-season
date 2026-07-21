@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -14,11 +15,14 @@ func clauseSentence(c scenarios.Clause, teams map[string]string, games map[strin
 		parts = append(parts, conditionText(v, teams, games))
 	}
 	if len(parts) == 0 {
-		return "Clinches with any results in the included slate."
+		return "With any results in the included slate."
 	}
-	return "Clinches with " + joinConditions(parts) + "."
+	return "With " + joinConditions(parts) + "."
 }
 func joinConditions(v []string) string {
+	if len(v) == 0 {
+		return ""
+	}
 	if len(v) == 1 {
 		return v[0]
 	}
@@ -49,24 +53,38 @@ func conditionText(c scenarios.FixtureCondition, teams map[string]string, games 
 	return home + " draws with " + away
 }
 
-func noHelpText(path clinching.NoHelpPath, games map[string]cache.Game, teams map[string]string) string {
+func noHelpText(path clinching.NoHelpPath, team, achievement string) string {
 	switch path.State {
 	case clinching.NoHelpGuaranteed:
-		fixtures := make([]string, 0, len(path.FixtureIDs))
-		for _, id := range path.FixtureIDs {
-			if game, ok := games[id]; ok {
-				fixtures = append(fixtures, teams[game.HomeTeamID]+" vs "+teams[game.AwayTeamID])
-			}
+		wins := len(path.FixtureIDs)
+		if wins == 0 {
+			return ""
 		}
-		if len(fixtures) > 0 {
-			return "Can guarantee this without help by winning: " + joinConditions(fixtures) + "."
+		if wins == 1 {
+			return fmt.Sprintf("%s can clinch %s with a win.", team, achievement)
 		}
-		return "Can guarantee this without help by winning its next fixtures."
+		return fmt.Sprintf("%s can clinch %s with %d wins.", team, achievement, wins)
 	case clinching.NoHelpImpossible:
-		return "Cannot guarantee this without help. " + path.Reason
+		return "Requires results elsewhere."
 	case clinching.NoHelpUnresolved:
-		return "No-help path is unresolved. " + path.Reason
+		return ""
 	default:
 		return ""
 	}
+}
+
+func noHelpFixtureText(path clinching.NoHelpPath, teamID string, games map[string]cache.Game, teams map[string]string) string {
+	fixtures := make([]string, 0, len(path.FixtureIDs))
+	for _, id := range path.FixtureIDs {
+		game, ok := games[id]
+		if !ok {
+			continue
+		}
+		if game.HomeTeamID == teamID {
+			fixtures = append(fixtures, "vs "+teams[game.AwayTeamID])
+		} else if game.AwayTeamID == teamID {
+			fixtures = append(fixtures, "at "+teams[game.HomeTeamID])
+		}
+	}
+	return joinConditions(fixtures)
 }

@@ -77,12 +77,38 @@ go run ./cmd/sync -season 2026
 ```
 
 For an operator-led retry after an ASA correction or diagnosis, use `-force`.
-It bypasses only the interval; it still validates the full ASA response and
-preserves the last good snapshot if the replacement fails.
+It bypasses the data-sync interval and the qualification/scenario caches; it
+still validates the full ASA response and preserves the last good snapshot if
+the replacement fails.
 
 ```sh
 go run ./cmd/sync -season 2026 -force
 ```
+
+To recalculate qualification and clinching scenarios from the last successful
+fixture snapshot without contacting ASA or changing synchronized data, use
+`-recalculate`. The sync timeout does not apply; the two calculation budgets
+remain independent:
+
+```sh
+NWSL_QUALIFICATION_BUDGET=10m \
+NWSL_SCENARIO_BUDGET=10m \
+go run ./cmd/sync -season 2026 -recalculate
+```
+
+This retries calculations that previously exhausted either budget, including
+unresolved no-help paths. Add `-force` to rebuild every qualification and
+scenario result even when the current cached batches are complete:
+
+```sh
+NWSL_QUALIFICATION_BUDGET=10m \
+NWSL_SCENARIO_BUDGET=10m \
+go run ./cmd/sync -season 2026 -recalculate -force
+```
+
+After any calculation run, the command reports the number of qualification
+proofs, no-help paths, and scenario checks left unresolved because their shared
+calculation budget expired.
 
 To print standings from the local cache:
 

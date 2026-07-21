@@ -79,6 +79,10 @@ type SyncRun struct {
 	FixtureSnapshotID  string
 	QualificationError string
 	ScenarioError      string
+	// Recalculated flags are command-local outcomes and are not persisted in
+	// sync_runs. They make cache reuse visible to maintenance callers.
+	QualificationRecalculated bool
+	ScenarioRecalculated      bool
 	// XGRun/XGError describe the independent second refresh when available.
 	XGRun   *XGSyncRun
 	XGError string
@@ -138,6 +142,14 @@ type SeasonData struct {
 	XGoals            []GameXG
 	XGStatus          XGStatus
 	FixtureSnapshotID string
+}
+
+// CalculationInputs is the last successfully synced fixture snapshot in the
+// cache-native shape required by qualification and scenario refreshers.
+type CalculationInputs struct {
+	SyncRun SyncRun
+	Teams   []Team
+	Games   []Game
 }
 
 type QualificationRun struct {
@@ -647,6 +659,38 @@ func (c *DB) StandingsInputs(ctx context.Context, season, stage string) ([]stand
 		return nil, nil, err
 	}
 	return teams, games, nil
+}
+
+// ClinchingInputs loads a calculation snapshot without contacting ASA or
+// changing fixture, team, xG, or sync audit data.
+func (c *DB) ClinchingInputs(ctx context.Context, season, stage string) (CalculationInputs, error) {
+	lastSuccess, err := c.LastSuccess(ctx, season, stage)
+	if err != nil {
+		return CalculationInputs{}, err
+	}
+	if lastSuccess == nil {
+		return CalculationInputs{}, fmt.Errorf("no successful sync exists for %s %s", season, stage)
+	}
+	games, err := c.seasonGames(ctx, season, stage)
+	if err != nil {
+		return CalculationInputs{}, err
+	}
+	domainTeams, err := c.standingsTeams(ctx, season, stage)
+	if err != nil {
+		return CalculationInputs{}, err
+	}
+	teams := make([]Team, 0, len(domainTeams))
+	for _, team := range domainTeams {
+		teams = append(teams, Team{ASAID: team.ID, Name: team.Name, ShortName: team.ShortName, Abbreviation: team.Abbreviation})
+	}
+	snapshotID, err := FixtureSnapshotID(teams, games)
+	if err != nil {
+		return CalculationInputs{}, err
+	}
+	if snapshotID != lastSuccess.FixtureSnapshotID {
+		return CalculationInputs{}, fmt.Errorf("cached fixtures do not match the last successful sync snapshot")
+	}
+	return CalculationInputs{SyncRun: *lastSuccess, Teams: teams, Games: games}, nil
 }
 
 // Season loads the teams, fixtures, and freshness information for a season and
