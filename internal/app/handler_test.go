@@ -574,7 +574,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Seasons simulated", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Add assumption", "Update forecast", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Fixture data as of", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
+	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Model changes apply immediately", `data-forecast-model-form`, "Seasons simulated", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Add assumption", "Update forecast", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Fixture data as of", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -641,10 +641,13 @@ func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"Model comparison", "Current pace relative to Results Poisson", `class="forecast-comparison-table"`, "places better"} {
+	for _, text := range []string{"Model comparison", "Results Poisson vs Current pace", `class="forecast-comparison-table"`, "Read every result from <strong>Current pace</strong> to <strong>Results Poisson</strong>", "more points", "pp higher"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
+	}
+	if comparison, projection := strings.Index(body, `class="forecast-comparison"`), strings.Index(body, `class="forecast-results"`); comparison < 0 || projection < 0 || comparison > projection {
+		t.Fatalf("model comparison should be rendered before the primary projection: comparison=%d projection=%d", comparison, projection)
 	}
 	if strings.Contains(body, "Δ comparison − active") {
 		t.Fatal("forecast still renders the comparison inside the primary forecast table")

@@ -161,16 +161,21 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 		}
 		rows[i].Comparison = &metrics
 		source := active.Teams[i]
-		rows[i].ExpectedPointsDelta = signedOne(other.ExpectedPoints - source.ExpectedPoints)
-		rows[i].PlayoffDelta = signedOne((other.PlayoffProbability-source.PlayoffProbability)*100) + " pp"
-		finishDelta := other.ExpectedPosition - source.ExpectedPosition
+		// The selected model is the subject of the comparison: every label
+		// describes what it projects relative to the optional comparison model.
+		pointsDelta := source.ExpectedPoints - other.ExpectedPoints
+		playoffDelta := (source.PlayoffProbability - other.PlayoffProbability) * 100
+		shieldDelta := (source.ShieldProbability - other.ShieldProbability) * 100
+		rows[i].ExpectedPointsDelta = comparisonChangeLabel(pointsDelta, "more points", "fewer points")
+		rows[i].PlayoffDelta = comparisonChangeLabel(playoffDelta, "pp higher", "pp lower")
+		finishDelta := source.ExpectedPosition - other.ExpectedPosition
 		rows[i].FinishDelta = signedOne(finishDelta)
 		rows[i].FinishDeltaLabel = finishDeltaLabel(finishDelta)
-		rows[i].ShieldDelta = signedOne((other.ShieldProbability-source.ShieldProbability)*100) + " pp"
-		rows[i].PointsDeltaTone = comparisonTone(other.ExpectedPoints-source.ExpectedPoints, true)
-		rows[i].PlayoffDeltaTone = comparisonTone((other.PlayoffProbability-source.PlayoffProbability)*100, true)
+		rows[i].ShieldDelta = comparisonChangeLabel(shieldDelta, "pp higher", "pp lower")
+		rows[i].PointsDeltaTone = comparisonTone(pointsDelta, true)
+		rows[i].PlayoffDeltaTone = comparisonTone(playoffDelta, true)
 		rows[i].FinishDeltaTone = comparisonTone(finishDelta, false)
-		rows[i].ShieldDeltaTone = comparisonTone((other.ShieldProbability-source.ShieldProbability)*100, true)
+		rows[i].ShieldDeltaTone = comparisonTone(shieldDelta, true)
 	}
 	return rows
 }
@@ -179,6 +184,16 @@ func signedOne(value float64) string {
 		return "0.0"
 	}
 	return fmt.Sprintf("%+.1f", value)
+}
+
+func comparisonChangeLabel(value float64, positive, negative string) string {
+	if value > -.05 && value < .05 {
+		return "No material change"
+	}
+	if value < 0 {
+		return fmt.Sprintf("%.1f %s", -value, negative)
+	}
+	return fmt.Sprintf("%.1f %s", value, positive)
 }
 
 func finishDeltaLabel(value float64) string {

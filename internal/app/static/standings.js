@@ -176,9 +176,11 @@ function setupForecastAssumptionBuilder() {
 
 function setupForecastControls() {
   const controls = document.querySelector("[data-forecast-controls]");
+  const form = controls?.querySelector("form[data-forecast-model-form]");
   const model = document.querySelector("#forecast-model");
   const comparison = document.querySelector("#forecast-comparison");
-  if (!controls || !model || !comparison) return;
+  const status = controls?.querySelector("[data-forecast-control-status]");
+  if (!controls || !form || !model || !comparison) return;
 
   const syncComparison = () => {
     Array.from(comparison.options).forEach((option) => {
@@ -187,7 +189,17 @@ function setupForecastControls() {
     if (comparison.value === model.value) comparison.value = "";
   };
 
-  model.addEventListener("change", syncComparison);
+  const updateForecast = () => {
+    controls.setAttribute("aria-busy", "true");
+    if (status) status.textContent = "Updating forecast…";
+    form.requestSubmit();
+  };
+
+  model.addEventListener("change", () => {
+    syncComparison();
+    updateForecast();
+  });
+  comparison.addEventListener("change", updateForecast);
   syncComparison();
 }
 
