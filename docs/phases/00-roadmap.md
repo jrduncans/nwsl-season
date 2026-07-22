@@ -57,6 +57,12 @@ For a layered description of the live proof, persistence, no-help, and
 next-slate scenario behavior, see
 [How clinching works](../clinching-logic-guide.md).
 
+## Current Forecast Lab guide
+
+For a layered description of the model catalog, complete-season simulation,
+fixed assumptions, comparisons, and shareable scenario behavior, see
+[How Forecast Lab works](../forecast-lab-guide.md).
+
 The order is intentional, but not sacred. Styling can happen whenever it keeps
 the project fun. The original dependency chain is games → cache → standings
 → clinching. The next sequence is schedule context → forecast simulation →

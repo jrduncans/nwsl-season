@@ -33,6 +33,10 @@ for/against are compact paired columns, alongside their respective
 differences. If completed-match xG coverage is incomplete, the page displays
 a coverage warning. Normal page requests never contact ASA.
 
+For the Forecast Lab model catalog, simulation process, fixed-outcome behavior,
+shareable scenarios, and the distinction between an outlook and a clinching
+proof, see [How Forecast Lab works](docs/forecast-lab-guide.md).
+
 ```sh
 go run ./cmd/server
 ```
