@@ -18,6 +18,11 @@ is deliberately conservative:
 - `unresolved` means the system cannot honestly settle the answer from the
   available data, an outcome-only points proof, and its computation budget.
 
+The clinching-scenarios page separately publishes a playoff-elimination path
+when it has a stronger proof: eight opponents already have strictly more
+points than the target can reach even by winning every remaining match. This
+is not inferred from `not_clinched`, standings position, or a tiebreak.
+
 The current 2026 regular-season rules are configuration, not solver constants:
 16 teams, 30 matches per team, with Shield (top 1), home playoff place (top 4),
 and playoffs (top 8). A stronger guarantee implies each weaker one: Shield →
@@ -266,6 +271,20 @@ conditions that depend on goal margin or unavailable disciplinary data.
 When a `can_clinch` result also has tiebreak-dependent leaves, the visible
 clauses remain valid but may not cover every theoretical path. The UI says so
 instead of implying that the displayed conditions are necessary.
+
+## Playoff-elimination scenarios
+
+Alongside positive clinching opportunities, the page can show that a team
+**can be eliminated from the playoffs** during the same slate. The search uses
+the target's best possible points ceiling: every still-unfixed target match is
+treated as a win. A condition is published only if, after the named slate
+outcomes, at least eight opponents already sit strictly above that ceiling.
+
+This makes the claim independent of all later fixtures and every tiebreak. It
+also means the feature intentionally withholds close cases in which a team
+could be eliminated only through goal difference, disciplinary points, or
+later coupled results. A team satisfying the same strict-points test before
+the slate is displayed as already eliminated.
 
 ## Where to look in the code
 

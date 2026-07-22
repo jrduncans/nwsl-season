@@ -157,8 +157,37 @@ function setupForecastAssumptionBuilder() {
   updateFixtures();
 }
 
+function setupClinchingTeamFilter() {
+  const filter = document.querySelector("[data-clinching-team-filter]");
+  const cards = Array.from(document.querySelectorAll("[data-clinching-team-card]"));
+  const sections = Array.from(document.querySelectorAll("[data-clinching-filter-section]"));
+  const summary = document.querySelector("[data-clinching-filter-summary]");
+  if (!filter || cards.length === 0) return;
+
+  const update = () => {
+    const teamID = filter.value;
+    const visibleCards = cards.filter((card) => !teamID || card.dataset.clinchingTeam === teamID);
+    cards.forEach((card) => { card.hidden = !visibleCards.includes(card); });
+    sections.forEach((section) => {
+      section.hidden = Boolean(teamID) && !visibleCards.some((card) => section.contains(card));
+    });
+    if (!summary) return;
+    if (!teamID) {
+      summary.textContent = "All teams shown.";
+      return;
+    }
+    const teamName = filter.selectedOptions[0]?.textContent ?? "this team";
+    const label = visibleCards.length === 1 ? "scenario" : "scenarios";
+    summary.textContent = `Showing ${visibleCards.length} ${label} for ${teamName}.`;
+  };
+
+  filter.addEventListener("change", update);
+  update();
+}
+
 localizeTimes();
 setupForecastAssumptionBuilder();
+setupClinchingTeamFilter();
 
 function sortStandings(display, mode) {
   const tbody = display.querySelector("[data-standings-table] tbody");

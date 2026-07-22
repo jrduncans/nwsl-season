@@ -185,6 +185,7 @@ type fixtureView struct {
 }
 
 type teamNameView struct {
+	ID      string
 	Name    string
 	LogoURL string
 }
@@ -210,13 +211,24 @@ type clinchingPage struct {
 	SlateGroups      []fixtureGroupView
 	Actionable       []clinchingRowView
 	NoHelp           []clinchingRowView
+	NoHelpTeams      []clinchingTeamView
+	Elimination      []clinchingRowView
+	ClinchingTeams   []teamNameView
 }
 type clinchingRowView struct {
-	Team, Achievement, Limitation string
-	Clauses, Necessary            []string
-	NoHelp                        string
-	NoHelpFixtures                string
-	NoHelpFixtureCount            int
+	Team                               teamNameView
+	Achievement, Limitation            string
+	Clauses, Necessary                 []string
+	NoHelp                             string
+	NoHelpFixtures                     string
+	NoHelpFixtureCount                 int
+	AchievementRank, StandingsPosition int
+	AlreadyEliminated                  bool
+}
+
+type clinchingTeamView struct {
+	Team  teamNameView
+	Paths []clinchingRowView
 }
 
 func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {
@@ -499,7 +511,7 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 func displayName(team standings.Team) string { return standings.DisplayName(team) }
 
 func teamName(team standings.Team) teamNameView {
-	return teamNameView{Name: displayName(team), LogoURL: clubLogoURL(team.ID)}
+	return teamNameView{ID: team.ID, Name: displayName(team), LogoURL: clubLogoURL(team.ID)}
 }
 
 func clubLogoURL(teamID string) string {

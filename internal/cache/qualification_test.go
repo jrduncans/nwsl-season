@@ -53,12 +53,12 @@ func TestScenarioRoundTripUsesExactCurrentQualificationSnapshot(t *testing.T) {
 	}
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	slate := scenarios.Slate{ID: "slate", DefinitionVersion: scenarios.DefinitionVersion, State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 1, StartsAtUTC: start, LatestKickoffUTC: start, CutoffUTC: start, FixtureIDs: []string{"g"}}
-	result := ScenarioResult{Result: scenarios.Result{TeamID: "a", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityAlreadyClinched, AlreadyClinched: true, Clauses: []scenarios.Clause{}, Necessary: []scenarios.FixtureCondition{}, ProofMethods: []clinching.ProofMethod{}}}
+	result := ScenarioResult{Result: scenarios.Result{TeamID: "a", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "g", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}, RepresentedAssignments: 1, ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}}, Necessary: []scenarios.FixtureCondition{}, ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}, TotalAssignments: 3, CertifiedAssignments: 1, CanBeEliminated: true, EliminationClauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "g", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}}, RepresentedAssignments: 1, ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}}}}
 	if _, err := db.ReplaceScenario(ctx, ScenarioRun{FixtureSnapshotID: syncRun.FixtureSnapshotID, QualificationRunID: qualification.Run.ID, SourceSyncRunID: syncRun.ID, Season: "2026", Stage: "Regular Season", RulesVersion: "test-v1", DefinitionVersion: scenarios.DefinitionVersion, Slate: slate, ExpectedResults: 1, WrittenResults: 1}, []ScenarioResult{result}); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, found, err := db.ScenarioForSnapshot(ctx, syncRun.FixtureSnapshotID, "test-v1", scenarios.DefinitionVersion)
-	if err != nil || !found || len(snapshot.Results) != 1 || !snapshot.Results[0].AlreadyClinched {
+	if err != nil || !found || len(snapshot.Results) != 1 || !snapshot.Results[0].CanBeEliminated || len(snapshot.Results[0].EliminationClauses) != 1 {
 		t.Fatalf("snapshot=%+v found=%v err=%v", snapshot, found, err)
 	}
 }

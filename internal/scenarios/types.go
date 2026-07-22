@@ -11,7 +11,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 )
 
-const DefinitionVersion = "next-slate-v1"
+const DefinitionVersion = "next-slate-v2"
 
 type SlateState string
 
@@ -81,6 +81,12 @@ type Result struct {
 	Limitation                                                    string
 	TotalAssignments, CertifiedAssignments, UnresolvedAssignments int
 	Diagnostics                                                   Diagnostics
+	// Playoff elimination is intentionally a separate outcome from a clinch.
+	// A clause is published only when enough opponents are already strictly
+	// beyond the target's maximum possible points, so no score tiebreak is
+	// being inferred. These fields are populated only for the playoffs.
+	AlreadyEliminated, CanBeEliminated bool
+	EliminationClauses                 []Clause
 }
 
 func empty[T any]() []T { return []T{} }
@@ -177,6 +183,32 @@ func (r Result) Validate(slate Slate) error {
 	}
 	if err := validateConditions(r.Necessary, fixture); err != nil {
 		return fmt.Errorf("invalid necessary condition: %w", err)
+	}
+	if r.Achievement != competition.AchievementPlayoffs && (r.AlreadyEliminated || r.CanBeEliminated || len(r.EliminationClauses) != 0) {
+		return fmt.Errorf("only playoff results may carry elimination data")
+	}
+	if r.AlreadyEliminated && r.CanBeEliminated {
+		return fmt.Errorf("already-eliminated result cannot have elimination scenarios")
+	}
+	if r.AlreadyClinched && (r.AlreadyEliminated || r.CanBeEliminated) {
+		return fmt.Errorf("already-clinched result cannot have elimination data")
+	}
+	if r.AlreadyEliminated && r.CanClinch {
+		return fmt.Errorf("already-eliminated result cannot have clinching scenarios")
+	}
+	if r.AlreadyEliminated && len(r.EliminationClauses) != 0 {
+		return fmt.Errorf("already-eliminated result cannot have elimination clauses")
+	}
+	if r.CanBeEliminated != (len(r.EliminationClauses) > 0) {
+		return fmt.Errorf("invalid elimination scenario flags")
+	}
+	for _, c := range r.EliminationClauses {
+		if c.RepresentedAssignments <= 0 || len(c.ProofMethods) == 0 {
+			return fmt.Errorf("invalid elimination clause")
+		}
+		if err := validateConditions(c.Conditions, fixture); err != nil {
+			return fmt.Errorf("invalid elimination condition: %w", err)
+		}
 	}
 	return nil
 }

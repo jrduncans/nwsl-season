@@ -24,7 +24,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 // DB wraps the SQLite cache.
 type DB struct {
@@ -383,6 +383,20 @@ func (c *DB) Migrate(ctx context.Context) error {
 			}
 		}
 		if err := recordMigration(ctx, tx, 5); err != nil {
+			return err
+		}
+	}
+	if version < 6 {
+		for _, statement := range []string{
+			`ALTER TABLE scenario_results ADD COLUMN already_eliminated INTEGER NOT NULL DEFAULT 0 CHECK (already_eliminated IN (0,1))`,
+			`ALTER TABLE scenario_results ADD COLUMN can_be_eliminated INTEGER NOT NULL DEFAULT 0 CHECK (can_be_eliminated IN (0,1))`,
+			`ALTER TABLE scenario_results ADD COLUMN elimination_clauses_json TEXT NOT NULL DEFAULT '[]'`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 6: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 6); err != nil {
 			return err
 		}
 	}
@@ -1345,6 +1359,12 @@ func nonNilStrings(v []string) []string {
 	}
 	return v
 }
+func nonNilClauses(v []scenarios.Clause) []scenarios.Clause {
+	if v == nil {
+		return []scenarios.Clause{}
+	}
+	return v
+}
 func validQualification(v QualificationStatus) bool {
 	return clinching.ValidStatus(v.Status) && clinching.ValidMethod(v.Method) && clinching.ValidEvidence(v.StrictlyAhead) && clinching.ValidEvidence(v.AtLeastLevel) && validNoHelp(v.NoHelp.State)
 }
@@ -1397,7 +1417,7 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 	if out.Run.FinishedAt, err = time.Parse(time.RFC3339, finished); err != nil {
 		return out, false, err
 	}
-	rows, err := c.db.QueryContext(ctx, `SELECT team_id,achievement,top_k,opportunity_state,already_clinched,can_clinch,clauses_json,necessary_json,proof_methods_json,limitation,total_assignments,certified_assignments,unresolved_assignments,diagnostics_json FROM scenario_results WHERE scenario_run_id=? ORDER BY team_id,achievement`, out.Run.ID)
+	rows, err := c.db.QueryContext(ctx, `SELECT team_id,achievement,top_k,opportunity_state,already_clinched,can_clinch,clauses_json,necessary_json,proof_methods_json,limitation,total_assignments,certified_assignments,unresolved_assignments,diagnostics_json,already_eliminated,can_be_eliminated,elimination_clauses_json FROM scenario_results WHERE scenario_run_id=? ORDER BY team_id,achievement`, out.Run.ID)
 	if err != nil {
 		return out, false, err
 	}
@@ -1405,15 +1425,17 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 	for rows.Next() {
 		var v ScenarioResult
 		var achievement, state string
-		var already, can int
-		var clauses, necessary, methods, diag string
-		if err := rows.Scan(&v.TeamID, &achievement, &v.TopK, &state, &already, &can, &clauses, &necessary, &methods, &v.Limitation, &v.TotalAssignments, &v.CertifiedAssignments, &v.UnresolvedAssignments, &diag); err != nil {
+		var already, can, alreadyEliminated, canBeEliminated int
+		var clauses, necessary, methods, diag, eliminationClauses string
+		if err := rows.Scan(&v.TeamID, &achievement, &v.TopK, &state, &already, &can, &clauses, &necessary, &methods, &v.Limitation, &v.TotalAssignments, &v.CertifiedAssignments, &v.UnresolvedAssignments, &diag, &alreadyEliminated, &canBeEliminated, &eliminationClauses); err != nil {
 			return out, false, err
 		}
 		v.Achievement = competition.AchievementID(achievement)
 		v.State = scenarios.OpportunityState(state)
 		v.AlreadyClinched = already != 0
 		v.CanClinch = can != 0
+		v.AlreadyEliminated = alreadyEliminated != 0
+		v.CanBeEliminated = canBeEliminated != 0
 		if err := json.Unmarshal([]byte(clauses), &v.Clauses); err != nil {
 			return out, false, err
 		}
@@ -1426,6 +1448,9 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 		if err := json.Unmarshal([]byte(diag), &v.Diagnostics); err != nil {
 			return out, false, err
 		}
+		if err := json.Unmarshal([]byte(eliminationClauses), &v.EliminationClauses); err != nil {
+			return out, false, err
+		}
 		if v.Clauses == nil {
 			v.Clauses = []scenarios.Clause{}
 		}
@@ -1434,6 +1459,9 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 		}
 		if v.ProofMethods == nil {
 			v.ProofMethods = []clinching.ProofMethod{}
+		}
+		if v.EliminationClauses == nil {
+			v.EliminationClauses = []scenarios.Clause{}
 		}
 		out.Results = append(out.Results, v)
 	}
@@ -1494,7 +1522,8 @@ func (c *DB) ReplaceScenario(ctx context.Context, run ScenarioRun, values []Scen
 		necessary, _ := json.Marshal(v.Necessary)
 		methods, _ := json.Marshal(v.ProofMethods)
 		diag, _ := json.Marshal(v.Diagnostics)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, v.TeamID, v.Achievement, v.TopK, v.State, boolInt(v.AlreadyClinched), boolInt(v.CanClinch), string(clauses), string(necessary), string(methods), v.Limitation, v.TotalAssignments, v.CertifiedAssignments, v.UnresolvedAssignments, string(diag)); err != nil {
+		eliminationClauses, _ := json.Marshal(nonNilClauses(v.EliminationClauses))
+		if _, err := tx.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, v.TeamID, v.Achievement, v.TopK, v.State, boolInt(v.AlreadyClinched), boolInt(v.CanClinch), string(clauses), string(necessary), string(methods), v.Limitation, v.TotalAssignments, v.CertifiedAssignments, v.UnresolvedAssignments, string(diag), boolInt(v.AlreadyEliminated), boolInt(v.CanBeEliminated), string(eliminationClauses)); err != nil {
 			return ScenarioSnapshot{}, err
 		}
 	}

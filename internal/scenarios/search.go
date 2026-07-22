@@ -52,20 +52,28 @@ type scenarioMember struct {
 	achievement           competition.Achievement
 	certified, unresolved assignmentBits
 	clauses               []Clause
+	eliminated            assignmentBits
+	eliminationClauses    []Clause
+	alreadyEliminated     bool
+	trackElimination      bool
 	diag                  Diagnostics
 }
 
 type batchScenarioSearch struct {
-	ctx             context.Context
-	evaluator       *clinching.Evaluator
-	target          string
-	slate           Slate
-	slateGames      []standings.Game
-	searchGames     []standings.Game
-	members         []scenarioMember
-	points          map[string]int
-	targetRemaining int
-	err             error
+	ctx         context.Context
+	evaluator   *clinching.Evaluator
+	target      string
+	slate       Slate
+	slateGames  []standings.Game
+	searchGames []standings.Game
+	members     []scenarioMember
+	points      map[string]int
+	// targetSlateRemaining is the best points total the target can have by
+	// this slate's cutoff. targetRemaining also includes later fixtures and is
+	// used only for the season-ending elimination proof.
+	targetSlateRemaining int
+	targetRemaining      int
+	err                  error
 }
 
 // GenerateBatch traverses the slate once and evaluates every active
@@ -132,7 +140,10 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 		default:
 			out.TotalAssignments = totalAssignments
 			activeAchievements = append(activeAchievements, achievement)
-			members = append(members, scenarioMember{achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments)})
+			members = append(members, scenarioMember{
+				achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),
+				eliminated: newAssignmentBits(totalAssignments), trackElimination: achievement.ID == competition.AchievementPlayoffs,
+			})
 		}
 		results[achievement.ID] = out
 	}
@@ -147,16 +158,24 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 			applyOutcomePoints(points, game, scoreOutcome(*game.HomeScore, *game.AwayScore))
 		}
 	}
-	targetRemaining := 0
-	for _, game := range slateGames {
+	targetSlateRemaining, targetRemaining := 0, 0
+	for _, game := range r.Games {
+		if game.Status != fixtures.PreMatchStatus {
+			continue
+		}
 		if game.HomeTeamID == r.TargetTeamID || game.AwayTeamID == r.TargetTeamID {
 			targetRemaining++
+		}
+	}
+	for _, game := range slateGames {
+		if game.HomeTeamID == r.TargetTeamID || game.AwayTeamID == r.TargetTeamID {
+			targetSlateRemaining++
 		}
 	}
 	search := batchScenarioSearch{
 		ctx: ctx, evaluator: r.Evaluator, target: r.TargetTeamID, slate: r.Slate,
 		slateGames: slateGames, searchGames: orderBatchSearchGames(r.Teams, r.Games, r.TargetTeamID, activeAchievements, slateGames),
-		members: members, points: points, targetRemaining: targetRemaining,
+		members: members, points: points, targetSlateRemaining: targetSlateRemaining, targetRemaining: targetRemaining,
 	}
 	active := uint64(1)<<uint(len(members)) - 1
 	search.walk(make([]clinching.FixedResult, 0, len(search.searchGames)), 0, active)
@@ -167,7 +186,8 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 		out := results[search.members[i].achievement.ID]
 		if search.err != nil {
 			out.State, out.Limitation = OpportunityUnresolved, "scenario computation budget exhausted"
-			out.Clauses, out.Necessary, out.ProofMethods = []Clause{}, []FixtureCondition{}, []clinching.ProofMethod{}
+			out.Clauses, out.Necessary, out.ProofMethods, out.EliminationClauses = []Clause{}, []FixtureCondition{}, []clinching.ProofMethod{}, []Clause{}
+			out.AlreadyEliminated, out.CanBeEliminated = false, false
 		} else {
 			var err error
 			out, err = finishScenario(ctx, out, slateGames, search.members[i])
@@ -176,7 +196,8 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 					return nil, err
 				}
 				out.State, out.Limitation = OpportunityUnresolved, "scenario computation budget exhausted"
-				out.Clauses, out.Necessary, out.ProofMethods = []Clause{}, []FixtureCondition{}, []clinching.ProofMethod{}
+				out.Clauses, out.Necessary, out.ProofMethods, out.EliminationClauses = []Clause{}, []FixtureCondition{}, []clinching.ProofMethod{}, []Clause{}
+				out.AlreadyEliminated, out.CanBeEliminated = false, false
 			}
 		}
 		results[out.Achievement] = out
@@ -186,7 +207,7 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 }
 
 func emptyResult(team string, achievement competition.Achievement) Result {
-	return Result{TeamID: team, Achievement: achievement.ID, TopK: achievement.TopK, Clauses: []Clause{}, Necessary: []FixtureCondition{}, ProofMethods: []clinching.ProofMethod{}}
+	return Result{TeamID: team, Achievement: achievement.ID, TopK: achievement.TopK, Clauses: []Clause{}, Necessary: []FixtureCondition{}, ProofMethods: []clinching.ProofMethod{}, EliminationClauses: []Clause{}}
 }
 
 func setBatchElapsed(results map[competition.AchievementID]Result, started time.Time) {
@@ -234,6 +255,29 @@ func finishScenario(ctx context.Context, out Result, games []standings.Game, mem
 	} else {
 		out.State = OpportunityCannotClinch
 	}
+	if member.trackElimination {
+		if member.alreadyEliminated {
+			out.AlreadyEliminated = true
+			return out, nil
+		}
+		eliminationMethods := []clinching.ProofMethod{}
+		for _, clause := range member.eliminationClauses {
+			eliminationMethods = append(eliminationMethods, clause.ProofMethods...)
+		}
+		finalElimination, err := minimizeCoverage(ctx, games, member.eliminated, eliminationMethods, &out.Diagnostics)
+		if err != nil {
+			return out, err
+		}
+		coverage := newAssignmentBits(out.TotalAssignments)
+		for _, clause := range finalElimination {
+			markCoverage(coverage, clause.Conditions, games)
+		}
+		if !member.eliminated.equal(coverage) {
+			return out, fmt.Errorf("minimized elimination coverage differs from exact search")
+		}
+		out.EliminationClauses = finalElimination
+		out.CanBeEliminated = len(finalElimination) > 0
+	}
 	return out, nil
 }
 
@@ -253,6 +297,18 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 		}
 		member := &s.members[memberIndex]
 		member.diag.SearchNodes++
+		if member.trackElimination && s.eliminationGuaranteed(member.achievement.TopK) {
+			if depth == 0 {
+				member.alreadyEliminated = true
+			} else {
+				clause := Clause{Conditions: fixedConditions(fixed, s.slate.FixtureIDs), ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}
+				clause.RepresentedAssignments = represented(clause.Conditions, len(s.slateGames))
+				member.eliminationClauses = append(member.eliminationClauses, clause)
+				markCoverage(member.eliminated, clause.Conditions, s.slateGames)
+			}
+			member.diag.OpportunityPrunes++
+			continue
+		}
 		if s.opportunityImpossible(member.achievement.TopK) {
 			member.diag.OpportunityPrunes++
 			continue
@@ -307,6 +363,7 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 func (s *batchScenarioSearch) push(game standings.Game, outcome clinching.Outcome) {
 	applyOutcomePoints(s.points, game, outcome)
 	if game.HomeTeamID == s.target || game.AwayTeamID == s.target {
+		s.targetSlateRemaining--
 		s.targetRemaining--
 	}
 }
@@ -314,12 +371,24 @@ func (s *batchScenarioSearch) push(game standings.Game, outcome clinching.Outcom
 func (s *batchScenarioSearch) pop(game standings.Game, outcome clinching.Outcome) {
 	removeOutcomePoints(s.points, game, outcome)
 	if game.HomeTeamID == s.target || game.AwayTeamID == s.target {
+		s.targetSlateRemaining++
 		s.targetRemaining++
 	}
 }
 
-func (s *batchScenarioSearch) opportunityImpossible(topK int) bool {
+func (s *batchScenarioSearch) eliminationGuaranteed(topK int) bool {
 	ceiling := s.points[s.target] + 3*s.targetRemaining
+	ahead := 0
+	for team, points := range s.points {
+		if team != s.target && points > ceiling {
+			ahead++
+		}
+	}
+	return ahead >= topK
+}
+
+func (s *batchScenarioSearch) opportunityImpossible(topK int) bool {
+	ceiling := s.points[s.target] + 3*s.targetSlateRemaining
 	ahead := 0
 	for team, points := range s.points {
 		if team != s.target && points > ceiling {

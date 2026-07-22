@@ -47,6 +47,101 @@ func TestGenerateFindsMinimalOutcomeOnlyClause(t *testing.T) {
 	}
 }
 
+func TestGenerateFindsPlayoffEliminationClause(t *testing.T) {
+	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}}
+	game := standings.Game{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b"}
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, []standings.Game{game}, []string{"g1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 1}
+	baseline, err := evaluator.EvaluateStatus(context.Background(), "a", achievement, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := Generate(context.Background(), Request{Evaluator: evaluator, Teams: teams, Games: []standings.Game{game}, Slate: slate, TargetTeamID: "a", Achievement: achievement, Baseline: baseline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AlreadyEliminated || !result.CanBeEliminated {
+		t.Fatalf("elimination result = %+v, want one upcoming elimination path", result)
+	}
+	if len(result.EliminationClauses) != 1 || len(result.EliminationClauses[0].Conditions) != 1 {
+		t.Fatalf("elimination clauses = %+v, want one single-fixture clause", result.EliminationClauses)
+	}
+	condition := result.EliminationClauses[0].Conditions[0]
+	if condition.GameID != "g1" || len(condition.AllowedOutcomes) != 1 || condition.AllowedOutcomes[0] != clinching.AwayWin {
+		t.Fatalf("elimination condition = %+v, want g1 away win", condition)
+	}
+	if got := result.EliminationClauses[0].ProofMethods; len(got) != 1 || got[0] != clinching.ProofCheapBound {
+		t.Fatalf("elimination proof methods = %+v, want cheap points bound", got)
+	}
+}
+
+func TestGenerateMarksAlreadyPointsEliminatedFromPlayoffs(t *testing.T) {
+	teams := []standings.Team{{ID: "a"}, {ID: "b"}, {ID: "c"}}
+	zero, one := 0, 1
+	games := []standings.Game{
+		{ID: "played", Status: standings.CompletedStatus, HomeTeamID: "b", AwayTeamID: "a", HomeScore: &one, AwayScore: &zero},
+		{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c"},
+	}
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, games, []string{"g1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 1}
+	baseline, err := evaluator.EvaluateStatus(context.Background(), "a", achievement, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := Generate(context.Background(), Request{Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: "a", Achievement: achievement, Baseline: baseline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.AlreadyEliminated || result.CanBeEliminated || len(result.EliminationClauses) != 0 {
+		t.Fatalf("elimination result = %+v, want already eliminated", result)
+	}
+}
+
+func TestPlayoffEliminationUsesTheFullSeasonPointsCeiling(t *testing.T) {
+	teams := []standings.Team{{ID: "a"}, {ID: "b"}, {ID: "c"}}
+	games := []standings.Game{
+		{ID: "slate", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c"},
+		{ID: "later", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "c"},
+	}
+	slate, err := DefineSlate([]ScheduledGame{
+		{ID: "slate", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)},
+		{ID: "later", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 8, 20, 0, 0, 0, time.UTC), Matchday: intPtr(5)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, games, []string{"slate", "later"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 1}
+	baseline, err := evaluator.EvaluateStatus(context.Background(), "a", achievement, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := Generate(context.Background(), Request{Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: "a", Achievement: achievement, Baseline: baseline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AlreadyEliminated || result.CanBeEliminated {
+		t.Fatalf("elimination result = %+v, a later target win must keep elimination unproved", result)
+	}
+}
+
 func TestDefineSlateUsesKickoffWindowWhenMatchdayIsUnavailable(t *testing.T) {
 	start := time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC)
 	slate, err := DefineSlate([]ScheduledGame{
@@ -295,5 +390,10 @@ func scenarioSemanticKey(result Result) string {
 		clauses[i] = clauseKey(clause.Conditions)
 	}
 	sort.Strings(clauses)
-	return fmt.Sprintf("%s|%t|%t|%d|%d|%s|%v|%s", result.State, result.AlreadyClinched, result.CanClinch, result.CertifiedAssignments, result.UnresolvedAssignments, clauseKey(result.Necessary), clauses, result.Limitation)
+	elimination := make([]string, len(result.EliminationClauses))
+	for i, clause := range result.EliminationClauses {
+		elimination[i] = clauseKey(clause.Conditions)
+	}
+	sort.Strings(elimination)
+	return fmt.Sprintf("%s|%t|%t|%d|%d|%s|%v|%t|%t|%v|%s", result.State, result.AlreadyClinched, result.CanClinch, result.CertifiedAssignments, result.UnresolvedAssignments, clauseKey(result.Necessary), clauses, result.AlreadyEliminated, result.CanBeEliminated, elimination, result.Limitation)
 }
