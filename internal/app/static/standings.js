@@ -53,11 +53,12 @@ function localizeTimes() {
 
 function updateForecastOutcomeLabels() {
   const fixture = document.querySelector("#forecast-fixture");
-  const outcome = document.querySelector("#forecast-outcome");
   const selected = fixture?.selectedOptions[0];
-  if (!selected || !outcome) return;
-  outcome.querySelector('option[value="h"]').textContent = `${selected.dataset.homeTeam} win`;
-  outcome.querySelector('option[value="a"]').textContent = `${selected.dataset.awayTeam} win`;
+  if (!selected) return;
+  const home = document.querySelector('[data-forecast-outcome="h"]');
+  const away = document.querySelector('[data-forecast-outcome="a"]');
+  if (home) home.textContent = `${selected.dataset.homeTeam} win`;
+  if (away) away.textContent = `${selected.dataset.awayTeam} win`;
 }
 
 function formatForecastFixtureLabel(option, teamID) {
@@ -79,16 +80,20 @@ function setupForecastAssumptionBuilder() {
   const builder = document.querySelector("form[data-assumption-builder]");
   const team = document.querySelector("#forecast-team");
   const fixture = document.querySelector("#forecast-fixture");
-  const outcome = document.querySelector("#forecast-outcome");
+  const search = document.querySelector("#forecast-fixture-search");
+  const fixtureCount = document.querySelector("#forecast-fixture-count");
+  const outcomes = Array.from(builder?.querySelectorAll('input[name="outcome"]') ?? []);
   const addButton = builder?.querySelector('button[type="submit"]:not([form])');
   const updateButton = document.querySelector("#forecast-update-button");
   const empty = document.querySelector("#forecast-filter-empty");
   const pendingSection = document.querySelector("#forecast-pending");
   const pendingList = document.querySelector("#forecast-pending-list");
+  const pendingStatus = document.querySelector("#forecast-pending-status");
   const pendingValues = document.querySelector("#forecast-pending-values");
-  if (!filter || !builder || !team || !fixture || !outcome || !addButton || !updateButton || !empty || !pendingSection || !pendingList || !pendingValues) return;
+  const allFixtures = document.querySelector("#forecast-all-fixtures");
+  if (!filter || !builder || !team || !fixture || !search || !fixtureCount || outcomes.length === 0 || !addButton || !updateButton || !empty || !pendingSection || !pendingList || !pendingStatus || !pendingValues || !allFixtures) return;
 
-  const options = Array.from(fixture.options);
+  const options = Array.from(allFixtures.content.querySelectorAll("option"));
   const pending = new Map();
 
   const renderPending = () => {
@@ -117,12 +122,17 @@ function setupForecastAssumptionBuilder() {
     pendingSection.hidden = !hasPending;
     updateButton.disabled = !hasPending;
     updateButton.textContent = hasPending ? `Update forecast (${pending.size})` : "Update forecast";
+    pendingStatus.textContent = hasPending ? `${pending.size} new ${pending.size === 1 ? "assumption is" : "assumptions are"} ready. Update the forecast to apply ${pending.size === 1 ? "it" : "them"}.` : "";
   };
 
   const updateFixtures = () => {
     const selectedValue = fixture.value;
     const teamID = team.value;
-    const visible = options.filter((option) => !pending.has(option.value) && (!teamID || option.dataset.homeTeamId === teamID || option.dataset.awayTeamId === teamID));
+    const query = search.value.trim().toLocaleLowerCase();
+    const visible = options.filter((option) => {
+      const fixtureText = `${option.dataset.fixtureLabel} ${option.dataset.homeTeam} ${option.dataset.awayTeam} ${option.dataset.kickoffFallback}`.toLocaleLowerCase();
+      return !pending.has(option.value) && (!teamID || option.dataset.homeTeamId === teamID || option.dataset.awayTeamId === teamID) && (!query || fixtureText.includes(query));
+    });
     visible.forEach((option) => formatForecastFixtureLabel(option, teamID));
     fixture.replaceChildren(...visible);
     if (visible.some((option) => option.value === selectedValue)) fixture.value = selectedValue;
@@ -130,16 +140,18 @@ function setupForecastAssumptionBuilder() {
 
     const hasFixtures = visible.length > 0;
     fixture.disabled = !hasFixtures;
-    outcome.disabled = !hasFixtures;
+    outcomes.forEach((outcome) => { outcome.disabled = !hasFixtures; });
     addButton.disabled = !hasFixtures;
     empty.hidden = hasFixtures;
+    fixtureCount.textContent = `${visible.length} ${visible.length === 1 ? "fixture" : "fixtures"} available`;
     updateForecastOutcomeLabels();
   };
 
   builder.addEventListener("submit", (event) => {
     event.preventDefault();
     const option = fixture.selectedOptions[0];
-    if (!option || !["h", "d", "a"].includes(outcome.value)) return;
+    const outcome = builder.querySelector('input[name="outcome"]:checked');
+    if (!option || !outcome || !["h", "d", "a"].includes(outcome.value)) return;
     pending.set(option.value, { option, outcome: outcome.value });
     renderPending();
     updateFixtures();
@@ -151,10 +163,54 @@ function setupForecastAssumptionBuilder() {
     renderPending();
     updateFixtures();
   });
+  filter.addEventListener("submit", (event) => {
+    event.preventDefault();
+    updateFixtures();
+  });
   team.addEventListener("change", updateFixtures);
+  search.addEventListener("input", updateFixtures);
   fixture.addEventListener("change", updateForecastOutcomeLabels);
   renderPending();
   updateFixtures();
+}
+
+function setupForecastControls() {
+  const controls = document.querySelector("[data-forecast-controls]");
+  const model = document.querySelector("#forecast-model");
+  const comparison = document.querySelector("#forecast-comparison");
+  if (!controls || !model || !comparison) return;
+
+  const syncComparison = () => {
+    Array.from(comparison.options).forEach((option) => {
+      option.disabled = Boolean(option.value) && option.value === model.value;
+    });
+    if (comparison.value === model.value) comparison.value = "";
+  };
+
+  model.addEventListener("change", syncComparison);
+  syncComparison();
+}
+
+function setupScenarioCopy() {
+  const link = document.querySelector("[data-copy-scenario]");
+  const status = document.querySelector("[data-scenario-copy-status]");
+  if (!link || !status || !navigator.clipboard?.writeText) return;
+
+  link.addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      await navigator.clipboard.writeText(new URL(link.href, window.location.href).href);
+      status.textContent = "Scenario link copied to the clipboard.";
+      const label = link.textContent;
+      link.textContent = "Copied scenario link";
+      window.setTimeout(() => {
+        link.textContent = label;
+      }, 1800);
+    } catch {
+      status.textContent = "Could not copy the scenario link. Open the link to copy it manually.";
+      window.location.assign(link.href);
+    }
+  });
 }
 
 function setupClinchingTeamFilter() {
@@ -186,7 +242,9 @@ function setupClinchingTeamFilter() {
 }
 
 localizeTimes();
+setupForecastControls();
 setupForecastAssumptionBuilder();
+setupScenarioCopy();
 setupClinchingTeamFilter();
 
 function sortStandings(display, mode) {

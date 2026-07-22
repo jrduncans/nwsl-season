@@ -30,10 +30,12 @@ type forecastPage struct {
 	HasComparison     bool
 	ComparisonName    string
 	ComparisonID      string
+	PlayoffPlaces     int
 	XGAvailable       int
 	XGCompleted       int
 	XGCoverage        string
 	XGWarning         bool
+	ShowXGCoverage    bool
 	Freshness         string
 	FreshnessFallback string
 	DataCutoff        string
@@ -48,16 +50,20 @@ type forecastPage struct {
 	HasTeamFilter     bool
 	StateValues       []string
 	Fixtures          []forecastFixtureOption
+	AllFixtures       []forecastFixtureOption
 	CanAdd            bool
 	DefaultHomeTeam   string
 	DefaultAwayTeam   string
 }
 
 type forecastRowView struct {
+	Rank                int
+	PlayoffLine         bool
 	Team                teamNameView
 	ExpectedPoints      string
 	PointsInterval      string
 	PlayoffChance       string
+	PlayoffWidth        string
 	ExpectedFinish      string
 	FinishInterval      string
 	ShieldChance        string
@@ -66,7 +72,12 @@ type forecastRowView struct {
 	ExpectedPointsDelta string
 	PlayoffDelta        string
 	FinishDelta         string
+	FinishDeltaLabel    string
 	ShieldDelta         string
+	PointsDeltaTone     string
+	PlayoffDeltaTone    string
+	FinishDeltaTone     string
+	ShieldDeltaTone     string
 }
 type forecastRowMetrics struct {
 	ExpectedPoints, PlayoffChance, ExpectedFinish, ShieldChance string
@@ -105,20 +116,23 @@ type forecastFixtureOption struct {
 	Away       teamNameView
 }
 
-func forecastRows(result simulation.Result) []forecastRowView {
+func forecastRows(result simulation.Result, playoffPlaces int) []forecastRowView {
 	rows := make([]forecastRowView, 0, len(result.Teams))
-	for _, row := range result.Teams {
+	for index, row := range result.Teams {
 		view := forecastRowView{
+			Rank:           index + 1,
+			PlayoffLine:    index+1 == playoffPlaces,
 			Team:           teamName(row.Team),
 			ExpectedPoints: fmt.Sprintf("%.1f", row.ExpectedPoints),
 			PointsInterval: fmt.Sprintf("%d–%d", row.PointsLow, row.PointsHigh),
 			PlayoffChance:  percent(row.PlayoffProbability),
+			PlayoffWidth:   percent(row.PlayoffProbability),
 			ExpectedFinish: fmt.Sprintf("%.1f", row.ExpectedPosition),
 			FinishInterval: fmt.Sprintf("%d–%d", row.PositionLow, row.PositionHigh),
 			ShieldChance:   percent(row.ShieldProbability),
 		}
 		for index, probability := range row.PositionProbability {
-			if probability == 0 {
+			if probability < .0005 {
 				continue
 			}
 			view.PositionBreakdown = append(view.PositionBreakdown, forecastPositionView{Position: index + 1, Probability: percent(probability)})
@@ -128,8 +142,8 @@ func forecastRows(result simulation.Result) []forecastRowView {
 	return rows
 }
 
-func forecastComparisonRows(active simulation.Result, comparison *simulation.Result) []forecastRowView {
-	rows := forecastRows(active)
+func forecastComparisonRows(active simulation.Result, comparison *simulation.Result, playoffPlaces int) []forecastRowView {
+	rows := forecastRows(active, playoffPlaces)
 	if comparison == nil {
 		return rows
 	}
@@ -149,12 +163,49 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 		source := active.Teams[i]
 		rows[i].ExpectedPointsDelta = signedOne(other.ExpectedPoints - source.ExpectedPoints)
 		rows[i].PlayoffDelta = signedOne((other.PlayoffProbability-source.PlayoffProbability)*100) + " pp"
-		rows[i].FinishDelta = signedOne(other.ExpectedPosition - source.ExpectedPosition)
+		finishDelta := other.ExpectedPosition - source.ExpectedPosition
+		rows[i].FinishDelta = signedOne(finishDelta)
+		rows[i].FinishDeltaLabel = finishDeltaLabel(finishDelta)
 		rows[i].ShieldDelta = signedOne((other.ShieldProbability-source.ShieldProbability)*100) + " pp"
+		rows[i].PointsDeltaTone = comparisonTone(other.ExpectedPoints-source.ExpectedPoints, true)
+		rows[i].PlayoffDeltaTone = comparisonTone((other.PlayoffProbability-source.PlayoffProbability)*100, true)
+		rows[i].FinishDeltaTone = comparisonTone(finishDelta, false)
+		rows[i].ShieldDeltaTone = comparisonTone((other.ShieldProbability-source.ShieldProbability)*100, true)
 	}
 	return rows
 }
-func signedOne(value float64) string { return fmt.Sprintf("%+.1f", value) }
+func signedOne(value float64) string {
+	if value > -.05 && value < .05 {
+		return "0.0"
+	}
+	return fmt.Sprintf("%+.1f", value)
+}
+
+func finishDeltaLabel(value float64) string {
+	if value < -.05 {
+		return fmt.Sprintf("%.1f places better", -value)
+	}
+	if value > .05 {
+		return fmt.Sprintf("%.1f places worse", value)
+	}
+	return "No material change"
+}
+
+func comparisonTone(value float64, higherIsBetter bool) string {
+	if value > .05 {
+		if higherIsBetter {
+			return "better"
+		}
+		return "worse"
+	}
+	if value < -.05 {
+		if higherIsBetter {
+			return "worse"
+		}
+		return "better"
+	}
+	return "neutral"
+}
 
 func percent(value float64) string { return fmt.Sprintf("%.1f%%", value*100) }
 
@@ -172,7 +223,7 @@ func forecastTeamOptions(teams []standings.Team) []forecastTeamOption {
 	return options
 }
 
-func forecastFixtures(data cache.SeasonData, state forecaststate.State, location *time.Location) []forecastFixtureOption {
+func forecastFixtures(data cache.SeasonData, state forecaststate.State, location *time.Location, teamID string) []forecastFixtureOption {
 	teams := make(map[string]teamNameView, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
@@ -183,6 +234,9 @@ func forecastFixtures(data cache.SeasonData, state forecaststate.State, location
 			continue
 		}
 		if _, fixed := state.Fixed[game.ASAID]; fixed {
+			continue
+		}
+		if teamID != "" && game.HomeTeamID != teamID && game.AwayTeamID != teamID {
 			continue
 		}
 		kickoff, err := fixtures.ParseKickoff(game.KickoffUTC)

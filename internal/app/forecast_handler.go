@@ -117,7 +117,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
-		Rows: forecastComparisonRows(result, comparison), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(),
+		Rows: forecastComparisonRows(result, comparison, playoffPlaces(a.options.Rules)), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(a.options.Rules),
 	}
 	for _, entry := range forecast.Catalog() {
 		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})
@@ -127,6 +127,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		page.ComparisonName = comparison.Model.Name
 		page.ComparisonID = comparison.Model.ID
 	}
+	page.ShowXGCoverage = result.Model.ID == "xg-poisson-v1" || (comparison != nil && comparison.Model.ID == "xg-poisson-v1")
 	page.XGAvailable, page.XGCompleted = forecastXGCoverage(data)
 	if page.XGCompleted > 0 {
 		page.XGCoverage = fmt.Sprintf("%d of %d completed matches", page.XGAvailable, page.XGCompleted)
@@ -142,13 +143,17 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	if len(data.Games) != expectedGames {
 		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures. This forecast includes only fixtures currently in the cache.", len(data.Games), expectedGames)
 	}
-	// Keep every fixture in the page so the browser can update the selector
-	// immediately when the team filter changes.
-	page.Fixtures = forecastFixtures(data, state, a.options.Location)
-	page.CanAdd = len(page.Fixtures) > 0
-	if page.CanAdd {
+	// The rendered selector is filtered for a useful no-JavaScript fallback.
+	// The complete list remains in a template for immediate client-side changes.
+	page.AllFixtures = forecastFixtures(data, state, a.options.Location, "")
+	page.Fixtures = forecastFixtures(data, state, a.options.Location, teamID)
+	page.CanAdd = len(page.AllFixtures) > 0
+	if len(page.Fixtures) > 0 {
 		page.DefaultHomeTeam = page.Fixtures[0].Home.Name
 		page.DefaultAwayTeam = page.Fixtures[0].Away.Name
+	} else if page.CanAdd {
+		page.DefaultHomeTeam = page.AllFixtures[0].Home.Name
+		page.DefaultAwayTeam = page.AllFixtures[0].Away.Name
 	}
 	page.Assumptions = forecastAssumptions(data, state, func(gameID string) string {
 		return forecastURL(r.URL.Path, season, state.Without(gameID), "")

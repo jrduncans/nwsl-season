@@ -574,7 +574,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Simulated seasons", ">20</dd>", "Expected points", "Playoffs", "Shield", "View positions", "Build assumptions", "Add assumption", "Update forecast", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data cutoff", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win"} {
+	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Seasons simulated", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Add assumption", "Update forecast", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Fixture data as of", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -593,18 +593,22 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	}
 }
 
-func TestForecastTeamFilterKeepsAllFixturesForClientSideFiltering(t *testing.T) {
+func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *testing.T) {
+	data := testSeasonData()
+	data.Teams = append(data.Teams, standings.Team{ID: "charlie", Name: "Charlie FC"})
+	data.Games[len(data.Games)-1].HomeTeamID = "bravo"
+	data.Games[len(data.Games)-1].AwayTeamID = "charlie"
 	for _, test := range []struct {
-		team string
-		want string
+		team, want string
+		fixtures   int
 	}{
-		{team: "alpha", want: `data-home-team-id="alpha"`},
-		{team: "bravo", want: `data-away-team-id="bravo"`},
+		{team: "alpha", want: `data-home-team-id="alpha"`, fixtures: 4},
+		{team: "bravo", want: `data-away-team-id="bravo"`, fixtures: 5},
 	} {
 		request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?team="+test.team, nil)
 		response := httptest.NewRecorder()
 
-		NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+		NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
 
 		if response.Code != http.StatusOK {
 			t.Fatalf("team %s: status = %d, want 200; body=%s", test.team, response.Code, response.Body.String())
@@ -612,8 +616,62 @@ func TestForecastTeamFilterKeepsAllFixturesForClientSideFiltering(t *testing.T) 
 		if !strings.Contains(response.Body.String(), test.want) {
 			t.Errorf("team %s: body does not contain %q", test.team, test.want)
 		}
-		if got := strings.Count(response.Body.String(), `<option value="future-`); got != 5 {
-			t.Errorf("team %s: rendered %d fixtures, want all 5 for client-side filtering", test.team, got)
+		body := response.Body.String()
+		start := strings.Index(body, `<select id="forecast-fixture"`)
+		end := strings.Index(body[start:], `</select>`)
+		if start < 0 || end < 0 {
+			t.Fatalf("team %s: body does not contain the visible fixture selector", test.team)
+		}
+		if got := strings.Count(body[start:start+end], `<option value="future-`); got != test.fixtures {
+			t.Errorf("team %s: rendered %d fixtures in the fallback selector, want %d", test.team, got, test.fixtures)
+		}
+		if got := strings.Count(body, `<template id="forecast-all-fixtures">`); got != 1 {
+			t.Errorf("team %s: rendered %d client fixture sources, want 1", test.team, got)
+		}
+	}
+}
+
+func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?v=2&m=results-poisson-v1&c=current-pace-v1", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, text := range []string{"Model comparison", "Current pace relative to Results Poisson", `class="forecast-comparison-table"`, "places better"} {
+		if !strings.Contains(body, text) {
+			t.Errorf("body does not contain %q", text)
+		}
+	}
+	if strings.Contains(body, "Δ comparison − active") {
+		t.Fatal("forecast still renders the comparison inside the primary forecast table")
+	}
+}
+
+func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
+	data := testSeasonData()
+	data.XGoals = []cache.GameXG{{
+		GameID: "completed", Availability: cache.XGAvailable,
+		HomeXG: sql.NullFloat64{Float64: 2.1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.0, Valid: true},
+	}}
+	options := Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}
+	for _, test := range []struct {
+		path string
+		want bool
+	}{
+		{path: "/seasons/2026/forecast", want: false},
+		{path: "/seasons/2026/forecast?v=2&m=xg-poisson-v1", want: true},
+	} {
+		response := httptest.NewRecorder()
+		NewHandlerWithOptions(fakeStore{season: data}, options).ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, want 200; body=%s", test.path, response.Code, response.Body.String())
+		}
+		if got := strings.Contains(response.Body.String(), "xG model data:"); got != test.want {
+			t.Errorf("%s: xG coverage shown = %t, want %t", test.path, got, test.want)
 		}
 	}
 }
