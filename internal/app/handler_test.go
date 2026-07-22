@@ -322,6 +322,17 @@ func TestNoHelpTextUsesWinCountAndHidesUnresolvedReason(t *testing.T) {
 	}
 }
 
+func TestConditionTextRendersNoDrawAlternative(t *testing.T) {
+	got := conditionText(
+		scenarios.FixtureCondition{GameID: "game", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin, clinching.AwayWin}},
+		map[string]string{"home": "Home FC", "away": "Away FC"},
+		map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}},
+	)
+	if got != "Home FC and Away FC do not draw" {
+		t.Fatalf("condition text = %q", got)
+	}
+}
+
 func TestNoHelpFixtureTextUsesVenueAndOpponent(t *testing.T) {
 	got := noHelpFixtureText(
 		clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"away", "home"}},

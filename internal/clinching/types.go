@@ -2,6 +2,7 @@ package clinching
 
 import (
 	"fmt"
+
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -70,8 +71,12 @@ type Diagnostics struct {
 	ReducedTeams        int   `json:"reduced_teams"`
 	ReducedFixtures     int   `json:"reduced_fixtures"`
 	ConnectedComponents int   `json:"connected_components"`
+	SubsetProbes        int   `json:"subset_probes"`
 	VisitedStates       int   `json:"visited_states"`
 	MemoHits            int   `json:"memo_hits"`
+	IndividualPrunes    int   `json:"individual_prunes"`
+	ComponentPrunes     int   `json:"component_prunes"`
+	TotalPrunes         int   `json:"total_prunes"`
 	ElapsedMicroseconds int64 `json:"elapsed_microseconds"`
 }
 type AchievementResult struct {
@@ -95,6 +100,9 @@ type Request struct {
 	TargetTeamID string
 	Achievement  competition.Achievement
 	Fixed        []FixedResult
+	validated    bool
+	prepared     *preparedSeason
+	omitWitness  bool
 }
 
 func validOutcome(o Outcome) bool { return o == HomeWin || o == Draw || o == AwayWin }

@@ -158,13 +158,25 @@ func feasibleThresholdWitnessAtLeast(p preparedSeason, threshold, atLeast int) q
 	// The all-draw, all-home-win, and all-away-win starts cover the obvious
 	// distributions. The focused starts bias every fixture involving one team
 	// toward that team and are useful when several direct rivals share fixtures.
-	seeds := make([]map[string]Outcome, 0, len(teams)+3)
+	best := queryResult{count: -1, outcomes: map[string]Outcome{}}
+	try := func(seed map[string]Outcome) (queryResult, bool) {
+		candidate := improveThresholdWitness(p, threshold, seed)
+		if candidate.count >= atLeast {
+			return candidate, true
+		}
+		if betterThresholdWitness(candidate, best) {
+			best = candidate
+		}
+		return queryResult{}, false
+	}
 	for _, defaultOutcome := range []Outcome{Draw, HomeWin, AwayWin} {
 		seed := map[string]Outcome{}
 		for _, game := range p.decision {
 			seed[game.ID] = defaultOutcome
 		}
-		seeds = append(seeds, seed)
+		if candidate, ok := try(seed); ok {
+			return candidate
+		}
 	}
 	for _, focus := range teams {
 		seed := map[string]Outcome{}
@@ -178,17 +190,8 @@ func feasibleThresholdWitnessAtLeast(p preparedSeason, threshold, atLeast int) q
 				seed[game.ID] = Draw
 			}
 		}
-		seeds = append(seeds, seed)
-	}
-
-	best := queryResult{count: -1, outcomes: map[string]Outcome{}}
-	for _, seed := range seeds {
-		candidate := improveThresholdWitness(p, threshold, seed)
-		if candidate.count >= atLeast {
+		if candidate, ok := try(seed); ok {
 			return candidate
-		}
-		if betterThresholdWitness(candidate, best) {
-			best = candidate
 		}
 	}
 	return best
@@ -339,7 +342,9 @@ func cloneOutcomes(values map[string]Outcome) map[string]Outcome {
 	return copy
 }
 
-func solveThreshold(ctx context.Context, p preparedSeason, threshold int) (queryResult, error) {
+// solveThresholdMaximumOracle retains the former exact-maximum dynamic program
+// as a generated/tiny-season correctness oracle for solveCutoff.
+func solveThresholdMaximumOracle(ctx context.Context, p preparedSeason, threshold int) (queryResult, error) {
 	q := queryResult{outcomes: map[string]Outcome{}}
 	// First reduce fixtures against teams unable to reach this query's threshold.
 	contender := map[string]bool{}

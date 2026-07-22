@@ -175,18 +175,22 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	ach := append([]competition.Achievement(nil), r.Rules.Achievements...)
 	sort.Slice(ach, func(i, j int) bool { return ach[i].TopK > ach[j].TopK })
 	for _, t := range table {
+		bases := make(map[competition.AchievementID]clinching.AchievementResult, len(ach))
 		for _, a := range ach {
 			b, ok := baseline[t.Team.ID+"\x00"+string(a.ID)]
 			if !ok {
 				return calculated{}, fmt.Errorf("qualification baseline missing for team %q achievement %q", t.Team.ID, a.ID)
 			}
-			base := clinching.AchievementResult{TeamID: b.TeamID, Achievement: b.Achievement, TopK: b.TopK, Status: b.Status, Method: b.Method, Reason: b.Reason, NoHelp: b.NoHelp}
-			probeStarted := time.Now()
+			bases[a.ID] = clinching.AchievementResult{TeamID: b.TeamID, Achievement: b.Achievement, TopK: b.TopK, Status: b.Status, Method: b.Method, Reason: b.Reason, NoHelp: b.NoHelp}
 			r.report(Progress{Phase: "started", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), BatchElapsed: time.Since(batchStarted)})
-			v, err := scenarios.Generate(ctx, scenarios.Request{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievement: a, Baseline: base})
-			if err != nil {
-				return calculated{}, err
-			}
+		}
+		probeStarted := time.Now()
+		teamResults, err := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
+		if err != nil {
+			return calculated{}, err
+		}
+		for _, a := range ach {
+			v := teamResults[a.ID]
 			rows = append(rows, cache.ScenarioResult{Result: v})
 			completed++
 			r.report(Progress{Phase: "finished", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), State: v.State})

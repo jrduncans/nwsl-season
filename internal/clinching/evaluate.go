@@ -24,8 +24,10 @@ func Evaluate(ctx context.Context, request Request) (AchievementResult, error) {
 
 func evaluateStatusRequest(ctx context.Context, request Request) (AchievementResult, error) {
 	started := time.Now()
-	if err := validateRequest(request); err != nil {
-		return AchievementResult{}, err
+	if !request.validated {
+		if err := validateRequest(request); err != nil {
+			return AchievementResult{}, err
+		}
 	}
 	result := AchievementResult{TeamID: request.TargetTeamID, Achievement: request.Achievement.ID, TopK: request.Achievement.TopK, BlockingWitness: []WitnessGame{}, FrontierWitness: []WitnessGame{}, NoHelp: NoHelpPath{State: NoHelpNotApplicable, FixtureIDs: []string{}}}
 	finish := func() AchievementResult {
@@ -33,9 +35,13 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 		return result
 	}
 	unknown := 0
-	for _, g := range request.Games {
-		if g.Status == "PreMatch" {
-			unknown++
+	if request.prepared != nil {
+		unknown = len(request.prepared.decision) + len(request.prepared.witness)
+	} else {
+		for _, g := range request.Games {
+			if g.Status == "PreMatch" {
+				unknown++
+			}
 		}
 	}
 	if unknown == 0 {
@@ -43,9 +49,15 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 		result.Diagnostics.ElapsedMicroseconds = time.Since(started).Microseconds()
 		return result, nil
 	}
-	prepared, err := prepare(request)
-	if err != nil {
-		return result, err
+	var prepared preparedSeason
+	if request.prepared != nil {
+		prepared = *request.prepared
+	} else {
+		var err error
+		prepared, err = prepare(request)
+		if err != nil {
+			return result, err
+		}
 	}
 	result.Diagnostics.BoundCapableTeams = prepared.capable
 	// Cheap strict witness: these opponents are ahead after all target losses.
@@ -59,7 +71,9 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 		result.Status, result.Method = NotClinched, ProofCheapBound
 		result.StrictlyAhead = CountEvidence{Value: strictAhead, Kind: "lower_bound"}
 		result.AtLeastLevel = CountEvidence{Value: strictAhead, Kind: "lower_bound"}
-		result.BlockingWitness = completeWitness(prepared, nil)
+		if !request.omitWitness {
+			result.BlockingWitness = completeWitness(prepared, nil)
+		}
 		return finish(), nil
 	}
 	if prepared.capable < request.Achievement.TopK {
@@ -75,12 +89,18 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 	if witness := feasibleThresholdWitnessAtLeast(prepared, prepared.frontier+1, request.Achievement.TopK); witness.count >= request.Achievement.TopK {
 		result.Status = NotClinched
 		result.Method = ProofPointsOptimization
-		result.StrictlyAhead = CountEvidence{Value: witness.count, Kind: "lower_bound"}
-		result.AtLeastLevel = CountEvidence{Value: witness.count, Kind: "lower_bound"}
-		result.BlockingWitness = completeWitness(prepared, witness.outcomes)
+		result.StrictlyAhead = CountEvidence{Value: request.Achievement.TopK, Kind: "lower_bound"}
+		result.AtLeastLevel = CountEvidence{Value: request.Achievement.TopK, Kind: "lower_bound"}
+		if !request.omitWitness {
+			verified := countThresholdWitness(prepared, prepared.frontier+1, witness.outcomes)
+			if verified.count < request.Achievement.TopK {
+				return result, errors.New("constructed blocking witness failed independent verification")
+			}
+			result.BlockingWitness = completeWitness(prepared, witness.outcomes)
+		}
 		return finish(), nil
 	}
-	strict, err := solveThreshold(ctx, prepared, prepared.frontier+1)
+	strict, err := solveCutoff(ctx, prepared, prepared.frontier+1, request.Achievement.TopK)
 	mergeDiagnostics(&result.Diagnostics, strict.diag)
 	if err != nil {
 		if errors.Is(err, ErrComputeBudget) {
@@ -92,14 +112,18 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 		}
 		return result, err
 	}
-	result.StrictlyAhead = CountEvidence{Value: strict.count, Kind: "exact"}
-	if strict.count >= request.Achievement.TopK {
+	if strict.feasible {
+		result.StrictlyAhead = CountEvidence{Value: request.Achievement.TopK, Kind: "lower_bound"}
+		result.AtLeastLevel = CountEvidence{Value: request.Achievement.TopK, Kind: "lower_bound"}
 		result.Status = NotClinched
 		result.Method = ProofPointsOptimization
-		result.BlockingWitness = completeWitness(prepared, strict.outcomes)
+		if !request.omitWitness {
+			result.BlockingWitness = completeWitness(prepared, strict.outcomes)
+		}
 		return finish(), nil
 	}
-	level, err := solveThreshold(ctx, prepared, prepared.frontier)
+	result.StrictlyAhead = CountEvidence{Value: request.Achievement.TopK - 1, Kind: "upper_bound"}
+	level, err := solveCutoff(ctx, prepared, prepared.frontier, request.Achievement.TopK)
 	mergeDiagnostics(&result.Diagnostics, level.diag)
 	if err != nil {
 		if errors.Is(err, ErrComputeBudget) {
@@ -111,14 +135,17 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 		}
 		return result, err
 	}
-	result.AtLeastLevel = CountEvidence{Value: level.count, Kind: "exact"}
-	if level.count < request.Achievement.TopK {
+	if !level.feasible {
+		result.AtLeastLevel = CountEvidence{Value: request.Achievement.TopK - 1, Kind: "upper_bound"}
 		result.Status = Clinched
 		result.Method = ProofPointsOptimization
 	} else {
+		result.AtLeastLevel = CountEvidence{Value: request.Achievement.TopK, Kind: "lower_bound"}
 		result.Status = Unresolved
 		result.Method = ProofUnprovedScoreTiebreak
-		result.FrontierWitness = completeWitness(prepared, level.outcomes)
+		if !request.omitWitness {
+			result.FrontierWitness = completeWitness(prepared, level.outcomes)
+		}
 		result.Reason = "a points-level completion requires an unproved score tiebreak"
 	}
 	return finish(), nil
@@ -175,66 +202,16 @@ func finishCompleted(r Request, result AchievementResult) AchievementResult {
 	return result
 }
 
-func addNoHelp(ctx context.Context, r Request, base AchievementResult) (AchievementResult, error) {
-	fixed := append([]FixedResult(nil), r.Fixed...)
-	fixedSet := map[string]bool{}
-	for _, f := range fixed {
-		fixedSet[f.GameID] = true
-	}
-	prefix := []string{}
-	for _, id := range r.FixtureOrder {
-		g := gameByID(r.Games, id)
-		if g.HomeTeamID != r.TargetTeamID && g.AwayTeamID != r.TargetTeamID || fixedSet[id] {
-			continue
-		}
-		o := AwayWin
-		if g.HomeTeamID == r.TargetTeamID {
-			o = HomeWin
-		}
-		fixed = append(fixed, FixedResult{GameID: id, Outcome: o})
-		prefix = append(prefix, id)
-		probe := r
-		probe.Fixed = fixed
-		value, err := evaluateStatusRequest(ctx, probe)
-		if err != nil {
-			return base, err
-		}
-		if value.Status == Clinched {
-			base.NoHelp = NoHelpPath{State: NoHelpGuaranteed, FixtureIDs: append([]string(nil), prefix...)}
-			return base, nil
-		}
-	}
-	probe := r
-	probe.Fixed = fixed
-	value, err := evaluateStatusRequest(ctx, probe)
-	if err != nil {
-		return base, err
-	}
-	switch value.Status {
-	case NotClinched:
-		base.NoHelp = NoHelpPath{State: NoHelpImpossible, FixtureIDs: []string{}, Reason: "even winning every remaining target fixture does not guarantee the achievement"}
-	case Unresolved:
-		base.NoHelp = NoHelpPath{State: NoHelpUnresolved, FixtureIDs: []string{}, Reason: value.Reason}
-	default:
-		base.NoHelp = NoHelpPath{State: NoHelpGuaranteed, FixtureIDs: append([]string(nil), prefix...)}
-	}
-	return base, nil
-}
-
-func gameByID(games []standings.Game, id string) standings.Game {
-	for _, g := range games {
-		if g.ID == id {
-			return g
-		}
-	}
-	return standings.Game{}
-}
 func mergeDiagnostics(to *Diagnostics, from Diagnostics) {
 	to.ReducedTeams += from.ReducedTeams
 	to.ReducedFixtures += from.ReducedFixtures
 	to.ConnectedComponents += from.ConnectedComponents
+	to.SubsetProbes += from.SubsetProbes
 	to.VisitedStates += from.VisitedStates
 	to.MemoHits += from.MemoHits
+	to.IndividualPrunes += from.IndividualPrunes
+	to.ComponentPrunes += from.ComponentPrunes
+	to.TotalPrunes += from.TotalPrunes
 }
 func sortedIDs(values map[string]int) []string {
 	ids := make([]string, 0, len(values))

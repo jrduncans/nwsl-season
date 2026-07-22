@@ -1,0 +1,2423 @@
+{
+  "snapshot": "2026-halfway-119-of-240",
+  "teams": [
+    "2lqRn34qr0",
+    "315VnJ759x",
+    "4JMAk47qKg",
+    "4wM4rZdqjB",
+    "7VqG1lYMvW",
+    "7vQ7BBzqD1",
+    "KPqjw8PQ6v",
+    "Pk5LeeNqOW",
+    "XVqKeVKM01",
+    "aDQ0lzvQEv",
+    "eV5D2w9QKn",
+    "eV5DR6YQKn",
+    "kRQa8JOqKZ",
+    "odMX2OJqYL",
+    "raMyrr25d2",
+    "zeQZeazqKw"
+  ],
+  "games": [
+    {
+      "id": "0Oq6onV6Q6",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-18 23:00:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "0Oq6onZgQ6",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-25 23:45:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "0Oq6onjxQ6",
+      "status": "FullTime",
+      "home": "2lqRn34qr0",
+      "away": "aDQ0lzvQEv",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-28 18:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "0Oq6onkgQ6",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "zeQZeazqKw",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-23 20:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "0Oq6onkxQ6",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "4JMAk47qKg",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-16 00:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "0Oq6onz6Q6",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-06 20:00:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "0Oq6onzgQ6",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-29 02:00:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "0x5gxvDXq7",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-06 18:00:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "0x5gxvDwq7",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-27 00:00:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "0x5gxvKPq7",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "4JMAk47qKg",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-28 02:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "0x5gxvRPq7",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "aDQ0lzvQEv",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-10 23:00:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "0x5gxvRwq7",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "315VnJ759x",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-21 02:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "0x5gxvnwq7",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-25 02:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "0x5gxvpXq7",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-18 17:00:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "2lqROv6JQr",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "KPqjw8PQ6v",
+      "home_score": 4,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-16 22:30:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "2lqROv6aQr",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "KPqjw8PQ6v",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-24 21:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "2lqROv8JQr",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "KPqjw8PQ6v",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-29 00:45:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "2lqROvKLQr",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-24 22:30:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "2lqROvaLQr",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-12 00:00:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "2lqROvaaQr",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-30 16:30:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "2lqROvdaQr",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-30 00:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "2vQ1gW7O5r",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "XVqKeVKM01",
+      "home_score": 3,
+      "away_score": 2,
+      "kickoff_utc": "2026-04-24 21:30:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "2vQ1gWDb5r",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-03 01:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "2vQ1gWOb5r",
+      "status": "FullTime",
+      "home": "aDQ0lzvQEv",
+      "away": "4JMAk47qKg",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-07-04 00:00:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "2vQ1gWnG5r",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "2vQ1gWzG5r",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "Pk5LeeNqOW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-19 20:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "315V9vEYM9",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-01 00:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "315V9vKvM9",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "aDQ0lzvQEv",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-25 21:00:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "315V9vNnM9",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "kRQa8JOqKZ",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-04-04 00:00:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "315V9vRYM9",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "2lqRn34qr0",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-30 00:00:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "315V9vavM9",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-12 22:30:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "4JMA1D62MK",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-15 02:00:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "4JMA1DG1MK",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "aDQ0lzvQEv",
+      "home_score": 2,
+      "away_score": 4,
+      "kickoff_utc": "2026-05-02 21:37:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "4JMA1DX2MK",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "kRQa8JOqKZ",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-12 00:45:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "4JMA1DgOMK",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-27 21:00:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "4JMA1Dz1MK",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "7vQ7BBzqD1",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-03-15 20:00:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "4wM4O67NQj",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "4wM4rZdqjB",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-02 22:30:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "4wM4O694Qj",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-27 23:00:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "4wM4O6BNQj",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "KPqjw8PQ6v",
+      "home_score": 4,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-15 23:00:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "4wM4O6DyQj",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-15 22:30:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "4wM4O6RyQj",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "Pk5LeeNqOW",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-12 20:00:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "7VqGXe4dQv",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "aDQ0lzvQEv",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-06 20:00:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "7VqGXe4zQv",
+      "status": "PreMatch",
+      "home": "raMyrr25d2",
+      "away": "Pk5LeeNqOW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-29 00:00:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "7VqGXe9jQv",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "eV5D2w9QKn",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-03-28 16:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "7VqGXeRdQv",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "Pk5LeeNqOW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-18 21:00:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "7VqGXeYzQv",
+      "status": "PreMatch",
+      "home": "odMX2OJqYL",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-25 21:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "7VqGXeyjQv",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "XVqKeVKM01",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-12 23:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "7VqGXeyzQv",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "7vQ7BBzqD1",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-23 00:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "7vQ7RoPLqD",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "7vQ7RoVOqD",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "4JMAk47qKg",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-31 19:00:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "7vQ7RojOqD",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-02 20:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "7vQ7RopGqD",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "2lqRn34qr0",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-05 00:45:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "7vQ7RozLqD",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-17 02:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "9YqdevG7Qv",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-08 22:30:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "9YqdevO7Qv",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "raMyrr25d2",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-05 00:45:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "9YqdevlEQv",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "zeQZeazqKw",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-04-26 00:00:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "9YqdevpkQv",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "aDQ0lzvQEv",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-20 21:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "9vQ2Gg7mMK",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "eV5D2w9QKn",
+      "home_score": 0,
+      "away_score": 3,
+      "kickoff_utc": "2026-04-27 00:00:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "9vQ2GgDLMK",
+      "status": "PreMatch",
+      "home": "odMX2OJqYL",
+      "away": "Pk5LeeNqOW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-09 20:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "9vQ2GgnLMK",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "eV5DR6YQKn",
+      "home_score": 4,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-05 23:00:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "9vQ2Ggo9MK",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-25 22:30:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "9vQ2GgwmMK",
+      "status": "FullTime",
+      "home": "aDQ0lzvQEv",
+      "away": "Pk5LeeNqOW",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-14 00:00:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "9z5kBv8dMA",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "7VqG1lYMvW",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-04-03 23:00:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "9z5kBvDeMA",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-12 02:00:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "9z5kBvPJMA",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "315VnJ759x",
+      "home_score": 3,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-30 00:10:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "9z5kBvkJMA",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-30 02:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "9z5kBvpeMA",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-25 19:00:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "BLMvVg2lMx",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "aDQ0lzvQEv",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-16 00:00:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "BLMvVgdWMx",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "2lqRn34qr0",
+      "home_score": 1,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-21 00:00:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "BLMvVgelMx",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-16 23:00:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "BLMvVgpBMx",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-03 02:00:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "BLMvVgxWMx",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "Pk5LeeNqOW",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-03 17:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "EGMPGz4yQa",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-13 00:45:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "EGMPGzKyQa",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-25 23:00:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "EGMPGzN6Qa",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "eV5DR6YQKn",
+      "home_score": 4,
+      "away_score": 3,
+      "kickoff_utc": "2026-04-04 00:30:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "EGMPGzdxQa",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-01 20:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "EGMPGzgxQa",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "odMX2OJqYL",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-30 17:30:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "KAqBr14Aqb",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-05 02:00:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "KAqBr14mqb",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-23 22:00:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "KAqBr16Bqb",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "KPqjw8PQ6v",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-10 16:25:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "KAqBr1GAqb",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-17 23:00:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "KAqBr1Omqb",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-25 00:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "KAqBr1ZBqb",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "4wM4rZdqjB",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-26 01:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "KAqBr1amqb",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "7VqG1lYMvW",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-21 00:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "KPqj3v92Q6",
+      "status": "PreMatch",
+      "home": "raMyrr25d2",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-15 00:00:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "KPqj3vV2Q6",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "4wM4rZdqjB",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-11 01:03:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "KPqj3vlYQ6",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "raMyrr25d2",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-04-30 00:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "KPqj3vpBQ6",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-26 16:30:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "KPqj3vyYQ6",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "2lqRn34qr0",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-14 22:30:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "KXMeXv6vQ6",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-07 23:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "KXMeXvbPQ6",
+      "status": "FullTime",
+      "home": "2lqRn34qr0",
+      "away": "7VqG1lYMvW",
+      "home_score": 2,
+      "away_score": 3,
+      "kickoff_utc": "2026-04-26 00:45:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "KXMeXvnvQ6",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "315VnJ759x",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-05 16:00:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "KXMeXvpkQ6",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-20 23:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "N6Mmgv1xqE",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "Pk5LeeNqOW",
+      "home_score": 3,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-08 22:30:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "N6MmgvDWqE",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-22 22:30:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "N6MmgvNxqE",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "4wM4rZdqjB",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-22 18:00:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "N6MmgvPWqE",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "zeQZeazqKw",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-18 20:00:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "N6MmgvpPqE",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-04 20:00:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "NPqxL61Xq9",
+      "status": "FullTime",
+      "home": "aDQ0lzvQEv",
+      "away": "eV5DR6YQKn",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-29 23:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "NPqxL62Wq9",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-09 23:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "NPqxL68Wq9",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "KPqjw8PQ6v",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-11 00:00:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "NPqxL6Jxq9",
+      "status": "PreMatch",
+      "home": "raMyrr25d2",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-26 00:00:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "NPqxL6NXq9",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "raMyrr25d2",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-14 16:30:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "NWMWkv4DMl",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-25 00:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "NWMWkv9DMl",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "4wM4rZdqjB",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-21 02:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "NWMWkv9EMl",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "eV5D2w9QKn",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-10 20:00:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "NWMWkvKYMl",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-18 00:45:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "NWMWkvZEMl",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "Pk5LeeNqOW",
+      "home_score": 3,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-26 02:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "NWMWkvaDMl",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-24 00:00:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "NWMWkvaYMl",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-05 22:30:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "Oa5wPG2Dq1",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "XVqKeVKM01",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-19 00:45:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "Oa5wPG8Dq1",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "kRQa8JOqKZ",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-17 22:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "Oa5wPGJ9q1",
+      "status": "PreMatch",
+      "home": "odMX2OJqYL",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-01 00:00:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "Oa5wPGJDq1",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-23 18:00:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "Oa5wPGN4q1",
+      "status": "FullTime",
+      "home": "aDQ0lzvQEv",
+      "away": "eV5D2w9QKn",
+      "home_score": 1,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-25 23:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "Oa5wPGe4q1",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "2lqRn34qr0",
+      "home_score": 1,
+      "away_score": 4,
+      "kickoff_utc": "2026-05-10 01:36:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "Oa5wPGp9q1",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-17 16:30:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "OlMlWv1DQL",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "315VnJ759x",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-25 17:00:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "OlMlWvDwQL",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-20 00:45:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "OlMlWvL4QL",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "XVqKeVKM01",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-07-04 02:00:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "OlMlWvV4QL",
+      "status": "PreMatch",
+      "home": "raMyrr25d2",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-08 00:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "OlMlWvpwQL",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "Pk5L3j4GMO",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-13 17:00:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "Pk5L3jLGMO",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "Pk5L3jNYMO",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "KPqjw8PQ6v",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-04 01:00:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "Pk5L3jdEMO",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-01 22:30:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "Pk5L3jwEMO",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "eV5D2w9QKn",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-30 20:00:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "Vj589R8Lq8",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "odMX2OJqYL",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-25 22:30:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "Vj589RLEq8",
+      "status": "PreMatch",
+      "home": "odMX2OJqYL",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-20 18:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "Vj589RPDq8",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "7vQ7BBzqD1",
+      "home_score": 3,
+      "away_score": 1,
+      "kickoff_utc": "2026-07-04 23:30:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "Vj589RpDq8",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-08 20:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "XVqKw04Wq0",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "aDQ0lzvQEv",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-17 01:00:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "XVqKw0NWq0",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "odMX2OJqYL",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-07-15 23:00:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "XVqKw0PDq0",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-03 20:00:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "XVqKw0r0q0",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "7vQ7BBzqD1",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-21 02:00:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "XVqKw0y0q0",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "2lqRn34qr0",
+      "home_score": 3,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-03 19:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "Xj5YPvARMb",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "7VqG1lYMvW",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-03-22 23:00:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "Xj5YPvKaMb",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "aDQ0lzvQEv",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-04 23:00:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "Xj5YPvayMb",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-22 23:30:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "Xj5YPvdyMb",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "kRQa8JOqKZ",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-18 22:30:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "Xj5YPveRMb",
+      "status": "FullTime",
+      "home": "XVqKeVKM01",
+      "away": "zeQZeazqKw",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-09 00:00:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "a35row12qL",
+      "status": "FullTime",
+      "home": "aDQ0lzvQEv",
+      "away": "4wM4rZdqjB",
+      "home_score": 4,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-25 00:00:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "a35row2oqL",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-06 02:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "a35row8oqL",
+      "status": "FullTime",
+      "home": "2lqRn34qr0",
+      "away": "4wM4rZdqjB",
+      "home_score": 0,
+      "away_score": 3,
+      "kickoff_utc": "2026-07-04 01:30:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "a35rowD4qL",
+      "status": "PreMatch",
+      "home": "zeQZeazqKw",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-19 22:30:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "a35rowp4qL",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "aDQ0WB2GqE",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-10 01:00:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "aDQ0WB6GqE",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "315VnJ759x",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-11 00:00:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "aDQ0WB73qE",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "zeQZeazqKw",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-04-29 23:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "aDQ0WBOlqE",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-26 00:30:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "aDQ0WBZ3qE",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "eV5D2w9QKn",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-14 20:00:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "e7Mzyn2JQr",
+      "status": "FullTime",
+      "home": "2lqRn34qr0",
+      "away": "Pk5LeeNqOW",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-07-18 18:15:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "e7Mzyn3eQr",
+      "status": "PreMatch",
+      "home": "raMyrr25d2",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-04 16:00:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "e7MzynBJQr",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-22 02:00:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "e7MzynNGQr",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "kRQa8JOqKZ",
+      "home_score": 1,
+      "away_score": 3,
+      "kickoff_utc": "2026-03-22 00:45:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "e7MzynYGQr",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "4JMAk47qKg",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-07 02:00:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "eV5D8l4Y5K",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-19 02:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "eV5D8lOY5K",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "eV5D8lnn5K",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "aDQ0lzvQEv",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-04-05 21:00:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "eV5D8lo95K",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "Pk5LeeNqOW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-02 23:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "eV5D8ly95K",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "zeQZeazqKw",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-31 23:00:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "eVq36G3V5W",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "XVqKeVKM01",
+      "home_score": 0,
+      "away_score": 3,
+      "kickoff_utc": "2026-03-26 00:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "eVq36G7V5W",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "7VqG1lYMvW",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-10 00:45:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "eVq36GDX5W",
+      "status": "FullTime",
+      "home": "odMX2OJqYL",
+      "away": "aDQ0lzvQEv",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-19 23:00:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "eVq36GRv5W",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-17 22:30:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "eVq36GoX5W",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "eV5DR6YQKn",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-18 00:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "eVq36GzX5W",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-23 20:00:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "eVq36Gzv5W",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-05 01:30:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "gOMnGv1l5w",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "eV5DR6YQKn",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-28 22:30:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "gOMnGv885w",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "kRQa8JOqKZ",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-24 00:45:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "gOMnGv8l5w",
+      "status": "FullTime",
+      "home": "7vQ7BBzqD1",
+      "away": "raMyrr25d2",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-16 02:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "gOMnGvD85w",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-29 23:00:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "gOMnGvDA5w",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-07 01:00:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "gOMnGvL85w",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-26 23:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "gOMnGvbA5w",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-24 01:30:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "gjMNWa8D5K",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "raMyrr25d2",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-04-04 20:00:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "gjMNWaB35K",
+      "status": "FullTime",
+      "home": "aDQ0lzvQEv",
+      "away": "7vQ7BBzqD1",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-30 22:30:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "gjMNWad35K",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-02 00:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "gjMNWamK5K",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-13 23:00:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "gjMNWayK5K",
+      "status": "PreMatch",
+      "home": "raMyrr25d2",
+      "away": "eV5D2w9QKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "gpMOgK4DMz",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-29 22:30:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "gpMOgK4lMz",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-06 23:00:00 UTC",
+      "matchday": 20
+    },
+    {
+      "id": "gpMOgK7lMz",
+      "status": "PreMatch",
+      "home": "KPqjw8PQ6v",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-24 00:00:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "gpMOgKDrMz",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "4wM4rZdqjB",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-28 20:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "gpMOgKWDMz",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "2lqRn34qr0",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-23 22:30:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "gpMOgKWrMz",
+      "status": "FullTime",
+      "home": "315VnJ759x",
+      "away": "odMX2OJqYL",
+      "home_score": 1,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-16 02:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "gpMOgKdDMz",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-26 21:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "jYQJJx2ZQG",
+      "status": "FullTime",
+      "home": "2lqRn34qr0",
+      "away": "XVqKeVKM01",
+      "home_score": 3,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-17 00:45:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "jYQJJxLZQG",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "4JMAk47qKg",
+      "home_score": 1,
+      "away_score": 1,
+      "kickoff_utc": "2026-07-19 01:00:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "jYQJJxPkQG",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "odMX2OJqYL",
+      "home_score": 1,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-09 22:30:00 UTC",
+      "matchday": 7
+    },
+    {
+      "id": "jYQJJxVVQG",
+      "status": "PreMatch",
+      "home": "odMX2OJqYL",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-17 00:00:00 UTC",
+      "matchday": 25
+    },
+    {
+      "id": "jYQJJxbVQG",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-30 23:00:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "jYQJJxbZQG",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-23 00:45:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "jYQJJxrkQG",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "2lqRn34qr0",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-03-25 23:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "kRQalvAjqK",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "4JMAk47qKg",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-15 00:45:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "kRQalvBkqK",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-15 02:00:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "kRQalvEjqK",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "7vQ7BBzqD1",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-02 00:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "kRQalvK8qK",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "4JMAk47qKg",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-27 00:45:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "kRQalvgkqK",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "aDQ0lzvQEv",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-11 22:30:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "ljqEd8RV5x",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "7vQ7BBzqD1",
+      "home_score": 3,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-18 18:30:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "ljqEd8Yo5x",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "odMX2OJqYL",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-04 00:45:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "ljqEd8ZV5x",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-20 00:00:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "ljqEd8o45x",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "315VnJ759x",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-03 23:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "ljqEd8v45x",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "zeQZeazqKw",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-21 22:30:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "odMXVvKJqY",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-20 23:00:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "odMXVvNxqY",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "Pk5LeeNqOW",
+      "home_score": 1,
+      "away_score": 2,
+      "kickoff_utc": "2026-04-26 22:00:00 UTC",
+      "matchday": 5
+    },
+    {
+      "id": "odMXVvdeqY",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "4wM4rZdqjB",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-09 00:45:00 UTC",
+      "matchday": 16
+    },
+    {
+      "id": "odMXVvkeqY",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "eV5D2w9QKn",
+      "home_score": 3,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-05 21:00:00 UTC",
+      "matchday": 11
+    },
+    {
+      "id": "p6qbYEKb50",
+      "status": "PreMatch",
+      "home": "4wM4rZdqjB",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-03 22:30:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "p6qbYEWX50",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "7VqG1lYMvW",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-18 00:00:00 UTC",
+      "matchday": 13
+    },
+    {
+      "id": "p6qbYEaX50",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-19 22:30:00 UTC",
+      "matchday": 18
+    },
+    {
+      "id": "p6qbYEbw50",
+      "status": "FullTime",
+      "home": "4JMAk47qKg",
+      "away": "odMX2OJqYL",
+      "home_score": 3,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-21 20:00:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "p6qbYElw50",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "eV5DR6YQKn",
+      "home_score": 1,
+      "away_score": 0,
+      "kickoff_utc": "2026-05-03 21:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "raMyNO2l5d",
+      "status": "PreMatch",
+      "home": "315VnJ759x",
+      "away": "7vQ7BBzqD1",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-02 00:45:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "raMyNO3B5d",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-17 01:30:00 UTC",
+      "matchday": 22
+    },
+    {
+      "id": "raMyNOpd5d",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "Pk5LeeNqOW",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-04-04 22:30:00 UTC",
+      "matchday": 4
+    },
+    {
+      "id": "raMyNOwB5d",
+      "status": "PreMatch",
+      "home": "4JMAk47qKg",
+      "away": "Pk5LeeNqOW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-11-01 22:00:00 UTC",
+      "matchday": 27
+    },
+    {
+      "id": "raMyNOxl5d",
+      "status": "FullTime",
+      "home": "KPqjw8PQ6v",
+      "away": "7VqG1lYMvW",
+      "home_score": 0,
+      "away_score": 2,
+      "kickoff_utc": "2026-05-31 17:00:00 UTC",
+      "matchday": 10
+    },
+    {
+      "id": "vzqoYv1JMa",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "315VnJ759x",
+      "home_score": 1,
+      "away_score": 3,
+      "kickoff_utc": "2026-03-28 23:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "vzqoYv8JMa",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "aDQ0lzvQEv",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-16 02:00:00 UTC",
+      "matchday": 8
+    },
+    {
+      "id": "vzqoYv8NMa",
+      "status": "FullTime",
+      "home": "4wM4rZdqjB",
+      "away": "Pk5LeeNqOW",
+      "home_score": 3,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-24 17:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "vzqoYvAYMa",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "zeQZeazqKw",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-24 02:00:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "vzqoYvNNMa",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "eV5DR6YQKn",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-27 01:00:00 UTC",
+      "matchday": 14
+    },
+    {
+      "id": "vzqoYvlNMa",
+      "status": "PreMatch",
+      "home": "2lqRn34qr0",
+      "away": "KPqjw8PQ6v",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-30 00:45:00 UTC",
+      "matchday": 19
+    },
+    {
+      "id": "vzqoYvlYMa",
+      "status": "PreMatch",
+      "home": "eV5DR6YQKn",
+      "away": "raMyrr25d2",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-11 22:30:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "wvq9k97BMW",
+      "status": "FullTime",
+      "home": "raMyrr25d2",
+      "away": "XVqKeVKM01",
+      "home_score": 0,
+      "away_score": 0,
+      "kickoff_utc": "2026-03-29 23:00:00 UTC",
+      "matchday": 3
+    },
+    {
+      "id": "wvq9k98NMW",
+      "status": "PreMatch",
+      "home": "eV5D2w9QKn",
+      "away": "aDQ0lzvQEv",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-07-30 01:00:00 UTC",
+      "matchday": 15
+    },
+    {
+      "id": "wvq9k9LNMW",
+      "status": "FullTime",
+      "home": "7VqG1lYMvW",
+      "away": "XVqKeVKM01",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-24 23:00:00 UTC",
+      "matchday": 9
+    },
+    {
+      "id": "wvq9k9N1MW",
+      "status": "PreMatch",
+      "home": "kRQa8JOqKZ",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-25 00:45:00 UTC",
+      "matchday": 26
+    },
+    {
+      "id": "wvq9k9z1MW",
+      "status": "PreMatch",
+      "home": "7vQ7BBzqD1",
+      "away": "315VnJ759x",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-13 00:00:00 UTC",
+      "matchday": 21
+    },
+    {
+      "id": "xW5pOv8RMg",
+      "status": "FullTime",
+      "home": "eV5D2w9QKn",
+      "away": "raMyrr25d2",
+      "home_score": 1,
+      "away_score": 3,
+      "kickoff_utc": "2026-07-11 02:00:00 UTC",
+      "matchday": 12
+    },
+    {
+      "id": "xW5pOvKYMg",
+      "status": "PreMatch",
+      "home": "aDQ0lzvQEv",
+      "away": "kRQa8JOqKZ",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-09-26 22:30:00 UTC",
+      "matchday": 23
+    },
+    {
+      "id": "xW5pOvNJMg",
+      "status": "FullTime",
+      "home": "zeQZeazqKw",
+      "away": "eV5DR6YQKn",
+      "home_score": 2,
+      "away_score": 1,
+      "kickoff_utc": "2026-03-14 23:00:00 UTC",
+      "matchday": 1
+    },
+    {
+      "id": "xW5pOvlJMg",
+      "status": "FullTime",
+      "home": "Pk5LeeNqOW",
+      "away": "7VqG1lYMvW",
+      "home_score": 2,
+      "away_score": 0,
+      "kickoff_utc": "2026-04-30 02:00:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "xW5pOvzRMg",
+      "status": "PreMatch",
+      "home": "7VqG1lYMvW",
+      "away": "2lqRn34qr0",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-15 02:00:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "zeQZLvAr5K",
+      "status": "FullTime",
+      "home": "eV5DR6YQKn",
+      "away": "aDQ0lzvQEv",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-03-21 00:00:00 UTC",
+      "matchday": 2
+    },
+    {
+      "id": "zeQZLvKZ5K",
+      "status": "PreMatch",
+      "home": "XVqKeVKM01",
+      "away": "7VqG1lYMvW",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-10-03 00:00:00 UTC",
+      "matchday": 24
+    },
+    {
+      "id": "zeQZLvNr5K",
+      "status": "FullTime",
+      "home": "kRQa8JOqKZ",
+      "away": "eV5D2w9QKn",
+      "home_score": 0,
+      "away_score": 1,
+      "kickoff_utc": "2026-05-03 00:45:00 UTC",
+      "matchday": 6
+    },
+    {
+      "id": "zeQZLvaY5K",
+      "status": "PreMatch",
+      "home": "Pk5LeeNqOW",
+      "away": "XVqKeVKM01",
+      "home_score": null,
+      "away_score": null,
+      "kickoff_utc": "2026-08-16 00:45:00 UTC",
+      "matchday": 17
+    },
+    {
+      "id": "zeQZLvdY5K",
+      "status": "FullTime",
+      "home": "2lqRn34qr0",
+      "away": "4JMAk47qKg",
+      "home_score": 2,
+      "away_score": 2,
+      "kickoff_utc": "2026-07-12 23:00:00 UTC",
+      "matchday": 12
+    }
+  ]
+}

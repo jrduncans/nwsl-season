@@ -205,6 +205,8 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	}
 	noHelpCompleted := 0
 	for _, row := range table {
+		teamAchievements := []competition.Achievement{}
+		bases := map[competition.AchievementID]clinching.AchievementResult{}
 		for _, a := range achievements {
 			value := results[row.Team.ID][a.ID]
 			if value.Status != clinching.NotClinched {
@@ -217,17 +219,23 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 				r.report(Progress{Phase: "no_help_skipped", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: value.NoHelp.State})
 				continue
 			}
-			probeStarted := time.Now()
-			r.report(Progress{Phase: "no_help_started", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method})
-			base := clinching.AchievementResult{TeamID: value.TeamID, Achievement: value.Achievement, TopK: value.TopK, Status: value.Status, Method: value.Method, Reason: value.Reason}
-			path, err := evaluator.EvaluateNoHelp(ctx, row.Team.ID, a, nil, base)
-			if err != nil {
-				return nil, err
-			}
-			value.NoHelp = path
+			teamAchievements = append(teamAchievements, a)
+			bases[a.ID] = clinching.AchievementResult{TeamID: value.TeamID, Achievement: value.Achievement, TopK: value.TopK, Status: value.Status, Method: value.Method, Reason: value.Reason}
+		}
+		if len(teamAchievements) == 0 {
+			continue
+		}
+		probeStarted := time.Now()
+		paths, err := evaluator.EvaluateNoHelpBatch(ctx, row.Team.ID, teamAchievements, nil, bases)
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range teamAchievements {
+			value := results[row.Team.ID][a.ID]
+			value.NoHelp = paths[a.ID]
 			results[row.Team.ID][a.ID] = value
 			noHelpCompleted++
-			r.report(Progress{Phase: "no_help_finished", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: path.State})
+			r.report(Progress{Phase: "no_help_finished", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: value.NoHelp.State})
 		}
 	}
 	out := []cache.QualificationStatus{}

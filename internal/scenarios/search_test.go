@@ -2,6 +2,9 @@ package scenarios
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
+	"sort"
 	"testing"
 	"time"
 
@@ -68,3 +71,229 @@ func TestResultValidateRejectsEmptyConditionOutcomes(t *testing.T) {
 }
 
 func intPtr(value int) *int { return &value }
+
+func TestGenerateMatchesNaiveAssignmentTruthTable(t *testing.T) {
+	random := rand.New(rand.NewSource(20260722))
+	checked := 0
+	for trial := 0; trial < 80 && checked < 25; trial++ {
+		teams := []standings.Team{{ID: "target"}, {ID: "a"}, {ID: "b"}, {ID: "c"}}
+		completedPairs := [][2]string{{"target", "a"}, {"b", "target"}, {"target", "c"}, {"a", "b"}, {"b", "c"}, {"c", "a"}}
+		games := make([]standings.Game, 0, len(completedPairs)+3)
+		for i, pair := range completedPairs {
+			home, away := random.Intn(4), random.Intn(4)
+			games = append(games, standings.Game{ID: fmt.Sprintf("played-%d", i), Status: standings.CompletedStatus, HomeTeamID: pair[0], AwayTeamID: pair[1], HomeScore: &home, AwayScore: &away})
+		}
+		pending := []standings.Game{
+			{ID: "slate-0", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a"},
+			{ID: "slate-1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "target"},
+			{ID: "slate-2", Status: "PreMatch", HomeTeamID: "c", AwayTeamID: "a"},
+		}
+		games = append(games, pending...)
+		scheduled := make([]ScheduledGame, len(pending))
+		for i, game := range pending {
+			scheduled[i] = ScheduledGame{ID: game.ID, Status: game.Status, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, KickoffUTC: time.Date(2026, 8, 1, 20+i, 0, 0, 0, time.UTC), Matchday: intPtr(4)}
+		}
+		slate, err := DefineSlate(scheduled)
+		if err != nil {
+			t.Fatal(err)
+		}
+		order := []string{"slate-0", "slate-1", "slate-2"}
+		evaluator, err := clinching.NewEvaluator(teams, games, order)
+		if err != nil {
+			t.Fatal(err)
+		}
+		achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 1 + random.Intn(3)}
+		baseline, err := evaluator.EvaluateStatus(context.Background(), "target", achievement, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if baseline.Status != clinching.NotClinched {
+			continue
+		}
+		checked++
+		got, err := Generate(context.Background(), Request{Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: "target", Achievement: achievement, Baseline: baseline})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		certified, unresolved := newAssignmentBits(27), newAssignmentBits(27)
+		for index := 0; index < 27; index++ {
+			cube := assignmentCube(index, len(pending))
+			fixed := make([]clinching.FixedResult, len(pending))
+			for i, game := range pending {
+				fixed[i] = clinching.FixedResult{GameID: game.ID, Outcome: maskOutcomes(cube[i])[0]}
+			}
+			value, err := evaluator.EvaluateStatusSummary(context.Background(), "target", achievement, fixed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if publishable(value) {
+				certified.set(index)
+			} else if value.Status == clinching.Unresolved {
+				unresolved.set(index)
+			}
+		}
+		gotCoverage := newAssignmentBits(27)
+		for _, clause := range got.Clauses {
+			markCoverage(gotCoverage, clause.Conditions, pending)
+		}
+		if !gotCoverage.equal(certified) || got.UnresolvedAssignments != unresolved.count() {
+			t.Fatalf("trial=%d optimized coverage=%v/%d naive=%v/%d", trial, gotCoverage.words, got.UnresolvedAssignments, certified.words, unresolved.count())
+		}
+		if certified.count() > 0 && unresolved.count() == 0 && clauseKey(got.Necessary) != clauseKey(necessary(certified, pending)) {
+			t.Fatalf("trial=%d necessary=%v naive=%v", trial, got.Necessary, necessary(certified, pending))
+		}
+		wantClauses := naiveMaximalClauseKeys(certified, pending)
+		gotKeys := make([]string, len(got.Clauses))
+		for i, clause := range got.Clauses {
+			gotKeys[i] = clauseKey(clause.Conditions)
+		}
+		sort.Strings(gotKeys)
+		if fmt.Sprint(gotKeys) != fmt.Sprint(wantClauses) {
+			t.Fatalf("trial=%d clauses=%v naive=%v", trial, gotKeys, wantClauses)
+		}
+	}
+	if checked < 10 {
+		t.Fatalf("only %d not-clinched randomized states were checked", checked)
+	}
+}
+
+func naiveMaximalClauseKeys(certified assignmentBits, games []standings.Game) []string {
+	positive := [][]uint8{}
+	var enumerate func([]uint8)
+	enumerate = func(cube []uint8) {
+		if len(cube) == len(games) {
+			if cubeCertified(cube, certified) {
+				positive = append(positive, append([]uint8(nil), cube...))
+			}
+			return
+		}
+		for mask := uint8(1); mask <= allMask; mask++ {
+			enumerate(append(cube, mask))
+		}
+	}
+	enumerate(nil)
+	keys := []string{}
+	for i, cube := range positive {
+		maximal := true
+		for j, other := range positive {
+			if i == j {
+				continue
+			}
+			broader, strict := true, false
+			for fixture := range cube {
+				if other[fixture]|cube[fixture] != other[fixture] {
+					broader = false
+					break
+				}
+				strict = strict || other[fixture] != cube[fixture]
+			}
+			if broader && strict {
+				maximal = false
+				break
+			}
+		}
+		if !maximal {
+			continue
+		}
+		conditions := []FixtureCondition{}
+		for fixture, mask := range cube {
+			if mask != allMask {
+				conditions = append(conditions, FixtureCondition{GameID: games[fixture].ID, AllowedOutcomes: maskOutcomes(mask)})
+			}
+		}
+		keys = append(keys, clauseKey(conditions))
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func TestGenerateBatchMatchesIndependentAchievementSearches(t *testing.T) {
+	teams := []standings.Team{{ID: "target"}, {ID: "a"}, {ID: "b"}, {ID: "c"}}
+	zero, one, two := 0, 1, 2
+	games := []standings.Game{
+		{ID: "played-0", Status: standings.CompletedStatus, HomeTeamID: "target", AwayTeamID: "c", HomeScore: &two, AwayScore: &zero},
+		{ID: "played-1", Status: standings.CompletedStatus, HomeTeamID: "a", AwayTeamID: "b", HomeScore: &one, AwayScore: &one},
+		{ID: "slate-0", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a"},
+		{ID: "slate-1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "target"},
+		{ID: "slate-2", Status: "PreMatch", HomeTeamID: "c", AwayTeamID: "a"},
+	}
+	pending := games[2:]
+	scheduled := make([]ScheduledGame, len(pending))
+	for i, game := range pending {
+		scheduled[i] = ScheduledGame{ID: game.ID, Status: game.Status, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, KickoffUTC: time.Date(2026, 8, 1, 20+i, 0, 0, 0, time.UTC), Matchday: intPtr(4)}
+	}
+	slate, err := DefineSlate(scheduled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, games, []string{"slate-0", "slate-1", "slate-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievements := []competition.Achievement{
+		{ID: competition.AchievementPlayoffs, TopK: 3},
+		{ID: competition.AchievementHomePlayoff, TopK: 2},
+		{ID: competition.AchievementShield, TopK: 1},
+	}
+	baselines := map[competition.AchievementID]clinching.AchievementResult{}
+	for _, achievement := range achievements {
+		baseline, err := evaluator.EvaluateStatus(context.Background(), "target", achievement, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baselines[achievement.ID] = baseline
+	}
+	batch, err := GenerateBatch(context.Background(), BatchRequest{Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: "target", Achievements: achievements, Baselines: baselines})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, achievement := range achievements {
+		if batch[achievement.ID].Diagnostics.SearchNodes > 40 || batch[achievement.ID].Diagnostics.OracleCalls > 40 {
+			t.Fatalf("achievement=%s deterministic search ceiling exceeded: %+v", achievement.ID, batch[achievement.ID].Diagnostics)
+		}
+		single, err := Generate(context.Background(), Request{Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: "target", Achievement: achievement, Baseline: baselines[achievement.ID]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scenarioSemanticKey(batch[achievement.ID]) != scenarioSemanticKey(single) {
+			t.Fatalf("achievement=%s batch=%s single=%s", achievement.ID, scenarioSemanticKey(batch[achievement.ID]), scenarioSemanticKey(single))
+		}
+	}
+}
+
+func TestGenerateDiscardsPartialCoverageAfterCancellation(t *testing.T) {
+	teams := []standings.Team{{ID: "target"}, {ID: "a"}}
+	game := standings.Game{ID: "g", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a"}
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, []standings.Game{game}, []string{"g"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementShield, TopK: 1}
+	baseline, err := evaluator.EvaluateStatus(context.Background(), "target", achievement, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := Generate(ctx, Request{Evaluator: evaluator, Teams: teams, Games: []standings.Game{game}, Slate: slate, TargetTeamID: "target", Achievement: achievement, Baseline: baseline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != OpportunityUnresolved || result.Limitation != "scenario computation budget exhausted" || len(result.Clauses) != 0 || result.CertifiedAssignments != 0 {
+		t.Fatalf("canceled result published partial work: %+v", result)
+	}
+}
+
+func scenarioSemanticKey(result Result) string {
+	clauses := make([]string, len(result.Clauses))
+	for i, clause := range result.Clauses {
+		clauses[i] = clauseKey(clause.Conditions)
+	}
+	sort.Strings(clauses)
+	return fmt.Sprintf("%s|%t|%t|%d|%d|%s|%v|%s", result.State, result.AlreadyClinched, result.CanClinch, result.CertifiedAssignments, result.UnresolvedAssignments, clauseKey(result.Necessary), clauses, result.Limitation)
+}

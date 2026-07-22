@@ -44,6 +44,9 @@ func conditionText(c scenarios.FixtureCondition, teams map[string]string, games 
 	if os[clinching.Draw] && os[clinching.AwayWin] && len(os) == 2 {
 		return home + " does not win against " + away
 	}
+	if os[clinching.HomeWin] && os[clinching.AwayWin] && len(os) == 2 {
+		return home + " and " + away + " do not draw"
+	}
 	if os[clinching.HomeWin] {
 		return home + " beats " + away
 	}
