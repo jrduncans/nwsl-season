@@ -18,6 +18,10 @@ as the strongest accessible achievement badge (Shield, Home playoff, or
 Playoffs). Clinching scenarios use the same conservative proof engine and
 prioritize actionable next-slate opportunities.
 
+For an explanation of the live qualification proof, its conservative tiebreak
+boundary, no-help paths, and next-slate scenarios, see
+[How clinching works](docs/14-clinching-logic-guide.md).
+
 Phase 11 also retains ASA team-model game xG separately
 from fixtures, including raw payloads, availability markers, and independent
 refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
