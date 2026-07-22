@@ -465,7 +465,7 @@ Implemented documentation changes:
 
 - This document records the selected count and convergence measurement.
 - `README.md` names Forecast Lab as the primary scenario tool.
-- `docs/06-website-and-what-if.md` records that the old checkpoint was removed.
+- `docs/phases/06-website-and-what-if.md` records that the old checkpoint was removed.
 - The roadmap records versioned URLs and latest-cache forecast semantics.
 
 No cache schema, ASA client, syncer, configuration environment variable, or

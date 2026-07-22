@@ -6,7 +6,7 @@ playoff place, forecast the rest of a season, and compare remaining strength of
 schedule.
 
 This repository intentionally grows in small phases. Start with
-[`docs/00-roadmap.md`](docs/00-roadmap.md), then use the guide for the current
+[`docs/phases/00-roadmap.md`](docs/phases/00-roadmap.md), then use the guide for the current
 phase. Each phase ends with a working checkpoint and a few questions worth
 exploring in the code.
 
@@ -20,7 +20,7 @@ prioritize actionable next-slate opportunities.
 
 For an explanation of the live qualification proof, its conservative tiebreak
 boundary, no-help paths, and next-slate scenarios, see
-[How clinching works](docs/14-clinching-logic-guide.md).
+[How clinching works](docs/clinching-logic-guide.md).
 
 Phase 11 also retains ASA team-model game xG separately
 from fixtures, including raw payloads, availability markers, and independent

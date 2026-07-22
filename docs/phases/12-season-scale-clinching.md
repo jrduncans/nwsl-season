@@ -6,7 +6,7 @@ Implemented. The Phase 5 representative-scoreline oracle described below was
 retired after the conservative evaluator became the live qualification
 authority. This document preserves the original design and implementation
 contract; for the current behavior and proof flow, see
-[How clinching works](14-clinching-logic-guide.md).
+[How clinching works](../clinching-logic-guide.md).
 
 ## Goal
 

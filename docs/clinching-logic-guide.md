@@ -3,8 +3,8 @@
 This is the guide to the **current** qualification and clinching-scenario
 implementation. It is deliberately layered: start with the short version, then
 follow the proof flow or the implementation details as needed. The original
-phase documents remain useful design history: [season-scale status](12-season-scale-clinching.md)
-and [clinching scenarios](13-clinching-scenarios.md).
+phase documents remain useful design history: [season-scale status](phases/12-season-scale-clinching.md)
+and [clinching scenarios](phases/13-clinching-scenarios.md).
 
 ## The short version
 

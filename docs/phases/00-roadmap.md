@@ -55,7 +55,7 @@ complete when its exit criteria pass; it does not need every possible refinement
 
 For a layered description of the live proof, persistence, no-help, and
 next-slate scenario behavior, see
-[How clinching works](14-clinching-logic-guide.md).
+[How clinching works](../clinching-logic-guide.md).
 
 The order is intentional, but not sacred. Styling can happen whenever it keeps
 the project fun. The original dependency chain is games → cache → standings

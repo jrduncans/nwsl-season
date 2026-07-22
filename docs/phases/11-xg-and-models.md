@@ -789,7 +789,7 @@ Modify:
 
 - `README.md`: xG cache, model comparison, recommended model, back-test command,
   and routes.
-- `docs/00-roadmap.md`: record the chosen recommended model and evidence ID only
+- `docs/phases/00-roadmap.md`: record the chosen recommended model and evidence ID only
   after the evidence packet.
 - `Makefile`: add `backtest` only if it is a useful shorthand; do not make
   ordinary `test` depend on network or the live SQLite file.
