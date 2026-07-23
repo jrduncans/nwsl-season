@@ -24,7 +24,7 @@ were made as part of the review.
 | SEC-01 | P1 | Resolved | Forecast requests permit unauthenticated resource exhaustion |
 | DB-01 | P2 | Resolved | SQLite safeguards apply to only one pooled connection |
 | HTTP-01 | P2 | Resolved | The HTTP server has no connection deadlines |
-| DB-02 | P2 | Open | A season response can mix different database snapshots |
+| DB-02 | P2 | Resolved | A season response can mix different database snapshots |
 | DATA-01 | P2 | Open | Self-fixtures can be committed as valid upstream data |
 | DATA-02 | P3 | Open | Impossible expected-points values are accepted |
 | HTTP-02 | P3 | Open | Successful upstream response bodies are unbounded |
@@ -218,7 +218,7 @@ work before the response is written.
 ## DB-02: Read a season as one database snapshot
 
 Priority: **P2 — Medium**  
-Status: **Open**
+Status: **Resolved**
 
 ### Location
 
@@ -258,10 +258,10 @@ allowing the xG status to describe its independent freshness.
 
 ### Completion checks
 
-- [ ] All fields in `SeasonData` are read from one SQLite snapshot.
-- [ ] The returned fixture snapshot ID matches the returned teams and games.
-- [ ] A concurrent refresh/read test cannot produce mismatched fixture hashes.
-- [ ] Qualification badges are never loaded for a different game snapshot.
+- [x] All fields in `SeasonData` are read from one SQLite snapshot.
+- [x] The returned fixture snapshot ID matches the returned teams and games.
+- [x] A concurrent refresh/read test cannot produce mismatched fixture hashes.
+- [x] Qualification badges are never loaded for a different game snapshot.
 
 ## DATA-01: Reject self-fixtures before replacement
 

@@ -4,11 +4,27 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
+
+type refreshAfterFirstQuery struct {
+	queryer
+	once    sync.Once
+	refresh func() error
+	err     error
+}
+
+func (q *refreshAfterFirstQuery) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	rows, err := q.queryer.QueryContext(ctx, query, args...)
+	if err == nil {
+		q.once.Do(func() { q.err = q.refresh() })
+	}
+	return rows, err
+}
 
 func TestOpenConfiguresEverySQLiteConnection(t *testing.T) {
 	ctx := context.Background()
@@ -330,6 +346,88 @@ func TestSeasonLoadsFixturesAndFreshness(t *testing.T) {
 	}
 	if season.LastSuccess == nil || season.LastSuccess.Season != "2026" {
 		t.Fatalf("last success = %+v, want 2026 sync", season.LastSuccess)
+	}
+}
+
+func TestSeasonReadUsesOneSnapshotDuringRefresh(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{
+		{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"},
+		{ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"},
+	}
+	oldGame := cachedGame("game-1", "2026", "Regular Season", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+	oldRun, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{oldGame}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	xgRun, err := db.ReplaceGameXG(ctx, "2026", "Regular Season", []Game{oldGame}, []GameXG{{
+		GameID: "game-1", Availability: XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo",
+		HomeXG: sql.NullFloat64{Float64: 1.2, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0.8, Valid: true}, RawJSON: "{}",
+	}}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	readTx, err := db.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollback(readTx)
+	newGame := oldGame
+	newGame.HomeScore = sql.NullInt64{Int64: 2, Valid: true}
+	reader := &refreshAfterFirstQuery{
+		queryer: readTx,
+		refresh: func() error {
+			_, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{newGame}, time.Now())
+			return err
+		},
+	}
+	season, err := loadSeasonData(ctx, reader, "2026", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reader.err != nil {
+		t.Fatalf("concurrent refresh: %v", reader.err)
+	}
+	if season.FixtureSnapshotID != oldRun.FixtureSnapshotID || season.LastSuccess == nil || season.LastSuccess.FixtureSnapshotID != oldRun.FixtureSnapshotID {
+		t.Fatalf("fixture snapshots = season %q, run %+v; want %q", season.FixtureSnapshotID, season.LastSuccess, oldRun.FixtureSnapshotID)
+	}
+	if len(season.Games) != 1 || season.Games[0].HomeScore.Int64 != 1 {
+		t.Fatalf("games = %+v, want pre-refresh fixture", season.Games)
+	}
+	if len(season.XGoals) != 1 || season.XGStatus.LastSuccess == nil || season.XGStatus.LastSuccess.ID != xgRun.ID {
+		t.Fatalf("xG data = %+v, want pre-refresh xG snapshot", season)
+	}
+}
+
+func TestSeasonRejectsMismatchedFixtureSnapshot(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{
+		{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"},
+		{ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"},
+	}
+	game := cachedGame("game-1", "2026", "Regular Season", "PreMatch", "alpha", "bravo", sql.NullInt64{}, sql.NullInt64{})
+	run, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.ExecContext(ctx, `UPDATE sync_runs SET fixture_snapshot_id = 'mismatch' WHERE id = ?`, run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Season(ctx, "2026", "Regular Season"); err == nil {
+		t.Fatal("Season succeeded with a mismatched fixture snapshot")
 	}
 }
 

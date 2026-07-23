@@ -32,6 +32,14 @@ type DB struct {
 	db *sql.DB
 }
 
+// queryer is the read-only subset shared by *sql.DB and *sql.Tx. Keeping the
+// season queries behind this interface lets a compound read use one SQLite
+// transaction and therefore one database snapshot.
+type queryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 // Team is the normalized team row stored in SQLite.
 type Team struct {
 	ASAID        string
@@ -730,29 +738,49 @@ func (c *DB) ClinchingInputs(ctx context.Context, season, stage string) (Calcula
 // Season loads the teams, fixtures, and freshness information for a season and
 // stage. It never refreshes data from the upstream source.
 func (c *DB) Season(ctx context.Context, season, stage string) (SeasonData, error) {
-	teams, err := c.standingsTeams(ctx, season, stage)
+	tx, err := c.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return SeasonData{}, fmt.Errorf("begin season read: %w", err)
+	}
+	defer rollback(tx)
+
+	return loadSeasonData(ctx, tx, season, stage)
+}
+
+func loadSeasonData(ctx context.Context, dbq queryer, season, stage string) (SeasonData, error) {
+	teams, err := standingsTeams(ctx, dbq, season, stage)
 	if err != nil {
 		return SeasonData{}, err
 	}
-	games, err := c.seasonGames(ctx, season, stage)
+	games, err := seasonGames(ctx, dbq, season, stage)
 	if err != nil {
 		return SeasonData{}, err
 	}
-	lastSuccess, err := c.LastSuccess(ctx, season, stage)
+	lastSuccess, err := latestRun(ctx, dbq, "success", season, stage)
 	if err != nil {
 		return SeasonData{}, err
 	}
-	xgoals, err := c.seasonXGoals(ctx, season, stage)
+	xgoals, err := seasonXGoals(ctx, dbq, season, stage)
 	if err != nil {
 		return SeasonData{}, err
 	}
-	xgStatus, err := c.XGStatus(ctx, season, stage)
+	xgStatus, err := xgStatus(ctx, dbq, season, stage)
 	if err != nil {
 		return SeasonData{}, err
 	}
 	snapshotID := ""
 	if lastSuccess != nil {
-		snapshotID = lastSuccess.FixtureSnapshotID
+		snapshotTeams := make([]Team, 0, len(teams))
+		for _, team := range teams {
+			snapshotTeams = append(snapshotTeams, Team{ASAID: team.ID})
+		}
+		snapshotID, err = FixtureSnapshotID(snapshotTeams, games)
+		if err != nil {
+			return SeasonData{}, fmt.Errorf("calculate fixture snapshot: %w", err)
+		}
+		if snapshotID != lastSuccess.FixtureSnapshotID {
+			return SeasonData{}, errors.New("cached fixtures do not match the last successful sync snapshot")
+		}
 	}
 	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess, XGoals: xgoals, XGStatus: xgStatus, FixtureSnapshotID: snapshotID}, nil
 }
@@ -936,24 +964,32 @@ func insertXGSyncRun(ctx context.Context, exec interface {
 	return nil
 }
 func (c *DB) XGStatus(ctx context.Context, season, stage string) (XGStatus, error) {
-	a, e := c.latestXGRun(ctx, "", season, stage)
+	return xgStatus(ctx, c.db, season, stage)
+}
+
+func xgStatus(ctx context.Context, dbq queryer, season, stage string) (XGStatus, error) {
+	a, e := latestXGRun(ctx, dbq, "", season, stage)
 	if e != nil {
 		return XGStatus{}, e
 	}
-	s, e := c.latestXGRun(ctx, "success", season, stage)
+	s, e := latestXGRun(ctx, dbq, "success", season, stage)
 	return XGStatus{a, s}, e
 }
 func (c *DB) latestXGRun(ctx context.Context, outcome, season, stage string) (*XGSyncRun, error) {
-	q := `SELECT id,started_at,finished_at,season,stage,outcome,error_summary,rows_seen,available_games,unavailable_games,rows_inserted,rows_updated,rows_unchanged FROM xg_sync_runs WHERE season=? AND stage=?`
+	return latestXGRun(ctx, c.db, outcome, season, stage)
+}
+
+func latestXGRun(ctx context.Context, dbq queryer, outcome, season, stage string) (*XGSyncRun, error) {
+	query := `SELECT id,started_at,finished_at,season,stage,outcome,error_summary,rows_seen,available_games,unavailable_games,rows_inserted,rows_updated,rows_unchanged FROM xg_sync_runs WHERE season=? AND stage=?`
 	args := []any{season, stage}
 	if outcome != "" {
-		q += ` AND outcome=?`
+		query += ` AND outcome=?`
 		args = append(args, outcome)
 	}
-	q += ` ORDER BY finished_at DESC,id DESC LIMIT 1`
+	query += ` ORDER BY finished_at DESC,id DESC LIMIT 1`
 	var run XGSyncRun
 	var st, fi string
-	err := c.db.QueryRowContext(ctx, q, args...).Scan(&run.ID, &st, &fi, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary, &run.RowsSeen, &run.AvailableGames, &run.UnavailableGames, &run.RowsInserted, &run.RowsUpdated, &run.RowsUnchanged)
+	err := dbq.QueryRowContext(ctx, query, args...).Scan(&run.ID, &st, &fi, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary, &run.RowsSeen, &run.AvailableGames, &run.UnavailableGames, &run.RowsInserted, &run.RowsUpdated, &run.RowsUnchanged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -971,7 +1007,11 @@ func (c *DB) latestXGRun(ctx context.Context, outcome, season, stage string) (*X
 	return &run, nil
 }
 func (c *DB) seasonXGoals(ctx context.Context, season, stage string) ([]GameXG, error) {
-	rows, err := c.db.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
+	return seasonXGoals(ctx, c.db, season, stage)
+}
+
+func seasonXGoals(ctx context.Context, dbq queryer, season, stage string) ([]GameXG, error) {
+	rows, err := dbq.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
 	if err != nil {
 		return nil, fmt.Errorf("load xG: %w", err)
 	}
@@ -1001,7 +1041,11 @@ func (c *DB) seasonXGoals(ctx context.Context, season, stage string) ([]GameXG, 
 }
 
 func (c *DB) standingsTeams(ctx context.Context, season, stage string) ([]standings.Team, error) {
-	rows, err := c.db.QueryContext(ctx, `SELECT DISTINCT
+	return standingsTeams(ctx, c.db, season, stage)
+}
+
+func standingsTeams(ctx context.Context, dbq queryer, season, stage string) ([]standings.Team, error) {
+	rows, err := dbq.QueryContext(ctx, `SELECT DISTINCT
 		t.asa_team_id, t.name, t.short_name, t.abbreviation
 		FROM teams t
 		JOIN games g ON g.home_team_id = t.asa_team_id OR g.away_team_id = t.asa_team_id
@@ -1055,7 +1099,11 @@ func (c *DB) standingsGames(ctx context.Context, season, stage string) ([]standi
 }
 
 func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, error) {
-	rows, err := c.db.QueryContext(ctx, `SELECT
+	return seasonGames(ctx, c.db, season, stage)
+}
+
+func seasonGames(ctx context.Context, dbq queryer, season, stage string) ([]Game, error) {
+	rows, err := dbq.QueryContext(ctx, `SELECT
 		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
 		home_score, away_score, matchday, last_updated_utc, raw_json
 		FROM games
@@ -1085,6 +1133,10 @@ func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, err
 }
 
 func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*SyncRun, error) {
+	return latestRun(ctx, c.db, outcome, season, stage)
+}
+
+func latestRun(ctx context.Context, dbq queryer, outcome, season, stage string) (*SyncRun, error) {
 	query := `SELECT id, started_at, finished_at, season, stage, outcome, error_summary, fixture_snapshot_id,
 		teams_upserted, games_upserted, games_deleted, games_seen,
 		teams_inserted, teams_updated, teams_unchanged, games_inserted, games_updated, games_unchanged FROM sync_runs`
@@ -1105,7 +1157,7 @@ func (c *DB) latestRun(ctx context.Context, outcome, season, stage string) (*Syn
 
 	var run SyncRun
 	var startedAt, finishedAt string
-	err := c.db.QueryRowContext(ctx, query, args...).Scan(
+	err := dbq.QueryRowContext(ctx, query, args...).Scan(
 		&run.ID, &startedAt, &finishedAt, &run.Season, &run.Stage, &run.Outcome, &run.ErrorSummary, &run.FixtureSnapshotID,
 		&run.TeamsUpserted, &run.GamesUpserted, &run.GamesDeleted, &run.GamesSeen,
 		&run.TeamsInserted, &run.TeamsUpdated, &run.TeamsUnchanged,
