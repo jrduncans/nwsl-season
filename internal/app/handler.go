@@ -28,6 +28,11 @@ const (
 	defaultSeason   = "2026"
 	defaultStage    = "Regular Season"
 	remainingStatus = fixtures.PreMatchStatus
+
+	// Forecast Lab simulates complete seasons and is deliberately constrained so
+	// a few expensive requests cannot consume the entire HTTP process.
+	defaultForecastConcurrency = 2
+	defaultForecastTimeout     = 15 * time.Second
 )
 
 // Store reads page data from the local cache.
@@ -38,11 +43,13 @@ type Store interface {
 
 // Options contains season rules that are intentionally explicit at the HTTP boundary.
 type Options struct {
-	CurrentSeason      string
-	Stage              string
-	Rules              competition.Rules
-	ForecastIterations int
-	Location           *time.Location
+	CurrentSeason       string
+	Stage               string
+	Rules               competition.Rules
+	ForecastIterations  int
+	ForecastConcurrency int
+	ForecastTimeout     time.Duration
+	Location            *time.Location
 }
 
 // NewHandler wires the application routes using the current-season defaults.
@@ -52,6 +59,10 @@ func NewHandler(store Store) http.Handler {
 
 // NewHandlerWithOptions wires the application routes with explicit season rules.
 func NewHandlerWithOptions(store Store, options Options) http.Handler {
+	return newHandlerWithForecastExecutor(store, options, nil)
+}
+
+func newHandlerWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) http.Handler {
 	options = defaultOptions(options)
 	pages := template.Must(template.ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
@@ -59,7 +70,10 @@ func NewHandlerWithOptions(store Store, options Options) http.Handler {
 		panic(err)
 	}
 
-	application := &application{store: store, options: options, pages: pages}
+	if forecasts == nil {
+		forecasts = newForecastExecutor(options.ForecastConcurrency, options.ForecastTimeout)
+	}
+	application := &application{store: store, options: options, pages: pages, forecasts: forecasts}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", application.root)
 	mux.HandleFunc("GET /seasons/{season}", application.season)
@@ -258,9 +272,10 @@ func clinchingTeams(groups ...[]clinchingRowView) []teamNameView {
 }
 
 type application struct {
-	store   Store
-	options Options
-	pages   *template.Template
+	store     Store
+	options   Options
+	pages     *template.Template
+	forecasts *forecastExecutor
 }
 
 func defaultOptions(options Options) Options {
@@ -282,6 +297,12 @@ func defaultOptions(options Options) Options {
 	}
 	if options.ForecastIterations <= 0 {
 		options.ForecastIterations = defaultForecastIterations
+	}
+	if options.ForecastConcurrency <= 0 {
+		options.ForecastConcurrency = defaultForecastConcurrency
+	}
+	if options.ForecastTimeout <= 0 {
+		options.ForecastTimeout = defaultForecastTimeout
 	}
 	if options.Location == nil {
 		options.Location = time.Local

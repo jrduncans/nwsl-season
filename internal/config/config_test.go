@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_HTTP_ADDR", "")
@@ -13,6 +16,8 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_SYNC_COMPLETION_GRACE", "")
 	t.Setenv("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", "")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "")
+	t.Setenv("NWSL_FORECAST_CONCURRENCY", "")
+	t.Setenv("NWSL_FORECAST_TIMEOUT", "")
 
 	got, err := FromEnvironment()
 	if err != nil {
@@ -34,6 +39,9 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	if got.SyncCheckInterval != defaultSyncCheckInterval || got.SyncCompletionGrace != defaultSyncCompletionGrace || got.SyncMinAttemptInterval != defaultSyncMinAttemptInterval || got.SyncTimeout != defaultSyncTimeout {
 		t.Errorf("sync durations = %+v, want defaults", got)
 	}
+	if got.ForecastConcurrency != defaultForecastConcurrency || got.ForecastTimeout != defaultForecastTimeout {
+		t.Errorf("forecast limits = %+v, want defaults", got)
+	}
 }
 
 func TestFromEnvironmentUsesOverrides(t *testing.T) {
@@ -48,6 +56,8 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	t.Setenv("NWSL_SYNC_COMPLETION_GRACE", "4h")
 	t.Setenv("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", "45m")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "25s")
+	t.Setenv("NWSL_FORECAST_CONCURRENCY", "3")
+	t.Setenv("NWSL_FORECAST_TIMEOUT", "40s")
 
 	got, err := FromEnvironment()
 	if err != nil {
@@ -65,6 +75,9 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	}
 	if got.SyncSeason != "2027" || got.SyncStage != "Challenge Cup" || got.SyncCheckInterval.String() != "7m0s" || got.SyncCompletionGrace.String() != "4h0m0s" || got.SyncMinAttemptInterval.String() != "45m0s" || got.SyncTimeout.String() != "25s" {
 		t.Errorf("sync overrides = %+v, want configured values", got)
+	}
+	if got.ForecastConcurrency != 3 || got.ForecastTimeout != 40*time.Second {
+		t.Errorf("forecast overrides = %+v, want configured values", got)
 	}
 }
 
@@ -119,6 +132,23 @@ func TestFromEnvironmentRejectsInvalidSyncDuration(t *testing.T) {
 			t.Setenv("NWSL_SYNC_TIMEOUT", value)
 			if _, err := FromEnvironment(); err == nil {
 				t.Fatal("FromEnvironment error = nil, want validation error")
+			}
+		})
+	}
+}
+
+func TestFromEnvironmentRejectsInvalidForecastLimits(t *testing.T) {
+	for _, test := range []struct {
+		name, key, value string
+	}{
+		{"concurrency", "NWSL_FORECAST_CONCURRENCY", "0"},
+		{"concurrency non-number", "NWSL_FORECAST_CONCURRENCY", "many"},
+		{"timeout", "NWSL_FORECAST_TIMEOUT", "0s"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(test.key, test.value)
+			if _, err := FromEnvironment(); err == nil {
+				t.Fatalf("FromEnvironment() with %s=%q succeeded", test.key, test.value)
 			}
 		})
 	}

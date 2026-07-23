@@ -1,9 +1,16 @@
 package app
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -61,31 +68,76 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	xgoals := forecastXGoals(data)
-	result, err := simulation.Run(r.Context(), simulation.Request{
-		Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: active.Model, Fixed: state.Fixed,
-		Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules),
-	})
+	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}
+	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: request}}
+	if state.ComparisonModelID != "" {
+		entry, _ := forecast.Lookup(state.ComparisonModelID)
+		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}})
+	}
+	results, err := a.forecasts.results(r.Context(), tasks)
 	if err != nil {
 		if r.Context().Err() != nil {
+			return
+		}
+		if errors.Is(err, errForecastOverloaded) {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "Forecast Lab is busy; please try again shortly.", http.StatusTooManyRequests)
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			http.Error(w, "Forecast Lab took too long; please try again shortly.", http.StatusServiceUnavailable)
 			return
 		}
 		a.renderError(w, r, fmt.Errorf("run forecast: %w", err))
 		return
 	}
+	result := results[0]
 	var comparison *simulation.Result
-	if state.ComparisonModelID != "" {
-		entry, _ := forecast.Lookup(state.ComparisonModelID)
-		value, runErr := simulation.Run(r.Context(), simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)})
-		if runErr != nil {
-			if r.Context().Err() != nil {
-				return
-			}
-			a.renderError(w, r, fmt.Errorf("run comparison forecast: %w", runErr))
-			return
-		}
-		comparison = &value
+	if len(results) == 2 {
+		comparison = &results[1]
 	}
 	a.render(w, "forecast", a.forecastPage(r, data, season, state, result, comparison, teamID))
+}
+
+// forecastResultKey identifies a deterministic simulation result. Fixture
+// snapshots cover teams and match state; xG values are included because they
+// are refreshed independently and affect the xG model without changing the
+// fixture snapshot.
+func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID string, iterations, playoffPlaces int) string {
+	parts := []string{"forecast-result-v1", data.FixtureSnapshotID, modelID, strconv.Itoa(iterations), strconv.Itoa(playoffPlaces)}
+	// A database Season result always supplies FixtureSnapshotID. Include the
+	// simulator's actual inputs as well so alternate Store implementations
+	// cannot accidentally share results when that field is absent.
+	for _, team := range data.Teams {
+		parts = append(parts, team.ID)
+	}
+	for _, game := range standingsGames(data.Games) {
+		parts = append(parts, game.ID, game.Status, game.HomeTeamID, game.AwayTeamID)
+		if game.HomeScore != nil {
+			parts = append(parts, strconv.Itoa(*game.HomeScore))
+		} else {
+			parts = append(parts, "")
+		}
+		if game.AwayScore != nil {
+			parts = append(parts, strconv.Itoa(*game.AwayScore))
+		} else {
+			parts = append(parts, "")
+		}
+	}
+	parts = append(parts, state.Values()...)
+	xgoals := forecastXGoals(data)
+	ids := make([]string, 0, len(xgoals))
+	for id := range xgoals {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		value := xgoals[id]
+		parts = append(parts, id, strconv.FormatFloat(value.Home, 'g', -1, 64), strconv.FormatFloat(value.Away, 'g', -1, 64))
+	}
+	encoded, _ := json.Marshal(parts) // Marshaling a []string cannot fail.
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
 }
 
 func (a *application) forecastData(r *http.Request) (data cache.SeasonData, season string, err error) {

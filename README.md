@@ -68,6 +68,8 @@ Configuration:
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum total time for a persisted qualification batch |
 | `NWSL_SCENARIO_BUDGET` | `30s` | Maximum total time for a persisted clinching-scenario batch |
+| `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests; excess requests receive `429` |
+| `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached Forecast Lab request |
 
 ## Useful commands
 

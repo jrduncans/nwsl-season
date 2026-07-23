@@ -73,6 +73,8 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Handler: app.NewHandlerWithOptions(db, app.Options{
 			CurrentSeason: cfg.SyncSeason,
 			Stage:         cfg.SyncStage, Rules: rules,
+			ForecastConcurrency: cfg.ForecastConcurrency,
+			ForecastTimeout:     cfg.ForecastTimeout,
 		}),
 	}
 	serverErrors := make(chan error, 1)
