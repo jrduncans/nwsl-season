@@ -574,13 +574,21 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Simulations", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Add assumption", "Update forecast", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-fixture-filter`, `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
+	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare with another model", "Simulations", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
 	}
 	if strings.Contains(response.Body.String(), `data-auto-submit`) {
-		t.Fatal("forecast filter still uses page-submit behavior")
+		t.Fatal("forecast builder still uses page-submit behavior")
+	}
+	if strings.Contains(response.Body.String(), `class="forecast-comparison-control" open`) {
+		t.Fatal("comparison control should stay collapsed until a comparison is selected")
+	}
+	for _, text := range []string{"Show fixtures", "Find fixture", `data-fixture-filter`, "Add assumption", "Update forecast"} {
+		if strings.Contains(response.Body.String(), text) {
+			t.Errorf("body still contains retired forecast-builder control %q", text)
+		}
 	}
 	if strings.Contains(response.Body.String(), ">Home win<") || strings.Contains(response.Body.String(), ">Away win<") {
 		t.Fatal("forecast outcome choices still use home and away labels")
@@ -645,6 +653,9 @@ func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
+	}
+	if !strings.Contains(body, `class="forecast-comparison-control" open`) {
+		t.Fatal("comparison control should open when a comparison is selected")
 	}
 	if comparison, projection := strings.Index(body, `class="forecast-comparison"`), strings.Index(body, `class="forecast-results"`); comparison < 0 || projection < 0 || comparison > projection {
 		t.Fatalf("model comparison should be rendered before the primary projection: comparison=%d projection=%d", comparison, projection)

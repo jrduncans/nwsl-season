@@ -12,8 +12,11 @@
     <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}{{if .FilteredTeam}}<input type="hidden" name="team" value="{{.FilteredTeam}}">{{end}}
     <div class="forecast-control-fields">
       <label for="forecast-model"><span>Forecast model</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (Default){{end}}</option>{{end}}</select></label>
-      <label for="forecast-comparison"><span>Compare against <span class="note">(optional)</span></span><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}<option value="{{.ID}}" {{if .Selected}}disabled{{end}} {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
     </div>
+    <details class="forecast-comparison-control"{{if .HasComparison}} open{{end}}>
+      <summary>Compare with another model <span class="note">(optional)</span></summary>
+      <label for="forecast-comparison"><span>Comparison model</span><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}<option value="{{.ID}}" {{if .Selected}}disabled{{end}} {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    </details>
     <p class="forecast-control-status note" data-forecast-control-status aria-live="polite">Changes keep your assumptions.</p>
     <noscript><button class="button button-secondary forecast-model-submit" type="submit">Apply model choices</button></noscript>
   </form>
@@ -74,34 +77,25 @@
 </section>
 
 <section id="forecast-builder" class="forecast-builder" aria-labelledby="assumption-builder-title">
-  <div class="section-heading"><div><h2 id="assumption-builder-title">Build a scenario</h2><p class="note">Choose a fixture and result, then update.</p></div></div>
+  <div class="section-heading"><div><h2 id="assumption-builder-title">Build a scenario</h2><p class="note">Choose a fixture and result. Add more if you like, then apply your scenario.</p></div></div>
   {{if .CanAdd}}
   <form id="forecast-update" method="get" action="{{.ForecastPath}}">
     <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
   </form>
-  <form class="forecast-filter" method="get" action="{{.ForecastPath}}" data-fixture-filter>
-    <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
-    <label for="forecast-team">Filter by team</label>
-    <select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
-    <button class="button button-secondary" type="submit">Show fixtures</button>
-  </form>
   <form class="forecast-add" method="get" action="{{.ForecastPath}}" data-assumption-builder>
     <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}<input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
-    <label for="forecast-fixture-search">Find fixture</label>
-    <input id="forecast-fixture-search" type="search" placeholder="Team or date" autocomplete="off" aria-describedby="forecast-fixture-count">
-    <p id="forecast-fixture-count" class="note" aria-live="polite"></p>
-    <label for="forecast-fixture">Fixture</label>
-    <select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}{{template "forecastFixtureOption" .}}{{end}}</select>
+    <label for="forecast-team"><span>Filter by team <span class="note">(optional)</span></span><select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    <label for="forecast-fixture"><span>Choose a fixture</span><select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}{{template "forecastFixtureOption" .}}{{end}}</select></label>
     <template id="forecast-all-fixtures">{{range .AllFixtures}}{{template "forecastFixtureOption" .}}{{end}}</template>
     <fieldset class="forecast-outcomes"><legend>Assume result</legend><label><input type="radio" name="outcome" value="h" checked><span data-forecast-outcome="h">{{.DefaultHomeTeam}} win</span></label><label><input type="radio" name="outcome" value="d"><span>Draw</span></label><label><input type="radio" name="outcome" value="a"><span data-forecast-outcome="a">{{.DefaultAwayTeam}} win</span></label></fieldset>
-    <button class="button" type="submit">Add assumption</button>
-    <button class="button" id="forecast-update-button" type="submit" form="forecast-update" disabled>Update forecast</button>
+    <button class="button" type="submit">Add result</button>
   </form>
-  <p id="forecast-filter-empty" class="note" hidden>No matching fixtures.</p>
+  <p id="forecast-fixture-empty" class="note" hidden>No unfixed fixtures remain for this team.</p>
   <section id="forecast-pending" class="forecast-pending" aria-labelledby="forecast-pending-title" hidden>
     <h3 id="forecast-pending-title">New assumptions</h3>
     <p id="forecast-pending-status" class="note" role="status" aria-live="polite"></p>
     <ul id="forecast-pending-list" class="forecast-assumptions"></ul>
+    <button class="button" id="forecast-update-button" type="submit" form="forecast-update" disabled>Apply scenario</button>
   </section>
   {{else if .HasTeamFilter}}<p>No unfixed fixtures match this team.</p>
   {{else if eq .Remaining 0}}<p>No fixtures remain. This is the final table, subject to available tiebreak data.</p>

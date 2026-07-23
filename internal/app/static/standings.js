@@ -76,22 +76,19 @@ function forecastOutcomeLabel(option, outcome) {
 }
 
 function setupForecastAssumptionBuilder() {
-  const filter = document.querySelector("form[data-fixture-filter]");
   const builder = document.querySelector("form[data-assumption-builder]");
   const team = document.querySelector("#forecast-team");
   const fixture = document.querySelector("#forecast-fixture");
-  const search = document.querySelector("#forecast-fixture-search");
-  const fixtureCount = document.querySelector("#forecast-fixture-count");
   const outcomes = Array.from(builder?.querySelectorAll('input[name="outcome"]') ?? []);
   const addButton = builder?.querySelector('button[type="submit"]:not([form])');
   const updateButton = document.querySelector("#forecast-update-button");
-  const empty = document.querySelector("#forecast-filter-empty");
+  const empty = document.querySelector("#forecast-fixture-empty");
   const pendingSection = document.querySelector("#forecast-pending");
   const pendingList = document.querySelector("#forecast-pending-list");
   const pendingStatus = document.querySelector("#forecast-pending-status");
   const pendingValues = document.querySelector("#forecast-pending-values");
   const allFixtures = document.querySelector("#forecast-all-fixtures");
-  if (!filter || !builder || !team || !fixture || !search || !fixtureCount || outcomes.length === 0 || !addButton || !updateButton || !empty || !pendingSection || !pendingList || !pendingStatus || !pendingValues || !allFixtures) return;
+  if (!builder || !team || !fixture || outcomes.length === 0 || !addButton || !updateButton || !empty || !pendingSection || !pendingList || !pendingStatus || !pendingValues || !allFixtures) return;
 
   const options = Array.from(allFixtures.content.querySelectorAll("option"));
   const pending = new Map();
@@ -121,17 +118,15 @@ function setupForecastAssumptionBuilder() {
     const hasPending = pending.size > 0;
     pendingSection.hidden = !hasPending;
     updateButton.disabled = !hasPending;
-    updateButton.textContent = hasPending ? `Update forecast (${pending.size})` : "Update forecast";
-    pendingStatus.textContent = hasPending ? `${pending.size} new ${pending.size === 1 ? "assumption" : "assumptions"} ready. Update to apply.` : "";
+    updateButton.textContent = hasPending ? `Apply scenario (${pending.size})` : "Apply scenario";
+    pendingStatus.textContent = hasPending ? `${pending.size} new ${pending.size === 1 ? "assumption" : "assumptions"} ready to apply.` : "";
   };
 
   const updateFixtures = () => {
     const selectedValue = fixture.value;
     const teamID = team.value;
-    const query = search.value.trim().toLocaleLowerCase();
     const visible = options.filter((option) => {
-      const fixtureText = `${option.dataset.fixtureLabel} ${option.dataset.homeTeam} ${option.dataset.awayTeam} ${option.dataset.kickoffFallback}`.toLocaleLowerCase();
-      return !pending.has(option.value) && (!teamID || option.dataset.homeTeamId === teamID || option.dataset.awayTeamId === teamID) && (!query || fixtureText.includes(query));
+      return !pending.has(option.value) && (!teamID || option.dataset.homeTeamId === teamID || option.dataset.awayTeamId === teamID);
     });
     visible.forEach((option) => formatForecastFixtureLabel(option, teamID));
     fixture.replaceChildren(...visible);
@@ -143,7 +138,6 @@ function setupForecastAssumptionBuilder() {
     outcomes.forEach((outcome) => { outcome.disabled = !hasFixtures; });
     addButton.disabled = !hasFixtures;
     empty.hidden = hasFixtures;
-    fixtureCount.textContent = `${visible.length} ${visible.length === 1 ? "fixture" : "fixtures"} available`;
     updateForecastOutcomeLabels();
   };
 
@@ -163,12 +157,7 @@ function setupForecastAssumptionBuilder() {
     renderPending();
     updateFixtures();
   });
-  filter.addEventListener("submit", (event) => {
-    event.preventDefault();
-    updateFixtures();
-  });
   team.addEventListener("change", updateFixtures);
-  search.addEventListener("input", updateFixtures);
   fixture.addEventListener("change", updateForecastOutcomeLabels);
   renderPending();
   updateFixtures();
