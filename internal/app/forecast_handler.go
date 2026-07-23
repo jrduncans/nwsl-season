@@ -141,7 +141,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	}
 	expectedGames := len(data.Teams) * a.options.Rules.GamesPerTeam / 2
 	if len(data.Games) != expectedGames {
-		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures. This forecast includes only fixtures currently in the cache.", len(data.Games), expectedGames)
+		page.ScheduleNote = fmt.Sprintf("Cache has %d of %d expected regular-season fixtures; this forecast uses those available.", len(data.Games), expectedGames)
 	}
 	// The rendered selector is filtered for a useful no-JavaScript fallback.
 	// The complete list remains in a template for immediate client-side changes.

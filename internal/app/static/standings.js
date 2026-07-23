@@ -122,7 +122,7 @@ function setupForecastAssumptionBuilder() {
     pendingSection.hidden = !hasPending;
     updateButton.disabled = !hasPending;
     updateButton.textContent = hasPending ? `Update forecast (${pending.size})` : "Update forecast";
-    pendingStatus.textContent = hasPending ? `${pending.size} new ${pending.size === 1 ? "assumption is" : "assumptions are"} ready. Update the forecast to apply ${pending.size === 1 ? "it" : "them"}.` : "";
+    pendingStatus.textContent = hasPending ? `${pending.size} new ${pending.size === 1 ? "assumption" : "assumptions"} ready. Update to apply.` : "";
   };
 
   const updateFixtures = () => {
