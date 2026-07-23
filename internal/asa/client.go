@@ -46,12 +46,14 @@ type XGoalsFilters struct {
 // GameXGoals is ASA's game-level xG response. The field names are captured
 // from the live endpoint; RawJSON preserves the complete source object.
 type GameXGoals struct {
-	GameID         string  `json:"game_id"`
-	HomeTeamID     string  `json:"home_team_id"`
-	AwayTeamID     string  `json:"away_team_id"`
-	HomeTeamXGoals float64 `json:"home_team_xgoals"`
-	AwayTeamXGoals float64 `json:"away_team_xgoals"`
-	RawJSON        string  `json:"-"`
+	GameID         string   `json:"game_id"`
+	HomeTeamID     string   `json:"home_team_id"`
+	AwayTeamID     string   `json:"away_team_id"`
+	HomeTeamXGoals float64  `json:"home_team_xgoals"`
+	AwayTeamXGoals float64  `json:"away_team_xgoals"`
+	HomeXPoints    *float64 `json:"home_xpoints"`
+	AwayXPoints    *float64 `json:"away_xpoints"`
+	RawJSON        string   `json:"-"`
 }
 
 // Game is the ASA /nwsl/games wire representation.

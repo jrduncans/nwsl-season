@@ -15,16 +15,48 @@ document.addEventListener("click", (event) => {
   display.classList.add("is-switching");
   requestAnimationFrame(() => {
     display.dataset.standingsMode = mode;
-    sortStandings(display, mode);
+    sortStandings(display, mode, display.dataset.standingsStat);
     display.querySelectorAll("[data-standings-mode-button]").forEach((candidate) => {
       candidate.setAttribute("aria-pressed", String(candidate === button));
     });
-    display.querySelectorAll("[data-standings-value]").forEach((value) => {
-      value.textContent = value.parentElement.dataset[mode === "per-game" ? "perGame" : "total"];
-    });
+    updateStandingsValues(display, mode);
     requestAnimationFrame(() => display.classList.remove("is-switching"));
   });
 });
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-standings-stat-button]");
+  if (!button) return;
+
+  const display = button.closest("[data-standings]");
+  const stat = button.dataset.standingsStatValue;
+  if (!display || !["goals", "xg"].includes(stat) || display.dataset.standingsStat === stat) return;
+
+  display.dataset.standingsStat = stat;
+  display.querySelectorAll("[data-standings-stat-button]").forEach((candidate) => {
+    candidate.setAttribute("aria-pressed", String(candidate === button));
+  });
+  display.querySelectorAll("[data-standings-points-label]").forEach((label) => {
+    label.textContent = stat === "xg" ? label.dataset.xgLabel : label.dataset.goalsLabel;
+    label.title = stat === "xg" ? "Expected points from ASA's game xG model" : "Official standings points";
+  });
+  display.querySelectorAll("[data-standings-caption]").forEach((caption) => {
+    caption.textContent = stat === "xg" ? caption.dataset.xgLabel : caption.dataset.goalsLabel;
+  });
+  updateStandingsValues(display, display.dataset.standingsMode);
+  sortStandings(display, display.dataset.standingsMode, stat);
+});
+
+function updateStandingsValues(display, mode) {
+  const stat = display.dataset.standingsStat;
+  display.querySelectorAll("[data-standings-value]").forEach((value) => {
+    const cell = value.parentElement;
+    const key = cell.hasAttribute("data-standings-points") && stat === "xg"
+      ? mode === "per-game" ? "xgPerGame" : "xgTotal"
+      : mode === "per-game" ? "perGame" : "total";
+    value.textContent = cell.dataset[key];
+  });
+}
 
 function formatLocalTime(utc) {
   const date = new Date(utc);
@@ -248,17 +280,41 @@ setupForecastAssumptionBuilder();
 setupScenarioCopy();
 setupClinchingTeamFilter();
 
-function sortStandings(display, mode) {
+function sortStandings(display, mode, stat) {
   const tbody = display.querySelector("[data-standings-table] tbody");
   if (!tbody) return;
 
-  const dataKey = mode === "per-game" ? "perGame" : "total";
   const rows = Array.from(tbody.rows);
-  rows.sort((left, right) => Number(left.querySelector("[data-standings-position]").dataset[dataKey]) - Number(right.querySelector("[data-standings-position]").dataset[dataKey]));
+  let playoffCutoff;
+  if (stat === "xg") {
+    const dataKey = mode === "per-game" ? "xgPerGame" : "xgTotal";
+    const officialDataKey = mode === "per-game" ? "perGame" : "total";
+    const officialCutoffRow = rows.find((row) => row.dataset[`${officialDataKey}PlayoffLine`] === "true");
+    playoffCutoff = Number(officialCutoffRow?.querySelector("[data-standings-position]")?.dataset[officialDataKey]);
+    rows.sort((left, right) => {
+      const leftPoints = Number(left.querySelector("[data-standings-points]").dataset[dataKey]);
+      const rightPoints = Number(right.querySelector("[data-standings-points]").dataset[dataKey]);
+      const leftValue = Number.isNaN(leftPoints) ? -Infinity : leftPoints;
+      const rightValue = Number.isNaN(rightPoints) ? -Infinity : rightPoints;
+      if (leftValue !== rightValue) return rightValue - leftValue;
+      const byName = left.dataset.teamName.localeCompare(right.dataset.teamName);
+      if (byName !== 0) return byName;
+      return left.dataset.teamId.localeCompare(right.dataset.teamId);
+    });
+  } else {
+    const dataKey = mode === "per-game" ? "perGame" : "total";
+    rows.sort((left, right) => Number(left.querySelector("[data-standings-position]").dataset[dataKey]) - Number(right.querySelector("[data-standings-position]").dataset[dataKey]));
+  }
   rows.forEach((row) => tbody.append(row));
-  rows.forEach((row) => {
+  rows.forEach((row, index) => {
     const position = row.querySelector("[data-standings-position]");
-    position.textContent = position.dataset[dataKey];
-    row.classList.toggle("playoff-line", row.dataset[`${dataKey}PlayoffLine`] === "true");
+    if (stat === "xg") {
+      position.textContent = index + 1;
+      row.classList.toggle("playoff-line", index + 1 === playoffCutoff);
+    } else {
+      const dataKey = mode === "per-game" ? "perGame" : "total";
+      position.textContent = position.dataset[dataKey];
+      row.classList.toggle("playoff-line", row.dataset[`${dataKey}PlayoffLine`] === "true");
+    }
   });
 }

@@ -80,6 +80,20 @@ func TestRunRefreshesXGBeforeDerivedCalculations(t *testing.T) {
 	}
 }
 
+func TestMapXGoalsPreservesExpectedPoints(t *testing.T) {
+	homePoints, awayPoints := 2.47, .367
+	values, err := mapXGoals([]asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 2.36, AwayTeamXGoals: 1.11, HomeXPoints: &homePoints, AwayXPoints: &awayPoints}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 1 || !values[0].HomeXPoints.Valid || !values[0].AwayXPoints.Valid {
+		t.Fatalf("mapped values = %+v, want expected points", values)
+	}
+	if values[0].HomeXPoints.Float64 != homePoints || values[0].AwayXPoints.Float64 != awayPoints {
+		t.Fatalf("expected points = %+v, want %.3f / %.3f", values[0], homePoints, awayPoints)
+	}
+}
+
 func TestRecalculateUsesCachedFixturesWithoutCallingASA(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)

@@ -137,6 +137,8 @@ type tableRowView struct {
 	XGForAgainstPerGame   string
 	XGDifference          string
 	XGDifferencePerGame   string
+	XPoints               string
+	XPointsPerGame        string
 	PlayoffLine           bool
 	TotalPosition         int
 	TotalPlayoffLine      bool
@@ -261,9 +263,11 @@ func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {
 // refresh must never make an incomplete total look like a complete one.
 func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, int, int) {
 	type total struct {
-		matches      int
-		goalsFor     float64
-		goalsAgainst float64
+		matches        int
+		goalsFor       float64
+		goalsAgainst   float64
+		xPoints        float64
+		xPointsMatches int
 	}
 
 	completed := make(map[string]cache.Game)
@@ -295,12 +299,19 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 		away.matches++
 		away.goalsFor += xg.AwayXG.Float64
 		away.goalsAgainst += xg.HomeXG.Float64
+		if xg.HomeXPoints.Valid && xg.AwayXPoints.Valid {
+			home.xPoints += xg.HomeXPoints.Float64
+			home.xPointsMatches++
+			away.xPoints += xg.AwayXPoints.Float64
+			away.xPointsMatches++
+		}
 	}
 	for index := range rows {
 		value := totals[rows[index].TeamID]
 		if value == nil || value.matches == 0 {
 			rows[index].XGForAgainst, rows[index].XGForAgainstPerGame = "—", "—"
 			rows[index].XGDifference, rows[index].XGDifferencePerGame = "—", "—"
+			rows[index].XPoints, rows[index].XPointsPerGame = "—", "—"
 			continue
 		}
 		difference := value.goalsFor - value.goalsAgainst
@@ -308,6 +319,12 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 		rows[index].XGForAgainstPerGame = fmt.Sprintf("%.2f/%.2f", value.goalsFor/float64(value.matches), value.goalsAgainst/float64(value.matches))
 		rows[index].XGDifference = signedFloatText(difference)
 		rows[index].XGDifferencePerGame = signedFloatText(difference / float64(value.matches))
+		if value.xPointsMatches == value.matches {
+			rows[index].XPoints = fmt.Sprintf("%.2f", value.xPoints)
+			rows[index].XPointsPerGame = fmt.Sprintf("%.2f", value.xPoints/float64(value.matches))
+		} else {
+			rows[index].XPoints, rows[index].XPointsPerGame = "—", "—"
+		}
 	}
 	return rows, available, len(completed)
 }

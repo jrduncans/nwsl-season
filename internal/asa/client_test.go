@@ -145,6 +145,33 @@ func TestTeamsSendsQueryParameters(t *testing.T) {
 	}
 }
 
+func TestGameXGoalsDecodesExpectedPoints(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/game_xgoals.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nwsl/games/xgoals" {
+			t.Errorf("path = %q, want %q", r.URL.Path, "/nwsl/games/xgoals")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fixture)
+	}))
+	defer server.Close()
+
+	values, err := (Client{BaseURL: server.URL, HTTPClient: server.Client()}).GameXGoals(context.Background(), XGoalsFilters{SeasonName: "2025", StageName: "Regular Season"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 1 || values[0].HomeXPoints == nil || values[0].AwayXPoints == nil {
+		t.Fatalf("xG values = %+v, want one game with expected points", values)
+	}
+	if *values[0].HomeXPoints != 2.47 || *values[0].AwayXPoints != .367 {
+		t.Fatalf("expected points = %.3f / %.3f, want 2.470 / 0.367", *values[0].HomeXPoints, *values[0].AwayXPoints)
+	}
+}
+
 func TestTeamsReturnsErrorForNon2xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad upstream", http.StatusBadGateway)

@@ -185,7 +185,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	if strings.Contains(response.Body.String(), "<h1>Remaining schedule difficulty</h1>") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
 		t.Fatal("main season page still renders the prominent schedule-difficulty summary")
 	}
-	for _, text := range []string{`data-standings-mode="per-game"`, ">Per game</button>", ">Totals</button>", `title="Goals for / against">+/-</th>`, `data-total="2/1" data-per-game="2.00/1.00"`, "Incomplete xG data:"} {
+	for _, text := range []string{`data-standings-mode="per-game"`, `data-standings-stat="goals"`, ">Goals</button>", ">xG</button>", ">Per game</button>", ">Totals</button>", `data-standings-stat-column="goals" title="Goals for / against">+/-</th>`, `data-standings-stat-column="xg" title="Expected goals for / against">xG +/-</th>`, `data-total="2/1" data-per-game="2.00/1.00"`, "Incomplete xG data:"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain default per-game standings control %q", text)
 		}
@@ -230,6 +230,7 @@ func TestSeasonRendersXGInStandingsWithoutCoverageWarning(t *testing.T) {
 	data.XGoals = []cache.GameXG{{
 		GameID: "completed", Availability: cache.XGAvailable,
 		HomeXG: sql.NullFloat64{Float64: 2.36, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.11, Valid: true},
+		HomeXPoints: sql.NullFloat64{Float64: 2.47, Valid: true}, AwayXPoints: sql.NullFloat64{Float64: .367, Valid: true},
 	}}
 	response := httptest.NewRecorder()
 
@@ -239,7 +240,7 @@ func TestSeasonRendersXGInStandingsWithoutCoverageWarning(t *testing.T) {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
 	body := response.Body.String()
-	for _, value := range []string{`data-total="2.36/1.11" data-per-game="2.36/1.11"`, `data-total="&#43;1.25" data-per-game="&#43;1.25"`} {
+	for _, value := range []string{`data-total="2.36/1.11" data-per-game="2.36/1.11"`, `data-total="&#43;1.25" data-per-game="&#43;1.25"`, `data-standings-caption data-goals-label="Current standings" data-xg-label="xG standings, ordered by xPts"`, `data-standings-points-label data-goals-label="Pts" data-xg-label="xPts"`, `data-standings-points data-total="3" data-per-game="3.00" data-xg-total="2.47" data-xg-per-game="2.47"`} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain xG value %q", value)
 		}

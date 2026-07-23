@@ -398,6 +398,9 @@ func mapXGoals(values []asa.GameXGoals) ([]cache.GameXG, error) {
 		if math.IsNaN(value.HomeTeamXGoals) || math.IsInf(value.HomeTeamXGoals, 0) || value.HomeTeamXGoals < 0 || math.IsNaN(value.AwayTeamXGoals) || math.IsInf(value.AwayTeamXGoals, 0) || value.AwayTeamXGoals < 0 {
 			return nil, fmt.Errorf("validate ASA xG response: invalid xG for game %q", value.GameID)
 		}
+		if (value.HomeXPoints == nil) != (value.AwayXPoints == nil) || (value.HomeXPoints != nil && (!finiteNonnegative(*value.HomeXPoints) || !finiteNonnegative(*value.AwayXPoints))) {
+			return nil, fmt.Errorf("validate ASA xG response: invalid expected points for game %q", value.GameID)
+		}
 		raw := value.RawJSON
 		if raw == "" {
 			encoded, err := json.Marshal(value)
@@ -406,9 +409,18 @@ func mapXGoals(values []asa.GameXGoals) ([]cache.GameXG, error) {
 			}
 			raw = string(encoded)
 		}
-		result = append(result, cache.GameXG{GameID: value.GameID, Availability: cache.XGAvailable, HomeTeamID: value.HomeTeamID, AwayTeamID: value.AwayTeamID, HomeXG: sql.NullFloat64{Float64: value.HomeTeamXGoals, Valid: true}, AwayXG: sql.NullFloat64{Float64: value.AwayTeamXGoals, Valid: true}, RawJSON: raw})
+		mapped := cache.GameXG{GameID: value.GameID, Availability: cache.XGAvailable, HomeTeamID: value.HomeTeamID, AwayTeamID: value.AwayTeamID, HomeXG: sql.NullFloat64{Float64: value.HomeTeamXGoals, Valid: true}, AwayXG: sql.NullFloat64{Float64: value.AwayTeamXGoals, Valid: true}, RawJSON: raw}
+		if value.HomeXPoints != nil {
+			mapped.HomeXPoints = sql.NullFloat64{Float64: *value.HomeXPoints, Valid: true}
+			mapped.AwayXPoints = sql.NullFloat64{Float64: *value.AwayXPoints, Valid: true}
+		}
+		result = append(result, mapped)
 	}
 	return result, nil
+}
+
+func finiteNonnegative(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0
 }
 
 func nullInt(value *int) sql.NullInt64 {

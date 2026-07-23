@@ -70,7 +70,8 @@ standard library.
 ### Endpoint and metric
 
 Use `GET /nwsl/games/xgoals` with `season_name` and `stage_name`. Cache the
-endpoint's **team-model** home and away xG values, not the player-model values.
+endpoint's **team-model** home and away xG values, plus its optional home and
+away expected-points values; do not substitute the player-model xG values.
 ASA describes its team xG as the team-quality measure that reduces the value of
 penalties and repeated shots in one sequence. Keep ASA's terminology in the
 methodology copy and link to the source glossary.
@@ -87,6 +88,10 @@ values, stop this phase and amend the plan before changing the cache schema:
 - home and away team IDs;
 - home team-model xG;
 - away team-model xG.
+
+When the payload provides `home_xpoints` and `away_xpoints`, persist them as a
+pair. They are descriptive game observations, not official standings points;
+an older payload may omit both values.
 
 Preserve every source object as `RawJSON`, including fields not normalized.
 The normalized application name is `ExpectedGoals`; the ASA wire name remains
@@ -143,6 +148,10 @@ without harming fixture availability.
 Increase `schemaVersion` from 2 to 3. Migration 3 creates these tables; do not
 rewrite migrations 1 or 2.
 
+Migration 7 later adds the nullable `home_xpoints` and `away_xpoints` columns.
+Existing caches receive expected-points values on their next successful xG
+refresh.
+
 ```sql
 CREATE TABLE game_xg (
     asa_game_id TEXT PRIMARY KEY REFERENCES games(asa_game_id) ON DELETE CASCADE,
@@ -151,6 +160,8 @@ CREATE TABLE game_xg (
     away_team_id TEXT NOT NULL REFERENCES teams(asa_team_id),
     home_xg REAL,
     away_xg REAL,
+    home_xpoints REAL,
+    away_xpoints REAL,
     raw_json TEXT NOT NULL,
     first_observed_at TEXT,
     last_checked_at TEXT NOT NULL,
@@ -203,6 +214,8 @@ type GameXG struct {
     AwayTeamID      string
     HomeXG          sql.NullFloat64
     AwayXG          sql.NullFloat64
+    HomeXPoints     sql.NullFloat64
+    AwayXPoints     sql.NullFloat64
     RawJSON         string
     FirstObservedAt *time.Time
     LastCheckedAt   time.Time

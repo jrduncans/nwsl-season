@@ -20,7 +20,8 @@ h2 { margin-top: 3rem; }
 .button { display: inline-block; border: 0; border-radius: .35rem; padding: .7rem 1rem; color: white; background: var(--green); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
 .button-secondary { color: var(--green); border: 1px solid var(--green); background: white; }
 .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
-.standings-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: .65rem; margin: 0 0 .55rem; }
+.standings-toolbar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .65rem 1rem; margin: 0 0 .55rem; }
+.standings-toolbar-group { display: flex; align-items: center; gap: .65rem; }
 .standings-view-label { margin: 0; color: var(--muted); font-size: .875rem; font-weight: 700; }
 .standings-toggle { display: inline-flex; padding: .2rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .standings-toggle-button { border: 0; border-radius: .3rem; padding: .35rem .6rem; color: var(--muted); background: transparent; font: inherit; font-size: .875rem; font-weight: 700; cursor: pointer; }
@@ -28,12 +29,16 @@ h2 { margin-top: 3rem; }
 .standings-toggle-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 45%, white); outline-offset: 1px; }
 [data-standings-value] { transition: opacity .12s ease, transform .12s ease; }
 .standings-display.is-switching [data-standings-value] { opacity: .35; transform: translateY(1px); }
+[data-standings-stat="goals"] [data-standings-stat-column="xg"], [data-standings-stat="xg"] [data-standings-stat-column="goals"] { display: none; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-/* Keep the stat columns from being remeasured when the display switches modes. */
-.standings { min-width: 52rem; table-layout: fixed; font-size: .875rem; }
+.standings { min-width: 47rem; table-layout: auto; font-size: .875rem; }
 .standings :is(th, td):first-child { width: 4rem; }
 .standings :is(th, td):nth-child(2) { width: 28%; }
 .standings :is(th, td):last-child { width: 5.25rem; }
+.standings :is(th, td):nth-child(n + 3):nth-child(-n + 6) { min-width: 2.5rem; }
+.standings :is(th, td):nth-child(7), .standings :is(th, td):nth-child(9) { min-width: 5.25rem; }
+.standings :is(th, td):nth-child(8), .standings :is(th, td):nth-child(10) { min-width: 3.75rem; }
+.standings :is(th, td):nth-child(11) { min-width: 3.25rem; }
 .standings th:nth-child(2) .team-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .standings th:nth-child(2) .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 caption { padding: .75rem; text-align: left; font-weight: 800; }
@@ -130,7 +135,7 @@ th:nth-child(2) { text-align: left; }
 .forecast-method { margin-top: 3rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }.forecast-method[open] summary { margin-bottom: .75rem; }
 .error-card { max-width: 40rem; padding: 2rem; border: 1px solid var(--line); background: white; }
 @media (prefers-reduced-motion: reduce) { [data-standings-value] { transition: none; } }
-@media (max-width: 700px) { .site-header { align-items: start; flex-direction: column; gap: .75rem; }.site-nav ul { justify-content: flex-start; }.title-row { align-items: start; flex-direction: column; }.title-actions { align-items: stretch; width: 100%; }.title-actions .button { text-align: center; }.standings-toolbar { justify-content: space-between; }.fixtures li { grid-template-columns: 1fr auto 1fr; }.fixtures time, .scheduled { grid-column: 1/-1; }.forecast-controls, .forecast-control-fields, .forecast-add { grid-template-columns: 1fr; }.forecast-model-detail summary { white-space: normal; }.forecast-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .75rem; }.forecast-meta div, .forecast-meta div:first-child { display: block; padding: 0; border: 0; }.forecast-meta dd { margin-top: .1rem; }.forecast-outcomes { grid-column: auto; align-items: stretch; flex-direction: column; }.forecast-outcomes label { width: 100%; }.forecast-table { min-width: 0; font-size: .875rem; }.forecast-table .forecast-rank { width: 2rem; }.forecast-table th:nth-child(2) { width: 38%; }.forecast-table td:nth-child(3), .forecast-table td:nth-child(4), .forecast-table td:nth-child(5) { width: auto; }.forecast-table th, .forecast-table td { padding: .5rem .35rem; }.forecast-table .forecast-shield, .forecast-table .forecast-range { display: none; }.forecast-team .team-name { white-space: normal; }.forecast-distribution summary { white-space: normal; }.forecast-distribution ul { grid-template-columns: 1fr; }.forecast-comparison { padding: .85rem; }.forecast-comparison-table { min-width: 56rem; }.forecast-assumptions li { align-items: start; flex-direction: column; }.clinching-filter { align-items: stretch; flex-direction: column; }.clinching-team-list { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .site-header { align-items: start; flex-direction: column; gap: .75rem; }.site-nav ul { justify-content: flex-start; }.title-row { align-items: start; flex-direction: column; }.title-actions { align-items: stretch; width: 100%; }.title-actions .button { text-align: center; }.standings-toolbar { justify-content: space-between; }.standings-toolbar-group { justify-content: space-between; width: 100%; }.fixtures li { grid-template-columns: 1fr auto 1fr; }.fixtures time, .scheduled { grid-column: 1/-1; }.forecast-controls, .forecast-control-fields, .forecast-add { grid-template-columns: 1fr; }.forecast-model-detail summary { white-space: normal; }.forecast-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .75rem; }.forecast-meta div, .forecast-meta div:first-child { display: block; padding: 0; border: 0; }.forecast-meta dd { margin-top: .1rem; }.forecast-outcomes { grid-column: auto; align-items: stretch; flex-direction: column; }.forecast-outcomes label { width: 100%; }.forecast-table { min-width: 0; font-size: .875rem; }.forecast-table .forecast-rank { width: 2rem; }.forecast-table th:nth-child(2) { width: 38%; }.forecast-table td:nth-child(3), .forecast-table td:nth-child(4), .forecast-table td:nth-child(5) { width: auto; }.forecast-table th, .forecast-table td { padding: .5rem .35rem; }.forecast-table .forecast-shield, .forecast-table .forecast-range { display: none; }.forecast-team .team-name { white-space: normal; }.forecast-distribution summary { white-space: normal; }.forecast-distribution ul { grid-template-columns: 1fr; }.forecast-comparison { padding: .85rem; }.forecast-comparison-table { min-width: 56rem; }.forecast-assumptions li { align-items: start; flex-direction: column; }.clinching-filter { align-items: stretch; flex-direction: column; }.clinching-team-list { grid-template-columns: 1fr; } }
 
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
 .section-heading h2 { margin-bottom: .35rem; }

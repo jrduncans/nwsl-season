@@ -29,6 +29,87 @@ func TestMigrationsCreateFreshDatabase(t *testing.T) {
 	}
 }
 
+func TestGameXGExpectedPointsPersist(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"}, {ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"}}
+	game := cachedGame("game-1", "2026", "Regular Season", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 2, Valid: true}, sql.NullInt64{Int64: 1, Valid: true})
+	if _, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ReplaceGameXG(ctx, "2026", "Regular Season", []Game{game}, []GameXG{{GameID: "game-1", Availability: XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeXG: sql.NullFloat64{Float64: 2.36, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.11, Valid: true}, HomeXPoints: sql.NullFloat64{Float64: 2.47, Valid: true}, AwayXPoints: sql.NullFloat64{Float64: .367, Valid: true}, RawJSON: `{}`}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	season, err := db.Season(ctx, "2026", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(season.XGoals) != 1 || !season.XGoals[0].HomeXPoints.Valid || !season.XGoals[0].AwayXPoints.Valid {
+		t.Fatalf("xG values = %+v, want expected points", season.XGoals)
+	}
+	if season.XGoals[0].HomeXPoints.Float64 != 2.47 || season.XGoals[0].AwayXPoints.Float64 != .367 {
+		t.Fatalf("expected points = %+v, want 2.470 / 0.367", season.XGoals[0])
+	}
+}
+
+func TestMigrationSevenAddsExpectedPointsColumns(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/cache.sqlite"
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`,
+		`INSERT INTO schema_migrations (version, applied_at) VALUES (6, '2026-07-22T00:00:00Z')`,
+		`CREATE TABLE game_xg (asa_game_id TEXT PRIMARY KEY, availability TEXT NOT NULL, home_team_id TEXT NOT NULL, away_team_id TEXT NOT NULL, home_xg REAL, away_xg REAL, raw_json TEXT NOT NULL, first_observed_at TEXT, last_checked_at TEXT NOT NULL)`,
+	} {
+		if _, err := legacy.ExecContext(ctx, statement); err != nil {
+			_ = legacy.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	columns := map[string]bool{}
+	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(game_xg)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"home_xpoints", "away_xpoints"} {
+		if !columns[name] {
+			t.Errorf("game_xg columns = %v, missing %q", columns, name)
+		}
+	}
+}
+
 func TestStandingsInputsLoadSeasonStageValues(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")

@@ -20,13 +20,13 @@
 </html>{{end}}
 
 {{define "currentTable"}}
-<div class="standings-display" data-standings data-standings-mode="per-game">
+<div class="standings-display" data-standings data-standings-mode="per-game" data-standings-stat="goals">
   {{template "standingsToggle"}}
   <div class="table-scroll">
     <table class="standings" data-standings-table>
-      <caption>Current standings</caption>
-      <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th title="Goals for / against">+/-</th><th>GD</th><th title="Expected goals for / against">xG +/-</th><th title="Expected-goal difference">xGD</th><th>Pts</th><th title="Remaining schedule difficulty relative to the league baseline">SD</th></tr></thead>
-      <tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}" data-per-game-playoff-line="{{.PlayoffLine}}" data-total-playoff-line="{{.TotalPlayoffLine}}"><td data-standings-position data-per-game="{{.Position}}" data-total="{{.TotalPosition}}">{{.Position}}</td><th scope="row">{{template "teamName" .Team}}{{if .QualificationBadge}} <span class="badge qualification-badge">✓ {{.QualificationBadge}}</span><span class="visually-hidden">{{.QualificationTitle}}</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td data-total="{{.GoalsFor}}/{{.GoalsAgainst}}" data-per-game="{{.GoalsForPerGame}}/{{.GoalsAgainstPerGame}}"><span data-standings-value>{{.GoalsForPerGame}}/{{.GoalsAgainstPerGame}}</span></td><td data-total="{{.GoalDifference}}" data-per-game="{{.GoalDifferencePerGame}}"><span data-standings-value>{{.GoalDifferencePerGame}}</span></td><td data-total="{{.XGForAgainst}}" data-per-game="{{.XGForAgainstPerGame}}"><span data-standings-value>{{.XGForAgainstPerGame}}</span></td><td data-total="{{.XGDifference}}" data-per-game="{{.XGDifferencePerGame}}"><span data-standings-value>{{.XGDifferencePerGame}}</span></td><td data-total="{{.Points}}" data-per-game="{{.PointsPerGame}}"><strong data-standings-value>{{.PointsPerGame}}</strong></td><td>{{template "scheduleAhead" .}}</td></tr>{{end}}</tbody>
+      <caption data-standings-caption data-goals-label="Current standings" data-xg-label="xG standings, ordered by xPts">Current standings</caption>
+      <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th data-standings-stat-column="goals" title="Goals for / against">+/-</th><th data-standings-stat-column="goals">GD</th><th data-standings-stat-column="xg" title="Expected goals for / against">xG +/-</th><th data-standings-stat-column="xg" title="Expected-goal difference">xGD</th><th data-standings-points-label data-goals-label="Pts" data-xg-label="xPts" title="Official standings points">Pts</th><th title="Remaining schedule difficulty relative to the league baseline">SD</th></tr></thead>
+      <tbody>{{range .}}<tr class="{{if .PlayoffLine}}playoff-line{{end}}" data-team-name="{{.Team.Name}}" data-team-id="{{.TeamID}}" data-per-game-playoff-line="{{.PlayoffLine}}" data-total-playoff-line="{{.TotalPlayoffLine}}"><td data-standings-position data-per-game="{{.Position}}" data-total="{{.TotalPosition}}">{{.Position}}</td><th scope="row">{{template "teamName" .Team}}{{if .QualificationBadge}} <span class="badge qualification-badge">✓ {{.QualificationBadge}}</span><span class="visually-hidden">{{.QualificationTitle}}</span>{{end}}{{if .TieBreak}} <span class="warning" title="{{.TieBreak}}">†</span>{{end}}</th><td>{{.Played}}</td><td>{{.Wins}}</td><td>{{.Draws}}</td><td>{{.Losses}}</td><td data-standings-stat-column="goals" data-total="{{.GoalsFor}}/{{.GoalsAgainst}}" data-per-game="{{.GoalsForPerGame}}/{{.GoalsAgainstPerGame}}"><span data-standings-value>{{.GoalsForPerGame}}/{{.GoalsAgainstPerGame}}</span></td><td data-standings-stat-column="goals" data-total="{{.GoalDifference}}" data-per-game="{{.GoalDifferencePerGame}}"><span data-standings-value>{{.GoalDifferencePerGame}}</span></td><td data-standings-stat-column="xg" data-total="{{.XGForAgainst}}" data-per-game="{{.XGForAgainstPerGame}}"><span data-standings-value>{{.XGForAgainstPerGame}}</span></td><td data-standings-stat-column="xg" data-total="{{.XGDifference}}" data-per-game="{{.XGDifferencePerGame}}"><span data-standings-value>{{.XGDifferencePerGame}}</span></td><td data-standings-points data-total="{{.Points}}" data-per-game="{{.PointsPerGame}}" data-xg-total="{{.XPoints}}" data-xg-per-game="{{.XPointsPerGame}}"><strong data-standings-value>{{.PointsPerGame}}</strong></td><td>{{template "scheduleAhead" .}}</td></tr>{{end}}</tbody>
     </table>
   </div>
 </div>
@@ -34,10 +34,19 @@
 
 {{define "standingsToggle"}}
   <div class="standings-toolbar">
-    <p class="standings-view-label">Stat view</p>
-    <div class="standings-toggle" role="group" aria-label="Standings statistic display">
-      <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="per-game" aria-pressed="true">Per game</button>
-      <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="total" aria-pressed="false">Totals</button>
+    <div class="standings-toolbar-group">
+      <p class="standings-view-label">Stats</p>
+      <div class="standings-toggle" role="group" aria-label="Standings goal statistics">
+        <button class="standings-toggle-button" type="button" data-standings-stat-button data-standings-stat-value="goals" aria-pressed="true">Goals</button>
+        <button class="standings-toggle-button" type="button" data-standings-stat-button data-standings-stat-value="xg" aria-pressed="false">xG</button>
+      </div>
+    </div>
+    <div class="standings-toolbar-group">
+      <p class="standings-view-label">Values</p>
+      <div class="standings-toggle" role="group" aria-label="Standings value display">
+        <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="per-game" aria-pressed="true">Per game</button>
+        <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="total" aria-pressed="false">Totals</button>
+      </div>
     </div>
   </div>
 {{end}}

@@ -24,7 +24,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 6
+const schemaVersion = 7
 
 // DB wraps the SQLite cache.
 type DB struct {
@@ -102,13 +102,14 @@ const (
 )
 
 type GameXG struct {
-	GameID                 string
-	Availability           XGAvailability
-	HomeTeamID, AwayTeamID string
-	HomeXG, AwayXG         sql.NullFloat64
-	RawJSON                string
-	FirstObservedAt        *time.Time
-	LastCheckedAt          time.Time
+	GameID                   string
+	Availability             XGAvailability
+	HomeTeamID, AwayTeamID   string
+	HomeXG, AwayXG           sql.NullFloat64
+	HomeXPoints, AwayXPoints sql.NullFloat64
+	RawJSON                  string
+	FirstObservedAt          *time.Time
+	LastCheckedAt            time.Time
 }
 type XGSyncRun struct {
 	ID, RowsSeen, AvailableGames, UnavailableGames int64
@@ -397,6 +398,19 @@ func (c *DB) Migrate(ctx context.Context) error {
 			}
 		}
 		if err := recordMigration(ctx, tx, 6); err != nil {
+			return err
+		}
+	}
+	if version < 7 {
+		for _, statement := range []string{
+			`ALTER TABLE game_xg ADD COLUMN home_xpoints REAL`,
+			`ALTER TABLE game_xg ADD COLUMN away_xpoints REAL`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 7: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 7); err != nil {
 			return err
 		}
 	}
@@ -778,6 +792,9 @@ func (c *DB) ReplaceGameXG(ctx context.Context, season, stage string, games []Ga
 		if value.Availability != XGAvailable || !value.HomeXG.Valid || !value.AwayXG.Valid || !finiteNonnegative(value.HomeXG.Float64) || !finiteNonnegative(value.AwayXG.Float64) {
 			return XGSyncRun{}, fmt.Errorf("xG game %q has invalid values", value.GameID)
 		}
+		if value.HomeXPoints.Valid != value.AwayXPoints.Valid || (value.HomeXPoints.Valid && (!finiteNonnegative(value.HomeXPoints.Float64) || !finiteNonnegative(value.AwayXPoints.Float64))) {
+			return XGSyncRun{}, fmt.Errorf("xG game %q has invalid expected points", value.GameID)
+		}
 		seen[value.GameID] = value
 	}
 	tx, err := c.db.BeginTx(ctx, nil)
@@ -838,7 +855,7 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 	var old GameXG
 	var first sql.NullString
 	var checked string
-	err := tx.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,raw_json,first_observed_at,last_checked_at FROM game_xg WHERE asa_game_id=?`, value.GameID).Scan(&old.Availability, &old.HomeTeamID, &old.AwayTeamID, &old.HomeXG, &old.AwayXG, &old.RawJSON, &first, &checked)
+	err := tx.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at FROM game_xg WHERE asa_game_id=?`, value.GameID).Scan(&old.Availability, &old.HomeTeamID, &old.AwayTeamID, &old.HomeXG, &old.AwayXG, &old.HomeXPoints, &old.AwayXPoints, &old.RawJSON, &first, &checked)
 	if first.Valid {
 		parsed, e := time.Parse(time.RFC3339, first.String)
 		if e != nil {
@@ -848,15 +865,17 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		firstValue := any(nil)
-		home, away := any(nil), any(nil)
+		home, away, homePoints, awayPoints := any(nil), any(nil), any(nil), any(nil)
 		raw := ""
 		if value.Availability == XGAvailable {
 			firstValue = formatTime(now)
 			home = value.HomeXG.Float64
 			away = value.AwayXG.Float64
+			homePoints = nullableFloat(value.HomeXPoints)
+			awayPoints = nullableFloat(value.AwayXPoints)
 			raw = value.RawJSON
 		}
-		_, e := tx.ExecContext(ctx, `INSERT INTO game_xg (asa_game_id,availability,home_team_id,away_team_id,home_xg,away_xg,raw_json,first_observed_at,last_checked_at) VALUES (?,?,?,?,?,?,?,?,?)`, value.GameID, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, raw, firstValue, formatTime(now))
+		_, e := tx.ExecContext(ctx, `INSERT INTO game_xg (asa_game_id,availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.GameID, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, homePoints, awayPoints, raw, firstValue, formatTime(now))
 		if e != nil {
 			return 0, fmt.Errorf("insert xG %q: %w", value.GameID, e)
 		}
@@ -865,9 +884,9 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 	if err != nil {
 		return 0, fmt.Errorf("load xG %q: %w", value.GameID, err)
 	}
-	material := old.Availability != value.Availability || old.HomeTeamID != value.HomeTeamID || old.AwayTeamID != value.AwayTeamID || old.HomeXG != value.HomeXG || old.AwayXG != value.AwayXG || (value.Availability == XGAvailable && old.RawJSON != value.RawJSON)
+	material := old.Availability != value.Availability || old.HomeTeamID != value.HomeTeamID || old.AwayTeamID != value.AwayTeamID || old.HomeXG != value.HomeXG || old.AwayXG != value.AwayXG || old.HomeXPoints != value.HomeXPoints || old.AwayXPoints != value.AwayXPoints || (value.Availability == XGAvailable && old.RawJSON != value.RawJSON)
 	firstValue := any(nil)
-	home, away := any(nil), any(nil)
+	home, away, homePoints, awayPoints := any(nil), any(nil), any(nil), any(nil)
 	raw := ""
 	if value.Availability == XGAvailable {
 		if old.FirstObservedAt != nil {
@@ -877,9 +896,11 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 		}
 		home = value.HomeXG.Float64
 		away = value.AwayXG.Float64
+		homePoints = nullableFloat(value.HomeXPoints)
+		awayPoints = nullableFloat(value.AwayXPoints)
 		raw = value.RawJSON
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE game_xg SET availability=?,home_team_id=?,away_team_id=?,home_xg=?,away_xg=?,raw_json=?,first_observed_at=?,last_checked_at=? WHERE asa_game_id=?`, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, raw, firstValue, formatTime(now), value.GameID)
+	_, err = tx.ExecContext(ctx, `UPDATE game_xg SET availability=?,home_team_id=?,away_team_id=?,home_xg=?,away_xg=?,home_xpoints=?,away_xpoints=?,raw_json=?,first_observed_at=?,last_checked_at=? WHERE asa_game_id=?`, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, homePoints, awayPoints, raw, firstValue, formatTime(now), value.GameID)
 	if err != nil {
 		return 0, fmt.Errorf("update xG %q: %w", value.GameID, err)
 	}
@@ -944,7 +965,7 @@ func (c *DB) latestXGRun(ctx context.Context, outcome, season, stage string) (*X
 	return &run, nil
 }
 func (c *DB) seasonXGoals(ctx context.Context, season, stage string) ([]GameXG, error) {
-	rows, err := c.db.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
+	rows, err := c.db.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
 	if err != nil {
 		return nil, fmt.Errorf("load xG: %w", err)
 	}
@@ -954,7 +975,7 @@ func (c *DB) seasonXGoals(ctx context.Context, season, stage string) ([]GameXG, 
 		var v GameXG
 		var first sql.NullString
 		var checked string
-		if err := rows.Scan(&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.RawJSON, &first, &checked); err != nil {
+		if err := rows.Scan(&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked); err != nil {
 			return nil, err
 		}
 		if first.Valid {
@@ -1170,6 +1191,13 @@ func nullableInt(value sql.NullInt64) any {
 		return nil
 	}
 	return value.Int64
+}
+
+func nullableFloat(value sql.NullFloat64) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Float64
 }
 
 func intPtrFromNull(value sql.NullInt64) *int {
