@@ -3,11 +3,144 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
+
+func TestOpenConfiguresEverySQLiteConnection(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	first, err := db.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := db.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+
+	for i, conn := range []*sql.Conn{first, second} {
+		if got := sqlitePragmaInt(t, ctx, conn, "foreign_keys"); got != 1 {
+			t.Errorf("connection %d foreign_keys = %d, want 1", i+1, got)
+		}
+		if got := sqlitePragmaInt(t, ctx, conn, "busy_timeout"); got != 5000 {
+			t.Errorf("connection %d busy_timeout = %d, want 5000", i+1, got)
+		}
+	}
+}
+
+func TestSQLiteForeignKeyCascadeOnNewPooledConnection(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{
+		{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"},
+		{ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"},
+	}
+	game := cachedGame("game-1", "2026", "Regular Season", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+	if _, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ReplaceGameXG(ctx, "2026", "Regular Season", []Game{game}, []GameXG{{GameID: game.ASAID, Availability: XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeXG: sql.NullFloat64{Float64: 1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0, Valid: true}, RawJSON: "{}"}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Keep the initialization connection checked out so this delete uses a
+	// newly opened pooled connection.
+	initial, err := db.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer initial.Close()
+	pooled, err := db.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pooled.Close()
+	if _, err := pooled.ExecContext(ctx, `DELETE FROM games WHERE asa_game_id = ?`, game.ASAID); err != nil {
+		t.Fatal(err)
+	}
+
+	var xgRows int
+	if err := pooled.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_xg WHERE asa_game_id = ?`, game.ASAID).Scan(&xgRows); err != nil {
+		t.Fatal(err)
+	}
+	if xgRows != 0 {
+		t.Fatalf("game_xg rows after game deletion = %d, want 0", xgRows)
+	}
+}
+
+func TestSQLiteBusyTimeoutWaitsForConcurrentWriter(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	first, err := db.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := db.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+
+	tx, err := first.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_leases (lock_key, holder, expires_at_unix_nano) VALUES ('first', 'first', 1)`); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	writeResult := make(chan error, 1)
+	go func() {
+		close(started)
+		_, err := second.ExecContext(ctx, `INSERT INTO sync_leases (lock_key, holder, expires_at_unix_nano) VALUES ('second', 'second', 1)`)
+		writeResult <- err
+	}()
+	<-started
+
+	// An unconfigured connection returns SQLITE_BUSY immediately. Releasing the
+	// write lock while the second connection is waiting proves its timeout is in
+	// effect without making this test wait for the full five seconds.
+	time.Sleep(100 * time.Millisecond)
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-writeResult; err != nil {
+		t.Fatalf("concurrent writer did not wait for lock: %v", err)
+	}
+}
+
+func sqlitePragmaInt(t *testing.T, ctx context.Context, conn *sql.Conn, name string) int {
+	t.Helper()
+	var value int
+	if err := conn.QueryRowContext(ctx, fmt.Sprintf("PRAGMA %s", name)).Scan(&value); err != nil {
+		t.Fatalf("read %s pragma: %v", name, err)
+	}
+	return value
+}
 
 func TestMigrationsCreateFreshDatabase(t *testing.T) {
 	ctx := context.Background()

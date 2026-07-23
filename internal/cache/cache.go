@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -202,7 +203,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, fmt.Errorf("create cache directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", sqliteDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite cache: %w", err)
 	}
@@ -228,17 +229,22 @@ func (c *DB) Close() error {
 }
 
 func (c *DB) configure(ctx context.Context) error {
-	statements := []string{
-		"PRAGMA journal_mode = WAL",
-		"PRAGMA busy_timeout = 5000",
-		"PRAGMA foreign_keys = ON",
-	}
-	for _, statement := range statements {
-		if _, err := c.db.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("configure sqlite cache: %w", err)
-		}
+	if _, err := c.db.ExecContext(ctx, "PRAGMA journal_mode = WAL"); err != nil {
+		return fmt.Errorf("configure sqlite cache: %w", err)
 	}
 	return nil
+}
+
+// sqliteDSN applies settings that SQLite scopes to an individual connection.
+// The modernc driver runs every _pragma value while opening each pooled
+// connection, unlike an ExecContext call on *sql.DB, which reaches only one
+// connection. journal_mode is configured separately because WAL is persistent
+// database state rather than a connection setting.
+func sqliteDSN(path string) string {
+	pragmas := url.Values{}
+	pragmas.Add("_pragma", "busy_timeout(5000)")
+	pragmas.Add("_pragma", "foreign_keys(ON)")
+	return path + "?" + pragmas.Encode()
 }
 
 // Migrate creates the cache schema and upgrades earlier versions in place.

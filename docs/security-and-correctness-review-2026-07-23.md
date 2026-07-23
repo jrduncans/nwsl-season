@@ -22,7 +22,7 @@ were made as part of the review.
 | ID | Priority | Status | Finding |
 | --- | --- | --- | --- |
 | SEC-01 | P1 | Resolved | Forecast requests permit unauthenticated resource exhaustion |
-| DB-01 | P2 | Open | SQLite safeguards apply to only one pooled connection |
+| DB-01 | P2 | Resolved | SQLite safeguards apply to only one pooled connection |
 | HTTP-01 | P2 | Open | The HTTP server has no connection deadlines |
 | DB-02 | P2 | Open | A season response can mix different database snapshots |
 | DATA-01 | P2 | Open | Self-fixtures can be committed as valid upstream data |
@@ -114,7 +114,7 @@ Use several layers rather than relying on only one:
 ## DB-01: Configure every SQLite connection
 
 Priority: **P2 — Medium**  
-Status: **Open**
+Status: **Resolved**
 
 ### Location
 
@@ -163,13 +163,13 @@ concurrency and still needs a strategy if that connection is replaced.
 
 ### Completion checks
 
-- [ ] Two simultaneously held `sql.Conn` values both report
+- [x] Two simultaneously held `sql.Conn` values both report
       `foreign_keys=1`.
-- [ ] Two simultaneously held `sql.Conn` values both report
+- [x] Two simultaneously held `sql.Conn` values both report
       `busy_timeout=5000`.
-- [ ] Deleting a game through a non-initial pooled connection cascades to
+- [x] Deleting a game through a non-initial pooled connection cascades to
       `game_xg`.
-- [ ] A concurrent-writer test confirms the configured busy timeout is active.
+- [x] A concurrent-writer test confirms the configured busy timeout is active.
 
 ## HTTP-01: Add HTTP server deadlines
 
