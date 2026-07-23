@@ -71,6 +71,12 @@ Configuration:
 | `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests; excess requests receive `429` |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached Forecast Lab request |
 
+The server also enforces connection limits independently of any proxy: a
+five-second header-read timeout, a 60-second idle timeout, and a 1 MiB maximum
+request-header size. Its write timeout is at least 30 seconds and increases to
+the configured Forecast Lab compute budget plus five seconds when needed, so a
+bounded normal or comparison forecast has time to return its response.
+
 ## Useful commands
 
 ```sh

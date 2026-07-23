@@ -23,7 +23,7 @@ were made as part of the review.
 | --- | --- | --- | --- |
 | SEC-01 | P1 | Resolved | Forecast requests permit unauthenticated resource exhaustion |
 | DB-01 | P2 | Resolved | SQLite safeguards apply to only one pooled connection |
-| HTTP-01 | P2 | Open | The HTTP server has no connection deadlines |
+| HTTP-01 | P2 | Resolved | The HTTP server has no connection deadlines |
 | DB-02 | P2 | Open | A season response can mix different database snapshots |
 | DATA-01 | P2 | Open | Self-fixtures can be committed as valid upstream data |
 | DATA-02 | P3 | Open | Impossible expected-points values are accepted |
@@ -174,7 +174,7 @@ concurrency and still needs a strategy if that connection is replaced.
 ## HTTP-01: Add HTTP server deadlines
 
 Priority: **P2 — Medium**  
-Status: **Open**
+Status: **Resolved**
 
 ### Location
 
@@ -208,12 +208,12 @@ work before the response is written.
 
 ### Completion checks
 
-- [ ] Server timeout values are explicit and documented.
-- [ ] Slow-header connections are terminated.
-- [ ] Idle keep-alive connections are bounded.
-- [ ] A normal and comparison forecast can finish within the configured,
+- [x] Server timeout values are explicit and documented.
+- [x] Slow-header connections are terminated.
+- [x] Idle keep-alive connections are bounded.
+- [x] A normal and comparison forecast can finish within the configured,
       bounded write window.
-- [ ] `cmd/server` has tests for server construction and shutdown behavior.
+- [x] `cmd/server` has tests for server construction and shutdown behavior.
 
 ## DB-02: Read a season as one database snapshot
 

@@ -23,6 +23,15 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
 
+const (
+	serverReadHeaderTimeout   = 5 * time.Second
+	serverMinimumWriteTimeout = 30 * time.Second
+	serverWriteTimeoutGrace   = 5 * time.Second
+	serverIdleTimeout         = 60 * time.Second
+	serverMaxHeaderBytes      = 1 << 20 // 1 MiB
+	serverShutdownTimeout     = 30 * time.Second
+)
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	cfg, err := config.FromEnvironment()
@@ -68,15 +77,12 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 	refreshScheduler.Start()
 
-	server := &http.Server{
-		Addr: cfg.HTTPAddr,
-		Handler: app.NewHandlerWithOptions(db, app.Options{
-			CurrentSeason: cfg.SyncSeason,
-			Stage:         cfg.SyncStage, Rules: rules,
-			ForecastConcurrency: cfg.ForecastConcurrency,
-			ForecastTimeout:     cfg.ForecastTimeout,
-		}),
-	}
+	server := newHTTPServer(cfg.HTTPAddr, app.NewHandlerWithOptions(db, app.Options{
+		CurrentSeason: cfg.SyncSeason,
+		Stage:         cfg.SyncStage, Rules: rules,
+		ForecastConcurrency: cfg.ForecastConcurrency,
+		ForecastTimeout:     cfg.ForecastTimeout,
+	}), cfg.ForecastTimeout)
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
 
@@ -95,9 +101,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 
 	refreshScheduler.Stop()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	err = server.Shutdown(shutdownCtx)
-	cancel()
+	err = shutdownHTTPServer(server)
 	refreshScheduler.Wait()
 	if err != nil {
 		return fmt.Errorf("gracefully shut down HTTP server: %w", err)
@@ -106,4 +110,25 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+// newHTTPServer applies the connection limits required when the listener is
+// reachable without a proxy. The write deadline includes the forecast budget
+// plus time to render and send its response, so both normal and comparison
+// forecasts have one bounded request window.
+func newHTTPServer(addr string, handler http.Handler, forecastTimeout time.Duration) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		WriteTimeout:      max(serverMinimumWriteTimeout, forecastTimeout+serverWriteTimeoutGrace),
+		IdleTimeout:       serverIdleTimeout,
+		MaxHeaderBytes:    serverMaxHeaderBytes,
+	}
+}
+
+func shutdownHTTPServer(server *http.Server) error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+	defer cancel()
+	return server.Shutdown(shutdownCtx)
 }
