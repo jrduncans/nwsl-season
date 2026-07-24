@@ -207,6 +207,29 @@ func TestGameXGExpectedPointsPersist(t *testing.T) {
 	}
 }
 
+func TestReplaceGameXGRejectsOutOfRangeExpectedPoints(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	teams := []Team{{ASAID: "alpha", Name: "Alpha FC", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"}, {ASAID: "bravo", Name: "Bravo FC", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"}}
+	game := cachedGame("game-1", "2026", "Regular Season", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 2, Valid: true}, sql.NullInt64{Int64: 1, Valid: true})
+	if _, err := db.ReplaceSeason(ctx, "2026", "Regular Season", teams, []Game{game}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	value := GameXG{GameID: "game-1", Availability: XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeXG: sql.NullFloat64{Float64: 2.36, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.11, Valid: true}, HomeXPoints: sql.NullFloat64{Float64: 0, Valid: true}, AwayXPoints: sql.NullFloat64{Float64: MaxGameExpectedPoints, Valid: true}, RawJSON: `{}`}
+	if _, err := db.ReplaceGameXG(ctx, "2026", "Regular Season", []Game{game}, []GameXG{value}, time.Now()); err != nil {
+		t.Fatalf("ReplaceGameXG rejected boundary expected points: %v", err)
+	}
+	value.HomeXPoints.Float64 = MaxGameExpectedPoints + .01
+	if _, err := db.ReplaceGameXG(ctx, "2026", "Regular Season", []Game{game}, []GameXG{value}, time.Now()); err == nil {
+		t.Fatal("ReplaceGameXG succeeded with expected points above three")
+	}
+}
+
 func TestMigrationSevenAddsExpectedPointsColumns(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"

@@ -401,7 +401,7 @@ func mapXGoals(values []asa.GameXGoals) ([]cache.GameXG, error) {
 		if math.IsNaN(value.HomeTeamXGoals) || math.IsInf(value.HomeTeamXGoals, 0) || value.HomeTeamXGoals < 0 || math.IsNaN(value.AwayTeamXGoals) || math.IsInf(value.AwayTeamXGoals, 0) || value.AwayTeamXGoals < 0 {
 			return nil, fmt.Errorf("validate ASA xG response: invalid xG for game %q", value.GameID)
 		}
-		if (value.HomeXPoints == nil) != (value.AwayXPoints == nil) || (value.HomeXPoints != nil && (!finiteNonnegative(*value.HomeXPoints) || !finiteNonnegative(*value.AwayXPoints))) {
+		if (value.HomeXPoints == nil) != (value.AwayXPoints == nil) || (value.HomeXPoints != nil && (!validGameExpectedPoints(*value.HomeXPoints) || !validGameExpectedPoints(*value.AwayXPoints))) {
 			return nil, fmt.Errorf("validate ASA xG response: invalid expected points for game %q", value.GameID)
 		}
 		raw := value.RawJSON
@@ -424,6 +424,10 @@ func mapXGoals(values []asa.GameXGoals) ([]cache.GameXG, error) {
 
 func finiteNonnegative(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0
+}
+
+func validGameExpectedPoints(value float64) bool {
+	return finiteNonnegative(value) && value <= cache.MaxGameExpectedPoints
 }
 
 func nullInt(value *int) sql.NullInt64 {

@@ -27,6 +27,11 @@ import (
 
 const schemaVersion = 7
 
+// MaxGameExpectedPoints is the most league points a team can expect from one
+// match. ASA's game-level expected-points values estimate that allocation, so
+// each team's value must be in the inclusive range [0, MaxGameExpectedPoints].
+const MaxGameExpectedPoints = 3
+
 // DB wraps the SQLite cache.
 type DB struct {
 	db *sql.DB
@@ -826,7 +831,7 @@ func (c *DB) ReplaceGameXG(ctx context.Context, season, stage string, games []Ga
 		if value.Availability != XGAvailable || !value.HomeXG.Valid || !value.AwayXG.Valid || !finiteNonnegative(value.HomeXG.Float64) || !finiteNonnegative(value.AwayXG.Float64) {
 			return XGSyncRun{}, fmt.Errorf("xG game %q has invalid values", value.GameID)
 		}
-		if value.HomeXPoints.Valid != value.AwayXPoints.Valid || (value.HomeXPoints.Valid && (!finiteNonnegative(value.HomeXPoints.Float64) || !finiteNonnegative(value.AwayXPoints.Float64))) {
+		if value.HomeXPoints.Valid != value.AwayXPoints.Valid || (value.HomeXPoints.Valid && (!validGameExpectedPoints(value.HomeXPoints.Float64) || !validGameExpectedPoints(value.AwayXPoints.Float64))) {
 			return XGSyncRun{}, fmt.Errorf("xG game %q has invalid expected points", value.GameID)
 		}
 		seen[value.GameID] = value
@@ -885,6 +890,10 @@ func (c *DB) ReplaceGameXG(ctx context.Context, season, stage string, games []Ga
 }
 
 func finiteNonnegative(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 }
+
+func validGameExpectedPoints(value float64) bool {
+	return finiteNonnegative(value) && value <= MaxGameExpectedPoints
+}
 func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (rowChange, error) {
 	var old GameXG
 	var first sql.NullString

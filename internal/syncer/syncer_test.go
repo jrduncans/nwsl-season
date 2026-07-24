@@ -3,6 +3,7 @@ package syncer
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -91,6 +92,83 @@ func TestMapXGoalsPreservesExpectedPoints(t *testing.T) {
 	}
 	if values[0].HomeXPoints.Float64 != homePoints || values[0].AwayXPoints.Float64 != awayPoints {
 		t.Fatalf("expected points = %+v, want %.3f / %.3f", values[0], homePoints, awayPoints)
+	}
+}
+
+func TestMapXGoalsValidatesExpectedPointsRange(t *testing.T) {
+	floatPtr := func(value float64) *float64 { return &value }
+	game := func(home, away float64) asa.GameXGoals {
+		return asa.GameXGoals{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6, HomeXPoints: floatPtr(home), AwayXPoints: floatPtr(away)}
+	}
+
+	for _, points := range []struct {
+		name       string
+		home, away float64
+	}{
+		{name: "negative", home: -0.01, away: 1},
+		{name: "above three", home: 3.01, away: 0},
+		{name: "not a number", home: math.NaN(), away: 1},
+		{name: "positive infinity", home: math.Inf(1), away: 1},
+		{name: "negative infinity", home: math.Inf(-1), away: 1},
+	} {
+		t.Run(points.name, func(t *testing.T) {
+			if _, err := mapXGoals([]asa.GameXGoals{game(points.home, points.away)}); err == nil {
+				t.Fatal("mapXGoals succeeded with invalid expected points")
+			}
+		})
+	}
+
+	for _, points := range []struct {
+		name       string
+		home, away float64
+	}{
+		{name: "zero", home: 0, away: 0},
+		{name: "three", home: 3, away: 3},
+	} {
+		t.Run(points.name, func(t *testing.T) {
+			if _, err := mapXGoals([]asa.GameXGoals{game(points.home, points.away)}); err != nil {
+				t.Fatalf("mapXGoals rejected boundary expected points: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunInvalidExpectedPointsPreservesLastGoodXGSnapshot(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	homePoints, awayPoints := 2.47, .367
+	order := []string{}
+	client := traceASA{fakeASA: fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}, order: &order, xg: []asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6, HomeXPoints: &homePoints, AwayXPoints: &awayPoints}}}
+	service := Service{ASA: &client, Store: db}
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPoints := 3.01
+	client.xg[0].HomeXPoints = &invalidPoints
+	run, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.XGError == "" {
+		t.Fatal("xG refresh error is empty after invalid expected points")
+	}
+
+	season, err := db.Season(ctx, "2024", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(season.XGoals) != 1 || season.XGoals[0].HomeXPoints.Float64 != homePoints || season.XGoals[0].AwayXPoints.Float64 != awayPoints {
+		t.Fatalf("xG values = %+v, want prior good expected-points snapshot", season.XGoals)
+	}
+	if season.XGStatus.LastAttempt == nil || season.XGStatus.LastAttempt.Outcome != "failure" {
+		t.Fatalf("last xG attempt = %+v, want recorded failure", season.XGStatus.LastAttempt)
+	}
+	if season.XGStatus.LastSuccess == nil || season.XGStatus.LastSuccess.ID == season.XGStatus.LastAttempt.ID {
+		t.Fatalf("last xG success = %+v, want prior successful snapshot", season.XGStatus.LastSuccess)
 	}
 }
 

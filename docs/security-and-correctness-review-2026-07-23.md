@@ -26,7 +26,7 @@ were made as part of the review.
 | HTTP-01 | P2 | Resolved | The HTTP server has no connection deadlines |
 | DB-02 | P2 | Resolved | A season response can mix different database snapshots |
 | DATA-01 | P2 | Resolved | Self-fixtures can be committed as valid upstream data |
-| DATA-02 | P3 | Open | Impossible expected-points values are accepted |
+| DATA-02 | P3 | Resolved | Impossible expected-points values are accepted |
 | HTTP-02 | P3 | Open | Successful upstream response bodies are unbounded |
 
 ## SEC-01: Bound Forecast Lab computation
@@ -304,7 +304,7 @@ before `ReplaceSeason` is called.
 ## DATA-02: Bound game-level expected points
 
 Priority: **P3 — Low**  
-Status: **Open**
+Status: **Resolved**
 
 ### Location
 
@@ -335,10 +335,10 @@ expected points while allowing a small tolerance for rounding.
 
 ### Completion checks
 
-- [ ] Values below zero, above three, NaN, and infinities are rejected.
-- [ ] Boundary values zero and three are accepted.
-- [ ] A failed malformed xG refresh preserves the last good xG snapshot.
-- [ ] The expected-points domain constraint is documented with its ASA meaning.
+- [x] Values below zero, above three, NaN, and infinities are rejected.
+- [x] Boundary values zero and three are accepted.
+- [x] A failed malformed xG refresh preserves the last good xG snapshot.
+- [x] The expected-points domain constraint is documented with its ASA meaning.
 
 ## HTTP-02: Limit upstream success bodies
 

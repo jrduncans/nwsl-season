@@ -90,8 +90,9 @@ values, stop this phase and amend the plan before changing the cache schema:
 - away team-model xG.
 
 When the payload provides `home_xpoints` and `away_xpoints`, persist them as a
-pair. They are descriptive game observations, not official standings points;
-an older payload may omit both values.
+pair. They are ASA's estimate of the league points each team should expect from
+that match, not official standings points; therefore each must be a finite
+value in the inclusive range `[0, 3]`. An older payload may omit both values.
 
 Preserve every source object as `RawJSON`, including fields not normalized.
 The normalized application name is `ExpectedGoals`; the ASA wire name remains
