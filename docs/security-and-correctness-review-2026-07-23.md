@@ -25,7 +25,7 @@ were made as part of the review.
 | DB-01 | P2 | Resolved | SQLite safeguards apply to only one pooled connection |
 | HTTP-01 | P2 | Resolved | The HTTP server has no connection deadlines |
 | DB-02 | P2 | Resolved | A season response can mix different database snapshots |
-| DATA-01 | P2 | Open | Self-fixtures can be committed as valid upstream data |
+| DATA-01 | P2 | Resolved | Self-fixtures can be committed as valid upstream data |
 | DATA-02 | P3 | Open | Impossible expected-points values are accepted |
 | HTTP-02 | P3 | Open | Successful upstream response bodies are unbounded |
 
@@ -266,7 +266,7 @@ allowing the xG status to describe its independent freshness.
 ## DATA-01: Reject self-fixtures before replacement
 
 Priority: **P2 — Medium**  
-Status: **Open**
+Status: **Resolved**
 
 ### Location
 
@@ -295,10 +295,10 @@ before `ReplaceSeason` is called.
 
 ### Completion checks
 
-- [ ] Sync validation rejects a self-fixture.
-- [ ] The previous successful cache remains unchanged after rejection.
-- [ ] The failed attempt is recorded in `sync_runs`.
-- [ ] A direct standings unit test documents safe behavior if malformed domain
+- [x] Sync validation rejects a self-fixture.
+- [x] The previous successful cache remains unchanged after rejection.
+- [x] The failed attempt is recorded in `sync_runs`.
+- [x] A direct standings unit test documents safe behavior if malformed domain
       input bypasses the sync layer.
 
 ## DATA-02: Bound game-level expected points

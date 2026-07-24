@@ -325,6 +325,9 @@ func validate(options RunOptions, teams []asa.Team, games []asa.Game) error {
 		if _, ok := teamIDs[game.AwayTeamID]; !ok {
 			return fmt.Errorf("validate ASA response: %s references unknown away team %q", label, game.AwayTeamID)
 		}
+		if game.HomeTeamID == game.AwayTeamID {
+			return fmt.Errorf("validate ASA response: %s has the same home and away team %q", label, game.HomeTeamID)
+		}
 		if game.HomeScore != nil && *game.HomeScore < 0 {
 			return fmt.Errorf("validate ASA response: %s has negative home score", label)
 		}

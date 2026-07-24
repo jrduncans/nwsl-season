@@ -112,6 +112,11 @@ func Calculate(teams []Team, games []Game, rules Rules) []TableRow {
 		if !ok {
 			continue
 		}
+		// A self-fixture is invalid source data. Sync validation rejects it, but
+		// ignore it here as a defense-in-depth measure for direct callers.
+		if home == away {
+			continue
+		}
 		applyResult(&rows[home].Record, *game.HomeScore, *game.AwayScore)
 		applyResult(&rows[away].Record, *game.AwayScore, *game.HomeScore)
 	}

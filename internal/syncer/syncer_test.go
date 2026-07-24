@@ -250,6 +250,46 @@ func TestRunRejectsEmptyGamesAndPreservesExistingRows(t *testing.T) {
 	}
 }
 
+func TestRunRejectsSelfFixtureAndPreservesExistingRows(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	service := Service{ASA: &client, Store: db}
+
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+
+	selfFixture := testGame("game-2", "FullTime", ptr(2), ptr(0))
+	selfFixture.AwayTeamID = selfFixture.HomeTeamID
+	client.games = []asa.Game{selfFixture}
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err == nil {
+		t.Fatal("err = nil, want self-fixture validation error")
+	}
+
+	if count := cachedGameCount(t, ctx, db, "2024", "Regular Season"); count != 1 {
+		t.Fatalf("cached game count = %d, want previous fixture set unchanged", count)
+	}
+	game := cachedGame(t, ctx, db, "2024", "Regular Season", "game-1")
+	if !game.HomeScore.Valid || game.HomeScore.Int64 != 1 || !game.AwayScore.Valid || game.AwayScore.Int64 != 0 {
+		t.Fatalf("cached game = %+v, want previous successful fixture", game)
+	}
+
+	status, err := db.Status(ctx, "2024", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LastAttempt == nil || status.LastAttempt.Outcome != "failure" {
+		t.Fatalf("last attempt = %+v, want recorded failure", status.LastAttempt)
+	}
+	if status.LastSuccess == nil || status.LastSuccess.Outcome != "success" {
+		t.Fatalf("last success = %+v, want original success", status.LastSuccess)
+	}
+}
+
 func TestRunRecordsFetchFailureAndPreservesExistingRows(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)

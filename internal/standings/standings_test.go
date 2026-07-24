@@ -49,6 +49,15 @@ func TestCalculateIgnoresUnplayedPostponedAndIncompleteGames(t *testing.T) {
 	assertRecord(t, table, "bravo", Record{})
 }
 
+func TestCalculateIgnoresSelfFixture(t *testing.T) {
+	teams := []Team{{ID: "alpha", Name: "Alpha FC"}}
+	games := []Game{game("alpha", "alpha", CompletedStatus, 3, 1)}
+
+	table := Calculate(teams, games, PerGameRules())
+
+	assertRecord(t, table, "alpha", Record{})
+}
+
 func TestCalculateIncludesTeamsWithNoCompletedGames(t *testing.T) {
 	teams := []Team{
 		{ID: "alpha", Name: "Alpha FC"},
