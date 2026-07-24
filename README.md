@@ -1,111 +1,91 @@
 # NWSL season explorer
 
-A learning project written in Go for exploring NWSL seasons. The eventual site will
-show results and standings, determine when teams have mathematically clinched a
-playoff place, forecast the rest of a season, and compare remaining strength of
-schedule.
+NWSL season explorer is a website built in Go for browsing NWSL seasons,
+standings, fixtures, schedule difficulty, playoff qualification, and
+probabilistic season forecasts.
 
-This repository intentionally grows in small phases. Start with
-[`docs/phases/00-roadmap.md`](docs/phases/00-roadmap.md), then use the guide for the current
-phase. Each phase ends with a working checkpoint and a few questions worth
-exploring in the code.
+The application keeps a local SQLite cache of data from [American Soccer
+Analysis (ASA)](https://www.americansocceranalysis.com/), so ordinary page
+requests read locally and do not contact ASA. A background scheduler refreshes
+the configured season and recalculates derived xG, qualification, and
+clinching-scenario data as the cache becomes stale. Standings are calculated
+from the cached fixtures when a season page or CLI report is requested.
 
-## Current checkpoint
+## Features
 
-Phase 13 is implemented: qualification is calculated after each durable fixture
-refresh, stored by immutable fixture snapshot and rules version, and displayed
-as the strongest accessible achievement badge (Shield, Top-four seed, or
-Playoffs). Clinching scenarios use the same conservative proof engine and
-prioritize actionable next-slate opportunities.
+- Season overview with results, upcoming fixtures, standings, goals, and xG.
+- Per-game and total standings views for seasons with uneven schedules.
+- Remaining schedule difficulty with raw and home/away-adjusted comparisons.
+- Qualification proofs for the Shield, top-four seed, and playoff places.
+- Actionable clinching and elimination scenarios for the next slate.
+- Forecast Lab with Current Pace, Results Poisson, and xG Poisson models.
+- Shareable forecast URLs with fixed match outcomes and optional model comparison.
+- Health and cache-status endpoints for operators.
 
-For an explanation of the live qualification proof, its conservative tiebreak
-boundary, no-help paths, and next-slate scenarios, see
-[How clinching works](docs/clinching-logic-guide.md).
+The current rules configuration covers the 2026 regular season: 16 teams, 240
+fixtures, and eight playoff places. Qualification indicators are suppressed
+when the cached fixture inventory is incomplete.
 
-Phase 11 also retains ASA team-model game xG separately
-from fixtures, including raw payloads, availability markers, and independent
-refresh freshness. Forecast Lab at `/seasons/2026/forecast` provides Current
-pace, Results Poisson, and xG Poisson presets; it defaults to the catalog’s
-provisional default, preserves fixed outcomes while models change,
-and can compare two models side by side. The season standings page remains
-the primary home for results and descriptive xG: goals for/against and xG
-for/against are compact paired columns, alongside their respective
-differences. If completed-match xG coverage is incomplete, the page displays
-a coverage warning. Normal page requests never contact ASA.
+## Quick start
 
-For the Forecast Lab model catalog, simulation process, fixed-outcome behavior,
-shareable scenarios, and the distinction between an outlook and a clinching
-proof, see [How Forecast Lab works](docs/forecast-lab-guide.md).
+Go 1.26 or newer is required.
 
 ```sh
 go run ./cmd/server
 ```
 
-Then visit <http://localhost:8080>. The health endpoint is
-<http://localhost:8080/healthz>. Cache freshness is available at
-<http://localhost:8080/cache/status>.
+Visit <http://localhost:8080>. With the default configuration, the current
+season is available at <http://localhost:8080/seasons/2026> and Forecast Lab is
+available at <http://localhost:8080/seasons/2026/forecast>.
 
-The current season redirects to <http://localhost:8080/seasons/2026>. Forecast
-Lab is at <http://localhost:8080/seasons/2026/forecast> and works with or
-without JavaScript. Its selected model, optional comparison, and outcomes are
-encoded in a versioned shareable URL. Fixed outcomes sample plausible conditional scorelines, so
-goal-based tiebreakers retain uncertainty. Shared forecast URLs use the latest
-cached fixture snapshot; an assumption becomes stale when its fixture completes.
+Useful endpoints:
 
-Configuration:
+- <http://localhost:8080/healthz> — process health check.
+- <http://localhost:8080/cache/status> — latest cache attempt and success.
+- `/seasons/:season` — season overview.
+- `/seasons/:season/fixtures` — results and remaining fixtures.
+- `/seasons/:season/schedule-difficulty` — remaining schedule comparison.
+- `/seasons/:season/clinching` — qualification and slate scenarios.
+- `/seasons/:season/forecast` — interactive forecast simulation.
+
+## Configuration
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `NWSL_HTTP_ADDR` | `127.0.0.1:8080` | Full address on which the server listens |
-| `HOST` | `127.0.0.1` | Host used to build the listen address when `NWSL_HTTP_ADDR` is unset |
-| `PORT` | `8080` | Port used to build the listen address when `NWSL_HTTP_ADDR` is unset |
-| `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache |
-| `NWSL_SYNC_SEASON` | `2026` | Current season the server may refresh automatically |
-| `NWSL_SYNC_STAGE` | `Regular Season` | Stage the server may refresh automatically |
-| `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the server checks cached fixtures locally |
-| `NWSL_SYNC_COMPLETION_GRACE` | `3h` | Time after kickoff before an unfinished fixture is stale |
-| `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures |
-| `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction |
-| `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum total time for a persisted qualification batch |
-| `NWSL_SCENARIO_BUDGET` | `30s` | Maximum total time for a persisted clinching-scenario batch |
-| `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Age after which superseded operational history is automatically pruned after a successful sync |
-| `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests; excess requests receive `429` |
-| `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached Forecast Lab request |
+| `NWSL_HTTP_ADDR` | `127.0.0.1:8080` | Full address on which the server listens. |
+| `HOST` | `127.0.0.1` | Host used when `NWSL_HTTP_ADDR` is unset. |
+| `PORT` | `8080` | Port used when `NWSL_HTTP_ADDR` is unset. |
+| `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache. |
+| `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
+| `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
+| `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the scheduler checks cache freshness. |
+| `NWSL_SYNC_COMPLETION_GRACE` | `3h` | Time after kickoff before an unfinished fixture is stale. |
+| `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures. |
+| `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction. |
+| `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum time for one qualification calculation batch. |
+| `NWSL_SCENARIO_BUDGET` | `30s` | Maximum time for one clinching-scenario calculation batch. |
+| `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
+| `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests. |
+| `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |
 
-The server also enforces connection limits independently of any proxy: a
-five-second header-read timeout, a 60-second idle timeout, and a 1 MiB maximum
-request-header size. Its write timeout is at least 30 seconds and increases to
-the configured Forecast Lab compute budget plus five seconds when needed, so a
-bounded normal or comparison forecast has time to return its response.
+Forecast requests that exceed the concurrency limit receive `429`. Forecast
+computations that exceed their timeout receive `503`. The server also applies
+connection limits independently of any reverse proxy.
 
-## Useful commands
+## Command-line tools
 
-```sh
-go test ./...
-go fmt ./...
-go vet ./...
-```
-
-To refresh the local ASA cache without bypassing the normal minimum-attempt
-interval:
+Refresh the local ASA cache:
 
 ```sh
 go run ./cmd/sync -season 2026
 ```
 
-For an operator-led retry after an ASA correction or diagnosis, use `-force`.
-It bypasses the data-sync interval and the qualification/scenario caches; it
-still validates the full ASA response and preserves the last good snapshot if
-the replacement fails.
+Use `-force` to bypass the minimum-attempt interval and rebuild qualification
+and scenario results. Use `-require-xg` when an xG refresh failure should make
+the command exit nonzero.
 
-```sh
-go run ./cmd/sync -season 2026 -force
-```
-
-To recalculate qualification and clinching scenarios from the last successful
-fixture snapshot without contacting ASA or changing synchronized data, use
-`-recalculate`. The sync timeout does not apply; the two calculation budgets
-remain independent:
+Recalculate qualification and clinching scenarios from the last successful
+fixture snapshot without contacting ASA:
 
 ```sh
 NWSL_QUALIFICATION_BUDGET=10m \
@@ -113,130 +93,67 @@ NWSL_SCENARIO_BUDGET=10m \
 go run ./cmd/sync -season 2026 -recalculate
 ```
 
-This retries calculations that previously exhausted either budget, including
-unresolved no-help paths. Add `-force` to rebuild every qualification and
-scenario result even when the current cached batches are complete:
-
-```sh
-NWSL_QUALIFICATION_BUDGET=10m \
-NWSL_SCENARIO_BUDGET=10m \
-go run ./cmd/sync -season 2026 -recalculate -force
-```
-
-After any calculation run, the command reports the number of qualification
-proofs, no-help paths, and scenario checks left unresolved because their shared
-calculation budget expired.
-
-After every successful sync, the application automatically prunes superseded
-operational history older than `NWSL_HISTORY_RETENTION`. It preserves the
-latest attempt and latest successful/complete result for each identity, plus
-any run still required by a retained derived batch; it does not delete cached
-teams, fixtures, or game xG. To use a one-off, stricter cutoff, run the
-maintenance command explicitly:
-
-```sh
-go run ./cmd/sync -prune-history-before 2025-01-01T00:00:00Z
-```
-
-To print standings from the local cache:
+Print standings from the local cache:
 
 ```sh
 go run ./cmd/standings -season 2026
+go run ./cmd/standings -season 2026 -order total
 ```
 
-The model-evaluation report is roadmap material. The repository contains tested
-scoring helpers, but it does not yet run the documented historical walk-forward
-evaluation; the Forecast Lab therefore labels Results Poisson as the default,
-not an evidence-backed recommendation.
+The sync command also supports `-db` for an explicit SQLite path and
+`-prune-history-before` for one-off cleanup of superseded run history. The
+server and sync command must use the same persistent `NWSL_DATA_DIR` when they
+share a cache.
 
-Standings default to per-game order while teams have played uneven schedules.
-Use `-order total` to print the full-season total-points order.
-
-Or use the Makefile wrappers:
+## Build and verify
 
 ```sh
 make test
 make fmt
 make vet
+make build
 ```
 
-To build the server for a Linux virtual machine:
+`make build` creates host-platform server and sync binaries in `bin/`.
+`make build-linux` creates Linux binaries; ARM64 is the default target and
+`TARGET_ARCH=amd64` selects x86_64:
 
 ```sh
 make build-linux
-```
-
-That writes both `bin/nwsl-season-server-linux-arm64` and
-`bin/nwsl-season-sync-linux-arm64`, suitable for the target ARM64 Linux VM. For
-an x86_64 VM, run:
-
-```sh
 make build-linux TARGET_ARCH=amd64
 ```
 
-Install the maintenance binary alongside the server and run it as the same
-user, with the same persistent `NWSL_DATA_DIR`:
+The individual build targets are `build-server`, `build-sync`,
+`build-linux-server`, and `build-linux-sync`.
 
-```sh
-NWSL_DATA_DIR=/var/lib/nwsl-season \
-  /opt/nwsl-season/nwsl-season-sync -season 2026 -force
-```
+## Runtime and deployment
 
-The maintenance binary is intended for operator-led recovery or corrections;
-it is not a second long-running service. The server's built-in scheduler
-handles normal refreshes.
+This repository builds the application binaries. A separate deployment
+environment is responsible for machine provisioning, process management,
+proxy/TLS configuration, configuration delivery, and backups.
 
-The server reads cache status from `NWSL_DATA_DIR/nwsl-season.sqlite`; normal
-page requests never refresh ASA data. `/cache/status` reports the latest
-configured-season attempt and success, including outcome, duration, and row
-change counts. Scheduler decisions such as `current`, `eligible`, and
-`rate_limited` are structured server logs.
+The runtime requires:
 
-The website expects the 2026 format of 16 teams, 30 regular-season games per
-team, and eight playoff places. It suppresses clinching indicators when the
-cache does not contain the complete 240-game regular-season schedule, and it
-reports incomplete fixture data on both season pages.
+- Exactly one server instance.
+- A writable, persistent `NWSL_DATA_DIR`.
+- Network access to ASA for scheduled or operator-triggered refreshes.
+- Graceful delivery of `SIGINT` or `SIGTERM`.
+- Permission to bind `NWSL_HTTP_ADDR`.
 
-## Runtime contract
+The sync binary is a maintenance command, not a second long-running service.
+Run it as the same operating-system user as the server and point it at the
+same SQLite data directory so it can share the sync lease safely. A reverse
+proxy should monitor `/healthz` and `/cache/status`.
 
-This repository builds the application binary; the separate deployment project
-owns machine provisioning, process management, proxy/TLS, configuration delivery,
-and backups.
+The cache database is stored at
+`NWSL_DATA_DIR/nwsl-season.sqlite`. The application retains refresh history for
+operations and recovery, and automatically prunes superseded history after a
+successful sync according to `NWSL_HISTORY_RETENTION`. Back up the SQLite data
+directory even though the current season data can be rebuilt from ASA.
 
-`make build-server` writes `bin/nwsl-season-server` for the host platform.
-`make build-linux-server` writes
-`bin/nwsl-season-server-linux-<arch>` (ARM64 by default; set
-`TARGET_ARCH=amd64` for x86_64).
-`make build-sync` writes `bin/nwsl-season-sync` for the host platform, and
-`make build-linux-sync` writes
-`bin/nwsl-season-sync-linux-<arch>` using the same architecture settings.
-`make build` builds both host-platform binaries, and `make build-linux` builds
-both Linux binaries.
+## Documentation
 
-The runtime must provide exactly one server instance, a writable and persistent
-`NWSL_DATA_DIR`, network access to ASA, and graceful `SIGINT`/`SIGTERM`
-delivery. Back up the SQLite data directory even though ASA can rebuild the
-cache; it retains refresh history and shortens recovery. The process must be
-allowed to bind `NWSL_HTTP_ADDR`; the deployment project may proxy it and should
-probe `/healthz` and `/cache/status`.
-
-The maintenance binary must be run with the same `NWSL_DATA_DIR` and operating
-system user as the server so it updates the live SQLite cache and can share the
-server's sync lease safely.
-
-## Dev container
-
-With Docker running and a dev-container-compatible editor installed, open this
-repository in its container. The container includes Go 1.26, the Go editor
-extension, persistent module and build caches, and forwards port 8080.
-
-Once the container is ready:
-
-```sh
-go test ./...
-go run ./cmd/server
-```
-
-Then visit <http://localhost:8080>. When Docker is provided by OrbStack, the
-server is also available at <https://nwsl-season.orb.local>. Runtime data is
-written to the repository's ignored `data/` directory.
+- [How clinching works](docs/clinching-logic-guide.md) explains qualification
+  proofs, conservative tiebreak handling, no-help paths, and slate scenarios.
+- [How Forecast Lab works](docs/forecast-lab-guide.md) explains model presets,
+  simulation behavior, fixed outcomes, and shareable scenarios.

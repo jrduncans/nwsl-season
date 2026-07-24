@@ -3,6 +3,7 @@ data/
 
 # Local configuration
 .env
+.codex/
 
 # Build and test output
 bin/
