@@ -1,6 +1,6 @@
 {{define "forecast"}}{{template "head" .}}
 <div class="title-row">
-  <div><h1>Forecast Lab</h1></div>
+  <div><h1>Forecast Lab</h1><p class="note">Explore possible finishes based on the selected approach, season-to-date data, and the remaining schedule. This is an estimate, not the official standings.</p></div>
   <div class="title-actions">
     <a class="button" href="{{.CanonicalPath}}" data-copy-scenario>Copy scenario link</a>
     <span class="visually-hidden" data-scenario-copy-status role="status" aria-live="polite"></span>
@@ -11,22 +11,22 @@
   <form method="get" action="{{.ForecastPath}}" data-forecast-model-form>
     <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}{{if .FilteredTeam}}<input type="hidden" name="team" value="{{.FilteredTeam}}">{{end}}
     <div class="forecast-control-fields">
-      <label for="forecast-model"><span>Forecast model</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (Default){{end}}</option>{{end}}</select></label>
+      <label for="forecast-model"><span>Forecast approach</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (Default){{end}}</option>{{end}}</select></label>
     </div>
     <details class="forecast-comparison-control"{{if .HasComparison}} open{{end}}>
-      <summary>Compare with another model <span class="note">(optional)</span></summary>
-      <label for="forecast-comparison"><span>Comparison model</span><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}<option value="{{.ID}}" {{if .Selected}}disabled{{end}} {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+      <summary>Compare another approach <span class="note">(optional)</span></summary>
+      <label for="forecast-comparison"><span>Compare with</span><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}<option value="{{.ID}}" {{if .Selected}}disabled{{end}} {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
     </details>
     <p class="forecast-control-status note" data-forecast-control-status aria-live="polite">Changes keep your assumptions.</p>
     <noscript><button class="button button-secondary forecast-model-submit" type="submit">Apply model choices</button></noscript>
   </form>
-  {{range .Models}}{{if .Selected}}<details class="forecast-model-detail"><summary>About {{.Name}}{{if .Default}} <span class="badge">Default</span>{{end}}</summary><p>{{.Detail}}</p></details>{{end}}{{end}}
-  {{if and .ShowXGCoverage .XGCoverage}}<p class="forecast-xg-coverage{{if .XGWarning}} data-warning{{end}}"><strong>xG data:</strong> {{.XGCoverage}}{{if .XGWarning}}. Below 95%; missing xG is not filled from results{{end}}.</p>{{end}}
+  {{range .Models}}{{if .Selected}}<details class="forecast-model-detail"><summary>About this approach{{if .Default}} <span class="badge">Default</span>{{end}}</summary><p>{{.Detail}}</p></details>{{end}}{{end}}
+  {{if and .ShowXGCoverage .XGCoverage}}<p class="forecast-xg-coverage{{if .XGWarning}} data-warning{{end}}"><strong>xG coverage:</strong> {{.XGCoverage}}{{if .XGWarning}}. The forecast uses only matches with available xG data{{end}}.</p>{{end}}
 </section>
 
 <dl class="forecast-meta">
   <div><dt>Data updated</dt><dd>{{if .Freshness}}<time datetime="{{.Freshness}}" data-local-time="{{.Freshness}}">{{.FreshnessFallback}}</time>{{else}}{{.DataCutoff}}{{end}}</dd></div>
-  <div><dt>Simulations</dt><dd>{{.Iterations}}</dd></div>
+  <div><dt>Possible seasons considered</dt><dd>{{.Iterations}}</dd></div>
   <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>
   <div><dt>Remaining</dt><dd>{{.Remaining}}</dd></div>
 </dl>
@@ -102,11 +102,10 @@
   {{else}}<p>All available fixtures are fixed.</p>{{end}}
 </section>
 
-<details class="forecast-method"><summary>Method and caveats</summary>
-  {{range .Models}}{{if .Selected}}<p><strong>Uses:</strong> {{.Inputs}} <strong>Assumes:</strong> {{.Assumptions}}</p>{{end}}{{end}}
-  <p>Fixed outcomes still sample plausible scores, so tiebreakers can remain uncertain.</p>
-  <p>Shared links use the latest cached data; completed-fixture assumptions can expire.</p>
-  <p>Tied positions share probability when data cannot resolve a tiebreak. Forecasts are not clinching proofs.</p>
+<details class="forecast-method"><summary>What this forecast considers</summary>
+  {{range .Models}}{{if .Selected}}<p><strong>Data considered:</strong> {{.Inputs}}</p><p><strong>At a high level:</strong> {{.Assumptions}}</p>{{end}}{{end}}
+  <p>It estimates each remaining match, then summarizes many possible final tables.</p>
+  <p>When you set a win, draw, or loss, the exact score remains open. That can leave tiebreaks uncertain.</p>
 </details>
 {{template "foot" .}}{{end}}
 

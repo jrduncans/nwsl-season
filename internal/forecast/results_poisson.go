@@ -28,9 +28,9 @@ func (resultsPoissonV1) Info() Info {
 	return Info{
 		ID:          resultsPoissonID,
 		Name:        "Results Poisson",
-		Description: "Completed goals with league and team shrinkage plus observed home advantage.",
-		Inputs:      "Completed match scores and the published fixture list.",
-		Assumptions: "Independent Poisson scoring, league/team shrinkage, and observed home advantage.",
+		Description: "Simulates remaining games from each team's scoring and defensive averages so far, adjusted for home-field advantage.",
+		Inputs:      "Completed match scores and the remaining schedule.",
+		Assumptions: "Home-field advantage reflects the league's average scoring difference between home and away teams this season. Early results are balanced with league-wide scoring averages.",
 	}
 }
 
