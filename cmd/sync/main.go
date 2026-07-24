@@ -22,6 +22,10 @@ import (
 )
 
 func main() {
+	if err := config.LoadEnvironmentFile(); err != nil {
+		fmt.Fprintf(os.Stderr, "sync: load configuration environment file: %v\n", err)
+		os.Exit(1)
+	}
 	cfg, err := config.FromEnvironment()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sync: configuration: %v\n", err)

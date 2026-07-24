@@ -67,10 +67,59 @@ Useful endpoints:
 | `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
 | `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests. |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |
+| `HONEYCOMB_API_KEY` | unset | Enables OpenTelemetry trace export directly to Honeycomb. Keep this secret out of the repository. |
+| `HONEYCOMB_API_ENDPOINT` | `https://api.honeycomb.io` | Honeycomb ingest endpoint; use `https://api.eu1.honeycomb.io` for the EU instance. |
+| `OTEL_SERVICE_NAME` | `nwsl-season-server` | Service name shown in Honeycomb. |
+| `HONEYCOMB_METRICS_DATASET` | unset | Optional Honeycomb dataset for OpenTelemetry HTTP metrics. |
 
 Forecast requests that exceed the concurrency limit receive `429`. Forecast
 computations that exceed their timeout receive `503`. The server also applies
 connection limits independently of any reverse proxy.
+
+## Observability
+
+The server creates OpenTelemetry traces for HTTP routes, ASA API calls,
+scheduled cache checks and refreshes, and Forecast Lab simulations. Local
+development remains silent and does not make telemetry network calls until an
+exporter is configured. Forecast spans record the selected model plus the
+iteration, team, fixture, xG-observation, playoff-place, and fixed-assumption
+counts; they do not include individual assumed results or team identifiers.
+
+To send traces to Honeycomb, create an **ingest API key** in your Honeycomb
+environment, then set it only in the runtime environment:
+
+```sh
+export HONEYCOMB_API_KEY='your-ingest-key'
+export OTEL_SERVICE_NAME='nwsl-season'
+go run ./cmd/server
+```
+
+For Honeycomb's EU instance, also set
+`HONEYCOMB_API_ENDPOINT=https://api.eu1.honeycomb.io`. Add
+`HONEYCOMB_METRICS_DATASET=nwsl-season-metrics` to export the HTTP metrics that
+the instrumentation produces. The process flushes pending telemetry for up to
+10 seconds during graceful shutdown.
+
+### 1Password Environments
+
+All commands load an optional `config.env` from their current working directory
+before reading configuration. This makes it suitable for a 1Password
+Environment-managed file. The file is read line by line, which is required for
+1Password's local `.env` file pipe. The checked-in
+[`config.env.example`](config.env.example) has the supported shape; the real
+`config.env` is ignored by Git.
+
+```dotenv
+HONEYCOMB_API_KEY=your-ingest-key
+OTEL_SERVICE_NAME=nwsl-season
+```
+
+Use `NWSL_CONFIG_FILE=/path/to/config.env` when the 1Password-managed file is
+elsewhere. Environment variables already supplied by the process take
+precedence over file values. 1Password also supports provisioning an
+Environment's variables directly to a subprocess with `op run`, or resolving a
+templated configuration file with `op inject`; this application is compatible
+with either approach. See [1Password's secrets-in-scripts guide](https://developer.1password.com/docs/cli/secrets-scripts/).
 
 ## Command-line tools
 
