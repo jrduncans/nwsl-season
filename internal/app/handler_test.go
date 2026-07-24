@@ -14,6 +14,8 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -490,7 +492,7 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Venue-adjusted comparison", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Adjusted contribution", "Home", "Away", "Alpha &amp; Co"} {
+	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Home/Away-adjusted comparison", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Adjusted contribution", "Home", "Away", "Alpha &amp; Co"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -501,7 +503,7 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 			t.Errorf("body does not contain schedule explanation %q", text)
 		}
 	}
-	for _, text := range []string{"These estimates do not change the official standings", "recommended venue-adjusted", "not a forecast, adjusted ranking, or power rating", "The data cutoff is"} {
+	for _, text := range []string{"These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is"} {
 		if strings.Contains(body, text) {
 			t.Errorf("body still contains removed schedule wording %q", text)
 		}
@@ -525,6 +527,67 @@ func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
 	for _, text := range []string{"Schedule difficulty is unavailable", "Remaining fixtures for Alpha &amp; Co", "Bravo FC", "Unavailable"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
+		}
+	}
+}
+
+func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
+	data := cache.SeasonData{
+		Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: "bravo", Name: "Bravo"}, {ID: "charlie", Name: "Charlie"}},
+		Games: []cache.Game{
+			{ASAID: "done", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Valid: true}},
+			{ASAID: "alpha-charlie", Status: "PreMatch", HomeTeamID: "alpha", AwayTeamID: "charlie"},
+			{ASAID: "bravo-charlie", Status: "PreMatch", HomeTeamID: "bravo", AwayTeamID: "charlie"},
+		},
+	}
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/schedule-difficulty", nil))
+
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, "League-wide schedule comparison is unavailable") {
+		t.Fatalf("status = %d; body=%s", response.Code, body)
+	}
+	if strings.Contains(body, "Toughest remaining schedule") || strings.Contains(body, "Venue-adjusted comparison") {
+		t.Fatal("partial data rendered league-wide comparison")
+	}
+}
+
+func TestScheduleDifficultyRendersMissingVenueSplitAndNoFixturesAccurately(t *testing.T) {
+	data := cache.SeasonData{
+		Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: "bravo", Name: "Bravo"}, {ID: "charlie", Name: "Charlie"}, {ID: "delta", Name: "Delta"}},
+		Games: []cache.Game{
+			{ASAID: "alpha-bravo", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: 2, Valid: true}, AwayScore: sql.NullInt64{Int64: 0, Valid: true}},
+			{ASAID: "charlie-delta", Status: standings.CompletedStatus, HomeTeamID: "charlie", AwayTeamID: "delta", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Int64: 1, Valid: true}},
+			{ASAID: "future", Status: "PreMatch", HomeTeamID: "charlie", AwayTeamID: "delta"},
+		},
+	}
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/schedule-difficulty", nil))
+
+	body := response.Body.String()
+	for _, want := range []string{"Home opponent PPG: 1.00; away opponent PPG: —", "No remaining fixtures are currently present for this team."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body does not contain %q", want)
+		}
+	}
+}
+
+func TestScheduleDifficultyNoteDetectsExcludedStatusesAndConfiguredCoverage(t *testing.T) {
+	rules := testRules(2)
+	rules.ExpectedTeams = 4
+	data := cache.SeasonData{
+		Teams: []standings.Team{{ID: "alpha"}, {ID: "bravo"}},
+		Games: []cache.Game{
+			{ASAID: "done", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo"},
+			{ASAID: "abandoned", Status: fixtures.AbandonedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo"},
+		},
+	}
+	note := scheduleDifficultyNote(data, rules)
+	for _, want := range []string{"2 of 4 expected teams", "2 of 4 expected regular-season fixtures", "status excluded"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("note = %q, want %q", note, want)
 		}
 	}
 }
@@ -688,6 +751,54 @@ func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 		if got := strings.Contains(response.Body.String(), "xG coverage:"); got != test.want {
 			t.Errorf("%s: xG coverage shown = %t, want %t", test.path, got, test.want)
 		}
+	}
+}
+
+func TestForecastShowsIndependentXGFreshnessAndFailure(t *testing.T) {
+	data := testSeasonData()
+	data.XGoals = []cache.GameXG{{
+		GameID: "completed", Availability: cache.XGAvailable,
+		HomeXG: sql.NullFloat64{Float64: 2.1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.0, Valid: true},
+	}}
+	success := cache.XGSyncRun{FinishedAt: time.Date(2026, 7, 8, 20, 0, 0, 0, time.UTC), Outcome: "success"}
+	attempt := cache.XGSyncRun{FinishedAt: time.Date(2026, 7, 9, 21, 0, 0, 0, time.UTC), Outcome: "failure"}
+	data.XGStatus = cache.XGStatus{LastSuccess: &success, LastAttempt: &attempt}
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?v=2&m=xg-poisson-v1", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, want := range []string{"xG data refreshed", `data-local-time="2026-07-08T20:00:00Z"`, "the latest xG refresh failed"} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Errorf("body does not contain %q", want)
+		}
+	}
+}
+
+func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing.T) {
+	data := cache.SeasonData{
+		Teams: []standings.Team{{ID: "alpha"}, {ID: "bravo"}, {ID: "charlie"}, {ID: "delta"}},
+		Games: []cache.Game{
+			{ASAID: "abandoned", Status: "Abandoned", HomeTeamID: "alpha", AwayTeamID: "bravo"},
+			{ASAID: "future", Status: "PreMatch", HomeTeamID: "alpha", AwayTeamID: "charlie"},
+		},
+	}
+	note := forecastScheduleNote(data, 1)
+	for _, want := range []string{"cannot be simulated", "excluded", "team(s) do not have"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("note = %q, want %q", note, want)
+		}
+	}
+}
+
+func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
+	data := cache.SeasonData{Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}}}
+	first := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8)
+	data.Teams[0].Name = "Renamed Alpha"
+	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8); second == first {
+		t.Fatal("forecast result key did not change with team presentation")
 	}
 }
 

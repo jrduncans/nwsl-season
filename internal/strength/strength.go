@@ -3,6 +3,7 @@
 package strength
 
 import (
+	"math"
 	"sort"
 
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -54,8 +55,17 @@ type Row struct {
 	VenueAdjustedOpponentPPG float64
 	DeltaFromBaseline        float64
 	ScheduleLabel            string
+	UnavailableReason        UnavailableReason
 	Available                bool
 }
+
+// UnavailableReason explains why a row cannot supply an aggregate estimate.
+type UnavailableReason string
+
+const (
+	UnavailableNoRemainingFixtures UnavailableReason = "no_remaining_fixtures"
+	UnavailableNoOpponentHistory   UnavailableReason = "no_opponent_history"
+)
 
 // Result contains schedule-strength rows and the derived league context used
 // to explain the venue-adjusted measure.
@@ -64,6 +74,7 @@ type Result struct {
 	CompletedMatches int
 	RemainingMatches int
 	AvailableRows    int
+	ComparableRows   int
 	Baseline         float64
 	HomePPG          float64
 	AwayPPG          float64
@@ -149,6 +160,7 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 			opponent, ok := allRecords[opponentID]
 			if !ok || opponent.played == 0 {
 				row.Available = false
+				row.UnavailableReason = UnavailableNoOpponentHistory
 				row.Fixtures = append(row.Fixtures, Fixture{ID: game.ID, Opponent: opponentTeam, Home: homeFixture})
 				continue
 			}
@@ -174,6 +186,7 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 		}
 		if row.RemainingFixtures == 0 {
 			row.Available = false
+			row.UnavailableReason = UnavailableNoRemainingFixtures
 		} else if row.Available {
 			row.HomeOpponentPPG = average(homeSum, row.RemainingHome)
 			row.AwayOpponentPPG = average(awaySum, row.RemainingAway)
@@ -181,9 +194,14 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 			row.VenueAdjustedOpponentPPG = adjustedSum / float64(row.RemainingFixtures)
 			result.AvailableRows++
 		}
+		if row.RemainingFixtures > 0 {
+			result.ComparableRows++
+		}
 		rows = append(rows, row)
 	}
-	if result.AvailableRows > 0 {
+	// A league baseline must be based on every team that still has a fixture.
+	// Otherwise the omitted teams silently change every displayed comparison.
+	if result.ComparableRows > 1 && result.AvailableRows == result.ComparableRows {
 		for _, row := range rows {
 			if !row.Available {
 				continue
@@ -223,6 +241,10 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 // language label. Exact deltas remain available to prevent the label from
 // overstating small differences.
 func LabelForDelta(delta float64) string {
+	// Labels and deltas are both shown to two decimal places. Classifying the
+	// same rounded value avoids displaying "+0.10" as both Near average and
+	// Harder depending on invisible precision.
+	delta = math.Round(delta*100) / 100
 	switch {
 	case delta > QualitativeThreshold:
 		return LabelHarder

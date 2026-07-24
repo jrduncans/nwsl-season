@@ -56,6 +56,24 @@ func TestCalculateMarksRowsUnavailableWithoutOpponentHistory(t *testing.T) {
 	}
 }
 
+func TestCalculateSuppressesBaselineForPartialCoverage(t *testing.T) {
+	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}, {ID: "c", Name: "Charlie"}}
+	games := []standings.Game{
+		game("a", "b", standings.CompletedStatus, 1, 0),
+		{ID: "a-c", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "c"},
+		{ID: "b-c", Status: RemainingStatus, HomeTeamID: "b", AwayTeamID: "c"},
+	}
+
+	result := Calculate(teams, games)
+	if result.AvailableRows != 1 || result.ComparableRows != 3 {
+		t.Fatalf("coverage = %d available of %d comparable rows, want 1 of 3", result.AvailableRows, result.ComparableRows)
+	}
+	row := byID(result.Rows)["c"]
+	if !row.Available || row.ScheduleLabel != "" || row.DeltaFromBaseline != 0 {
+		t.Fatalf("available partial row = %+v, want estimate without league comparison", row)
+	}
+}
+
 func TestCalculateBaselineAndScheduleLabels(t *testing.T) {
 	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}, {ID: "c", Name: "Charlie"}, {ID: "d", Name: "Delta"}}
 	games := []standings.Game{
@@ -93,8 +111,10 @@ func TestLabelForDeltaTreatsThresholdAsNearAverage(t *testing.T) {
 	}{
 		{QualitativeThreshold, LabelNearAverage},
 		{-QualitativeThreshold, LabelNearAverage},
-		{QualitativeThreshold + 0.001, LabelHarder},
-		{-QualitativeThreshold - 0.001, LabelEasier},
+		{QualitativeThreshold + 0.004, LabelNearAverage},
+		{-QualitativeThreshold - 0.004, LabelNearAverage},
+		{QualitativeThreshold + 0.006, LabelHarder},
+		{-QualitativeThreshold - 0.006, LabelEasier},
 	} {
 		if got := LabelForDelta(test.delta); got != test.want {
 			t.Errorf("LabelForDelta(%f) = %q, want %q", test.delta, got, test.want)

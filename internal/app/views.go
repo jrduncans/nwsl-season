@@ -67,22 +67,24 @@ func seasonNavigation(from, season, current string) []navigationItem {
 }
 
 type strengthView struct {
-	Rows                []strengthRowView
-	CompletedMatches    int
-	RemainingMatches    int
-	AvailableRows       int
-	Baseline            string
-	RawBaseline         string
-	HasBaseline         bool
-	HasRawBaseline      bool
-	BaselinePosition    string
-	RawBaselinePosition string
-	HomePPG             string
-	AwayPPG             string
-	VenueGap            string
-	HasCallouts         bool
-	Toughest            strengthRowView
-	Easiest             strengthRowView
+	Rows                   []strengthRowView
+	CompletedMatches       int
+	RemainingMatches       int
+	AvailableRows          int
+	ComparableRows         int
+	Baseline               string
+	RawBaseline            string
+	HasBaseline            bool
+	HasRawBaseline         bool
+	HasIndividualEstimates bool
+	BaselinePosition       string
+	RawBaselinePosition    string
+	HomePPG                string
+	AwayPPG                string
+	VenueGap               string
+	HasCallouts            bool
+	Toughest               strengthRowView
+	Easiest                strengthRowView
 }
 
 type strengthRowView struct {
@@ -106,6 +108,7 @@ type strengthRowView struct {
 	RawPlotPosition          string
 	Fixtures                 []strengthFixtureView
 	Available                bool
+	NoRemainingFixtures      bool
 }
 
 type strengthFixtureView struct {
@@ -330,19 +333,32 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 }
 
 func strengthViewFrom(result strength.Result) strengthView {
+	hasBaseline := result.ComparableRows > 1 && result.AvailableRows == result.ComparableRows
 	rows := make([]strengthRowView, 0, len(result.Rows))
 	for index, row := range result.Rows {
 		view := strengthRowView{
 			TeamID: row.Team.ID, Position: index + 1, Team: teamName(row.Team), RemainingFixtures: row.RemainingFixtures,
 			RemainingHome: row.RemainingHome, RemainingAway: row.RemainingAway, Available: row.Available,
-			ScheduleLabel: row.ScheduleLabel,
+			ScheduleLabel: row.ScheduleLabel, NoRemainingFixtures: row.UnavailableReason == strength.UnavailableNoRemainingFixtures,
 		}
 		if row.Available {
-			view.HomeOpponentPPG = fmt.Sprintf("%.2f", row.HomeOpponentPPG)
-			view.AwayOpponentPPG = fmt.Sprintf("%.2f", row.AwayOpponentPPG)
+			if row.RemainingHome > 0 {
+				view.HomeOpponentPPG = fmt.Sprintf("%.2f", row.HomeOpponentPPG)
+			} else {
+				view.HomeOpponentPPG = "—"
+			}
+			if row.RemainingAway > 0 {
+				view.AwayOpponentPPG = fmt.Sprintf("%.2f", row.AwayOpponentPPG)
+			} else {
+				view.AwayOpponentPPG = "—"
+			}
 			view.RawOpponentPPG = fmt.Sprintf("%.2f", row.RawOpponentPPG)
 			view.VenueAdjustedOpponentPPG = fmt.Sprintf("%.2f", row.VenueAdjustedOpponentPPG)
-			view.DeltaFromBaseline = signedFloatText(row.DeltaFromBaseline)
+			if hasBaseline {
+				view.DeltaFromBaseline = scheduleDeltaText(row.DeltaFromBaseline)
+			} else {
+				view.DeltaFromBaseline, view.ScheduleLabel = "—", "Not comparable"
+			}
 		} else {
 			view.HomeOpponentPPG, view.AwayOpponentPPG = "—", "—"
 			view.RawOpponentPPG, view.VenueAdjustedOpponentPPG = "—", "—"
@@ -431,17 +447,21 @@ func strengthViewFrom(result strength.Result) strengthView {
 	}
 	view := strengthView{
 		Rows: rows, CompletedMatches: result.CompletedMatches, RemainingMatches: result.RemainingMatches,
-		AvailableRows: result.AvailableRows, HasBaseline: result.AvailableRows > 0,
+		AvailableRows: result.AvailableRows, ComparableRows: result.ComparableRows,
+		HasBaseline: hasBaseline, HasIndividualEstimates: result.AvailableRows > 0,
 		Baseline:         fmt.Sprintf("%.2f", result.Baseline),
 		BaselinePosition: plotPosition(result.Baseline, adjustedMin, adjustedMax),
 		HomePPG:          fmt.Sprintf("%.2f", result.HomePPG), AwayPPG: fmt.Sprintf("%.2f", result.AwayPPG), VenueGap: signedFloatText(result.VenueGap),
 	}
-	if availableCount > 0 {
+	if hasBaseline {
 		view.HasRawBaseline = true
 		view.RawBaseline = fmt.Sprintf("%.2f", rawSum/float64(availableCount))
 		view.RawBaselinePosition = plotPosition(rawSum/float64(availableCount), rawMin, rawMax)
 	}
 	for index := range rows {
+		if !hasBaseline {
+			break
+		}
 		if !rows[index].Available {
 			continue
 		}
@@ -475,7 +495,7 @@ func addScheduleIndicators(rows []tableRowView, strength strengthView) []tableRo
 	}
 	for index := range rows {
 		if row, ok := byID[rows[index].TeamID]; ok {
-			rows[index].ScheduleAvailable = row.Available
+			rows[index].ScheduleAvailable = strength.HasBaseline && row.Available
 			rows[index].ScheduleLabel = row.ScheduleLabel
 			rows[index].ScheduleDelta = row.DeltaFromBaseline
 			rows[index].SchedulePosition = row.SchedulePosition
@@ -566,4 +586,8 @@ func signedFloatText(value float64) string {
 		return "+" + text
 	}
 	return text
+}
+
+func scheduleDeltaText(value float64) string {
+	return signedFloatText(math.Round(value*100) / 100)
 }

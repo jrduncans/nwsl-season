@@ -114,6 +114,34 @@ func TestSchedulerRunsImmediatelyAndStops(t *testing.T) {
 	}
 }
 
+func TestSchedulerRecalculatesWhenFixtureCacheIsCurrent(t *testing.T) {
+	now := time.Now().UTC()
+	store := schedulerStore{snapshot: cache.RefreshSnapshot{
+		LastSuccess: &cache.SyncRun{FinishedAt: now},
+		XGStatus:    cache.XGStatus{LastSuccess: &cache.XGSyncRun{FinishedAt: now, Outcome: "success"}},
+		Games:       []cache.Game{schedulerGame("future", now.Add(time.Hour).Format(time.RFC3339), "PreMatch", false, false)},
+	}}
+	runner := &recalculatingSchedulerRunner{schedulerRunner: schedulerRunner{called: make(chan struct{}, 1)}, recalculated: make(chan struct{}, 1)}
+	s, err := New(store, runner, Config{
+		Season: "2026", Stage: "Regular Season", CheckInterval: time.Hour,
+		CompletionGrace: 3 * time.Hour, MinimumAttemptInterval: 30 * time.Minute, Timeout: time.Second,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	select {
+	case <-runner.recalculated:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not recalculate the current fixture cache")
+	}
+	s.Stop()
+	s.Wait()
+	if runner.calls.Load() != 0 {
+		t.Fatalf("source sync calls = %d, want 0", runner.calls.Load())
+	}
+}
+
 func schedulerGame(id, kickoff, status string, homeScore, awayScore bool) cache.Game {
 	game := cache.Game{ASAID: id, KickoffUTC: kickoff, Status: status}
 	if homeScore {
@@ -140,4 +168,14 @@ func (r *schedulerRunner) Run(context.Context, syncer.RunOptions) (cache.SyncRun
 	r.calls.Add(1)
 	r.called <- struct{}{}
 	return cache.SyncRun{StartedAt: time.Now(), FinishedAt: time.Now()}, nil
+}
+
+type recalculatingSchedulerRunner struct {
+	schedulerRunner
+	recalculated chan struct{}
+}
+
+func (r *recalculatingSchedulerRunner) Recalculate(context.Context, syncer.RecalculateOptions) (cache.SyncRun, error) {
+	r.recalculated <- struct{}{}
+	return cache.SyncRun{QualificationRecalculated: true, ScenarioRecalculated: true}, nil
 }

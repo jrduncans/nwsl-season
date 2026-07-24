@@ -28,6 +28,13 @@ type Runner interface {
 	Run(context.Context, syncer.RunOptions) (cache.SyncRun, error)
 }
 
+// calculationRunner is optional so schedulers can still be used with runners
+// that only synchronize source data. syncer.Service implements it to restore
+// missing derived clinching batches from an otherwise current fixture cache.
+type calculationRunner interface {
+	Recalculate(context.Context, syncer.RecalculateOptions) (cache.SyncRun, error)
+}
+
 // Config configures one current-season scheduler.
 type Config struct {
 	Season                 string
@@ -136,6 +143,7 @@ func (s *Scheduler) check() {
 	s.logger.Info("cache refresh decision", "decision", decision.Name, "reason", decision.Reason,
 		"season", s.config.Season, "stage", s.config.Stage, "fixture_id", decision.FixtureID)
 	if decision.Name != decisionEligible {
+		s.recalculateCachedClinching()
 		return
 	}
 
@@ -151,6 +159,7 @@ func (s *Scheduler) check() {
 	if run.Skipped {
 		s.logger.Info("cache refresh decision", "decision", "rate_limited", "season", s.config.Season, "stage", s.config.Stage,
 			"last_attempt", run.FinishedAt.UTC().Format(time.RFC3339), "last_outcome", run.Outcome)
+		s.recalculateCachedClinching()
 		return
 	}
 	if run.HistoryPruneError != "" {
@@ -159,6 +168,32 @@ func (s *Scheduler) check() {
 	s.logger.Info("cache refresh succeeded", "season", s.config.Season, "stage", s.config.Stage,
 		"duration_ms", run.FinishedAt.Sub(run.StartedAt).Milliseconds(), "games_seen", run.GamesSeen,
 		"games_inserted", run.GamesInserted, "games_updated", run.GamesUpdated, "games_unchanged", run.GamesUnchanged)
+}
+
+// recalculateCachedClinching repairs missing or retryable derived batches
+// without an ASA request. In particular, it lets a restarted server recover a
+// page that is pending only because the fixture cache was already current.
+func (s *Scheduler) recalculateCachedClinching() {
+	runner, ok := s.runner.(calculationRunner)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), s.config.Timeout)
+	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage})
+	cancel()
+	if err != nil {
+		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
+		return
+	}
+	if run.QualificationError != "" || run.ScenarioError != "" {
+		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage,
+			"qualification_error", run.QualificationError, "scenario_error", run.ScenarioError)
+		return
+	}
+	if run.QualificationRecalculated || run.ScenarioRecalculated {
+		s.logger.Info("cached clinching recalculated", "season", s.config.Season, "stage", s.config.Stage,
+			"qualification_recalculated", run.QualificationRecalculated, "scenario_recalculated", run.ScenarioRecalculated)
+	}
 }
 
 // Assess determines whether the cached match window needs an ASA request.

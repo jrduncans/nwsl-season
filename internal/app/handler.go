@@ -429,11 +429,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 	}
-	expectedGames := len(data.Teams) * a.options.Rules.GamesPerTeam / 2
-	scheduleComplete := len(data.Games) == expectedGames
-	if !scheduleComplete {
-		page.ScheduleNote = fmt.Sprintf("The cache contains %d of %d expected regular-season fixtures.", len(data.Games), expectedGames)
-	}
+	page.ScheduleNote = scheduleDifficultyNote(data, a.options.Rules)
 	if qualificationStore, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
 	}); ok && data.FixtureSnapshotID != "" && a.options.Rules.Version != "" {
@@ -443,6 +439,40 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	}
 
 	return page, nil
+}
+
+func scheduleDifficultyNote(data cache.SeasonData, rules competition.Rules) string {
+	expectedGames := rules.ExpectedTeams * rules.GamesPerTeam / 2
+	notes := make([]string, 0, 4)
+	if len(data.Teams) != rules.ExpectedTeams {
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected teams.", len(data.Teams), rules.ExpectedTeams))
+	}
+	if len(data.Games) != expectedGames {
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), expectedGames))
+	}
+
+	appearances := make(map[string]int, len(data.Teams))
+	unsupported := 0
+	for _, game := range data.Games {
+		appearances[game.HomeTeamID]++
+		appearances[game.AwayTeamID]++
+		if game.Status != standings.CompletedStatus && game.Status != remainingStatus {
+			unsupported++
+		}
+	}
+	if unsupported > 0 {
+		notes = append(notes, fmt.Sprintf("%d fixture(s) have a status excluded from schedule difficulty.", unsupported))
+	}
+	uneven := 0
+	for _, team := range data.Teams {
+		if appearances[team.ID] != rules.GamesPerTeam {
+			uneven++
+		}
+	}
+	if uneven > 0 {
+		notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", uneven, rules.GamesPerTeam))
+	}
+	return strings.Join(notes, " ")
 }
 func qualificationViews(rows []tableRowView, values []cache.QualificationStatus) []tableRowView {
 	byTeam := map[string][]cache.QualificationStatus{}

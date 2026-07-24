@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -109,7 +111,10 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 	// simulator's actual inputs as well so alternate Store implementations
 	// cannot accidentally share results when that field is absent.
 	for _, team := range data.Teams {
-		parts = append(parts, team.ID)
+		// Results retain the full Team value for rendering, so presentation
+		// changes must invalidate a cached result even though they do not alter
+		// the simulation's random seed.
+		parts = append(parts, team.ID, team.Name, team.ShortName, team.Abbreviation)
 	}
 	for _, game := range standingsGames(data.Games) {
 		parts = append(parts, game.ID, game.Status, game.HomeTeamID, game.AwayTeamID)
@@ -185,16 +190,16 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		page.XGCoverage = fmt.Sprintf("%d of %d completed matches", page.XGAvailable, page.XGCompleted)
 		page.XGWarning = float64(page.XGAvailable)/float64(page.XGCompleted) < .95
 	}
+	if page.ShowXGCoverage {
+		page.XGFreshness, page.XGFreshnessFallback, page.XGRefreshWarning = forecastXGFreshness(data, a.options.Location)
+	}
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 		page.DataCutoff = page.FreshnessFallback
 	} else {
 		page.DataCutoff = "Unavailable"
 	}
-	expectedGames := len(data.Teams) * a.options.Rules.GamesPerTeam / 2
-	if len(data.Games) != expectedGames {
-		page.ScheduleNote = fmt.Sprintf("Cache has %d of %d expected regular-season fixtures; this forecast uses those available.", len(data.Games), expectedGames)
-	}
+	page.ScheduleNote = forecastScheduleNote(data, a.options.Rules.GamesPerTeam)
 	// The rendered selector is filtered for a useful no-JavaScript fallback.
 	// The complete list remains in a template for immediate client-side changes.
 	page.AllFixtures = forecastFixtures(data, state, a.options.Location, "")
@@ -234,6 +239,45 @@ func forecastXGCoverage(data cache.SeasonData) (available, completed int) {
 		}
 	}
 	return
+}
+
+func forecastXGFreshness(data cache.SeasonData, location *time.Location) (freshness, fallback string, warning bool) {
+	if success := data.XGStatus.LastSuccess; success != nil {
+		freshness, fallback = freshnessValues(success.FinishedAt, location)
+	}
+	attempt, success := data.XGStatus.LastAttempt, data.XGStatus.LastSuccess
+	return freshness, fallback, attempt != nil && (success == nil || attempt.FinishedAt.After(success.FinishedAt)) && attempt.Outcome != "success"
+}
+
+func forecastScheduleNote(data cache.SeasonData, gamesPerTeam int) string {
+	expectedGames := len(data.Teams) * gamesPerTeam / 2
+	notes := make([]string, 0, 3)
+	if len(data.Games) != expectedGames {
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), expectedGames))
+	}
+
+	appearances := make(map[string]int, len(data.Teams))
+	unsupported := 0
+	for _, game := range data.Games {
+		appearances[game.HomeTeamID]++
+		appearances[game.AwayTeamID]++
+		if game.Status != fixtures.CompletedStatus && game.Status != simulation.RemainingStatus {
+			unsupported++
+		}
+	}
+	if unsupported > 0 {
+		notes = append(notes, fmt.Sprintf("%d fixture(s) have a status that cannot be simulated and are excluded.", unsupported))
+	}
+	teamsWithUnexpectedCounts := 0
+	for _, team := range data.Teams {
+		if appearances[team.ID] != gamesPerTeam {
+			teamsWithUnexpectedCounts++
+		}
+	}
+	if teamsWithUnexpectedCounts > 0 {
+		notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", teamsWithUnexpectedCounts, gamesPerTeam))
+	}
+	return strings.Join(notes, " ")
 }
 
 func validateForecastState(data cache.SeasonData, state forecaststate.State) error {

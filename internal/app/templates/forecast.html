@@ -21,7 +21,7 @@
     <noscript><button class="button button-secondary forecast-model-submit" type="submit">Apply model choices</button></noscript>
   </form>
   {{range .Models}}{{if .Selected}}<details class="forecast-model-detail"><summary>About this approach{{if .Default}} <span class="badge">Default</span>{{end}}</summary><p>{{.Detail}}</p></details>{{end}}{{end}}
-  {{if and .ShowXGCoverage .XGCoverage}}<p class="forecast-xg-coverage{{if .XGWarning}} data-warning{{end}}"><strong>xG coverage:</strong> {{.XGCoverage}}{{if .XGWarning}}. The forecast uses only matches with available xG data{{end}}.</p>{{end}}
+  {{if .ShowXGCoverage}}<p class="forecast-xg-coverage{{if or .XGWarning .XGRefreshWarning}} data-warning{{end}}"><strong>xG coverage:</strong> {{if .XGCoverage}}{{.XGCoverage}}{{if .XGWarning}}. The forecast uses only matches with available xG data{{end}}{{else}}No completed matches to assess yet{{end}}. {{if .XGFreshness}}xG data refreshed <time datetime="{{.XGFreshness}}" data-local-time="{{.XGFreshness}}">{{.XGFreshnessFallback}}</time>{{else}}No successful xG refresh is available{{end}}{{if .XGRefreshWarning}}; the latest xG refresh failed{{end}}.</p>{{end}}
 </section>
 
 <dl class="forecast-meta">

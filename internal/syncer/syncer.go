@@ -208,7 +208,11 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (c
 	if err != nil {
 		return cache.SyncRun{}, fmt.Errorf("load cached clinching inputs: %w", err)
 	}
-	run := s.refreshCalculations(ctx, inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
+	// Keep the derived calculation budgets independent from the short caller
+	// deadline used to load the cached inputs. This mirrors Run: a scheduler
+	// check may have a small source-sync timeout, while the qualification and
+	// scenario passes each have their own bounded budgets.
+	run := s.refreshCalculations(context.WithoutCancel(ctx), inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
 	return s.pruneHistory(run), nil
 }
 
