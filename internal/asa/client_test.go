@@ -267,3 +267,159 @@ func TestGamesReturnsContextError(t *testing.T) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
+
+func TestSuccessResponsesRejectOversizedBodies(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit int64
+		fetch func(Client) error
+	}{
+		{
+			name:  "teams",
+			limit: maxTeamsResponseBytes,
+			fetch: func(client Client) error {
+				_, err := client.Teams(context.Background(), TeamsFilters{})
+				return err
+			},
+		},
+		{
+			name:  "games",
+			limit: maxGamesResponseBytes,
+			fetch: func(client Client) error {
+				_, err := client.Games(context.Background(), GamesFilters{})
+				return err
+			},
+		},
+		{
+			name:  "xgoals",
+			limit: maxXGoalsResponseBytes,
+			fetch: func(client Client) error {
+				_, err := client.GameXGoals(context.Background(), XGoalsFilters{})
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte("[]"))
+				_, _ = w.Write([]byte(strings.Repeat(" ", int(test.limit))))
+			}))
+			defer server.Close()
+
+			err := test.fetch(Client{BaseURL: server.URL, HTTPClient: server.Client()})
+			if !errors.Is(err, errResponseBodyTooLarge) {
+				t.Fatalf("err = %v, want oversized-body error", err)
+			}
+		})
+	}
+}
+
+func TestSuccessResponsesRejectExcessiveRows(t *testing.T) {
+	tests := []struct {
+		name  string
+		rows  int
+		fetch func(Client) error
+	}{
+		{
+			name: "teams",
+			rows: maxTeamRows,
+			fetch: func(client Client) error {
+				_, err := client.Teams(context.Background(), TeamsFilters{})
+				return err
+			},
+		},
+		{
+			name: "games",
+			rows: maxGameRows,
+			fetch: func(client Client) error {
+				_, err := client.Games(context.Background(), GamesFilters{})
+				return err
+			},
+		},
+		{
+			name: "xgoals",
+			rows: maxXGoalRows,
+			fetch: func(client Client) error {
+				_, err := client.GameXGoals(context.Background(), XGoalsFilters{})
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := "[" + strings.TrimSuffix(strings.Repeat("{},", test.rows+1), ",") + "]"
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			err := test.fetch(Client{BaseURL: server.URL, HTTPClient: server.Client()})
+			if err == nil || !strings.Contains(err.Error(), "more than") {
+				t.Fatalf("err = %v, want row-limit error", err)
+			}
+		})
+	}
+}
+
+func TestSuccessResponsesRejectTrailingContent(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  string
+		fetch func(Client) error
+	}{
+		{
+			name: "trailing JSON value",
+			body: "[] {}",
+			fetch: func(client Client) error {
+				_, err := client.Teams(context.Background(), TeamsFilters{})
+				return err
+			},
+		},
+		{
+			name: "trailing non-whitespace",
+			body: "[] trailing",
+			fetch: func(client Client) error {
+				_, err := client.Teams(context.Background(), TeamsFilters{})
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+
+			err := test.fetch(Client{BaseURL: server.URL, HTTPClient: server.Client()})
+			if err == nil || !strings.Contains(err.Error(), "trailing") {
+				t.Fatalf("err = %v, want trailing-content error", err)
+			}
+		})
+	}
+}
+
+func TestCheckedInFixturesFitResponseLimits(t *testing.T) {
+	tests := []struct {
+		path  string
+		limit int64
+	}{
+		{path: "testdata/teams.json", limit: maxTeamsResponseBytes},
+		{path: "testdata/games.json", limit: maxGamesResponseBytes},
+		{path: "testdata/game_xgoals.json", limit: maxXGoalsResponseBytes},
+	}
+
+	for _, test := range tests {
+		info, err := os.Stat(test.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Size() > test.limit/2 {
+			t.Errorf("%s is %d bytes, want at most half of the %d-byte response limit", test.path, info.Size(), test.limit)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package asa
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +14,18 @@ import (
 const (
 	DefaultBaseURL    = "https://app.americansocceranalysis.com/api/v1"
 	maxErrorBodyBytes = 1024
+
+	// These allow ample room for a full NWSL season while bounding memory use
+	// if an upstream response is malformed or unexpectedly large.
+	maxTeamsResponseBytes  int64 = 1 << 20 // 1 MiB
+	maxGamesResponseBytes  int64 = 4 << 20 // 4 MiB
+	maxXGoalsResponseBytes int64 = 2 << 20 // 2 MiB
+	maxTeamRows                  = 64
+	maxGameRows                  = 512
+	maxXGoalRows                 = 512
 )
+
+var errResponseBodyTooLarge = errors.New("response body exceeds size limit")
 
 // Client fetches data from the American Soccer Analysis API.
 type Client struct {
@@ -191,56 +203,98 @@ func (c Client) GameXGoals(ctx context.Context, filters XGoalsFilters) ([]GameXG
 }
 
 func decodeGames(body io.Reader) ([]Game, error) {
-	var rawObjects []json.RawMessage
-	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
-		return nil, err
-	}
-
-	values := make([]Game, 0, len(rawObjects))
-	for _, raw := range rawObjects {
-		var value Game
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, err
-		}
-		value.RawJSON = string(raw)
-		values = append(values, value)
-	}
-	return values, nil
+	return decodeArray(body, maxGamesResponseBytes, maxGameRows, func(value *Game, raw string) {
+		value.RawJSON = raw
+	})
 }
 
 func decodeTeams(body io.Reader) ([]Team, error) {
-	var rawObjects []json.RawMessage
-	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
-		return nil, err
-	}
-
-	values := make([]Team, 0, len(rawObjects))
-	for _, raw := range rawObjects {
-		var value Team
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, err
-		}
-		value.RawJSON = string(raw)
-		values = append(values, value)
-	}
-	return values, nil
+	return decodeArray(body, maxTeamsResponseBytes, maxTeamRows, func(value *Team, raw string) {
+		value.RawJSON = raw
+	})
 }
 
 func decodeXGoals(body io.Reader) ([]GameXGoals, error) {
-	var rawObjects []json.RawMessage
-	if err := json.NewDecoder(body).Decode(&rawObjects); err != nil {
+	return decodeArray(body, maxXGoalsResponseBytes, maxXGoalRows, func(value *GameXGoals, raw string) {
+		value.RawJSON = raw
+	})
+}
+
+// decodeArray decodes one JSON array, retaining each source object for cache
+// provenance. It streams elements so the row cap is enforced before a large
+// array can be materialized in memory.
+func decodeArray[T any](body io.Reader, maxBytes int64, maxRows int, setRaw func(*T, string)) ([]T, error) {
+	decoder := json.NewDecoder(&responseBodyLimitReader{reader: body, remaining: maxBytes})
+
+	token, err := decoder.Token()
+	if err != nil {
 		return nil, err
 	}
-	values := make([]GameXGoals, 0, len(rawObjects))
-	for _, raw := range rawObjects {
-		var value GameXGoals
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '[' {
+		return nil, fmt.Errorf("expected top-level JSON array")
+	}
+
+	values := make([]T, 0)
+	for decoder.More() {
+		if len(values) == maxRows {
+			return nil, fmt.Errorf("response has more than %d rows", maxRows)
+		}
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			return nil, err
+		}
+
+		var value T
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, err
 		}
-		value.RawJSON = string(raw)
+		setRaw(&value, string(raw))
 		values = append(values, value)
 	}
+
+	token, err = decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != ']' {
+		return nil, fmt.Errorf("expected end of JSON array")
+	}
+
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected trailing JSON value")
+		}
+		return nil, fmt.Errorf("invalid trailing response data: %w", err)
+	}
+
 	return values, nil
+}
+
+// responseBodyLimitReader reports a distinct error only after proving that
+// more than the configured number of bytes are present. This keeps bodies
+// exactly at the limit valid while rejecting oversized responses.
+type responseBodyLimitReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func (r *responseBodyLimitReader) Read(p []byte) (int, error) {
+	if r.remaining > 0 {
+		if int64(len(p)) > r.remaining {
+			p = p[:r.remaining]
+		}
+		n, err := r.reader.Read(p)
+		r.remaining -= int64(n)
+		return n, err
+	}
+
+	var probe [1]byte
+	n, err := r.reader.Read(probe[:])
+	if n > 0 {
+		return 0, errResponseBodyTooLarge
+	}
+	return 0, err
 }
 
 func (c Client) resourceURL(path string, add func(url.Values)) (string, error) {

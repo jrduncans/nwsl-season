@@ -1,6 +1,6 @@
 # Security and correctness review — 2026-07-23
 
-Status: **Open**
+Status: **Resolved**
 
 Reviewed commit: `a93edbc`
 
@@ -27,7 +27,7 @@ were made as part of the review.
 | DB-02 | P2 | Resolved | A season response can mix different database snapshots |
 | DATA-01 | P2 | Resolved | Self-fixtures can be committed as valid upstream data |
 | DATA-02 | P3 | Resolved | Impossible expected-points values are accepted |
-| HTTP-02 | P3 | Open | Successful upstream response bodies are unbounded |
+| HTTP-02 | P3 | Resolved | Successful upstream response bodies are unbounded |
 
 ## SEC-01: Bound Forecast Lab computation
 
@@ -343,7 +343,7 @@ expected points while allowing a small tolerance for rounding.
 ## HTTP-02: Limit upstream success bodies
 
 Priority: **P3 — Low**  
-Status: **Open**
+Status: **Resolved**
 
 ### Location
 
@@ -383,11 +383,11 @@ seasons rather than using the current response size exactly.
 
 ### Completion checks
 
-- [ ] Oversized team, game, and xG bodies are rejected.
-- [ ] Excessive array lengths are rejected.
-- [ ] Trailing JSON or non-whitespace content is rejected.
-- [ ] Rejection records a failure without replacing cached data.
-- [ ] Normal checked-in fixtures remain comfortably below the selected limits.
+- [x] Oversized team, game, and xG bodies are rejected.
+- [x] Excessive array lengths are rejected.
+- [x] Trailing JSON or non-whitespace content is rejected.
+- [x] Rejection records a failure without replacing cached data.
+- [x] Normal checked-in fixtures remain comfortably below the selected limits.
 
 ## Verification completed during the review
 
