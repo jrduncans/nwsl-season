@@ -47,6 +47,53 @@ func TestGenerateFindsMinimalOutcomeOnlyClause(t *testing.T) {
 	}
 }
 
+func TestGenerateSearchesTiebreakOnlyUnresolvedBaseline(t *testing.T) {
+	teams := []standings.Team{{ID: "target"}, {ID: "rival"}, {ID: "sink-a"}, {ID: "sink-b"}}
+	zero, one := 0, 1
+	games := []standings.Game{
+		{ID: "target-played", Status: standings.CompletedStatus, HomeTeamID: "target", AwayTeamID: "sink-a", HomeScore: &one, AwayScore: &zero},
+		{ID: "rival-played", Status: standings.CompletedStatus, HomeTeamID: "rival", AwayTeamID: "sink-b", HomeScore: &one, AwayScore: &zero},
+		{ID: "slate", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "sink-a"},
+	}
+	slate, err := DefineSlate([]ScheduledGame{{
+		ID: "slate", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "sink-a",
+		KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, games, []string{"slate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementHomePlayoff, TopK: 2}
+	baseline, err := evaluator.EvaluateStatus(context.Background(), "target", achievement, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseline.Status != clinching.Unresolved || baseline.Method != clinching.ProofUnprovedScoreTiebreak {
+		t.Fatalf("baseline = %+v, want unresolved score-tiebreak frontier", baseline)
+	}
+
+	result, err := Generate(context.Background(), Request{
+		Evaluator: evaluator, Teams: teams, Games: games, Slate: slate,
+		TargetTeamID: "target", Achievement: achievement, Baseline: baseline,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != OpportunityCanClinch || !result.CanClinch || result.CertifiedAssignments != 2 || result.UnresolvedAssignments != 1 {
+		t.Fatalf("result = %+v, want win-or-draw points clinch plus one unresolved loss", result)
+	}
+	if len(result.Clauses) != 1 || len(result.Clauses[0].Conditions) != 1 {
+		t.Fatalf("clauses = %+v, want one merged condition", result.Clauses)
+	}
+	condition := result.Clauses[0].Conditions[0]
+	if condition.GameID != "slate" || fmt.Sprint(condition.AllowedOutcomes) != fmt.Sprint([]clinching.Outcome{clinching.HomeWin, clinching.Draw}) {
+		t.Fatalf("condition = %+v, want target win or draw", condition)
+	}
+}
+
 func TestGenerateFindsPlayoffEliminationClause(t *testing.T) {
 	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}}
 	game := standings.Game{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b"}

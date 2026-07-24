@@ -43,7 +43,7 @@ complete when its exit criteria pass; it does not need every possible refinement
     remains roadmap work pending an audited replacement run.
     See [`11-xg-and-models.md`](11-xg-and-models.md).
 12. **Season-scale clinching status** — Generalize exact qualification proofs to
-    the Shield, a home playoff place, and a playoff place; use cheap bounds and a
+    the Shield, a top-four seed, and a playoff place; use cheap bounds and a
     coupled-fixture optimizer so status can be calculated throughout the season.
     See [`12-season-scale-clinching.md`](12-season-scale-clinching.md).
 13. **Clinching scenarios** — Turn the qualification proof into minimal,

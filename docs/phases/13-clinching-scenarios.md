@@ -17,7 +17,7 @@ match-week, for example:
 
 > Portland clinches a playoff place with a win and a Gotham loss.
 
-Apply the same feature to the Shield, a home playoff place, and a playoff place.
+Apply the same feature to the Shield, a top-four seed, and a playoff place.
 Conditions must be mathematically sufficient, use the Phase 12 proof service,
 and say exactly which upcoming fixtures and cutoff they cover.
 
@@ -83,9 +83,9 @@ conditions.
 Examples of honest output include:
 
 - `Clinches a playoff place with a win.`
-- `Clinches a home playoff place with a win and Gotham not winning.`
+- `Clinches a top-four seed with a win and Gotham not winning.`
 - `Can clinch the Shield this slate; 3 minimal paths.`
-- `Cannot clinch a home playoff place this slate.`
+- `Cannot clinch a top-four seed this slate.`
 
 Avoid “needs” when a displayed condition is merely one sufficient path among
 several. Use “needs” only for a necessary condition established across every
@@ -514,8 +514,11 @@ the request.
 Handle the baseline before searching:
 
 - A baseline `clinched` result becomes `already_clinched`. Do not search.
-- A baseline `unresolved` result becomes `unresolved`. A team might already be
-  clinched, so “can clinch this slate” would be misleading.
+- A baseline `unresolved` result caused by incomplete data, unavailable final
+  discipline, or compute budget becomes `unresolved`.
+- A baseline `unproved_score_tiebreak` result may be searched. Publish only
+  later outcome assignments that independently produce a points-certified
+  clinch, while retaining the baseline limitation on unresolved leaves.
 - A baseline `not_clinched` result may be searched.
 - A non-ready slate becomes `unresolved`, except `SlateNoUpcoming`, which
   becomes `cannot_clinch` for a baseline not-clinched team with zero total
@@ -1028,8 +1031,9 @@ tests.
   completion of unassigned slate fixtures.
 - A target win plus one rival result produces the expected two-condition path.
 - Help-only paths are retained.
-- Already-clinched, baseline-unresolved, no-upcoming, oversized-slate, context
-  cancellation, and no-path states map to the correct enums and booleans.
+- Already-clinched, terminal baseline-unresolved, score-tiebreak baseline,
+  no-upcoming, oversized-slate, context cancellation, and no-path states map to
+  the correct enums and booleans.
 - Score-tiebreak frontier leaves produce `tiebreak_dependent`, not
   `cannot_clinch` or a clause.
 - Certified and tiebreak-dependent leaves together retain only certified

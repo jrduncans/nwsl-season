@@ -15,15 +15,15 @@ arbitrary limit on the number of league fixtures remaining. Apply one proof
 engine to every configured regular-season achievement:
 
 - **Shield**: guaranteed to finish first.
-- **Home playoff place**: guaranteed to finish in the top four and therefore to
-  host the opening playoff match under the configured format.
+- **Top-four seed**: guaranteed to finish in the top four. The higher seed
+  normally hosts the opening playoff match, subject to venue availability.
 - **Playoff place**: guaranteed to finish in the top eight.
 
 The place counts are season rules, not permanent NWSL constants. For a generic
 top-`K` achievement, team `T` has clinched when no feasible completion of the
 remaining schedule leaves `K` teams officially ahead of `T`.
 
-Shield implies home playoff place, which implies playoff place. The domain
+Shield implies a top-four seed, which implies a playoff place. The domain
 result should retain all three facts even when the standings presentation shows
 only the strongest badge.
 
@@ -183,7 +183,7 @@ Add a compact qualification-status area to each standings row. Show the
 strongest achieved state as the visible badge:
 
 - `Shield` when first place is guaranteed;
-- `Home playoff` when top four, but not first, is guaranteed;
+- `Top-four seed` when top four, but not first, is guaranteed;
 - `Playoffs` when top eight, but not top four, is guaranteed.
 
 Accessible text or a disclosure should enumerate every implied achievement.
@@ -278,7 +278,7 @@ type Rules struct {
 Provide `ForSeason(season, stage) (Rules, bool)` and initially configure the
 current 2026 regular season as 16 teams, 30 games per team, and achievements
 `shield=1`, `home_playoff=4`, and `playoffs=8`. Use a nonempty immutable version
-such as `2026-regular-v1`. Validate that IDs and `TopK` values are unique, every
+such as `2026-regular-v2`. Validate that IDs and `TopK` values are unique, every
 `TopK` is between 1 and `ExpectedTeams`, the stage is nonempty, and the
 achievements are ordered strongest to weakest (increasing `TopK`). Return copies
 of slices so callers cannot mutate the catalog.
@@ -553,7 +553,7 @@ invariants before persistence: a clinched stronger achievement implies every
 weaker achievement is clinched. Mark a result filled only by this normalization
 as `ProofImplied` and name the source achievement in `Reason`. Never infer the
 reverse direction. Add an invariant test that no persisted team can have Shield
-clinched while home playoff or playoffs is non-clinched/unresolved. An implied
+clinched while top-four seed or playoffs is non-clinched/unresolved. An implied
 clinched row uses `NoHelpNotApplicable` and an empty fixture list.
 
 ### Snapshot identity and SQLite migration 4
@@ -723,7 +723,7 @@ steps:
 3. Group persisted statuses by team. Only `clinching.Clinched` counts as achieved;
    `not_clinched` and `unresolved` both render no achievement badge.
 4. Choose the clinched achievement with the smallest `TopK` as the visible
-   strongest badge: `Shield`, `Home playoff`, or `Playoffs`.
+   strongest badge: `Shield`, `Top-four seed`, or `Playoffs`.
 5. Build accessible text listing every clinched/implied achievement, strongest
    to weakest. Do not rely on the `title` attribute or color alone.
 
@@ -732,7 +732,7 @@ Replace the `Clinched bool` field on `tableRowView` with
 Render the badge in the `currentTable` partial in
 `internal/app/templates/partials.html`; that is the partial used by the season
 overview. A suitable shape is a visible badge plus a `visually-hidden` span
-whose text is “Guaranteed achievements: Shield, home playoff place, playoff
+whose text is “Guaranteed achievements: Shield, top-four seed, playoff
 place.” Add only the CSS needed for the compact badge and a non-color cue. No
 JavaScript is needed.
 

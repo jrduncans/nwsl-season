@@ -14,7 +14,7 @@ exploring in the code.
 
 Phase 13 is implemented: qualification is calculated after each durable fixture
 refresh, stored by immutable fixture snapshot and rules version, and displayed
-as the strongest accessible achievement badge (Shield, Home playoff, or
+as the strongest accessible achievement badge (Shield, Top-four seed, or
 Playoffs). Clinching scenarios use the same conservative proof engine and
 prioritize actionable next-slate opportunities.
 

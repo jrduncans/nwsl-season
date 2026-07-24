@@ -64,7 +64,7 @@ own format.
 This is a checkpoint constraint, not the desired final availability.
 [`12-season-scale-clinching.md`](12-season-scale-clinching.md) plans cheap
 always-on bounds, coupled-fixture optimization, and snapshot-level computation
-for the Shield, home playoff places, and playoff places. Phase 13 adds
+for the Shield, top-four seeds, and playoff places. Phase 13 adds
 upcoming-slate clinching conditions without turning the what-if form into an
 official proof surface.
 

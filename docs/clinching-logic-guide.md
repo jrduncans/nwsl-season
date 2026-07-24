@@ -24,9 +24,11 @@ points than the target can reach even by winning every remaining match. This
 is not inferred from `not_clinched`, standings position, or a tiebreak.
 
 The current 2026 regular-season rules are configuration, not solver constants:
-16 teams, 30 matches per team, with Shield (top 1), home playoff place (top 4),
-and playoffs (top 8). A stronger guarantee implies each weaker one: Shield →
-home playoff → playoffs.
+16 teams, 30 matches per team, with Shield (top 1), top-four seed (top 4), and
+playoffs (top 8). A stronger guarantee implies each weaker one: Shield →
+top-four seed → playoffs. A top-four seed normally hosts the opening playoff
+match, but venue availability means hosting itself is not an unconditional
+qualification guarantee.
 
 ```mermaid
 flowchart TD
@@ -174,7 +176,9 @@ When there are no pending fixtures, the system calculates the official
 total-points table from actual scores. Its available ordering is points, goal
 difference, wins, goals scored, head-to-head points, and head-to-head goals
 scored. If a final tie still reaches least disciplinary points, which is not in
-the cache, the affected result is `unresolved` with
+the cache, the system compares the tied group's best and worst possible ranks
+with each achievement cutoff. A tie wholly above or below the cutoff is
+decisive; only a tie that crosses the cutoff is `unresolved` with
 `missing_disciplinary_rule`. The deterministic display order used as a final
 fallback is never used as an official clinching proof.
 
@@ -233,7 +237,8 @@ rather than silently sampled.
 flowchart TD
     A["Matching persisted qualification baseline"] --> B{"Baseline status"}
     B -->|Clinched| C["already_clinched: do not search"]
-    B -->|Unresolved| D["unresolved scenario with limitation"]
+    B -->|Data or compute unresolved| D["unresolved scenario with limitation"]
+    B -->|Score-tiebreak unresolved| E["Define and validate next slate"]
     B -->|Not clinched| E["Define and validate next slate"]
     E --> F{"Slate usable and no more than 10 fixtures?"}
     F -->|No| D

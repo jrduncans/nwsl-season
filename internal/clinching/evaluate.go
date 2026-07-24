@@ -153,51 +153,56 @@ func evaluateStatusRequest(ctx context.Context, request Request) (AchievementRes
 
 func finishCompleted(r Request, result AchievementResult) AchievementResult {
 	table := standings.Calculate(r.Teams, r.Games, standings.OfficialTotalRules())
-	target := -1
+	targetIndex := -1
+	var targetRow standings.TableRow
 	for i, row := range table {
 		if row.Team.ID == r.TargetTeamID {
-			target = i
+			targetIndex = i
+			targetRow = row
 			break
 		}
 	}
-	if target < 0 {
+	if targetIndex < 0 {
 		return result
 	}
-	ahead := 0
-	strictPointsAhead := 0
-	targetPoints := 0
-	for _, row := range table {
-		if row.Team.ID == r.TargetTeamID {
-			targetPoints = row.Record.Points
+
+	if !targetRow.TieBreak.Undetermined {
+		result.StrictlyAhead = CountEvidence{Value: targetIndex, Kind: "exact"}
+		result.AtLeastLevel = CountEvidence{Value: targetIndex, Kind: "exact"}
+		if targetIndex >= r.Achievement.TopK {
+			result.Status = NotClinched
+		} else {
+			result.Status = Clinched
+		}
+		result.Method = ProofAccessibleTiebreak
+		return result
+	}
+
+	tied := make(map[string]bool, len(targetRow.TieBreak.TiedTeamIDs))
+	for _, id := range targetRow.TieBreak.TiedTeamIDs {
+		tied[id] = true
+	}
+	tied[r.TargetTeamID] = true
+	definitelyAhead := 0
+	for i := 0; i < targetIndex; i++ {
+		if !tied[table[i].Team.ID] {
+			definitelyAhead++
 		}
 	}
-	undetermined := false
-	for i, row := range table {
-		if i < target {
-			ahead++
-		}
-		if row.Team.ID != r.TargetTeamID && row.Record.Points > targetPoints {
-			strictPointsAhead++
-		}
-		if row.Team.ID == r.TargetTeamID && row.TieBreak.Undetermined {
-			undetermined = true
-		}
-	}
-	result.StrictlyAhead = CountEvidence{Value: ahead, Kind: "exact"}
-	result.AtLeastLevel = CountEvidence{Value: ahead, Kind: "exact"}
-	if strictPointsAhead >= r.Achievement.TopK {
+	possiblyAhead := definitelyAhead + len(tied) - 1
+	result.StrictlyAhead = CountEvidence{Value: definitelyAhead, Kind: "lower_bound"}
+	result.AtLeastLevel = CountEvidence{Value: possiblyAhead, Kind: "upper_bound"}
+	switch {
+	case definitelyAhead >= r.Achievement.TopK:
 		result.Status = NotClinched
 		result.Method = ProofAccessibleTiebreak
-	} else if undetermined {
+	case possiblyAhead < r.Achievement.TopK:
+		result.Status = Clinched
+		result.Method = ProofAccessibleTiebreak
+	default:
 		result.Status = Unresolved
 		result.Method = ProofMissingDisciplinary
 		result.Reason = "least disciplinary points are unavailable"
-	} else if ahead >= r.Achievement.TopK {
-		result.Status = NotClinched
-		result.Method = ProofAccessibleTiebreak
-	} else {
-		result.Status = Clinched
-		result.Method = ProofAccessibleTiebreak
 	}
 	return result
 }

@@ -279,13 +279,27 @@ func completeInventory(r competition.Rules, teams []standings.Team, games []stan
 		return false
 	}
 	n := map[string]int{}
+	directed := map[[2]string]int{}
 	for _, g := range games {
 		n[g.HomeTeamID]++
 		n[g.AwayTeamID]++
+		directed[[2]string{g.HomeTeamID, g.AwayTeamID}]++
 	}
 	for _, t := range teams {
 		if n[t.ID] != r.GamesPerTeam {
 			return false
+		}
+	}
+	// A 2*(N-1)-game format is a double round robin: every pair must appear
+	// once in each direction. Per-team degree alone cannot detect a duplicated
+	// matchup that replaces two other scheduled fixtures.
+	if r.GamesPerTeam == 2*(r.ExpectedTeams-1) {
+		for _, home := range teams {
+			for _, away := range teams {
+				if home.ID != away.ID && directed[[2]string{home.ID, away.ID}] != 1 {
+					return false
+				}
+			}
 		}
 	}
 	return true

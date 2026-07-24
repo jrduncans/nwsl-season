@@ -126,7 +126,7 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 		switch {
 		case baseline.Status == clinching.Clinched:
 			out.State, out.AlreadyClinched = OpportunityAlreadyClinched, true
-		case baseline.Status == clinching.Unresolved:
+		case baseline.Status == clinching.Unresolved && baseline.Method != clinching.ProofUnprovedScoreTiebreak:
 			out.State, out.Limitation = OpportunityUnresolved, limitation(baseline)
 		case r.Slate.State == SlateNoUpcoming:
 			out.State = OpportunityCannotClinch

@@ -61,7 +61,7 @@ func generatedHalfwaySeason() ([]standings.Team, []standings.Game, []string) {
 func benchmarkAchievements() []competition.Achievement {
 	return []competition.Achievement{
 		{ID: competition.AchievementPlayoffs, Label: "Playoffs", TopK: 8},
-		{ID: competition.AchievementHomePlayoff, Label: "Home playoff", TopK: 4},
+		{ID: competition.AchievementHomePlayoff, Label: "Top-four seed", TopK: 4},
 		{ID: competition.AchievementShield, Label: "Shield", TopK: 1},
 	}
 }

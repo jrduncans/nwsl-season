@@ -318,7 +318,7 @@ func presentationFallbackRules(season, stage string) competition.Rules {
 		Season: season, Stage: stage, Version: "presentation-fallback-v1", ExpectedTeams: 16, GamesPerTeam: 30,
 		Achievements: []competition.Achievement{
 			{ID: competition.AchievementShield, Label: "Shield", TopK: 1},
-			{ID: competition.AchievementHomePlayoff, Label: "Home playoff", TopK: 4},
+			{ID: competition.AchievementHomePlayoff, Label: "Top-four seed", TopK: 4},
 			{ID: competition.AchievementPlayoffs, Label: "Playoffs", TopK: 8},
 		},
 	}
@@ -471,7 +471,7 @@ func labelAchievement(a competition.AchievementID) string {
 	case competition.AchievementShield:
 		return "Shield"
 	case competition.AchievementHomePlayoff:
-		return "Home playoff"
+		return "Top-four seed"
 	case competition.AchievementPlayoffs:
 		return "Playoffs"
 	}
@@ -483,7 +483,7 @@ func achievementPhrase(a competition.AchievementID) string {
 	case competition.AchievementShield:
 		return "the Shield"
 	case competition.AchievementHomePlayoff:
-		return "a home playoff place"
+		return "a top-four seed"
 	case competition.AchievementPlayoffs:
 		return "the playoffs"
 	}
