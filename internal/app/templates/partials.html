@@ -14,7 +14,7 @@
   <main class="page">{{end}}
 
 {{define "foot"}}</main>
-  <footer class="site-footer">Data source: American Soccer Analysis.{{if .Freshness}} Data last fetched on <time datetime="{{.Freshness}}" data-local-time="{{.Freshness}}">{{.FreshnessFallback}}</time>.{{else}} Data fetch time unavailable.{{end}}</footer>
+  <footer class="site-footer">Data source: American Soccer Analysis.{{if .Freshness}} Data last fetched on <time datetime="{{.Freshness}}" data-local-time="{{.Freshness}}">{{.FreshnessFallback}}</time>.{{else}} Data fetch time unavailable.{{end}} Project source: <a href="https://github.com/jrduncans/nwsl-season">GitHub</a>.</footer>
   <script src="{{.ScriptPath}}" defer></script>
 </body>
 </html>{{end}}
