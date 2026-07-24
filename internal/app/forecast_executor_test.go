@@ -9,8 +9,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
+	"github.com/jrduncans/nwsl-season/internal/standings"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+type telemetryTestModel struct{}
+
+func (telemetryTestModel) Info() forecast.Info { return forecast.Info{ID: "telemetry-test-v1"} }
+
+func (telemetryTestModel) Fit(forecast.FitInput) (forecast.Predictor, error) {
+	return nil, errors.New("test model must not be fitted")
+}
 
 func TestForecastExecutorCachesSuccessfulResults(t *testing.T) {
 	executor := newForecastExecutor(1, time.Second)
@@ -83,6 +97,83 @@ func TestForecastExecutorBoundsItsResultCache(t *testing.T) {
 	if got := len(executor.cache); got != forecastResultCacheCapacity {
 		t.Fatalf("cache entries = %d, want %d", got, forecastResultCacheCapacity)
 	}
+}
+
+func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	executor := newForecastExecutor(1, time.Second)
+	executor.run = func(context.Context, simulation.Request) (simulation.Result, error) {
+		return simulation.Result{FixedCount: 2, Remaining: 3}, nil
+	}
+	request := simulation.Request{
+		Model:         telemetryTestModel{},
+		Teams:         []standings.Team{{ID: "a"}, {ID: "b"}},
+		Games:         []standings.Game{{ID: "finished", Status: standings.CompletedStatus}, {ID: "future-1", Status: simulation.RemainingStatus}, {ID: "future-2", Status: simulation.RemainingStatus}, {ID: "future-3", Status: simulation.RemainingStatus}},
+		XGoals:        map[string]forecast.ExpectedGoals{"finished": {}},
+		Fixed:         map[string]simulation.Outcome{"future-1": simulation.HomeWin, "future-2": simulation.Draw},
+		Iterations:    50000,
+		PlayoffPlaces: 8,
+	}
+	if _, err := executor.results(context.Background(), []forecastTask{{key: "telemetry", request: request}}); err != nil {
+		t.Fatal(err)
+	}
+
+	spans := exporter.GetSpans()
+	calculation := findSpan(t, spans, "forecast.simulation")
+	attributes := spanAttributes(calculation)
+	if got := attributes["forecast.model_id"].AsString(); got != "telemetry-test-v1" {
+		t.Errorf("forecast.model_id = %q, want telemetry-test-v1", got)
+	}
+	for key, want := range map[string]int{
+		"forecast.iteration_count":         50000,
+		"forecast.team_count":              2,
+		"forecast.fixture_count":           4,
+		"forecast.completed_fixture_count": 1,
+		"forecast.remaining_fixture_count": 3,
+		"forecast.fixed_assumption_count":  2,
+		"forecast.xg_observation_count":    1,
+		"forecast.playoff_place_count":     8,
+	} {
+		if got := int(attributes[key].AsInt64()); got != want {
+			t.Errorf("%s = %d, want %d", key, got, want)
+		}
+	}
+	parent := findSpan(t, spans, "forecast.run")
+	parentAttributes := spanAttributes(parent)
+	modelIDs := parentAttributes["forecast.model_ids"].AsStringSlice()
+	if len(modelIDs) != 1 || modelIDs[0] != "telemetry-test-v1" {
+		t.Errorf("forecast.model_ids = %q, want [telemetry-test-v1]", modelIDs)
+	}
+	if got := parentAttributes["forecast.fixed_assumption_count"].AsInt64(); got != 2 {
+		t.Errorf("parent forecast.fixed_assumption_count = %d, want 2", got)
+	}
+}
+
+func findSpan(t *testing.T, spans []tracetest.SpanStub, name string) tracetest.SpanStub {
+	t.Helper()
+	for _, span := range spans {
+		if span.Name == name {
+			return span
+		}
+	}
+	t.Fatalf("span %q was not recorded; spans = %#v", name, spans)
+	return tracetest.SpanStub{}
+}
+
+func spanAttributes(span tracetest.SpanStub) map[string]attribute.Value {
+	values := make(map[string]attribute.Value, len(span.Attributes))
+	for _, value := range span.Attributes {
+		values[string(value.Key)] = value.Value
+	}
+	return values
 }
 
 func TestForecastHandlerReturns429WhenForecastCapacityIsFull(t *testing.T) {

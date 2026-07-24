@@ -11,6 +11,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -131,35 +134,51 @@ func (s *Scheduler) Stop() {
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
-	ctx, cancel := context.WithTimeout(context.Background(), s.config.Timeout)
-	snapshot, err := s.store.RefreshSnapshot(ctx, s.config.Season, s.config.Stage)
+	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.check",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", s.config.Season),
+			attribute.String("sync.stage", s.config.Stage),
+		),
+	)
+	defer span.End()
+
+	snapshotCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
+	snapshot, err := s.store.RefreshSnapshot(snapshotCtx, s.config.Season, s.config.Stage)
 	cancel()
 	if err != nil {
+		telemetry.RecordError(span, err)
 		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
 
 	decision := Assess(snapshot, s.now().UTC(), s.config.CompletionGrace)
+	span.SetAttributes(
+		attribute.String("sync.decision", decision.Name),
+		attribute.String("sync.decision_reason", decision.Reason),
+		attribute.String("sync.fixture_id", decision.FixtureID),
+	)
 	s.logger.Info("cache refresh decision", "decision", decision.Name, "reason", decision.Reason,
 		"season", s.config.Season, "stage", s.config.Stage, "fixture_id", decision.FixtureID)
 	if decision.Name != decisionEligible {
-		s.recalculateCachedClinching()
+		s.recalculateCachedClinching(ctx)
 		return
 	}
 
-	runCtx, cancel := context.WithTimeout(context.Background(), s.config.Timeout)
+	runCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	run, err := s.runner.Run(runCtx, syncer.RunOptions{
 		Season: s.config.Season, Stage: s.config.Stage, MinimumAttemptInterval: s.config.MinimumAttemptInterval,
 	})
 	cancel()
 	if err != nil {
+		telemetry.RecordError(span, err)
 		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
 	if run.Skipped {
 		s.logger.Info("cache refresh decision", "decision", "rate_limited", "season", s.config.Season, "stage", s.config.Stage,
 			"last_attempt", run.FinishedAt.UTC().Format(time.RFC3339), "last_outcome", run.Outcome)
-		s.recalculateCachedClinching()
+		s.recalculateCachedClinching(ctx)
 		return
 	}
 	if run.HistoryPruneError != "" {
@@ -173,12 +192,12 @@ func (s *Scheduler) check() {
 // recalculateCachedClinching repairs missing or retryable derived batches
 // without an ASA request. In particular, it lets a restarted server recover a
 // page that is pending only because the fixture cache was already current.
-func (s *Scheduler) recalculateCachedClinching() {
+func (s *Scheduler) recalculateCachedClinching(parent context.Context) {
 	runner, ok := s.runner.(calculationRunner)
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.config.Timeout)
+	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
 	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage})
 	cancel()
 	if err != nil {

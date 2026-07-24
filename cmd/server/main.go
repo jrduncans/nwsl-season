@@ -21,6 +21,8 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
 	"github.com/jrduncans/nwsl-season/internal/scheduler"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -30,10 +32,15 @@ const (
 	serverIdleTimeout         = 60 * time.Second
 	serverMaxHeaderBytes      = 1 << 20 // 1 MiB
 	serverShutdownTimeout     = 30 * time.Second
+	telemetryShutdownTimeout  = 10 * time.Second
 )
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	if err := config.LoadEnvironmentFile(); err != nil {
+		logger.Error("load configuration environment file", "error", err)
+		os.Exit(1)
+	}
 	cfg, err := config.FromEnvironment()
 	if err != nil {
 		logger.Error("read configuration", "error", err)
@@ -41,8 +48,24 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, cfg, logger); err != nil {
-		logger.Error("HTTP server stopped", "error", err)
+	providers, err := telemetry.Configure(ctx, logger, "nwsl-season-server")
+	if err != nil {
+		logger.Error("configure OpenTelemetry", "error", err)
+		os.Exit(1)
+	}
+	runErr := run(ctx, cfg, logger)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryShutdownTimeout)
+	shutdownErr := providers.Shutdown(shutdownCtx)
+	cancel()
+	if runErr != nil {
+		logger.Error("HTTP server stopped", "error", runErr)
+		if shutdownErr != nil {
+			logger.Warn("flush OpenTelemetry telemetry", "error", shutdownErr)
+		}
+		os.Exit(1)
+	}
+	if shutdownErr != nil {
+		logger.Error("flush OpenTelemetry telemetry", "error", shutdownErr)
 		os.Exit(1)
 	}
 }
@@ -55,7 +78,10 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	defer db.Close()
 
 	service := syncer.Service{
-		ASA:                  asa.Client{HTTPClient: &http.Client{Timeout: cfg.SyncTimeout}},
+		ASA: asa.Client{HTTPClient: &http.Client{
+			Timeout:   cfg.SyncTimeout,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		}},
 		Store:                db,
 		QualificationTimeout: cfg.QualificationBudget,
 		ScenarioTimeout:      cfg.ScenarioBudget,
@@ -78,12 +104,13 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 	refreshScheduler.Start()
 
-	server := newHTTPServer(cfg.HTTPAddr, app.NewHandlerWithOptions(db, app.Options{
+	handler := app.NewHandlerWithOptions(db, app.Options{
 		CurrentSeason: cfg.SyncSeason,
 		Stage:         cfg.SyncStage, Rules: rules,
 		ForecastConcurrency: cfg.ForecastConcurrency,
 		ForecastTimeout:     cfg.ForecastTimeout,
-	}), cfg.ForecastTimeout)
+	})
+	server := newHTTPServer(cfg.HTTPAddr, otelhttp.NewHandler(handler, "HTTP server", otelhttp.WithSpanNameFormatter(httpSpanName)), cfg.ForecastTimeout)
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
 
@@ -111,6 +138,13 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+func httpSpanName(_ string, request *http.Request) string {
+	if request.Pattern != "" {
+		return request.Pattern
+	}
+	return request.Method + " unknown_route"
 }
 
 // newHTTPServer applies the connection limits required when the listener is

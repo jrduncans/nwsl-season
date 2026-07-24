@@ -22,6 +22,9 @@ func main() {
 }
 
 func run() error {
+	if err := config.LoadEnvironmentFile(); err != nil {
+		return fmt.Errorf("load configuration environment file: %w", err)
+	}
 	cfg, err := config.FromEnvironment()
 	if err != nil {
 		return fmt.Errorf("configuration: %w", err)

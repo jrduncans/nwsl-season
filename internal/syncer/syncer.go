@@ -15,6 +15,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -92,7 +95,26 @@ type RecalculateOptions struct {
 }
 
 // Run fetches one complete ASA season/stage and atomically stores it.
-func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, error) {
+func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun, err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "sync.run",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", options.Season),
+			attribute.String("sync.stage", options.Stage),
+			attribute.Bool("sync.forced", options.Force),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.String("sync.outcome", run.Outcome),
+			attribute.Bool("sync.skipped", run.Skipped),
+			attribute.Int("sync.games_seen", run.GamesSeen),
+		)
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+		span.End()
+	}()
 	runMu.Lock()
 	defer runMu.Unlock()
 
@@ -162,7 +184,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
 
-	run, err := s.Store.ReplaceSeason(ctx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
+	run, err = s.Store.ReplaceSeason(ctx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
@@ -190,7 +212,25 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 
 // Recalculate reruns derived clinching calculations from the last successful
 // fixture snapshot without performing a data or xG sync.
-func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (cache.SyncRun, error) {
+func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (run cache.SyncRun, err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "sync.recalculate",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", options.Season),
+			attribute.String("sync.stage", options.Stage),
+			attribute.Bool("sync.forced", options.Force),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.Bool("sync.qualification_recalculated", run.QualificationRecalculated),
+			attribute.Bool("sync.scenario_recalculated", run.ScenarioRecalculated),
+		)
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+		span.End()
+	}()
 	if s.Store == nil {
 		return cache.SyncRun{}, errors.New("sync store is required")
 	}
@@ -212,7 +252,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (c
 	// deadline used to load the cached inputs. This mirrors Run: a scheduler
 	// check may have a small source-sync timeout, while the qualification and
 	// scenario passes each have their own bounded budgets.
-	run := s.refreshCalculations(context.WithoutCancel(ctx), inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
+	run = s.refreshCalculations(context.WithoutCancel(ctx), inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
 	return s.pruneHistory(run), nil
 }
 
