@@ -35,6 +35,7 @@ func main() {
 	recalculate := flag.Bool("recalculate", false, "recalculate qualification and clinching scenarios from cached fixtures without syncing ASA data")
 	force := flag.Bool("force", false, "bypass the sync interval and force all clinching calculations")
 	requireXG := flag.Bool("require-xg", false, "exit nonzero when fixtures sync but xG refresh fails")
+	pruneHistoryBefore := flag.String("prune-history-before", "", "delete superseded run history finished before this RFC 3339 timestamp, then exit")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -53,12 +54,27 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	if *pruneHistoryBefore != "" {
+		cutoff, err := time.Parse(time.RFC3339, *pruneHistoryBefore)
+		if err != nil {
+			logger.Error("parse history prune cutoff", "error", err, "value", *pruneHistoryBefore)
+			os.Exit(1)
+		}
+		result, err := db.PruneHistory(context.Background(), cutoff)
+		if err != nil {
+			logger.Error("prune cache history", "error", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Pruned history before %s: %d sync runs, %d xG sync runs, %d qualification runs (%d statuses), %d scenario runs (%d results), and %d expired sync leases.\n", cutoff.UTC().Format(time.RFC3339), result.SyncRuns, result.XGSyncRuns, result.QualificationRuns, result.QualificationStatuses, result.ScenarioRuns, result.ScenarioResults, result.ExpiredSyncLeases)
+		return
+	}
 
 	service := syncer.Service{
 		ASA:                  client,
 		Store:                db,
 		QualificationTimeout: cfg.QualificationBudget,
 		ScenarioTimeout:      cfg.ScenarioBudget,
+		HistoryRetention:     cfg.HistoryRetention,
 	}
 	if rules, ok := competition.ForSeason(*season, *stage); ok {
 		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget, Progress: operations.QualificationTelemetry(logger)}
@@ -125,6 +141,12 @@ func main() {
 	if run.ScenarioError != "" {
 		logger.Warn("fixture sync succeeded but scenario refresh failed", "error", run.ScenarioError)
 	}
+	if run.HistoryPruneError != "" {
+		logger.Warn("automatic cache history prune failed", "error", run.HistoryPruneError)
+	}
+	if run.HistoryPrune != nil && historyPruneCount(*run.HistoryPrune) > 0 {
+		fmt.Printf("Automatically pruned %d history rows using the %s retention window.\n", historyPruneCount(*run.HistoryPrune), cfg.HistoryRetention)
+	}
 	if run.QualificationRecalculated || run.ScenarioRecalculated {
 		printCalculationBudgetSummary(logger, db, run)
 	}
@@ -135,6 +157,10 @@ func calculationOutcome(recalculated bool) string {
 		return "recalculated"
 	}
 	return "already current"
+}
+
+func historyPruneCount(result cache.HistoryPruneResult) int64 {
+	return result.SyncRuns + result.XGSyncRuns + result.QualificationRuns + result.QualificationStatuses + result.ScenarioRuns + result.ScenarioResults + result.ExpiredSyncLeases
 }
 
 type calculationBudgetSummary struct {

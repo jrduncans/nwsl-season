@@ -59,6 +59,27 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	}
 }
 
+func TestRunAutomaticallyPrunesHistoryWhenConfigured(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	service := Service{ASA: &client, Store: db, HistoryRetention: 90 * 24 * time.Hour}
+
+	run, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.HistoryPrune == nil {
+		t.Fatal("automatic history prune was not run")
+	}
+	if run.HistoryPruneError != "" {
+		t.Fatalf("automatic history prune error = %q", run.HistoryPruneError)
+	}
+}
+
 func TestRunRefreshesXGBeforeDerivedCalculations(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)

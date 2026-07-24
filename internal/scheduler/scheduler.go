@@ -153,6 +153,9 @@ func (s *Scheduler) check() {
 			"last_attempt", run.FinishedAt.UTC().Format(time.RFC3339), "last_outcome", run.Outcome)
 		return
 	}
+	if run.HistoryPruneError != "" {
+		s.logger.Warn("automatic cache history prune failed", "season", s.config.Season, "stage", s.config.Stage, "error", run.HistoryPruneError)
+	}
 	s.logger.Info("cache refresh succeeded", "season", s.config.Season, "stage", s.config.Stage,
 		"duration_ms", run.FinishedAt.Sub(run.StartedAt).Milliseconds(), "games_seen", run.GamesSeen,
 		"games_inserted", run.GamesInserted, "games_updated", run.GamesUpdated, "games_unchanged", run.GamesUnchanged)

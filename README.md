@@ -68,6 +68,7 @@ Configuration:
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum total time for a persisted qualification batch |
 | `NWSL_SCENARIO_BUDGET` | `30s` | Maximum total time for a persisted clinching-scenario batch |
+| `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Age after which superseded operational history is automatically pruned after a successful sync |
 | `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests; excess requests receive `429` |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached Forecast Lab request |
 
@@ -125,6 +126,17 @@ go run ./cmd/sync -season 2026 -recalculate -force
 After any calculation run, the command reports the number of qualification
 proofs, no-help paths, and scenario checks left unresolved because their shared
 calculation budget expired.
+
+After every successful sync, the application automatically prunes superseded
+operational history older than `NWSL_HISTORY_RETENTION`. It preserves the
+latest attempt and latest successful/complete result for each identity, plus
+any run still required by a retained derived batch; it does not delete cached
+teams, fixtures, or game xG. To use a one-off, stricter cutoff, run the
+maintenance command explicitly:
+
+```sh
+go run ./cmd/sync -prune-history-before 2025-01-01T00:00:00Z
+```
 
 To print standings from the local cache:
 

@@ -50,6 +50,9 @@ type Store interface {
 type calculationStore interface {
 	ClinchingInputs(context.Context, string, string) (cache.CalculationInputs, error)
 }
+type historyPruningStore interface {
+	PruneHistory(context.Context, time.Time) (cache.HistoryPruneResult, error)
+}
 
 // Service refreshes the persistent cache from ASA.
 type Service struct {
@@ -59,6 +62,7 @@ type Service struct {
 	Scenarios            ScenarioRefresher
 	QualificationTimeout time.Duration
 	ScenarioTimeout      time.Duration
+	HistoryRetention     time.Duration
 }
 
 // QualificationRefresher runs after the durable fixture transaction. It is
@@ -180,7 +184,8 @@ func (s Service) Run(ctx context.Context, options RunOptions) (cache.SyncRun, er
 			run.XGRun = &xgRun
 		}
 	}
-	return s.refreshCalculations(context.WithoutCancel(ctx), run, cacheTeams, cacheGames, options.Force), nil
+	run = s.refreshCalculations(context.WithoutCancel(ctx), run, cacheTeams, cacheGames, options.Force)
+	return s.pruneHistory(run), nil
 }
 
 // Recalculate reruns derived clinching calculations from the last successful
@@ -203,7 +208,27 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (c
 	if err != nil {
 		return cache.SyncRun{}, fmt.Errorf("load cached clinching inputs: %w", err)
 	}
-	return s.refreshCalculations(ctx, inputs.SyncRun, inputs.Teams, inputs.Games, options.Force), nil
+	run := s.refreshCalculations(ctx, inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
+	return s.pruneHistory(run), nil
+}
+
+func (s Service) pruneHistory(run cache.SyncRun) cache.SyncRun {
+	if s.HistoryRetention <= 0 {
+		return run
+	}
+	store, ok := s.Store.(historyPruningStore)
+	if !ok {
+		return run
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := store.PruneHistory(ctx, time.Now().UTC().Add(-s.HistoryRetention))
+	if err != nil {
+		run.HistoryPruneError = err.Error()
+		return run
+	}
+	run.HistoryPrune = &result
+	return run
 }
 
 func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) cache.SyncRun {

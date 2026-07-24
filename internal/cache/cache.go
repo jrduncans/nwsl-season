@@ -98,8 +98,10 @@ type SyncRun struct {
 	QualificationRecalculated bool
 	ScenarioRecalculated      bool
 	// XGRun/XGError describe the independent second refresh when available.
-	XGRun   *XGSyncRun
-	XGError string
+	XGRun             *XGSyncRun
+	XGError           string
+	HistoryPrune      *HistoryPruneResult
+	HistoryPruneError string
 }
 
 // Status is the latest cache freshness summary.

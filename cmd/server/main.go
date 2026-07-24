@@ -59,6 +59,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Store:                db,
 		QualificationTimeout: cfg.QualificationBudget,
 		ScenarioTimeout:      cfg.ScenarioBudget,
+		HistoryRetention:     cfg.HistoryRetention,
 	}
 	rules, knownRules := competition.ForSeason(cfg.SyncSeason, cfg.SyncStage)
 	if knownRules {
