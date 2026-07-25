@@ -6,7 +6,7 @@
 
 {{range .FixtureGroups}}
   <section class="fixture-group"><h2>{{.Label}}</h2>
-    <ul class="fixtures">{{range .Games}}<li><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{if .Remaining}}<span class="scheduled">Scheduled</span>{{else if not .Completed}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
   </section>
 {{end}}
 {{template "foot" .}}{{end}}
