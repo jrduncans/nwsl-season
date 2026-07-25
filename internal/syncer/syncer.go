@@ -157,19 +157,16 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		}
 	}
 
-	teams, err := s.ASA.Teams(ctx, asa.TeamsFilters{})
-	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch teams: %w", err))
+	xgClient, hasXGClient := s.ASA.(xgASAClient)
+	xgCache, hasXGCache := s.Store.(xgStore)
+	data := s.fetchASAData(ctx, options, xgClient, hasXGClient && hasXGCache)
+	if data.teamsErr != nil {
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch teams: %w", data.teamsErr))
 	}
-
-	games, err := s.ASA.Games(ctx, asa.GamesFilters{
-		SeasonName: options.Season,
-		StageName:  options.Stage,
-		Status:     allGameStatuses,
-	})
-	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch games: %w", err))
+	if data.gamesErr != nil {
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch games: %w", data.gamesErr))
 	}
+	teams, games := data.teams, data.games
 
 	if err := validate(options, teams, games); err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
@@ -188,17 +185,14 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
-	// Fetch xG while the main sync context still has its full budget. The
-	// qualification and scenario passes can legitimately outlive that context
-	// through their independent derived budgets, so placing xG after them would
-	// make its HTTP request begin already cancelled.
-	xgClient, hasXGClient := s.ASA.(xgASAClient)
-	xgCache, hasXGCache := s.Store.(xgStore)
+	// xG is fetched concurrently with the fixture inventory, but committing it
+	// still waits for the durable fixture snapshot above. The qualification and
+	// scenario passes can legitimately outlive the source-sync context through
+	// their independent derived budgets, so they remain after this step.
 	if hasXGClient && hasXGCache {
-		xg, err := xgClient.GameXGoals(ctx, asa.XGoalsFilters{SeasonName: options.Season, StageName: options.Stage})
-		if err != nil {
-			run = s.xgWarning(ctx, xgCache, options, startedAt, run, fmt.Errorf("fetch game xG: %w", err))
-		} else if values, err := mapXGoals(xg); err != nil {
+		if data.xgErr != nil {
+			run = s.xgWarning(ctx, xgCache, options, startedAt, run, fmt.Errorf("fetch game xG: %w", data.xgErr))
+		} else if values, err := mapXGoals(data.xg); err != nil {
 			run = s.xgWarning(ctx, xgCache, options, startedAt, run, err)
 		} else if xgRun, err := xgCache.ReplaceGameXG(ctx, options.Season, options.Stage, cacheGames, values, startedAt); err != nil {
 			run = s.xgWarning(ctx, xgCache, options, startedAt, run, err)
@@ -208,6 +202,50 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	}
 	run = s.refreshCalculations(context.WithoutCancel(ctx), run, cacheTeams, cacheGames, options.Force)
 	return s.pruneHistory(run), nil
+}
+
+type asaSyncData struct {
+	teams    []asa.Team
+	teamsErr error
+	games    []asa.Game
+	gamesErr error
+	xg       []asa.GameXGoals
+	xgErr    error
+}
+
+// fetchASAData requests the independent ASA resources at the same time. xG
+// remains an optional source: its error is handled only after the fixture
+// snapshot commits successfully.
+func (s Service) fetchASAData(ctx context.Context, options RunOptions, xgClient xgASAClient, fetchXG bool) asaSyncData {
+	var data asaSyncData
+	var group stdsync.WaitGroup
+
+	group.Add(2)
+	go func() {
+		defer group.Done()
+		data.teams, data.teamsErr = s.ASA.Teams(ctx, asa.TeamsFilters{})
+	}()
+	go func() {
+		defer group.Done()
+		data.games, data.gamesErr = s.ASA.Games(ctx, asa.GamesFilters{
+			SeasonName: options.Season,
+			StageName:  options.Stage,
+			Status:     allGameStatuses,
+		})
+	}()
+	if fetchXG {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			data.xg, data.xgErr = xgClient.GameXGoals(ctx, asa.XGoalsFilters{
+				SeasonName: options.Season,
+				StageName:  options.Stage,
+			})
+		}()
+	}
+
+	group.Wait()
+	return data
 }
 
 // Recalculate reruns derived clinching calculations from the last successful

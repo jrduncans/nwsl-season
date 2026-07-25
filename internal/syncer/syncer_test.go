@@ -59,6 +59,47 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	}
 }
 
+func TestRunFetchesASAResourcesConcurrently(t *testing.T) {
+	db := newTestDB(t)
+	release := make(chan struct{})
+	client := blockingASA{
+		teamsStarted: make(chan struct{}),
+		gamesStarted: make(chan struct{}),
+		xgStarted:    make(chan struct{}),
+		release:      release,
+	}
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := (Service{ASA: &client, Store: db}).Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season"})
+		done <- err
+	}()
+
+	for name, started := range map[string]<-chan struct{}{
+		"teams": client.teamsStarted,
+		"games": client.gamesStarted,
+		"xG":    client.xgStarted,
+	} {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatalf("%s request did not start while the other ASA request was blocked", name)
+		}
+	}
+
+	close(release)
+	released = true
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunAutomaticallyPrunesHistoryWhenConfigured(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
@@ -440,7 +481,7 @@ func TestRunRateLimitsFailedAttemptAndForceBypassesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if forced.Skipped || client.teamsCalls != 2 || client.gamesCalls != 1 {
+	if forced.Skipped || client.teamsCalls != 2 || client.gamesCalls != 2 {
 		t.Fatalf("forced run = %+v; calls teams=%d games=%d, want completed refresh", forced, client.teamsCalls, client.gamesCalls)
 	}
 }
@@ -491,6 +532,37 @@ type fakeASA struct {
 	gamesErr     error
 	gamesCalls   int
 	gamesFilters asa.GamesFilters
+}
+
+type blockingASA struct {
+	teamsStarted chan struct{}
+	gamesStarted chan struct{}
+	xgStarted    chan struct{}
+	release      <-chan struct{}
+}
+
+func (f *blockingASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
+	close(f.teamsStarted)
+	<-f.release
+	return testTeams(), nil
+}
+
+func (f *blockingASA) Games(context.Context, asa.GamesFilters) ([]asa.Game, error) {
+	close(f.gamesStarted)
+	<-f.release
+	return []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}, nil
+}
+
+func (f *blockingASA) GameXGoals(context.Context, asa.XGoalsFilters) ([]asa.GameXGoals, error) {
+	close(f.xgStarted)
+	<-f.release
+	return []asa.GameXGoals{{
+		GameID:         "game-1",
+		HomeTeamID:     "home",
+		AwayTeamID:     "away",
+		HomeTeamXGoals: 1.2,
+		AwayTeamXGoals: 0.6,
+	}}, nil
 }
 
 type traceASA struct {
