@@ -458,19 +458,39 @@ IDs are non-empty and unique, exactly one entry is recommended, and every
 entry's method path is non-empty.
 
 The initial implementation left `results-poisson-v1` recommended until the
-back-test report packet completed. The checked-in v1 evidence selected
-`xg-poisson-v1`; future candidate versions must use the development/final-test
-protocol below and must not change a formula in the same packet that promotes
-it.
+back-test report packet completed. Its v1 evidence therefore records an
+incumbent-replacement decision, not an initial, symmetric catalog choice.
+
+### Initial catalog-selection policy
+
+For the first fair comparison of a fixed catalog, no forecasting model receives
+incumbent protection merely because it happened to be the pre-evaluation app
+default. The straight-line pace model is an evaluation-only reference and is
+not eligible for selection. Current pace, Results Poisson, and xG Poisson must
+be treated symmetrically:
+
+1. rank eligible models by final-test match log loss;
+2. use the model with the lowest point estimate as the operational default;
+3. label that default **provisional** unless its paired final-test comparison
+   is conclusively better than every other eligible model; and
+4. describe a non-conclusive lead as a practical tie, not evidence that the
+   incumbent or the point-estimate leader is universally better.
+
+The older v1 artifact retains its incumbent-replacement rule so its recorded
+result remains reproducible. The symmetric policy must be implemented before
+the next selection artifact is generated; it is the policy that applies once
+the initial catalog comparison is treated as the first real evaluation rather
+than as a continuation of a pre-existing default.
 
 ## Leakage-safe back-testing
 
 ### Evaluation data
 
 Use NWSL regular seasons 2016 through 2025 from the local cache. Exclude 2020,
-which did not have the comparable regular-season competition. Use 2016-2019
-and 2021-2022 as the development window, and 2023-2025 as the final-test
-recommendation window.
+which did not have the comparable regular-season competition. Alternate the
+eligible completed seasons so both windows cover the historical range: use
+2017, 2019, 2022, and 2024 as the development window, and 2016, 2018, 2021,
+2023, and 2025 as the five-season final-test recommendation window.
 
 The development window is operational: it may be used to compare candidate
 model versions and choose fixed constants, priors, feature sets, or fitting

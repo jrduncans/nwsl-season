@@ -62,6 +62,7 @@ type Season struct {
 type Config struct {
 	Models             []forecast.Model
 	IncumbentModelID   string
+	ReferenceModelIDs  map[string]bool
 	Iterations         int
 	BootstrapResamples int
 	BootstrapSeed      int64
@@ -109,6 +110,10 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 			"Daily UTC cutoffs prevent games on the same date from training one another.",
 		},
 	}
+	for id := range cfg.ReferenceModelIDs {
+		report.ReferenceModels = append(report.ReferenceModels, id)
+	}
+	sort.Strings(report.ReferenceModels)
 	models := make(map[string]*modelAccumulator, len(cfg.Models))
 	for _, model := range cfg.Models {
 		models[model.Info().ID] = &modelAccumulator{windows: map[string]map[string]*scoreAccumulator{}, blocks: map[string]map[string]MetricSet{}}

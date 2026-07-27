@@ -18,6 +18,7 @@ type Report struct {
 	GitCommit           string        `json:"git_commit,omitempty"`
 	Iterations          int           `json:"iterations"`
 	BootstrapResamples  int           `json:"bootstrap_resamples"`
+	ReferenceModels     []string      `json:"reference_models,omitempty"`
 	Seasons             []SeasonAudit `json:"seasons"`
 	Models              []ModelResult `json:"models"`
 	Comparisons         []Comparison  `json:"comparisons"`
@@ -232,6 +233,10 @@ func selectModel(report Report, coverageGate bool) Selection {
 	selection := Selection{SelectedModel: report.IncumbentModel, CoverageGate: coverageGate}
 	bestID, bestLogLoss := "", math.Inf(1)
 	for _, comparison := range report.Comparisons {
+		if isReferenceModel(report, comparison.Candidate) {
+			selection.Candidates = append(selection.Candidates, CandidateResult{Model: comparison.Candidate, Reasons: []string{"evaluation-only reference model; excluded from selection"}})
+			continue
+		}
 		reasons := []string{}
 		logLoss := comparison.Metrics["match_log_loss"]
 		metrics := modelMetrics(report, comparison.Candidate)
@@ -273,6 +278,15 @@ func selectModel(report Report, coverageGate bool) Selection {
 		selection.Reason = fmt.Sprintf("`%s` met the precommitted replacement rule and had the lowest qualifying final-test match log loss.", bestID)
 	}
 	return selection
+}
+
+func isReferenceModel(report Report, id string) bool {
+	for _, reference := range report.ReferenceModels {
+		if id == reference {
+			return true
+		}
+	}
+	return false
 }
 
 func modelMetrics(report Report, id string) MetricSet {

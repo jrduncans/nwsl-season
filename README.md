@@ -37,6 +37,8 @@ go run ./cmd/server
 Visit <http://localhost:8080>. With the default configuration, the current
 season is available at <http://localhost:8080/seasons/2026> and Forecast Lab is
 available at <http://localhost:8080/seasons/2026/forecast>.
+The historical forecast comparison is available at
+<http://localhost:8080/seasons/2026/model-evaluation>.
 
 Useful endpoints:
 
@@ -47,6 +49,7 @@ Useful endpoints:
 - `/seasons/:season/schedule-difficulty` — remaining schedule comparison.
 - `/seasons/:season/clinching` — qualification and slate scenarios.
 - `/seasons/:season/forecast` — interactive forecast simulation.
+- `/seasons/:season/model-evaluation` — interactive historical forecast evaluation.
 
 ## Configuration
 
@@ -164,12 +167,13 @@ make backfill-evaluation-data
 make backtest
 ```
 
-The default protocol uses 2016–2019 plus 2021–2022 for model development and
-holds out 2023–2025 as the final test. Development results may guide new model
-versions and fixed constants; final-test results alone decide the recommended
-model. Pooled results are descriptive only. A model changed after inspecting
-final-test results is a new version and needs later untouched seasons for a new
-final test.
+The default protocol alternates the eligible completed seasons so both windows
+span the league's history: 2017, 2019, 2022, and 2024 are development seasons;
+2016, 2018, 2021, 2023, and 2025 form the five-season final test. Development
+results may guide new model versions and fixed constants; final-test results
+alone decide the recommended model. Pooled results are descriptive only. A
+model changed after inspecting final-test results is a new version and needs
+later untouched seasons for a new final test.
 
 The runner refuses to replace the checked-in evidence unless every requested
 season passes its data audit and each final-test season has at least 95% xG
@@ -188,9 +192,9 @@ The runner audits each season, uses daily UTC cutoffs (so same-day results canno
 train one another), simulates each remaining season, calculates proper scoring
 rules and calibration, and applies the precommitted paired-bootstrap selection
 rule. It writes machine-readable evidence to `docs/model-evaluation-v1.json`
-and a readable summary to `docs/model-evaluation-v1.md`. The checked-in v1
-evidence uses 20,000 iterations and 10,000 resamples, and selects xG Poisson as
-the recommended default. Use `-generated-at` for byte-stable reruns and
+and a readable summary to `docs/model-evaluation-v1.md`. The default evaluation
+uses 20,000 iterations and 10,000 resamples; the generated artifact records the
+exact values used for a particular run. Use `-generated-at` for byte-stable reruns and
 `-json`/`-markdown` to write elsewhere while testing.
 
 The sync command also supports `-db` for an explicit SQLite path and

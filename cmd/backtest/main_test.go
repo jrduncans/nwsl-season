@@ -95,3 +95,27 @@ func TestCSVSetRejectsDuplicatesAndEmptyValues(t *testing.T) {
 		t.Fatalf("set=%v err=%v", got, err)
 	}
 }
+
+func TestDefaultEvaluationWindowsAlternateEligibleSeasons(t *testing.T) {
+	development, err := csvSet(defaultDevelopmentSeasons)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heldout, err := csvSet(defaultHeldoutSeasons)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(development) != 4 || len(heldout) != 5 {
+		t.Fatalf("window sizes = development %d, held-out %d; want 4 and 5", len(development), len(heldout))
+	}
+	for _, season := range []string{"2016", "2018", "2021", "2023", "2025"} {
+		if !heldout[season] || development[season] {
+			t.Fatalf("season %s is not assigned to the alternating held-out window", season)
+		}
+	}
+	for _, season := range []string{"2017", "2019", "2022", "2024"} {
+		if !development[season] || heldout[season] {
+			t.Fatalf("season %s is not assigned to the alternating development window", season)
+		}
+	}
+}

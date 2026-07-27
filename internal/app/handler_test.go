@@ -211,6 +211,21 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	}
 }
 
+func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{CurrentSeason: "2026", Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/model-evaluation", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, value := range []string{"How close were the forecasts?", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "Model evaluation"} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+}
+
 func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"

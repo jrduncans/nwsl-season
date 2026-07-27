@@ -17,3 +17,15 @@ func TestCatalogDefaultMatchesModelEvaluationV1(t *testing.T) {
 		t.Fatalf("default model = %q, want xg-poisson-v1", got)
 	}
 }
+
+func TestEvaluationCatalogAddsOnlyTheStraightLineBaseline(t *testing.T) {
+	for _, entry := range Catalog() {
+		if entry.Model.Info().ID == straightLinePaceID {
+			t.Fatal("Forecast Lab catalog includes the evaluation-only baseline")
+		}
+	}
+	entries := EvaluationCatalog()
+	if got := entries[0].Model.Info().ID; got != straightLinePaceID {
+		t.Fatalf("first evaluation model = %q, want %q", got, straightLinePaceID)
+	}
+}

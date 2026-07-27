@@ -431,6 +431,46 @@ func TestGenerateDiscardsPartialCoverageAfterCancellation(t *testing.T) {
 	}
 }
 
+func TestGenerateRetainsTotalAssignmentsWhenSlateExceedsLimit(t *testing.T) {
+	teams := make([]standings.Team, 0, 22)
+	games := make([]standings.Game, 0, 11)
+	scheduled := make([]ScheduledGame, 0, 11)
+	start := time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC)
+	for i := 0; i < 11; i++ {
+		home, away := fmt.Sprintf("home-%d", i), fmt.Sprintf("away-%d", i)
+		teams = append(teams, standings.Team{ID: home}, standings.Team{ID: away})
+		id := fmt.Sprintf("g-%d", i)
+		games = append(games, standings.Game{ID: id, Status: standings.PreMatchStatus, HomeTeamID: home, AwayTeamID: away})
+		scheduled = append(scheduled, ScheduledGame{ID: id, Status: fixtures.PreMatchStatus, HomeTeamID: home, AwayTeamID: away, KickoffUTC: start, Matchday: intPtr(4)})
+	}
+	slate, err := DefineSlate(scheduled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, games, slate.FixtureIDs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 8}
+	result, err := Generate(context.Background(), Request{
+		Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: teams[0].ID,
+		Achievement: achievement,
+		Baseline:    clinching.AchievementResult{TeamID: teams[0].ID, Achievement: achievement.ID, TopK: achievement.TopK, Status: clinching.NotClinched},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != OpportunityUnresolved || result.Limitation != "slate has 11 fixtures; maximum is 10" {
+		t.Fatalf("result = %+v, want an unevaluated oversized-slate result", result)
+	}
+	if want := pow3(11); result.TotalAssignments != want {
+		t.Fatalf("total assignments = %d, want %d", result.TotalAssignments, want)
+	}
+	if err := result.Validate(slate); err != nil {
+		t.Fatalf("oversized-slate result failed validation: %v", err)
+	}
+}
+
 func scenarioSemanticKey(result Result) string {
 	clauses := make([]string, len(result.Clauses))
 	for i, clause := range result.Clauses {

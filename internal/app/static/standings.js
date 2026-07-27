@@ -83,6 +83,122 @@ function localizeTimes() {
   });
 }
 
+function setupEvaluationCharts() {
+  document.querySelectorAll("[data-evaluation-chart]").forEach((panel) => {
+    let data;
+    try {
+      data = JSON.parse(panel.dataset.evaluation);
+    } catch {
+      return;
+    }
+    const metricControl = panel.querySelector("[data-evaluation-metric]");
+    const scaleControl = panel.querySelector("[data-evaluation-scale]");
+    const windowControl = panel.querySelector("[data-evaluation-window]");
+    const svg = panel.querySelector("[data-evaluation-svg]");
+    const summary = panel.querySelector("[data-evaluation-summary]");
+    const legend = panel.querySelector("[data-evaluation-legend]");
+    const baseline = data.models.find((model) => model.id === data.baseline_id);
+    if (!metricControl || !scaleControl || !windowControl || !svg || !summary || !legend || !baseline) {
+      panel.replaceChildren(Object.assign(document.createElement("p"), { className: "data-warning", textContent: "The simple baseline is not available in this evaluation artifact." }));
+      return;
+    }
+
+    const colors = ["#6b7280", "#c26a00", "#2563eb", "#15803d", "#7c3aed"];
+    const colorFor = (id) => colors[Math.max(0, data.models.findIndex((model) => model.id === id)) % colors.length];
+    const element = (name, attributes = {}) => {
+      const value = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attributes).forEach(([key, attribute]) => value.setAttribute(key, String(attribute)));
+      return value;
+    };
+    const formatNumber = (value, precision = 2) => Number(value).toFixed(precision);
+
+    const render = () => {
+      const metric = metricControl.value;
+      const scale = scaleControl.value;
+      const windowName = windowControl.value;
+      const field = metric === "points" ? "points_mae" : "position_mae";
+      const baselineStages = new Map((baseline.windows[windowName]?.stages ?? []).map((stage) => [stage.label, stage]));
+      const lines = data.models.map((model) => {
+        const stages = (model.windows[windowName]?.stages ?? []).flatMap((stage) => {
+          const base = baselineStages.get(stage.label);
+          if (!base || !base[field]) return [];
+          return [{ ...stage, value: scale === "relative" ? stage[field] / base[field] : stage[field] }];
+        });
+        return { ...model, stages };
+      }).filter((model) => model.stages.length > 0);
+      const values = lines.flatMap((model) => model.stages.map((stage) => stage.value));
+      if (values.length === 0) {
+        summary.textContent = "No stage-level results are available for this view.";
+        svg.replaceChildren();
+        legend.replaceChildren();
+        return;
+      }
+      const width = 760;
+      const height = 340;
+      const margin = { top: 24, right: 24, bottom: 54, left: 62 };
+      const xValues = [...new Set(lines.flatMap((model) => model.stages.map((stage) => stage.progress)))].sort((a, b) => a - b);
+      let min = Math.min(...values);
+      let max = Math.max(...values);
+      if (scale === "relative") {
+        min = Math.min(min, 1);
+        max = Math.max(max, 1);
+      }
+      const padding = Math.max((max - min) * .16, scale === "relative" ? .025 : .1);
+      min = Math.max(0, min - padding);
+      max += padding;
+      const x = (value) => margin.left + ((value - xValues[0]) / Math.max(1, xValues[xValues.length - 1] - xValues[0])) * (width - margin.left - margin.right);
+      const y = (value) => height - margin.bottom - ((value - min) / Math.max(.0001, max - min)) * (height - margin.top - margin.bottom);
+
+      const nodes = [element("title"), element("desc")];
+      nodes[0].textContent = metric === "points" ? "Final-points forecast error through the season" : "Final table-position forecast error through the season";
+      nodes[1].textContent = scale === "relative" ? "Values below one have less error than the simple baseline." : "Lower values mean closer forecasts.";
+      for (let i = 0; i <= 4; i++) {
+        const value = min + (max - min) * i / 4;
+        nodes.push(element("line", { x1: margin.left, x2: width - margin.right, y1: y(value), y2: y(value), class: "evaluation-grid" }));
+        const label = element("text", { x: margin.left - 9, y: y(value) + 4, "text-anchor": "end", class: "evaluation-axis-label" });
+        label.textContent = scale === "relative" ? `${formatNumber(value)}×` : formatNumber(value, 1);
+        nodes.push(label);
+      }
+      xValues.forEach((value) => {
+        nodes.push(element("line", { x1: x(value), x2: x(value), y1: height - margin.bottom, y2: height - margin.bottom + 5, class: "evaluation-axis" }));
+        const label = element("text", { x: x(value), y: height - margin.bottom + 23, "text-anchor": "middle", class: "evaluation-axis-label" });
+        label.textContent = `${value}%`;
+        nodes.push(label);
+      });
+      const axisTitle = element("text", { x: (margin.left + width - margin.right) / 2, y: height - 9, "text-anchor": "middle", class: "evaluation-axis-title" });
+      axisTitle.textContent = "Regular season complete";
+      nodes.push(axisTitle);
+      if (scale === "relative" && min <= 1 && max >= 1) {
+        nodes.push(element("line", { x1: margin.left, x2: width - margin.right, y1: y(1), y2: y(1), class: "evaluation-baseline-line" }));
+      }
+      lines.forEach((model) => {
+        const path = element("path", { d: model.stages.map((stage, index) => `${index === 0 ? "M" : "L"}${x(stage.progress)},${y(stage.value)}`).join(" "), fill: "none", stroke: colorFor(model.id), "stroke-width": 3, class: model.id === data.baseline_id ? "evaluation-baseline-path" : "" });
+        nodes.push(path);
+        model.stages.forEach((stage) => nodes.push(element("circle", { cx: x(stage.progress), cy: y(stage.value), r: 4, fill: colorFor(model.id) })));
+      });
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("aria-label", `${nodes[0].textContent}. ${nodes[1].textContent}`);
+      svg.replaceChildren(...nodes);
+
+      legend.replaceChildren(...lines.map((model) => {
+        const item = document.createElement("span");
+        const marker = document.createElement("i");
+        marker.style.background = colorFor(model.id);
+        item.append(marker, model.name);
+        return item;
+      }));
+      const unit = metric === "points" ? "points" : "places";
+      summary.textContent = scale === "relative"
+        ? "The simple straight-line pace baseline is fixed at 1.00. Lower lines are closer to the final table."
+        : `Lower is better: this is the average final-table error per team, measured in ${unit}.`;
+    };
+    [metricControl, scaleControl, windowControl].forEach((control) => control.addEventListener("change", render));
+    render();
+  });
+}
+
+setupEvaluationCharts();
+
 function updateForecastOutcomeLabels() {
   const fixture = document.querySelector("#forecast-fixture");
   const selected = fixture?.selectedOptions[0];

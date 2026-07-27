@@ -21,7 +21,11 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
-const defaultSeasons = "2016,2017,2018,2019,2021,2022,2023,2024,2025"
+const (
+	defaultSeasons            = "2016,2017,2018,2019,2021,2022,2023,2024,2025"
+	defaultDevelopmentSeasons = "2017,2019,2022,2024"
+	defaultHeldoutSeasons     = "2016,2018,2021,2023,2025"
+)
 
 func main() {
 	if wantsHelp(os.Args[1:]) {
@@ -61,8 +65,8 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	dbPath := flags.String("db", defaultDB, "SQLite cache database path")
 	stage := flags.String("stage", "Regular Season", "competition stage")
 	seasonList := flags.String("seasons", defaultSeasons, "comma-separated seasons")
-	development := flags.String("development", "2016,2017,2018,2019,2021,2022", "development seasons used to design and tune candidate model versions")
-	heldout := flags.String("held-out", "2023,2024,2025", "final-test seasons held out from model design")
+	development := flags.String("development", defaultDevelopmentSeasons, "development seasons used to design and tune candidate model versions")
+	heldout := flags.String("held-out", defaultHeldoutSeasons, "final-test seasons held out from model design")
 	iterations := flags.Int("iterations", 20000, "season simulations per daily cutoff")
 	resamples := flags.Int("bootstrap-resamples", 10000, "paired bootstrap resamples")
 	seed := flags.Int64("bootstrap-seed", 20251109, "paired bootstrap seed")
@@ -135,11 +139,12 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 		seasons = append(seasons, season)
 	}
 	models := []forecast.Model{}
-	for _, entry := range forecast.Catalog() {
+	for _, entry := range forecast.EvaluationCatalog() {
 		models = append(models, entry.Model)
 	}
 	report, err := backtest.Evaluate(ctx, seasons, backtest.Config{
 		Models: models, IncumbentModelID: "results-poisson-v1", Iterations: *iterations,
+		ReferenceModelIDs:  map[string]bool{"straight-line-pace-v1": true},
 		BootstrapResamples: *resamples, BootstrapSeed: *seed, GeneratedAt: generatedAt, GitCommit: gitCommit(),
 	})
 	if err != nil {

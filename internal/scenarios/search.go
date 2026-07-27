@@ -110,7 +110,11 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 	results := make(map[competition.AchievementID]Result, len(r.Achievements))
 	activeAchievements := []competition.Achievement{}
 	members := []scenarioMember{}
-	totalAssignments := pow3(len(slateGames))
+	// The total is a property of the declared ready slate, not whether this
+	// request can safely enumerate it. Keep it on unresolved results as well:
+	// cache validation and consumers can then distinguish an unevaluated slate
+	// from one with no possible assignments.
+	totalAssignments := pow3(len(r.Slate.FixtureIDs))
 	for _, achievement := range r.Achievements {
 		if achievement.ID == "" || achievement.TopK < 1 {
 			return nil, fmt.Errorf("invalid scenario achievement")
@@ -123,6 +127,9 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 			return nil, fmt.Errorf("scenario baseline does not match achievement %q", achievement.ID)
 		}
 		out := emptyResult(r.TargetTeamID, achievement)
+		if r.Slate.State == SlateReady {
+			out.TotalAssignments = totalAssignments
+		}
 		switch {
 		case baseline.Status == clinching.Clinched:
 			out.State, out.AlreadyClinched = OpportunityAlreadyClinched, true
@@ -138,7 +145,6 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 			out.State = OpportunityUnresolved
 			out.Limitation = fmt.Sprintf("slate has %d fixtures; maximum is %d", len(r.Slate.FixtureIDs), r.MaxSlateFixtures)
 		default:
-			out.TotalAssignments = totalAssignments
 			activeAchievements = append(activeAchievements, achievement)
 			members = append(members, scenarioMember{
 				achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),

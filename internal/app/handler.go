@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	evaluationdata "github.com/jrduncans/nwsl-season/docs"
+	"github.com/jrduncans/nwsl-season/internal/backtest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
@@ -80,6 +82,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
 	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
 	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
+	mux.HandleFunc("GET /seasons/{season}/model-evaluation", application.modelEvaluation)
 	mux.HandleFunc("GET /seasons/{season}/clinching", application.clinching)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
@@ -377,6 +380,27 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 	a.render(w, "schedule-difficulty", page)
 }
 
+func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
+	page, err := a.loadSeasonPage(r)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	var report backtest.Report
+	if err := json.Unmarshal(evaluationdata.ModelEvaluationV1, &report); err != nil {
+		a.renderError(w, r, fmt.Errorf("read model evaluation evidence: %w", err))
+		return
+	}
+	view, err := evaluationView(report)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	view.seasonPage = page
+	view.Title = "Model evaluation"
+	a.render(w, "model-evaluation", view)
+}
+
 func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	if a.store == nil {
 		return seasonPage{}, fmt.Errorf("season cache unavailable")
@@ -411,6 +435,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		Strength:               scheduleView,
 		FixtureGroups:          fixtureGroups(data, a.options.Location),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
+		ModelEvaluationPath:    relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),
 		SeasonPath:             seasonURL(r.URL.Path, season),

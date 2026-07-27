@@ -129,6 +129,25 @@ func TestSelectionChoosesLowestLogLossAmongQualifyingCandidates(t *testing.T) {
 	}
 }
 
+func TestSelectionDoesNotChooseEvaluationOnlyReferenceModel(t *testing.T) {
+	report := Report{
+		IncumbentModel: "incumbent", ReferenceModels: []string{"baseline"},
+		Models: []ModelResult{
+			{ID: "incumbent", Windows: map[string]WindowResult{HeldoutWindow: {Metrics: selectionMetrics(1)}}},
+			{ID: "baseline", Windows: map[string]WindowResult{HeldoutWindow: {Metrics: selectionMetrics(.5)}}},
+			{ID: "candidate", Windows: map[string]WindowResult{HeldoutWindow: {Metrics: selectionMetrics(.9)}}},
+		},
+		Comparisons: []Comparison{
+			{Candidate: "baseline", Metrics: map[string]Interval{"match_log_loss": {High: -.1, Blocks: 10}}},
+			{Candidate: "candidate", Metrics: map[string]Interval{"match_log_loss": {High: -.1, Blocks: 10}}},
+		},
+	}
+	selection := selectModel(report, true)
+	if selection.SelectedModel != "candidate" || selection.Candidates[0].Qualified || !strings.Contains(selection.Candidates[0].Reasons[0], "excluded") {
+		t.Fatalf("selection = %+v", selection)
+	}
+}
+
 func selectionMetrics(logLoss float64) MetricSet {
 	return MetricSet{
 		MatchLogLoss: Score{Mean: logLoss}, PlayoffBrier: Score{Mean: .1}, ShieldBrier: Score{Mean: .1},
