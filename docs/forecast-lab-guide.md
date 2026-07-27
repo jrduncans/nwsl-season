@@ -37,10 +37,10 @@ flowchart TD
     G --> H["Render the forecast and an optional model comparison"]
 ```
 
-The default model is currently **Results Poisson**
-(`results-poisson-v1`). It is a transparent default, not an
-evidence-backed recommendation: the historical walk-forward evaluation is
-still roadmap work. See [Model evaluation v1](model-evaluation-v1.md).
+The default model is currently **xG Poisson** (`xg-poisson-v1`). It is the
+recommendation selected by the checked-in historical walk-forward evaluation;
+see [Model evaluation v1](model-evaluation-v1.md) for its development,
+final-test, and pooled results.
 
 ## What Forecast Lab needs before it can run
 

@@ -2,16 +2,11 @@
 
 ## Status
 
-The catalog, xG cache, and Forecast Lab are implemented. The historical
-walk-forward evaluator described below is still roadmap work: the repository
-retains tested scoring helpers but does not publish an evidence-backed model
-recommendation. References below to “recommended,” `MethodPath`, or the
-`cmd/backtest` runner describe the original implementation packet, not the
-current runtime contract.
-
-Planned. This document is the implementation contract. Phase 10 is the
-baseline: preserve its simulation, fixed-result, tiebreak, and latest-cache URL
-semantics unless this document explicitly changes them.
+The catalog, xG cache, Forecast Lab, and historical walk-forward evaluator are
+implemented. The checked-in v1 evidence uses a six-season development window
+and a three-season final test, and selects `xg-poisson-v1` as the recommended
+default. Phase 10 remains the baseline for simulation, fixed-result, tiebreak,
+and latest-cache URL semantics unless this document explicitly changes them.
 
 ## Goal
 
@@ -462,19 +457,29 @@ Return fresh model values and copied slices. Validate in a catalog test that
 IDs are non-empty and unique, exactly one entry is recommended, and every
 entry's method path is non-empty.
 
-The first implementation must leave `results-poisson-v1` recommended until the
-back-test report packet is complete. The evidence packet may change the single
-catalog flag according to the precommitted selection rule below. It may not
-change any model formula in the same packet.
+The initial implementation left `results-poisson-v1` recommended until the
+back-test report packet completed. The checked-in v1 evidence selected
+`xg-poisson-v1`; future candidate versions must use the development/final-test
+protocol below and must not change a formula in the same packet that promotes
+it.
 
 ## Leakage-safe back-testing
 
 ### Evaluation data
 
 Use NWSL regular seasons 2016 through 2025 from the local cache. Exclude 2020,
-which did not have the comparable regular-season competition. Use 2016-2023 as
-the development/sanity window and 2024-2025 as the held-out recommendation
-window.
+which did not have the comparable regular-season competition. Use 2016-2019
+and 2021-2022 as the development window, and 2023-2025 as the final-test
+recommendation window.
+
+The development window is operational: it may be used to compare candidate
+model versions and choose fixed constants, priors, feature sets, or fitting
+rules through leakage-safe rolling historical evaluations. The final-test
+window must not influence any such choice. A formula or constant changed after
+examining final-test results is a new model version and cannot claim those
+results as untouched evidence; it needs a later completed season for a new
+final test. The report must show development, final-test, and pooled
+descriptive results separately; pooled results never select the recommendation.
 
 Add season rules for back-testing rather than applying the current eight-place
 format historically:
@@ -496,9 +501,10 @@ For every season, audit and report:
 - a final table calculable with the existing official-total standings rules.
 
 Exclude an invalid season from every model comparison and print the exact
-reason. For a fair recommendation comparison, the held-out common set must
-have at least 95% xG coverage in each season. If it does not, generate the
-report but retain `results-poisson-v1` as recommended.
+reason. For a fair recommendation comparison, the final-test common set must
+have at least 95% xG coverage in each season. Otherwise the command fails
+before replacing evidence artifacts; `-allow-incomplete` can write a clearly
+marked diagnostic report, and the current recommended model remains unchanged.
 
 Historical backfills contain ASA's currently published/corrected xG, not a
 record of when ASA first published each old value. State that limitation in the
@@ -553,20 +559,20 @@ metric formulas as small pure functions with hand-calculated tests.
 
 ### Precommitted recommendation rule
 
-Compare each candidate with the incumbent `results-poisson-v1` on the held-out
+Compare each candidate with the incumbent `results-poisson-v1` on the final-test
 common season-date blocks. Use 10,000 deterministic paired bootstrap resamples
 of whole season-date blocks and report the 95% interval of each metric
 difference (`candidate - incumbent`).
 
 A candidate may replace the incumbent only if:
 
-1. every held-out season passes the data audit and 95% xG-coverage gate;
+1. every final-test season passes the data audit and 95% xG-coverage gate;
 2. the entire 95% interval for match-outcome log-loss difference is below zero;
 3. its point estimate is not worse than the incumbent by more than `0.005` in
    playoff Brier, `0.002` in Shield Brier, `0.25` points in points CRPS, or
    `0.02` in position ranked probability score.
 
-If multiple candidates qualify, choose the one with the lowest held-out match
+If multiple candidates qualify, choose the one with the lowest final-test match
 log loss. If none qualifies, keep `results-poisson-v1`. A simpler model winning
 this rule is allowed; do not hard-code xG as the desired answer.
 
@@ -918,7 +924,7 @@ byte-stable report tests.
 2. Run the command with the locked 20,000 iterations and 10,000 bootstrap
    resamples.
 3. Inspect exclusions, xG coverage, calibration sample sizes, and metric
-   sanity; fix code bugs but do not tune a released model on held-out results.
+   sanity; fix code bugs but do not tune a released model on final-test results.
 4. Generate and commit the JSON and Markdown evidence.
 5. Apply the precommitted recommendation rule and change only the catalog flag
    and roadmap statement if a candidate qualifies.

@@ -149,6 +149,50 @@ go run ./cmd/standings -season 2026
 go run ./cmd/standings -season 2026 -order total
 ```
 
+Load and evaluate all required historical seasons with one explicit command:
+
+```sh
+make model-evaluation
+```
+
+It fetches the 2016–2019 and 2021–2025 regular seasons from ASA, including xG,
+then evaluates all three forecast models with the leakage-safe historical
+walk-forward runner. To only load or only evaluate, use:
+
+```sh
+make backfill-evaluation-data
+make backtest
+```
+
+The default protocol uses 2016–2019 plus 2021–2022 for model development and
+holds out 2023–2025 as the final test. Development results may guide new model
+versions and fixed constants; final-test results alone decide the recommended
+model. Pooled results are descriptive only. A model changed after inspecting
+final-test results is a new version and needs later untouched seasons for a new
+final test.
+
+The runner refuses to replace the checked-in evidence unless every requested
+season passes its data audit and each final-test season has at least 95% xG
+coverage. This prevents a partial cache from producing a misleading report. For
+inspection only, `-allow-incomplete` writes an incomplete diagnostic report
+without claiming a complete evaluation.
+
+The evaluator can also be invoked directly after the 2016–2025 regular seasons
+have been synced into the same cache:
+
+```sh
+go run ./cmd/backtest
+```
+
+The runner audits each season, uses daily UTC cutoffs (so same-day results cannot
+train one another), simulates each remaining season, calculates proper scoring
+rules and calibration, and applies the precommitted paired-bootstrap selection
+rule. It writes machine-readable evidence to `docs/model-evaluation-v1.json`
+and a readable summary to `docs/model-evaluation-v1.md`. The checked-in v1
+evidence uses 20,000 iterations and 10,000 resamples, and selects xG Poisson as
+the recommended default. Use `-generated-at` for byte-stable reruns and
+`-json`/`-markdown` to write elsewhere while testing.
+
 The sync command also supports `-db` for an explicit SQLite path and
 `-prune-history-before` for one-off cleanup of superseded run history. The
 server and sync command must use the same persistent `NWSL_DATA_DIR` when they
@@ -163,7 +207,7 @@ make vet
 make build
 ```
 
-`make build` creates host-platform server and sync binaries in `bin/`.
+`make build` creates host-platform server, sync, and back-test binaries in `bin/`.
 `make build-linux` creates Linux binaries; ARM64 is the default target and
 `TARGET_ARCH=amd64` selects x86_64:
 
@@ -172,8 +216,8 @@ make build-linux
 make build-linux TARGET_ARCH=amd64
 ```
 
-The individual build targets are `build-server`, `build-sync`,
-`build-linux-server`, and `build-linux-sync`.
+The individual build targets are `build-server`, `build-sync`, `build-backtest`,
+`build-linux-server`, `build-linux-sync`, and `build-linux-backtest`.
 
 ## Runtime and deployment
 

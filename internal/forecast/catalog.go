@@ -6,7 +6,7 @@ type CatalogEntry struct {
 }
 
 func Catalog() []CatalogEntry {
-	return []CatalogEntry{{Model: NewCurrentPaceV1()}, {Model: NewResultsPoissonV1(), Default: true}, {Model: NewXGPoissonV1()}}
+	return []CatalogEntry{{Model: NewCurrentPaceV1()}, {Model: NewResultsPoissonV1()}, {Model: NewXGPoissonV1(), Default: true}}
 }
 func Lookup(id string) (CatalogEntry, bool) {
 	for _, entry := range Catalog() {
