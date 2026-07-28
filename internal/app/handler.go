@@ -438,6 +438,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		Standings:              addTotalPositions(standingsView, totalTable, playoffPlaces(a.options.Rules)),
 		Strength:               scheduleView,
 		FixtureGroups:          fixtureGroups(data, a.options.Location),
+		FixtureTeams:           fixtureTeams(data.Teams),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),

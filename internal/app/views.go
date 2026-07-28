@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -36,6 +37,7 @@ type seasonPage struct {
 	Standings              []tableRowView
 	Strength               strengthView
 	FixtureGroups          []fixtureGroupView
+	FixtureTeams           []teamNameView
 	Remaining              int
 }
 
@@ -184,6 +186,7 @@ type fixtureView struct {
 	HomeTeam   teamNameView
 	AwayTeam   teamNameView
 	Score      string
+	XG         string
 	Completed  bool
 	Remaining  bool
 	Status     string
@@ -516,6 +519,12 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
 	}
+	xgoals := make(map[string]cache.GameXG, len(data.XGoals))
+	for _, xg := range data.XGoals {
+		if xg.Availability == cache.XGAvailable && xg.HomeXG.Valid && xg.AwayXG.Valid {
+			xgoals[xg.GameID] = xg
+		}
+	}
 	groups := []fixtureGroupView{}
 	groupIndex := map[string]int{}
 	for _, game := range data.Games {
@@ -540,10 +549,27 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 		}
 		if view.Completed && game.HomeScore.Valid && game.AwayScore.Valid {
 			view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
+			if xg, ok := xgoals[game.ASAID]; ok {
+				view.XG = fmt.Sprintf("%.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+			}
 		}
 		groups[index].Games = append(groups[index].Games, view)
 	}
 	return groups
+}
+
+func fixtureTeams(teams []standings.Team) []teamNameView {
+	values := make([]teamNameView, 0, len(teams))
+	for _, team := range teams {
+		values = append(values, teamName(team))
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].Name == values[j].Name {
+			return values[i].ID < values[j].ID
+		}
+		return values[i].Name < values[j].Name
+	})
+	return values
 }
 
 func displayName(team standings.Team) string { return standings.DisplayName(team) }

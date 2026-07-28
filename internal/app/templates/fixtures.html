@@ -4,9 +4,11 @@
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 
+{{if .FixtureTeams}}<div class="fixture-filter"><label for="fixture-team">Show fixtures for</label><select id="fixture-team" data-fixture-team-filter><option value="">All teams</option>{{range .FixtureTeams}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div><p class="note fixture-filter-summary" data-fixture-filter-summary aria-live="polite">All fixtures shown.</p><noscript><p class="note">Team filtering requires JavaScript; all fixtures are shown.</p></noscript>{{end}}
+
 {{range .FixtureGroups}}
-  <section class="fixture-group"><h2>{{.Label}}</h2>
-    <ul class="fixtures">{{range .Games}}<li><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
+  <section class="fixture-group" data-fixture-filter-section><h2>{{.Label}}</h2>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
   </section>
 {{end}}
 {{template "foot" .}}{{end}}

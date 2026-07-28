@@ -391,11 +391,40 @@ function setupClinchingTeamFilter() {
   update();
 }
 
+function setupFixtureTeamFilter() {
+  const filter = document.querySelector("[data-fixture-team-filter]");
+  const fixtures = Array.from(document.querySelectorAll("[data-fixture-home-team]"));
+  const sections = Array.from(document.querySelectorAll("[data-fixture-filter-section]"));
+  const summary = document.querySelector("[data-fixture-filter-summary]");
+  if (!filter || fixtures.length === 0) return;
+
+  const update = () => {
+    const teamID = filter.value;
+    const visibleFixtures = fixtures.filter((fixture) => !teamID || fixture.dataset.fixtureHomeTeam === teamID || fixture.dataset.fixtureAwayTeam === teamID);
+    fixtures.forEach((fixture) => { fixture.hidden = !visibleFixtures.includes(fixture); });
+    sections.forEach((section) => {
+      section.hidden = Boolean(teamID) && !visibleFixtures.some((fixture) => section.contains(fixture));
+    });
+    if (!summary) return;
+    if (!teamID) {
+      summary.textContent = "All fixtures shown.";
+      return;
+    }
+    const teamName = filter.selectedOptions[0]?.textContent ?? "this team";
+    const label = visibleFixtures.length === 1 ? "fixture" : "fixtures";
+    summary.textContent = `Showing ${visibleFixtures.length} ${label} for ${teamName}.`;
+  };
+
+  filter.addEventListener("change", update);
+  update();
+}
+
 localizeTimes();
 setupForecastControls();
 setupForecastAssumptionBuilder();
 setupScenarioCopy();
 setupClinchingTeamFilter();
+setupFixtureTeamFilter();
 
 function sortStandings(display, mode, stat) {
   const tbody = display.querySelector("[data-standings-table] tbody");

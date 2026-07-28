@@ -466,15 +466,20 @@ func TestRemovedXGRouteReturnsNotFound(t *testing.T) {
 }
 
 func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
+	data := testSeasonData()
+	data.XGoals = []cache.GameXG{{
+		GameID: "completed", Availability: cache.XGAvailable,
+		HomeXG: sql.NullFloat64{Float64: 2.36, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.11, Valid: true},
+	}}
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/fixtures", nil)
 	response := httptest.NewRecorder()
 
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, request)
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "Matchday 1", "Scheduled", `href="."`, `href="forecast"`} {
+	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="."`, `href="forecast"`} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
