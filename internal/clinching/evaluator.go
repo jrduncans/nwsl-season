@@ -157,6 +157,52 @@ func (e *Evaluator) EvaluateCheapClinched(targetTeamID string, achievement compe
 	return result, true, nil
 }
 
+// HasUniversalSlateBlocker reports whether a completion of only the fixtures
+// after slateFixtureIDs puts enough opponents strictly above the target's best
+// possible points total in that slate. Such a completion blocks the target
+// regardless of how the slate itself finishes, so no slate outcome can clinch
+// the achievement.
+func (e *Evaluator) HasUniversalSlateBlocker(ctx context.Context, targetTeamID string, achievement competition.Achievement, slateFixtureIDs []string) (bool, error) {
+	if e == nil || targetTeamID == "" || !e.teamIDs[targetTeamID] || achievement.ID == "" || achievement.TopK < 1 || achievement.TopK > len(e.teams) {
+		return false, fmt.Errorf("invalid universal slate blocker request")
+	}
+	slate := make(map[string]bool, len(slateFixtureIDs))
+	targetWins := 0
+	for _, id := range slateFixtureIDs {
+		game, ok := e.gamesByID[id]
+		if !ok || game.Status != "PreMatch" || slate[id] {
+			return false, fmt.Errorf("invalid slate fixture %q", id)
+		}
+		slate[id] = true
+		if game.HomeTeamID == targetTeamID || game.AwayTeamID == targetTeamID {
+			targetWins++
+		}
+	}
+	postGames := make([]standings.Game, 0, len(e.games)-len(slate))
+	for _, game := range e.games {
+		if !slate[game.ID] {
+			postGames = append(postGames, game)
+		}
+	}
+	postOrder := make([]string, 0, len(e.fixtureOrder)-len(slate))
+	for _, id := range e.fixtureOrder {
+		if !slate[id] {
+			postOrder = append(postOrder, id)
+		}
+	}
+	prepared, err := prepare(Request{Teams: e.teams, Games: postGames, FixtureOrder: postOrder, TargetTeamID: targetTeamID, Achievement: achievement, validated: true})
+	if err != nil {
+		return false, err
+	}
+	prepared.points[targetTeamID] += 3 * targetWins
+	prepared.frontier = prepared.points[targetTeamID]
+	blocker, err := solveCutoff(ctx, prepared, prepared.frontier+1, achievement.TopK)
+	if err != nil {
+		return false, err
+	}
+	return blocker.feasible, nil
+}
+
 // Evaluate runs the status proof followed by the conservative no-help path.
 func (e *Evaluator) Evaluate(ctx context.Context, targetTeamID string, achievement competition.Achievement, fixed []FixedResult) (AchievementResult, error) {
 	value, err := e.EvaluateStatus(ctx, targetTeamID, achievement, fixed)

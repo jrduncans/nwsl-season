@@ -330,6 +330,30 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 	}
 }
 
+func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	found := false
+	store := fullFakeStore{
+		fakeStore:     fakeStore{season: data},
+		scenarioFound: &found,
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{
+			TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.Clinched,
+		}}},
+	}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/clinching", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, value := range []string{"Recalculation pending.", "Already clinched", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the playoffs"} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+}
+
 func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
@@ -999,6 +1023,7 @@ type fullFakeStore struct {
 	fakeStore
 	qualification cache.QualificationSnapshot
 	scenario      cache.ScenarioSnapshot
+	scenarioFound *bool
 }
 
 func (f fullFakeStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
@@ -1006,6 +1031,9 @@ func (f fullFakeStore) QualificationForSnapshot(context.Context, string, string)
 }
 
 func (f fullFakeStore) ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error) {
+	if f.scenarioFound != nil {
+		return f.scenario, *f.scenarioFound, nil
+	}
 	return f.scenario, true, nil
 }
 

@@ -116,6 +116,45 @@ func TestEvaluatorCacheKeepsLiteralFixedWitness(t *testing.T) {
 	}
 }
 
+func TestUniversalSlateBlockerIgnoresEverySlateOutcome(t *testing.T) {
+	teams := []standings.Team{{ID: "target"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}}
+	zero, one := 0, 1
+	games := []standings.Game{
+		{ID: "a-c", Status: standings.CompletedStatus, HomeTeamID: "a", AwayTeamID: "c", HomeScore: &one, AwayScore: &zero},
+		{ID: "a-d", Status: standings.CompletedStatus, HomeTeamID: "a", AwayTeamID: "d", HomeScore: &one, AwayScore: &zero},
+		{ID: "b-c", Status: standings.CompletedStatus, HomeTeamID: "b", AwayTeamID: "c", HomeScore: &one, AwayScore: &zero},
+		{ID: "b-d", Status: standings.CompletedStatus, HomeTeamID: "b", AwayTeamID: "d", HomeScore: &one, AwayScore: &zero},
+		{ID: "slate", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "c"},
+	}
+	evaluator, err := NewEvaluator(teams, games, []string{"slate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := evaluator.HasUniversalSlateBlocker(context.Background(), "target", competition.Achievement{ID: "test", TopK: 2}, []string{"slate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !blocked {
+		t.Fatal("expected a post-slate blocker for every slate outcome")
+	}
+}
+
+func TestUniversalSlateBlockerLeavesPossibleSlateForScenarioSearch(t *testing.T) {
+	teams := []standings.Team{{ID: "target"}, {ID: "a"}}
+	game := standings.Game{ID: "slate", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a"}
+	evaluator, err := NewEvaluator(teams, []standings.Game{game}, []string{"slate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := evaluator.HasUniversalSlateBlocker(context.Background(), "target", competition.Achievement{ID: "test", TopK: 1}, []string{"slate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocked {
+		t.Fatal("a possible slate clinch was incorrectly blocked")
+	}
+}
+
 func TestBinaryNoHelpMatchesLinearPrefixEnumeration(t *testing.T) {
 	random := rand.New(rand.NewSource(20260722))
 	for trial := 0; trial < 100; trial++ {

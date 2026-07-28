@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -56,6 +57,7 @@ type scenarioMember struct {
 	eliminationClauses    []Clause
 	alreadyEliminated     bool
 	trackElimination      bool
+	skipOpportunity       bool
 	diag                  Diagnostics
 }
 
@@ -141,15 +143,32 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 			out.State, out.Limitation = OpportunityUnresolved, r.Slate.Reason
 		case slateProblem != "":
 			out.State, out.Limitation = OpportunityUnresolved, slateProblem
-		case len(r.Slate.FixtureIDs) > r.MaxSlateFixtures:
-			out.State = OpportunityUnresolved
-			out.Limitation = fmt.Sprintf("slate has %d fixtures; maximum is %d", len(r.Slate.FixtureIDs), r.MaxSlateFixtures)
-		default:
-			activeAchievements = append(activeAchievements, achievement)
-			members = append(members, scenarioMember{
-				achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),
-				eliminated: newAssignmentBits(totalAssignments), trackElimination: achievement.ID == competition.AchievementPlayoffs,
-			})
+		case r.Slate.State == SlateReady:
+			blocked, err := r.Evaluator.HasUniversalSlateBlocker(ctx, r.TargetTeamID, achievement, r.Slate.FixtureIDs)
+			if err != nil && !errors.Is(err, clinching.ErrComputeBudget) {
+				return nil, err
+			}
+			if blocked {
+				out.State = OpportunityCannotClinch
+				// Playoff elimination still uses the exact slate traversal when it
+				// is within the normal safety limit. The blocker has already
+				// settled clinching, so avoid status-oracle work on every leaf.
+				if achievement.ID == competition.AchievementPlayoffs && len(r.Slate.FixtureIDs) <= r.MaxSlateFixtures {
+					members = append(members, scenarioMember{
+						achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),
+						eliminated: newAssignmentBits(totalAssignments), trackElimination: true, skipOpportunity: true,
+					})
+				}
+			} else if len(r.Slate.FixtureIDs) > r.MaxSlateFixtures {
+				out.State = OpportunityUnresolved
+				out.Limitation = fmt.Sprintf("slate has %d fixtures; maximum is %d", len(r.Slate.FixtureIDs), r.MaxSlateFixtures)
+			} else {
+				activeAchievements = append(activeAchievements, achievement)
+				members = append(members, scenarioMember{
+					achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),
+					eliminated: newAssignmentBits(totalAssignments), trackElimination: achievement.ID == competition.AchievementPlayoffs,
+				})
+			}
 		}
 		results[achievement.ID] = out
 	}
@@ -313,6 +332,10 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 				markCoverage(member.eliminated, clause.Conditions, s.slateGames)
 			}
 			member.diag.OpportunityPrunes++
+			continue
+		}
+		if member.skipOpportunity {
+			remaining |= bit
 			continue
 		}
 		if s.opportunityImpossible(member.achievement.TopK) {

@@ -220,6 +220,7 @@ type clinchingPage struct {
 	NoHelp           []clinchingRowView
 	NoHelpTeams      []clinchingTeamView
 	Elimination      []clinchingRowView
+	AlreadyClinched  []clinchingRowView
 	ClinchingTeams   []teamNameView
 }
 type clinchingRowView struct {
