@@ -407,7 +407,7 @@ function setupFixtureTeamFilter() {
     });
     if (!summary) return;
     if (!teamID) {
-      summary.textContent = "All fixtures shown.";
+      summary.textContent = "All teams shown.";
       return;
     }
     const teamName = filter.selectedOptions[0]?.textContent ?? "this team";
@@ -419,12 +419,31 @@ function setupFixtureTeamFilter() {
   update();
 }
 
+function setupFixtureViews() {
+  const toggle = document.querySelector("[data-fixture-view-toggle]");
+  const buttons = Array.from(document.querySelectorAll("[data-fixture-view-button]"));
+  const views = Array.from(document.querySelectorAll("[data-fixture-view]"));
+  if (!toggle || buttons.length === 0 || views.length === 0) return;
+
+  const show = (selected) => {
+    views.forEach((view) => { view.hidden = view.dataset.fixtureView !== selected; });
+    buttons.forEach((button) => { button.setAttribute("aria-pressed", String(button.dataset.fixtureViewButton === selected)); });
+  };
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => show(button.dataset.fixtureViewButton));
+  });
+  toggle.hidden = false;
+  show("results");
+}
+
 localizeTimes();
 setupForecastControls();
 setupForecastAssumptionBuilder();
 setupScenarioCopy();
 setupClinchingTeamFilter();
 setupFixtureTeamFilter();
+setupFixtureViews();
 
 function sortStandings(display, mode, stat) {
   const tbody = display.querySelector("[data-standings-table] tbody");

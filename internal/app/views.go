@@ -36,7 +36,8 @@ type seasonPage struct {
 	XGWarning              string
 	Standings              []tableRowView
 	Strength               strengthView
-	FixtureGroups          []fixtureGroupView
+	ResultFixtureGroups    []fixtureGroupView
+	UpcomingFixtureGroups  []fixtureGroupView
 	FixtureTeams           []teamNameView
 	Remaining              int
 }
@@ -556,6 +557,38 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 		groups[index].Games = append(groups[index].Games, view)
 	}
 	return groups
+}
+
+// fixtureGroupsByStatus separates the fixtures-page views without changing the
+// canonical chronological grouping used elsewhere in the app. Completed games
+// are shown newest first; unfinished fixtures remain in kickoff order.
+func fixtureGroupsByStatus(data cache.SeasonData, location *time.Location) (results, upcoming []fixtureGroupView) {
+	for _, group := range fixtureGroups(data, location) {
+		resultGroup := fixtureGroupView{Label: group.Label}
+		upcomingGroup := fixtureGroupView{Label: group.Label}
+		for _, game := range group.Games {
+			if game.Completed {
+				resultGroup.Games = append(resultGroup.Games, game)
+			} else {
+				upcomingGroup.Games = append(upcomingGroup.Games, game)
+			}
+		}
+		if len(resultGroup.Games) > 0 {
+			results = append(results, resultGroup)
+		}
+		if len(upcomingGroup.Games) > 0 {
+			upcoming = append(upcoming, upcomingGroup)
+		}
+	}
+	for left, right := 0, len(results)-1; left < right; left, right = left+1, right-1 {
+		results[left], results[right] = results[right], results[left]
+	}
+	for index := range results {
+		for left, right := 0, len(results[index].Games)-1; left < right; left, right = left+1, right-1 {
+			results[index].Games[left], results[index].Games[right] = results[index].Games[right], results[index].Games[left]
+		}
+	}
+	return results, upcoming
 }
 
 func fixtureTeams(teams []standings.Team) []teamNameView {
