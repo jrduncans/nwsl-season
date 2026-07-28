@@ -55,6 +55,7 @@ type TeamResult struct {
 	PositionLow         int
 	PositionHigh        int
 	PositionProbability []float64
+	TopFourProbability  float64
 	PlayoffProbability  float64
 	ShieldProbability   float64
 }
@@ -135,8 +136,8 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		rows = append(rows, resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces))
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].ExpectedPosition != rows[j].ExpectedPosition {
-			return rows[i].ExpectedPosition < rows[j].ExpectedPosition
+		if rows[i].TopFourProbability != rows[j].TopFourProbability {
+			return rows[i].TopFourProbability > rows[j].TopFourProbability
 		}
 		if rows[i].ExpectedPoints != rows[j].ExpectedPoints {
 			return rows[i].ExpectedPoints > rows[j].ExpectedPoints
@@ -332,6 +333,9 @@ func resultFromAccumulator(value *accumulator, iterations, playoffPlaces int) Te
 		result.PositionProbability[index] = count / total
 		result.ExpectedPosition += float64(position) * count / total
 		positionValues[position] = count
+		if position <= 4 {
+			result.TopFourProbability += count / total
+		}
 		if position <= playoffPlaces {
 			result.PlayoffProbability += count / total
 		}
