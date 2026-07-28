@@ -471,6 +471,41 @@ func TestGenerateRetainsTotalAssignmentsWhenSlateExceedsLimit(t *testing.T) {
 	}
 }
 
+func TestGenerateSkipsOversizedSlateWhenUniversalBlockerExists(t *testing.T) {
+	teams := []standings.Team{{ID: "target"}, {ID: "a"}, {ID: "b"}}
+	zero, one := 0, 1
+	games := []standings.Game{{ID: "played", Status: standings.CompletedStatus, HomeTeamID: "a", AwayTeamID: "b", HomeScore: &one, AwayScore: &zero}}
+	scheduled := make([]ScheduledGame, 0, 11)
+	start := time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC)
+	for i := 0; i < 11; i++ {
+		id := fmt.Sprintf("slate-%d", i)
+		games = append(games, standings.Game{ID: id, Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b"})
+		scheduled = append(scheduled, ScheduledGame{ID: id, Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: start, Matchday: intPtr(4)})
+	}
+	slate, err := DefineSlate(scheduled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := clinching.NewEvaluator(teams, games, slate.FixtureIDs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 1}
+	result, err := Generate(context.Background(), Request{
+		Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: "target", Achievement: achievement,
+		Baseline: clinching.AchievementResult{TeamID: "target", Achievement: achievement.ID, TopK: achievement.TopK, Status: clinching.NotClinched},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != OpportunityCannotClinch || result.Limitation != "" {
+		t.Fatalf("result = %+v, want a conclusive no-clinch result", result)
+	}
+	if err := result.Validate(slate); err != nil {
+		t.Fatalf("universal-blocker result failed validation: %v", err)
+	}
+}
+
 func scenarioSemanticKey(result Result) string {
 	clauses := make([]string, len(result.Clauses))
 	for i, clause := range result.Clauses {

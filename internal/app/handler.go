@@ -97,7 +97,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.Title = page.Season + " clinching scenarios"
-	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
+	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, AlreadyClinched: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
 	})
@@ -111,23 +111,6 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version, scenarios.DefinitionVersion)
-	if err != nil {
-		a.renderError(w, r, err)
-		return
-	}
-	if !found {
-		view.State = "Recalculation pending."
-		a.render(w, "clinching", view)
-		return
-	}
-	view.Slate = snapshot.Run.Slate
-	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
-	view.SlateStartsAt = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
-	view.SlateLatestUTC = snapshot.Run.Slate.LatestKickoffUTC.UTC().Format(time.RFC3339)
-	view.SlateLatest = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
-	view.SlateCutoffUTC = snapshot.Run.Slate.CutoffUTC.UTC().Format(time.RFC3339)
-	view.SlateCutoff = snapshot.Run.Slate.CutoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
 	teamLabels := map[string]string{}
 	teamViews := map[string]teamNameView{}
 	for _, t := range data.Teams {
@@ -154,9 +137,30 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if found {
 			for _, status := range value.Statuses {
 				qualification[status.TeamID+"\x00"+string(status.Achievement)] = status
+				if status.Status == clinching.Clinched {
+					view.AlreadyClinched = append(view.AlreadyClinched, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID], Clauses: []string{}, Necessary: []string{}})
+				}
 			}
 		}
 	}
+	sort.Slice(view.AlreadyClinched, func(i, j int) bool { return clinchingRowLess(view.AlreadyClinched[i], view.AlreadyClinched[j]) })
+	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version, scenarios.DefinitionVersion)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	if !found {
+		view.State = "Recalculation pending."
+		a.render(w, "clinching", view)
+		return
+	}
+	view.Slate = snapshot.Run.Slate
+	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
+	view.SlateStartsAt = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
+	view.SlateLatestUTC = snapshot.Run.Slate.LatestKickoffUTC.UTC().Format(time.RFC3339)
+	view.SlateLatest = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
+	view.SlateCutoffUTC = snapshot.Run.Slate.CutoffUTC.UTC().Format(time.RFC3339)
+	view.SlateCutoff = snapshot.Run.Slate.CutoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
 	slateIDs := map[string]bool{}
 	for _, id := range snapshot.Run.Slate.FixtureIDs {
 		slateIDs[id] = true
