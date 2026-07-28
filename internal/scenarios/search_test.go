@@ -440,8 +440,8 @@ func TestGenerateRetainsTotalAssignmentsWhenSlateExceedsLimit(t *testing.T) {
 		home, away := fmt.Sprintf("home-%d", i), fmt.Sprintf("away-%d", i)
 		teams = append(teams, standings.Team{ID: home}, standings.Team{ID: away})
 		id := fmt.Sprintf("g-%d", i)
-		games = append(games, standings.Game{ID: id, Status: standings.PreMatchStatus, HomeTeamID: home, AwayTeamID: away})
-		scheduled = append(scheduled, ScheduledGame{ID: id, Status: fixtures.PreMatchStatus, HomeTeamID: home, AwayTeamID: away, KickoffUTC: start, Matchday: intPtr(4)})
+		games = append(games, standings.Game{ID: id, Status: "PreMatch", HomeTeamID: home, AwayTeamID: away})
+		scheduled = append(scheduled, ScheduledGame{ID: id, Status: "PreMatch", HomeTeamID: home, AwayTeamID: away, KickoffUTC: start, Matchday: intPtr(4)})
 	}
 	slate, err := DefineSlate(scheduled)
 	if err != nil {

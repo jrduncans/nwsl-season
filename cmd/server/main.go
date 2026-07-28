@@ -90,7 +90,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	rules, knownRules := competition.ForSeason(cfg.SyncSeason, cfg.SyncStage)
 	if knownRules {
 		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget, Progress: operations.QualificationTelemetry(logger)}
-		service.Scenarios = scenariorefresh.Refresher{Store: db, Rules: rules, Budget: cfg.ScenarioBudget, Progress: operations.ScenarioTelemetry(logger)}
+		service.Scenarios = scenariorefresh.Refresher{Store: db, Rules: rules, Budget: cfg.ScenarioBudget, MaxSlateFixtures: cfg.MaxSlateFixtures, Progress: operations.ScenarioTelemetry(logger)}
 	} else {
 		logger.Warn("qualification unavailable: no configured season rules", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
 	}

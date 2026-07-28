@@ -24,6 +24,7 @@ const (
 	defaultSyncTimeout            = 20 * time.Second
 	defaultQualificationBudget    = 5 * time.Second
 	defaultScenarioBudget         = 30 * time.Second
+	defaultMaxSlateFixtures       = 10
 	defaultHistoryRetention       = 90 * 24 * time.Hour
 	defaultForecastConcurrency    = 2
 	defaultForecastTimeout        = 15 * time.Second
@@ -43,6 +44,7 @@ type Config struct {
 	SyncTimeout            time.Duration
 	QualificationBudget    time.Duration
 	ScenarioBudget         time.Duration
+	MaxSlateFixtures       int
 	HistoryRetention       time.Duration
 	ForecastConcurrency    int
 	ForecastTimeout        time.Duration
@@ -75,6 +77,10 @@ func FromEnvironment() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	maxSlateFixtures, err := positiveIntFromEnvironment("NWSL_MAX_SLATE_FIXTURES", defaultMaxSlateFixtures)
+	if err != nil {
+		return Config{}, err
+	}
 	historyRetention, err := durationFromEnvironment("NWSL_HISTORY_RETENTION", defaultHistoryRetention)
 	if err != nil {
 		return Config{}, err
@@ -101,6 +107,7 @@ func FromEnvironment() (Config, error) {
 		SyncTimeout:            timeout,
 		QualificationBudget:    qualificationBudget,
 		ScenarioBudget:         scenarioBudget,
+		MaxSlateFixtures:       maxSlateFixtures,
 		HistoryRetention:       historyRetention,
 		ForecastConcurrency:    forecastConcurrency,
 		ForecastTimeout:        forecastTimeout,
