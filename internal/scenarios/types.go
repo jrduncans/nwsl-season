@@ -11,7 +11,12 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 )
 
-const DefinitionVersion = "next-slate-v2"
+const DefinitionVersion = "next-slate-v3"
+
+const (
+	LimitationBudgetExhausted = "scenario computation budget exhausted"
+	LimitationBudgetPartial   = "scenario computation budget exhausted; published clauses are certified, but additional paths may exist"
+)
 
 type SlateState string
 
@@ -87,6 +92,13 @@ type Result struct {
 	// being inferred. These fields are populated only for the playoffs.
 	AlreadyEliminated, CanBeEliminated bool
 	EliminationClauses                 []Clause
+}
+
+// BudgetLimited reports whether a result came from an incomplete search. A
+// partial result may still contain sufficient clauses, but is retried so a
+// later run can discover more of them.
+func (r Result) BudgetLimited() bool {
+	return r.Limitation == LimitationBudgetExhausted || r.Limitation == LimitationBudgetPartial
 }
 
 func empty[T any]() []T { return []T{} }

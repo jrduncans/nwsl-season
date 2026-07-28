@@ -25,6 +25,9 @@ func TestShouldRetryComputeBudget(t *testing.T) {
 	if !shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"}}}}) {
 		t.Fatal("compute-budget result should be retried")
 	}
+	if !shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityCanClinch, Limitation: scenarios.LimitationBudgetPartial}}}}) {
+		t.Fatal("partial compute-budget result should be retried")
+	}
 	if shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "a clinch may depend on score"}}}}) {
 		t.Fatal("non-budget unresolved result should not be retried")
 	}

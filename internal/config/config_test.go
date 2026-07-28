@@ -16,7 +16,8 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_SYNC_COMPLETION_GRACE", "")
 	t.Setenv("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", "")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "")
-	t.Setenv("NWSL_MAX_SLATE_FIXTURES", "")
+	t.Setenv("NWSL_QUALIFICATION_BUDGET", "")
+	t.Setenv("NWSL_SCENARIO_BUDGET", "")
 	t.Setenv("NWSL_HISTORY_RETENTION", "")
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "")
@@ -47,8 +48,8 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	if got.HistoryRetention != defaultHistoryRetention {
 		t.Errorf("history retention = %s, want %s", got.HistoryRetention, defaultHistoryRetention)
 	}
-	if got.MaxSlateFixtures != defaultMaxSlateFixtures {
-		t.Errorf("MaxSlateFixtures = %d, want %d", got.MaxSlateFixtures, defaultMaxSlateFixtures)
+	if got.ScenarioBudget != defaultScenarioBudget {
+		t.Errorf("ScenarioBudget = %s, want %s", got.ScenarioBudget, defaultScenarioBudget)
 	}
 }
 
@@ -64,7 +65,8 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	t.Setenv("NWSL_SYNC_COMPLETION_GRACE", "4h")
 	t.Setenv("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", "45m")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "25s")
-	t.Setenv("NWSL_MAX_SLATE_FIXTURES", "11")
+	t.Setenv("NWSL_QUALIFICATION_BUDGET", "12s")
+	t.Setenv("NWSL_SCENARIO_BUDGET", "75s")
 	t.Setenv("NWSL_HISTORY_RETENTION", "2160h")
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "3")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "40s")
@@ -92,8 +94,11 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	if got.HistoryRetention != 90*24*time.Hour {
 		t.Errorf("history retention = %s, want 90d", got.HistoryRetention)
 	}
-	if got.MaxSlateFixtures != 11 {
-		t.Errorf("MaxSlateFixtures = %d, want 11", got.MaxSlateFixtures)
+	if got.ScenarioBudget != 75*time.Second {
+		t.Errorf("ScenarioBudget = %s, want 75s", got.ScenarioBudget)
+	}
+	if got.QualificationBudget != 12*time.Second {
+		t.Errorf("QualificationBudget = %s, want 12s", got.QualificationBudget)
 	}
 }
 

@@ -23,11 +23,10 @@ type Store interface {
 	RecordScenarioFailure(context.Context, cache.ScenarioRun, error) error
 }
 type Refresher struct {
-	Store            Store
-	Rules            competition.Rules
-	Budget           time.Duration
-	MaxSlateFixtures int
-	Progress         func(Progress)
+	Store    Store
+	Rules    competition.Rules
+	Budget   time.Duration
+	Progress func(Progress)
 }
 
 // Progress reports one team/achievement scenario calculation boundary.
@@ -84,7 +83,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 // later sync pick up an optimizer improvement or a larger configured budget.
 func shouldRetryComputeBudget(snapshot cache.ScenarioSnapshot) bool {
 	for _, result := range snapshot.Results {
-		if result.State == scenarios.OpportunityUnresolved && result.Limitation == "scenario computation budget exhausted" {
+		if result.BudgetLimited() {
 			return true
 		}
 	}
@@ -186,7 +185,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			r.report(Progress{Phase: "started", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), BatchElapsed: time.Since(batchStarted)})
 		}
 		probeStarted := time.Now()
-		teamResults, err := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases, MaxSlateFixtures: r.MaxSlateFixtures})
+		teamResults, err := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
 		if err != nil {
 			return calculated{}, err
 		}
