@@ -4,7 +4,9 @@ data/
 # Local configuration
 .env
 config.env
-.codex/
+.codex/*
+!.codex/
+!.codex/config.toml
 
 # Build and test output
 bin/
