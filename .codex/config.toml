@@ -1,0 +1,6 @@
+# This project selects the global Go profile. The `workspace` alias handles
+# Desktop Worktree sessions that request that profile name during startup.
+default_permissions = "go-web"
+
+[permissions.workspace]
+extends = "go-web"
