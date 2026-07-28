@@ -79,6 +79,19 @@ func TestRunSplitsUnknownFinalTie(t *testing.T) {
 	}
 }
 
+func TestRunReportsTopFourProbability(t *testing.T) {
+	teams := []standings.Team{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	result, err := Run(context.Background(), Request{Teams: teams, Model: fixedModel{}, Iterations: 10, PlayoffPlaces: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range result.Teams {
+		if row.TopFourProbability != .8 {
+			t.Fatalf("top-four probability for %q = %.1f, want 0.8", row.Team.ID, row.TopFourProbability)
+		}
+	}
+}
+
 func TestRunIsDeterministicForSameSnapshot(t *testing.T) {
 	request := Request{
 		Teams: []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}},

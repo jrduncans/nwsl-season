@@ -42,8 +42,8 @@
   <div class="table-scroll">
     <table class="forecast-comparison-table" aria-describedby="forecast-comparison-direction">
       <caption>{{.ComparisonName}} → {{.ModelName}} by team</caption>
-      <thead><tr><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoff chance</th><th scope="col">Expected finish</th><th scope="col">Shield chance</th></tr></thead>
-      <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td class="comparison-{{.PointsDeltaTone}}"><strong>{{.ExpectedPointsDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ExpectedPoints}} → {{.ExpectedPoints}} pts</span></td><td class="comparison-{{.PlayoffDeltaTone}}"><strong>{{.PlayoffDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.PlayoffChance}} → {{.PlayoffChance}}</span></td><td class="comparison-{{.FinishDeltaTone}}"><strong>{{.FinishDeltaLabel}}</strong><span class="forecast-comparison-values">{{.Comparison.ExpectedFinish}} → {{.ExpectedFinish}}</span></td><td class="comparison-{{.ShieldDeltaTone}}"><strong>{{.ShieldDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ShieldChance}} → {{.ShieldChance}}</span></td></tr>{{end}}</tbody>
+      <thead><tr><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Top 4 chance</th><th scope="col">Playoff chance</th><th scope="col">Shield chance</th></tr></thead>
+      <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td class="comparison-{{.PointsDeltaTone}}"><strong>{{.ExpectedPointsDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ExpectedPoints}} → {{.ExpectedPoints}} pts</span></td><td class="comparison-{{.TopFourDeltaTone}}"><strong>{{.TopFourDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.TopFourChance}} → {{.TopFourChance}}</span></td><td class="comparison-{{.PlayoffDeltaTone}}"><strong>{{.PlayoffDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.PlayoffChance}} → {{.PlayoffChance}}</span></td><td class="comparison-{{.ShieldDeltaTone}}"><strong>{{.ShieldDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ShieldChance}} → {{.ShieldChance}}</span></td></tr>{{end}}</tbody>
     </table>
   </div>
 </section>
@@ -51,20 +51,20 @@
 
 <section class="forecast-results" aria-labelledby="forecast-title">
   <div class="section-heading">
-    <div><h2 id="forecast-title">Projected finish</h2><p class="note">Sorted by expected finish · Ranges show the middle 80%.</p></div>
+    <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by top-4 chance. Expand a team’s finish distribution for its range of outcomes.</p></div>
     <p class="forecast-cutline"><strong>Playoff line:</strong> top {{.PlayoffPlaces}}</p>
   </div>
   <div class="table-scroll">
     <table class="forecast-table">
       <caption>{{.Season}} regular-season forecast</caption>
-      <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoffs</th><th scope="col">Expected finish</th><th class="forecast-shield" scope="col">Shield</th></tr></thead>
+      <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Top 4</th><th scope="col">Playoffs</th><th class="forecast-shield" scope="col">Shield</th></tr></thead>
       <tbody>{{range .Rows}}
         <tr{{if .PlayoffLine}} class="forecast-playoff-line"{{end}}>
           <td class="forecast-rank">{{.Rank}}</td>
-          <th scope="row"><div class="forecast-team">{{template "teamName" .Team}}<details class="forecast-distribution"><summary aria-label="{{.Team.Name}} finishing-position distribution">Finish distribution</summary><ul>{{range .PositionBreakdown}}<li>{{.Position}}: {{.Probability}}</li>{{end}}</ul></details></div></th>
+          <th scope="row"><div class="forecast-team">{{template "teamName" .Team}}<details class="forecast-distribution"><summary aria-label="{{.Team.Name}} finishing-position distribution">Finish distribution</summary><p class="forecast-distribution-range">Middle 80%: {{.FinishInterval}}</p><ul>{{range .PositionBreakdown}}<li>{{.Position}}: {{.Probability}}</li>{{end}}</ul></details></div></th>
           <td><strong>{{.ExpectedPoints}}</strong><span class="forecast-range">80%: {{.PointsInterval}}</span></td>
+          <td><strong>{{.TopFourChance}}</strong><span class="forecast-probability-track" aria-hidden="true"><span style="width: {{.TopFourWidth}}"></span></span></td>
           <td><strong>{{.PlayoffChance}}</strong><span class="forecast-probability-track" aria-hidden="true"><span style="width: {{.PlayoffWidth}}"></span></span></td>
-          <td><strong>{{.ExpectedFinish}}</strong><span class="forecast-range">80%: {{.FinishInterval}}</span></td>
           <td class="forecast-shield">{{.ShieldChance}}</td>
         </tr>
       {{end}}</tbody>

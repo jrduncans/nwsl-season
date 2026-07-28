@@ -198,15 +198,15 @@ of independent per-fixture percentages.
 | --- | --- |
 | Expected points | Mean final points across simulated seasons. |
 | 80% points interval | The 10th through 90th percentile final-points range. |
+| Top 4 | Share of the position distribution that finishes first through fourth. |
 | Playoffs | Share of the position distribution inside the configured playoff field. |
-| Expected finish | Mean final position; lower is better. |
-| 80% finish interval | The 10th through 90th percentile finishing-position range. |
 | Shield | First-place share of the position distribution. |
-| Position distribution | Probability for every finishing place with non-zero probability. |
+| Finish distribution | The 10th through 90th percentile finishing-position range and probability for every finishing place with non-zero probability. |
 
-The table is sorted by expected finish, then expected points, then a stable
-team name/ID order. An expected finish of 3.4 is an average over possibilities,
-not a prediction that a team can literally finish third-and-two-fifths.
+The table is sorted by top-4 chance, then expected points, then a stable team
+name/ID order. The full finish distribution is available from each team row,
+so the range of plausible finishes remains visible without presenting an
+average finishing position as a literal outcome.
 
 ### Comparing models
 
@@ -215,10 +215,8 @@ fixtures, fixed outcomes, iteration count, and playoff rules. The table keeps
 the active model as the main row and shows the comparison metrics plus
 `comparison − active` deltas:
 
-- expected-point and expected-finish deltas are shown to one decimal;
-- playoff and Shield deltas are percentage points; and
-- a negative expected-finish delta is better, because smaller finishing
-  positions are better.
+- expected-point deltas are shown to one decimal; and
+- top-4, playoff, and Shield deltas are percentage points.
 
 The models do not share forced random score samples. Each model has its own
 deterministic seed because their score distributions are different. The

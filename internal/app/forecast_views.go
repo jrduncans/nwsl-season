@@ -66,26 +66,26 @@ type forecastRowView struct {
 	Team                teamNameView
 	ExpectedPoints      string
 	PointsInterval      string
+	TopFourChance       string
+	TopFourWidth        string
 	PlayoffChance       string
 	PlayoffWidth        string
-	ExpectedFinish      string
 	FinishInterval      string
 	ShieldChance        string
 	PositionBreakdown   []forecastPositionView
 	Comparison          *forecastRowMetrics
 	ExpectedPointsDelta string
+	TopFourDelta        string
 	PlayoffDelta        string
-	FinishDelta         string
-	FinishDeltaLabel    string
 	ShieldDelta         string
 	PointsDeltaTone     string
+	TopFourDeltaTone    string
 	PlayoffDeltaTone    string
-	FinishDeltaTone     string
 	ShieldDeltaTone     string
 }
 type forecastRowMetrics struct {
-	ExpectedPoints, PlayoffChance, ExpectedFinish, ShieldChance string
-	PositionBreakdown                                           []forecastPositionView
+	ExpectedPoints, TopFourChance, PlayoffChance, ShieldChance string
+	PositionBreakdown                                          []forecastPositionView
 }
 type forecastModelView struct {
 	ID, Name, Detail, Inputs, Assumptions string
@@ -129,9 +129,10 @@ func forecastRows(result simulation.Result, playoffPlaces int) []forecastRowView
 			Team:           teamName(row.Team),
 			ExpectedPoints: fmt.Sprintf("%.1f", row.ExpectedPoints),
 			PointsInterval: fmt.Sprintf("%d–%d", row.PointsLow, row.PointsHigh),
+			TopFourChance:  percent(row.TopFourProbability),
+			TopFourWidth:   percent(row.TopFourProbability),
 			PlayoffChance:  percent(row.PlayoffProbability),
 			PlayoffWidth:   percent(row.PlayoffProbability),
-			ExpectedFinish: fmt.Sprintf("%.1f", row.ExpectedPosition),
 			FinishInterval: fmt.Sprintf("%d–%d", row.PositionLow, row.PositionHigh),
 			ShieldChance:   percent(row.ShieldProbability),
 		}
@@ -157,7 +158,7 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 	}
 	for i := range rows {
 		other := byID[active.Teams[i].Team.ID]
-		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), PlayoffChance: percent(other.PlayoffProbability), ExpectedFinish: fmt.Sprintf("%.1f", other.ExpectedPosition), ShieldChance: percent(other.ShieldProbability)}
+		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), TopFourChance: percent(other.TopFourProbability), PlayoffChance: percent(other.PlayoffProbability), ShieldChance: percent(other.ShieldProbability)}
 		for p, prob := range other.PositionProbability {
 			if prob > 0 {
 				metrics.PositionBreakdown = append(metrics.PositionBreakdown, forecastPositionView{Position: p + 1, Probability: percent(prob)})
@@ -168,28 +169,20 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 		// The selected model is the subject of the comparison: every label
 		// describes what it projects relative to the optional comparison model.
 		pointsDelta := source.ExpectedPoints - other.ExpectedPoints
+		topFourDelta := (source.TopFourProbability - other.TopFourProbability) * 100
 		playoffDelta := (source.PlayoffProbability - other.PlayoffProbability) * 100
 		shieldDelta := (source.ShieldProbability - other.ShieldProbability) * 100
 		rows[i].ExpectedPointsDelta = comparisonChangeLabel(pointsDelta, "more points", "fewer points")
+		rows[i].TopFourDelta = comparisonChangeLabel(topFourDelta, "pp higher", "pp lower")
 		rows[i].PlayoffDelta = comparisonChangeLabel(playoffDelta, "pp higher", "pp lower")
-		finishDelta := source.ExpectedPosition - other.ExpectedPosition
-		rows[i].FinishDelta = signedOne(finishDelta)
-		rows[i].FinishDeltaLabel = finishDeltaLabel(finishDelta)
 		rows[i].ShieldDelta = comparisonChangeLabel(shieldDelta, "pp higher", "pp lower")
 		rows[i].PointsDeltaTone = comparisonTone(pointsDelta, true)
+		rows[i].TopFourDeltaTone = comparisonTone(topFourDelta, true)
 		rows[i].PlayoffDeltaTone = comparisonTone(playoffDelta, true)
-		rows[i].FinishDeltaTone = comparisonTone(finishDelta, false)
 		rows[i].ShieldDeltaTone = comparisonTone(shieldDelta, true)
 	}
 	return rows
 }
-func signedOne(value float64) string {
-	if value > -.05 && value < .05 {
-		return "0.0"
-	}
-	return fmt.Sprintf("%+.1f", value)
-}
-
 func comparisonChangeLabel(value float64, positive, negative string) string {
 	if value > -.05 && value < .05 {
 		return "No material change"
@@ -198,16 +191,6 @@ func comparisonChangeLabel(value float64, positive, negative string) string {
 		return fmt.Sprintf("%.1f %s", -value, negative)
 	}
 	return fmt.Sprintf("%.1f %s", value, positive)
-}
-
-func finishDeltaLabel(value float64) string {
-	if value < -.05 {
-		return fmt.Sprintf("%.1f places better", -value)
-	}
-	if value > .05 {
-		return fmt.Sprintf("%.1f places worse", value)
-	}
-	return "No material change"
 }
 
 func comparisonTone(value float64, higherIsBetter bool) string {
