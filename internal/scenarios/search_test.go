@@ -426,12 +426,12 @@ func TestGenerateDiscardsPartialCoverageAfterCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.State != OpportunityUnresolved || result.Limitation != "scenario computation budget exhausted" || len(result.Clauses) != 0 || result.CertifiedAssignments != 0 {
+	if result.State != OpportunityUnresolved || result.Limitation != LimitationBudgetPartial || len(result.Clauses) != 0 || result.CertifiedAssignments != 0 {
 		t.Fatalf("canceled result published partial work: %+v", result)
 	}
 }
 
-func TestGenerateRetainsTotalAssignmentsWhenSlateExceedsLimit(t *testing.T) {
+func TestGenerateAttemptsSlateBeyondFormerFixtureLimit(t *testing.T) {
 	teams := make([]standings.Team, 0, 22)
 	games := make([]standings.Game, 0, 11)
 	scheduled := make([]ScheduledGame, 0, 11)
@@ -452,7 +452,9 @@ func TestGenerateRetainsTotalAssignmentsWhenSlateExceedsLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 8}
-	result, err := Generate(context.Background(), Request{
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := Generate(ctx, Request{
 		Evaluator: evaluator, Teams: teams, Games: games, Slate: slate, TargetTeamID: teams[0].ID,
 		Achievement: achievement,
 		Baseline:    clinching.AchievementResult{TeamID: teams[0].ID, Achievement: achievement.ID, TopK: achievement.TopK, Status: clinching.NotClinched},
@@ -460,14 +462,29 @@ func TestGenerateRetainsTotalAssignmentsWhenSlateExceedsLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.State != OpportunityUnresolved || result.Limitation != "slate has 11 fixtures; maximum is 10" {
-		t.Fatalf("result = %+v, want an unevaluated oversized-slate result", result)
+	if result.State != OpportunityUnresolved || result.Limitation != LimitationBudgetPartial {
+		t.Fatalf("result = %+v, want a budget-limited discovery result", result)
 	}
 	if want := pow3(11); result.TotalAssignments != want {
 		t.Fatalf("total assignments = %d, want %d", result.TotalAssignments, want)
 	}
 	if err := result.Validate(slate); err != nil {
-		t.Fatalf("oversized-slate result failed validation: %v", err)
+		t.Fatalf("large-slate result failed validation: %v", err)
+	}
+}
+
+func TestFinishDiscoveredScenarioPublishesCertifiedPartialClauses(t *testing.T) {
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 8}
+	out := emptyResult("target", achievement)
+	out.TotalAssignments = 9
+	member := scenarioMember{achievement: achievement, clauses: []Clause{{
+		Conditions:             []FixtureCondition{{GameID: "g", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}},
+		RepresentedAssignments: 3,
+		ProofMethods:           []clinching.ProofMethod{clinching.ProofCheapBound},
+	}}}
+	got := finishDiscoveredScenario(out, member)
+	if got.State != OpportunityCanClinch || !got.CanClinch || got.CertifiedAssignments != 3 || len(got.Clauses) != 1 {
+		t.Fatalf("partial result = %+v", got)
 	}
 }
 

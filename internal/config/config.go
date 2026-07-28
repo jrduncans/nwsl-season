@@ -23,11 +23,13 @@ const (
 	defaultSyncMinAttemptInterval = 30 * time.Minute
 	defaultSyncTimeout            = 20 * time.Second
 	defaultQualificationBudget    = 5 * time.Second
-	defaultScenarioBudget         = 30 * time.Second
-	defaultMaxSlateFixtures       = 10
-	defaultHistoryRetention       = 90 * 24 * time.Hour
-	defaultForecastConcurrency    = 2
-	defaultForecastTimeout        = 15 * time.Second
+	// Scenario discovery runs after the fixture sync and qualification proof in
+	// its own context. Give a busy late-season slate enough time to find
+	// certified conditions without extending either of those calculations.
+	defaultScenarioBudget      = 2 * time.Minute
+	defaultHistoryRetention    = 90 * 24 * time.Hour
+	defaultForecastConcurrency = 2
+	defaultForecastTimeout     = 15 * time.Second
 )
 
 // Config holds values that vary between local development and deployment.
@@ -44,7 +46,6 @@ type Config struct {
 	SyncTimeout            time.Duration
 	QualificationBudget    time.Duration
 	ScenarioBudget         time.Duration
-	MaxSlateFixtures       int
 	HistoryRetention       time.Duration
 	ForecastConcurrency    int
 	ForecastTimeout        time.Duration
@@ -77,10 +78,6 @@ func FromEnvironment() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	maxSlateFixtures, err := positiveIntFromEnvironment("NWSL_MAX_SLATE_FIXTURES", defaultMaxSlateFixtures)
-	if err != nil {
-		return Config{}, err
-	}
 	historyRetention, err := durationFromEnvironment("NWSL_HISTORY_RETENTION", defaultHistoryRetention)
 	if err != nil {
 		return Config{}, err
@@ -107,7 +104,6 @@ func FromEnvironment() (Config, error) {
 		SyncTimeout:            timeout,
 		QualificationBudget:    qualificationBudget,
 		ScenarioBudget:         scenarioBudget,
-		MaxSlateFixtures:       maxSlateFixtures,
 		HistoryRetention:       historyRetention,
 		ForecastConcurrency:    forecastConcurrency,
 		ForecastTimeout:        forecastTimeout,

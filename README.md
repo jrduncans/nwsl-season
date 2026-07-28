@@ -66,7 +66,7 @@ Useful endpoints:
 | `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures. |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction. |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum time for one qualification calculation batch. |
-| `NWSL_SCENARIO_BUDGET` | `30s` | Maximum time for one clinching-scenario calculation batch. |
+| `NWSL_SCENARIO_BUDGET` | `2m` | Maximum time for one clinching-scenario discovery batch; it runs independently after fixture sync and qualification. |
 | `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
 | `NWSL_FORECAST_CONCURRENCY` | `2` | Maximum concurrent uncached Forecast Lab requests. |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |

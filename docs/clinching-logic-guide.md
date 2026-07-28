@@ -229,9 +229,12 @@ season-long status proof.
 
 The slate is explicit. The system uses the next matchday when its data is
 reliable; otherwise it includes pending fixtures in the 120-hour window starting
-with the next kickoff. It evaluates at most ten slate fixtures (at most
-`3^10` outcome assignments); a larger or unavailable slate is `unresolved`
-rather than silently sampled.
+with the next kickoff. Every usable slate is searched. The proof-directed walk
+prunes branches as soon as it can certify a sufficient clinch or rule out a
+possible one, and uses the independently configured scenario budget as its only
+operational limit. When the budget expires, any clauses already found remain
+published because they are certified; the result also says that additional paths
+may exist.
 
 ```mermaid
 flowchart TD
@@ -240,7 +243,7 @@ flowchart TD
     B -->|Data or compute unresolved| D["unresolved scenario with limitation"]
     B -->|Score-tiebreak unresolved| E["Define and validate next slate"]
     B -->|Not clinched| E["Define and validate next slate"]
-    E --> F{"Slate usable and no more than 10 fixtures?"}
+    E --> F{"Slate usable?"}
     F -->|No| D
     F -->|Yes| G["Walk home-win / draw / away-win tree"]
     G --> H{"Partial outcomes already points-clinch?"}
@@ -254,7 +257,7 @@ flowchart TD
     N -->|Yes| O["Mark certified assignment"]
     N -->|No, tie unresolved| P["Mark tiebreak-dependent assignment"]
     N -->|No, not clinched| K
-    O --> Q["Minimize certified truth table into clauses"]
+    O --> Q["Minimize complete coverage, or retain certified discovered clauses"]
     P --> Q
     Q --> R["Publish clauses, or tiebreak-dependent / cannot-clinch state"]
 ```
@@ -271,11 +274,12 @@ conditions that depend on goal margin or unavailable disciplinary data.
 | `can_clinch` | At least one score-independent, sufficient outcome clause was certified. |
 | `cannot_clinch` | All complete slate outcomes were definitively non-clinching. |
 | `tiebreak_dependent` | A possible clinch may depend on scores or unavailable tiebreak data; no outcome-only clause is published. |
-| `unresolved` | The baseline, slate data, slate size, or compute budget prevented an exact search. |
+| `unresolved` | The baseline, slate data, or compute budget prevented a conclusive search. |
 
-When a `can_clinch` result also has tiebreak-dependent leaves, the visible
-clauses remain valid but may not cover every theoretical path. The UI says so
-instead of implying that the displayed conditions are necessary.
+When a `can_clinch` result has tiebreak-dependent leaves or ends at its compute
+budget, the visible clauses remain valid but may not cover every theoretical
+path. The UI says so instead of implying that the displayed conditions are
+necessary.
 
 ## Playoff-elimination scenarios
 

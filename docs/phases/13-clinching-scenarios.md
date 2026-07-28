@@ -6,6 +6,11 @@ Implemented. The implementation packet below records the build contract for
 the current feature and remains useful when revisiting its proof or persistence
 design.
 
+The first-release fixture-count gate described later in this historical packet
+has been superseded: current scenario discovery searches every usable slate
+within `NWSL_SCENARIO_BUDGET` and can persist certified clauses found before the
+budget expires.
+
 The live page only reads the exact current snapshot. The older optional
 `LatestScenario` fallback described below was intentionally not retained,
 because presenting a stale proof as current would be misleading.
@@ -208,10 +213,10 @@ outcomes, minimizes certified clauses, persists them, and presents them.
   clause only when every oracle probe needed by that clause returns `clinched`
   through `cheap_bound` or `points_optimization`. Do not use representative
   scores, infer a score cap, or publish a clause from an `unresolved` result.
-- Search the complete three-outcome slate exactly. The normal eight-fixture
-  case is 6,561 assignments. Support at most ten fixtures in the first release;
-  a larger derived slate is an explicit unresolved result, never silently
-  truncated or divided into smaller slates.
+- Search every usable three-outcome slate proof-directed. The normal
+  eight-fixture case is 6,561 assignments. A larger slate continues until the
+  scenario budget expires; it may then publish any sufficient clauses already
+  certified, never silently truncating or dividing the slate.
 - Prefer a reliable matchday grouping. When matchday metadata is not reliable,
   use the fixed 120-hour kickoff window defined below. Do not use locale weeks,
   a guessed round number, or the server's current calendar date.
@@ -501,7 +506,6 @@ type Request struct {
     TargetTeamID    string
     Achievement     competition.Achievement
     Baseline        clinching.AchievementResult
-    MaxSlateFixtures int
 }
 
 func Generate(ctx context.Context, request Request) (Result, error)
@@ -523,8 +527,9 @@ Handle the baseline before searching:
 - A non-ready slate becomes `unresolved`, except `SlateNoUpcoming`, which
   becomes `cannot_clinch` for a baseline not-clinched team with zero total
   assignments.
-- More than `MaxSlateFixtures` (default ten) becomes `unresolved` with the
-  exact fixture count in the limitation. Do not search a prefix.
+- A ready slate is always searched as a whole. When its scenario budget
+  expires, publish only the clauses already certified and mark that additional
+  paths may exist.
 
 Search teams in official-total table order and achievements from easiest to
 guarantee to hardest (`TopK` descending) so the useful playoff paths are most

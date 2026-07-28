@@ -14,27 +14,25 @@ import (
 )
 
 type Request struct {
-	Evaluator        *clinching.Evaluator
-	Teams            []standings.Team
-	Games            []standings.Game
-	Slate            Slate
-	TargetTeamID     string
-	Achievement      competition.Achievement
-	Baseline         clinching.AchievementResult
-	MaxSlateFixtures int
+	Evaluator    *clinching.Evaluator
+	Teams        []standings.Team
+	Games        []standings.Game
+	Slate        Slate
+	TargetTeamID string
+	Achievement  competition.Achievement
+	Baseline     clinching.AchievementResult
 }
 
 // BatchRequest evaluates every achievement for one team in a shared slate
 // traversal. Baselines are keyed by achievement ID.
 type BatchRequest struct {
-	Evaluator        *clinching.Evaluator
-	Teams            []standings.Team
-	Games            []standings.Game
-	Slate            Slate
-	TargetTeamID     string
-	Achievements     []competition.Achievement
-	Baselines        map[competition.AchievementID]clinching.AchievementResult
-	MaxSlateFixtures int
+	Evaluator    *clinching.Evaluator
+	Teams        []standings.Team
+	Games        []standings.Game
+	Slate        Slate
+	TargetTeamID string
+	Achievements []competition.Achievement
+	Baselines    map[competition.AchievementID]clinching.AchievementResult
 }
 
 // Generate searches all three-outcome completions, pruning only statements
@@ -42,9 +40,8 @@ type BatchRequest struct {
 func Generate(ctx context.Context, r Request) (Result, error) {
 	values, err := GenerateBatch(ctx, BatchRequest{
 		Evaluator: r.Evaluator, Teams: r.Teams, Games: r.Games, Slate: r.Slate, TargetTeamID: r.TargetTeamID,
-		Achievements:     []competition.Achievement{r.Achievement},
-		Baselines:        map[competition.AchievementID]clinching.AchievementResult{r.Achievement.ID: r.Baseline},
-		MaxSlateFixtures: r.MaxSlateFixtures,
+		Achievements: []competition.Achievement{r.Achievement},
+		Baselines:    map[competition.AchievementID]clinching.AchievementResult{r.Achievement.ID: r.Baseline},
 	})
 	return values[r.Achievement.ID], err
 }
@@ -52,6 +49,8 @@ func Generate(ctx context.Context, r Request) (Result, error) {
 type scenarioMember struct {
 	achievement           competition.Achievement
 	certified, unresolved assignmentBits
+	trackCoverage         bool
+	unresolvedAssignments int
 	clauses               []Clause
 	eliminated            assignmentBits
 	eliminationClauses    []Clause
@@ -89,9 +88,6 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 	if err := r.Slate.Validate(); err != nil {
 		return nil, err
 	}
-	if r.MaxSlateFixtures <= 0 {
-		r.MaxSlateFixtures = 10
-	}
 	byGame := make(map[string]standings.Game, len(r.Games))
 	for _, game := range r.Games {
 		byGame[game.ID] = game
@@ -124,10 +120,11 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 		return slateBlocker.Blocks(ctx, achievement)
 	}
 	// The total is a property of the declared ready slate, not whether this
-	// request can safely enumerate it. Keep it on unresolved results as well:
-	// cache validation and consumers can then distinguish an unevaluated slate
+	// request can completely explore it. Keep it on unresolved results as well:
+	// cache validation and consumers can then distinguish an incomplete search
 	// from one with no possible assignments.
 	totalAssignments := pow3(len(r.Slate.FixtureIDs))
+	trackCoverage := canTrackCoverage(totalAssignments)
 	for _, achievement := range r.Achievements {
 		if achievement.ID == "" || achievement.TopK < 1 {
 			return nil, fmt.Errorf("invalid scenario achievement")
@@ -161,24 +158,14 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 			}
 			if blocked {
 				out.State = OpportunityCannotClinch
-				// Playoff elimination still uses the exact slate traversal when it
-				// is within the normal safety limit. The blocker has already
+				// Playoff elimination still uses the slate traversal. The blocker has already
 				// settled clinching, so avoid status-oracle work on every leaf.
-				if achievement.ID == competition.AchievementPlayoffs && len(r.Slate.FixtureIDs) <= r.MaxSlateFixtures {
-					members = append(members, scenarioMember{
-						achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),
-						eliminated: newAssignmentBits(totalAssignments), trackElimination: true, skipOpportunity: true,
-					})
+				if achievement.ID == competition.AchievementPlayoffs {
+					members = append(members, newScenarioMember(achievement, totalAssignments, trackCoverage, true, true))
 				}
-			} else if len(r.Slate.FixtureIDs) > r.MaxSlateFixtures {
-				out.State = OpportunityUnresolved
-				out.Limitation = fmt.Sprintf("slate has %d fixtures; maximum is %d", len(r.Slate.FixtureIDs), r.MaxSlateFixtures)
 			} else {
 				activeAchievements = append(activeAchievements, achievement)
-				members = append(members, scenarioMember{
-					achievement: achievement, certified: newAssignmentBits(totalAssignments), unresolved: newAssignmentBits(totalAssignments),
-					eliminated: newAssignmentBits(totalAssignments), trackElimination: achievement.ID == competition.AchievementPlayoffs,
-				})
+				members = append(members, newScenarioMember(achievement, totalAssignments, trackCoverage, achievement.ID == competition.AchievementPlayoffs, false))
 			}
 		}
 		results[achievement.ID] = out
@@ -215,15 +202,14 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 	}
 	active := uint64(1)<<uint(len(members)) - 1
 	search.walk(make([]clinching.FixedResult, 0, len(search.searchGames)), 0, active)
-	if search.err != nil && ctx.Err() == nil {
+	if search.err != nil && ctx.Err() == nil && !errors.Is(search.err, clinching.ErrComputeBudget) {
 		return nil, search.err
 	}
 	for i := range search.members {
 		out := results[search.members[i].achievement.ID]
 		if search.err != nil {
-			out.State, out.Limitation = OpportunityUnresolved, "scenario computation budget exhausted"
-			out.Clauses, out.Necessary, out.ProofMethods, out.EliminationClauses = []Clause{}, []FixtureCondition{}, []clinching.ProofMethod{}, []Clause{}
-			out.AlreadyEliminated, out.CanBeEliminated = false, false
+			out = finishDiscoveredScenario(out, search.members[i])
+			out.Limitation = LimitationBudgetPartial
 		} else {
 			var err error
 			out, err = finishScenario(ctx, out, slateGames, search.members[i])
@@ -231,15 +217,33 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 				if ctx.Err() == nil {
 					return nil, err
 				}
-				out.State, out.Limitation = OpportunityUnresolved, "scenario computation budget exhausted"
-				out.Clauses, out.Necessary, out.ProofMethods, out.EliminationClauses = []Clause{}, []FixtureCondition{}, []clinching.ProofMethod{}, []Clause{}
-				out.AlreadyEliminated, out.CanBeEliminated = false, false
+				out = finishDiscoveredScenario(out, search.members[i])
+				out.Limitation = LimitationBudgetPartial
 			}
 		}
 		results[out.Achievement] = out
 	}
 	setBatchElapsed(results, started)
 	return results, nil
+}
+
+// Coverage supports exact clause minimization and exact necessary conditions.
+// Searching never depends on it: a large slate still receives proof-directed
+// discovery until the caller's scenario budget expires.
+const maxCoverageAssignments = 8 * 1024 * 1024 * 8
+
+func canTrackCoverage(assignments int) bool {
+	return assignments > 0 && assignments <= maxCoverageAssignments
+}
+
+func newScenarioMember(achievement competition.Achievement, assignments int, trackCoverage, trackElimination, skipOpportunity bool) scenarioMember {
+	member := scenarioMember{achievement: achievement, trackCoverage: trackCoverage, trackElimination: trackElimination, skipOpportunity: skipOpportunity}
+	if trackCoverage {
+		member.certified = newAssignmentBits(assignments)
+		member.unresolved = newAssignmentBits(assignments)
+		member.eliminated = newAssignmentBits(assignments)
+	}
+	return member
 }
 
 func emptyResult(team string, achievement competition.Achievement) Result {
@@ -255,6 +259,9 @@ func setBatchElapsed(results map[competition.AchievementID]Result, started time.
 }
 
 func finishScenario(ctx context.Context, out Result, games []standings.Game, member scenarioMember) (Result, error) {
+	if !member.trackCoverage {
+		return finishUntrackedScenario(out, member), nil
+	}
 	out.Diagnostics = member.diag
 	out.Diagnostics.InitialClauses = len(member.clauses)
 	methods := []clinching.ProofMethod{}
@@ -317,6 +324,61 @@ func finishScenario(ctx context.Context, out Result, games []standings.Game, mem
 	return out, nil
 }
 
+// finishDiscoveredScenario publishes the clauses already proved by the search
+// without claiming that it has exhausted the slate. Clauses emitted by the
+// depth-first walk cover disjoint outcome cubes, so their represented counts
+// are an exact count of the certified portion discovered so far.
+func finishDiscoveredScenario(out Result, member scenarioMember) Result {
+	out.Diagnostics = member.diag
+	out.Diagnostics.InitialClauses = len(member.clauses)
+	out.Diagnostics.MinimalClauses = len(member.clauses)
+	out.Clauses = append([]Clause{}, member.clauses...)
+	out.CertifiedAssignments = representedClauses(member.clauses)
+	out.UnresolvedAssignments = member.unresolvedAssignments
+	for _, clause := range out.Clauses {
+		out.ProofMethods = append(out.ProofMethods, clause.ProofMethods...)
+	}
+	out.ProofMethods = sortedMethods(out.ProofMethods)
+	if out.CertifiedAssignments > 0 {
+		out.State, out.CanClinch = OpportunityCanClinch, true
+	} else {
+		out.State = OpportunityUnresolved
+	}
+	if member.trackElimination {
+		if member.alreadyEliminated {
+			out.AlreadyEliminated = true
+			return out
+		}
+		out.EliminationClauses = append([]Clause{}, member.eliminationClauses...)
+		out.CanBeEliminated = len(out.EliminationClauses) > 0
+	}
+	return out
+}
+
+func finishUntrackedScenario(out Result, member scenarioMember) Result {
+	out = finishDiscoveredScenario(out, member)
+	if out.CertifiedAssignments > 0 {
+		out.State, out.CanClinch = OpportunityCanClinch, true
+		if out.UnresolvedAssignments > 0 {
+			out.Limitation = "additional paths may depend on score or unavailable tiebreak data; no outcome-only path is published"
+		}
+	} else if out.UnresolvedAssignments > 0 {
+		out.State = OpportunityTiebreakDependent
+		out.Limitation = "a clinch may depend on score or unavailable tiebreak data; no outcome-only path is published"
+	} else {
+		out.State = OpportunityCannotClinch
+	}
+	return out
+}
+
+func representedClauses(clauses []Clause) int {
+	total := 0
+	for _, clause := range clauses {
+		total += clause.RepresentedAssignments
+	}
+	return total
+}
+
 func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, active uint64) {
 	if s.err != nil {
 		return
@@ -340,7 +402,9 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 				clause := Clause{Conditions: fixedConditions(fixed, s.slate.FixtureIDs), ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}
 				clause.RepresentedAssignments = represented(clause.Conditions, len(s.slateGames))
 				member.eliminationClauses = append(member.eliminationClauses, clause)
-				markCoverage(member.eliminated, clause.Conditions, s.slateGames)
+				if member.trackCoverage {
+					markCoverage(member.eliminated, clause.Conditions, s.slateGames)
+				}
 			}
 			member.diag.OpportunityPrunes++
 			continue
@@ -372,7 +436,11 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 			}
 			if err == nil && !publishable(value) {
 				if value.Status == clinching.Unresolved {
-					member.unresolved.set(assignmentIndex(fixed, s.slate.FixtureIDs))
+					if member.trackCoverage {
+						member.unresolved.set(assignmentIndex(fixed, s.slate.FixtureIDs))
+					} else {
+						member.unresolvedAssignments++
+					}
 				}
 				continue
 			}
@@ -384,7 +452,9 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 		clause := Clause{Conditions: fixedConditions(fixed, s.slate.FixtureIDs), ProofMethods: []clinching.ProofMethod{value.Method}}
 		clause.RepresentedAssignments = represented(clause.Conditions, len(s.slateGames))
 		member.clauses = append(member.clauses, clause)
-		markCoverage(member.certified, clause.Conditions, s.slateGames)
+		if member.trackCoverage {
+			markCoverage(member.certified, clause.Conditions, s.slateGames)
+		}
 		member.diag.GuaranteePrunes++
 	}
 	if depth == len(s.searchGames) || remaining == 0 {

@@ -82,7 +82,7 @@ func main() {
 	}
 	if rules, ok := competition.ForSeason(*season, *stage); ok {
 		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget, Progress: operations.QualificationTelemetry(logger)}
-		service.Scenarios = scenariorefresh.Refresher{Store: db, Rules: rules, Budget: cfg.ScenarioBudget, MaxSlateFixtures: cfg.MaxSlateFixtures, Progress: operations.ScenarioTelemetry(logger)}
+		service.Scenarios = scenariorefresh.Refresher{Store: db, Rules: rules, Budget: cfg.ScenarioBudget, Progress: operations.ScenarioTelemetry(logger)}
 	} else {
 		if *recalculate {
 			logger.Error("clinching recalculation unavailable: no configured season rules", "season", *season, "stage", *stage)
@@ -219,7 +219,7 @@ func countCalculationBudgetTimeouts(qualification cache.QualificationSnapshot, s
 		}
 	}
 	for _, result := range scenario.Results {
-		if result.State == scenarios.OpportunityUnresolved && result.Limitation == "scenario computation budget exhausted" {
+		if result.BudgetLimited() {
 			summary.Scenarios++
 		}
 	}
