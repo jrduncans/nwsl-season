@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -479,10 +480,28 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="."`, `href="forecast"`} {
+	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="."`, `href="forecast"`} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
+	}
+}
+
+func TestFixtureGroupsByStatusKeepsResultsNewestFirst(t *testing.T) {
+	data := cache.SeasonData{Games: []cache.Game{
+		{ASAID: "completed-early", KickoffUTC: "2026-07-01 19:00:00 UTC", Status: standings.CompletedStatus, Matchday: sql.NullInt64{Int64: 1, Valid: true}},
+		{ASAID: "completed-late-a", KickoffUTC: "2026-07-04 19:00:00 UTC", Status: standings.CompletedStatus, Matchday: sql.NullInt64{Int64: 2, Valid: true}},
+		{ASAID: "completed-late-b", KickoffUTC: "2026-07-04 21:00:00 UTC", Status: standings.CompletedStatus, Matchday: sql.NullInt64{Int64: 2, Valid: true}},
+		{ASAID: "upcoming", KickoffUTC: "2026-07-11 19:00:00 UTC", Status: remainingStatus, Matchday: sql.NullInt64{Int64: 3, Valid: true}},
+	}}
+
+	results, upcoming := fixtureGroupsByStatus(data, time.UTC)
+
+	if got := []string{results[0].Label, results[0].Games[0].ID, results[0].Games[1].ID, results[1].Label}; !reflect.DeepEqual(got, []string{"Matchday 2", "completed-late-b", "completed-late-a", "Matchday 1"}) {
+		t.Fatalf("results = %#v, want newest matchdays and fixtures first", got)
+	}
+	if got := []string{upcoming[0].Label, upcoming[0].Games[0].ID}; !reflect.DeepEqual(got, []string{"Matchday 3", "upcoming"}) {
+		t.Fatalf("upcoming = %#v, want chronological fixture order", got)
 	}
 }
 

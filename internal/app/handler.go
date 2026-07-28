@@ -428,6 +428,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	scheduleView := strengthViewFrom(scheduleStrength)
 	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(a.options.Rules)), scheduleView)
 	standingsView, xgAvailable, completedMatches := addXGValues(standingsView, data)
+	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatus(data, a.options.Location)
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
@@ -437,7 +438,8 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
 		Standings:              addTotalPositions(standingsView, totalTable, playoffPlaces(a.options.Rules)),
 		Strength:               scheduleView,
-		FixtureGroups:          fixtureGroups(data, a.options.Location),
+		ResultFixtureGroups:    resultFixtureGroups,
+		UpcomingFixtureGroups:  upcomingFixtureGroups,
 		FixtureTeams:           fixtureTeams(data.Teams),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
