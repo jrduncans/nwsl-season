@@ -342,18 +342,19 @@ function setupForecastControls() {
 
 function setupScenarioCopy() {
   const link = document.querySelector("[data-copy-scenario]");
+  const label = link?.querySelector("[data-copy-scenario-label]");
   const status = document.querySelector("[data-scenario-copy-status]");
-  if (!link || !status || !navigator.clipboard?.writeText) return;
+  if (!link || !label || !status || !navigator.clipboard?.writeText) return;
 
   link.addEventListener("click", async (event) => {
     event.preventDefault();
     try {
       await navigator.clipboard.writeText(new URL(link.href, window.location.href).href);
       status.textContent = "Scenario link copied to the clipboard.";
-      const label = link.textContent;
-      link.textContent = "Copied scenario link";
+      const labelText = label.textContent;
+      label.textContent = "Copied";
       window.setTimeout(() => {
-        link.textContent = label;
+        label.textContent = labelText;
       }, 1800);
     } catch {
       status.textContent = "Could not copy the scenario link. Open the link to copy it manually.";

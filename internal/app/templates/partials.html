@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} · NWSL season explorer</title>
+  <title>{{.Title}} · NWSL Season Explorer</title>
   <link rel="stylesheet" href="{{.StylesheetPath}}">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="{{.HomePath}}">NWSL season explorer</a>
+    <a class="brand" href="{{.HomePath}}">NWSL Season Explorer</a>
     {{if .Navigation}}<nav class="site-nav" aria-label="Season sections"><ul>{{range .Navigation}}<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a></li>{{end}}</ul></nav>{{end}}
   </header>
   <main class="page">{{end}}

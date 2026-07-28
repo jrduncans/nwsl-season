@@ -439,7 +439,6 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		Strength:               scheduleView,
 		FixtureGroups:          fixtureGroups(data, a.options.Location),
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		ModelEvaluationPath:    relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),
 		SeasonPath:             seasonURL(r.URL.Path, season),

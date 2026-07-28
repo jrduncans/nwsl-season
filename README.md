@@ -1,6 +1,6 @@
-# NWSL season explorer
+# NWSL Season Explorer
 
-NWSL season explorer is a website built in Go for browsing NWSL seasons,
+NWSL Season Explorer is a website built in Go for browsing NWSL seasons,
 standings, fixtures, schedule difficulty, playoff qualification, and
 probabilistic season forecasts.
 

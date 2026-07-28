@@ -1,9 +1,12 @@
 {{define "forecast"}}{{template "head" .}}
-<div class="title-row">
-  <div><h1>Forecast Lab</h1><p class="note">Explore possible finishes based on the selected approach, season-to-date data, and the remaining schedule. This is an estimate, not the official standings.</p></div>
-  <div class="title-actions">
-    <a class="button" href="{{.CanonicalPath}}" data-copy-scenario>Copy scenario link</a>
-    <span class="visually-hidden" data-scenario-copy-status role="status" aria-live="polite"></span>
+<div class="forecast-title">
+  <h1>Forecast lab</h1>
+  <div class="forecast-title-content">
+    <p class="note">Explore possible finishes based on the selected approach, season-to-date data, and the remaining schedule. This is an estimate, not the official standings.</p>
+    <div class="title-actions">
+      <a class="button scenario-copy" href="{{.CanonicalPath}}" data-copy-scenario aria-label="Copy scenario link"><span data-copy-scenario-label>Copy link</span></a>
+      <span class="visually-hidden" data-scenario-copy-status role="status" aria-live="polite"></span>
+    </div>
   </div>
 </div>
 
@@ -21,6 +24,7 @@
     <noscript><button class="button button-secondary forecast-model-submit" type="submit">Apply model choices</button></noscript>
   </form>
   {{range .Models}}{{if .Selected}}<details class="forecast-model-detail"><summary>About this approach{{if .Default}} <span class="badge">Default</span>{{end}}</summary><p>{{.Detail}}</p></details>{{end}}{{end}}
+  <p class="forecast-evaluation-link"><a href="{{.ModelEvaluationPath}}">Model evaluation</a> <span class="note">See how the forecast approaches performed historically.</span></p>
   {{if .ShowXGCoverage}}<p class="forecast-xg-coverage{{if or .XGWarning .XGRefreshWarning}} data-warning{{end}}"><strong>xG coverage:</strong> {{if .XGCoverage}}{{.XGCoverage}}{{if .XGWarning}}. The forecast uses only matches with available xG data{{end}}{{else}}No completed matches to assess yet{{end}}. {{if .XGFreshness}}xG data refreshed <time datetime="{{.XGFreshness}}" data-local-time="{{.XGFreshness}}">{{.XGFreshnessFallback}}</time>{{else}}No successful xG refresh is available{{end}}{{if .XGRefreshWarning}}; the latest xG refresh failed{{end}}.</p>{{end}}
 </section>
 
