@@ -86,8 +86,11 @@ func RankedProbabilityScore(probabilities []float64, observedPosition int) float
 }
 
 type CalibrationBin struct {
-	Lower, Upper, MeanPrediction, ObservedFrequency float64
-	Count                                           int
+	Lower             float64 `json:"lower"`
+	Upper             float64 `json:"upper"`
+	MeanPrediction    float64 `json:"mean_prediction"`
+	ObservedFrequency float64 `json:"observed_frequency"`
+	Count             int     `json:"count"`
 }
 
 // Calibration returns ten fixed deciles, including empty bins for stable reports.

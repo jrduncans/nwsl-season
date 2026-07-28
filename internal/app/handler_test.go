@@ -211,6 +211,21 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	}
 }
 
+func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{CurrentSeason: "2026", Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/model-evaluation", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, value := range []string{"How close were the forecasts?", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "Model evaluation"} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+}
+
 func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
@@ -638,7 +653,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast Lab", "Results Poisson", "results-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", "Possible seasons considered", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
+	for _, text := range []string{"Forecast Lab", "xG Poisson", "xg-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", "Possible seasons considered", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -740,7 +755,8 @@ func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 		path string
 		want bool
 	}{
-		{path: "/seasons/2026/forecast", want: false},
+		{path: "/seasons/2026/forecast", want: true},
+		{path: "/seasons/2026/forecast?v=2&m=results-poisson-v1", want: false},
 		{path: "/seasons/2026/forecast?v=2&m=xg-poisson-v1", want: true},
 	} {
 		response := httptest.NewRecorder()

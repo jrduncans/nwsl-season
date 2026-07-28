@@ -23,10 +23,11 @@ type Store interface {
 	RecordScenarioFailure(context.Context, cache.ScenarioRun, error) error
 }
 type Refresher struct {
-	Store    Store
-	Rules    competition.Rules
-	Budget   time.Duration
-	Progress func(Progress)
+	Store            Store
+	Rules            competition.Rules
+	Budget           time.Duration
+	MaxSlateFixtures int
+	Progress         func(Progress)
 }
 
 // Progress reports one team/achievement scenario calculation boundary.
@@ -185,7 +186,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			r.report(Progress{Phase: "started", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), BatchElapsed: time.Since(batchStarted)})
 		}
 		probeStarted := time.Now()
-		teamResults, err := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
+		teamResults, err := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases, MaxSlateFixtures: r.MaxSlateFixtures})
 		if err != nil {
 			return calculated{}, err
 		}

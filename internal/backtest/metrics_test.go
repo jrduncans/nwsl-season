@@ -39,7 +39,7 @@ func TestCalibrationAndBootstrapAreDeterministic(t *testing.T) {
 
 func TestReportStatesIncompleteEvaluation(t *testing.T) {
 	report := Report{Status: "not_run", CurrentDefaultModel: "results-poisson-v1", Limitations: []string{"historical evaluation is pending"}}
-	if got := Markdown(report); !strings.Contains(got, "not_run") || !strings.Contains(got, "results-poisson-v1") {
+	if got := Markdown(report); !strings.Contains(got, "not_run") || !strings.Contains(got, "results-poisson-v1") || !strings.Contains(got, "Development results") || !strings.Contains(got, "Final-test results") || !strings.Contains(got, "Pooled results") {
 		t.Fatalf("markdown = %q", got)
 	}
 }

@@ -1,0 +1,30 @@
+{{define "model-evaluation"}}{{template "head" .}}
+<header class="title-row">
+  <div><p class="eyebrow">Forecast quality</p><h1>How close were the forecasts?</h1></div>
+</header>
+<p class="evaluation-intro">This compares each forecast with the final regular-season table at different points in past seasons. Lower error is better. The default view uses final-test seasons that were held out while the models were designed.</p>
+
+{{if eq .Status "complete"}}<section class="evaluation-chart-panel" data-evaluation-chart data-evaluation='{{.ChartData}}'>
+  <div class="evaluation-controls" aria-label="Chart settings">
+    <label><span>Measure</span><select data-evaluation-metric><option value="points">Final points error</option><option value="position">Final table-position error</option></select></label>
+    <label><span>Show</span><select data-evaluation-scale><option value="relative">Relative to the simple baseline</option><option value="absolute">Average error</option></select></label>
+    <label><span>Seasons</span><select data-evaluation-window><option value="held_out">Final test</option><option value="development">Development</option></select></label>
+  </div>
+  <p class="evaluation-chart-summary" data-evaluation-summary aria-live="polite"></p>
+  <div class="evaluation-chart-wrap"><svg class="evaluation-chart" data-evaluation-svg role="img"></svg></div>
+  <div class="evaluation-legend" data-evaluation-legend></div>
+</section>
+
+<section class="evaluation-explainer">
+  <h2>Read this chart</h2>
+  <p><strong>Final points error</strong> is the average number of points each team’s projected final total missed by. <strong>Final table-position error</strong> is the average number of places each team’s projected final rank missed by.</p>
+  <p>The relative view keeps the simple straight-line pace baseline at 1.00. A value below 1.00 means a model was closer to the final table; for example, 0.90 means 10% less error. The absolute view shows the natural decline in error as more of a season has been played.</p>
+</section>
+
+<details class="evaluation-details"><summary>More about the comparison</summary>
+  <p>The simple baseline carries a team’s observed points pace forward and deliberately does not correct for home field. It helps show whether a more sophisticated model delivers a useful improvement.</p>
+  <p>Each point on the chart pools forecasts made while the indicated share of the regular-season schedule was complete. The page shows descriptive stage results; it does not change the precommitted rule used to choose the default model.</p>
+  <ul>{{range .Models}}<li><strong>{{.Name}}</strong> <code>{{.ID}}</code></li>{{end}}</ul>
+</details>
+{{else}}<p class="data-warning">The checked-in model evaluation is incomplete, so chart data is not being presented as evidence.</p>{{end}}
+{{template "foot" .}}{{end}}

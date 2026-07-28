@@ -39,8 +39,7 @@ complete when its exit criteria pass; it does not need every possible refinement
     assumptions. See [`10-forecast-simulator.md`](10-forecast-simulator.md).
 11. **xG and model comparison** — Cache game-level xG, back-test forecast models,
     select an opinionated default, and let interested users compare alternatives.
-    The initial default model is `results-poisson-v1`; historical evaluation
-    remains roadmap work pending an audited replacement run.
+    The audited v1 evaluation selects `xg-poisson-v1` as the current default.
     See [`11-xg-and-models.md`](11-xg-and-models.md).
 12. **Season-scale clinching status** — Generalize exact qualification proofs to
     the Shield, a top-four seed, and a playoff place; use cheap bounds and a
@@ -91,8 +90,8 @@ that reusable proof rather than introducing a second scenario calculator.
   historical source snapshot.
 - Whether schedule difficulty remains useful as a dedicated page after its most
   important signals are incorporated into the season overview.
-- Which forecast model earns the recommended default after walk-forward
-  back-testing, and how often that choice should be reconsidered.
+- How often the xG Poisson recommendation, selected by the v1 walk-forward
+  evaluation, should be reconsidered as new completed seasons arrive.
 - Whether validated team-strength estimates should later appear as a separately
   named power rating. They must never replace or silently adjust official
   standings.

@@ -6,7 +6,14 @@ type CatalogEntry struct {
 }
 
 func Catalog() []CatalogEntry {
-	return []CatalogEntry{{Model: NewCurrentPaceV1()}, {Model: NewResultsPoissonV1(), Default: true}, {Model: NewXGPoissonV1()}}
+	return []CatalogEntry{{Model: NewCurrentPaceV1()}, {Model: NewResultsPoissonV1()}, {Model: NewXGPoissonV1(), Default: true}}
+}
+
+// EvaluationCatalog adds a deliberately simple reference model to the models
+// available in Forecast Lab. It is useful for interpreting evaluation results,
+// but is intentionally not offered as a user-facing forecast choice.
+func EvaluationCatalog() []CatalogEntry {
+	return append([]CatalogEntry{{Model: NewStraightLinePaceV1()}}, Catalog()...)
 }
 func Lookup(id string) (CatalogEntry, bool) {
 	for _, entry := range Catalog() {
