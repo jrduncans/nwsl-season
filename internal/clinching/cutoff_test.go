@@ -130,12 +130,23 @@ func TestUniversalSlateBlockerIgnoresEverySlateOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blocked, err := evaluator.HasUniversalSlateBlocker(context.Background(), "target", competition.Achievement{ID: "test", TopK: 2}, []string{"slate"})
+	blocker, err := evaluator.NewSlateBlocker("target", []string{"slate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := blocker.Blocks(context.Background(), competition.Achievement{ID: "playoffs", TopK: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !blocked {
 		t.Fatal("expected a post-slate blocker for every slate outcome")
+	}
+	blocked, err = blocker.Blocks(context.Background(), competition.Achievement{ID: "shield", TopK: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !blocked {
+		t.Fatal("a playoff blocker must also block the smaller cutoff")
 	}
 }
 

@@ -157,21 +157,28 @@ func (e *Evaluator) EvaluateCheapClinched(targetTeamID string, achievement compe
 	return result, true, nil
 }
 
-// HasUniversalSlateBlocker reports whether a completion of only the fixtures
-// after slateFixtureIDs puts enough opponents strictly above the target's best
-// possible points total in that slate. Such a completion blocks the target
-// regardless of how the slate itself finishes, so no slate outcome can clinch
-// the achievement.
-func (e *Evaluator) HasUniversalSlateBlocker(ctx context.Context, targetTeamID string, achievement competition.Achievement, slateFixtureIDs []string) (bool, error) {
-	if e == nil || targetTeamID == "" || !e.teamIDs[targetTeamID] || achievement.ID == "" || achievement.TopK < 1 || achievement.TopK > len(e.teams) {
-		return false, fmt.Errorf("invalid universal slate blocker request")
+// SlateBlocker reuses one post-slate fixture preparation across a target's
+// achievements. A proof for a larger TopK also proves every smaller TopK.
+type SlateBlocker struct {
+	prepared  preparedSeason
+	blockedAt int
+	results   map[int]bool
+}
+
+// NewSlateBlocker prepares the fixtures after slateFixtureIDs and gives the
+// target its maximum possible slate points. The resulting object can answer
+// exact no-clinch questions for each achievement without rebuilding that
+// common state.
+func (e *Evaluator) NewSlateBlocker(targetTeamID string, slateFixtureIDs []string) (*SlateBlocker, error) {
+	if e == nil || targetTeamID == "" || !e.teamIDs[targetTeamID] {
+		return nil, fmt.Errorf("invalid universal slate blocker request")
 	}
 	slate := make(map[string]bool, len(slateFixtureIDs))
 	targetWins := 0
 	for _, id := range slateFixtureIDs {
 		game, ok := e.gamesByID[id]
 		if !ok || game.Status != "PreMatch" || slate[id] {
-			return false, fmt.Errorf("invalid slate fixture %q", id)
+			return nil, fmt.Errorf("invalid slate fixture %q", id)
 		}
 		slate[id] = true
 		if game.HomeTeamID == targetTeamID || game.AwayTeamID == targetTeamID {
@@ -190,17 +197,47 @@ func (e *Evaluator) HasUniversalSlateBlocker(ctx context.Context, targetTeamID s
 			postOrder = append(postOrder, id)
 		}
 	}
-	prepared, err := prepare(Request{Teams: e.teams, Games: postGames, FixtureOrder: postOrder, TargetTeamID: targetTeamID, Achievement: achievement, validated: true})
+	prepared, err := prepare(Request{Teams: e.teams, Games: postGames, FixtureOrder: postOrder, TargetTeamID: targetTeamID, Achievement: competition.Achievement{ID: "slate_blocker", TopK: 1}, validated: true})
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	prepared.points[targetTeamID] += 3 * targetWins
 	prepared.frontier = prepared.points[targetTeamID]
-	blocker, err := solveCutoff(ctx, prepared, prepared.frontier+1, achievement.TopK)
+	return &SlateBlocker{prepared: prepared, results: map[int]bool{}}, nil
+}
+
+// Blocks reports whether a completion of only the post-slate fixtures puts
+// enough opponents strictly above the target's best slate total. That single
+// completion defeats every slate outcome, so no such outcome can clinch the
+// requested achievement.
+func (b *SlateBlocker) Blocks(ctx context.Context, achievement competition.Achievement) (bool, error) {
+	if b == nil || achievement.ID == "" || achievement.TopK < 1 || achievement.TopK > len(b.prepared.points) {
+		return false, fmt.Errorf("invalid universal slate blocker achievement")
+	}
+	if b.blockedAt >= achievement.TopK {
+		return true, nil
+	}
+	if result, ok := b.results[achievement.TopK]; ok {
+		return result, nil
+	}
+	blocker, err := solveCutoff(ctx, b.prepared, b.prepared.frontier+1, achievement.TopK)
 	if err != nil {
 		return false, err
 	}
+	b.results[achievement.TopK] = blocker.feasible
+	if blocker.feasible && achievement.TopK > b.blockedAt {
+		b.blockedAt = achievement.TopK
+	}
 	return blocker.feasible, nil
+}
+
+// HasUniversalSlateBlocker is a single-achievement convenience wrapper.
+func (e *Evaluator) HasUniversalSlateBlocker(ctx context.Context, targetTeamID string, achievement competition.Achievement, slateFixtureIDs []string) (bool, error) {
+	blocker, err := e.NewSlateBlocker(targetTeamID, slateFixtureIDs)
+	if err != nil {
+		return false, err
+	}
+	return blocker.Blocks(ctx, achievement)
 }
 
 // Evaluate runs the status proof followed by the conservative no-help path.

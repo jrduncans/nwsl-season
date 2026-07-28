@@ -112,6 +112,17 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 	results := make(map[competition.AchievementID]Result, len(r.Achievements))
 	activeAchievements := []competition.Achievement{}
 	members := []scenarioMember{}
+	var slateBlocker *clinching.SlateBlocker
+	blockerFor := func(achievement competition.Achievement) (bool, error) {
+		if slateBlocker == nil {
+			var err error
+			slateBlocker, err = r.Evaluator.NewSlateBlocker(r.TargetTeamID, r.Slate.FixtureIDs)
+			if err != nil {
+				return false, err
+			}
+		}
+		return slateBlocker.Blocks(ctx, achievement)
+	}
 	// The total is a property of the declared ready slate, not whether this
 	// request can safely enumerate it. Keep it on unresolved results as well:
 	// cache validation and consumers can then distinguish an unevaluated slate
@@ -144,7 +155,7 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 		case slateProblem != "":
 			out.State, out.Limitation = OpportunityUnresolved, slateProblem
 		case r.Slate.State == SlateReady:
-			blocked, err := r.Evaluator.HasUniversalSlateBlocker(ctx, r.TargetTeamID, achievement, r.Slate.FixtureIDs)
+			blocked, err := blockerFor(achievement)
 			if err != nil && !errors.Is(err, clinching.ErrComputeBudget) {
 				return nil, err
 			}
