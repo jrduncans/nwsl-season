@@ -39,7 +39,8 @@ complete when its exit criteria pass; it does not need every possible refinement
     assumptions. See [`10-forecast-simulator.md`](10-forecast-simulator.md).
 11. **xG and model comparison** — Cache game-level xG, back-test forecast models,
     select an opinionated default, and let interested users compare alternatives.
-    The audited v1 evaluation selects `xg-poisson-v1` as the current default.
+    The audited v1 evaluation selected `xg-poisson-v1`; subsequent venue-window
+    experiments promote `xg-poisson-home-two-seasons-v1` as the current default.
     See [`11-xg-and-models.md`](11-xg-and-models.md).
 12. **Season-scale clinching status** — Generalize exact qualification proofs to
     the Shield, a top-four seed, and a playoff place; use cheap bounds and a

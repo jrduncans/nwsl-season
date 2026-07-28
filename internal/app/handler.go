@@ -424,7 +424,8 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	domainGames := standingsGames(data.Games)
 	actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
 	totalTable := standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
-	scheduleStrength := strength.Calculate(data.Teams, domainGames)
+	venue := forecastVenueSample(data)
+	scheduleStrength := strength.CalculateWithVenueSample(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
 	scheduleView := strengthViewFrom(scheduleStrength)
 	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(a.options.Rules)), scheduleView)
 	standingsView, xgAvailable, completedMatches := addXGValues(standingsView, data)
@@ -475,6 +476,9 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 func scheduleDifficultyNote(data cache.SeasonData, rules competition.Rules) string {
 	expectedGames := rules.ExpectedTeams * rules.GamesPerTeam / 2
 	notes := make([]string, 0, 4)
+	if !historicalVenueReady(data, false) {
+		notes = append(notes, "Two-season home/away history is still syncing; the venue adjustment temporarily uses this season only.")
+	}
 	if len(data.Teams) != rules.ExpectedTeams {
 		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected teams.", len(data.Teams), rules.ExpectedTeams))
 	}
@@ -559,6 +563,9 @@ func standingsGames(games []cache.Game) []standings.Game {
 			Status:     game.Status,
 			HomeTeamID: game.HomeTeamID,
 			AwayTeamID: game.AwayTeamID,
+		}
+		if kickoff, err := fixtures.ParseKickoff(game.KickoffUTC); err == nil {
+			value.Kickoff = kickoff
 		}
 		if game.HomeScore.Valid {
 			score := int(game.HomeScore.Int64)

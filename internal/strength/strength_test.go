@@ -42,6 +42,22 @@ func TestCalculateRawAndVenueAdjustedStrength(t *testing.T) {
 	}
 }
 
+func TestCalculatePoolsHistoricalVenuePointsOnly(t *testing.T) {
+	teams := []standings.Team{{ID: "a"}, {ID: "b"}}
+	games := []standings.Game{
+		game("a", "b", standings.CompletedStatus, 0, 1),
+		{ID: "future", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "b"},
+	}
+	result := CalculateWithVenueSample(teams, games, VenueSample{Matches: 9, HomePoints: 27, AwayPoints: 0})
+	if result.CompletedMatches != 10 {
+		t.Fatalf("venue matches = %d, want 10", result.CompletedMatches)
+	}
+	assertFloat(t, result.HomePPG, 2.7)
+	assertFloat(t, result.AwayPPG, .3)
+	// Opponent PPG is still the current-season record (b won its only match).
+	assertFloat(t, byID(result.Rows)["a"].RawOpponentPPG, 3)
+}
+
 func TestCalculateMarksRowsUnavailableWithoutOpponentHistory(t *testing.T) {
 	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}}
 	result := Calculate(teams, []standings.Game{{ID: "future", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "b"}})

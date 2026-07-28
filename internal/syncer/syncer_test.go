@@ -100,6 +100,29 @@ func TestRunFetchesASAResourcesConcurrently(t *testing.T) {
 	}
 }
 
+func TestEnsureVenueHistorySyncsMissingSeasonsOnce(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := &historyASA{calls: map[string]int{}}
+	order := []string{}
+	service := Service{ASA: client, Store: db, Qualification: orderedRefresher{order: &order, label: "qualification"}}
+	if err := service.EnsureVenueHistory(ctx, "2026", "Regular Season", 2, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if client.calls["2025"] != 1 || client.calls["2024"] != 1 {
+		t.Fatalf("historical calls = %v, want one per season", client.calls)
+	}
+	if len(order) != 0 {
+		t.Fatalf("historical sync ran derived calculations: %v", order)
+	}
+	if err := service.EnsureVenueHistory(ctx, "2026", "Regular Season", 2, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if client.calls["2025"] != 1 || client.calls["2024"] != 1 {
+		t.Fatalf("ready historical seasons were fetched again: %v", client.calls)
+	}
+}
+
 func TestRunAutomaticallyPrunesHistoryWhenConfigured(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
@@ -532,6 +555,23 @@ type fakeASA struct {
 	gamesErr     error
 	gamesCalls   int
 	gamesFilters asa.GamesFilters
+}
+
+type historyASA struct{ calls map[string]int }
+
+func (f *historyASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
+	return testTeams(), nil
+}
+
+func (f *historyASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game, error) {
+	f.calls[filters.SeasonName]++
+	game := testGame("game-"+filters.SeasonName, "FullTime", ptr(2), ptr(1))
+	game.SeasonName = filters.SeasonName
+	return []asa.Game{game}, nil
+}
+
+func (f *historyASA) GameXGoals(_ context.Context, filters asa.XGoalsFilters) ([]asa.GameXGoals, error) {
+	return []asa.GameXGoals{{GameID: "game-" + filters.SeasonName, HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.5, AwayTeamXGoals: .8}}, nil
 }
 
 type blockingASA struct {

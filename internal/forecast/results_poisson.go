@@ -48,6 +48,14 @@ type resultsPredictor struct {
 }
 
 func (resultsPoissonV1) Fit(input FitInput) (Predictor, error) {
+	return fitResultsPoisson(input, input.Games, VenueSample{})
+}
+
+// fitResultsPoisson keeps current-season team attack/defence estimates separate
+// from the league-wide home and away scoring sample. Evaluation candidates can
+// use completed prior seasons for the latter without treating former players or
+// clubs as part of the current season's team strengths.
+func fitResultsPoisson(input FitInput, leagueGames []standings.Game, historical VenueSample) (Predictor, error) {
 	teams, games := input.Teams, input.Games
 	teamTotalsByID := make(map[string]teamTotals, len(teams))
 	for _, team := range teams {
@@ -60,7 +68,6 @@ func (resultsPoissonV1) Fit(input FitInput) (Predictor, error) {
 		teamTotalsByID[team.ID] = teamTotals{}
 	}
 
-	var completed, homeGoals, awayGoals int
 	for _, game := range games {
 		if game.Status != standings.CompletedStatus {
 			continue
@@ -84,13 +91,24 @@ func (resultsPoissonV1) Fit(input FitInput) (Predictor, error) {
 		away.against += *game.HomeScore
 		teamTotalsByID[game.HomeTeamID] = home
 		teamTotalsByID[game.AwayTeamID] = away
-		completed++
-		homeGoals += *game.HomeScore
-		awayGoals += *game.AwayScore
 	}
 
-	homeRate := (float64(homeGoals) + leaguePriorGames*priorHomeGoals) / (float64(completed) + leaguePriorGames)
-	awayRate := (float64(awayGoals) + leaguePriorGames*priorAwayGoals) / (float64(completed) + leaguePriorGames)
+	completed := historical.Matches
+	homeGoals, awayGoals := historical.HomeGoals, historical.AwayGoals
+	for _, game := range leagueGames {
+		if game.Status != standings.CompletedStatus {
+			continue
+		}
+		if game.HomeScore == nil || game.AwayScore == nil || *game.HomeScore < 0 || *game.AwayScore < 0 {
+			return nil, fmt.Errorf("completed league game %q has an invalid score", game.ID)
+		}
+		completed++
+		homeGoals += float64(*game.HomeScore)
+		awayGoals += float64(*game.AwayScore)
+	}
+
+	homeRate := (homeGoals + leaguePriorGames*priorHomeGoals) / (float64(completed) + leaguePriorGames)
+	awayRate := (awayGoals + leaguePriorGames*priorAwayGoals) / (float64(completed) + leaguePriorGames)
 	return resultsPredictor{
 		teams:      teamTotalsByID,
 		homeRate:   homeRate,

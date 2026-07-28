@@ -1,7 +1,10 @@
 // Package competition owns immutable season-format configuration.
 package competition
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type AchievementID string
 
@@ -52,4 +55,24 @@ func ForSeason(season, stage string) (Rules, bool) {
 		return regular2026.Copy(), true
 	}
 	return Rules{}, false
+}
+
+// PreviousRegularSeasons returns the most recent NWSL regular seasons before
+// season. The 2020 tournament year had no regular season and is skipped.
+func PreviousRegularSeasons(season string, count int) ([]string, error) {
+	year, err := strconv.Atoi(season)
+	if err != nil || year < 2013 || count < 0 {
+		return nil, fmt.Errorf("invalid regular season history request")
+	}
+	values := make([]string, 0, count)
+	for candidate := year - 1; len(values) < count; candidate-- {
+		if candidate < 2013 {
+			return nil, fmt.Errorf("not enough prior regular seasons before %s", season)
+		}
+		if candidate == 2020 {
+			continue
+		}
+		values = append(values, strconv.Itoa(candidate))
+	}
+	return values, nil
 }

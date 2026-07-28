@@ -2,6 +2,7 @@ package standings
 
 import (
 	"sort"
+	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 )
@@ -24,6 +25,9 @@ type Game struct {
 	AwayTeamID string
 	HomeScore  *int
 	AwayScore  *int
+	// Kickoff is optional for standings calculations. Forecast candidates that
+	// use schedule context need it to be the UTC kickoff time.
+	Kickoff time.Time
 }
 
 // Record contains accumulated match results for a team.

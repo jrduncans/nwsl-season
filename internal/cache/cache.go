@@ -25,7 +25,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 7
+const schemaVersion = 8
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -158,7 +158,21 @@ type SeasonData struct {
 	LastSuccess       *SyncRun
 	XGoals            []GameXG
 	XGStatus          XGStatus
+	VenueHistory      []VenueSummary
 	FixtureSnapshotID string
+}
+
+// VenueSummary is the persisted league-wide home/away sample for one season.
+// FixtureReady and XGReady distinguish a successful zero-row refresh from data
+// that has never been synchronized.
+type VenueSummary struct {
+	Season, Stage                 string
+	FixtureReady, XGReady         bool
+	Matches, HomeGoals, AwayGoals int
+	HomePoints, AwayPoints        int
+	XGMatches                     int
+	HomeXG, AwayXG                float64
+	UpdatedAt                     time.Time
 }
 
 // CalculationInputs is the last successfully synced fixture snapshot in the
@@ -434,11 +448,65 @@ func (c *DB) Migrate(ctx context.Context) error {
 		if err := recordMigration(ctx, tx, 7); err != nil {
 			return err
 		}
+		version = 7
+	}
+	if version < 8 {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE venue_summaries (
+				season TEXT NOT NULL, stage TEXT NOT NULL,
+				fixture_ready INTEGER NOT NULL CHECK (fixture_ready IN (0,1)),
+				xg_ready INTEGER NOT NULL CHECK (xg_ready IN (0,1)),
+				matches INTEGER NOT NULL, home_goals INTEGER NOT NULL, away_goals INTEGER NOT NULL,
+				home_points INTEGER NOT NULL, away_points INTEGER NOT NULL,
+				xg_matches INTEGER NOT NULL, home_xg REAL NOT NULL, away_xg REAL NOT NULL,
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY (season, stage)
+			)`); err != nil {
+			return fmt.Errorf("apply migration 8: %w", err)
+		}
+		hasGames, err := tableExists(ctx, tx, "games")
+		if err != nil {
+			return err
+		}
+		if hasGames {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO venue_summaries (
+				season,stage,fixture_ready,xg_ready,matches,home_goals,away_goals,home_points,away_points,xg_matches,home_xg,away_xg,updated_at
+			)
+			SELECT g.season,g.stage,1,
+				CASE WHEN EXISTS (SELECT 1 FROM xg_sync_runs xr WHERE xr.season=g.season AND xr.stage=g.stage AND xr.outcome='success')
+					AND NOT EXISTS (
+						SELECT 1 FROM games g2 LEFT JOIN game_xg x2 ON x2.asa_game_id=g2.asa_game_id
+						WHERE g2.season=g.season AND g2.stage=g.stage AND g2.status='FullTime' AND x2.asa_game_id IS NULL
+					) THEN 1 ELSE 0 END,
+				SUM(CASE WHEN g.status='FullTime' AND g.home_score IS NOT NULL AND g.away_score IS NOT NULL THEN 1 ELSE 0 END),
+				COALESCE(SUM(CASE WHEN g.status='FullTime' THEN g.home_score ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN g.status='FullTime' THEN g.away_score ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN g.status!='FullTime' THEN 0 WHEN g.home_score>g.away_score THEN 3 WHEN g.home_score=g.away_score THEN 1 ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN g.status!='FullTime' THEN 0 WHEN g.away_score>g.home_score THEN 3 WHEN g.home_score=g.away_score THEN 1 ELSE 0 END),0),
+				SUM(CASE WHEN g.status='FullTime' AND x.availability='available' AND x.home_xg IS NOT NULL AND x.away_xg IS NOT NULL THEN 1 ELSE 0 END),
+				COALESCE(SUM(CASE WHEN g.status='FullTime' AND x.availability='available' THEN x.home_xg ELSE 0 END),0),
+				COALESCE(SUM(CASE WHEN g.status='FullTime' AND x.availability='available' THEN x.away_xg ELSE 0 END),0),
+				?
+			FROM games g LEFT JOIN game_xg x ON x.asa_game_id=g.asa_game_id
+			GROUP BY g.season,g.stage`, formatTime(time.Now().UTC())); err != nil {
+				return fmt.Errorf("apply migration 8: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 8); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
+}
+
+func tableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, name).Scan(&count); err != nil {
+		return false, fmt.Errorf("check migration table %q: %w", name, err)
+	}
+	return count > 0, nil
 }
 
 func migrationVersion(ctx context.Context, tx *sql.Tx) (int, error) {
@@ -518,6 +586,9 @@ func (c *DB) ReplaceSeason(ctx context.Context, season, stage string, teams []Te
 		return SyncRun{}, err
 	}
 	run.GamesDeleted = deleted
+	if err := updateVenueFixtureSummary(ctx, tx, season, stage, now); err != nil {
+		return SyncRun{}, err
+	}
 
 	if err := insertSyncRun(ctx, tx, &run); err != nil {
 		return SyncRun{}, err
@@ -775,6 +846,13 @@ func loadSeasonData(ctx context.Context, dbq queryer, season, stage string) (Sea
 	if err != nil {
 		return SeasonData{}, err
 	}
+	var venueHistory []VenueSummary
+	if seasons, historyErr := competition.PreviousRegularSeasons(season, 2); historyErr == nil {
+		venueHistory, err = venueSummaries(ctx, dbq, seasons, stage)
+		if err != nil {
+			return SeasonData{}, err
+		}
+	}
 	snapshotID := ""
 	if lastSuccess != nil {
 		snapshotTeams := make([]Team, 0, len(teams))
@@ -789,7 +867,7 @@ func loadSeasonData(ctx context.Context, dbq queryer, season, stage string) (Sea
 			return SeasonData{}, errors.New("cached fixtures do not match the last successful sync snapshot")
 		}
 	}
-	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess, XGoals: xgoals, XGStatus: xgStatus, FixtureSnapshotID: snapshotID}, nil
+	return SeasonData{Teams: teams, Games: games, LastSuccess: lastSuccess, XGoals: xgoals, XGStatus: xgStatus, VenueHistory: venueHistory, FixtureSnapshotID: snapshotID}, nil
 }
 
 // ReplaceGameXG atomically replaces a complete xG response after validating it
@@ -885,10 +963,78 @@ func (c *DB) ReplaceGameXG(ctx context.Context, season, stage string, games []Ga
 	if err := insertXGSyncRun(ctx, tx, &run); err != nil {
 		return XGSyncRun{}, err
 	}
+	if err := updateVenueXGSummary(ctx, tx, season, stage, now); err != nil {
+		return XGSyncRun{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return XGSyncRun{}, fmt.Errorf("commit xG refresh: %w", err)
 	}
 	return run, nil
+}
+
+func updateVenueFixtureSummary(ctx context.Context, tx *sql.Tx, season, stage string, now time.Time) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO venue_summaries (
+		season,stage,fixture_ready,xg_ready,matches,home_goals,away_goals,home_points,away_points,xg_matches,home_xg,away_xg,updated_at
+	) SELECT ?,?,1,0,
+		COUNT(*),COALESCE(SUM(home_score),0),COALESCE(SUM(away_score),0),
+		COALESCE(SUM(CASE WHEN home_score>away_score THEN 3 WHEN home_score=away_score THEN 1 ELSE 0 END),0),
+		COALESCE(SUM(CASE WHEN away_score>home_score THEN 3 WHEN home_score=away_score THEN 1 ELSE 0 END),0),
+		0,0,0,?
+	FROM games WHERE season=? AND stage=? AND status='FullTime' AND home_score IS NOT NULL AND away_score IS NOT NULL
+	ON CONFLICT(season,stage) DO UPDATE SET
+		fixture_ready=1,xg_ready=0,matches=excluded.matches,home_goals=excluded.home_goals,away_goals=excluded.away_goals,
+		home_points=excluded.home_points,away_points=excluded.away_points,updated_at=excluded.updated_at`,
+		season, stage, formatTime(now), season, stage)
+	if err != nil {
+		return fmt.Errorf("update venue fixture summary: %w", err)
+	}
+	return nil
+}
+
+func updateVenueXGSummary(ctx context.Context, tx *sql.Tx, season, stage string, now time.Time) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO venue_summaries (
+		season,stage,fixture_ready,xg_ready,matches,home_goals,away_goals,home_points,away_points,xg_matches,home_xg,away_xg,updated_at
+	) SELECT ?,?,0,1,0,0,0,0,0,
+		COUNT(*),COALESCE(SUM(x.home_xg),0),COALESCE(SUM(x.away_xg),0),?
+	FROM games g JOIN game_xg x ON x.asa_game_id=g.asa_game_id
+	WHERE g.season=? AND g.stage=? AND g.status='FullTime' AND x.availability='available'
+	ON CONFLICT(season,stage) DO UPDATE SET
+		xg_ready=1,xg_matches=excluded.xg_matches,home_xg=excluded.home_xg,away_xg=excluded.away_xg,updated_at=excluded.updated_at`,
+		season, stage, formatTime(now), season, stage)
+	if err != nil {
+		return fmt.Errorf("update venue xG summary: %w", err)
+	}
+	return nil
+}
+
+// VenueSummaries loads the small persisted summaries for the requested
+// seasons. Missing seasons are omitted so callers can trigger synchronization.
+func (c *DB) VenueSummaries(ctx context.Context, seasons []string, stage string) ([]VenueSummary, error) {
+	return venueSummaries(ctx, c.db, seasons, stage)
+}
+
+func venueSummaries(ctx context.Context, dbq queryer, seasons []string, stage string) ([]VenueSummary, error) {
+	values := make([]VenueSummary, 0, len(seasons))
+	for _, season := range seasons {
+		var value VenueSummary
+		var fixtureReady, xgReady int
+		var updated string
+		err := dbq.QueryRowContext(ctx, `SELECT season,stage,fixture_ready,xg_ready,matches,home_goals,away_goals,home_points,away_points,xg_matches,home_xg,away_xg,updated_at FROM venue_summaries WHERE season=? AND stage=?`, season, stage).Scan(
+			&value.Season, &value.Stage, &fixtureReady, &xgReady, &value.Matches, &value.HomeGoals, &value.AwayGoals, &value.HomePoints, &value.AwayPoints, &value.XGMatches, &value.HomeXG, &value.AwayXG, &updated)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load venue summary for %s %s: %w", season, stage, err)
+		}
+		value.FixtureReady, value.XGReady = fixtureReady != 0, xgReady != 0
+		value.UpdatedAt, err = time.Parse(time.RFC3339, updated)
+		if err != nil {
+			return nil, fmt.Errorf("parse venue summary timestamp: %w", err)
+		}
+		values = append(values, value)
+	}
+	return values, nil
 }
 
 func finiteNonnegative(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 }
