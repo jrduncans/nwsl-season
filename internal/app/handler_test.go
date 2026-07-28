@@ -169,7 +169,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast Lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `href="https://github.com/jrduncans/nwsl-season"`, ">SD</th>", "Harder"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `href="https://github.com/jrduncans/nwsl-season"`, ">SD</th>", "Harder"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -677,7 +677,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast Lab", "xG Poisson", "xg-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", "Possible seasons considered", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
+	for _, text := range []string{"Forecast lab", "xG Poisson", "xg-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Playoffs", "Shield", "Finish distribution", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -894,7 +894,7 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 		{"/seasons/2026/fixtures", "Results &amp; fixtures"},
 		{"/seasons/2026/schedule-difficulty", "Schedule difficulty"},
 		{"/seasons/2026/clinching", "Clinching scenarios"},
-		{"/seasons/2026/forecast", "Forecast Lab"},
+		{"/seasons/2026/forecast", "Forecast lab"},
 	}
 	for _, test := range paths {
 		t.Run(test.current, func(t *testing.T) {
@@ -907,12 +907,20 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 			if !strings.Contains(body, `<nav class="site-nav" aria-label="Season sections">`) {
 				t.Fatal("page does not render the shared season navigation")
 			}
-			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast Lab"} {
-				if !strings.Contains(body, ">"+label+"</a>") {
+			navEnd := strings.Index(body, "</nav>")
+			if navEnd == -1 {
+				t.Fatal("page does not close the shared season navigation")
+			}
+			navigation := body[:navEnd]
+			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast lab"} {
+				if !strings.Contains(navigation, ">"+label+"</a>") {
 					t.Errorf("navigation does not contain %q", label)
 				}
 			}
-			if !strings.Contains(body, `aria-current="page">`+test.current+"</a>") {
+			if strings.Contains(navigation, `>Model evaluation</a>`) {
+				t.Error("navigation still includes Model evaluation")
+			}
+			if !strings.Contains(navigation, `aria-current="page">`+test.current+"</a>") {
 				t.Errorf("navigation does not mark %q as current", test.current)
 			}
 		})

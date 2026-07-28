@@ -26,7 +26,6 @@ type seasonPage struct {
 	FixturesPath           string
 	ScheduleDifficultyPath string
 	ForecastPath           string
-	ModelEvaluationPath    string
 	ClinchingPath          string
 	CurrentPath            string
 	Navigation             []navigationItem
@@ -56,8 +55,7 @@ func seasonNavigation(from, season, current string) []navigationItem {
 		{"Results & fixtures", base + "/fixtures"},
 		{"Schedule difficulty", base + "/schedule-difficulty"},
 		{"Clinching scenarios", base + "/clinching"},
-		{"Forecast Lab", base + "/forecast"},
-		{"Model evaluation", base + "/model-evaluation"},
+		{"Forecast lab", base + "/forecast"},
 	}
 	navigation := make([]navigationItem, 0, len(items))
 	for _, item := range items {

@@ -21,6 +21,7 @@ type forecastPage struct {
 	SeasonPath          string
 	Navigation          []navigationItem
 	ForecastPath        string
+	ModelEvaluationPath string
 	CanonicalPath       string
 	ResetPath           string
 	ModelName           string

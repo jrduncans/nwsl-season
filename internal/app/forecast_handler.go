@@ -83,11 +83,11 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, errForecastOverloaded) {
 			w.Header().Set("Retry-After", "1")
-			http.Error(w, "Forecast Lab is busy; please try again shortly.", http.StatusTooManyRequests)
+			http.Error(w, "Forecast lab is busy; please try again shortly.", http.StatusTooManyRequests)
 			return
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
-			http.Error(w, "Forecast Lab took too long; please try again shortly.", http.StatusServiceUnavailable)
+			http.Error(w, "Forecast lab took too long; please try again shortly.", http.StatusServiceUnavailable)
 			return
 		}
 		a.renderError(w, r, fmt.Errorf("run forecast: %w", err))
@@ -167,10 +167,10 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	base := forecastURL(r.URL.Path, season, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
 	canonical := forecastURL(r.URL.Path, season, state, "")
 	page := forecastPage{
-		Title: "Forecast Lab · " + season + " NWSL season", Season: season,
+		Title: "Forecast lab · " + season + " NWSL season", Season: season,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 		SeasonPath: seasonURL(r.URL.Path, season), ForecastPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		Navigation:    seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+"/forecast"),
+		Navigation: seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+"/forecast"), ModelEvaluationPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
