@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/forecast"
+	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"go.opentelemetry.io/otel"
@@ -46,6 +47,36 @@ func TestForecastExecutorCachesSuccessfulResults(t *testing.T) {
 	}
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("simulation calls = %d, want 1", got)
+	}
+}
+
+func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
+	data := testSeasonData()
+	options := defaultOptions(Options{CurrentSeason: "2026", Rules: testRules(30), ForecastIterations: 20, Location: time.UTC})
+	application := newApplicationWithForecastExecutor(fakeStore{season: data}, options, newForecastExecutor(1, time.Second))
+	var calls atomic.Int32
+	application.app.forecasts.run = func(_ context.Context, request simulation.Request) (simulation.Result, error) {
+		if len(request.Fixed) != 0 {
+			t.Fatalf("fixed assumptions = %#v, want none", request.Fixed)
+		}
+		calls.Add(1)
+		return simulation.Result{Model: request.Model.Info(), Iterations: request.Iterations}, nil
+	}
+
+	if err := application.PrecacheForecasts(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := calls.Load(), int32(len(forecast.Catalog())); got != want {
+		t.Fatalf("simulation calls = %d, want %d", got, want)
+	}
+
+	state := forecaststate.State{Fixed: map[string]simulation.Outcome{}}
+	places := playoffPlaces(options.Rules)
+	for _, entry := range forecast.Catalog() {
+		key := forecastResultKey(data, state, entry.Model.Info().ID, options.ForecastIterations, places)
+		if _, found := application.app.forecasts.cache[key]; !found {
+			t.Errorf("cache has no baseline result for %s", entry.Model.Info().ID)
+		}
 	}
 }
 

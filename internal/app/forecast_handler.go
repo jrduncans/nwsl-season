@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -22,6 +23,83 @@ import (
 )
 
 const defaultForecastIterations = 50000
+
+// PrecacheForecasts calculates the baseline (zero fixed assumptions) result
+// for every Forecast Lab model and stores each result in this application's
+// process-local forecast cache. It is intended for server startup; individual
+// model failures do not prevent later models from being attempted.
+func (a *Application) PrecacheForecasts(ctx context.Context) error {
+	return a.app.precacheForecasts(ctx)
+}
+
+func (a *application) precacheForecasts(ctx context.Context) error {
+	if a.store == nil {
+		return fmt.Errorf("season cache unavailable")
+	}
+	data, err := a.store.Season(ctx, a.options.CurrentSeason, a.options.Stage)
+	if err != nil {
+		return fmt.Errorf("load %s season: %w", a.options.CurrentSeason, err)
+	}
+	if len(data.Games) == 0 {
+		return fmt.Errorf("no cached games found for %s %s", a.options.CurrentSeason, a.options.Stage)
+	}
+
+	state := forecaststate.State{Fixed: map[string]simulation.Outcome{}}
+	xgoals := forecastXGoals(data)
+	venue := forecastVenueSample(data)
+	games := standingsGames(data.Games)
+	places := playoffPlaces(a.options.Rules)
+	entries := forecast.Catalog()
+	// Warm the model selected by a bare Forecast Lab URL first, so a startup
+	// time budget still prioritizes the most common first request.
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Default && !entries[j].Default })
+
+	tasks := make([]forecastTask, 0, len(entries))
+	for _, entry := range entries {
+		request := simulation.Request{
+			Teams: data.Teams, Games: games, XGoals: xgoals, HistoricalVenue: venue,
+			Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places,
+		}
+		tasks = append(tasks, forecastTask{
+			key:     forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places),
+			request: request,
+		})
+	}
+
+	// Use the same capacity as live Forecast Lab work. Each model keeps its own
+	// forecast deadline, while parallel workers avoid serially extending server
+	// startup by one timeout for every model.
+	workers := min(len(tasks), cap(a.forecasts.slots))
+	work := make(chan forecastTask)
+	errs := make(chan error, len(tasks))
+	var group sync.WaitGroup
+	for range workers {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			for task := range work {
+				if _, err := a.forecasts.results(ctx, []forecastTask{task}); err != nil {
+					errs <- fmt.Errorf("warm forecast model %s: %w", task.request.Model.Info().ID, err)
+				}
+			}
+		}()
+	}
+	for _, task := range tasks {
+		work <- task
+	}
+	close(work)
+	group.Wait()
+	close(errs)
+	return errors.Join(errorsFrom(errs)...)
+}
+
+func errorsFrom(values <-chan error) []error {
+	errs := make([]error, 0, cap(values))
+	for err := range values {
+		errs = append(errs, err)
+	}
+	return errs
+}
 
 func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()

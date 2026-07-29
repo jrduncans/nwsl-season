@@ -94,13 +94,24 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	} else {
 		logger.Warn("qualification unavailable: no configured season rules", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
 	}
-	refreshScheduler, err := scheduler.New(db, service, scheduler.Config{
+	application := app.NewApplication(db, app.Options{
+		CurrentSeason: cfg.SyncSeason,
+		Stage:         cfg.SyncStage, Rules: rules,
+		ForecastConcurrency: cfg.ForecastConcurrency,
+		ForecastTimeout:     cfg.ForecastTimeout,
+	})
+	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger}, scheduler.Config{
 		Season: cfg.SyncSeason, Stage: cfg.SyncStage, CheckInterval: cfg.SyncCheckInterval,
 		CompletionGrace: cfg.SyncCompletionGrace, MinimumAttemptInterval: cfg.SyncMinAttemptInterval,
 		Timeout: cfg.SyncTimeout,
 	}, logger)
 	if err != nil {
 		return fmt.Errorf("create refresh scheduler: %w", err)
+	}
+	if err := application.PrecacheForecasts(ctx); err != nil && ctx.Err() == nil {
+		logger.Warn("pre-cache baseline forecasts", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
+	} else if ctx.Err() == nil {
+		logger.Info("pre-cached baseline forecasts", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
 	}
 	refreshScheduler.Start()
 	historyCtx, historyCancel := context.WithCancel(ctx)
@@ -112,15 +123,12 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			return
 		}
 		logger.Info("historical venue data ready", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "prior_seasons", 2)
+		if err := application.PrecacheForecasts(historyCtx); err != nil && historyCtx.Err() == nil {
+			logger.Warn("pre-cache forecasts after historical venue sync", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
+		}
 	}()
 
-	handler := app.NewHandlerWithOptions(db, app.Options{
-		CurrentSeason: cfg.SyncSeason,
-		Stage:         cfg.SyncStage, Rules: rules,
-		ForecastConcurrency: cfg.ForecastConcurrency,
-		ForecastTimeout:     cfg.ForecastTimeout,
-	})
-	server := newHTTPServer(cfg.HTTPAddr, otelhttp.NewHandler(handler, "HTTP server", otelhttp.WithSpanNameFormatter(httpSpanName)), cfg.ForecastTimeout)
+	server := newHTTPServer(cfg.HTTPAddr, otelhttp.NewHandler(application, "HTTP server", otelhttp.WithSpanNameFormatter(httpSpanName)), cfg.ForecastTimeout)
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
 
@@ -180,4 +188,44 @@ func shutdownHTTPServer(server *http.Server) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)
+}
+
+// forecastWarmingRunner preserves the scheduler's normal sync behavior, then
+// refreshes the process-local baseline forecast cache only when an input to a
+// forecast actually changed.
+type forecastWarmingRunner struct {
+	service     syncer.Service
+	application *app.Application
+	logger      *slog.Logger
+}
+
+func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOptions) (cache.SyncRun, error) {
+	run, err := r.service.Run(ctx, options)
+	if err != nil || run.Skipped || !forecastInputsChanged(run) {
+		return run, err
+	}
+	// Warm-up is independent from the source-request deadline. The forecast
+	// executor applies its own per-model deadline, and a failure must not turn a
+	// successful ASA cache transaction into a failed sync.
+	if err := r.application.PrecacheForecasts(context.WithoutCancel(ctx)); err != nil {
+		r.logger.Warn("pre-cache forecasts after data refresh", "season", options.Season, "stage", options.Stage, "error", err)
+		return run, nil
+	}
+	r.logger.Info("pre-cached forecasts after data refresh", "season", options.Season, "stage", options.Stage,
+		"fixture_snapshot_id", run.FixtureSnapshotID)
+	return run, nil
+}
+
+func (r forecastWarmingRunner) Recalculate(ctx context.Context, options syncer.RecalculateOptions) (cache.SyncRun, error) {
+	return r.service.Recalculate(ctx, options)
+}
+
+func forecastInputsChanged(run cache.SyncRun) bool {
+	if run.TeamsInserted > 0 || run.TeamsUpdated > 0 || run.GamesInserted > 0 || run.GamesUpdated > 0 || run.GamesDeleted > 0 {
+		return true
+	}
+	if run.XGRun == nil {
+		return false
+	}
+	return run.XGRun.RowsInserted > 0 || run.XGRun.RowsUpdated > 0
 }
