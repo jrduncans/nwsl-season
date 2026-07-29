@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -53,24 +54,51 @@ func (a *application) precacheForecasts(ctx context.Context) error {
 	// time budget still prioritizes the most common first request.
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Default && !entries[j].Default })
 
-	var errs []error
+	tasks := make([]forecastTask, 0, len(entries))
 	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		request := simulation.Request{
 			Teams: data.Teams, Games: games, XGoals: xgoals, HistoricalVenue: venue,
 			Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places,
 		}
-		task := forecastTask{
+		tasks = append(tasks, forecastTask{
 			key:     forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places),
 			request: request,
-		}
-		if _, err := a.forecasts.results(ctx, []forecastTask{task}); err != nil {
-			errs = append(errs, fmt.Errorf("warm forecast model %s: %w", entry.Model.Info().ID, err))
-		}
+		})
 	}
-	return errors.Join(errs...)
+
+	// Use the same capacity as live Forecast Lab work. Each model keeps its own
+	// forecast deadline, while parallel workers avoid serially extending server
+	// startup by one timeout for every model.
+	workers := min(len(tasks), cap(a.forecasts.slots))
+	work := make(chan forecastTask)
+	errs := make(chan error, len(tasks))
+	var group sync.WaitGroup
+	for range workers {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			for task := range work {
+				if _, err := a.forecasts.results(ctx, []forecastTask{task}); err != nil {
+					errs <- fmt.Errorf("warm forecast model %s: %w", task.request.Model.Info().ID, err)
+				}
+			}
+		}()
+	}
+	for _, task := range tasks {
+		work <- task
+	}
+	close(work)
+	group.Wait()
+	close(errs)
+	return errors.Join(errorsFrom(errs)...)
+}
+
+func errorsFrom(values <-chan error) []error {
+	errs := make([]error, 0, cap(values))
+	for err := range values {
+		errs = append(errs, err)
+	}
+	return errs
 }
 
 func (a *application) forecast(w http.ResponseWriter, r *http.Request) {

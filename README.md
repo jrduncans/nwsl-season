@@ -81,7 +81,9 @@ connection limits independently of any reverse proxy. During startup, it also
 calculates and keeps the zero-assumption result for every Forecast Lab model in
 the process-local result cache, so the initial request for each model can be
 served without running a simulation. A missing or unusable fixture cache only
-skips this warm-up; it does not prevent the server from starting.
+skips this warm-up; it does not prevent the server from starting. Later
+successful fixture or xG cache changes refresh those baseline results; no-op
+and rate-limited checks leave the warmed cache intact.
 
 ## Observability
 
