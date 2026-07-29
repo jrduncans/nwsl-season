@@ -20,6 +20,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const defaultForecastIterations = 50000
@@ -33,10 +36,12 @@ func (a *Application) PrecacheForecasts(ctx context.Context) error {
 }
 
 func (a *application) precacheForecasts(ctx context.Context) error {
+	ctx, span := telemetry.Tracer().Start(ctx, "forecast.precache", trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
 	if a.store == nil {
 		return fmt.Errorf("season cache unavailable")
 	}
-	data, err := a.store.Season(ctx, a.options.CurrentSeason, a.options.Stage)
+	data, err := a.loadSeasonData(ctx, a.options.CurrentSeason)
 	if err != nil {
 		return fmt.Errorf("load %s season: %w", a.options.CurrentSeason, err)
 	}
@@ -110,6 +115,11 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	}
 	state.ModelID = forecast.CanonicalID(state.ModelID)
 	state.ComparisonModelID = forecast.CanonicalID(state.ComparisonModelID)
+	trace.SpanFromContext(r.Context()).SetAttributes(
+		attribute.String("forecast.model_id", state.ModelID),
+		attribute.Bool("forecast.comparison_requested", state.ComparisonModelID != ""),
+		attribute.Int("forecast.fixed_assumption_count", len(state.Fixed)),
+	)
 	data, season, err := a.forecastData(r)
 	if err != nil {
 		a.renderError(w, r, err)
@@ -240,7 +250,7 @@ func (a *application) forecastData(r *http.Request) (data cache.SeasonData, seas
 	if season == "" {
 		season = a.options.CurrentSeason
 	}
-	data, err = a.store.Season(r.Context(), season, a.options.Stage)
+	data, err = a.loadSeasonData(r.Context(), season)
 	if err != nil {
 		return cache.SeasonData{}, "", fmt.Errorf("load %s season: %w", season, err)
 	}

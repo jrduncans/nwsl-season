@@ -167,7 +167,7 @@ func (s *Scheduler) check() {
 
 	runCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	run, err := s.runner.Run(runCtx, syncer.RunOptions{
-		Season: s.config.Season, Stage: s.config.Stage, MinimumAttemptInterval: s.config.MinimumAttemptInterval,
+		Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler", MinimumAttemptInterval: s.config.MinimumAttemptInterval,
 	})
 	cancel()
 	if err != nil {
@@ -198,7 +198,7 @@ func (s *Scheduler) recalculateCachedClinching(parent context.Context) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
-	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage})
+	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler"})
 	cancel()
 	if err != nil {
 		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)

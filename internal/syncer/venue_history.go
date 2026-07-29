@@ -43,7 +43,7 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 		if timeout > 0 {
 			runCtx, cancel = context.WithTimeout(ctx, timeout)
 		}
-		run, runErr := s.Run(runCtx, RunOptions{Season: season, Stage: stage, SourceOnly: true})
+		run, runErr := s.Run(runCtx, RunOptions{Season: season, Stage: stage, Trigger: "venue_history", SourceOnly: true})
 		cancel()
 		if runErr != nil {
 			return fmt.Errorf("sync venue history for %s: %w", season, runErr)

@@ -87,12 +87,23 @@ and rate-limited checks leave the warmed cache intact.
 
 ## Observability
 
-The server creates OpenTelemetry traces for HTTP routes, ASA API calls,
-scheduled cache checks and refreshes, and Forecast Lab simulations. Local
-development remains silent and does not make telemetry network calls until an
-exporter is configured. Forecast spans record the selected model plus the
-iteration, team, fixture, xG-observation, playoff-place, and fixed-assumption
-counts; they do not include individual assumed results or team identifiers.
+The server and `sync` command create OpenTelemetry traces for HTTP routes, ASA
+API calls, scheduled cache checks and refreshes, cache reads and writes,
+qualification and scenario calculations, and Forecast Lab simulations. Every
+ASA request is a downstream HTTP child span regardless of whether it was
+started by the server or the maintenance command.
+
+The trace data is deliberately wide rather than pre-aggregated. Page requests
+record the season, stage, fixture snapshot, cache age, fixture inventory, and
+xG availability. Sync traces include their trigger, data-change counts, and
+independent xG/qualification/scenario outcomes. Forecast spans record the
+selected model plus the iteration, team, fixture, xG-observation, playoff-place,
+and fixed-assumption counts; calculation spans add the scoped fixture and
+achievement counts. They do not include individual assumed results.
+
+Local development remains silent and does not make telemetry network calls
+until an exporter is configured. Metrics are optional; traces alone are enough
+to investigate a reported problem in Honeycomb at this project's scale.
 
 To send traces to Honeycomb, create an **ingest API key** in your Honeycomb
 environment, then set it only in the runtime environment:
@@ -100,6 +111,8 @@ environment, then set it only in the runtime environment:
 ```sh
 export HONEYCOMB_API_KEY='your-ingest-key'
 export OTEL_SERVICE_NAME='nwsl-season'
+# Set this on deploy to compare behavior between versions.
+export OTEL_RESOURCE_ATTRIBUTES='service.version=git-sha-or-release'
 go run ./cmd/server
 ```
 

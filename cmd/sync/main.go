@@ -19,17 +19,22 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() (exitCode int) {
 	if err := config.LoadEnvironmentFile(); err != nil {
 		fmt.Fprintf(os.Stderr, "sync: load configuration environment file: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	cfg, err := config.FromEnvironment()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sync: configuration: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	season := flag.String("season", cfg.SyncSeason, "NWSL season year to fetch")
 	stage := flag.String("stage", cfg.SyncStage, "NWSL competition stage to fetch")
@@ -43,6 +48,19 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	providers, err := telemetry.Configure(context.Background(), logger, "nwsl-season-sync")
+	if err != nil {
+		logger.Error("configure OpenTelemetry", "error", err)
+		return 1
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := providers.Shutdown(shutdownCtx); err != nil {
+			logger.Error("flush OpenTelemetry telemetry", "error", err)
+			exitCode = 1
+		}
+	}()
 	client := asa.Client{
 		BaseURL: *baseURL,
 		HTTPClient: &http.Client{
@@ -55,22 +73,22 @@ func main() {
 	cancelOpen()
 	if err != nil {
 		logger.Error("open cache database", "error", err, "db", *dbPath)
-		os.Exit(1)
+		return 1
 	}
 	defer db.Close()
 	if *pruneHistoryBefore != "" {
 		cutoff, err := time.Parse(time.RFC3339, *pruneHistoryBefore)
 		if err != nil {
 			logger.Error("parse history prune cutoff", "error", err, "value", *pruneHistoryBefore)
-			os.Exit(1)
+			return 1
 		}
 		result, err := db.PruneHistory(context.Background(), cutoff)
 		if err != nil {
 			logger.Error("prune cache history", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("Pruned history before %s: %d sync runs, %d xG sync runs, %d qualification runs (%d statuses), %d scenario runs (%d results), and %d expired sync leases.\n", cutoff.UTC().Format(time.RFC3339), result.SyncRuns, result.XGSyncRuns, result.QualificationRuns, result.QualificationStatuses, result.ScenarioRuns, result.ScenarioResults, result.ExpiredSyncLeases)
-		return
+		return 0
 	}
 
 	service := syncer.Service{
@@ -86,28 +104,28 @@ func main() {
 	} else {
 		if *recalculate {
 			logger.Error("clinching recalculation unavailable: no configured season rules", "season", *season, "stage", *stage)
-			os.Exit(1)
+			return 1
 		}
 		logger.Warn("qualification unavailable: no configured season rules", "season", *season, "stage", *stage)
 	}
 	if *recalculate {
-		run, err := service.Recalculate(context.Background(), syncer.RecalculateOptions{Season: *season, Stage: *stage, Force: *force})
+		run, err := service.Recalculate(context.Background(), syncer.RecalculateOptions{Season: *season, Stage: *stage, Force: *force, Trigger: "cli"})
 		if err != nil {
 			logger.Error("recalculate clinching data", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		if run.QualificationError != "" {
 			logger.Error("qualification recalculation failed", "error", run.QualificationError)
-			os.Exit(1)
+			return 1
 		}
 		if run.ScenarioError != "" {
 			logger.Error("scenario recalculation failed", "error", run.ScenarioError)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Printf("Checked clinching data for cached %s %s snapshot %s.\n", *season, *stage, run.FixtureSnapshotID)
 		fmt.Printf("Qualification: %s. Scenarios: %s.\n", calculationOutcome(run.QualificationRecalculated), calculationOutcome(run.ScenarioRecalculated))
 		printCalculationBudgetSummary(logger, db, run)
-		return
+		return 0
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.SyncTimeout)
@@ -115,18 +133,19 @@ func main() {
 	run, err := service.Run(ctx, syncer.RunOptions{
 		Season:                 *season,
 		Stage:                  *stage,
+		Trigger:                "cli",
 		MinimumAttemptInterval: *minInterval,
 		Force:                  *force,
 	})
 	if err != nil {
 		logger.Error("sync ASA cache", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	if run.Skipped {
 		fmt.Printf("Skipped sync for %s %s because the cache was attempted recently.\n", *season, *stage)
 		fmt.Printf("Last attempt: %s (%s).\n", run.FinishedAt.Format(time.RFC3339), run.Outcome)
-		return
+		return 0
 	}
 	fmt.Printf("Synced %d games and %d teams for %s %s into %s.\n", run.GamesUpserted, run.TeamsUpserted, *season, *stage, *dbPath)
 	fmt.Printf("Deleted %d stale games. Last successful sync: %s.\n", run.GamesDeleted, run.FinishedAt.Format(time.RFC3339))
@@ -136,7 +155,7 @@ func main() {
 	if run.XGError != "" {
 		logger.Warn("fixture sync succeeded but xG refresh failed", "error", run.XGError)
 		if *requireXG {
-			os.Exit(1)
+			return 1
 		}
 	}
 	if run.QualificationError != "" {
@@ -154,6 +173,7 @@ func main() {
 	if run.QualificationRecalculated || run.ScenarioRecalculated {
 		printCalculationBudgetSummary(logger, db, run)
 	}
+	return 0
 }
 
 func calculationOutcome(recalculated bool) string {

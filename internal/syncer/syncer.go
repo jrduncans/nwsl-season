@@ -80,8 +80,12 @@ type ScenarioRefresher interface {
 
 // RunOptions configures one sync run.
 type RunOptions struct {
-	Season                 string
-	Stage                  string
+	Season string
+	Stage  string
+	// Trigger identifies the caller that started this sync (for example,
+	// "scheduler", "cli", or "venue_history"). It is trace context, not
+	// persisted cache state.
+	Trigger                string
 	MinimumAttemptInterval time.Duration
 	Force                  bool
 	// SourceOnly stores fixtures, xG, and venue summaries without running
@@ -92,9 +96,10 @@ type RunOptions struct {
 // RecalculateOptions selects one already-cached season and stage. It never
 // performs an ASA request or mutates synchronized source data.
 type RecalculateOptions struct {
-	Season string
-	Stage  string
-	Force  bool
+	Season  string
+	Stage   string
+	Force   bool
+	Trigger string
 }
 
 // Run fetches one complete ASA season/stage and atomically stores it.
@@ -105,14 +110,11 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 			attribute.String("sync.season", options.Season),
 			attribute.String("sync.stage", options.Stage),
 			attribute.Bool("sync.forced", options.Force),
+			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
 	defer func() {
-		span.SetAttributes(
-			attribute.String("sync.outcome", run.Outcome),
-			attribute.Bool("sync.skipped", run.Skipped),
-			attribute.Int("sync.games_seen", run.GamesSeen),
-		)
+		span.SetAttributes(syncRunAttributes(run)...)
 		if err != nil {
 			telemetry.RecordError(span, err)
 		}
@@ -162,7 +164,22 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 
 	xgClient, hasXGClient := s.ASA.(xgASAClient)
 	xgCache, hasXGCache := s.Store.(xgStore)
-	data := s.fetchASAData(ctx, options, xgClient, hasXGClient && hasXGCache)
+	fetchCtx, fetchSpan := telemetry.Tracer().Start(ctx, "sync.fetch_asa",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.Bool("sync.xg_requested", hasXGClient && hasXGCache),
+		),
+	)
+	data := s.fetchASAData(fetchCtx, options, xgClient, hasXGClient && hasXGCache)
+	fetchSpan.SetAttributes(
+		attribute.Int("sync.teams_fetched", len(data.teams)),
+		attribute.Int("sync.games_fetched", len(data.games)),
+		attribute.Int("sync.xg_rows_fetched", len(data.xg)),
+	)
+	if fetchErr := errors.Join(data.teamsErr, data.gamesErr, data.xgErr); fetchErr != nil {
+		telemetry.RecordError(fetchSpan, fetchErr)
+	}
+	fetchSpan.End()
 	if data.teamsErr != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch teams: %w", data.teamsErr))
 	}
@@ -184,7 +201,23 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
 
-	run, err = s.Store.ReplaceSeason(ctx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
+	replaceCtx, replaceSpan := telemetry.Tracer().Start(ctx, "cache.season.replace",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("cache.name", "season"),
+			attribute.String("sync.season", options.Season),
+			attribute.String("sync.stage", options.Stage),
+			attribute.Int("sync.team_count", len(cacheTeams)),
+			attribute.Int("sync.fixture_count", len(cacheGames)),
+		),
+	)
+	run, err = s.Store.ReplaceSeason(replaceCtx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
+	if err != nil {
+		telemetry.RecordError(replaceSpan, err)
+	} else {
+		replaceSpan.SetAttributes(syncRunAttributes(run)...)
+	}
+	replaceSpan.End()
 	if err != nil {
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
 	}
@@ -193,15 +226,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	// scenario passes can legitimately outlive the source-sync context through
 	// their independent derived budgets, so they remain after this step.
 	if hasXGClient && hasXGCache {
-		if data.xgErr != nil {
-			run = s.xgWarning(ctx, xgCache, options, startedAt, run, fmt.Errorf("fetch game xG: %w", data.xgErr))
-		} else if values, err := mapXGoals(data.xg); err != nil {
-			run = s.xgWarning(ctx, xgCache, options, startedAt, run, err)
-		} else if xgRun, err := xgCache.ReplaceGameXG(ctx, options.Season, options.Stage, cacheGames, values, startedAt); err != nil {
-			run = s.xgWarning(ctx, xgCache, options, startedAt, run, err)
-		} else {
-			run.XGRun = &xgRun
-		}
+		run = s.refreshXG(ctx, xgCache, options, startedAt, cacheGames, data.xg, data.xgErr, run)
 	}
 	if options.SourceOnly {
 		return run, nil
@@ -263,6 +288,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 			attribute.String("sync.season", options.Season),
 			attribute.String("sync.stage", options.Stage),
 			attribute.Bool("sync.forced", options.Force),
+			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
 	defer func() {
@@ -350,6 +376,94 @@ func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, 
 		}
 	}
 	return run
+}
+
+func (s Service) refreshXG(ctx context.Context, store xgStore, options RunOptions, startedAt time.Time, games []cache.Game, source []asa.GameXGoals, sourceErr error, run cache.SyncRun) cache.SyncRun {
+	ctx, span := telemetry.Tracer().Start(ctx, "sync.xg.refresh",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", options.Season),
+			attribute.String("sync.stage", options.Stage),
+			attribute.Int("sync.fixture_count", len(games)),
+			attribute.Int("sync.xg_rows_fetched", len(source)),
+		),
+	)
+	defer func() {
+		outcome := "success"
+		if run.XGError != "" {
+			outcome = "failure"
+		}
+		span.SetAttributes(attribute.String("sync.xg.outcome", outcome))
+		if run.XGRun != nil {
+			span.SetAttributes(
+				attribute.Int64("sync.xg.available_games", run.XGRun.AvailableGames),
+				attribute.Int64("sync.xg.unavailable_games", run.XGRun.UnavailableGames),
+			)
+		}
+		span.End()
+	}()
+	if sourceErr != nil {
+		cause := fmt.Errorf("fetch game xG: %w", sourceErr)
+		telemetry.RecordError(span, cause)
+		return s.xgWarning(ctx, store, options, startedAt, run, cause)
+	}
+	values, err := mapXGoals(source)
+	if err != nil {
+		telemetry.RecordError(span, err)
+		return s.xgWarning(ctx, store, options, startedAt, run, err)
+	}
+	xgRun, err := store.ReplaceGameXG(ctx, options.Season, options.Stage, games, values, startedAt)
+	if err != nil {
+		telemetry.RecordError(span, err)
+		return s.xgWarning(ctx, store, options, startedAt, run, err)
+	}
+	run.XGRun = &xgRun
+	return run
+}
+
+func syncTrigger(value string) string {
+	if value == "" {
+		return "unspecified"
+	}
+	return value
+}
+
+func syncRunAttributes(run cache.SyncRun) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.String("sync.outcome", run.Outcome),
+		attribute.Bool("sync.skipped", run.Skipped),
+		attribute.Int("sync.teams_seen", run.TeamsUpserted),
+		attribute.Int("sync.games_seen", run.GamesSeen),
+		attribute.Int("sync.teams_inserted", run.TeamsInserted),
+		attribute.Int("sync.teams_updated", run.TeamsUpdated),
+		attribute.Int("sync.teams_unchanged", run.TeamsUnchanged),
+		attribute.Int("sync.games_inserted", run.GamesInserted),
+		attribute.Int("sync.games_updated", run.GamesUpdated),
+		attribute.Int("sync.games_unchanged", run.GamesUnchanged),
+		attribute.Int("sync.games_deleted", run.GamesDeleted),
+		attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID),
+		attribute.Bool("sync.partial_failure", run.XGError != "" || run.QualificationError != "" || run.ScenarioError != ""),
+		attribute.String("sync.xg.outcome", syncComponentOutcome(run.XGRun != nil, run.XGError)),
+		attribute.String("sync.qualification.outcome", syncComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
+		attribute.String("sync.scenario.outcome", syncComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+	}
+	if run.XGRun != nil {
+		attributes = append(attributes,
+			attribute.Int64("sync.xg.available_games", run.XGRun.AvailableGames),
+			attribute.Int64("sync.xg.unavailable_games", run.XGRun.UnavailableGames),
+		)
+	}
+	return attributes
+}
+
+func syncComponentOutcome(completed bool, failure string) string {
+	if failure != "" {
+		return "failure"
+	}
+	if completed {
+		return "complete"
+	}
+	return "not_run"
 }
 
 func (s Service) xgWarning(ctx context.Context, store xgStore, options RunOptions, startedAt time.Time, run cache.SyncRun, cause error) cache.SyncRun {

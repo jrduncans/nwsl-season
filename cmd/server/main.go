@@ -79,8 +79,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 
 	service := syncer.Service{
 		ASA: asa.Client{HTTPClient: &http.Client{
-			Timeout:   cfg.SyncTimeout,
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
+			Timeout: cfg.SyncTimeout,
 		}},
 		Store:                db,
 		QualificationTimeout: cfg.QualificationBudget,

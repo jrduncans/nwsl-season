@@ -10,6 +10,10 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
@@ -57,6 +61,62 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	if !game.AwayScore.Valid || game.AwayScore.Int64 != 2 {
 		t.Fatalf("away score = %+v, want 2", game.AwayScore)
 	}
+}
+
+func TestRunRecordsDetailedTelemetry(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	service := Service{ASA: &fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}, Store: newTestDB(t)}
+	if _, err := service.Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season", Trigger: "cli"}); err != nil {
+		t.Fatal(err)
+	}
+
+	span := findTelemetrySpan(t, exporter.GetSpans(), "sync.run")
+	attributes := telemetryAttributes(span)
+	if got := attributes["sync.trigger"].AsString(); got != "cli" {
+		t.Errorf("sync.trigger = %q, want cli", got)
+	}
+	if got := attributes["sync.games_seen"].AsInt64(); got != 1 {
+		t.Errorf("sync.games_seen = %d, want 1", got)
+	}
+	if got := attributes["sync.partial_failure"].AsBool(); got {
+		t.Error("sync.partial_failure = true, want false")
+	}
+	if got := attributes["cache.fixture_snapshot_id"].AsString(); got == "" {
+		t.Error("cache.fixture_snapshot_id is empty")
+	}
+	if got := telemetryAttributes(findTelemetrySpan(t, exporter.GetSpans(), "cache.season.replace"))["sync.games_inserted"].AsInt64(); got != 1 {
+		t.Errorf("cache replacement sync.games_inserted = %d, want 1", got)
+	}
+}
+
+func findTelemetrySpan(t *testing.T, spans []tracetest.SpanStub, name string) tracetest.SpanStub {
+	t.Helper()
+	for _, span := range spans {
+		if span.Name == name {
+			return span
+		}
+	}
+	t.Fatalf("span %q was not recorded", name)
+	return tracetest.SpanStub{}
+}
+
+func telemetryAttributes(span tracetest.SpanStub) map[string]attribute.Value {
+	values := make(map[string]attribute.Value, len(span.Attributes))
+	for _, value := range span.Attributes {
+		values[string(value.Key)] = value.Value
+	}
+	return values
 }
 
 func TestRunFetchesASAResourcesConcurrently(t *testing.T) {
