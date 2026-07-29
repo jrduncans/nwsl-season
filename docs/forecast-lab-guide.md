@@ -83,8 +83,9 @@ ID, so a shared URL always says which model produced its outlook.
 | Current pace | `current-pace-v1` | Scores and table points | A team's observed points pace directly scales its future scoring rate. It does not model opponent defence. |
 | Results Poisson | `results-poisson-home-two-seasons-v1` | Scores | Current-season team attack and goals-conceded rates use league venue rates pooled with the two previous seasons. |
 | xG Poisson | `xg-poisson-home-two-seasons-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
+| xG Poisson (recent form) | `xg-poisson-recent-form-v1` | Available ASA team-model xG and kickoff dates | An experimental alternative: each team's xG attack and defence discount older current-season matches exponentially, while the two-season league home-field baseline stays unchanged. |
 
-All three models turn a fixture into independent home and away Poisson score
+All four models turn a fixture into independent home and away Poisson score
 distributions. Their scoring rates are bounded between `0.20` and `4.50` goals
 per side, which keeps sparse early-season data from producing implausibly
 extreme scorelines.
@@ -128,6 +129,30 @@ home/away rates; each team's attack and defence still use the current season.
 Incomplete xG coverage can make its outlook different from Results Poisson for
 two reasons: the input values differ, and the model may have fewer observed
 matches. It does not fall back to results.
+
+### xG Poisson (recent form)
+
+`xg-poisson-recent-form-v1` is a comparison model rather than the recommended
+default. It uses the same Poisson construction and league home/away rates as
+the default xG Poisson model, but replaces each team's unweighted xG totals
+with an exponentially weighted total. For a completed match `d` days before
+the most recently completed match in the cached season:
+
+```text
+weight = 2^(-d / 60)
+```
+
+The match at the cutoff has weight 1; a match 60 days old has weight 0.5, and
+one 120 days old has weight 0.25. The weighted xG-for, xG-against, and match
+weight replace `GF`, `GA`, and `P` in the standard eight-match shrinkage
+formula. This smooth decay has no date cliff and does not give an unevenly
+scheduled team an arbitrary fixed number of “recent” games. The 60-day
+half-life is a deliberately fixed experimental constant, not a user control.
+The checked-in historical evaluation found that it did not meet the
+precommitted replacement rule: its final-test match log loss was slightly
+worse than the default and the paired interval crossed zero. It remains an
+available comparison model; `xg-poisson-home-two-seasons-v1` remains the
+recommended default.
 
 ### Current pace
 

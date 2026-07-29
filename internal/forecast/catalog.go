@@ -6,7 +6,12 @@ type CatalogEntry struct {
 }
 
 func Catalog() []CatalogEntry {
-	return []CatalogEntry{{Model: NewCurrentPaceV1()}, {Model: NewResultsPoissonHomeTwoSeasonsV1()}, {Model: NewXGPoissonHomeTwoSeasonsV1(), Default: true}}
+	return []CatalogEntry{
+		{Model: NewCurrentPaceV1()},
+		{Model: NewResultsPoissonHomeTwoSeasonsV1()},
+		{Model: NewXGPoissonHomeTwoSeasonsV1(), Default: true},
+		{Model: NewXGPoissonRecentFormV1()},
+	}
 }
 
 // EvaluationCatalog adds a deliberately simple reference model to the models

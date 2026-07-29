@@ -120,7 +120,7 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 		parts = append(parts, team.ID, team.Name, team.ShortName, team.Abbreviation)
 	}
 	for _, game := range standingsGames(data.Games) {
-		parts = append(parts, game.ID, game.Status, game.HomeTeamID, game.AwayTeamID)
+		parts = append(parts, game.ID, game.Status, game.HomeTeamID, game.AwayTeamID, game.Kickoff.UTC().Format(time.RFC3339Nano))
 		if game.HomeScore != nil {
 			parts = append(parts, strconv.Itoa(*game.HomeScore))
 		} else {

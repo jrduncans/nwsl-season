@@ -795,6 +795,22 @@ func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
 	}
 }
 
+func TestForecastAcceptsRecentFormModel(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?v=2&m=xg-poisson-recent-form-v1", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, text := range []string{"xG Poisson (recent form)", "xg-poisson-recent-form-v1", "experimental xG Poisson model"} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain %q", text)
+		}
+	}
+}
+
 func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 	data := testSeasonData()
 	data.XGoals = []cache.GameXG{{
@@ -809,6 +825,7 @@ func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 		{path: "/seasons/2026/forecast", want: true},
 		{path: "/seasons/2026/forecast?v=2&m=results-poisson-v1", want: false},
 		{path: "/seasons/2026/forecast?v=2&m=xg-poisson-v1", want: true},
+		{path: "/seasons/2026/forecast?v=2&m=xg-poisson-recent-form-v1", want: true},
 	} {
 		response := httptest.NewRecorder()
 		NewHandlerWithOptions(fakeStore{season: data}, options).ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
@@ -866,6 +883,15 @@ func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 	data.Teams[0].Name = "Renamed Alpha"
 	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8); second == first {
 		t.Fatal("forecast result key did not change with team presentation")
+	}
+}
+
+func TestForecastResultKeyChangesWithKickoff(t *testing.T) {
+	data := cache.SeasonData{Games: []cache.Game{{ASAID: "completed", KickoffUTC: "2026-05-01 20:00:00 UTC"}}}
+	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-recent-form-v1", 50000, 8)
+	data.Games[0].KickoffUTC = "2026-05-02 20:00:00 UTC"
+	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-recent-form-v1", 50000, 8); second == first {
+		t.Fatal("forecast result key did not change with fixture kickoff")
 	}
 }
 
