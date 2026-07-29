@@ -61,10 +61,32 @@ func NewHandler(store Store) http.Handler {
 
 // NewHandlerWithOptions wires the application routes with explicit season rules.
 func NewHandlerWithOptions(store Store, options Options) http.Handler {
-	return newHandlerWithForecastExecutor(store, options, nil)
+	return NewApplication(store, options)
+}
+
+// Application is the HTTP application plus its process-local forecast cache.
+// It exposes forecast warm-up for server startup while still implementing
+// http.Handler for callers that only need to serve requests.
+type Application struct {
+	handler http.Handler
+	app     *application
+}
+
+// NewApplication wires the application routes with explicit season rules.
+func NewApplication(store Store, options Options) *Application {
+	return newApplicationWithForecastExecutor(store, options, nil)
+}
+
+// ServeHTTP implements http.Handler.
+func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.handler.ServeHTTP(w, r)
 }
 
 func newHandlerWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) http.Handler {
+	return newApplicationWithForecastExecutor(store, options, forecasts)
+}
+
+func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
 	pages := template.Must(template.ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
@@ -87,7 +109,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
-	return withBasePath(mux)
+	return &Application{handler: withBasePath(mux), app: application}
 }
 
 func (a *application) clinching(w http.ResponseWriter, r *http.Request) {

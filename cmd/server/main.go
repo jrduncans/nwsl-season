@@ -114,13 +114,18 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		logger.Info("historical venue data ready", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "prior_seasons", 2)
 	}()
 
-	handler := app.NewHandlerWithOptions(db, app.Options{
+	application := app.NewApplication(db, app.Options{
 		CurrentSeason: cfg.SyncSeason,
 		Stage:         cfg.SyncStage, Rules: rules,
 		ForecastConcurrency: cfg.ForecastConcurrency,
 		ForecastTimeout:     cfg.ForecastTimeout,
 	})
-	server := newHTTPServer(cfg.HTTPAddr, otelhttp.NewHandler(handler, "HTTP server", otelhttp.WithSpanNameFormatter(httpSpanName)), cfg.ForecastTimeout)
+	if err := application.PrecacheForecasts(ctx); err != nil && ctx.Err() == nil {
+		logger.Warn("pre-cache baseline forecasts", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
+	} else if ctx.Err() == nil {
+		logger.Info("pre-cached baseline forecasts", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
+	}
+	server := newHTTPServer(cfg.HTTPAddr, otelhttp.NewHandler(application, "HTTP server", otelhttp.WithSpanNameFormatter(httpSpanName)), cfg.ForecastTimeout)
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
 

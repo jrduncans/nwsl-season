@@ -77,7 +77,11 @@ Useful endpoints:
 
 Forecast requests that exceed the concurrency limit receive `429`. Forecast
 computations that exceed their timeout receive `503`. The server also applies
-connection limits independently of any reverse proxy.
+connection limits independently of any reverse proxy. During startup, it also
+calculates and keeps the zero-assumption result for every Forecast Lab model in
+the process-local result cache, so the initial request for each model can be
+served without running a simulation. A missing or unusable fixture cache only
+skips this warm-up; it does not prevent the server from starting.
 
 ## Observability
 

@@ -23,6 +23,56 @@ import (
 
 const defaultForecastIterations = 50000
 
+// PrecacheForecasts calculates the baseline (zero fixed assumptions) result
+// for every Forecast Lab model and stores each result in this application's
+// process-local forecast cache. It is intended for server startup; individual
+// model failures do not prevent later models from being attempted.
+func (a *Application) PrecacheForecasts(ctx context.Context) error {
+	return a.app.precacheForecasts(ctx)
+}
+
+func (a *application) precacheForecasts(ctx context.Context) error {
+	if a.store == nil {
+		return fmt.Errorf("season cache unavailable")
+	}
+	data, err := a.store.Season(ctx, a.options.CurrentSeason, a.options.Stage)
+	if err != nil {
+		return fmt.Errorf("load %s season: %w", a.options.CurrentSeason, err)
+	}
+	if len(data.Games) == 0 {
+		return fmt.Errorf("no cached games found for %s %s", a.options.CurrentSeason, a.options.Stage)
+	}
+
+	state := forecaststate.State{Fixed: map[string]simulation.Outcome{}}
+	xgoals := forecastXGoals(data)
+	venue := forecastVenueSample(data)
+	games := standingsGames(data.Games)
+	places := playoffPlaces(a.options.Rules)
+	entries := forecast.Catalog()
+	// Warm the model selected by a bare Forecast Lab URL first, so a startup
+	// time budget still prioritizes the most common first request.
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Default && !entries[j].Default })
+
+	var errs []error
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		request := simulation.Request{
+			Teams: data.Teams, Games: games, XGoals: xgoals, HistoricalVenue: venue,
+			Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places,
+		}
+		task := forecastTask{
+			key:     forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places),
+			request: request,
+		}
+		if _, err := a.forecasts.results(ctx, []forecastTask{task}); err != nil {
+			errs = append(errs, fmt.Errorf("warm forecast model %s: %w", entry.Model.Info().ID, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	state, err := forecaststate.ParseV2(query.Get("v"), query.Get("m"), query.Get("c"), query["p"], func(id string) bool { _, ok := forecast.Lookup(id); return ok }, forecast.Default().Model.Info().ID)
