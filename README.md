@@ -159,7 +159,7 @@ make model-evaluation
 ```
 
 It fetches the 2016–2019 and 2021–2025 regular seasons from ASA, including xG,
-then evaluates all three forecast models with the leakage-safe historical
+then evaluates every Forecast Lab model with the leakage-safe historical
 walk-forward runner. To only load or only evaluate, use:
 
 ```sh

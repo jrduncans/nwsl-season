@@ -30,8 +30,8 @@ func (p xgPoissonHomeHistoryV1) Info() Info {
 }
 
 func (p xgPoissonHomeHistoryV1) Fit(input FitInput) (Predictor, error) {
-	if p.seasons == 2 && input.HistoricalVenue.XGMatches > 0 {
-		return fitXGPoisson(input, input.Games, input.XGoals, input.HistoricalVenue)
+	if p.seasons == 2 {
+		return fitXGPoissonHomeTwoSeasons(input)
 	}
 	history, xgoals := historyPool(input, p.seasons)
 	games := append(history, input.Games...)
