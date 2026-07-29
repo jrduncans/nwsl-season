@@ -37,10 +37,13 @@ flowchart TD
     G --> H["Render the forecast and an optional model comparison"]
 ```
 
-The default model is currently **xG Poisson** (`xg-poisson-v1`). It is the
-recommendation selected by the checked-in historical walk-forward evaluation;
-see [Model evaluation v1](model-evaluation-v1.md) for its development,
-final-test, and pooled results.
+The default model is currently **xG Poisson**
+(`xg-poisson-home-two-seasons-v1`). Its current-team strengths use only this
+season, while its league home/away rates pool this season with the two previous
+regular seasons. That venue window was selected after the checked-in
+walk-forward experiments showed a small log-loss improvement over season-only
+rates, with no meaningful advantage for pooling all history; see
+[Model evaluation v1](model-evaluation-v1.md).
 
 ## What Forecast Lab needs before it can run
 
@@ -64,6 +67,12 @@ The xG model reads only validated, available ASA **team-model** xG for
 completed games. The page reports its coverage; a warning appears below 95%.
 Missing xG is deliberately not substituted with actual goals.
 
+At server startup, the cache checks for persisted venue summaries for the two
+previous regular seasons. Missing fixture or xG summaries trigger a one-time
+source-only sync for that season. Each successful fixture and xG write updates
+the summary transactionally, so later forecasts read two small aggregate rows
+rather than recalculating historical seasons on every request.
+
 ## The model catalog
 
 Every model has a stable ID. Changing its formula or constants requires a new
@@ -72,8 +81,8 @@ ID, so a shared URL always says which model produced its outlook.
 | Model | ID | Completed-data input | Main assumption |
 | --- | --- | --- | --- |
 | Current pace | `current-pace-v1` | Scores and table points | A team's observed points pace directly scales its future scoring rate. It does not model opponent defence. |
-| Results Poisson | `results-poisson-v1` | Scores | Team attack and goals-conceded rates, with league and team shrinkage, explain future scoring. |
-| xG Poisson | `xg-poisson-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
+| Results Poisson | `results-poisson-home-two-seasons-v1` | Scores | Current-season team attack and goals-conceded rates use league venue rates pooled with the two previous seasons. |
+| xG Poisson | `xg-poisson-home-two-seasons-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
 
 All three models turn a fixture into independent home and away Poisson score
 distributions. Their scoring rates are bounded between `0.20` and `4.50` goals
@@ -83,8 +92,9 @@ extreme scorelines.
 ### Results Poisson and xG Poisson
 
 The two Poisson models share the same structure. For Results Poisson, let `M`
-be completed matches, `HG` and `AG` their home and away goals, and use the
-fixed league priors of 20 matches at 1.50 home goals and 1.20 away goals:
+be completed matches from the current and two previous regular seasons, `HG`
+and `AG` their home and away goals, and use the fixed league priors of 20
+matches at 1.50 home goals and 1.20 away goals:
 
 ```text
 league_home = (HG + 20 * 1.50) / (M + 20)
@@ -111,11 +121,13 @@ lambda_away = clamp(league_away * attack_A * defence_H, 0.20, 4.50)
 The simulator independently samples `Poisson(lambda_home)` and
 `Poisson(lambda_away)`.
 
-`xg-poisson-v1` uses this exact calculation with available team-model xG in
-place of `HG`, `AG`, `GF`, and `GA`. Only completed fixtures with available xG
-contribute to its fit. This means incomplete xG coverage can make its outlook
-different from Results Poisson for two reasons: the input values differ, and
-the model may have fewer observed matches. It does not fall back to results.
+`xg-poisson-home-two-seasons-v1` uses this exact calculation with available
+team-model xG in place of `HG`, `AG`, `GF`, and `GA`. Only completed fixtures
+with available xG contribute to its fit. Historical xG affects only the league
+home/away rates; each team's attack and defence still use the current season.
+Incomplete xG coverage can make its outlook different from Results Poisson for
+two reasons: the input values differ, and the model may have fewer observed
+matches. It does not fall back to results.
 
 ### Current pace
 

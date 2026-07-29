@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -25,11 +26,36 @@ type ExpectedGoals struct {
 	Home, Away float64
 }
 
-// FitInput keeps forecast-only inputs distinct from official standings.
-type FitInput struct {
-	Teams  []standings.Team
+// HistoricalSeason contains only fixtures and xG observations that were
+// available before a forecast cutoff. It lets candidates select a bounded
+// number of recent seasons without changing current-season team strengths.
+type HistoricalSeason struct {
+	ID     string
+	Ended  time.Time
 	Games  []standings.Game
 	XGoals map[string]ExpectedGoals
+}
+
+// VenueSample is a compact, reusable league home/away sample. Live forecasts
+// load it from persisted prior-season summaries; backtests can continue to
+// supply cutoff-safe historical fixtures.
+type VenueSample struct {
+	Matches                int
+	HomeGoals, AwayGoals   float64
+	XGMatches              int
+	HomeXG, AwayXG         float64
+	HomePoints, AwayPoints int
+}
+
+// FitInput keeps forecast-only inputs distinct from official standings.
+type FitInput struct {
+	Teams             []standings.Team
+	Games             []standings.Game
+	XGoals            map[string]ExpectedGoals
+	HistoricalGames   []standings.Game
+	HistoricalXGoals  map[string]ExpectedGoals
+	HistoricalSeasons []HistoricalSeason
+	HistoricalVenue   VenueSample
 }
 
 type OutcomeProbabilities struct{ HomeWin, Draw, AwayWin float64 }

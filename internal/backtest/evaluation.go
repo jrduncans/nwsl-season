@@ -120,6 +120,7 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 	}
 
 	validHeldoutCoverage, heldoutSeasons := true, 0
+	preparedSeasons := make([]Season, 0, len(seasons))
 	for _, season := range seasons {
 		audit, prepared, err := auditSeason(season)
 		report.Seasons = append(report.Seasons, audit)
@@ -136,7 +137,10 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 		if season.Window == HeldoutWindow {
 			heldoutSeasons++
 		}
-		if err := evaluateSeason(ctx, prepared, cfg, models); err != nil {
+		preparedSeasons = append(preparedSeasons, prepared)
+	}
+	for _, season := range preparedSeasons {
+		if err := evaluateSeason(ctx, season, preparedSeasons, cfg, models); err != nil {
 			return Report{}, fmt.Errorf("evaluate season %s: %w", season.ID, err)
 		}
 	}
@@ -263,7 +267,7 @@ func auditSeason(season Season) (SeasonAudit, Season, error) {
 	return audit, season, nil
 }
 
-func evaluateSeason(ctx context.Context, season Season, cfg Config, accumulators map[string]*modelAccumulator) error {
+func evaluateSeason(ctx context.Context, season Season, allSeasons []Season, cfg Config, accumulators map[string]*modelAccumulator) error {
 	finalTable := standings.Calculate(season.Teams, standingsGames(season.Games), standings.OfficialTotalRules())
 	actualPoints, actualPosition := map[string]int{}, map[string]int{}
 	for position, row := range finalTable {
@@ -275,10 +279,13 @@ func evaluateSeason(ctx context.Context, season Season, cfg Config, accumulators
 			return err
 		}
 		cutoffGames, today, completed := cutoff(season.Games, date)
+		history := historicalGames(allSeasons, season.ID, date)
+		historicalXG := historicalXGoals(allSeasons, season.ID, date)
+		historicalSeasons := historicalSeasons(allSeasons, season.ID, date)
 		stage := stageName(completed, countCompleted(season.Games))
 		xg := cutoffXG(season.XGoals, cutoffGames)
 		for _, model := range cfg.Models {
-			predictor, err := model.Fit(forecast.FitInput{Teams: season.Teams, Games: cutoffGames, XGoals: xg})
+			predictor, err := model.Fit(forecast.FitInput{Teams: season.Teams, Games: cutoffGames, XGoals: xg, HistoricalGames: history, HistoricalXGoals: historicalXG, HistoricalSeasons: historicalSeasons})
 			if err != nil {
 				return fmt.Errorf("fit %s at %s: %w", model.Info().ID, date.Format("2006-01-02"), err)
 			}
@@ -290,7 +297,7 @@ func evaluateSeason(ctx context.Context, season Season, cfg Config, accumulators
 				}
 				block.MatchLogLoss.add(OutcomeLogLoss(distribution.Outcomes(), observedOutcome(game.Game)))
 			}
-			result, err := simulation.Run(ctx, simulation.Request{Teams: season.Teams, Games: cutoffGames, XGoals: xg, Model: model, Iterations: cfg.Iterations, PlayoffPlaces: season.PlayoffPlaces})
+			result, err := simulation.Run(ctx, simulation.Request{Teams: season.Teams, Games: cutoffGames, XGoals: xg, HistoricalGames: history, HistoricalXGoals: historicalXG, HistoricalSeasons: historicalSeasons, Model: model, Iterations: cfg.Iterations, PlayoffPlaces: season.PlayoffPlaces})
 			if err != nil {
 				return fmt.Errorf("simulate %s at %s: %w", model.Info().ID, date.Format("2006-01-02"), err)
 			}
@@ -331,6 +338,94 @@ func evaluateSeason(ctx context.Context, season Season, cfg Config, accumulators
 	return nil
 }
 
+// historicalGames returns only completed fixtures from other seasons that had
+// already kicked off at this forecast date. It is deliberately time-based,
+// rather than relying on season IDs, so an unusual calendar cannot leak a
+// later result into an earlier prediction.
+func historicalGames(seasons []Season, currentSeason string, before time.Time) []standings.Game {
+	values := []standings.Game{}
+	for _, season := range seasons {
+		if season.ID == currentSeason {
+			continue
+		}
+		for _, historical := range season.Games {
+			if historical.Status != standings.CompletedStatus || !historical.Kickoff.Before(before) {
+				continue
+			}
+			game := historical.Game
+			// Fixture IDs are only guaranteed unique within a cached season. The
+			// history pool is a multi-season schedule, so namespace them before
+			// calculating congestion flags by fixture ID.
+			game.ID = season.ID + "/" + game.ID
+			game.Kickoff = historical.Kickoff
+			values = append(values, game)
+		}
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].Kickoff.Equal(values[j].Kickoff) {
+			return values[i].ID < values[j].ID
+		}
+		return values[i].Kickoff.Before(values[j].Kickoff)
+	})
+	return values
+}
+
+func historicalXGoals(seasons []Season, currentSeason string, before time.Time) map[string]forecast.ExpectedGoals {
+	values := map[string]forecast.ExpectedGoals{}
+	for _, season := range seasons {
+		if season.ID == currentSeason {
+			continue
+		}
+		for _, historical := range season.Games {
+			if historical.Status != standings.CompletedStatus || !historical.Kickoff.Before(before) {
+				continue
+			}
+			if xg, ok := season.XGoals[historical.ID]; ok {
+				xg.GameID = season.ID + "/" + historical.ID
+				values[xg.GameID] = xg
+			}
+		}
+	}
+	return values
+}
+
+func historicalSeasons(seasons []Season, currentSeason string, before time.Time) []forecast.HistoricalSeason {
+	values := []forecast.HistoricalSeason{}
+	for _, season := range seasons {
+		if season.ID == currentSeason {
+			continue
+		}
+		games := []standings.Game{}
+		xgoals := map[string]forecast.ExpectedGoals{}
+		var ended time.Time
+		for _, historical := range season.Games {
+			if historical.Status != standings.CompletedStatus || !historical.Kickoff.Before(before) {
+				continue
+			}
+			game := historical.Game
+			game.ID = season.ID + "/" + game.ID
+			games = append(games, game)
+			if xg, ok := season.XGoals[historical.ID]; ok {
+				xg.GameID = game.ID
+				xgoals[game.ID] = xg
+			}
+			if historical.Kickoff.After(ended) {
+				ended = historical.Kickoff
+			}
+		}
+		if len(games) > 0 {
+			values = append(values, forecast.HistoricalSeason{ID: season.ID, Ended: ended, Games: games, XGoals: xgoals})
+		}
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].Ended.Equal(values[j].Ended) {
+			return values[i].ID < values[j].ID
+		}
+		return values[i].Ended.Before(values[j].Ended)
+	})
+	return values
+}
+
 func scoreBucket(model *modelAccumulator, window, stage string) *scoreAccumulator {
 	if model.windows[window] == nil {
 		model.windows[window] = map[string]*scoreAccumulator{}
@@ -368,6 +463,7 @@ func cutoff(games []Game, date time.Time) ([]standings.Game, []Game, int) {
 	today, completed := []Game{}, 0
 	for _, historical := range games {
 		game := historical.Game
+		game.Kickoff = historical.Kickoff
 		day := utcDate(historical.Kickoff)
 		if game.Status == standings.CompletedStatus && day.Before(date) {
 			completed++

@@ -1,10 +1,10 @@
 # Model evaluation v1
 
-Status: **complete**. Selected model: **results-poisson-v1**.
+Status: **complete**. Selected model: **xg-poisson-home-two-seasons-v1**.
 
-Generated: 2026-07-27T21:05:07Z. Simulations: 20,000 iterations per cutoff; 10,000 paired bootstrap resamples.
+Generated: 2026-07-28T23:41:23Z. Simulations: 20,000 iterations per cutoff; 10,000 paired bootstrap resamples.
 
-Git commit: `ed081d72983724d191bb025d4d08a03a340330eb`.
+Git commit: `e6872bae0966bd451ea3521cd228928d1150c82b`.
 
 ## Data audit
 
@@ -40,8 +40,8 @@ Lower is better for every metric.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Straight-line pace (`straight-line-pace-v1`) | 1.0409 | 0.1274 | 0.0571 | 5.023 | 3.608 | 1.589 | 0.1033 |
 | Current pace (`current-pace-v1`) | 1.0365 | 0.1251 | 0.0582 | 5.031 | 3.623 | 1.580 | 0.1026 |
-| Results Poisson (`results-poisson-v1`) | 1.0251 | 0.1235 | 0.0582 | 4.757 | 3.417 | 1.471 | 0.0940 |
-| xG Poisson (`xg-poisson-v1`) | 1.0133 | 0.1111 | 0.0500 | 4.791 | 3.413 | 1.456 | 0.0906 |
+| Results Poisson (`results-poisson-home-two-seasons-v1`) | 1.0230 | 0.1233 | 0.0586 | 4.752 | 3.413 | 1.473 | 0.0942 |
+| xG Poisson (`xg-poisson-home-two-seasons-v1`) | 1.0121 | 0.1112 | 0.0497 | 4.785 | 3.409 | 1.455 | 0.0907 |
 
 ### Final-test results
 
@@ -49,8 +49,8 @@ Lower is better for every metric.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Straight-line pace (`straight-line-pace-v1`) | 1.0668 | 0.1215 | 0.0454 | 4.116 | 2.957 | 1.579 | 0.1060 |
 | Current pace (`current-pace-v1`) | 1.0624 | 0.1210 | 0.0445 | 4.105 | 2.954 | 1.578 | 0.1058 |
-| Results Poisson (`results-poisson-v1`) | 1.0605 | 0.1232 | 0.0456 | 4.267 | 3.063 | 1.602 | 0.1085 |
-| xG Poisson (`xg-poisson-v1`) | 1.0501 | 0.1175 | 0.0422 | 4.001 | 2.844 | 1.528 | 0.1010 |
+| Results Poisson (`results-poisson-home-two-seasons-v1`) | 1.0582 | 0.1239 | 0.0456 | 4.287 | 3.076 | 1.608 | 0.1088 |
+| xG Poisson (`xg-poisson-home-two-seasons-v1`) | 1.0478 | 0.1177 | 0.0421 | 3.998 | 2.842 | 1.530 | 0.1010 |
 
 ### Pooled results (descriptive only)
 
@@ -58,8 +58,8 @@ Lower is better for every metric.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Straight-line pace (`straight-line-pace-v1`) | 1.0549 | 0.1243 | 0.0509 | 4.540 | 3.261 | 1.583 | 0.1048 |
 | Current pace (`current-pace-v1`) | 1.0505 | 0.1229 | 0.0509 | 4.538 | 3.267 | 1.579 | 0.1043 |
-| Results Poisson (`results-poisson-v1`) | 1.0443 | 0.1233 | 0.0515 | 4.496 | 3.229 | 1.541 | 0.1017 |
-| xG Poisson (`xg-poisson-v1`) | 1.0332 | 0.1145 | 0.0458 | 4.370 | 3.110 | 1.494 | 0.0961 |
+| Results Poisson (`results-poisson-home-two-seasons-v1`) | 1.0421 | 0.1236 | 0.0517 | 4.504 | 3.233 | 1.545 | 0.1020 |
+| xG Poisson (`xg-poisson-home-two-seasons-v1`) | 1.0314 | 0.1147 | 0.0457 | 4.366 | 3.107 | 1.495 | 0.0962 |
 
 ## Paired final-test comparisons
 
@@ -67,31 +67,31 @@ Differences are candidate minus incumbent; negative values favor the candidate.
 
 | Candidate | Metric | Difference | 95% interval | Date blocks |
 | --- | --- | ---: | ---: | ---: |
-| `straight-line-pace-v1` | match_log_loss | -0.0054 | [-0.0252, +0.0137] | 296 |
-| `straight-line-pace-v1` | playoff_brier | -0.0019 | [-0.0036, -0.0004] | 296 |
-| `straight-line-pace-v1` | shield_brier | +0.0003 | [-0.0010, +0.0018] | 296 |
-| `straight-line-pace-v1` | points_crps | -0.1059 | [-0.1305, -0.0812] | 296 |
-| `straight-line-pace-v1` | position_rps | -0.0024 | [-0.0031, -0.0017] | 296 |
-| `current-pace-v1` | match_log_loss | -0.0053 | [-0.0179, +0.0070] | 296 |
-| `current-pace-v1` | playoff_brier | -0.0025 | [-0.0042, -0.0008] | 296 |
-| `current-pace-v1` | shield_brier | -0.0007 | [-0.0019, +0.0006] | 296 |
-| `current-pace-v1` | points_crps | -0.1092 | [-0.1339, -0.0850] | 296 |
-| `current-pace-v1` | position_rps | -0.0027 | [-0.0034, -0.0019] | 296 |
-| `xg-poisson-v1` | match_log_loss | -0.0151 | [-0.0330, +0.0021] | 296 |
-| `xg-poisson-v1` | playoff_brier | -0.0055 | [-0.0085, -0.0027] | 296 |
-| `xg-poisson-v1` | shield_brier | -0.0033 | [-0.0050, -0.0017] | 296 |
-| `xg-poisson-v1` | points_crps | -0.2055 | [-0.2523, -0.1598] | 296 |
-| `xg-poisson-v1` | position_rps | -0.0079 | [-0.0094, -0.0064] | 296 |
+| `straight-line-pace-v1` | match_log_loss | +0.0132 | [-0.0071, +0.0333] | 296 |
+| `straight-line-pace-v1` | playoff_brier | +0.0034 | [+0.0008, +0.0059] | 296 |
+| `straight-line-pace-v1` | shield_brier | +0.0037 | [+0.0018, +0.0057] | 296 |
+| `straight-line-pace-v1` | points_crps | +0.1023 | [+0.0636, +0.1422] | 296 |
+| `straight-line-pace-v1` | position_rps | +0.0054 | [+0.0040, +0.0069] | 296 |
+| `current-pace-v1` | match_log_loss | +0.0133 | [-0.0030, +0.0296] | 296 |
+| `current-pace-v1` | playoff_brier | +0.0028 | [+0.0003, +0.0055] | 296 |
+| `current-pace-v1` | shield_brier | +0.0027 | [+0.0006, +0.0049] | 296 |
+| `current-pace-v1` | points_crps | +0.0989 | [+0.0613, +0.1375] | 296 |
+| `current-pace-v1` | position_rps | +0.0052 | [+0.0039, +0.0066] | 296 |
+| `results-poisson-home-two-seasons-v1` | match_log_loss | +0.0160 | [-0.0014, +0.0340] | 296 |
+| `results-poisson-home-two-seasons-v1` | playoff_brier | +0.0061 | [+0.0033, +0.0091] | 296 |
+| `results-poisson-home-two-seasons-v1` | shield_brier | +0.0034 | [+0.0018, +0.0051] | 296 |
+| `results-poisson-home-two-seasons-v1` | points_crps | +0.2222 | [+0.1753, +0.2699] | 296 |
+| `results-poisson-home-two-seasons-v1` | position_rps | +0.0081 | [+0.0067, +0.0097] | 296 |
 
 The JSON artifact is the machine-readable source for all development/final-test stage buckets and fixed-decile calibration tables.
 
 ## Selection
 
-No candidate met the precommitted replacement rule, so `results-poisson-v1` remains selected.
+No candidate met the precommitted replacement rule, so `xg-poisson-home-two-seasons-v1` remains selected.
 
 - `straight-line-pace-v1` did not qualify: evaluation-only reference model; excluded from selection.
-- `current-pace-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero.
-- `xg-poisson-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero.
+- `current-pace-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero; Shield Brier guardrail failed.
+- `results-poisson-home-two-seasons-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero; playoff Brier guardrail failed; Shield Brier guardrail failed.
 
 ## Limitations
 

@@ -70,6 +70,7 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	iterations := flags.Int("iterations", 20000, "season simulations per daily cutoff")
 	resamples := flags.Int("bootstrap-resamples", 10000, "paired bootstrap resamples")
 	seed := flags.Int64("bootstrap-seed", 20251109, "paired bootstrap seed")
+	incumbent := flags.String("incumbent", forecast.Default().Model.Info().ID, "model ID used as the paired-comparison baseline")
 	generated := flags.String("generated-at", "", "fixed RFC3339 report timestamp")
 	jsonPath := flags.String("json", "docs/model-evaluation-v1.json", "JSON report path")
 	markdownPath := flags.String("markdown", "docs/model-evaluation-v1.md", "Markdown report path")
@@ -143,7 +144,7 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 		models = append(models, entry.Model)
 	}
 	report, err := backtest.Evaluate(ctx, seasons, backtest.Config{
-		Models: models, IncumbentModelID: "results-poisson-v1", Iterations: *iterations,
+		Models: models, IncumbentModelID: *incumbent, Iterations: *iterations,
 		ReferenceModelIDs:  map[string]bool{"straight-line-pace-v1": true},
 		BootstrapResamples: *resamples, BootstrapSeed: *seed, GeneratedAt: generatedAt, GitCommit: gitCommit(),
 	})
@@ -195,7 +196,7 @@ func evaluationSeason(id, window string, playoffPlaces int, data cache.SeasonDat
 		if err != nil {
 			return backtest.Season{}, fmt.Errorf("game %s: %w", value.ASAID, err)
 		}
-		game := standings.Game{ID: value.ASAID, Status: value.Status, HomeTeamID: value.HomeTeamID, AwayTeamID: value.AwayTeamID}
+		game := standings.Game{ID: value.ASAID, Status: value.Status, HomeTeamID: value.HomeTeamID, AwayTeamID: value.AwayTeamID, Kickoff: kickoff}
 		if value.HomeScore.Valid {
 			score := int(value.HomeScore.Int64)
 			game.HomeScore = &score

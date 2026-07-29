@@ -81,6 +81,14 @@ type Result struct {
 	VenueGap         float64
 }
 
+// VenueSample contains already-aggregated completed matches from prior
+// seasons. It affects only the league venue gap; opponent PPG remains based on
+// the current season.
+type VenueSample struct {
+	Matches                int
+	HomePoints, AwayPoints int
+}
+
 type record struct {
 	played int
 	points int
@@ -92,13 +100,19 @@ type record struct {
 // league home/away PPG gap from completed matches and applies half the gap in
 // the direction of the fixture venue.
 func Calculate(teams []standings.Team, games []standings.Game) Result {
+	return CalculateWithVenueSample(teams, games, VenueSample{})
+}
+
+// CalculateWithVenueSample pools prior-season and current-season venue points
+// while retaining current-season opponent records.
+func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, venue VenueSample) Result {
 	teamByID := make(map[string]standings.Team, len(teams))
 	for _, team := range teams {
 		teamByID[team.ID] = team
 	}
 
 	allRecords := make(map[string]record, len(teams))
-	var homePoints, awayPoints, completed int
+	homePoints, awayPoints, completed := venue.HomePoints, venue.AwayPoints, venue.Matches
 	for _, game := range games {
 		if game.Status != standings.CompletedStatus || game.HomeScore == nil || game.AwayScore == nil {
 			continue

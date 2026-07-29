@@ -701,7 +701,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast lab", "xG Poisson", "xg-poisson-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Top 4", "Playoffs", "Shield", "Finish distribution", "Middle 80%", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
+	for _, text := range []string{"Forecast lab", "xG Poisson", "xg-poisson-home-two-seasons-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Top 4", "Playoffs", "Shield", "Finish distribution", "Middle 80%", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -852,7 +852,7 @@ func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing
 			{ASAID: "future", Status: "PreMatch", HomeTeamID: "alpha", AwayTeamID: "charlie"},
 		},
 	}
-	note := forecastScheduleNote(data, 1)
+	note := forecastScheduleNote(data, 1, false, false)
 	for _, want := range []string{"cannot be simulated", "excluded", "team(s) do not have"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("note = %q, want %q", note, want)
@@ -866,6 +866,15 @@ func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 	data.Teams[0].Name = "Renamed Alpha"
 	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8); second == first {
 		t.Fatal("forecast result key did not change with team presentation")
+	}
+}
+
+func TestForecastResultKeyChangesWhenHistoricalVenueSummaryArrives(t *testing.T) {
+	data := cache.SeasonData{Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}}}
+	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8)
+	data.VenueHistory = []cache.VenueSummary{{Season: "2025", Stage: "Regular Season", FixtureReady: true, XGReady: true, Matches: 182, HomeGoals: 260, AwayGoals: 220, XGMatches: 182, HomeXG: 250.5, AwayXG: 215.5}}
+	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8); second == first {
+		t.Fatal("forecast result key did not change with historical venue summary")
 	}
 }
 
@@ -894,7 +903,7 @@ func TestForecastAddResultRedirectsToCanonicalState(t *testing.T) {
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want redirect", response.Code)
 	}
-	if got, want := response.Header().Get("Location"), "forecast?m=results-poisson-v1&p=future-1%3Ah&p=future-2%3Ad&v=2"; got != want {
+	if got, want := response.Header().Get("Location"), "forecast?m=results-poisson-home-two-seasons-v1&p=future-1%3Ah&p=future-2%3Ad&v=2"; got != want {
 		t.Fatalf("location = %q, want %q", got, want)
 	}
 }

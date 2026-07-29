@@ -17,7 +17,8 @@ both measures as model estimates rather than facts about future results.
 
 ## Venue adjustment
 
-The adjustment is derived from completed matches in the cached season:
+The adjustment is derived from completed matches in the cached season plus up
+to the two previous regular seasons:
 
 ```text
 home advantage = league home PPG - league away PPG
@@ -36,12 +37,15 @@ unavailable instead of displaying a misleading zero.
 2. Estimate a league-wide home advantage rather than choosing an arbitrary bonus.
    **Complete.**
 3. Add a simple rating model and back-test it on prior seasons. **Deferred.**
-4. Add rest only after deciding how travel, international breaks, and rescheduled
-   matches will be handled. **Deferred.**
+4. Test season-only, two-prior-season, and all-prior-season home/away rates
+   before changing the forecast default. **Complete.** The two-prior-season
+   window was selected for both Results and xG. Current-team attack and defence
+   remain current-season-only; only league-wide venue rates are pooled.
 
 The calculation lives in `internal/strength` and consumes standings-domain
-values only. The HTTP layer maps its result into the season page; no cache
-schema or ASA synchronization changes are required.
+values plus a compact venue sample. SQLite persists one venue summary per
+season, and startup syncs a missing prior season once instead of recalculating
+historical fixtures for every page request.
 
 Avoid mixing future information into historical ratings during back-tests. Ratings
 for a date should use only matches known before that date.

@@ -84,6 +84,9 @@ type RunOptions struct {
 	Stage                  string
 	MinimumAttemptInterval time.Duration
 	Force                  bool
+	// SourceOnly stores fixtures, xG, and venue summaries without running
+	// current-season qualification/scenario calculations.
+	SourceOnly bool
 }
 
 // RecalculateOptions selects one already-cached season and stage. It never
@@ -199,6 +202,9 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		} else {
 			run.XGRun = &xgRun
 		}
+	}
+	if options.SourceOnly {
+		return run, nil
 	}
 	run = s.refreshCalculations(context.WithoutCancel(ctx), run, cacheTeams, cacheGames, options.Force)
 	return s.pruneHistory(run), nil

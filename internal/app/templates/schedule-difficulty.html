@@ -17,7 +17,7 @@
   <p class="note">No remaining regular-season fixtures are present in the cache.</p>
 {{else}}
   <p class="note" id="schedule-definition">Remaining schedule difficulty is the average points per game (PPG) of a team’s remaining opponents, adjusted for home and away matches. For each fixture, we start with the opponent’s current PPG. Each remaining fixture is adjusted separately: in a home match, the opponent is playing away, so we subtract half the difference between the league’s average home and away PPG from the opponent’s value. In an away match, the opponent is playing at home, so we add half that difference. Higher values mean a harder remaining schedule.</p>
-  <p class="note">The adjustment uses {{.Strength.CompletedMatches}} completed matches: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
+  <p class="note">The adjustment uses {{.Strength.CompletedMatches}} completed regular-season matches from this season and up to the two previous seasons: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
   {{if .Strength.HasBaseline}}
     <section aria-labelledby="adjusted-title">
       <div class="section-heading"><div><h2 id="adjusted-title">Home/Away-adjusted comparison</h2><p class="note">Sorted hardest to easiest. The vertical marker is the league baseline of {{.Strength.Baseline}} Home/Away-adjusted opponent PPG.</p></div></div>

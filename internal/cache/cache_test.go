@@ -230,6 +230,42 @@ func TestReplaceGameXGRejectsOutOfRangeExpectedPoints(t *testing.T) {
 	}
 }
 
+func TestVenueSummaryIsPersistedAcrossFixtureAndXGWrites(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	teams := []Team{{ASAID: "alpha", Name: "Alpha", RawJSON: "{}"}, {ASAID: "bravo", Name: "Bravo", RawJSON: "{}"}}
+	game := cachedGame("game-1", "2025", "Regular Season", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 2, Valid: true}, sql.NullInt64{Int64: 1, Valid: true})
+	if _, err := db.ReplaceSeason(ctx, "2025", "Regular Season", teams, []Game{game}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	summaries, err := db.VenueSummaries(ctx, []string{"2025"}, "Regular Season")
+	if err != nil || len(summaries) != 1 {
+		t.Fatalf("fixture summaries = %+v, %v", summaries, err)
+	}
+	if got := summaries[0]; !got.FixtureReady || got.XGReady || got.Matches != 1 || got.HomeGoals != 2 || got.AwayGoals != 1 || got.HomePoints != 3 || got.AwayPoints != 0 {
+		t.Fatalf("fixture summary = %+v", got)
+	}
+	value := GameXG{GameID: game.ASAID, Availability: XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeXG: sql.NullFloat64{Float64: 1.7, Valid: true}, AwayXG: sql.NullFloat64{Float64: .8, Valid: true}, RawJSON: "{}"}
+	if _, err := db.ReplaceGameXG(ctx, "2025", "Regular Season", []Game{game}, []GameXG{value}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	summaries, err = db.VenueSummaries(ctx, []string{"2025"}, "Regular Season")
+	if err != nil || len(summaries) != 1 {
+		t.Fatalf("xG summaries = %+v, %v", summaries, err)
+	}
+	if got := summaries[0]; !got.XGReady || got.XGMatches != 1 || got.HomeXG != 1.7 || got.AwayXG != .8 {
+		t.Fatalf("xG summary = %+v", got)
+	}
+	season, err := db.Season(ctx, "2026", "Regular Season")
+	if err != nil || len(season.VenueHistory) != 1 || season.VenueHistory[0].Season != "2025" {
+		t.Fatalf("season venue history = %+v, %v", season.VenueHistory, err)
+	}
+}
+
 func TestMigrationSevenAddsExpectedPointsColumns(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"

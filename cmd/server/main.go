@@ -103,6 +103,16 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("create refresh scheduler: %w", err)
 	}
 	refreshScheduler.Start()
+	historyCtx, historyCancel := context.WithCancel(ctx)
+	historyDone := make(chan struct{})
+	go func() {
+		defer close(historyDone)
+		if err := service.EnsureVenueHistory(historyCtx, cfg.SyncSeason, cfg.SyncStage, 2, cfg.SyncTimeout); err != nil && historyCtx.Err() == nil {
+			logger.Error("sync historical venue data", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
+			return
+		}
+		logger.Info("historical venue data ready", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "prior_seasons", 2)
+	}()
 
 	handler := app.NewHandlerWithOptions(db, app.Options{
 		CurrentSeason: cfg.SyncSeason,
@@ -120,17 +130,21 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	case <-ctx.Done():
 		logger.Info("shutting down HTTP server", "reason", ctx.Err())
 	case err := <-serverErrors:
+		historyCancel()
 		refreshScheduler.Stop()
 		refreshScheduler.Wait()
+		<-historyDone
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return err
 	}
 
+	historyCancel()
 	refreshScheduler.Stop()
 	err = shutdownHTTPServer(server)
 	refreshScheduler.Wait()
+	<-historyDone
 	if err != nil {
 		return fmt.Errorf("gracefully shut down HTTP server: %w", err)
 	}

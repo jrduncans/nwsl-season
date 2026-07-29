@@ -35,13 +35,17 @@ func (o Outcome) Valid() bool { return o == HomeWin || o == Draw || o == AwayWin
 
 // Request describes one reproducible forecast.
 type Request struct {
-	Teams         []standings.Team
-	Games         []standings.Game
-	XGoals        map[string]forecast.ExpectedGoals
-	Model         forecast.Model
-	Fixed         map[string]Outcome
-	Iterations    int
-	PlayoffPlaces int
+	Teams             []standings.Team
+	Games             []standings.Game
+	XGoals            map[string]forecast.ExpectedGoals
+	HistoricalGames   []standings.Game
+	HistoricalXGoals  map[string]forecast.ExpectedGoals
+	HistoricalSeasons []forecast.HistoricalSeason
+	HistoricalVenue   forecast.VenueSample
+	Model             forecast.Model
+	Fixed             map[string]Outcome
+	Iterations        int
+	PlayoffPlaces     int
 }
 
 // TeamResult contains probability and uncertainty aggregates for one team.
@@ -93,7 +97,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	predictor, err := request.Model.Fit(forecast.FitInput{Teams: request.Teams, Games: request.Games, XGoals: request.XGoals})
+	predictor, err := request.Model.Fit(forecast.FitInput{Teams: request.Teams, Games: request.Games, XGoals: request.XGoals, HistoricalGames: request.HistoricalGames, HistoricalXGoals: request.HistoricalXGoals, HistoricalSeasons: request.HistoricalSeasons, HistoricalVenue: request.HistoricalVenue})
 	if err != nil {
 		return Result{}, fmt.Errorf("fit forecast model: %w", err)
 	}

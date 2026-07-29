@@ -80,6 +80,39 @@ func TestCutoffHidesSameDayAndFutureResultsAndXG(t *testing.T) {
 	}
 }
 
+func TestHistoricalGamesUseOnlyEarlierOtherSeasons(t *testing.T) {
+	first := tinySeason()
+	first.ID = "2024"
+	for index := range first.Games {
+		first.Games[index].Kickoff = first.Games[index].Kickoff.AddDate(-1, 0, 0)
+	}
+	current := tinySeason()
+	current.ID = "2025"
+	before := time.Date(2025, 3, 8, 0, 0, 0, 0, time.UTC)
+	history := historicalGames([]Season{first, current}, current.ID, before)
+	if len(history) != len(first.Games) {
+		t.Fatalf("historical games = %d, want %d completed earlier-season fixtures", len(history), len(first.Games))
+	}
+	if history[0].Kickoff.IsZero() || history[0].ID != "2024/1" {
+		t.Fatalf("history = %+v, want kickoff-preserving sorted results", history)
+	}
+}
+
+func TestHistoricalXGoalsMatchNamespacedHistoricalGames(t *testing.T) {
+	prior := tinySeason()
+	prior.ID = "2024"
+	for index := range prior.Games {
+		prior.Games[index].Kickoff = prior.Games[index].Kickoff.AddDate(-1, 0, 0)
+	}
+	current := tinySeason()
+	current.ID = "2025"
+	before := time.Date(2025, 3, 8, 0, 0, 0, 0, time.UTC)
+	xgoals := historicalXGoals([]Season{prior, current}, current.ID, before)
+	if got, ok := xgoals["2024/1"]; !ok || got.GameID != "2024/1" {
+		t.Fatalf("historical xG = %+v, want namespaced historical fixture", xgoals)
+	}
+}
+
 func TestEvaluateReportsInvalidSeasonWithoutRunningIt(t *testing.T) {
 	season := tinySeason()
 	season.Games[0].Status = "PreMatch"

@@ -29,6 +29,14 @@ type xgPredictor struct {
 }
 
 func (xgPoissonV1) Fit(input FitInput) (Predictor, error) {
+	return fitXGPoisson(input, input.Games, input.XGoals, VenueSample{})
+}
+
+// fitXGPoisson keeps current-season team xG strengths separate from the
+// league-wide home and away xG sample. This permits evaluation candidates to
+// test a larger venue sample without carrying former squads into current-team
+// strengths.
+func fitXGPoisson(input FitInput, leagueGames []standings.Game, leagueXG map[string]ExpectedGoals, historical VenueSample) (Predictor, error) {
 	known, err := validateTeams(input.Teams)
 	if err != nil {
 		return nil, err
@@ -37,9 +45,6 @@ func (xgPoissonV1) Fit(input FitInput) (Predictor, error) {
 	for id := range known {
 		totals[id] = xgTotals{}
 	}
-	ids := make([]string, 0)
-	var matches int
-	var homeGoals, awayGoals float64
 	for _, game := range input.Games {
 		if game.Status != standings.CompletedStatus {
 			continue
@@ -67,6 +72,24 @@ func (xgPoissonV1) Fit(input FitInput) (Predictor, error) {
 		a.against += xg.Home
 		totals[game.HomeTeamID] = h
 		totals[game.AwayTeamID] = a
+	}
+	ids := make([]string, 0)
+	matches := historical.XGMatches
+	homeGoals, awayGoals := historical.HomeXG, historical.AwayXG
+	for _, game := range leagueGames {
+		if game.Status != standings.CompletedStatus {
+			continue
+		}
+		xg, ok := leagueXG[game.ID]
+		if !ok {
+			continue
+		}
+		if xg.GameID != "" && xg.GameID != game.ID {
+			return nil, fmt.Errorf("xG game ID %q does not match fixture %q", xg.GameID, game.ID)
+		}
+		if !validXG(xg.Home) || !validXG(xg.Away) {
+			return nil, fmt.Errorf("invalid xG for game %q", game.ID)
+		}
 		matches++
 		homeGoals += xg.Home
 		awayGoals += xg.Away
@@ -78,7 +101,7 @@ func (xgPoissonV1) Fit(input FitInput) (Predictor, error) {
 	sort.Strings(ids)
 	material := make([]byte, 0, len(ids)*24)
 	for _, id := range ids {
-		x := input.XGoals[id]
+		x := leagueXG[id]
 		var length [8]byte
 		binary.BigEndian.PutUint64(length[:], uint64(len(id)))
 		material = append(material, length[:]...)
@@ -87,6 +110,15 @@ func (xgPoissonV1) Fit(input FitInput) (Predictor, error) {
 		binary.BigEndian.PutUint64(b[:], math.Float64bits(x.Home))
 		material = append(material, b[:]...)
 		binary.BigEndian.PutUint64(b[:], math.Float64bits(x.Away))
+		material = append(material, b[:]...)
+	}
+	if historical.XGMatches > 0 {
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], uint64(historical.XGMatches))
+		material = append(material, b[:]...)
+		binary.BigEndian.PutUint64(b[:], math.Float64bits(historical.HomeXG))
+		material = append(material, b[:]...)
+		binary.BigEndian.PutUint64(b[:], math.Float64bits(historical.AwayXG))
 		material = append(material, b[:]...)
 	}
 	return xgPredictor{totals, homeRate, awayRate, leagueRate, material}, nil

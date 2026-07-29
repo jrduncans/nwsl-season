@@ -30,6 +30,8 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		a.renderScenarioBadRequest(w, r, "Invalid forecast scenario", err)
 		return
 	}
+	state.ModelID = forecast.CanonicalID(state.ModelID)
+	state.ComparisonModelID = forecast.CanonicalID(state.ComparisonModelID)
 	data, season, err := a.forecastData(r)
 	if err != nil {
 		a.renderError(w, r, err)
@@ -70,11 +72,12 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	xgoals := forecastXGoals(data)
-	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}
+	venue := forecastVenueSample(data)
+	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}
 	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: request}}
 	if state.ComparisonModelID != "" {
 		entry, _ := forecast.Lookup(state.ComparisonModelID)
-		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}})
+		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}})
 	}
 	results, err := a.forecasts.results(r.Context(), tasks)
 	if err != nil {
@@ -140,6 +143,12 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 		value := xgoals[id]
 		parts = append(parts, id, strconv.FormatFloat(value.Home, 'g', -1, 64), strconv.FormatFloat(value.Away, 'g', -1, 64))
 	}
+	for _, summary := range data.VenueHistory {
+		parts = append(parts, summary.Season, strconv.FormatBool(summary.FixtureReady), strconv.FormatBool(summary.XGReady),
+			strconv.Itoa(summary.Matches), strconv.Itoa(summary.HomeGoals), strconv.Itoa(summary.AwayGoals),
+			strconv.Itoa(summary.HomePoints), strconv.Itoa(summary.AwayPoints), strconv.Itoa(summary.XGMatches),
+			strconv.FormatFloat(summary.HomeXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayXG, 'g', -1, 64))
+	}
 	encoded, _ := json.Marshal(parts) // Marshaling a []string cannot fail.
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
@@ -184,7 +193,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		page.ComparisonName = comparison.Model.Name
 		page.ComparisonID = comparison.Model.ID
 	}
-	page.ShowXGCoverage = result.Model.ID == "xg-poisson-v1" || (comparison != nil && comparison.Model.ID == "xg-poisson-v1")
+	page.ShowXGCoverage = strings.HasPrefix(result.Model.ID, "xg-poisson-") || (comparison != nil && strings.HasPrefix(comparison.Model.ID, "xg-poisson-"))
 	page.XGAvailable, page.XGCompleted = forecastXGCoverage(data)
 	if page.XGCompleted > 0 {
 		page.XGCoverage = fmt.Sprintf("%d of %d completed matches", page.XGAvailable, page.XGCompleted)
@@ -199,7 +208,9 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	} else {
 		page.DataCutoff = "Unavailable"
 	}
-	page.ScheduleNote = forecastScheduleNote(data, a.options.Rules.GamesPerTeam)
+	usesHistoricalVenue := strings.HasPrefix(result.Model.ID, "results-poisson-") || strings.HasPrefix(result.Model.ID, "xg-poisson-") ||
+		(comparison != nil && (strings.HasPrefix(comparison.Model.ID, "results-poisson-") || strings.HasPrefix(comparison.Model.ID, "xg-poisson-")))
+	page.ScheduleNote = forecastScheduleNote(data, a.options.Rules.GamesPerTeam, usesHistoricalVenue, page.ShowXGCoverage)
 	// The rendered selector is filtered for a useful no-JavaScript fallback.
 	// The complete list remains in a template for immediate client-side changes.
 	page.AllFixtures = forecastFixtures(data, state, a.options.Location, "")
@@ -227,6 +238,38 @@ func forecastXGoals(data cache.SeasonData) map[string]forecast.ExpectedGoals {
 	}
 	return values
 }
+
+func forecastVenueSample(data cache.SeasonData) forecast.VenueSample {
+	var sample forecast.VenueSample
+	fixturesReady, xgReady := historicalVenueReady(data, false), historicalVenueReady(data, true)
+	for _, summary := range data.VenueHistory {
+		if fixturesReady {
+			sample.Matches += summary.Matches
+			sample.HomeGoals += float64(summary.HomeGoals)
+			sample.AwayGoals += float64(summary.AwayGoals)
+			sample.HomePoints += summary.HomePoints
+			sample.AwayPoints += summary.AwayPoints
+		}
+		if xgReady {
+			sample.XGMatches += summary.XGMatches
+			sample.HomeXG += summary.HomeXG
+			sample.AwayXG += summary.AwayXG
+		}
+	}
+	return sample
+}
+
+func historicalVenueReady(data cache.SeasonData, requireXG bool) bool {
+	if len(data.VenueHistory) != 2 {
+		return false
+	}
+	for _, summary := range data.VenueHistory {
+		if !summary.FixtureReady || (requireXG && !summary.XGReady) {
+			return false
+		}
+	}
+	return true
+}
 func forecastXGCoverage(data cache.SeasonData) (available, completed int) {
 	for _, game := range data.Games {
 		if game.Status == fixtures.CompletedStatus {
@@ -249,9 +292,12 @@ func forecastXGFreshness(data cache.SeasonData, location *time.Location) (freshn
 	return freshness, fallback, attempt != nil && (success == nil || attempt.FinishedAt.After(success.FinishedAt)) && attempt.Outcome != "success"
 }
 
-func forecastScheduleNote(data cache.SeasonData, gamesPerTeam int) string {
+func forecastScheduleNote(data cache.SeasonData, gamesPerTeam int, usesHistoricalVenue, requireXG bool) string {
 	expectedGames := len(data.Teams) * gamesPerTeam / 2
 	notes := make([]string, 0, 3)
+	if usesHistoricalVenue && !historicalVenueReady(data, requireXG) {
+		notes = append(notes, "Two-season home/away history is still syncing; venue rates temporarily use this season only.")
+	}
 	if len(data.Games) != expectedGames {
 		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), expectedGames))
 	}

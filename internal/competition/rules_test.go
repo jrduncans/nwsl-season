@@ -25,3 +25,13 @@ func TestRulesRejectNonMonotonicAchievements(t *testing.T) {
 		t.Fatal("expected invalid ordering")
 	}
 }
+
+func TestPreviousRegularSeasonsSkips2020(t *testing.T) {
+	got, err := PreviousRegularSeasons("2022", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "2021" || got[1] != "2019" {
+		t.Fatalf("previous seasons = %v, want [2021 2019]", got)
+	}
+}
