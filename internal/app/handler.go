@@ -36,7 +36,7 @@ const (
 
 	// Forecast Lab simulates complete seasons and is deliberately constrained so
 	// a few expensive requests cannot consume the entire HTTP process.
-	defaultForecastConcurrency = 2
+	defaultForecastConcurrency = 4
 	defaultForecastTimeout     = 15 * time.Second
 )
 
