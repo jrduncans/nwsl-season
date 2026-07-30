@@ -67,7 +67,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 			attribute.String("scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
 		)
 		if err != nil {
-			telemetry.RecordError(span, err)
+			telemetry.RecordErrorWithSlug(span, err, "err-scenario-refresh")
 		}
 		span.End()
 	}()
@@ -140,7 +140,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	defer func() {
 		span.SetAttributes(attribute.Int("scenario.team_search_count", teamSearches))
 		if err != nil {
-			telemetry.RecordError(span, err)
+			telemetry.RecordErrorWithSlug(span, err, "err-scenario-calculate")
 		}
 		span.End()
 	}()
@@ -248,7 +248,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		teamResults, generateErr := scenarios.GenerateBatch(searchCtx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
 		teamSearches++
 		if generateErr != nil {
-			telemetry.RecordError(searchSpan, generateErr)
+			telemetry.RecordErrorWithSlug(searchSpan, generateErr, "err-scenario-generate-team")
 			searchSpan.End()
 			return calculated{}, generateErr
 		}

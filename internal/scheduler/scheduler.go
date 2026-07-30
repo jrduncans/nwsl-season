@@ -147,7 +147,7 @@ func (s *Scheduler) check() {
 	snapshot, err := s.store.RefreshSnapshot(snapshotCtx, s.config.Season, s.config.Stage)
 	cancel()
 	if err != nil {
-		telemetry.RecordError(span, err)
+		telemetry.RecordErrorWithSlug(span, err, "err-scheduler-refresh-snapshot")
 		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
@@ -171,7 +171,7 @@ func (s *Scheduler) check() {
 	})
 	cancel()
 	if err != nil {
-		telemetry.RecordError(span, err)
+		telemetry.RecordErrorWithSlug(span, err, "err-scheduler-refresh-run")
 		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}

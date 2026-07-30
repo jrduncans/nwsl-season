@@ -60,7 +60,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 			if errors.Is(err, errForecastOverloaded) {
 				span.SetAttributes(attribute.Bool("error.expected", true))
 			} else {
-				telemetry.RecordError(span, err)
+				telemetry.RecordErrorWithSlug(span, err, "err-forecast-run")
 			}
 		}
 		span.End()
@@ -109,7 +109,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 			} else {
 				outcome = "failure"
 			}
-			telemetry.RecordError(calculationSpan, runErr)
+			telemetry.RecordErrorWithSlug(calculationSpan, runErr, "err-forecast-simulation")
 			calculationSpan.End()
 			return nil, runErr
 		}

@@ -73,7 +73,9 @@ Useful endpoints:
 | `HONEYCOMB_API_KEY` | unset | Enables OpenTelemetry trace export directly to Honeycomb. Keep this secret out of the repository. |
 | `HONEYCOMB_API_ENDPOINT` | `https://api.honeycomb.io` | Honeycomb ingest endpoint; use `https://api.eu1.honeycomb.io` for the EU instance. |
 | `OTEL_SERVICE_NAME` | `nwsl-season-server` | Service name shown in Honeycomb. |
-| `HONEYCOMB_METRICS_DATASET` | unset | Optional Honeycomb dataset for OpenTelemetry HTTP metrics. |
+| `OTEL_RESOURCE_ATTRIBUTES` | unset | Comma-separated OpenTelemetry resource attributes, such as deployment environment and instance identity. |
+| `OTEL_METRICS_EXPORTER` | unset | Set to `otlp` to enable native OpenTelemetry HTTP metrics. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | This application uses OTLP/HTTP; set explicitly when configuring an exporter. |
 
 Forecast requests that exceed the concurrency limit receive `429`. Forecast
 computations that exceed their timeout receive `503`. The server also applies
@@ -105,21 +107,53 @@ Local development remains silent and does not make telemetry network calls
 until an exporter is configured. Metrics are optional; traces alone are enough
 to investigate a reported problem in Honeycomb at this project's scale.
 
-To send traces to Honeycomb, create an **ingest API key** in your Honeycomb
-environment, then set it only in the runtime environment:
+To send traces to Honeycomb, create an **ingest API key** in the corresponding
+Honeycomb environment, then set it only in that runtime environment:
 
 ```sh
 export HONEYCOMB_API_KEY='your-ingest-key'
 export OTEL_SERVICE_NAME='nwsl-season'
-# Set this on deploy to compare behavior between versions.
-export OTEL_RESOURCE_ATTRIBUTES='service.version=git-sha-or-release'
+export OTEL_RESOURCE_ATTRIBUTES='deployment.environment.name=test,service.instance.id=macos-test-shell'
 go run ./cmd/server
 ```
 
+`service.version` is populated automatically from the Go build's VCS metadata.
+It identifies the exact source version in a built binary, including a `-dirty`
+suffix when the build contains uncommitted changes. Set `service.version` in
+`OTEL_RESOURCE_ATTRIBUTES` only when you deliberately need to override that
+value (for example, with a release tag).
+
+For the two local environments, keep a separate ignored `config.env` alongside
+each runtime:
+
+```dotenv
+# macOS shell (test)
+HONEYCOMB_API_KEY=your-test-ingest-key
+OTEL_SERVICE_NAME=nwsl-season
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=test,service.instance.id=macos-test-shell
+OTEL_METRICS_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+```
+
+```dotenv
+# isolated VM (production)
+HONEYCOMB_API_KEY=your-production-ingest-key
+OTEL_SERVICE_NAME=nwsl-season
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production,service.instance.id=local-vm-prod-1
+OTEL_METRICS_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+```
+
+`service.instance.id` identifies *where the process runs*, not the release.
+Use a stable, human-readable name for the shell and VM; change it only when an
+environment is replaced. The API keys choose the Honeycomb environments, while
+the resource attributes remain useful for filtering and comparing telemetry.
+
 For Honeycomb's EU instance, also set
-`HONEYCOMB_API_ENDPOINT=https://api.eu1.honeycomb.io`. Add
-`HONEYCOMB_METRICS_DATASET=nwsl-season-metrics` to export the HTTP metrics that
-the instrumentation produces. The process flushes pending telemetry for up to
+`HONEYCOMB_API_ENDPOINT=https://api.eu1.honeycomb.io`. Set
+`OTEL_METRICS_EXPORTER=otlp` to export the HTTP metrics that the instrumentation
+produces. Metrics use native OTLP routing; do not configure an
+`x-honeycomb-dataset` header. The process flushes pending telemetry for up to
 10 seconds during graceful shutdown.
 
 ### 1Password Environments
@@ -134,6 +168,7 @@ Environment-managed file. The file is read line by line, which is required for
 ```dotenv
 HONEYCOMB_API_KEY=your-ingest-key
 OTEL_SERVICE_NAME=nwsl-season
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=test,service.instance.id=macos-test-shell
 ```
 
 Use `NWSL_CONFIG_FILE=/path/to/config.env` when the 1Password-managed file is

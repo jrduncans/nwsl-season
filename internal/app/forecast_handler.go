@@ -35,9 +35,30 @@ func (a *Application) PrecacheForecasts(ctx context.Context) error {
 	return a.app.precacheForecasts(ctx)
 }
 
-func (a *application) precacheForecasts(ctx context.Context) error {
-	ctx, span := telemetry.Tracer().Start(ctx, "forecast.precache", trace.WithSpanKind(trace.SpanKindInternal))
-	defer span.End()
+func (a *application) precacheForecasts(ctx context.Context) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "forecast.precache",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.Bool("forecast.preload", true),
+			attribute.String("nwsl.season", a.options.CurrentSeason),
+			attribute.String("nwsl.stage", a.options.Stage),
+		),
+	)
+	modelCount := 0
+	failedModels := 0
+	defer func() {
+		outcome := "complete"
+		if err != nil {
+			outcome = "failure"
+			telemetry.RecordErrorWithSlug(span, err, "err-forecast-precache")
+		}
+		span.SetAttributes(
+			attribute.Int("forecast.model_count", modelCount),
+			attribute.Int("forecast.failed_model_count", failedModels),
+			attribute.String("forecast.precache.outcome", outcome),
+		)
+		span.End()
+	}()
 	if a.store == nil {
 		return fmt.Errorf("season cache unavailable")
 	}
@@ -55,6 +76,7 @@ func (a *application) precacheForecasts(ctx context.Context) error {
 	games := standingsGames(data.Games)
 	places := playoffPlaces(a.options.Rules)
 	entries := forecast.Catalog()
+	modelCount = len(entries)
 	// Warm the model selected by a bare Forecast Lab URL first, so a startup
 	// time budget still prioritizes the most common first request.
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Default && !entries[j].Default })
@@ -95,7 +117,9 @@ func (a *application) precacheForecasts(ctx context.Context) error {
 	close(work)
 	group.Wait()
 	close(errs)
-	return errors.Join(errorsFrom(errs)...)
+	values := errorsFrom(errs)
+	failedModels = len(values)
+	return errors.Join(values...)
 }
 
 func errorsFrom(values <-chan error) []error {

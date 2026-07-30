@@ -116,7 +116,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	defer func() {
 		span.SetAttributes(syncRunAttributes(run)...)
 		if err != nil {
-			telemetry.RecordError(span, err)
+			telemetry.RecordErrorWithSlug(span, err, "err-sync-run")
 		}
 		span.End()
 	}()
@@ -177,7 +177,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		attribute.Int("sync.xg_rows_fetched", len(data.xg)),
 	)
 	if fetchErr := errors.Join(data.teamsErr, data.gamesErr, data.xgErr); fetchErr != nil {
-		telemetry.RecordError(fetchSpan, fetchErr)
+		telemetry.RecordErrorWithSlug(fetchSpan, fetchErr, "err-sync-fetch-asa")
 	}
 	fetchSpan.End()
 	if data.teamsErr != nil {
@@ -213,7 +213,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	)
 	run, err = s.Store.ReplaceSeason(replaceCtx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
 	if err != nil {
-		telemetry.RecordError(replaceSpan, err)
+		telemetry.RecordErrorWithSlug(replaceSpan, err, "err-cache-season-replace")
 	} else {
 		replaceSpan.SetAttributes(syncRunAttributes(run)...)
 	}
@@ -297,7 +297,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 			attribute.Bool("sync.scenario_recalculated", run.ScenarioRecalculated),
 		)
 		if err != nil {
-			telemetry.RecordError(span, err)
+			telemetry.RecordErrorWithSlug(span, err, "err-sync-recalculate")
 		}
 		span.End()
 	}()
@@ -404,17 +404,17 @@ func (s Service) refreshXG(ctx context.Context, store xgStore, options RunOption
 	}()
 	if sourceErr != nil {
 		cause := fmt.Errorf("fetch game xG: %w", sourceErr)
-		telemetry.RecordError(span, cause)
+		telemetry.RecordErrorWithSlug(span, cause, "err-sync-refresh-xg")
 		return s.xgWarning(ctx, store, options, startedAt, run, cause)
 	}
 	values, err := mapXGoals(source)
 	if err != nil {
-		telemetry.RecordError(span, err)
+		telemetry.RecordErrorWithSlug(span, err, "err-sync-refresh-xg")
 		return s.xgWarning(ctx, store, options, startedAt, run, err)
 	}
 	xgRun, err := store.ReplaceGameXG(ctx, options.Season, options.Stage, games, values, startedAt)
 	if err != nil {
-		telemetry.RecordError(span, err)
+		telemetry.RecordErrorWithSlug(span, err, "err-sync-refresh-xg")
 		return s.xgWarning(ctx, store, options, startedAt, run, err)
 	}
 	run.XGRun = &xgRun

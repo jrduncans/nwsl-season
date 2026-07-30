@@ -68,7 +68,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 			attribute.String("qualification.outcome", calculationOutcome(recalculated, err)),
 		)
 		if err != nil {
-			telemetry.RecordError(span, err)
+			telemetry.RecordErrorWithSlug(span, err, "err-qualification-refresh")
 		}
 		span.End()
 	}()
@@ -153,7 +153,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			attribute.Int("qualification.no_help_batch_count", noHelpBatches),
 		)
 		if err != nil {
-			telemetry.RecordError(span, err)
+			telemetry.RecordErrorWithSlug(span, err, "err-qualification-calculate")
 		}
 		span.End()
 	}()
@@ -231,7 +231,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			value, evaluateErr := evaluator.EvaluateStatus(proofCtx, row.Team.ID, a, nil)
 			statusChecks++
 			if evaluateErr != nil {
-				telemetry.RecordError(proofSpan, evaluateErr)
+				telemetry.RecordErrorWithSlug(proofSpan, evaluateErr, "err-qualification-status-proof")
 				proofSpan.End()
 				return nil, evaluateErr
 			}
@@ -315,7 +315,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		paths, evaluateErr := evaluator.EvaluateNoHelpBatch(noHelpCtx, row.Team.ID, teamAchievements, nil, bases)
 		noHelpBatches++
 		if evaluateErr != nil {
-			telemetry.RecordError(noHelpSpan, evaluateErr)
+			telemetry.RecordErrorWithSlug(noHelpSpan, evaluateErr, "err-qualification-no-help-batch")
 			noHelpSpan.End()
 			return nil, evaluateErr
 		}
