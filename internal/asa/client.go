@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -322,10 +324,20 @@ func addQuery(query url.Values, name, value string) {
 }
 
 func (c Client) httpClient() *http.Client {
-	if c.HTTPClient != nil {
-		return c.HTTPClient
+	base := c.HTTPClient
+	if base == nil {
+		base = http.DefaultClient
 	}
-	return http.DefaultClient
+	// Keep HTTP tracing at the ASA boundary so scheduled and command-line
+	// syncs both expose the same downstream calls. Copying preserves caller
+	// settings such as timeout and test-server TLS configuration.
+	client := *base
+	transport := base.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	client.Transport = otelhttp.NewTransport(transport)
+	return &client
 }
 
 func limitedBody(body io.Reader) string {

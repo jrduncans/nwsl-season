@@ -13,6 +13,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/standings"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Store interface {
@@ -42,7 +45,33 @@ type Progress struct {
 	NoHelpState  clinching.NoHelpState
 }
 
-func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (bool, error) {
+func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (recalculated bool, err error) {
+	budget := r.Budget
+	if budget <= 0 {
+		budget = 5 * time.Second
+	}
+	ctx, span := telemetry.Tracer().Start(ctx, "qualification.refresh",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", syncRun.Season),
+			attribute.String("sync.stage", syncRun.Stage),
+			attribute.String("cache.fixture_snapshot_id", syncRun.FixtureSnapshotID),
+			attribute.Int("qualification.team_count", len(teams)),
+			attribute.Int("qualification.fixture_count", len(games)),
+			attribute.Int64("qualification.budget_ms", budget.Milliseconds()),
+			attribute.Bool("qualification.forced", force),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.Bool("qualification.recalculated", recalculated),
+			attribute.String("qualification.outcome", calculationOutcome(recalculated, err)),
+		)
+		if err != nil {
+			telemetry.RecordErrorWithSlug(span, err, "err-qualification-refresh")
+		}
+		span.End()
+	}()
 	if r.Store == nil {
 		return false, fmt.Errorf("qualification store is required")
 	}
@@ -104,8 +133,30 @@ func shouldRetryComputeBudget(snapshot cache.QualificationSnapshot) bool {
 	}
 	return false
 }
-func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game) ([]cache.QualificationStatus, error) {
+func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game) (statuses []cache.QualificationStatus, err error) {
 	batchStarted := time.Now()
+	statusChecks := 0
+	noHelpBatches := 0
+	ctx, span := telemetry.Tracer().Start(parent, "qualification.calculate",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.Int("qualification.input_team_count", len(teams)),
+			attribute.Int("qualification.input_fixture_count", len(games)),
+			attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
+			attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+			attribute.StringSlice("qualification.achievement_ids", achievementIDs(r.Rules.Achievements)),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.Int("qualification.status_check_count", statusChecks),
+			attribute.Int("qualification.no_help_batch_count", noHelpBatches),
+		)
+		if err != nil {
+			telemetry.RecordErrorWithSlug(span, err, "err-qualification-calculate")
+		}
+		span.End()
+	}()
 	participants := map[string]bool{}
 	for _, g := range games {
 		participants[g.HomeTeamID] = true
@@ -144,7 +195,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	if err != nil {
 		return unresolvedRows(domainTeams, r.Rules, clinching.ProofIncompleteSchedule, "fixture kickoff order is invalid"), nil
 	}
-	ctx, cancel := context.WithTimeout(parent, r.Budget)
+	ctx, cancel := context.WithTimeout(ctx, r.Budget)
 	defer cancel()
 	evaluator, err := clinching.NewEvaluator(domainTeams, domainGames, order)
 	if err != nil {
@@ -167,10 +218,35 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			}
 			probeStarted := time.Now()
 			r.report(Progress{Phase: "status_started", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, BatchElapsed: time.Since(batchStarted)})
-			value, err := evaluator.EvaluateStatus(ctx, row.Team.ID, a, nil)
-			if err != nil {
-				return nil, err
+			proofCtx, proofSpan := telemetry.Tracer().Start(ctx, "qualification.status_proof",
+				trace.WithSpanKind(trace.SpanKindInternal),
+				trace.WithAttributes(
+					attribute.String("qualification.team_id", row.Team.ID),
+					attribute.String("qualification.achievement_id", string(a.ID)),
+					attribute.Int("qualification.top_k", a.TopK),
+					attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
+					attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+				),
+			)
+			value, evaluateErr := evaluator.EvaluateStatus(proofCtx, row.Team.ID, a, nil)
+			statusChecks++
+			if evaluateErr != nil {
+				telemetry.RecordErrorWithSlug(proofSpan, evaluateErr, "err-qualification-status-proof")
+				proofSpan.End()
+				return nil, evaluateErr
 			}
+			proofSpan.SetAttributes(
+				attribute.String("qualification.status", string(value.Status)),
+				attribute.String("qualification.method", string(value.Method)),
+				attribute.Int("qualification.reduced_team_count", value.Diagnostics.ReducedTeams),
+				attribute.Int("qualification.reduced_fixture_count", value.Diagnostics.ReducedFixtures),
+				attribute.Int("qualification.connected_component_count", value.Diagnostics.ConnectedComponents),
+				attribute.Int("qualification.subset_probe_count", value.Diagnostics.SubsetProbes),
+				attribute.Int("qualification.visited_state_count", value.Diagnostics.VisitedStates),
+				attribute.Int("qualification.memo_hit_count", value.Diagnostics.MemoHits),
+				attribute.Int("qualification.prune_count", value.Diagnostics.TotalPrunes),
+			)
+			proofSpan.End()
 			results[row.Team.ID][a.ID] = toCache(value)
 			completed++
 			r.report(Progress{Phase: "status_finished", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method})
@@ -226,10 +302,24 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			continue
 		}
 		probeStarted := time.Now()
-		paths, err := evaluator.EvaluateNoHelpBatch(ctx, row.Team.ID, teamAchievements, nil, bases)
-		if err != nil {
-			return nil, err
+		noHelpCtx, noHelpSpan := telemetry.Tracer().Start(ctx, "qualification.no_help_batch",
+			trace.WithSpanKind(trace.SpanKindInternal),
+			trace.WithAttributes(
+				attribute.String("qualification.team_id", row.Team.ID),
+				attribute.StringSlice("qualification.achievement_ids", achievementIDs(teamAchievements)),
+				attribute.Int("qualification.achievement_count", len(teamAchievements)),
+				attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
+				attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+			),
+		)
+		paths, evaluateErr := evaluator.EvaluateNoHelpBatch(noHelpCtx, row.Team.ID, teamAchievements, nil, bases)
+		noHelpBatches++
+		if evaluateErr != nil {
+			telemetry.RecordErrorWithSlug(noHelpSpan, evaluateErr, "err-qualification-no-help-batch")
+			noHelpSpan.End()
+			return nil, evaluateErr
 		}
+		noHelpSpan.End()
 		for _, a := range teamAchievements {
 			value := results[row.Team.ID][a.ID]
 			value.NoHelp = paths[a.ID]
@@ -250,6 +340,44 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		}
 	}
 	return out, nil
+}
+
+func calculationOutcome(recalculated bool, err error) string {
+	if err != nil {
+		return "failure"
+	}
+	if recalculated {
+		return "recalculated"
+	}
+	return "current"
+}
+
+func completedFixtures(games []cache.Game) int {
+	count := 0
+	for _, game := range games {
+		if game.Status == fixtures.CompletedStatus {
+			count++
+		}
+	}
+	return count
+}
+
+func remainingFixtures(games []cache.Game) int {
+	count := 0
+	for _, game := range games {
+		if game.Status == fixtures.PreMatchStatus {
+			count++
+		}
+	}
+	return count
+}
+
+func achievementIDs(values []competition.Achievement) []string {
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		ids = append(ids, string(value.ID))
+	}
+	return ids
 }
 
 func (r Refresher) report(value Progress) {

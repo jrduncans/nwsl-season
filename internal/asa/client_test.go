@@ -9,6 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestGamesDecodesResponse(t *testing.T) {
@@ -48,6 +53,40 @@ func TestGamesDecodesResponse(t *testing.T) {
 	if games[1].Attendance != nil {
 		t.Fatalf("second attendance = %v, want nil", *games[1].Attendance)
 	}
+}
+
+func TestGamesCreatesDownstreamHTTPSpan(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/games.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(fixture)
+	}))
+	defer server.Close()
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	ctx, parent := otel.Tracer("test").Start(context.Background(), "sync.run")
+	_, err = (Client{BaseURL: server.URL, HTTPClient: server.Client()}).Games(ctx, GamesFilters{SeasonName: "2026"})
+	parent.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, span := range exporter.GetSpans() {
+		if span.SpanKind == trace.SpanKindClient {
+			return
+		}
+	}
+	t.Fatal("ASA request did not create a client span")
 }
 
 func TestGamesSendsQueryParameters(t *testing.T) {

@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"reflect"
+	"runtime/debug"
 	"strings"
 
 	"go.opentelemetry.io/otel"
@@ -15,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -23,12 +26,12 @@ import (
 )
 
 const (
-	instrumentationName        = "github.com/jrduncans/nwsl-season"
-	defaultHoneycombEndpoint   = "https://api.honeycomb.io"
-	defaultTelemetryService    = "nwsl-season-server"
-	honeycombAPIKeyEnv         = "HONEYCOMB_API_KEY"
-	honeycombAPIEndpointEnv    = "HONEYCOMB_API_ENDPOINT"
-	honeycombMetricsDatasetEnv = "HONEYCOMB_METRICS_DATASET"
+	instrumentationName      = "github.com/jrduncans/nwsl-season"
+	defaultHoneycombEndpoint = "https://api.honeycomb.io"
+	defaultTelemetryService  = "nwsl-season-server"
+	honeycombAPIKeyEnv       = "HONEYCOMB_API_KEY"
+	honeycombAPIEndpointEnv  = "HONEYCOMB_API_ENDPOINT"
+	legacyMetricsDatasetEnv  = "HONEYCOMB_METRICS_DATASET"
 )
 
 // Providers owns the configured SDK providers and flushes their batches during
@@ -42,9 +45,11 @@ type Providers struct {
 // HONEYCOMB_API_KEY exports traces directly to Honeycomb. The standard OTLP
 // trace endpoint variables are also supported for collector-based deployments.
 //
-// HONEYCOMB_METRICS_DATASET enables HTTP metrics in addition to traces. When
-// no exporter is configured, spans remain no-ops so local development does not
-// need credentials or a collector.
+// Metrics are opt-in through OTEL_METRICS_EXPORTER=otlp. The legacy
+// HONEYCOMB_METRICS_DATASET variable is also accepted as an enablement signal,
+// but is not sent as an OTLP header. When no trace exporter is configured,
+// spans remain no-ops so local development does not need credentials or a
+// collector.
 func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName string) (*Providers, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -57,13 +62,20 @@ func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName str
 		serviceName = defaultTelemetryService
 	}
 
-	res, err := resource.New(ctx,
+	baseResource, err := resource.New(ctx,
 		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
-		resource.WithAttributes(attribute.String("service.name", serviceName)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build OpenTelemetry resource: %w", err)
+	}
+	resourceAttributes := []attribute.KeyValue{attribute.String("service.name", serviceName)}
+	if _, configured := baseResource.Set().Value(attribute.Key("service.version")); !configured {
+		resourceAttributes = append(resourceAttributes, attribute.String("service.version", buildVersion()))
+	}
+	res, err := resource.Merge(baseResource, resource.NewSchemaless(resourceAttributes...))
+	if err != nil {
+		return nil, fmt.Errorf("merge OpenTelemetry resource: %w", err)
 	}
 
 	traceExporter, exporterName, err := newTraceExporter(ctx)
@@ -92,7 +104,7 @@ func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName str
 		propagation.TraceContext{}, propagation.Baggage{},
 	))
 	if traceExporter == nil {
-		logger.Info("OpenTelemetry trace export disabled; set HONEYCOMB_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT to enable it")
+		logger.Info("OpenTelemetry trace export disabled; set HONEYCOMB_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT to enable it", "metrics", metrics != nil)
 	} else {
 		logger.Info("OpenTelemetry trace export enabled", "exporter", exporterName, "service", serviceName, "metrics", metrics != nil)
 	}
@@ -119,19 +131,41 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 // Tracer returns the common application tracer for manually instrumented work.
 func Tracer() oteltrace.Tracer { return otel.Tracer(instrumentationName) }
 
-// RecordError gives a span the conventional OpenTelemetry error event and
-// status without leaking implementation details into callers.
+// Meter returns the common application meter for manually instrumented work.
+func Meter() otelmetric.Meter { return otel.Meter(instrumentationName) }
+
+// RecordError gives a span an exception event and queryable failure dimensions.
+// Prefer RecordErrorWithSlug for a static identifier of the failure site.
 func RecordError(span oteltrace.Span, err error) {
+	RecordErrorWithSlug(span, err, "")
+}
+
+// RecordErrorWithSlug records an error without using its potentially
+// high-cardinality message as a span dimension. Slugs are static identifiers
+// (for example, "err-sync-fetch-asa") that make failures easy to group and
+// connect back to a code path.
+func RecordErrorWithSlug(span oteltrace.Span, err error, slug string) {
 	if err == nil {
 		return
 	}
 	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
+	attributes := []attribute.KeyValue{
+		attribute.Bool("error", true),
+		attribute.String("error.type", reflect.TypeOf(err).String()),
+	}
+	if slug != "" {
+		attributes = append(attributes, attribute.String("exception.slug", slug))
+	}
+	span.SetAttributes(attributes...)
+	span.SetStatus(codes.Error, "error")
 }
 
 func newTraceExporter(ctx context.Context) (trace.SpanExporter, string, error) {
 	if tracesExportDisabled() {
 		return nil, "", nil
+	}
+	if err := validateOTLPHTTPProtocol("traces"); err != nil {
+		return nil, "", err
 	}
 	if apiKey := strings.TrimSpace(os.Getenv(honeycombAPIKeyEnv)); apiKey != "" {
 		endpoint, err := honeycombSignalEndpoint("/v1/traces")
@@ -159,21 +193,31 @@ func newTraceExporter(ctx context.Context) (trace.SpanExporter, string, error) {
 
 func newMeterProvider(ctx context.Context, res *resource.Resource) (*metric.MeterProvider, error) {
 	apiKey := strings.TrimSpace(os.Getenv(honeycombAPIKeyEnv))
-	dataset := strings.TrimSpace(os.Getenv(honeycombMetricsDatasetEnv))
-	if apiKey == "" || dataset == "" || tracesExportDisabled() {
+	if !metricsExportEnabled() {
 		return nil, nil
 	}
-	endpoint, err := honeycombSignalEndpoint("/v1/metrics")
-	if err != nil {
+	if err := validateOTLPHTTPProtocol("metrics"); err != nil {
 		return nil, err
 	}
-	exporter, err := otlpmetrichttp.New(ctx,
-		otlpmetrichttp.WithEndpointURL(endpoint),
-		otlpmetrichttp.WithHeaders(map[string]string{
-			"x-honeycomb-team":    apiKey,
-			"x-honeycomb-dataset": dataset,
-		}),
+	var (
+		exporter *otlpmetrichttp.Exporter
+		err      error
 	)
+	if apiKey != "" {
+		endpoint, endpointErr := honeycombSignalEndpoint("/v1/metrics")
+		if endpointErr != nil {
+			return nil, endpointErr
+		}
+		exporter, err = otlpmetrichttp.New(ctx,
+			otlpmetrichttp.WithEndpointURL(endpoint),
+			otlpmetrichttp.WithHeaders(map[string]string{"x-honeycomb-team": apiKey}),
+		)
+	} else {
+		if !otlpMetricsEndpointConfigured() {
+			return nil, errors.New("OTEL_METRICS_EXPORTER=otlp requires HONEYCOMB_API_KEY or an OTEL_EXPORTER_OTLP_ENDPOINT/OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
+		}
+		exporter, err = otlpmetrichttp.New(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create Honeycomb metric exporter: %w", err)
 	}
@@ -187,9 +231,66 @@ func tracesExportDisabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_TRACES_EXPORTER")), "none")
 }
 
+func metricsExportEnabled() bool {
+	value := strings.TrimSpace(os.Getenv("OTEL_METRICS_EXPORTER"))
+	if strings.EqualFold(value, "none") {
+		return false
+	}
+	return strings.EqualFold(value, "otlp") || strings.TrimSpace(os.Getenv(legacyMetricsDatasetEnv)) != ""
+}
+
 func otlpTraceEndpointConfigured() bool {
 	return strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) != "" ||
 		strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")) != ""
+}
+
+func otlpMetricsEndpointConfigured() bool {
+	return strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) != "" ||
+		strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")) != ""
+}
+
+func validateOTLPHTTPProtocol(signal string) error {
+	for _, name := range []string{
+		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_" + strings.ToUpper(signal) + "_PROTOCOL",
+	} {
+		protocol := strings.TrimSpace(os.Getenv(name))
+		if protocol == "" || strings.EqualFold(protocol, "http/protobuf") {
+			continue
+		}
+		return fmt.Errorf("%s=%q is unsupported for %s; configure http/protobuf", name, protocol, signal)
+	}
+	return nil
+}
+
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	var revision string
+	modified := false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+	if revision == "" {
+		return "devel"
+	}
+	if len(revision) > 12 {
+		revision = revision[:12]
+	}
+	if modified {
+		return "git-" + revision + "-dirty"
+	}
+	return "git-" + revision
 }
 
 func honeycombSignalEndpoint(signalPath string) (string, error) {

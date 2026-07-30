@@ -49,13 +49,19 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 		trace.WithAttributes(spanAttributes...),
 	)
 	cacheHits := 0
+	outcome := "computed"
 	defer func() {
 		span.SetAttributes(
 			attribute.Int("forecast.cache_hits", cacheHits),
 			attribute.Int("forecast.calculation_count", len(tasks)-cacheHits),
+			attribute.String("forecast.outcome", outcome),
 		)
 		if err != nil {
-			telemetry.RecordError(span, err)
+			if errors.Is(err, errForecastOverloaded) {
+				span.SetAttributes(attribute.Bool("error.expected", true))
+			} else {
+				telemetry.RecordErrorWithSlug(span, err, "err-forecast-run")
+			}
 		}
 		span.End()
 	}()
@@ -73,6 +79,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	}
 	e.mu.Unlock()
 	if len(missing) == 0 {
+		outcome = "cache_hit"
 		return results, nil
 	}
 
@@ -83,6 +90,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	case e.slots <- struct{}{}:
 		defer func() { <-e.slots }()
 	default:
+		outcome = "overloaded"
 		return nil, errForecastOverloaded
 	}
 
@@ -96,7 +104,12 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 		)
 		result, runErr := e.run(calculationCtx, request)
 		if runErr != nil {
-			telemetry.RecordError(calculationSpan, runErr)
+			if errors.Is(runErr, context.DeadlineExceeded) {
+				outcome = "timed_out"
+			} else {
+				outcome = "failure"
+			}
+			telemetry.RecordErrorWithSlug(calculationSpan, runErr, "err-forecast-simulation")
 			calculationSpan.End()
 			return nil, runErr
 		}

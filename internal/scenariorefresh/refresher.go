@@ -14,6 +14,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Store interface {
@@ -41,7 +44,33 @@ type Progress struct {
 	State        scenarios.OpportunityState
 }
 
-func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (bool, error) {
+func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (recalculated bool, err error) {
+	budget := r.Budget
+	if budget <= 0 {
+		budget = 30 * time.Second
+	}
+	ctx, span := telemetry.Tracer().Start(ctx, "scenario.refresh",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", sync.Season),
+			attribute.String("sync.stage", sync.Stage),
+			attribute.String("cache.fixture_snapshot_id", sync.FixtureSnapshotID),
+			attribute.Int("scenario.team_count", len(teams)),
+			attribute.Int("scenario.fixture_count", len(games)),
+			attribute.Int64("scenario.budget_ms", budget.Milliseconds()),
+			attribute.Bool("scenario.forced", force),
+		),
+	)
+	defer func() {
+		span.SetAttributes(
+			attribute.Bool("scenario.recalculated", recalculated),
+			attribute.String("scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
+		)
+		if err != nil {
+			telemetry.RecordErrorWithSlug(span, err, "err-scenario-refresh")
+		}
+		span.End()
+	}()
 	if r.Store == nil {
 		return false, fmt.Errorf("scenario store is required")
 	}
@@ -95,8 +124,26 @@ type calculated struct {
 	rows  []cache.ScenarioResult
 }
 
-func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot) (calculated, error) {
+func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot) (result calculated, err error) {
 	batchStarted := time.Now()
+	teamSearches := 0
+	ctx, span := telemetry.Tracer().Start(parent, "scenario.calculate",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.Int("scenario.input_team_count", len(teams)),
+			attribute.Int("scenario.input_fixture_count", len(games)),
+			attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
+			attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
+			attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(r.Rules.Achievements)),
+		),
+	)
+	defer func() {
+		span.SetAttributes(attribute.Int("scenario.team_search_count", teamSearches))
+		if err != nil {
+			telemetry.RecordErrorWithSlug(span, err, "err-scenario-calculate")
+		}
+		span.End()
+	}()
 	// The cache's team table is shared across seasons and can include former
 	// clubs. Qualification scopes the snapshot to fixture participants; the
 	// scenario evaluator must use that same participant set so its baseline
@@ -167,7 +214,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	if budget <= 0 {
 		budget = 30 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(parent, budget)
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	rows := []cache.ScenarioResult{}
 	completed := 0
@@ -185,10 +232,28 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			r.report(Progress{Phase: "started", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), BatchElapsed: time.Since(batchStarted)})
 		}
 		probeStarted := time.Now()
-		teamResults, err := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
-		if err != nil {
-			return calculated{}, err
+		searchCtx, searchSpan := telemetry.Tracer().Start(ctx, "scenario.generate_team",
+			trace.WithSpanKind(trace.SpanKindInternal),
+			trace.WithAttributes(
+				attribute.String("scenario.team_id", t.Team.ID),
+				attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(ach)),
+				attribute.Int("scenario.achievement_count", len(ach)),
+				attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
+				attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
+				attribute.String("scenario.slate_state", string(slate.State)),
+				attribute.String("scenario.slate_source", string(slate.Source)),
+				attribute.Int("scenario.slate_fixture_count", len(slate.FixtureIDs)),
+			),
+		)
+		teamResults, generateErr := scenarios.GenerateBatch(searchCtx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
+		teamSearches++
+		if generateErr != nil {
+			telemetry.RecordErrorWithSlug(searchSpan, generateErr, "err-scenario-generate-team")
+			searchSpan.End()
+			return calculated{}, generateErr
 		}
+		searchSpan.SetAttributes(scenarioResultAttributes(teamResults)...)
+		searchSpan.End()
 		for _, a := range ach {
 			v := teamResults[a.ID]
 			rows = append(rows, cache.ScenarioResult{Result: v})
@@ -203,6 +268,69 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		return rows[i].TeamID < rows[j].TeamID
 	})
 	return calculated{slate: slate, rows: rows}, nil
+}
+
+func scenarioCalculationOutcome(recalculated bool, err error) string {
+	if err != nil {
+		return "failure"
+	}
+	if recalculated {
+		return "recalculated"
+	}
+	return "current"
+}
+
+func scenarioCompletedFixtures(games []cache.Game) int {
+	count := 0
+	for _, game := range games {
+		if game.Status == fixtures.CompletedStatus {
+			count++
+		}
+	}
+	return count
+}
+
+func scenarioRemainingFixtures(games []cache.Game) int {
+	count := 0
+	for _, game := range games {
+		if game.Status == fixtures.PreMatchStatus {
+			count++
+		}
+	}
+	return count
+}
+
+func scenarioAchievementIDs(values []competition.Achievement) []string {
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		ids = append(ids, string(value.ID))
+	}
+	return ids
+}
+
+func scenarioResultAttributes(values map[competition.AchievementID]scenarios.Result) []attribute.KeyValue {
+	var totalAssignments, certifiedAssignments, unresolvedAssignments int
+	var searchNodes, oracleCalls, oracleCacheHits, visitedComplete int
+	for _, value := range values {
+		if value.TotalAssignments > totalAssignments {
+			totalAssignments = value.TotalAssignments
+		}
+		certifiedAssignments += value.CertifiedAssignments
+		unresolvedAssignments += value.UnresolvedAssignments
+		searchNodes += value.Diagnostics.SearchNodes
+		oracleCalls += value.Diagnostics.OracleCalls
+		oracleCacheHits += value.Diagnostics.OracleCacheHits
+		visitedComplete += value.Diagnostics.VisitedComplete
+	}
+	return []attribute.KeyValue{
+		attribute.Int("scenario.assignment_count", totalAssignments),
+		attribute.Int("scenario.certified_assignment_count", certifiedAssignments),
+		attribute.Int("scenario.unresolved_assignment_count", unresolvedAssignments),
+		attribute.Int("scenario.search_node_count", searchNodes),
+		attribute.Int("scenario.oracle_call_count", oracleCalls),
+		attribute.Int("scenario.oracle_cache_hit_count", oracleCacheHits),
+		attribute.Int("scenario.visited_complete_count", visitedComplete),
+	}
 }
 
 func (r Refresher) report(value Progress) {

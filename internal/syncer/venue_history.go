@@ -7,6 +7,9 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type venueSummaryStore interface {
@@ -17,7 +20,28 @@ type venueSummaryStore interface {
 // persisted fixture/xG venue summaries are not ready. Each season gets its own
 // timeout so one slow upstream response does not consume the next season's
 // budget.
-func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage string, count int, timeout time.Duration) error {
+func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage string, count int, timeout time.Duration) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "sync.venue_history",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("sync.season", currentSeason),
+			attribute.String("sync.stage", stage),
+			attribute.Int("sync.venue_history_requested_season_count", count),
+		),
+	)
+	refreshed := 0
+	defer func() {
+		outcome := "complete"
+		if err != nil {
+			outcome = "failure"
+			telemetry.RecordErrorWithSlug(span, err, "err-sync-venue-history")
+		}
+		span.SetAttributes(
+			attribute.Int("sync.venue_history_refreshed_season_count", refreshed),
+			attribute.String("sync.venue_history.outcome", outcome),
+		)
+		span.End()
+	}()
 	store, ok := s.Store.(venueSummaryStore)
 	if !ok {
 		return fmt.Errorf("sync store does not support venue summaries")
@@ -43,7 +67,7 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 		if timeout > 0 {
 			runCtx, cancel = context.WithTimeout(ctx, timeout)
 		}
-		run, runErr := s.Run(runCtx, RunOptions{Season: season, Stage: stage, SourceOnly: true})
+		run, runErr := s.Run(runCtx, RunOptions{Season: season, Stage: stage, Trigger: "venue_history", SourceOnly: true})
 		cancel()
 		if runErr != nil {
 			return fmt.Errorf("sync venue history for %s: %w", season, runErr)
@@ -51,6 +75,7 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 		if run.XGError != "" || run.XGRun == nil {
 			return fmt.Errorf("sync venue history for %s: xG summary was not refreshed: %s", season, run.XGError)
 		}
+		refreshed++
 	}
 	return nil
 }

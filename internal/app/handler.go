@@ -24,6 +24,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -128,7 +131,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.render(w, "clinching", view)
 		return
 	}
-	data, err := a.store.Season(r.Context(), page.Season, a.options.Stage)
+	data, err := a.loadSeasonData(r.Context(), page.Season)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -435,7 +438,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	if season == "" {
 		season = a.options.CurrentSeason
 	}
-	data, err := a.store.Season(r.Context(), season, a.options.Stage)
+	data, err := a.loadSeasonData(r.Context(), season)
 	if err != nil {
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
 	}
@@ -493,6 +496,71 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	}
 
 	return page, nil
+}
+
+// loadSeasonData makes local-cache latency visible as a distinct operation and
+// adds the version and completeness of the data to the enclosing request span.
+func (a *application) loadSeasonData(parent context.Context, season string) (data cache.SeasonData, err error) {
+	ctx, span := telemetry.Tracer().Start(parent, "cache.season.load",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("cache.name", "season"),
+			attribute.String("nwsl.season", season),
+			attribute.String("nwsl.stage", a.options.Stage),
+		),
+	)
+	defer func() {
+		if err != nil {
+			telemetry.RecordErrorWithSlug(span, err, "err-cache-season-load")
+		}
+		span.End()
+	}()
+	data, err = a.store.Season(ctx, season, a.options.Stage)
+	if err != nil {
+		return cache.SeasonData{}, err
+	}
+	attributes := seasonDataAttributes(data, season, a.options.Stage)
+	span.SetAttributes(attributes...)
+	trace.SpanFromContext(parent).SetAttributes(attributes...)
+	return data, nil
+}
+
+func seasonDataAttributes(data cache.SeasonData, season, stage string) []attribute.KeyValue {
+	completed := 0
+	remaining := 0
+	for _, game := range data.Games {
+		switch game.Status {
+		case fixtures.CompletedStatus:
+			completed++
+		case remainingStatus:
+			remaining++
+		}
+	}
+	xgAvailable := 0
+	xgUnavailable := 0
+	for _, value := range data.XGoals {
+		switch value.Availability {
+		case cache.XGAvailable:
+			xgAvailable++
+		case cache.XGUnavailable:
+			xgUnavailable++
+		}
+	}
+	attributes := []attribute.KeyValue{
+		attribute.String("nwsl.season", season),
+		attribute.String("nwsl.stage", stage),
+		attribute.String("cache.fixture_snapshot_id", data.FixtureSnapshotID),
+		attribute.Int("season.team_count", len(data.Teams)),
+		attribute.Int("season.fixture_count", len(data.Games)),
+		attribute.Int("season.completed_fixture_count", completed),
+		attribute.Int("season.remaining_fixture_count", remaining),
+		attribute.Int("season.xg_available_count", xgAvailable),
+		attribute.Int("season.xg_unavailable_count", xgUnavailable),
+	}
+	if data.LastSuccess != nil {
+		attributes = append(attributes, attribute.Float64("cache.last_success_age_seconds", time.Since(data.LastSuccess.FinishedAt).Seconds()))
+	}
+	return attributes
 }
 
 func scheduleDifficultyNote(data cache.SeasonData, rules competition.Rules) string {
