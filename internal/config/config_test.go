@@ -42,7 +42,7 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	if got.SyncCheckInterval != defaultSyncCheckInterval || got.SyncCompletionGrace != defaultSyncCompletionGrace || got.SyncMinAttemptInterval != defaultSyncMinAttemptInterval || got.SyncTimeout != defaultSyncTimeout {
 		t.Errorf("sync durations = %+v, want defaults", got)
 	}
-	if got.ForecastConcurrency != defaultForecastConcurrency || got.ForecastTimeout != defaultForecastTimeout {
+	if got.ForecastConcurrency != 4 || got.ForecastTimeout != defaultForecastTimeout {
 		t.Errorf("forecast limits = %+v, want defaults", got)
 	}
 	if got.HistoryRetention != defaultHistoryRetention {

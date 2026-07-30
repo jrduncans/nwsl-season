@@ -28,7 +28,7 @@ const (
 	// certified conditions without extending either of those calculations.
 	defaultScenarioBudget      = 2 * time.Minute
 	defaultHistoryRetention    = 90 * 24 * time.Hour
-	defaultForecastConcurrency = 2
+	defaultForecastConcurrency = 4
 	defaultForecastTimeout     = 15 * time.Second
 )
 
