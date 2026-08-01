@@ -425,6 +425,33 @@ function setupFixtureViews() {
   const views = Array.from(document.querySelectorAll("[data-fixture-view]"));
   if (!toggle || buttons.length === 0 || views.length === 0) return;
 
+  const results = views.find((view) => view.dataset.fixtureView === "results");
+  const upcoming = views.find((view) => view.dataset.fixtureView === "upcoming");
+  if (!results || !upcoming) return;
+
+  const now = new Date();
+  const groups = Array.from(upcoming.querySelectorAll("[data-fixture-group-start]"));
+  const startedGroups = groups.filter((group) => {
+    const start = new Date(group.dataset.fixtureGroupStart);
+    return !Number.isNaN(start.getTime()) && start <= now;
+  });
+  startedGroups.forEach((group) => {
+    const status = group.querySelector("[data-fixture-group-status]");
+    if (status) {
+      status.textContent = "In progress";
+      status.hidden = false;
+    }
+    results.prepend(group);
+  });
+
+  const nextGroup = Array.from(upcoming.querySelectorAll("[data-fixture-group-start]")).find((group) => {
+    const start = new Date(group.dataset.fixtureGroupStart);
+    return !Number.isNaN(start.getTime()) && start > now;
+  });
+  const nextStart = nextGroup && new Date(nextGroup.dataset.fixtureGroupStart);
+  const nextStartsToday = nextStart && nextStart.getFullYear() === now.getFullYear() &&
+    nextStart.getMonth() === now.getMonth() && nextStart.getDate() === now.getDate();
+
   const show = (selected) => {
     views.forEach((view) => { view.hidden = view.dataset.fixtureView !== selected; });
     buttons.forEach((button) => { button.setAttribute("aria-pressed", String(button.dataset.fixtureViewButton === selected)); });
@@ -434,7 +461,7 @@ function setupFixtureViews() {
     button.addEventListener("click", () => show(button.dataset.fixtureViewButton));
   });
   toggle.hidden = false;
-  show("results");
+  show(nextStartsToday ? "upcoming" : "results");
 }
 
 localizeTimes();
