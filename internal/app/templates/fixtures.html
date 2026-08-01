@@ -13,7 +13,7 @@
 
 <section data-fixture-view="results">
 {{range .ResultFixtureGroups}}
-  <section class="fixture-group" data-fixture-filter-section><h2>{{.Label}}</h2>
+  <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status{{if not .InProgress}} hidden{{end}}>{{if .InProgress}}In progress{{end}}</span></h2>
     <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
   </section>
 {{end}}
@@ -21,7 +21,7 @@
 
 <section data-fixture-view="upcoming">
 {{range .UpcomingFixtureGroups}}
-  <section class="fixture-group" data-fixture-filter-section><h2>{{.Label}}</h2>
+  <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status hidden></span></h2>
     <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
   </section>
 {{end}}

@@ -487,18 +487,22 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	}
 }
 
-func TestFixtureGroupsByStatusKeepsResultsNewestFirst(t *testing.T) {
+func TestFixtureGroupsByStatusKeepsMatchdaysTogether(t *testing.T) {
 	data := cache.SeasonData{Games: []cache.Game{
 		{ASAID: "completed-early", KickoffUTC: "2026-07-01 19:00:00 UTC", Status: standings.CompletedStatus, Matchday: sql.NullInt64{Int64: 1, Valid: true}},
 		{ASAID: "completed-late-a", KickoffUTC: "2026-07-04 19:00:00 UTC", Status: standings.CompletedStatus, Matchday: sql.NullInt64{Int64: 2, Valid: true}},
 		{ASAID: "completed-late-b", KickoffUTC: "2026-07-04 21:00:00 UTC", Status: standings.CompletedStatus, Matchday: sql.NullInt64{Int64: 2, Valid: true}},
+		{ASAID: "scheduled-late", KickoffUTC: "2026-07-05 19:00:00 UTC", Status: remainingStatus, Matchday: sql.NullInt64{Int64: 2, Valid: true}},
 		{ASAID: "upcoming", KickoffUTC: "2026-07-11 19:00:00 UTC", Status: remainingStatus, Matchday: sql.NullInt64{Int64: 3, Valid: true}},
 	}}
 
 	results, upcoming := fixtureGroupsByStatus(data, time.UTC)
 
-	if got := []string{results[0].Label, results[0].Games[0].ID, results[0].Games[1].ID, results[1].Label}; !reflect.DeepEqual(got, []string{"Matchday 2", "completed-late-b", "completed-late-a", "Matchday 1"}) {
-		t.Fatalf("results = %#v, want newest matchdays and fixtures first", got)
+	if got := []string{results[0].Label, results[0].Games[0].ID, results[0].Games[1].ID, results[0].Games[2].ID, results[1].Label}; !reflect.DeepEqual(got, []string{"Matchday 2", "completed-late-a", "completed-late-b", "scheduled-late", "Matchday 1"}) {
+		t.Fatalf("results = %#v, want complete matchdays with newest first", got)
+	}
+	if !results[0].InProgress || results[0].StartUTC != "2026-07-04T19:00:00Z" {
+		t.Fatalf("result group = %#v, want an in-progress matchday starting at its first kickoff", results[0])
 	}
 	if got := []string{upcoming[0].Label, upcoming[0].Games[0].ID}; !reflect.DeepEqual(got, []string{"Matchday 3", "upcoming"}) {
 		t.Fatalf("upcoming = %#v, want chronological fixture order", got)
