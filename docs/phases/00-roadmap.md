@@ -77,8 +77,8 @@ that reusable proof rather than introducing a second scenario calculator.
 
 - Which SQLite driver to use. Prefer a pure-Go driver unless measurements show a
   reason to accept CGO.
-- What ASA's post-match publication delay is, and whether the initial
-  three-hour completion grace needs adjustment.
+- What ASA's post-match publication delay is, and whether the two-hour
+  completion grace needs further adjustment.
 - How official tiebreak rules differ by season.
 - Which optimization approach best handles coupled-fixture qualification proofs
   after the Phase 12 points bounds have reduced the problem.

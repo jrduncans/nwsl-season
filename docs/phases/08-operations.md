@@ -27,10 +27,9 @@ before closing SQLite.
 A scheduled ASA refresh is eligible when one of the following is true:
 
 - There is no successful snapshot for the configured season and stage.
-- A cached fixture has a valid kickoff at least three hours in the past and is
-  not a `FullTime` result with both scores. The three-hour completion grace is
-  deliberately conservative until observed ASA publication timing justifies a
-  change.
+- A cached fixture has a valid kickoff at least two hours in the past and is
+  not a `FullTime` result with both scores. The two-hour completion grace leaves
+  room for ASA publication delay while reducing the wait for completed results.
 - The scheduler cannot determine whether the cache covers the current match
   window, for example because a known fixture has an invalid kickoff or an
   unsupported status.
@@ -48,7 +47,7 @@ configuration so production timing can be adjusted without a code change:
 | `NWSL_SYNC_SEASON` | `2026` | Current season that the server may refresh automatically. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage that the server may refresh automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the server inspects cached fixtures locally. |
-| `NWSL_SYNC_COMPLETION_GRACE` | `3h` | Time after kickoff before a non-final fixture can make a refresh eligible. |
+| `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before a non-final fixture can make a refresh eligible. |
 | `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA requests for the same season and stage, regardless of whether the previous attempt succeeded. |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Bound on a single ASA refresh, including its database transaction. |
 
