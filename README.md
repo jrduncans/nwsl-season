@@ -62,7 +62,7 @@ Useful endpoints:
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the scheduler checks cache freshness. |
-| `NWSL_SYNC_COMPLETION_GRACE` | `3h` | Time after kickoff before an unfinished fixture is stale. |
+| `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before an unfinished fixture is stale. |
 | `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures. |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction. |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum time for one qualification calculation batch. |

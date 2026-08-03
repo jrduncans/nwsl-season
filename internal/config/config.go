@@ -19,7 +19,7 @@ const (
 	defaultSyncSeason             = "2026"
 	defaultSyncStage              = "Regular Season"
 	defaultSyncCheckInterval      = 5 * time.Minute
-	defaultSyncCompletionGrace    = 3 * time.Hour
+	defaultSyncCompletionGrace    = 2 * time.Hour
 	defaultSyncMinAttemptInterval = 30 * time.Minute
 	defaultSyncTimeout            = 20 * time.Second
 	defaultQualificationBudget    = 5 * time.Second
