@@ -18,6 +18,23 @@ var errForecastOverloaded = errors.New("forecast capacity is currently unavailab
 
 const forecastResultCacheCapacity = 128
 
+type forecastTriggerContextKey struct{}
+
+func withForecastTrigger(ctx context.Context, trigger string) context.Context {
+	if trigger == "" {
+		trigger = "unspecified"
+	}
+	return context.WithValue(ctx, forecastTriggerContextKey{}, trigger)
+}
+
+func forecastTrigger(ctx context.Context) string {
+	trigger, _ := ctx.Value(forecastTriggerContextKey{}).(string)
+	if trigger == "" {
+		return "unspecified"
+	}
+	return trigger
+}
+
 // forecastExecutor bounds expensive season simulations for the entire process.
 // It intentionally does not queue work: waiting requests would still allow an
 // unbounded request flood to retain goroutines and memory.
@@ -44,6 +61,7 @@ func newForecastExecutor(concurrency int, timeout time.Duration) *forecastExecut
 
 func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (results []simulation.Result, err error) {
 	spanAttributes := forecastRunAttributes(tasks)
+	spanAttributes = append(spanAttributes, attribute.String("forecast.trigger", forecastTrigger(ctx)))
 	ctx, span := telemetry.Tracer().Start(ctx, "forecast.run",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(spanAttributes...),
@@ -98,9 +116,11 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	defer cancel()
 	for _, index := range missing {
 		request := tasks[index].request
+		calculationAttributes := forecastInputAttributes(request)
+		calculationAttributes = append(calculationAttributes, attribute.String("forecast.trigger", forecastTrigger(ctx)))
 		calculationCtx, calculationSpan := telemetry.Tracer().Start(workCtx, "forecast.simulation",
 			trace.WithSpanKind(trace.SpanKindInternal),
-			trace.WithAttributes(forecastInputAttributes(request)...),
+			trace.WithAttributes(calculationAttributes...),
 		)
 		result, runErr := e.run(calculationCtx, request)
 		if runErr != nil {

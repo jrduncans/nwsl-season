@@ -83,6 +83,9 @@ func TestGamesCreatesDownstreamHTTPSpan(t *testing.T) {
 
 	for _, span := range exporter.GetSpans() {
 		if span.SpanKind == trace.SpanKindClient {
+			if span.Name != "HTTP GET /nwsl/games" {
+				t.Errorf("client span name = %q, want HTTP GET /nwsl/games", span.Name)
+			}
 			return
 		}
 	}

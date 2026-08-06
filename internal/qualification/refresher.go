@@ -45,6 +45,130 @@ type Progress struct {
 	NoHelpState  clinching.NoHelpState
 }
 
+// calculationTelemetry keeps loop-level work on qualification.calculate. A
+// completed leaf span is retained only when the individual operation is slow
+// enough to matter in the waterfall or fails.
+type calculationTelemetry struct {
+	statusChecks, skippedStatusProofs, noHelpBatches, skippedNoHelpBatches int
+	statusProofDuration, noHelpDuration                                    time.Duration
+	slowStatusProofs, slowNoHelpBatches                                    int
+	slowestStatusProof, slowestNoHelpBatch                                 calculationAttempt
+	maxReducedTeams, maxReducedFixtures, maxConnectedComponents            int
+	totalSubsetProbes, totalVisitedStates, totalMemoHits, totalPrunes      int
+}
+
+type calculationAttempt struct {
+	duration              time.Duration
+	teamID, achievementID string
+}
+
+func (t *calculationTelemetry) recordStatusProof(duration time.Duration, teamID string, achievement competition.Achievement) {
+	t.statusChecks++
+	t.statusProofDuration += duration
+	if duration >= telemetry.SlowOperationThreshold {
+		t.slowStatusProofs++
+	}
+	if duration > t.slowestStatusProof.duration {
+		t.slowestStatusProof = calculationAttempt{duration: duration, teamID: teamID, achievementID: string(achievement.ID)}
+	}
+}
+
+func (t *calculationTelemetry) recordStatusProofDiagnostics(value clinching.AchievementResult) {
+	if value.Diagnostics.ReducedTeams > t.maxReducedTeams {
+		t.maxReducedTeams = value.Diagnostics.ReducedTeams
+	}
+	if value.Diagnostics.ReducedFixtures > t.maxReducedFixtures {
+		t.maxReducedFixtures = value.Diagnostics.ReducedFixtures
+	}
+	if value.Diagnostics.ConnectedComponents > t.maxConnectedComponents {
+		t.maxConnectedComponents = value.Diagnostics.ConnectedComponents
+	}
+	t.totalSubsetProbes += value.Diagnostics.SubsetProbes
+	t.totalVisitedStates += value.Diagnostics.VisitedStates
+	t.totalMemoHits += value.Diagnostics.MemoHits
+	t.totalPrunes += value.Diagnostics.TotalPrunes
+}
+
+func (t *calculationTelemetry) recordNoHelpBatch(duration time.Duration, teamID string) {
+	t.noHelpBatches++
+	t.noHelpDuration += duration
+	if duration >= telemetry.SlowOperationThreshold {
+		t.slowNoHelpBatches++
+	}
+	if duration > t.slowestNoHelpBatch.duration {
+		t.slowestNoHelpBatch = calculationAttempt{duration: duration, teamID: teamID}
+	}
+}
+
+func (t calculationTelemetry) attributes(statuses []cache.QualificationStatus) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.Int("qualification.status_check_count", t.statusChecks),
+		attribute.Int("qualification.status_proof.skipped_count", t.skippedStatusProofs),
+		attribute.Float64("qualification.status_proof.duration_total_ms", float64(t.statusProofDuration)/float64(time.Millisecond)),
+		attribute.Float64("qualification.status_proof.duration_max_ms", float64(t.slowestStatusProof.duration)/float64(time.Millisecond)),
+		attribute.Int("qualification.status_proof.slow_count", t.slowStatusProofs),
+		attribute.Int("qualification.status_proof.reduced_team_count.max", t.maxReducedTeams),
+		attribute.Int("qualification.status_proof.reduced_fixture_count.max", t.maxReducedFixtures),
+		attribute.Int("qualification.status_proof.connected_component_count.max", t.maxConnectedComponents),
+		attribute.Int("qualification.status_proof.subset_probe_count.total", t.totalSubsetProbes),
+		attribute.Int("qualification.status_proof.visited_state_count.total", t.totalVisitedStates),
+		attribute.Int("qualification.status_proof.memo_hit_count.total", t.totalMemoHits),
+		attribute.Int("qualification.status_proof.prune_count.total", t.totalPrunes),
+		attribute.Int("qualification.no_help_batch_count", t.noHelpBatches),
+		attribute.Int("qualification.no_help_batch.skipped_count", t.skippedNoHelpBatches),
+		attribute.Float64("qualification.no_help_batch.duration_total_ms", float64(t.noHelpDuration)/float64(time.Millisecond)),
+		attribute.Float64("qualification.no_help_batch.duration_max_ms", float64(t.slowestNoHelpBatch.duration)/float64(time.Millisecond)),
+		attribute.Int("qualification.no_help_batch.slow_count", t.slowNoHelpBatches),
+	}
+	if t.slowestStatusProof.duration > 0 {
+		attributes = append(attributes,
+			attribute.String("qualification.status_proof.slowest_team_id", t.slowestStatusProof.teamID),
+			attribute.String("qualification.status_proof.slowest_achievement_id", t.slowestStatusProof.achievementID),
+		)
+	}
+	if t.slowestNoHelpBatch.duration > 0 {
+		attributes = append(attributes, attribute.String("qualification.no_help_batch.slowest_team_id", t.slowestNoHelpBatch.teamID))
+	}
+
+	statusCounts := map[clinching.Status]int{}
+	methodCounts := map[clinching.ProofMethod]int{}
+	noHelpCounts := map[clinching.NoHelpState]int{}
+	budgetExhausted := 0
+	for _, status := range statuses {
+		statusCounts[status.Status]++
+		methodCounts[status.Method]++
+		noHelpCounts[status.NoHelp.State]++
+		if status.Method == clinching.ProofComputeBudget ||
+			(status.NoHelp.State == clinching.NoHelpUnresolved && status.NoHelp.Reason == "calculation budget exhausted") {
+			budgetExhausted++
+		}
+	}
+	for _, status := range []clinching.Status{clinching.Clinched, clinching.NotClinched, clinching.Unresolved} {
+		attributes = append(attributes, attribute.Int("qualification.result.status."+string(status)+"_count", statusCounts[status]))
+	}
+	for _, method := range []clinching.ProofMethod{
+		clinching.ProofCheapBound,
+		clinching.ProofPointsOptimization,
+		clinching.ProofAccessibleTiebreak,
+		clinching.ProofMissingDisciplinary,
+		clinching.ProofUnprovedScoreTiebreak,
+		clinching.ProofComputeBudget,
+		clinching.ProofIncompleteSchedule,
+		clinching.ProofImplied,
+	} {
+		attributes = append(attributes, attribute.Int("qualification.result.method."+string(method)+"_count", methodCounts[method]))
+	}
+	for _, state := range []clinching.NoHelpState{
+		clinching.NoHelpNotApplicable,
+		clinching.NoHelpGuaranteed,
+		clinching.NoHelpImpossible,
+		clinching.NoHelpUnresolved,
+	} {
+		attributes = append(attributes, attribute.Int("qualification.result.no_help."+string(state)+"_count", noHelpCounts[state]))
+	}
+	return append(attributes, attribute.Int("qualification.result.budget_exhausted_count", budgetExhausted))
+}
+
 func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (recalculated bool, err error) {
 	budget := r.Budget
 	if budget <= 0 {
@@ -135,8 +259,7 @@ func shouldRetryComputeBudget(snapshot cache.QualificationSnapshot) bool {
 }
 func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game) (statuses []cache.QualificationStatus, err error) {
 	batchStarted := time.Now()
-	statusChecks := 0
-	noHelpBatches := 0
+	calculation := calculationTelemetry{}
 	ctx, span := telemetry.Tracer().Start(parent, "qualification.calculate",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
@@ -148,10 +271,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		),
 	)
 	defer func() {
-		span.SetAttributes(
-			attribute.Int("qualification.status_check_count", statusChecks),
-			attribute.Int("qualification.no_help_batch_count", noHelpBatches),
-		)
+		span.SetAttributes(calculation.attributes(statuses)...)
 		if err != nil {
 			telemetry.RecordErrorWithSlug(span, err, "err-qualification-calculate")
 		}
@@ -212,44 +332,29 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		for _, a := range achievements {
 			if ctx.Err() != nil {
 				results[row.Team.ID][a.ID] = unresolved(row.Team.ID, a, clinching.ProofComputeBudget, "calculation budget exhausted")
+				calculation.skippedStatusProofs++
 				completed++
 				r.report(Progress{Phase: "skipped", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, BatchElapsed: time.Since(batchStarted), Status: clinching.Unresolved, Method: clinching.ProofComputeBudget})
 				continue
 			}
 			probeStarted := time.Now()
 			r.report(Progress{Phase: "status_started", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, BatchElapsed: time.Since(batchStarted)})
-			proofCtx, proofSpan := telemetry.Tracer().Start(ctx, "qualification.status_proof",
-				trace.WithSpanKind(trace.SpanKindInternal),
-				trace.WithAttributes(
-					attribute.String("qualification.team_id", row.Team.ID),
-					attribute.String("qualification.achievement_id", string(a.ID)),
-					attribute.Int("qualification.top_k", a.TopK),
-					attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
-					attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
-				),
-			)
-			value, evaluateErr := evaluator.EvaluateStatus(proofCtx, row.Team.ID, a, nil)
-			statusChecks++
+			proofAttributes := qualificationStatusProofAttributes(row.Team.ID, a, games)
+			value, evaluateErr := evaluator.EvaluateStatus(ctx, row.Team.ID, a, nil)
+			finished := time.Now()
+			duration := finished.Sub(probeStarted)
+			calculation.recordStatusProof(duration, row.Team.ID, a)
 			if evaluateErr != nil {
-				telemetry.RecordErrorWithSlug(proofSpan, evaluateErr, "err-qualification-status-proof")
-				proofSpan.End()
+				telemetry.RecordCompletedSpan(ctx, "qualification.status_proof", probeStarted, finished, proofAttributes, evaluateErr, "err-qualification-status-proof")
 				return nil, evaluateErr
 			}
-			proofSpan.SetAttributes(
-				attribute.String("qualification.status", string(value.Status)),
-				attribute.String("qualification.method", string(value.Method)),
-				attribute.Int("qualification.reduced_team_count", value.Diagnostics.ReducedTeams),
-				attribute.Int("qualification.reduced_fixture_count", value.Diagnostics.ReducedFixtures),
-				attribute.Int("qualification.connected_component_count", value.Diagnostics.ConnectedComponents),
-				attribute.Int("qualification.subset_probe_count", value.Diagnostics.SubsetProbes),
-				attribute.Int("qualification.visited_state_count", value.Diagnostics.VisitedStates),
-				attribute.Int("qualification.memo_hit_count", value.Diagnostics.MemoHits),
-				attribute.Int("qualification.prune_count", value.Diagnostics.TotalPrunes),
-			)
-			proofSpan.End()
+			calculation.recordStatusProofDiagnostics(value)
+			if duration >= telemetry.SlowOperationThreshold {
+				telemetry.RecordCompletedSpan(ctx, "qualification.status_proof", probeStarted, finished, append(proofAttributes, qualificationStatusProofResultAttributes(value)...), nil, "")
+			}
 			results[row.Team.ID][a.ID] = toCache(value)
 			completed++
-			r.report(Progress{Phase: "status_finished", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method})
+			r.report(Progress{Phase: "status_finished", TeamID: row.Team.ID, Achievement: a, Completed: completed, Total: total, Elapsed: duration, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method})
 		}
 	}
 	// Stronger guarantees imply weaker guarantees, never the reverse.
@@ -291,6 +396,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			if ctx.Err() != nil {
 				value.NoHelp = clinching.NoHelpPath{State: clinching.NoHelpUnresolved, FixtureIDs: []string{}, Reason: "calculation budget exhausted"}
 				results[row.Team.ID][a.ID] = value
+				calculation.skippedNoHelpBatches++
 				noHelpCompleted++
 				r.report(Progress{Phase: "no_help_skipped", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: value.NoHelp.State})
 				continue
@@ -302,30 +408,24 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			continue
 		}
 		probeStarted := time.Now()
-		noHelpCtx, noHelpSpan := telemetry.Tracer().Start(ctx, "qualification.no_help_batch",
-			trace.WithSpanKind(trace.SpanKindInternal),
-			trace.WithAttributes(
-				attribute.String("qualification.team_id", row.Team.ID),
-				attribute.StringSlice("qualification.achievement_ids", achievementIDs(teamAchievements)),
-				attribute.Int("qualification.achievement_count", len(teamAchievements)),
-				attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
-				attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
-			),
-		)
-		paths, evaluateErr := evaluator.EvaluateNoHelpBatch(noHelpCtx, row.Team.ID, teamAchievements, nil, bases)
-		noHelpBatches++
+		noHelpAttributes := qualificationNoHelpAttributes(row.Team.ID, teamAchievements, games)
+		paths, evaluateErr := evaluator.EvaluateNoHelpBatch(ctx, row.Team.ID, teamAchievements, nil, bases)
+		finished := time.Now()
+		duration := finished.Sub(probeStarted)
+		calculation.recordNoHelpBatch(duration, row.Team.ID)
 		if evaluateErr != nil {
-			telemetry.RecordErrorWithSlug(noHelpSpan, evaluateErr, "err-qualification-no-help-batch")
-			noHelpSpan.End()
+			telemetry.RecordCompletedSpan(ctx, "qualification.no_help_batch", probeStarted, finished, noHelpAttributes, evaluateErr, "err-qualification-no-help-batch")
 			return nil, evaluateErr
 		}
-		noHelpSpan.End()
+		if duration >= telemetry.SlowOperationThreshold {
+			telemetry.RecordCompletedSpan(ctx, "qualification.no_help_batch", probeStarted, finished, noHelpAttributes, nil, "")
+		}
 		for _, a := range teamAchievements {
 			value := results[row.Team.ID][a.ID]
 			value.NoHelp = paths[a.ID]
 			results[row.Team.ID][a.ID] = value
 			noHelpCompleted++
-			r.report(Progress{Phase: "no_help_finished", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: value.NoHelp.State})
+			r.report(Progress{Phase: "no_help_finished", TeamID: row.Team.ID, Achievement: a, Completed: noHelpCompleted, Total: noHelpTotal, Elapsed: duration, BatchElapsed: time.Since(batchStarted), Status: value.Status, Method: value.Method, NoHelpState: value.NoHelp.State})
 		}
 	}
 	out := []cache.QualificationStatus{}
@@ -340,6 +440,40 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		}
 	}
 	return out, nil
+}
+
+func qualificationStatusProofAttributes(teamID string, achievement competition.Achievement, games []cache.Game) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("qualification.team_id", teamID),
+		attribute.String("qualification.achievement_id", string(achievement.ID)),
+		attribute.Int("qualification.top_k", achievement.TopK),
+		attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
+		attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+	}
+}
+
+func qualificationStatusProofResultAttributes(value clinching.AchievementResult) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("qualification.status", string(value.Status)),
+		attribute.String("qualification.method", string(value.Method)),
+		attribute.Int("qualification.reduced_team_count", value.Diagnostics.ReducedTeams),
+		attribute.Int("qualification.reduced_fixture_count", value.Diagnostics.ReducedFixtures),
+		attribute.Int("qualification.connected_component_count", value.Diagnostics.ConnectedComponents),
+		attribute.Int("qualification.subset_probe_count", value.Diagnostics.SubsetProbes),
+		attribute.Int("qualification.visited_state_count", value.Diagnostics.VisitedStates),
+		attribute.Int("qualification.memo_hit_count", value.Diagnostics.MemoHits),
+		attribute.Int("qualification.prune_count", value.Diagnostics.TotalPrunes),
+	}
+}
+
+func qualificationNoHelpAttributes(teamID string, achievements []competition.Achievement, games []cache.Game) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("qualification.team_id", teamID),
+		attribute.StringSlice("qualification.achievement_ids", achievementIDs(achievements)),
+		attribute.Int("qualification.achievement_count", len(achievements)),
+		attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
+		attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+	}
 }
 
 func calculationOutcome(recalculated bool, err error) string {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -161,4 +162,39 @@ func TestRecordErrorWithSlug(t *testing.T) {
 	if spans[0].Status.Code != codes.Error {
 		t.Errorf("span status = %v, want error", spans[0].Status.Code)
 	}
+}
+
+func TestRecordCompletedSpanPreservesOperationTiming(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	started := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	finished := started.Add(37 * time.Millisecond)
+	ctx, parent := provider.Tracer("test").Start(context.Background(), "parent")
+	RecordCompletedSpan(ctx, "slow.work", started, finished, []attribute.KeyValue{attribute.String("work.id", "work-123")}, nil, "")
+	parent.End()
+
+	for _, span := range exporter.GetSpans() {
+		if span.Name != "slow.work" {
+			continue
+		}
+		if !span.StartTime.Equal(started) || !span.EndTime.Equal(finished) {
+			t.Errorf("span timing = %s-%s, want %s-%s", span.StartTime, span.EndTime, started, finished)
+		}
+		attributes := map[attribute.Key]attribute.Value{}
+		for _, value := range span.Attributes {
+			attributes[value.Key] = value.Value
+		}
+		if got := attributes["work.id"].AsString(); got != "work-123" {
+			t.Errorf("work.id = %q, want work-123", got)
+		}
+		return
+	}
+	t.Fatal("completed span was not exported")
 }
