@@ -430,27 +430,25 @@ function setupFixtureViews() {
   if (!results || !upcoming) return;
 
   const now = new Date();
+  const isToday = (date) => date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
   const groups = Array.from(upcoming.querySelectorAll("[data-fixture-group-start]"));
-  const startedGroups = groups.filter((group) => {
-    const start = new Date(group.dataset.fixtureGroupStart);
-    return !Number.isNaN(start.getTime()) && start <= now;
+  const activeGroups = groups.filter((group) => {
+    const kickoffs = Array.from(group.querySelectorAll("[data-local-time]")).map((fixture) => new Date(fixture.dataset.localTime));
+    return kickoffs.some((kickoff) => !Number.isNaN(kickoff.getTime()) && (kickoff <= now || isToday(kickoff)));
   });
-  startedGroups.forEach((group) => {
+  activeGroups.forEach((group) => {
     const status = group.querySelector("[data-fixture-group-status]");
     if (status) {
-      status.textContent = "In progress";
+      const hasStarted = Array.from(group.querySelectorAll("[data-local-time]")).some((fixture) => {
+        const kickoff = new Date(fixture.dataset.localTime);
+        return !Number.isNaN(kickoff.getTime()) && kickoff <= now;
+      });
+      status.textContent = hasStarted ? "In progress" : "Today";
       status.hidden = false;
     }
     results.prepend(group);
   });
-
-  const nextGroup = Array.from(upcoming.querySelectorAll("[data-fixture-group-start]")).find((group) => {
-    const start = new Date(group.dataset.fixtureGroupStart);
-    return !Number.isNaN(start.getTime()) && start > now;
-  });
-  const nextStart = nextGroup && new Date(nextGroup.dataset.fixtureGroupStart);
-  const nextStartsToday = nextStart && nextStart.getFullYear() === now.getFullYear() &&
-    nextStart.getMonth() === now.getMonth() && nextStart.getDate() === now.getDate();
 
   const show = (selected) => {
     views.forEach((view) => { view.hidden = view.dataset.fixtureView !== selected; });
@@ -461,7 +459,7 @@ function setupFixtureViews() {
     button.addEventListener("click", () => show(button.dataset.fixtureViewButton));
   });
   toggle.hidden = false;
-  show(nextStartsToday ? "upcoming" : "results");
+  show("results");
 }
 
 localizeTimes();

@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,6 +33,11 @@ const (
 	honeycombAPIKeyEnv       = "HONEYCOMB_API_KEY"
 	honeycombAPIEndpointEnv  = "HONEYCOMB_API_ENDPOINT"
 	legacyMetricsDatasetEnv  = "HONEYCOMB_METRICS_DATASET"
+
+	// SlowOperationThreshold retains a child span for work whose individual
+	// timing is useful in a trace waterfall. Faster repeated work is recorded
+	// as timing attributes on its parent span instead.
+	SlowOperationThreshold = 25 * time.Millisecond
 )
 
 // Providers owns the configured SDK providers and flushes their batches during
@@ -145,10 +151,14 @@ func RecordError(span oteltrace.Span, err error) {
 // (for example, "err-sync-fetch-asa") that make failures easy to group and
 // connect back to a code path.
 func RecordErrorWithSlug(span oteltrace.Span, err error, slug string) {
+	recordErrorWithSlug(span, err, slug)
+}
+
+func recordErrorWithSlug(span oteltrace.Span, err error, slug string, options ...oteltrace.EventOption) {
 	if err == nil {
 		return
 	}
-	span.RecordError(err)
+	span.RecordError(err, options...)
 	attributes := []attribute.KeyValue{
 		attribute.Bool("error", true),
 		attribute.String("error.type", reflect.TypeOf(err).String()),
@@ -158,6 +168,22 @@ func RecordErrorWithSlug(span oteltrace.Span, err error, slug string) {
 	}
 	span.SetAttributes(attributes...)
 	span.SetStatus(codes.Error, "error")
+}
+
+// RecordCompletedSpan creates a child span after an operation has completed.
+// It is useful for exceptional or slow loop work: the ordinary fast path can
+// remain a wide parent span, while the retained child keeps its real timing
+// and trace placement.
+func RecordCompletedSpan(ctx context.Context, name string, started, finished time.Time, attributes []attribute.KeyValue, err error, slug string) {
+	_, span := Tracer().Start(ctx, name,
+		oteltrace.WithSpanKind(oteltrace.SpanKindInternal),
+		oteltrace.WithTimestamp(started),
+		oteltrace.WithAttributes(attributes...),
+	)
+	if err != nil {
+		recordErrorWithSlug(span, err, slug, oteltrace.WithTimestamp(finished))
+	}
+	span.End(oteltrace.WithTimestamp(finished))
 }
 
 func newTraceExporter(ctx context.Context) (trace.SpanExporter, string, error) {

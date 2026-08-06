@@ -124,9 +124,112 @@ type calculated struct {
 	rows  []cache.ScenarioResult
 }
 
+// calculationTelemetry summarizes the repeated per-team searches on the
+// scenario.calculate span. Individual searches retain a child span only when
+// their timing is useful in the waterfall or they fail.
+type calculationTelemetry struct {
+	teamSearches, slowTeamSearches int
+	teamSearchDuration             time.Duration
+	slowestTeamSearch              teamSearchTelemetry
+	total                          scenarioSearchDiagnostics
+	maxSearchNodes                 int
+	maxSearchNodesTeamID           string
+}
+
+type teamSearchTelemetry struct {
+	duration time.Duration
+	teamID   string
+}
+
+type scenarioSearchDiagnostics struct {
+	assignments, certifiedAssignments, unresolvedAssignments   int
+	searchNodes, oracleCalls, oracleCacheHits, visitedComplete int
+}
+
+func (t *calculationTelemetry) recordTeamSearch(duration time.Duration, teamID string, values map[competition.AchievementID]scenarios.Result) {
+	diagnostics := scenarioSearchDiagnosticsFor(values)
+	t.teamSearches++
+	t.teamSearchDuration += duration
+	if duration >= telemetry.SlowOperationThreshold {
+		t.slowTeamSearches++
+	}
+	if duration > t.slowestTeamSearch.duration {
+		t.slowestTeamSearch = teamSearchTelemetry{duration: duration, teamID: teamID}
+	}
+	if diagnostics.searchNodes > t.maxSearchNodes {
+		t.maxSearchNodes = diagnostics.searchNodes
+		t.maxSearchNodesTeamID = teamID
+	}
+	t.total.assignments += diagnostics.assignments
+	t.total.certifiedAssignments += diagnostics.certifiedAssignments
+	t.total.unresolvedAssignments += diagnostics.unresolvedAssignments
+	t.total.searchNodes += diagnostics.searchNodes
+	t.total.oracleCalls += diagnostics.oracleCalls
+	t.total.oracleCacheHits += diagnostics.oracleCacheHits
+	t.total.visitedComplete += diagnostics.visitedComplete
+}
+
+func (t calculationTelemetry) attributes(rows []cache.ScenarioResult) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.Int("scenario.team_search_count", t.teamSearches),
+		attribute.Float64("scenario.team_search.duration_total_ms", float64(t.teamSearchDuration)/float64(time.Millisecond)),
+		attribute.Float64("scenario.team_search.duration_max_ms", float64(t.slowestTeamSearch.duration)/float64(time.Millisecond)),
+		attribute.Int("scenario.team_search.slow_count", t.slowTeamSearches),
+		attribute.Int("scenario.assignment_count.total", t.total.assignments),
+		attribute.Int("scenario.certified_assignment_count.total", t.total.certifiedAssignments),
+		attribute.Int("scenario.unresolved_assignment_count.total", t.total.unresolvedAssignments),
+		attribute.Int("scenario.search_node_count.total", t.total.searchNodes),
+		attribute.Int("scenario.search_node_count.max", t.maxSearchNodes),
+		attribute.Int("scenario.oracle_call_count.total", t.total.oracleCalls),
+		attribute.Int("scenario.oracle_cache_hit_count.total", t.total.oracleCacheHits),
+		attribute.Int("scenario.visited_complete_count.total", t.total.visitedComplete),
+	}
+	if t.slowestTeamSearch.duration > 0 {
+		attributes = append(attributes, attribute.String("scenario.team_search.slowest_team_id", t.slowestTeamSearch.teamID))
+	}
+	if t.maxSearchNodesTeamID != "" {
+		attributes = append(attributes, attribute.String("scenario.search_node_count.max_team_id", t.maxSearchNodesTeamID))
+	}
+
+	stateCounts := map[scenarios.OpportunityState]int{}
+	budgetLimited := 0
+	for _, row := range rows {
+		stateCounts[row.State]++
+		if row.BudgetLimited() {
+			budgetLimited++
+		}
+	}
+	for _, state := range []scenarios.OpportunityState{
+		scenarios.OpportunityAlreadyClinched,
+		scenarios.OpportunityCanClinch,
+		scenarios.OpportunityCannotClinch,
+		scenarios.OpportunityTiebreakDependent,
+		scenarios.OpportunityUnresolved,
+	} {
+		attributes = append(attributes, attribute.Int("scenario.result.state."+string(state)+"_count", stateCounts[state]))
+	}
+	return append(attributes, attribute.Int("scenario.result.budget_limited_count", budgetLimited))
+}
+
+func scenarioSearchDiagnosticsFor(values map[competition.AchievementID]scenarios.Result) scenarioSearchDiagnostics {
+	result := scenarioSearchDiagnostics{}
+	for _, value := range values {
+		if value.TotalAssignments > result.assignments {
+			result.assignments = value.TotalAssignments
+		}
+		result.certifiedAssignments += value.CertifiedAssignments
+		result.unresolvedAssignments += value.UnresolvedAssignments
+		result.searchNodes += value.Diagnostics.SearchNodes
+		result.oracleCalls += value.Diagnostics.OracleCalls
+		result.oracleCacheHits += value.Diagnostics.OracleCacheHits
+		result.visitedComplete += value.Diagnostics.VisitedComplete
+	}
+	return result
+}
+
 func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot) (result calculated, err error) {
 	batchStarted := time.Now()
-	teamSearches := 0
+	calculation := calculationTelemetry{}
 	ctx, span := telemetry.Tracer().Start(parent, "scenario.calculate",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
@@ -138,7 +241,7 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		),
 	)
 	defer func() {
-		span.SetAttributes(attribute.Int("scenario.team_search_count", teamSearches))
+		span.SetAttributes(calculation.attributes(result.rows)...)
 		if err != nil {
 			telemetry.RecordErrorWithSlug(span, err, "err-scenario-calculate")
 		}
@@ -194,6 +297,13 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 	if err != nil {
 		return calculated{}, err
 	}
+	span.SetAttributes(
+		attribute.String("scenario.slate_id", slate.ID),
+		attribute.String("scenario.slate_state", string(slate.State)),
+		attribute.String("scenario.slate_source", string(slate.Source)),
+		attribute.Int("scenario.slate_fixture_count", len(slate.FixtureIDs)),
+		attribute.String("scenario.slate_reason", slate.Reason),
+	)
 	order := []string{}
 	pending := append([]scenarios.ScheduledGame(nil), scheduled...)
 	sort.Slice(pending, func(i, j int) bool { return pending[i].KickoffUTC.Before(pending[j].KickoffUTC) })
@@ -232,33 +342,23 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 			r.report(Progress{Phase: "started", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), BatchElapsed: time.Since(batchStarted)})
 		}
 		probeStarted := time.Now()
-		searchCtx, searchSpan := telemetry.Tracer().Start(ctx, "scenario.generate_team",
-			trace.WithSpanKind(trace.SpanKindInternal),
-			trace.WithAttributes(
-				attribute.String("scenario.team_id", t.Team.ID),
-				attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(ach)),
-				attribute.Int("scenario.achievement_count", len(ach)),
-				attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
-				attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
-				attribute.String("scenario.slate_state", string(slate.State)),
-				attribute.String("scenario.slate_source", string(slate.Source)),
-				attribute.Int("scenario.slate_fixture_count", len(slate.FixtureIDs)),
-			),
-		)
-		teamResults, generateErr := scenarios.GenerateBatch(searchCtx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
-		teamSearches++
+		searchAttributes := scenarioGenerateTeamAttributes(t.Team.ID, ach, games, slate)
+		teamResults, generateErr := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
+		finished := time.Now()
+		duration := finished.Sub(probeStarted)
+		calculation.recordTeamSearch(duration, t.Team.ID, teamResults)
 		if generateErr != nil {
-			telemetry.RecordErrorWithSlug(searchSpan, generateErr, "err-scenario-generate-team")
-			searchSpan.End()
+			telemetry.RecordCompletedSpan(ctx, "scenario.generate_team", probeStarted, finished, searchAttributes, generateErr, "err-scenario-generate-team")
 			return calculated{}, generateErr
 		}
-		searchSpan.SetAttributes(scenarioResultAttributes(teamResults)...)
-		searchSpan.End()
+		if duration >= telemetry.SlowOperationThreshold {
+			telemetry.RecordCompletedSpan(ctx, "scenario.generate_team", probeStarted, finished, append(searchAttributes, scenarioResultAttributes(teamResults)...), nil, "")
+		}
 		for _, a := range ach {
 			v := teamResults[a.ID]
 			rows = append(rows, cache.ScenarioResult{Result: v})
 			completed++
-			r.report(Progress{Phase: "finished", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), Elapsed: time.Since(probeStarted), BatchElapsed: time.Since(batchStarted), State: v.State})
+			r.report(Progress{Phase: "finished", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), Elapsed: duration, BatchElapsed: time.Since(batchStarted), State: v.State})
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -268,6 +368,19 @@ func (r Refresher) calculate(parent context.Context, teams []cache.Team, games [
 		return rows[i].TeamID < rows[j].TeamID
 	})
 	return calculated{slate: slate, rows: rows}, nil
+}
+
+func scenarioGenerateTeamAttributes(teamID string, achievements []competition.Achievement, games []cache.Game, slate scenarios.Slate) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("scenario.team_id", teamID),
+		attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(achievements)),
+		attribute.Int("scenario.achievement_count", len(achievements)),
+		attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
+		attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
+		attribute.String("scenario.slate_state", string(slate.State)),
+		attribute.String("scenario.slate_source", string(slate.Source)),
+		attribute.Int("scenario.slate_fixture_count", len(slate.FixtureIDs)),
+	}
 }
 
 func scenarioCalculationOutcome(recalculated bool, err error) string {
@@ -309,27 +422,15 @@ func scenarioAchievementIDs(values []competition.Achievement) []string {
 }
 
 func scenarioResultAttributes(values map[competition.AchievementID]scenarios.Result) []attribute.KeyValue {
-	var totalAssignments, certifiedAssignments, unresolvedAssignments int
-	var searchNodes, oracleCalls, oracleCacheHits, visitedComplete int
-	for _, value := range values {
-		if value.TotalAssignments > totalAssignments {
-			totalAssignments = value.TotalAssignments
-		}
-		certifiedAssignments += value.CertifiedAssignments
-		unresolvedAssignments += value.UnresolvedAssignments
-		searchNodes += value.Diagnostics.SearchNodes
-		oracleCalls += value.Diagnostics.OracleCalls
-		oracleCacheHits += value.Diagnostics.OracleCacheHits
-		visitedComplete += value.Diagnostics.VisitedComplete
-	}
+	diagnostics := scenarioSearchDiagnosticsFor(values)
 	return []attribute.KeyValue{
-		attribute.Int("scenario.assignment_count", totalAssignments),
-		attribute.Int("scenario.certified_assignment_count", certifiedAssignments),
-		attribute.Int("scenario.unresolved_assignment_count", unresolvedAssignments),
-		attribute.Int("scenario.search_node_count", searchNodes),
-		attribute.Int("scenario.oracle_call_count", oracleCalls),
-		attribute.Int("scenario.oracle_cache_hit_count", oracleCacheHits),
-		attribute.Int("scenario.visited_complete_count", visitedComplete),
+		attribute.Int("scenario.assignment_count", diagnostics.assignments),
+		attribute.Int("scenario.certified_assignment_count", diagnostics.certifiedAssignments),
+		attribute.Int("scenario.unresolved_assignment_count", diagnostics.unresolvedAssignments),
+		attribute.Int("scenario.search_node_count", diagnostics.searchNodes),
+		attribute.Int("scenario.oracle_call_count", diagnostics.oracleCalls),
+		attribute.Int("scenario.oracle_cache_hit_count", diagnostics.oracleCacheHits),
+		attribute.Int("scenario.visited_complete_count", diagnostics.visitedComplete),
 	}
 }
 

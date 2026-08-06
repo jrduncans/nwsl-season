@@ -153,7 +153,7 @@ func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
 		Iterations:    50000,
 		PlayoffPlaces: 8,
 	}
-	if _, err := executor.results(context.Background(), []forecastTask{{key: "telemetry", request: request}}); err != nil {
+	if _, err := executor.results(withForecastTrigger(context.Background(), "post_sync"), []forecastTask{{key: "telemetry", request: request}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -162,6 +162,9 @@ func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
 	attributes := spanAttributes(calculation)
 	if got := attributes["forecast.model_id"].AsString(); got != "telemetry-test-v1" {
 		t.Errorf("forecast.model_id = %q, want telemetry-test-v1", got)
+	}
+	if got := attributes["forecast.trigger"].AsString(); got != "post_sync" {
+		t.Errorf("forecast.trigger = %q, want post_sync", got)
 	}
 	for key, want := range map[string]int{
 		"forecast.iteration_count":         50000,
@@ -185,6 +188,9 @@ func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
 	}
 	if got := parentAttributes["forecast.fixed_assumption_count"].AsInt64(); got != 2 {
 		t.Errorf("parent forecast.fixed_assumption_count = %d, want 2", got)
+	}
+	if got := parentAttributes["forecast.trigger"].AsString(); got != "post_sync" {
+		t.Errorf("parent forecast.trigger = %q, want post_sync", got)
 	}
 }
 

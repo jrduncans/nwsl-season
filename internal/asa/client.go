@@ -336,7 +336,11 @@ func (c Client) httpClient() *http.Client {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	client.Transport = otelhttp.NewTransport(transport)
+	client.Transport = otelhttp.NewTransport(transport,
+		otelhttp.WithSpanNameFormatter(func(_ string, request *http.Request) string {
+			return "HTTP " + request.Method + " " + request.URL.EscapedPath()
+		}),
+	)
 	return &client
 }
 

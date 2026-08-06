@@ -32,20 +32,29 @@ const defaultForecastIterations = 50000
 // process-local forecast cache. It is intended for server startup; individual
 // model failures do not prevent later models from being attempted.
 func (a *Application) PrecacheForecasts(ctx context.Context) error {
-	return a.app.precacheForecasts(ctx)
+	return a.PrecacheForecastsWithTrigger(ctx, "unspecified")
 }
 
-func (a *application) precacheForecasts(ctx context.Context) (err error) {
+// PrecacheForecastsWithTrigger warms baseline forecasts and identifies the
+// operation that requested the warm-up (for example, startup or post_sync).
+func (a *Application) PrecacheForecastsWithTrigger(ctx context.Context, trigger string) error {
+	ctx = withForecastTrigger(ctx, trigger)
+	return a.app.precacheForecasts(ctx, forecastTrigger(ctx))
+}
+
+func (a *application) precacheForecasts(ctx context.Context, trigger string) (err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "forecast.precache",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
 			attribute.Bool("forecast.preload", true),
+			attribute.String("forecast.trigger", trigger),
 			attribute.String("nwsl.season", a.options.CurrentSeason),
 			attribute.String("nwsl.stage", a.options.Stage),
 		),
 	)
 	modelCount := 0
 	failedModels := 0
+	workerCount := 0
 	defer func() {
 		outcome := "complete"
 		if err != nil {
@@ -55,6 +64,7 @@ func (a *application) precacheForecasts(ctx context.Context) (err error) {
 		span.SetAttributes(
 			attribute.Int("forecast.model_count", modelCount),
 			attribute.Int("forecast.failed_model_count", failedModels),
+			attribute.Int("forecast.precache.worker_count", workerCount),
 			attribute.String("forecast.precache.outcome", outcome),
 		)
 		span.End()
@@ -97,6 +107,7 @@ func (a *application) precacheForecasts(ctx context.Context) (err error) {
 	// forecast deadline, while parallel workers avoid serially extending server
 	// startup by one timeout for every model.
 	workers := min(len(tasks), cap(a.forecasts.slots))
+	workerCount = workers
 	work := make(chan forecastTask)
 	errs := make(chan error, len(tasks))
 	var group sync.WaitGroup
@@ -140,6 +151,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	state.ModelID = forecast.CanonicalID(state.ModelID)
 	state.ComparisonModelID = forecast.CanonicalID(state.ComparisonModelID)
 	trace.SpanFromContext(r.Context()).SetAttributes(
+		attribute.String("forecast.trigger", "http"),
 		attribute.String("forecast.model_id", state.ModelID),
 		attribute.Bool("forecast.comparison_requested", state.ComparisonModelID != ""),
 		attribute.Int("forecast.fixed_assumption_count", len(state.Fixed)),
@@ -191,7 +203,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		entry, _ := forecast.Lookup(state.ComparisonModelID)
 		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}})
 	}
-	results, err := a.forecasts.results(r.Context(), tasks)
+	results, err := a.forecasts.results(withForecastTrigger(r.Context(), "http"), tasks)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return

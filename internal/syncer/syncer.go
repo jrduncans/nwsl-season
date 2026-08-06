@@ -292,10 +292,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 		),
 	)
 	defer func() {
-		span.SetAttributes(
-			attribute.Bool("sync.qualification_recalculated", run.QualificationRecalculated),
-			attribute.Bool("sync.scenario_recalculated", run.ScenarioRecalculated),
-		)
+		span.SetAttributes(recalculateRunAttributes(run, err)...)
 		if err != nil {
 			telemetry.RecordErrorWithSlug(span, err, "err-sync-recalculate")
 		}
@@ -324,6 +321,50 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 	// scenario passes each have their own bounded budgets.
 	run = s.refreshCalculations(context.WithoutCancel(ctx), inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
 	return s.pruneHistory(run), nil
+}
+
+func recalculateRunAttributes(run cache.SyncRun, err error) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.String("sync.recalculate.outcome", recalculateOutcome(run, err)),
+		attribute.Bool("sync.partial_failure", run.QualificationError != "" || run.ScenarioError != ""),
+		attribute.Bool("sync.qualification_recalculated", run.QualificationRecalculated),
+		attribute.Bool("sync.scenario_recalculated", run.ScenarioRecalculated),
+		attribute.String("sync.qualification.outcome", recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err)),
+		attribute.String("sync.scenario.outcome", recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err)),
+	}
+	if run.ID > 0 {
+		attributes = append(attributes, attribute.Int64("sync.source_run_id", run.ID))
+	}
+	if run.FixtureSnapshotID != "" {
+		attributes = append(attributes, attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID))
+	}
+	return attributes
+}
+
+func recalculateOutcome(run cache.SyncRun, err error) string {
+	if err != nil {
+		return "failure"
+	}
+	if run.QualificationError != "" || run.ScenarioError != "" {
+		return "partial_failure"
+	}
+	if run.QualificationRecalculated || run.ScenarioRecalculated {
+		return "complete"
+	}
+	return "current"
+}
+
+func recalculateComponentOutcome(recalculated bool, failure string, runErr error) string {
+	if runErr != nil {
+		return "not_run"
+	}
+	if failure != "" {
+		return "failure"
+	}
+	if recalculated {
+		return "complete"
+	}
+	return "current"
 }
 
 func (s Service) pruneHistory(run cache.SyncRun) cache.SyncRun {

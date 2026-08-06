@@ -147,6 +147,10 @@ func (s *Scheduler) check() {
 	snapshot, err := s.store.RefreshSnapshot(snapshotCtx, s.config.Season, s.config.Stage)
 	cancel()
 	if err != nil {
+		span.SetAttributes(
+			attribute.String("scheduler.action", "read_snapshot"),
+			attribute.String("scheduler.outcome", "failure"),
+		)
 		telemetry.RecordErrorWithSlug(span, err, "err-scheduler-refresh-snapshot")
 		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
@@ -161,24 +165,40 @@ func (s *Scheduler) check() {
 	s.logger.Info("cache refresh decision", "decision", decision.Name, "reason", decision.Reason,
 		"season", s.config.Season, "stage", s.config.Stage, "fixture_id", decision.FixtureID)
 	if decision.Name != decisionEligible {
-		s.recalculateCachedClinching(ctx)
+		span.SetAttributes(
+			attribute.String("scheduler.action", "recalculate"),
+			attribute.String("scheduler.sync.outcome", "not_requested"),
+			attribute.String("scheduler.forecast_warm.outcome", "not_needed"),
+		)
+		span.SetAttributes(attribute.String("scheduler.outcome", s.recalculateCachedClinching(ctx, span)))
 		return
 	}
 
+	span.SetAttributes(attribute.String("scheduler.action", "sync"))
 	runCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	run, err := s.runner.Run(runCtx, syncer.RunOptions{
 		Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler", MinimumAttemptInterval: s.config.MinimumAttemptInterval,
 	})
 	cancel()
 	if err != nil {
+		span.SetAttributes(
+			attribute.String("scheduler.sync.outcome", "failure"),
+			attribute.String("scheduler.outcome", "failure"),
+		)
 		telemetry.RecordErrorWithSlug(span, err, "err-scheduler-refresh-run")
 		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
+	span.SetAttributes(schedulerRunAttributes(run)...)
 	if run.Skipped {
 		s.logger.Info("cache refresh decision", "decision", "rate_limited", "season", s.config.Season, "stage", s.config.Stage,
 			"last_attempt", run.FinishedAt.UTC().Format(time.RFC3339), "last_outcome", run.Outcome)
-		s.recalculateCachedClinching(ctx)
+		recalculateOutcome := s.recalculateCachedClinching(ctx, span)
+		outcome := "rate_limited"
+		if recalculateOutcome == "failure" || recalculateOutcome == "partial_failure" {
+			outcome = "partial_failure"
+		}
+		span.SetAttributes(attribute.String("scheduler.outcome", outcome))
 		return
 	}
 	if run.HistoryPruneError != "" {
@@ -187,32 +207,128 @@ func (s *Scheduler) check() {
 	s.logger.Info("cache refresh succeeded", "season", s.config.Season, "stage", s.config.Stage,
 		"duration_ms", run.FinishedAt.Sub(run.StartedAt).Milliseconds(), "games_seen", run.GamesSeen,
 		"games_inserted", run.GamesInserted, "games_updated", run.GamesUpdated, "games_unchanged", run.GamesUnchanged)
+	if run.XGError != "" || run.QualificationError != "" || run.ScenarioError != "" {
+		span.SetAttributes(attribute.String("scheduler.outcome", "partial_failure"))
+		return
+	}
+	span.SetAttributes(attribute.String("scheduler.outcome", "synced"))
 }
 
 // recalculateCachedClinching repairs missing or retryable derived batches
 // without an ASA request. In particular, it lets a restarted server recover a
 // page that is pending only because the fixture cache was already current.
-func (s *Scheduler) recalculateCachedClinching(parent context.Context) {
+func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span) string {
 	runner, ok := s.runner.(calculationRunner)
 	if !ok {
-		return
+		span.SetAttributes(
+			attribute.Bool("scheduler.recalculation.attempted", false),
+			attribute.String("scheduler.recalculation.outcome", "unsupported"),
+		)
+		return "current"
 	}
+	span.SetAttributes(attribute.Bool("scheduler.recalculation.attempted", true))
 	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
 	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler"})
 	cancel()
 	if err != nil {
+		span.SetAttributes(
+			attribute.String("scheduler.recalculation.outcome", "failure"),
+			attribute.String("scheduler.qualification.outcome", "not_run"),
+			attribute.String("scheduler.scenario.outcome", "not_run"),
+		)
 		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
-		return
+		return "failure"
 	}
+	span.SetAttributes(schedulerRecalculationAttributes(run)...)
 	if run.QualificationError != "" || run.ScenarioError != "" {
 		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage,
 			"qualification_error", run.QualificationError, "scenario_error", run.ScenarioError)
-		return
+		return "partial_failure"
 	}
 	if run.QualificationRecalculated || run.ScenarioRecalculated {
 		s.logger.Info("cached clinching recalculated", "season", s.config.Season, "stage", s.config.Stage,
 			"qualification_recalculated", run.QualificationRecalculated, "scenario_recalculated", run.ScenarioRecalculated)
 	}
+	if run.QualificationRecalculated || run.ScenarioRecalculated {
+		return "complete"
+	}
+	return "current"
+}
+
+func schedulerRunAttributes(run cache.SyncRun) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.Bool("scheduler.sync.attempted", true),
+		attribute.Bool("scheduler.sync.skipped", run.Skipped),
+		attribute.String("scheduler.sync.outcome", schedulerSyncOutcome(run)),
+		attribute.String("scheduler.xg.outcome", schedulerXGOutcome(run)),
+		attribute.String("scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
+		attribute.String("scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+	}
+	if run.ID > 0 {
+		attributes = append(attributes, attribute.Int64("scheduler.sync_run_id", run.ID))
+	}
+	if run.FixtureSnapshotID != "" {
+		attributes = append(attributes, attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID))
+	}
+	return attributes
+}
+
+func schedulerRecalculationAttributes(run cache.SyncRun) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.String("scheduler.recalculation.outcome", schedulerRecalculationOutcome(run)),
+		attribute.String("scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
+		attribute.String("scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+	}
+	if run.ID > 0 {
+		attributes = append(attributes, attribute.Int64("scheduler.recalculation_source_sync_run_id", run.ID))
+	}
+	if run.FixtureSnapshotID != "" {
+		attributes = append(attributes, attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID))
+	}
+	return attributes
+}
+
+func schedulerSyncOutcome(run cache.SyncRun) string {
+	if run.Skipped {
+		return "rate_limited"
+	}
+	if run.XGError != "" || run.QualificationError != "" || run.ScenarioError != "" {
+		return "partial_failure"
+	}
+	return "success"
+}
+
+func schedulerXGOutcome(run cache.SyncRun) string {
+	if run.Skipped {
+		return "not_run"
+	}
+	if run.XGError != "" {
+		return "failure"
+	}
+	if run.XGRun != nil {
+		return "complete"
+	}
+	return "not_requested"
+}
+
+func schedulerRecalculationOutcome(run cache.SyncRun) string {
+	if run.QualificationError != "" || run.ScenarioError != "" {
+		return "partial_failure"
+	}
+	if run.QualificationRecalculated || run.ScenarioRecalculated {
+		return "complete"
+	}
+	return "current"
+}
+
+func schedulerComponentOutcome(completed bool, failure string) string {
+	if failure != "" {
+		return "failure"
+	}
+	if completed {
+		return "complete"
+	}
+	return "current"
 }
 
 // Assess determines whether the cached match window needs an ASA request.
