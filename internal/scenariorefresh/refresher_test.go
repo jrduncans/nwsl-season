@@ -1,6 +1,7 @@
 package scenariorefresh
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,7 +10,10 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestCalculationTelemetrySummarizesTeamSearches(t *testing.T) {
@@ -48,6 +52,33 @@ func TestCalculationTelemetrySummarizesTeamSearches(t *testing.T) {
 	}
 	if got := attributes["scenario.search_node_count.max_team_id"].AsString(); got != "slow-team" {
 		t.Errorf("most-search-nodes team = %q, want slow-team", got)
+	}
+}
+
+func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := trace.NewTracerProvider(trace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	ctx, span := telemetry.Tracer().Start(context.Background(), "scenario.refresh")
+	_, _ = (Refresher{}).calculate(ctx, nil, nil, cache.QualificationSnapshot{})
+	span.End()
+
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || spans[0].Name != "scenario.refresh" {
+		t.Fatalf("spans = %#v, want only scenario.refresh", spans)
+	}
+	attributes := scenarioAttributeMap(spans[0].Attributes)
+	if got := attributes["scenario.input_team_count"].AsInt64(); got != 0 {
+		t.Errorf("scenario.input_team_count = %d, want 0", got)
+	}
+	if got := attributes["scenario.team_search_count"].AsInt64(); got != 0 {
+		t.Errorf("scenario.team_search_count = %d, want 0", got)
 	}
 }
 

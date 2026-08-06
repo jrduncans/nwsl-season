@@ -116,28 +116,15 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	defer cancel()
 	for _, index := range missing {
 		request := tasks[index].request
-		calculationAttributes := forecastInputAttributes(request)
-		calculationAttributes = append(calculationAttributes, attribute.String("forecast.trigger", forecastTrigger(ctx)))
-		calculationCtx, calculationSpan := telemetry.Tracer().Start(workCtx, "forecast.simulation",
-			trace.WithSpanKind(trace.SpanKindInternal),
-			trace.WithAttributes(calculationAttributes...),
-		)
-		result, runErr := e.run(calculationCtx, request)
+		result, runErr := e.run(workCtx, request)
 		if runErr != nil {
 			if errors.Is(runErr, context.DeadlineExceeded) {
 				outcome = "timed_out"
 			} else {
 				outcome = "failure"
 			}
-			telemetry.RecordErrorWithSlug(calculationSpan, runErr, "err-forecast-simulation")
-			calculationSpan.End()
 			return nil, runErr
 		}
-		calculationSpan.SetAttributes(
-			attribute.Int("forecast.result.fixed_assumption_count", result.FixedCount),
-			attribute.Int("forecast.result.remaining_fixture_count", result.Remaining),
-		)
-		calculationSpan.End()
 		results[index] = result
 		e.mu.Lock()
 		if len(e.cache) >= forecastResultCacheCapacity {
@@ -185,14 +172,6 @@ func forecastModelIDs(tasks []forecastTask) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-func forecastInputAttributes(request simulation.Request) []attribute.KeyValue {
-	attributes := forecastSharedInputAttributes(request)
-	if request.Model != nil {
-		attributes = append(attributes, attribute.String("forecast.model_id", request.Model.Info().ID))
-	}
-	return attributes
 }
 
 func forecastSharedInputAttributes(request simulation.Request) []attribute.KeyValue {

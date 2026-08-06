@@ -1,6 +1,7 @@
 package qualification
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"testing"
@@ -11,7 +12,10 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestCalculationTelemetrySummarizesFastLoopWork(t *testing.T) {
@@ -61,6 +65,33 @@ func TestCalculationTelemetrySummarizesFastLoopWork(t *testing.T) {
 	}
 	if got := attributes["qualification.no_help_batch.slowest_team_id"].AsString(); got != "slow-team" {
 		t.Errorf("slowest no-help team = %q, want slow-team", got)
+	}
+}
+
+func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := trace.NewTracerProvider(trace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	ctx, span := telemetry.Tracer().Start(context.Background(), "qualification.refresh")
+	_, _ = (Refresher{}).calculate(ctx, nil, nil)
+	span.End()
+
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || spans[0].Name != "qualification.refresh" {
+		t.Fatalf("spans = %#v, want only qualification.refresh", spans)
+	}
+	attributes := qualificationAttributeMap(spans[0].Attributes)
+	if got := attributes["qualification.input_team_count"].AsInt64(); got != 0 {
+		t.Errorf("qualification.input_team_count = %d, want 0", got)
+	}
+	if got := attributes["qualification.status_check_count"].AsInt64(); got != 0 {
+		t.Errorf("qualification.status_check_count = %d, want 0", got)
 	}
 }
 

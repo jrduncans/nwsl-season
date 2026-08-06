@@ -45,7 +45,7 @@ type Progress struct {
 	NoHelpState  clinching.NoHelpState
 }
 
-// calculationTelemetry keeps loop-level work on qualification.calculate. A
+// calculationTelemetry keeps loop-level work on qualification.refresh. A
 // completed leaf span is retained only when the individual operation is slow
 // enough to matter in the waterfall or fails.
 type calculationTelemetry struct {
@@ -257,25 +257,19 @@ func shouldRetryComputeBudget(snapshot cache.QualificationSnapshot) bool {
 	}
 	return false
 }
-func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game) (statuses []cache.QualificationStatus, err error) {
+func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []cache.Game) (statuses []cache.QualificationStatus, err error) {
 	batchStarted := time.Now()
 	calculation := calculationTelemetry{}
-	ctx, span := telemetry.Tracer().Start(parent, "qualification.calculate",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.Int("qualification.input_team_count", len(teams)),
-			attribute.Int("qualification.input_fixture_count", len(games)),
-			attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
-			attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
-			attribute.StringSlice("qualification.achievement_ids", achievementIDs(r.Rules.Achievements)),
-		),
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.Int("qualification.input_team_count", len(teams)),
+		attribute.Int("qualification.input_fixture_count", len(games)),
+		attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
+		attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+		attribute.StringSlice("qualification.achievement_ids", achievementIDs(r.Rules.Achievements)),
 	)
 	defer func() {
 		span.SetAttributes(calculation.attributes(statuses)...)
-		if err != nil {
-			telemetry.RecordErrorWithSlug(span, err, "err-qualification-calculate")
-		}
-		span.End()
 	}()
 	participants := map[string]bool{}
 	for _, g := range games {
