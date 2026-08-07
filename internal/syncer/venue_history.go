@@ -34,7 +34,7 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 		outcome := "complete"
 		if err != nil {
 			outcome = "failure"
-			telemetry.RecordErrorWithSlug(span, err, "err-sync-venue-history")
+			telemetry.RecordErrorWithCode(ctx, span, err, "sync.venue_history")
 		}
 		span.SetAttributes(
 			attribute.Int("sync.venue_history_refreshed_season_count", refreshed),

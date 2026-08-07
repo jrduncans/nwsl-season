@@ -78,7 +78,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 			if errors.Is(err, errForecastOverloaded) {
 				span.SetAttributes(attribute.Bool("error.expected", true))
 			} else {
-				telemetry.RecordErrorWithSlug(span, err, "err-forecast-run")
+				telemetry.RecordErrorWithCode(ctx, span, err, "forecast.run")
 			}
 		}
 		span.End()

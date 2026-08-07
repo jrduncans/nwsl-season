@@ -70,11 +70,12 @@ Useful endpoints:
 | `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
 | `NWSL_FORECAST_CONCURRENCY` | `4` | Maximum concurrent uncached Forecast Lab requests. |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |
-| `HONEYCOMB_API_KEY` | unset | Enables OpenTelemetry trace export directly to Honeycomb. Keep this secret out of the repository. |
+| `HONEYCOMB_API_KEY` | unset | Enables OpenTelemetry trace and exception-log export directly to Honeycomb. Keep this secret out of the repository. |
 | `HONEYCOMB_API_ENDPOINT` | `https://api.honeycomb.io` | Honeycomb ingest endpoint; use `https://api.eu1.honeycomb.io` for the EU instance. |
 | `OTEL_SERVICE_NAME` | `nwsl-season-server` | Service name shown in Honeycomb. |
 | `OTEL_RESOURCE_ATTRIBUTES` | unset | Comma-separated OpenTelemetry resource attributes, such as deployment environment and instance identity. |
 | `OTEL_METRICS_EXPORTER` | unset | Set to `otlp` to enable native OpenTelemetry HTTP metrics. |
+| `OTEL_LOGS_EXPORTER` | unset | Set to `none` to disable exception-log export. |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | This application uses OTLP/HTTP; set explicitly when configuring an exporter. |
 
 Forecast requests that exceed the concurrency limit receive `429`. Forecast
@@ -93,7 +94,9 @@ The server and `sync` command create OpenTelemetry traces for HTTP routes, ASA
 API calls, scheduled cache checks and refreshes, cache reads and writes,
 qualification and scenario calculations, and Forecast Lab simulations. Every
 ASA request is a downstream HTTP child span regardless of whether it was
-started by the server or the maintenance command.
+started by the server or the maintenance command. Failures are emitted as
+correlated OpenTelemetry exception log records, with the error message and
+stack trace retained off the span itself.
 
 The trace data is deliberately wide rather than pre-aggregated. Page requests
 record the season, stage, fixture snapshot, cache age, fixture inventory, and
@@ -104,11 +107,13 @@ and fixed-assumption counts; calculation spans add the scoped fixture and
 achievement counts. They do not include individual assumed results.
 
 Local development remains silent and does not make telemetry network calls
-until an exporter is configured. Metrics are optional; traces alone are enough
-to investigate a reported problem in Honeycomb at this project's scale.
+until an exporter is configured. Metrics are optional; traces and their
+correlated exception logs are enough to investigate a reported problem in
+Honeycomb at this project's scale.
 
-To send traces to Honeycomb, create an **ingest API key** in the corresponding
-Honeycomb environment, then set it only in that runtime environment:
+To send traces and exception logs to Honeycomb, create an **ingest API key** in
+the corresponding Honeycomb environment, then set it only in that runtime
+environment:
 
 ```sh
 export HONEYCOMB_API_KEY='your-ingest-key'
