@@ -130,7 +130,7 @@ func TestForecastExecutorBoundsItsResultCache(t *testing.T) {
 	}
 }
 
-func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
+func TestForecastExecutorRecordsRunInputs(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	previous := otel.GetTracerProvider()
@@ -158,11 +158,8 @@ func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
 	}
 
 	spans := exporter.GetSpans()
-	calculation := findSpan(t, spans, "forecast.simulation")
-	attributes := spanAttributes(calculation)
-	if got := attributes["forecast.model_id"].AsString(); got != "telemetry-test-v1" {
-		t.Errorf("forecast.model_id = %q, want telemetry-test-v1", got)
-	}
+	parent := findSpan(t, spans, "forecast.run")
+	attributes := spanAttributes(parent)
 	if got := attributes["forecast.trigger"].AsString(); got != "post_sync" {
 		t.Errorf("forecast.trigger = %q, want post_sync", got)
 	}
@@ -180,17 +177,17 @@ func TestForecastExecutorRecordsCalculationInputs(t *testing.T) {
 			t.Errorf("%s = %d, want %d", key, got, want)
 		}
 	}
-	parent := findSpan(t, spans, "forecast.run")
-	parentAttributes := spanAttributes(parent)
-	modelIDs := parentAttributes["forecast.model_ids"].AsStringSlice()
+	modelIDs := attributes["forecast.model_ids"].AsStringSlice()
 	if len(modelIDs) != 1 || modelIDs[0] != "telemetry-test-v1" {
 		t.Errorf("forecast.model_ids = %q, want [telemetry-test-v1]", modelIDs)
 	}
-	if got := parentAttributes["forecast.fixed_assumption_count"].AsInt64(); got != 2 {
-		t.Errorf("parent forecast.fixed_assumption_count = %d, want 2", got)
+	if got := attributes["forecast.fixed_assumption_count"].AsInt64(); got != 2 {
+		t.Errorf("forecast.fixed_assumption_count = %d, want 2", got)
 	}
-	if got := parentAttributes["forecast.trigger"].AsString(); got != "post_sync" {
-		t.Errorf("parent forecast.trigger = %q, want post_sync", got)
+	for _, span := range spans {
+		if span.Name == "forecast.simulation" {
+			t.Fatal("forecast.simulation should be recorded on forecast.run instead")
+		}
 	}
 }
 

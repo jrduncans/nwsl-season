@@ -125,7 +125,7 @@ type calculated struct {
 }
 
 // calculationTelemetry summarizes the repeated per-team searches on the
-// scenario.calculate span. Individual searches retain a child span only when
+// scenario.refresh span. Individual searches retain a child span only when
 // their timing is useful in the waterfall or they fail.
 type calculationTelemetry struct {
 	teamSearches, slowTeamSearches int
@@ -227,25 +227,19 @@ func scenarioSearchDiagnosticsFor(values map[competition.AchievementID]scenarios
 	return result
 }
 
-func (r Refresher) calculate(parent context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot) (result calculated, err error) {
+func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot) (result calculated, err error) {
 	batchStarted := time.Now()
 	calculation := calculationTelemetry{}
-	ctx, span := telemetry.Tracer().Start(parent, "scenario.calculate",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.Int("scenario.input_team_count", len(teams)),
-			attribute.Int("scenario.input_fixture_count", len(games)),
-			attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
-			attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
-			attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(r.Rules.Achievements)),
-		),
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.Int("scenario.input_team_count", len(teams)),
+		attribute.Int("scenario.input_fixture_count", len(games)),
+		attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
+		attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
+		attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(r.Rules.Achievements)),
 	)
 	defer func() {
 		span.SetAttributes(calculation.attributes(result.rows)...)
-		if err != nil {
-			telemetry.RecordErrorWithSlug(span, err, "err-scenario-calculate")
-		}
-		span.End()
 	}()
 	// The cache's team table is shared across seasons and can include former
 	// clubs. Qualification scopes the snapshot to fixture participants; the
