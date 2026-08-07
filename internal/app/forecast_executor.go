@@ -60,8 +60,9 @@ func newForecastExecutor(concurrency int, timeout time.Duration) *forecastExecut
 }
 
 func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (results []simulation.Result, err error) {
+	trigger := forecastTrigger(ctx)
 	spanAttributes := forecastRunAttributes(tasks)
-	spanAttributes = append(spanAttributes, attribute.String("forecast.trigger", forecastTrigger(ctx)))
+	spanAttributes = append(spanAttributes, attribute.String("forecast.trigger", trigger))
 	ctx, span := telemetry.Tracer().Start(ctx, "forecast.run",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(spanAttributes...),
@@ -77,8 +78,10 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 		if err != nil {
 			if errors.Is(err, errForecastOverloaded) {
 				span.SetAttributes(attribute.Bool("error.expected", true))
+			} else if trigger != "http" {
+				err = telemetry.RecordWarningWithType(ctx, span, err, "forecast.run", telemetry.ErrorTypeCalculationFailure)
 			} else {
-				telemetry.RecordErrorWithCode(ctx, span, err, "forecast.run")
+				err = telemetry.RecordErrorWithType(ctx, span, err, "forecast.run", telemetry.ErrorTypeCalculationFailure)
 			}
 		}
 		span.End()

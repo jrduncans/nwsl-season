@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,11 +18,16 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type inMemoryLogExporter struct {
 	records []sdklog.Record
 }
+
+type concreteTestError struct{}
+
+func (concreteTestError) Error() string { return "concrete failure" }
 
 func (e *inMemoryLogExporter) Export(_ context.Context, records []sdklog.Record) error {
 	e.records = append(e.records, records...)
@@ -224,11 +230,14 @@ func TestRecordErrorWithCode(t *testing.T) {
 	if got := attributes["nwsl.error.code"].AsString(); got != "test.operation" {
 		t.Errorf("nwsl.error.code = %q, want test.operation", got)
 	}
-	if got := attributes["error.type"].AsString(); got == "" {
-		t.Error("error.type is empty")
+	if got := attributes["error.type"].AsString(); got != ErrorTypeOther {
+		t.Errorf("error.type = %q, want %q", got, ErrorTypeOther)
 	}
 	if spans[0].Status.Code != codes.Error {
 		t.Errorf("span status = %v, want error", spans[0].Status.Code)
+	}
+	if got := spans[0].Status.Description; got != "test failure" {
+		t.Errorf("span status description = %q, want test failure", got)
 	}
 	if len(logExporter.records) != 1 {
 		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
@@ -239,6 +248,9 @@ func TestRecordErrorWithCode(t *testing.T) {
 	}
 	if got := record.Severity(); got != otellog.SeverityError {
 		t.Errorf("severity = %v, want ERROR", got)
+	}
+	if got := record.SeverityText(); got != "" {
+		t.Errorf("severity text = %q, want empty native-event value", got)
 	}
 	if record.TraceID() != span.SpanContext().TraceID() || record.SpanID() != span.SpanContext().SpanID() {
 		t.Error("log record is not correlated with its span")
@@ -251,14 +263,151 @@ func TestRecordErrorWithCode(t *testing.T) {
 	if got := logAttributes["exception.message"]; got != "test failure" {
 		t.Errorf("exception.message = %q, want test failure", got)
 	}
-	if got := logAttributes["exception.type"]; got == "" {
-		t.Error("exception.type is empty")
+	if got := logAttributes["exception.type"]; got != ErrorTypeOther {
+		t.Errorf("exception.type = %q, want %q", got, ErrorTypeOther)
 	}
 	if got := logAttributes["exception.stacktrace"]; got == "" {
 		t.Error("exception.stacktrace is empty")
 	}
 	if got := logAttributes["nwsl.error.code"]; got != "test.operation" {
 		t.Errorf("nwsl.error.code = %q, want test.operation", got)
+	}
+}
+
+func TestExceptionSeverityReflectsDisposition(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		emit func(context.Context, oteltrace.Span, error)
+		want otellog.Severity
+	}{
+		{
+			name: "terminal operation failure",
+			err:  errors.New("terminal failure"),
+			emit: func(ctx context.Context, span oteltrace.Span, err error) {
+				RecordErrorWithType(ctx, span, err, "test.terminal", ErrorTypeCalculationFailure)
+			},
+			want: otellog.SeverityError,
+		},
+		{
+			name: "handled partial failure",
+			err:  context.DeadlineExceeded,
+			emit: func(ctx context.Context, span oteltrace.Span, err error) {
+				RecordWarningWithType(ctx, span, err, "test.partial", ErrorTypeCalculationFailure)
+			},
+			want: otellog.SeverityWarn,
+		},
+		{
+			name: "normal cancellation",
+			err:  context.Canceled,
+			emit: func(ctx context.Context, span oteltrace.Span, err error) {
+				RecordErrorWithType(ctx, span, err, "test.canceled", ErrorTypeCalculationFailure)
+			},
+			want: otellog.SeverityDebug,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			traceProvider := sdktrace.NewTracerProvider()
+			defer func() { _ = traceProvider.Shutdown(context.Background()) }()
+			logExporter := &inMemoryLogExporter{}
+			logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
+			previousLogProvider := global.GetLoggerProvider()
+			global.SetLoggerProvider(logProvider)
+			t.Cleanup(func() {
+				global.SetLoggerProvider(previousLogProvider)
+				_ = logProvider.Shutdown(context.Background())
+			})
+
+			ctx, span := traceProvider.Tracer("test").Start(context.Background(), "test.operation")
+			test.emit(ctx, span, test.err)
+			span.End()
+			if len(logExporter.records) != 1 {
+				t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
+			}
+			if got := logExporter.records[0].Severity(); got != test.want {
+				t.Errorf("severity = %v, want %v", got, test.want)
+			}
+			if got := logExporter.records[0].SeverityText(); got != "" {
+				t.Errorf("severity text = %q, want empty native-event value", got)
+			}
+		})
+	}
+}
+
+func TestRecordErrorWithTypeAlignsWrappedJoinedErrorAcrossSignals(t *testing.T) {
+	traceExporter := tracetest.NewInMemoryExporter()
+	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(traceExporter))
+	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
+	logExporter := &inMemoryLogExporter{}
+	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
+	previousLogProvider := global.GetLoggerProvider()
+	global.SetLoggerProvider(logProvider)
+	t.Cleanup(func() {
+		global.SetLoggerProvider(previousLogProvider)
+		_ = logProvider.Shutdown(context.Background())
+	})
+
+	parentCtx, parent := traceProvider.Tracer("test").Start(context.Background(), "parent.operation")
+	childCtx, child := traceProvider.Tracer("test").Start(parentCtx, "child.operation")
+	cause := errors.Join(
+		fmt.Errorf("fetch teams: %w", context.DeadlineExceeded),
+		errors.New("secondary failure"),
+	)
+	recorded := RecordErrorWithType(childCtx, child, cause, "sync.fetch_asa", ErrorTypeUpstreamFailure)
+	child.End()
+	parentErr := fmt.Errorf("sync failed: %w", recorded)
+	MarkError(parent, parentErr)
+	parent.End()
+
+	if !errors.Is(recorded, context.DeadlineExceeded) {
+		t.Error("classified error no longer matches context deadline")
+	}
+	spans := make(map[string]tracetest.SpanStub)
+	for _, span := range traceExporter.GetSpans() {
+		spans[span.Name] = span
+	}
+	for name, wantDescription := range map[string]string{
+		"child.operation":  cause.Error(),
+		"parent.operation": parentErr.Error(),
+	} {
+		span, ok := spans[name]
+		if !ok {
+			t.Fatalf("span %q was not exported", name)
+		}
+		attributes := map[attribute.Key]attribute.Value{}
+		for _, value := range span.Attributes {
+			attributes[value.Key] = value.Value
+		}
+		if got := attributes["error.type"].AsString(); got != ErrorTypeTimeout {
+			t.Errorf("%s error.type = %q, want %q", name, got, ErrorTypeTimeout)
+		}
+		if got := span.Status.Description; got != wantDescription {
+			t.Errorf("%s status description = %q, want %q", name, got, wantDescription)
+		}
+	}
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
+	}
+	logAttributes := map[string]string{}
+	logExporter.records[0].WalkAttributes(func(value attribute.KeyValue) bool {
+		logAttributes[string(value.Key)] = value.Value.AsString()
+		return true
+	})
+	if got := logAttributes["exception.type"]; got != ErrorTypeTimeout {
+		t.Errorf("exception.type = %q, want %q", got, ErrorTypeTimeout)
+	}
+	if got := logAttributes["exception.message"]; got != cause.Error() {
+		t.Errorf("exception.message = %q, want %q", got, cause.Error())
+	}
+}
+
+func TestResolveErrorTypeFindsMeaningfulJoinedChild(t *testing.T) {
+	want := resolveErrorType(concreteTestError{}, "")
+	got := resolveErrorType(errors.Join(errors.New("generic failure"), concreteTestError{}), "")
+	if got != want {
+		t.Errorf("resolveErrorType(joined error) = %q, want %q", got, want)
 	}
 }
 

@@ -98,6 +98,21 @@ started by the server or the maintenance command. Failures are emitted as
 correlated OpenTelemetry exception log records, with the error message and
 stack trace retained off the span itself.
 
+Error spans and exception logs use the same low-cardinality `error.type`
+classification: `canceled`, `timeout`, `invalid_argument`, `invalid_data`,
+`conflict`, `upstream_failure`, `storage_failure`, `calculation_failure`, or
+`_OTHER`. The separate `nwsl.error.code` attribute identifies the operation
+that detected the failure, such as `sync.fetch_asa`; together they describe
+why and where a failure occurred. Error wrapping preserves this classification,
+and cancellation or timeout takes precedence over the broader operation class.
+
+Exception severity describes impact independently from `error.type`. Failures
+that terminate an operation are `ERROR`; failures deliberately absorbed as a
+retryable or partial result are `WARN`; and ordinary context cancellation is
+`DEBUG`. Expected synchronization contention is recorded as span outcome
+`conflict` without an exception event. `FATAL` is reserved for a process
+boundary that actually shuts down the application.
+
 The trace data is deliberately wide rather than pre-aggregated. Page requests
 record the season, stage, fixture snapshot, cache age, fixture inventory, and
 xG availability. Sync traces include their trigger, data-change counts, and

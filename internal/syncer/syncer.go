@@ -113,14 +113,21 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
-	recordRunException := func(cause error) error {
-		telemetry.RecordErrorWithCode(ctx, span, cause, "sync.run")
-		return cause
+	recordRunException := func(cause error, errorType string) error {
+		return telemetry.RecordErrorWithType(ctx, span, cause, "sync.run", errorType)
 	}
 	defer func() {
 		span.SetAttributes(syncRunAttributes(run)...)
 		if err != nil {
-			telemetry.MarkError(span, err)
+			if errors.Is(err, cache.ErrSyncInProgress) {
+				span.SetAttributes(
+					attribute.Bool("error.expected", true),
+					attribute.Bool("sync.skipped", true),
+					attribute.String("sync.outcome", "conflict"),
+				)
+			} else {
+				telemetry.MarkError(span, err)
+			}
 		}
 		span.End()
 	}()
@@ -129,25 +136,25 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 
 	startedAt := time.Now().UTC()
 	if s.ASA == nil {
-		return cache.SyncRun{}, recordRunException(errors.New("sync ASA client is required"))
+		return cache.SyncRun{}, recordRunException(errors.New("sync ASA client is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if s.Store == nil {
-		return cache.SyncRun{}, recordRunException(errors.New("sync store is required"))
+		return cache.SyncRun{}, recordRunException(errors.New("sync store is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if strings.TrimSpace(options.Season) == "" {
-		return cache.SyncRun{}, recordRunException(errors.New("sync season is required"))
+		return cache.SyncRun{}, recordRunException(errors.New("sync season is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if strings.TrimSpace(options.Stage) == "" {
-		return cache.SyncRun{}, recordRunException(errors.New("sync stage is required"))
+		return cache.SyncRun{}, recordRunException(errors.New("sync stage is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 
 	holder := fmt.Sprintf("%d-%d", os.Getpid(), startedAt.UnixNano())
 	acquired, err := s.Store.TryAcquireSyncLease(ctx, leaseKey(options), holder, leaseExpiry(ctx, startedAt))
 	if err != nil {
-		return cache.SyncRun{}, recordRunException(err)
+		return cache.SyncRun{}, recordRunException(err, telemetry.ErrorTypeStorageFailure)
 	}
 	if !acquired {
-		return cache.SyncRun{}, recordRunException(cache.ErrSyncInProgress)
+		return cache.SyncRun{}, cache.ErrSyncInProgress
 	}
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -158,7 +165,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	if !options.Force && options.MinimumAttemptInterval > 0 {
 		run, err := s.Store.LastAttempt(ctx, options.Season, options.Stage)
 		if err != nil {
-			return cache.SyncRun{}, recordRunException(fmt.Errorf("check recent sync: %w", err))
+			return cache.SyncRun{}, recordRunException(fmt.Errorf("check recent sync: %w", err), telemetry.ErrorTypeStorageFailure)
 		}
 		if run != nil && !run.FinishedAt.Add(options.MinimumAttemptInterval).Before(startedAt) {
 			run.Skipped = true
@@ -175,6 +182,9 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		),
 	)
 	data := s.fetchASAData(fetchCtx, options, xgClient, hasXGClient && hasXGCache)
+	data.teamsErr = telemetry.ClassifyError(data.teamsErr, telemetry.ErrorTypeUpstreamFailure)
+	data.gamesErr = telemetry.ClassifyError(data.gamesErr, telemetry.ErrorTypeUpstreamFailure)
+	data.xgErr = telemetry.ClassifyError(data.xgErr, telemetry.ErrorTypeUpstreamFailure)
 	fetchSpan.SetAttributes(
 		attribute.Int("sync.teams_fetched", len(data.teams)),
 		attribute.Int("sync.games_fetched", len(data.games)),
@@ -193,16 +203,16 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	teams, games := data.teams, data.games
 
 	if err := validate(options, teams, games); err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err))
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
 	}
 
 	cacheTeams, err := mapTeams(teams)
 	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err))
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
 	}
 	cacheGames, err := mapGames(options, games)
 	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err))
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
 	}
 
 	replaceCtx, replaceSpan := telemetry.Tracer().Start(ctx, "cache.season.replace",
@@ -217,7 +227,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	)
 	run, err = s.Store.ReplaceSeason(replaceCtx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
 	if err != nil {
-		telemetry.RecordErrorWithCode(replaceCtx, replaceSpan, err, "cache.season.replace")
+		err = telemetry.RecordErrorWithType(replaceCtx, replaceSpan, err, "cache.season.replace", telemetry.ErrorTypeStorageFailure)
 	} else {
 		replaceSpan.SetAttributes(syncRunAttributes(run)...)
 	}
@@ -295,29 +305,32 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
+	recordRecalculationException := func(cause error, errorType string) error {
+		return telemetry.RecordErrorWithType(ctx, span, cause, "sync.recalculate", errorType)
+	}
 	defer func() {
 		span.SetAttributes(recalculateRunAttributes(run, err)...)
 		if err != nil {
-			telemetry.RecordErrorWithCode(ctx, span, err, "sync.recalculate")
+			telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()
 	if s.Store == nil {
-		return cache.SyncRun{}, errors.New("sync store is required")
+		return cache.SyncRun{}, recordRecalculationException(errors.New("sync store is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if strings.TrimSpace(options.Season) == "" {
-		return cache.SyncRun{}, errors.New("recalculation season is required")
+		return cache.SyncRun{}, recordRecalculationException(errors.New("recalculation season is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if strings.TrimSpace(options.Stage) == "" {
-		return cache.SyncRun{}, errors.New("recalculation stage is required")
+		return cache.SyncRun{}, recordRecalculationException(errors.New("recalculation stage is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	store, ok := s.Store.(calculationStore)
 	if !ok {
-		return cache.SyncRun{}, errors.New("sync store does not support cached clinching inputs")
+		return cache.SyncRun{}, recordRecalculationException(errors.New("sync store does not support cached clinching inputs"), telemetry.ErrorTypeInvalidArgument)
 	}
 	inputs, err := store.ClinchingInputs(ctx, options.Season, options.Stage)
 	if err != nil {
-		return cache.SyncRun{}, fmt.Errorf("load cached clinching inputs: %w", err)
+		return cache.SyncRun{}, recordRecalculationException(fmt.Errorf("load cached clinching inputs: %w", err), telemetry.ErrorTypeStorageFailure)
 	}
 	// Keep the derived calculation budgets independent from the short caller
 	// deadline used to load the cached inputs. This mirrors Run: a scheduler
@@ -449,17 +462,17 @@ func (s Service) refreshXG(ctx context.Context, store xgStore, options RunOption
 	}()
 	if sourceErr != nil {
 		cause := fmt.Errorf("fetch game xG: %w", sourceErr)
-		telemetry.RecordErrorWithCode(ctx, span, cause, "sync.refresh_xg")
+		cause = telemetry.RecordWarningWithType(ctx, span, cause, "sync.refresh_xg", telemetry.ErrorTypeUpstreamFailure)
 		return s.xgWarning(ctx, store, options, startedAt, run, cause)
 	}
 	values, err := mapXGoals(source)
 	if err != nil {
-		telemetry.RecordErrorWithCode(ctx, span, err, "sync.refresh_xg")
+		err = telemetry.RecordWarningWithType(ctx, span, err, "sync.refresh_xg", telemetry.ErrorTypeInvalidData)
 		return s.xgWarning(ctx, store, options, startedAt, run, err)
 	}
 	xgRun, err := store.ReplaceGameXG(ctx, options.Season, options.Stage, games, values, startedAt)
 	if err != nil {
-		telemetry.RecordErrorWithCode(ctx, span, err, "sync.refresh_xg")
+		err = telemetry.RecordWarningWithType(ctx, span, err, "sync.refresh_xg", telemetry.ErrorTypeStorageFailure)
 		return s.xgWarning(ctx, store, options, startedAt, run, err)
 	}
 	run.XGRun = &xgRun

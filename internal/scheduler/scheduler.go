@@ -3,6 +3,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -153,7 +154,7 @@ func (s *Scheduler) check() {
 			attribute.String("scheduler.action", "read_snapshot"),
 			attribute.String("scheduler.outcome", "failure"),
 		)
-		telemetry.RecordErrorWithCode(ctx, span, err, "scheduler.refresh_snapshot")
+		telemetry.RecordWarningWithType(ctx, span, err, "scheduler.refresh_snapshot", telemetry.ErrorTypeStorageFailure)
 		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
@@ -182,6 +183,15 @@ func (s *Scheduler) check() {
 		Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler", MinimumAttemptInterval: s.config.MinimumAttemptInterval,
 	})
 	cancel()
+	if errors.Is(err, cache.ErrSyncInProgress) {
+		span.SetAttributes(
+			attribute.Bool("error.expected", true),
+			attribute.String("scheduler.sync.outcome", "in_progress"),
+			attribute.String("scheduler.outcome", "deferred"),
+		)
+		s.logger.Info("cache refresh deferred", "reason", "sync_in_progress", "season", s.config.Season, "stage", s.config.Stage)
+		return
+	}
 	if err != nil {
 		span.SetAttributes(
 			attribute.String("scheduler.sync.outcome", "failure"),
