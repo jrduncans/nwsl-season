@@ -61,36 +61,40 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 			attribute.Bool("scenario.forced", force),
 		),
 	)
+	recordRefreshException := func(cause error) error {
+		telemetry.RecordErrorWithCode(ctx, span, cause, "scenario.refresh")
+		return cause
+	}
 	defer func() {
 		span.SetAttributes(
 			attribute.Bool("scenario.recalculated", recalculated),
 			attribute.String("scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
 		)
 		if err != nil {
-			telemetry.RecordErrorWithCode(ctx, span, err, "scenario.refresh")
+			telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()
 	if r.Store == nil {
-		return false, fmt.Errorf("scenario store is required")
+		return false, recordRefreshException(fmt.Errorf("scenario store is required"))
 	}
 	if err := r.Rules.Validate(); err != nil {
-		return false, err
+		return false, recordRefreshException(err)
 	}
 	if sync.FixtureSnapshotID == "" {
-		return false, fmt.Errorf("fixture snapshot ID is required")
+		return false, recordRefreshException(fmt.Errorf("fixture snapshot ID is required"))
 	}
 	if snapshot, ok, err := r.Store.ScenarioForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version, scenarios.DefinitionVersion); err != nil {
-		return false, err
+		return false, recordRefreshException(err)
 	} else if ok && !force && !shouldRetryComputeBudget(snapshot) {
 		return false, nil
 	}
 	q, ok, err := r.Store.QualificationForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version)
 	if err != nil {
-		return false, err
+		return false, recordRefreshException(err)
 	}
 	if !ok {
-		return false, fmt.Errorf("matching qualification batch is required")
+		return false, recordRefreshException(fmt.Errorf("matching qualification batch is required"))
 	}
 	run := cache.ScenarioRun{FixtureSnapshotID: sync.FixtureSnapshotID, QualificationRunID: q.Run.ID, SourceSyncRunID: sync.ID, Season: sync.Season, Stage: sync.Stage, RulesVersion: r.Rules.Version, DefinitionVersion: scenarios.DefinitionVersion, StartedAt: time.Now().UTC(), ExpectedResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games, q)
@@ -101,6 +105,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	run.Slate = values.slate
 	_, err = r.Store.ReplaceScenario(context.Background(), run, values.rows)
 	if err != nil {
+		recordRefreshException(err)
 		_ = r.Store.RecordScenarioFailure(context.Background(), run, err)
 	}
 	return true, err
@@ -231,6 +236,10 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	batchStarted := time.Now()
 	calculation := calculationTelemetry{}
 	span := trace.SpanFromContext(ctx)
+	recordCalculationException := func(cause error) error {
+		telemetry.RecordErrorWithCode(ctx, span, cause, "scenario.refresh")
+		return cause
+	}
 	span.SetAttributes(
 		attribute.Int("scenario.input_team_count", len(teams)),
 		attribute.Int("scenario.input_fixture_count", len(games)),
@@ -258,7 +267,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	for id := range participants {
 		t, ok := byID[id]
 		if !ok {
-			return calculated{}, fmt.Errorf("fixture references missing team %q", id)
+			return calculated{}, recordCalculationException(fmt.Errorf("fixture references missing team %q", id))
 		}
 		domainTeams = append(domainTeams, standings.Team{ID: t.ASAID, Name: t.Name, ShortName: t.ShortName, Abbreviation: t.Abbreviation})
 	}
@@ -278,7 +287,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		domainGames = append(domainGames, d)
 		k, err := fixtures.ParseKickoff(g.KickoffUTC)
 		if err != nil {
-			return calculated{}, err
+			return calculated{}, recordCalculationException(err)
 		}
 		sg := scenarios.ScheduledGame{ID: g.ASAID, Status: g.Status, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID, HomeScore: d.HomeScore, AwayScore: d.AwayScore, KickoffUTC: k}
 		if g.Matchday.Valid {
@@ -289,7 +298,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	}
 	slate, err := scenarios.DefineSlate(scheduled)
 	if err != nil {
-		return calculated{}, err
+		return calculated{}, recordCalculationException(err)
 	}
 	span.SetAttributes(
 		attribute.String("scenario.slate_id", slate.ID),
@@ -308,7 +317,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	}
 	evaluator, err := clinching.NewEvaluator(domainTeams, domainGames, order)
 	if err != nil {
-		return calculated{}, err
+		return calculated{}, recordCalculationException(err)
 	}
 	baseline := map[string]cache.QualificationStatus{}
 	for _, v := range q.Statuses {
@@ -330,7 +339,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		for _, a := range ach {
 			b, ok := baseline[t.Team.ID+"\x00"+string(a.ID)]
 			if !ok {
-				return calculated{}, fmt.Errorf("qualification baseline missing for team %q achievement %q", t.Team.ID, a.ID)
+				return calculated{}, recordCalculationException(fmt.Errorf("qualification baseline missing for team %q achievement %q", t.Team.ID, a.ID))
 			}
 			bases[a.ID] = clinching.AchievementResult{TeamID: b.TeamID, Achievement: b.Achievement, TopK: b.TopK, Status: b.Status, Method: b.Method, Reason: b.Reason, NoHelp: b.NoHelp}
 			r.report(Progress{Phase: "started", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), BatchElapsed: time.Since(batchStarted)})

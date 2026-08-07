@@ -27,6 +27,8 @@ type SnapshotStore interface {
 }
 
 // Runner performs a complete atomic sync when the scheduler makes it eligible.
+// Implementations own exception logging for returned errors; the scheduler
+// marks its orchestration span without recording that same exception again.
 type Runner interface {
 	Run(context.Context, syncer.RunOptions) (cache.SyncRun, error)
 }
@@ -185,7 +187,7 @@ func (s *Scheduler) check() {
 			attribute.String("scheduler.sync.outcome", "failure"),
 			attribute.String("scheduler.outcome", "failure"),
 		)
-		telemetry.RecordErrorWithCode(ctx, span, err, "scheduler.refresh_run")
+		telemetry.MarkError(span, err)
 		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
@@ -236,6 +238,7 @@ func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trac
 			attribute.String("scheduler.qualification.outcome", "not_run"),
 			attribute.String("scheduler.scenario.outcome", "not_run"),
 		)
+		telemetry.MarkError(span, err)
 		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return "failure"
 	}

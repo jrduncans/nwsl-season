@@ -113,10 +113,14 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
+	recordRunException := func(cause error) error {
+		telemetry.RecordErrorWithCode(ctx, span, cause, "sync.run")
+		return cause
+	}
 	defer func() {
 		span.SetAttributes(syncRunAttributes(run)...)
 		if err != nil {
-			telemetry.RecordErrorWithCode(ctx, span, err, "sync.run")
+			telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()
@@ -125,25 +129,25 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 
 	startedAt := time.Now().UTC()
 	if s.ASA == nil {
-		return cache.SyncRun{}, errors.New("sync ASA client is required")
+		return cache.SyncRun{}, recordRunException(errors.New("sync ASA client is required"))
 	}
 	if s.Store == nil {
-		return cache.SyncRun{}, errors.New("sync store is required")
+		return cache.SyncRun{}, recordRunException(errors.New("sync store is required"))
 	}
 	if strings.TrimSpace(options.Season) == "" {
-		return cache.SyncRun{}, errors.New("sync season is required")
+		return cache.SyncRun{}, recordRunException(errors.New("sync season is required"))
 	}
 	if strings.TrimSpace(options.Stage) == "" {
-		return cache.SyncRun{}, errors.New("sync stage is required")
+		return cache.SyncRun{}, recordRunException(errors.New("sync stage is required"))
 	}
 
 	holder := fmt.Sprintf("%d-%d", os.Getpid(), startedAt.UnixNano())
 	acquired, err := s.Store.TryAcquireSyncLease(ctx, leaseKey(options), holder, leaseExpiry(ctx, startedAt))
 	if err != nil {
-		return cache.SyncRun{}, err
+		return cache.SyncRun{}, recordRunException(err)
 	}
 	if !acquired {
-		return cache.SyncRun{}, cache.ErrSyncInProgress
+		return cache.SyncRun{}, recordRunException(cache.ErrSyncInProgress)
 	}
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -154,7 +158,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	if !options.Force && options.MinimumAttemptInterval > 0 {
 		run, err := s.Store.LastAttempt(ctx, options.Season, options.Stage)
 		if err != nil {
-			return cache.SyncRun{}, fmt.Errorf("check recent sync: %w", err)
+			return cache.SyncRun{}, recordRunException(fmt.Errorf("check recent sync: %w", err))
 		}
 		if run != nil && !run.FinishedAt.Add(options.MinimumAttemptInterval).Before(startedAt) {
 			run.Skipped = true
@@ -176,7 +180,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		attribute.Int("sync.games_fetched", len(data.games)),
 		attribute.Int("sync.xg_rows_fetched", len(data.xg)),
 	)
-	if fetchErr := errors.Join(data.teamsErr, data.gamesErr, data.xgErr); fetchErr != nil {
+	if fetchErr := errors.Join(data.teamsErr, data.gamesErr); fetchErr != nil {
 		telemetry.RecordErrorWithCode(fetchCtx, fetchSpan, fetchErr, "sync.fetch_asa")
 	}
 	fetchSpan.End()
@@ -189,16 +193,16 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	teams, games := data.teams, data.games
 
 	if err := validate(options, teams, games); err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err))
 	}
 
 	cacheTeams, err := mapTeams(teams)
 	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err))
 	}
 	cacheGames, err := mapGames(options, games)
 	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
+		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err))
 	}
 
 	replaceCtx, replaceSpan := telemetry.Tracer().Start(ctx, "cache.season.replace",

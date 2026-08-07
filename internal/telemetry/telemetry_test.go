@@ -262,6 +262,45 @@ func TestRecordErrorWithCode(t *testing.T) {
 	}
 }
 
+func TestMarkErrorDoesNotEmitExceptionLog(t *testing.T) {
+	traceExporter := tracetest.NewInMemoryExporter()
+	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(traceExporter))
+	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
+	logExporter := &inMemoryLogExporter{}
+	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
+	previousLogProvider := global.GetLoggerProvider()
+	global.SetLoggerProvider(logProvider)
+	t.Cleanup(func() {
+		global.SetLoggerProvider(previousLogProvider)
+		_ = logProvider.Shutdown(context.Background())
+	})
+
+	_, span := traceProvider.Tracer("test").Start(context.Background(), "parent.operation")
+	MarkError(span, errors.New("child operation failed"))
+	span.End()
+
+	spans := traceExporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("exported spans = %d, want 1", len(spans))
+	}
+	attributes := map[attribute.Key]attribute.Value{}
+	for _, value := range spans[0].Attributes {
+		attributes[value.Key] = value.Value
+	}
+	if got := attributes["error.type"].AsString(); got == "" {
+		t.Error("error.type is empty")
+	}
+	if _, found := attributes["nwsl.error.code"]; found {
+		t.Error("mark-only span has nwsl.error.code")
+	}
+	if spans[0].Status.Code != codes.Error {
+		t.Errorf("span status = %v, want error", spans[0].Status.Code)
+	}
+	if len(logExporter.records) != 0 {
+		t.Errorf("exported log records = %d, want 0", len(logExporter.records))
+	}
+}
+
 func TestRecordCompletedSpanPreservesOperationTiming(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))

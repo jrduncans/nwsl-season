@@ -12,6 +12,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/log/global"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -100,6 +103,53 @@ func TestRunRecordsDetailedTelemetry(t *testing.T) {
 	}
 }
 
+func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
+	traceExporter := tracetest.NewInMemoryExporter()
+	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(traceExporter))
+	previousTraceProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(traceProvider)
+	logExporter := &syncerLogExporter{}
+	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
+	previousLogProvider := global.GetLoggerProvider()
+	global.SetLoggerProvider(logProvider)
+	t.Cleanup(func() {
+		global.SetLoggerProvider(previousLogProvider)
+		_ = logProvider.Shutdown(context.Background())
+		otel.SetTracerProvider(previousTraceProvider)
+		_ = traceProvider.Shutdown(context.Background())
+	})
+
+	service := Service{ASA: &fakeASA{
+		teamsErr: errors.New("ASA teams unavailable"),
+		games:    []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}, Store: newTestDB(t)}
+	if _, err := service.Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season"}); err == nil {
+		t.Fatal("Run() error = nil, want fetch failure")
+	}
+
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exception log records = %d, want 1", len(logExporter.records))
+	}
+	if got := syncerLogAttribute(logExporter.records[0], "nwsl.error.code"); got != "sync.fetch_asa" {
+		t.Errorf("exception code = %q, want sync.fetch_asa", got)
+	}
+	for _, name := range []string{"sync.fetch_asa", "sync.run"} {
+		if findTelemetrySpan(t, traceExporter.GetSpans(), name).Status.Code != codes.Error {
+			t.Errorf("%s status is not error", name)
+		}
+	}
+
+	if _, err := (Service{}).Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season"}); err == nil {
+		t.Fatal("Run() error = nil, want configuration failure")
+	}
+	if len(logExporter.records) != 2 {
+		t.Fatalf("exception log records after two failed runs = %d, want 2", len(logExporter.records))
+	}
+	if got := syncerLogAttribute(logExporter.records[1], "nwsl.error.code"); got != "sync.run" {
+		t.Errorf("direct failure exception code = %q, want sync.run", got)
+	}
+}
+
 func findTelemetrySpan(t *testing.T, spans []tracetest.SpanStub, name string) tracetest.SpanStub {
 	t.Helper()
 	for _, span := range spans {
@@ -117,6 +167,29 @@ func telemetryAttributes(span tracetest.SpanStub) map[string]attribute.Value {
 		values[string(value.Key)] = value.Value
 	}
 	return values
+}
+
+type syncerLogExporter struct {
+	records []sdklog.Record
+}
+
+func (e *syncerLogExporter) Export(_ context.Context, records []sdklog.Record) error {
+	e.records = append(e.records, records...)
+	return nil
+}
+
+func (*syncerLogExporter) Shutdown(context.Context) error   { return nil }
+func (*syncerLogExporter) ForceFlush(context.Context) error { return nil }
+
+func syncerLogAttribute(record sdklog.Record, key string) string {
+	value := ""
+	record.WalkAttributes(func(attribute attribute.KeyValue) bool {
+		if string(attribute.Key) == key {
+			value = attribute.Value.AsString()
+		}
+		return true
+	})
+	return value
 }
 
 func TestRunFetchesASAResourcesConcurrently(t *testing.T) {
