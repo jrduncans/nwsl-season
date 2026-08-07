@@ -42,7 +42,29 @@ const (
 	// timing is useful in a trace waterfall. Faster repeated work is recorded
 	// as timing attributes on its parent span instead.
 	SlowOperationThreshold = 25 * time.Millisecond
+
+	// Error types are deliberately broad and low-cardinality. Combine them
+	// with nwsl.error.code to answer both why an operation failed and where the
+	// failure was detected.
+	ErrorTypeCanceled           = "canceled"
+	ErrorTypeTimeout            = "timeout"
+	ErrorTypeInvalidArgument    = "invalid_argument"
+	ErrorTypeInvalidData        = "invalid_data"
+	ErrorTypeConflict           = "conflict"
+	ErrorTypeUpstreamFailure    = "upstream_failure"
+	ErrorTypeStorageFailure     = "storage_failure"
+	ErrorTypeCalculationFailure = "calculation_failure"
+	ErrorTypeOther              = "_OTHER"
 )
+
+type classifiedError struct {
+	err       error
+	errorType string
+}
+
+func (e classifiedError) Error() string     { return e.err.Error() }
+func (e classifiedError) Unwrap() error     { return e.err }
+func (e classifiedError) ErrorType() string { return e.errorType }
 
 // Providers owns the configured SDK providers and flushes their batches during
 // graceful process shutdown.
@@ -174,6 +196,20 @@ func MarkError(span oteltrace.Span, err error) {
 	markError(span, err, "")
 }
 
+// ClassifyError attaches a stable error.type to err while preserving its
+// errors.Is/errors.As chain. Context cancellation and timeouts take precedence
+// over the supplied fallback because they are more useful failure classes.
+func ClassifyError(err error, fallback string) error {
+	if err == nil {
+		return nil
+	}
+	errorType := resolveErrorType(err, fallback)
+	if typed, ok := err.(interface{ ErrorType() string }); ok && typed.ErrorType() == errorType {
+		return err
+	}
+	return classifiedError{err: err, errorType: errorType}
+}
+
 // RecordErrorWithCode records an error without using its potentially
 // high-cardinality message as a span dimension. Codes are stable identifiers
 // (for example, "sync.fetch_asa") that make failures easy to group and connect
@@ -182,20 +218,44 @@ func RecordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, co
 	recordErrorWithCode(ctx, span, err, code, time.Time{})
 }
 
+// RecordErrorWithType classifies err, records its exception, and returns the
+// classified error for propagation to parent operations. It uses ERROR
+// severity because the exception terminates the operation.
+func RecordErrorWithType(ctx context.Context, span oteltrace.Span, err error, code, errorType string) error {
+	return recordExceptionWithType(ctx, span, err, code, errorType, otellog.SeverityError)
+}
+
+// RecordWarningWithType classifies err, records its exception, and returns the
+// classified error for propagation. It uses WARN severity because the caller
+// handles the failure through retry, degradation, or a partial result.
+func RecordWarningWithType(ctx context.Context, span oteltrace.Span, err error, code, errorType string) error {
+	return recordExceptionWithType(ctx, span, err, code, errorType, otellog.SeverityWarn)
+}
+
+func recordExceptionWithType(ctx context.Context, span oteltrace.Span, err error, code, errorType string, severity otellog.Severity) error {
+	err = ClassifyError(err, errorType)
+	recordExceptionWithCode(ctx, span, err, code, time.Time{}, severity)
+	return err
+}
+
 func recordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, code string, timestamp time.Time) {
+	recordExceptionWithCode(ctx, span, err, code, timestamp, otellog.SeverityError)
+}
+
+func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error, code string, timestamp time.Time, severity otellog.Severity) {
 	if err == nil {
 		return
 	}
 	record := otellog.Record{}
 	record.SetEventName("exception")
-	record.SetSeverity(otellog.SeverityError)
-	record.SetSeverityText("ERROR")
+	record.SetSeverity(exceptionSeverity(err, severity))
 	record.SetBody(attribute.StringValue(err.Error()))
 	record.SetErr(err)
 	if !timestamp.IsZero() {
 		record.SetTimestamp(timestamp)
 	}
 	attributes := []attribute.KeyValue{
+		semconv.ExceptionTypeKey.String(resolveErrorType(err, "")),
 		attribute.String("exception.stacktrace", string(debug.Stack())),
 	}
 	if code != "" {
@@ -207,18 +267,66 @@ func recordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, co
 	markError(span, err, code)
 }
 
+func exceptionSeverity(err error, severity otellog.Severity) otellog.Severity {
+	// In this application context cancellation normally means a caller went
+	// away or the process is shutting down, not that the operation needs
+	// operator attention. DeadlineExceeded remains at the caller-selected
+	// severity because exhausting an operation budget can be a real failure.
+	if errors.Is(err, context.Canceled) {
+		return otellog.SeverityDebug
+	}
+	return severity
+}
+
 func markError(span oteltrace.Span, err error, code string) {
 	if err == nil {
 		return
 	}
-	spanAttributes := []attribute.KeyValue{
-		semconv.ErrorType(err),
-	}
+	spanAttributes := []attribute.KeyValue{semconv.ErrorTypeKey.String(resolveErrorType(err, ""))}
 	if code != "" {
 		spanAttributes = append(spanAttributes, attribute.String("nwsl.error.code", code))
 	}
 	span.SetAttributes(spanAttributes...)
-	span.SetStatus(codes.Error, "")
+	span.SetStatus(codes.Error, err.Error())
+}
+
+func resolveErrorType(err error, fallback string) string {
+	if err == nil {
+		return ErrorTypeOther
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ErrorTypeTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return ErrorTypeCanceled
+	}
+	var timeout interface{ Timeout() bool }
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		return ErrorTypeTimeout
+	}
+	var typed interface{ ErrorType() string }
+	if errors.As(err, &typed) {
+		if value := strings.TrimSpace(typed.ErrorType()); value != "" {
+			return value
+		}
+	}
+	if fallback = strings.TrimSpace(fallback); fallback != "" {
+		return fallback
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, child := range joined.Unwrap() {
+			if value := resolveErrorType(child, ""); value != ErrorTypeOther {
+				return value
+			}
+		}
+	}
+	value := semconv.ErrorType(err).Value.AsString()
+	switch value {
+	case "", "*errors.errorString", "*errors.joinError", "*fmt.wrapError":
+		return ErrorTypeOther
+	default:
+		return value
+	}
 }
 
 // RecordCompletedSpan creates a child span after an operation has completed.
@@ -226,13 +334,23 @@ func markError(span oteltrace.Span, err error, code string) {
 // remain a wide parent span, while the retained child keeps its real timing
 // and trace placement.
 func RecordCompletedSpan(ctx context.Context, name string, started, finished time.Time, attributes []attribute.KeyValue, err error, code string) {
+	recordCompletedSpan(ctx, name, started, finished, attributes, err, code, otellog.SeverityError)
+}
+
+// RecordCompletedWarningSpan records completed work whose local operation
+// failed but whose caller handles the failure through retry or degradation.
+func RecordCompletedWarningSpan(ctx context.Context, name string, started, finished time.Time, attributes []attribute.KeyValue, err error, code string) {
+	recordCompletedSpan(ctx, name, started, finished, attributes, err, code, otellog.SeverityWarn)
+}
+
+func recordCompletedSpan(ctx context.Context, name string, started, finished time.Time, attributes []attribute.KeyValue, err error, code string, severity otellog.Severity) {
 	ctx, span := Tracer().Start(ctx, name,
 		oteltrace.WithSpanKind(oteltrace.SpanKindInternal),
 		oteltrace.WithTimestamp(started),
 		oteltrace.WithAttributes(attributes...),
 	)
 	if err != nil {
-		recordErrorWithCode(ctx, span, err, code, finished)
+		recordExceptionWithCode(ctx, span, err, code, finished, severity)
 	}
 	span.End(oteltrace.WithTimestamp(finished))
 }

@@ -55,9 +55,8 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	modelCount := 0
 	failedModels := 0
 	workerCount := 0
-	recordPrecacheException := func(cause error) error {
-		telemetry.RecordErrorWithCode(ctx, span, cause, "forecast.precache")
-		return cause
+	recordPrecacheException := func(cause error, errorType string) error {
+		return telemetry.RecordWarningWithType(ctx, span, cause, "forecast.precache", errorType)
 	}
 	defer func() {
 		outcome := "complete"
@@ -74,14 +73,14 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 		span.End()
 	}()
 	if a.store == nil {
-		return recordPrecacheException(fmt.Errorf("season cache unavailable"))
+		return recordPrecacheException(fmt.Errorf("season cache unavailable"), telemetry.ErrorTypeInvalidArgument)
 	}
 	data, err := a.loadSeasonData(ctx, a.options.CurrentSeason)
 	if err != nil {
 		return fmt.Errorf("load %s season: %w", a.options.CurrentSeason, err)
 	}
 	if len(data.Games) == 0 {
-		return recordPrecacheException(fmt.Errorf("no cached games found for %s %s", a.options.CurrentSeason, a.options.Stage))
+		return recordPrecacheException(fmt.Errorf("no cached games found for %s %s", a.options.CurrentSeason, a.options.Stage), telemetry.ErrorTypeInvalidData)
 	}
 
 	state := forecaststate.State{Fixed: map[string]simulation.Outcome{}}

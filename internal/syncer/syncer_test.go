@@ -10,9 +10,11 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -133,9 +135,19 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 	if got := syncerLogAttribute(logExporter.records[0], "nwsl.error.code"); got != "sync.fetch_asa" {
 		t.Errorf("exception code = %q, want sync.fetch_asa", got)
 	}
+	if got := syncerLogAttribute(logExporter.records[0], "exception.type"); got != telemetry.ErrorTypeUpstreamFailure {
+		t.Errorf("fetch exception type = %q, want %q", got, telemetry.ErrorTypeUpstreamFailure)
+	}
+	if got := logExporter.records[0].Severity(); got != otellog.SeverityError {
+		t.Errorf("fetch exception severity = %v, want ERROR", got)
+	}
 	for _, name := range []string{"sync.fetch_asa", "sync.run"} {
-		if findTelemetrySpan(t, traceExporter.GetSpans(), name).Status.Code != codes.Error {
+		span := findTelemetrySpan(t, traceExporter.GetSpans(), name)
+		if span.Status.Code != codes.Error {
 			t.Errorf("%s status is not error", name)
+		}
+		if got := telemetryAttributes(span)["error.type"].AsString(); got != telemetry.ErrorTypeUpstreamFailure {
+			t.Errorf("%s error.type = %q, want %q", name, got, telemetry.ErrorTypeUpstreamFailure)
 		}
 	}
 
@@ -147,6 +159,40 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 	}
 	if got := syncerLogAttribute(logExporter.records[1], "nwsl.error.code"); got != "sync.run" {
 		t.Errorf("direct failure exception code = %q, want sync.run", got)
+	}
+	if got := syncerLogAttribute(logExporter.records[1], "exception.type"); got != telemetry.ErrorTypeInvalidArgument {
+		t.Errorf("direct failure exception type = %q, want %q", got, telemetry.ErrorTypeInvalidArgument)
+	}
+
+	conflictOptions := RunOptions{Season: "2024", Stage: "Regular Season"}
+	conflictStore := newTestDB(t)
+	acquired, err := conflictStore.TryAcquireSyncLease(context.Background(), leaseKey(conflictOptions), "other-process", time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired {
+		t.Fatal("test lease was not acquired")
+	}
+	if _, err := (Service{ASA: &fakeASA{}, Store: conflictStore}).Run(context.Background(), conflictOptions); !errors.Is(err, cache.ErrSyncInProgress) {
+		t.Fatalf("Run() error = %v, want ErrSyncInProgress", err)
+	}
+	if len(logExporter.records) != 2 {
+		t.Fatalf("expected sync conflict emitted an exception; log records = %d, want 2", len(logExporter.records))
+	}
+	spans := traceExporter.GetSpans()
+	conflictSpan := spans[len(spans)-1]
+	if conflictSpan.Name != "sync.run" {
+		t.Fatalf("last span = %q, want sync.run", conflictSpan.Name)
+	}
+	if conflictSpan.Status.Code != codes.Unset {
+		t.Errorf("conflict span status = %v, want unset", conflictSpan.Status.Code)
+	}
+	conflictAttributes := telemetryAttributes(conflictSpan)
+	if !conflictAttributes["error.expected"].AsBool() {
+		t.Error("conflict span error.expected = false, want true")
+	}
+	if got := conflictAttributes["sync.outcome"].AsString(); got != "conflict" {
+		t.Errorf("conflict span sync.outcome = %q, want conflict", got)
 	}
 }
 

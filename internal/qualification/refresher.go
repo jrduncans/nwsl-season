@@ -186,9 +186,8 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 			attribute.Bool("qualification.forced", force),
 		),
 	)
-	recordRefreshException := func(cause error) error {
-		telemetry.RecordErrorWithCode(ctx, span, cause, "qualification.refresh")
-		return cause
+	recordRefreshException := func(cause error, errorType string) error {
+		return telemetry.RecordWarningWithType(ctx, span, cause, "qualification.refresh", errorType)
 	}
 	defer func() {
 		span.SetAttributes(
@@ -201,19 +200,19 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 		span.End()
 	}()
 	if r.Store == nil {
-		return false, recordRefreshException(fmt.Errorf("qualification store is required"))
+		return false, recordRefreshException(fmt.Errorf("qualification store is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if err := r.Rules.Validate(); err != nil {
-		return false, recordRefreshException(err)
+		return false, recordRefreshException(err, telemetry.ErrorTypeInvalidArgument)
 	}
 	if syncRun.FixtureSnapshotID == "" {
-		return false, recordRefreshException(fmt.Errorf("fixture snapshot ID is required"))
+		return false, recordRefreshException(fmt.Errorf("fixture snapshot ID is required"), telemetry.ErrorTypeInvalidArgument)
 	}
 	if r.Budget <= 0 {
 		r.Budget = 5 * time.Second
 	}
 	if snapshot, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version); err != nil {
-		return false, recordRefreshException(err)
+		return false, recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
 	} else if ok && !force && !shouldRetryKickoffOrder(snapshot, games) && !shouldRetryComputeBudget(snapshot) {
 		return false, nil
 	}
@@ -225,7 +224,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}
 	_, err = r.Store.ReplaceQualification(context.Background(), run, values)
 	if err != nil {
-		recordRefreshException(err)
+		err = recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
 		return true, err
 	}
@@ -266,9 +265,8 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	batchStarted := time.Now()
 	calculation := calculationTelemetry{}
 	span := trace.SpanFromContext(ctx)
-	recordCalculationException := func(cause error) error {
-		telemetry.RecordErrorWithCode(ctx, span, cause, "qualification.refresh")
-		return cause
+	recordCalculationException := func(cause error, errorType string) error {
+		return telemetry.RecordWarningWithType(ctx, span, cause, "qualification.refresh", errorType)
 	}
 	span.SetAttributes(
 		attribute.Int("qualification.input_team_count", len(teams)),
@@ -293,7 +291,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	for id := range participants {
 		t, ok := byID[id]
 		if !ok {
-			return nil, recordCalculationException(fmt.Errorf("fixture references missing team %q", id))
+			return nil, recordCalculationException(fmt.Errorf("fixture references missing team %q", id), telemetry.ErrorTypeInvalidData)
 		}
 		domainTeams = append(domainTeams, standings.Team{ID: t.ASAID, Name: t.Name, ShortName: t.ShortName, Abbreviation: t.Abbreviation})
 	}
@@ -322,7 +320,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	defer cancel()
 	evaluator, err := clinching.NewEvaluator(domainTeams, domainGames, order)
 	if err != nil {
-		return nil, recordCalculationException(err)
+		return nil, recordCalculationException(err, telemetry.ErrorTypeCalculationFailure)
 	}
 	table := standings.Calculate(domainTeams, domainGames, standings.OfficialTotalRules())
 	achievements := append([]competition.Achievement(nil), r.Rules.Achievements...)
@@ -348,7 +346,8 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 			duration := finished.Sub(probeStarted)
 			calculation.recordStatusProof(duration, row.Team.ID, a)
 			if evaluateErr != nil {
-				telemetry.RecordCompletedSpan(ctx, "qualification.status_proof", probeStarted, finished, proofAttributes, evaluateErr, "qualification.status_proof")
+				evaluateErr = telemetry.ClassifyError(evaluateErr, telemetry.ErrorTypeCalculationFailure)
+				telemetry.RecordCompletedWarningSpan(ctx, "qualification.status_proof", probeStarted, finished, proofAttributes, evaluateErr, "qualification.status_proof")
 				return nil, evaluateErr
 			}
 			calculation.recordStatusProofDiagnostics(value)
@@ -417,7 +416,8 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		duration := finished.Sub(probeStarted)
 		calculation.recordNoHelpBatch(duration, row.Team.ID)
 		if evaluateErr != nil {
-			telemetry.RecordCompletedSpan(ctx, "qualification.no_help_batch", probeStarted, finished, noHelpAttributes, evaluateErr, "qualification.no_help_batch")
+			evaluateErr = telemetry.ClassifyError(evaluateErr, telemetry.ErrorTypeCalculationFailure)
+			telemetry.RecordCompletedWarningSpan(ctx, "qualification.no_help_batch", probeStarted, finished, noHelpAttributes, evaluateErr, "qualification.no_help_batch")
 			return nil, evaluateErr
 		}
 		if duration >= telemetry.SlowOperationThreshold {
