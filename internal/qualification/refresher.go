@@ -186,30 +186,34 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 			attribute.Bool("qualification.forced", force),
 		),
 	)
+	recordRefreshException := func(cause error) error {
+		telemetry.RecordErrorWithCode(ctx, span, cause, "qualification.refresh")
+		return cause
+	}
 	defer func() {
 		span.SetAttributes(
 			attribute.Bool("qualification.recalculated", recalculated),
 			attribute.String("qualification.outcome", calculationOutcome(recalculated, err)),
 		)
 		if err != nil {
-			telemetry.RecordErrorWithCode(ctx, span, err, "qualification.refresh")
+			telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()
 	if r.Store == nil {
-		return false, fmt.Errorf("qualification store is required")
+		return false, recordRefreshException(fmt.Errorf("qualification store is required"))
 	}
 	if err := r.Rules.Validate(); err != nil {
-		return false, err
+		return false, recordRefreshException(err)
 	}
 	if syncRun.FixtureSnapshotID == "" {
-		return false, fmt.Errorf("fixture snapshot ID is required")
+		return false, recordRefreshException(fmt.Errorf("fixture snapshot ID is required"))
 	}
 	if r.Budget <= 0 {
 		r.Budget = 5 * time.Second
 	}
 	if snapshot, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version); err != nil {
-		return false, err
+		return false, recordRefreshException(err)
 	} else if ok && !force && !shouldRetryKickoffOrder(snapshot, games) && !shouldRetryComputeBudget(snapshot) {
 		return false, nil
 	}
@@ -221,6 +225,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}
 	_, err = r.Store.ReplaceQualification(context.Background(), run, values)
 	if err != nil {
+		recordRefreshException(err)
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
 		return true, err
 	}
@@ -261,6 +266,10 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	batchStarted := time.Now()
 	calculation := calculationTelemetry{}
 	span := trace.SpanFromContext(ctx)
+	recordCalculationException := func(cause error) error {
+		telemetry.RecordErrorWithCode(ctx, span, cause, "qualification.refresh")
+		return cause
+	}
 	span.SetAttributes(
 		attribute.Int("qualification.input_team_count", len(teams)),
 		attribute.Int("qualification.input_fixture_count", len(games)),
@@ -284,7 +293,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	for id := range participants {
 		t, ok := byID[id]
 		if !ok {
-			return nil, fmt.Errorf("fixture references missing team %q", id)
+			return nil, recordCalculationException(fmt.Errorf("fixture references missing team %q", id))
 		}
 		domainTeams = append(domainTeams, standings.Team{ID: t.ASAID, Name: t.Name, ShortName: t.ShortName, Abbreviation: t.Abbreviation})
 	}
@@ -313,7 +322,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	defer cancel()
 	evaluator, err := clinching.NewEvaluator(domainTeams, domainGames, order)
 	if err != nil {
-		return nil, err
+		return nil, recordCalculationException(err)
 	}
 	table := standings.Calculate(domainTeams, domainGames, standings.OfficialTotalRules())
 	achievements := append([]competition.Achievement(nil), r.Rules.Achievements...)

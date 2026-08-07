@@ -166,6 +166,14 @@ func RecordError(ctx context.Context, span oteltrace.Span, err error) {
 	RecordErrorWithCode(ctx, span, err, "")
 }
 
+// MarkError marks a span as failed without emitting an exception log record.
+// Use it when an error has propagated from a child operation that already
+// recorded the exception. This keeps every failed span queryable without
+// duplicating the exception detail in the trace.
+func MarkError(span oteltrace.Span, err error) {
+	markError(span, err, "")
+}
+
 // RecordErrorWithCode records an error without using its potentially
 // high-cardinality message as a span dimension. Codes are stable identifiers
 // (for example, "sync.fetch_asa") that make failures easy to group and connect
@@ -196,6 +204,13 @@ func recordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, co
 	record.AddAttributes(attributes...)
 	Logger().Emit(ctx, record)
 
+	markError(span, err, code)
+}
+
+func markError(span oteltrace.Span, err error, code string) {
+	if err == nil {
+		return
+	}
 	spanAttributes := []attribute.KeyValue{
 		semconv.ErrorType(err),
 	}

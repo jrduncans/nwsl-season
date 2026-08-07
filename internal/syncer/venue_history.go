@@ -30,11 +30,15 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 		),
 	)
 	refreshed := 0
+	recordVenueHistoryException := func(cause error) error {
+		telemetry.RecordErrorWithCode(ctx, span, cause, "sync.venue_history")
+		return cause
+	}
 	defer func() {
 		outcome := "complete"
 		if err != nil {
 			outcome = "failure"
-			telemetry.RecordErrorWithCode(ctx, span, err, "sync.venue_history")
+			telemetry.MarkError(span, err)
 		}
 		span.SetAttributes(
 			attribute.Int("sync.venue_history_refreshed_season_count", refreshed),
@@ -44,15 +48,15 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 	}()
 	store, ok := s.Store.(venueSummaryStore)
 	if !ok {
-		return fmt.Errorf("sync store does not support venue summaries")
+		return recordVenueHistoryException(fmt.Errorf("sync store does not support venue summaries"))
 	}
 	seasons, err := competition.PreviousRegularSeasons(currentSeason, count)
 	if err != nil {
-		return err
+		return recordVenueHistoryException(err)
 	}
 	summaries, err := store.VenueSummaries(ctx, seasons, stage)
 	if err != nil {
-		return err
+		return recordVenueHistoryException(err)
 	}
 	ready := make(map[string]bool, len(summaries))
 	for _, summary := range summaries {
@@ -73,7 +77,11 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 			return fmt.Errorf("sync venue history for %s: %w", season, runErr)
 		}
 		if run.XGError != "" || run.XGRun == nil {
-			return fmt.Errorf("sync venue history for %s: xG summary was not refreshed: %s", season, run.XGError)
+			cause := fmt.Errorf("sync venue history for %s: xG summary was not refreshed: %s", season, run.XGError)
+			if run.XGError == "" {
+				return recordVenueHistoryException(cause)
+			}
+			return cause
 		}
 		refreshed++
 	}
