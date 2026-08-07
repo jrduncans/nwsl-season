@@ -192,7 +192,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 			attribute.String("qualification.outcome", calculationOutcome(recalculated, err)),
 		)
 		if err != nil {
-			telemetry.RecordErrorWithSlug(span, err, "err-qualification-refresh")
+			telemetry.RecordErrorWithCode(ctx, span, err, "qualification.refresh")
 		}
 		span.End()
 	}()
@@ -339,7 +339,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 			duration := finished.Sub(probeStarted)
 			calculation.recordStatusProof(duration, row.Team.ID, a)
 			if evaluateErr != nil {
-				telemetry.RecordCompletedSpan(ctx, "qualification.status_proof", probeStarted, finished, proofAttributes, evaluateErr, "err-qualification-status-proof")
+				telemetry.RecordCompletedSpan(ctx, "qualification.status_proof", probeStarted, finished, proofAttributes, evaluateErr, "qualification.status_proof")
 				return nil, evaluateErr
 			}
 			calculation.recordStatusProofDiagnostics(value)
@@ -408,7 +408,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		duration := finished.Sub(probeStarted)
 		calculation.recordNoHelpBatch(duration, row.Team.ID)
 		if evaluateErr != nil {
-			telemetry.RecordCompletedSpan(ctx, "qualification.no_help_batch", probeStarted, finished, noHelpAttributes, evaluateErr, "err-qualification-no-help-batch")
+			telemetry.RecordCompletedSpan(ctx, "qualification.no_help_batch", probeStarted, finished, noHelpAttributes, evaluateErr, "qualification.no_help_batch")
 			return nil, evaluateErr
 		}
 		if duration >= telemetry.SlowOperationThreshold {

@@ -67,7 +67,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 			attribute.String("scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
 		)
 		if err != nil {
-			telemetry.RecordErrorWithSlug(span, err, "err-scenario-refresh")
+			telemetry.RecordErrorWithCode(ctx, span, err, "scenario.refresh")
 		}
 		span.End()
 	}()
@@ -342,7 +342,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		duration := finished.Sub(probeStarted)
 		calculation.recordTeamSearch(duration, t.Team.ID, teamResults)
 		if generateErr != nil {
-			telemetry.RecordCompletedSpan(ctx, "scenario.generate_team", probeStarted, finished, searchAttributes, generateErr, "err-scenario-generate-team")
+			telemetry.RecordCompletedSpan(ctx, "scenario.generate_team", probeStarted, finished, searchAttributes, generateErr, "scenario.generate_team")
 			return calculated{}, generateErr
 		}
 		if duration >= telemetry.SlowOperationThreshold {

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"reflect"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -16,13 +15,18 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/global"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -45,17 +49,19 @@ const (
 type Providers struct {
 	traces  *trace.TracerProvider
 	metrics *metric.MeterProvider
+	logs    *sdklog.LoggerProvider
 }
 
 // Configure installs OpenTelemetry providers for the process. Supplying a
-// HONEYCOMB_API_KEY exports traces directly to Honeycomb. The standard OTLP
-// trace endpoint variables are also supported for collector-based deployments.
+// HONEYCOMB_API_KEY exports traces and exception logs directly to Honeycomb.
+// The standard OTLP endpoint variables are also supported for collector-based
+// deployments.
 //
 // Metrics are opt-in through OTEL_METRICS_EXPORTER=otlp. The legacy
 // HONEYCOMB_METRICS_DATASET variable is also accepted as an enablement signal,
-// but is not sent as an OTLP header. When no trace exporter is configured,
-// spans remain no-ops so local development does not need credentials or a
-// collector.
+// but is not sent as an OTLP header. When no trace or log exporter is
+// configured, telemetry remains local no-op work so development does not need
+// credentials or a collector.
 func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName string) (*Providers, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -96,13 +102,21 @@ func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName str
 	}
 	traces := trace.NewTracerProvider(traceOptions...)
 
-	metrics, err := newMeterProvider(ctx, res)
+	logs, logExporterName, err := newLoggerProvider(ctx, res)
 	if err != nil {
 		_ = traces.Shutdown(ctx)
 		return nil, err
 	}
 
+	metrics, err := newMeterProvider(ctx, res)
+	if err != nil {
+		_ = logs.Shutdown(ctx)
+		_ = traces.Shutdown(ctx)
+		return nil, err
+	}
+
 	otel.SetTracerProvider(traces)
+	global.SetLoggerProvider(logs)
 	if metrics != nil {
 		otel.SetMeterProvider(metrics)
 	}
@@ -110,11 +124,11 @@ func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName str
 		propagation.TraceContext{}, propagation.Baggage{},
 	))
 	if traceExporter == nil {
-		logger.Info("OpenTelemetry trace export disabled; set HONEYCOMB_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT to enable it", "metrics", metrics != nil)
+		logger.Info("OpenTelemetry trace export disabled; set HONEYCOMB_API_KEY or OTEL_EXPORTER_OTLP_ENDPOINT to enable it", "logs", logExporterName != "", "metrics", metrics != nil)
 	} else {
-		logger.Info("OpenTelemetry trace export enabled", "exporter", exporterName, "service", serviceName, "metrics", metrics != nil)
+		logger.Info("OpenTelemetry trace export enabled", "exporter", exporterName, "log_exporter", logExporterName, "service", serviceName, "metrics", metrics != nil)
 	}
-	return &Providers{traces: traces, metrics: metrics}, nil
+	return &Providers{traces: traces, metrics: metrics, logs: logs}, nil
 }
 
 // Shutdown flushes trace and metric batches. Call it with a fresh, bounded
@@ -125,6 +139,9 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
+	if p.logs != nil {
+		errs = append(errs, p.logs.Shutdown(ctx))
+	}
 	if p.metrics != nil {
 		errs = append(errs, p.metrics.Shutdown(ctx))
 	}
@@ -140,48 +157,67 @@ func Tracer() oteltrace.Tracer { return otel.Tracer(instrumentationName) }
 // Meter returns the common application meter for manually instrumented work.
 func Meter() otelmetric.Meter { return otel.Meter(instrumentationName) }
 
-// RecordError gives a span an exception event and queryable failure dimensions.
-// Prefer RecordErrorWithSlug for a static identifier of the failure site.
-func RecordError(span oteltrace.Span, err error) {
-	RecordErrorWithSlug(span, err, "")
+// Logger returns the common application logger for manually emitted log records.
+func Logger() otellog.Logger { return global.GetLoggerProvider().Logger(instrumentationName) }
+
+// RecordError emits a correlated exception log record and marks span as failed.
+// Prefer RecordErrorWithCode for a stable identifier of the failure site.
+func RecordError(ctx context.Context, span oteltrace.Span, err error) {
+	RecordErrorWithCode(ctx, span, err, "")
 }
 
-// RecordErrorWithSlug records an error without using its potentially
-// high-cardinality message as a span dimension. Slugs are static identifiers
-// (for example, "err-sync-fetch-asa") that make failures easy to group and
-// connect back to a code path.
-func RecordErrorWithSlug(span oteltrace.Span, err error, slug string) {
-	recordErrorWithSlug(span, err, slug)
+// RecordErrorWithCode records an error without using its potentially
+// high-cardinality message as a span dimension. Codes are stable identifiers
+// (for example, "sync.fetch_asa") that make failures easy to group and connect
+// back to a code path.
+func RecordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, code string) {
+	recordErrorWithCode(ctx, span, err, code, time.Time{})
 }
 
-func recordErrorWithSlug(span oteltrace.Span, err error, slug string, options ...oteltrace.EventOption) {
+func recordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, code string, timestamp time.Time) {
 	if err == nil {
 		return
 	}
-	span.RecordError(err, options...)
+	record := otellog.Record{}
+	record.SetEventName("exception")
+	record.SetSeverity(otellog.SeverityError)
+	record.SetSeverityText("ERROR")
+	record.SetBody(attribute.StringValue(err.Error()))
+	record.SetErr(err)
+	if !timestamp.IsZero() {
+		record.SetTimestamp(timestamp)
+	}
 	attributes := []attribute.KeyValue{
-		attribute.Bool("error", true),
-		attribute.String("error.type", reflect.TypeOf(err).String()),
+		attribute.String("exception.stacktrace", string(debug.Stack())),
 	}
-	if slug != "" {
-		attributes = append(attributes, attribute.String("exception.slug", slug))
+	if code != "" {
+		attributes = append(attributes, attribute.String("nwsl.error.code", code))
 	}
-	span.SetAttributes(attributes...)
-	span.SetStatus(codes.Error, "error")
+	record.AddAttributes(attributes...)
+	Logger().Emit(ctx, record)
+
+	spanAttributes := []attribute.KeyValue{
+		semconv.ErrorType(err),
+	}
+	if code != "" {
+		spanAttributes = append(spanAttributes, attribute.String("nwsl.error.code", code))
+	}
+	span.SetAttributes(spanAttributes...)
+	span.SetStatus(codes.Error, "")
 }
 
 // RecordCompletedSpan creates a child span after an operation has completed.
 // It is useful for exceptional or slow loop work: the ordinary fast path can
 // remain a wide parent span, while the retained child keeps its real timing
 // and trace placement.
-func RecordCompletedSpan(ctx context.Context, name string, started, finished time.Time, attributes []attribute.KeyValue, err error, slug string) {
-	_, span := Tracer().Start(ctx, name,
+func RecordCompletedSpan(ctx context.Context, name string, started, finished time.Time, attributes []attribute.KeyValue, err error, code string) {
+	ctx, span := Tracer().Start(ctx, name,
 		oteltrace.WithSpanKind(oteltrace.SpanKindInternal),
 		oteltrace.WithTimestamp(started),
 		oteltrace.WithAttributes(attributes...),
 	)
 	if err != nil {
-		recordErrorWithSlug(span, err, slug, oteltrace.WithTimestamp(finished))
+		recordErrorWithCode(ctx, span, err, code, finished)
 	}
 	span.End(oteltrace.WithTimestamp(finished))
 }
@@ -213,6 +249,49 @@ func newTraceExporter(ctx context.Context) (trace.SpanExporter, string, error) {
 	exporter, err := otlptracehttp.New(ctx)
 	if err != nil {
 		return nil, "", fmt.Errorf("create OTLP trace exporter: %w", err)
+	}
+	return exporter, "OTLP", nil
+}
+
+func newLoggerProvider(ctx context.Context, res *resource.Resource) (*sdklog.LoggerProvider, string, error) {
+	exporter, exporterName, err := newLogExporter(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	options := []sdklog.LoggerProviderOption{sdklog.WithResource(res)}
+	if exporter != nil {
+		options = append(options, sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)))
+	}
+	return sdklog.NewLoggerProvider(options...), exporterName, nil
+}
+
+func newLogExporter(ctx context.Context) (*otlploghttp.Exporter, string, error) {
+	if logsExportDisabled() {
+		return nil, "", nil
+	}
+	if err := validateOTLPHTTPProtocol("logs"); err != nil {
+		return nil, "", err
+	}
+	if apiKey := strings.TrimSpace(os.Getenv(honeycombAPIKeyEnv)); apiKey != "" {
+		endpoint, err := honeycombSignalEndpoint("/v1/logs")
+		if err != nil {
+			return nil, "", err
+		}
+		exporter, err := otlploghttp.New(ctx,
+			otlploghttp.WithEndpointURL(endpoint),
+			otlploghttp.WithHeaders(map[string]string{"x-honeycomb-team": apiKey}),
+		)
+		if err != nil {
+			return nil, "", fmt.Errorf("create Honeycomb log exporter: %w", err)
+		}
+		return exporter, "Honeycomb", nil
+	}
+	if !otlpLogsEndpointConfigured() {
+		return nil, "", nil
+	}
+	exporter, err := otlploghttp.New(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("create OTLP log exporter: %w", err)
 	}
 	return exporter, "OTLP", nil
 }
@@ -257,6 +336,10 @@ func tracesExportDisabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_TRACES_EXPORTER")), "none")
 }
 
+func logsExportDisabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_LOGS_EXPORTER")), "none")
+}
+
 func metricsExportEnabled() bool {
 	value := strings.TrimSpace(os.Getenv("OTEL_METRICS_EXPORTER"))
 	if strings.EqualFold(value, "none") {
@@ -273,6 +356,11 @@ func otlpTraceEndpointConfigured() bool {
 func otlpMetricsEndpointConfigured() bool {
 	return strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) != "" ||
 		strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")) != ""
+}
+
+func otlpLogsEndpointConfigured() bool {
+	return strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) != "" ||
+		strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")) != ""
 }
 
 func validateOTLPHTTPProtocol(signal string) error {

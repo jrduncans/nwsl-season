@@ -59,7 +59,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 		outcome := "complete"
 		if err != nil {
 			outcome = "failure"
-			telemetry.RecordErrorWithSlug(span, err, "err-forecast-precache")
+			telemetry.RecordErrorWithCode(ctx, span, err, "forecast.precache")
 		}
 		span.SetAttributes(
 			attribute.Int("forecast.model_count", modelCount),

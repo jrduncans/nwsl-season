@@ -151,7 +151,7 @@ func (s *Scheduler) check() {
 			attribute.String("scheduler.action", "read_snapshot"),
 			attribute.String("scheduler.outcome", "failure"),
 		)
-		telemetry.RecordErrorWithSlug(span, err, "err-scheduler-refresh-snapshot")
+		telemetry.RecordErrorWithCode(ctx, span, err, "scheduler.refresh_snapshot")
 		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}
@@ -185,7 +185,7 @@ func (s *Scheduler) check() {
 			attribute.String("scheduler.sync.outcome", "failure"),
 			attribute.String("scheduler.outcome", "failure"),
 		)
-		telemetry.RecordErrorWithSlug(span, err, "err-scheduler-refresh-run")
+		telemetry.RecordErrorWithCode(ctx, span, err, "scheduler.refresh_run")
 		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return
 	}

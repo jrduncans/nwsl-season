@@ -12,9 +12,24 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/global"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+type inMemoryLogExporter struct {
+	records []sdklog.Record
+}
+
+func (e *inMemoryLogExporter) Export(_ context.Context, records []sdklog.Record) error {
+	e.records = append(e.records, records...)
+	return nil
+}
+
+func (*inMemoryLogExporter) Shutdown(context.Context) error   { return nil }
+func (*inMemoryLogExporter) ForceFlush(context.Context) error { return nil }
 
 func TestHoneycombSignalEndpoint(t *testing.T) {
 	tests := []struct {
@@ -136,16 +151,66 @@ func TestConfigureExportsNativeHoneycombMetrics(t *testing.T) {
 	}
 }
 
-func TestRecordErrorWithSlug(t *testing.T) {
-	exporter := tracetest.NewInMemoryExporter()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	defer func() { _ = provider.Shutdown(context.Background()) }()
+func TestConfigureExportsHoneycombLogs(t *testing.T) {
+	received := make(chan *http.Request, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		received <- request
+		writer.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
 
-	_, span := provider.Tracer("test").Start(context.Background(), "test.operation")
-	RecordErrorWithSlug(span, errors.New("test failure"), "err-test-operation")
+	t.Setenv(honeycombAPIKeyEnv, "test-ingest-key")
+	t.Setenv(honeycombAPIEndpointEnv, server.URL)
+	t.Setenv(legacyMetricsDatasetEnv, "")
+	t.Setenv("OTEL_METRICS_EXPORTER", "none")
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+	t.Setenv("OTEL_LOGS_EXPORTER", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	providers, err := Configure(context.Background(), nil, "fallback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, span := Tracer().Start(context.Background(), "test.operation")
+	RecordErrorWithCode(ctx, span, errors.New("test failure"), "test.operation")
+	span.End()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := providers.Shutdown(shutdownCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case request := <-received:
+		if request.URL.Path != "/v1/logs" {
+			t.Errorf("request path = %q, want /v1/logs", request.URL.Path)
+		}
+		if got := request.Header.Get("x-honeycomb-team"); got != "test-ingest-key" {
+			t.Errorf("x-honeycomb-team = %q, want test ingest key", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Honeycomb log export was not received")
+	}
+}
+
+func TestRecordErrorWithCode(t *testing.T) {
+	traceExporter := tracetest.NewInMemoryExporter()
+	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(traceExporter))
+	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
+	logExporter := &inMemoryLogExporter{}
+	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
+	previousLogProvider := global.GetLoggerProvider()
+	global.SetLoggerProvider(logProvider)
+	t.Cleanup(func() {
+		global.SetLoggerProvider(previousLogProvider)
+		_ = logProvider.Shutdown(context.Background())
+	})
+
+	ctx, span := traceProvider.Tracer("test").Start(context.Background(), "test.operation")
+	RecordErrorWithCode(ctx, span, errors.New("test failure"), "test.operation")
 	span.End()
 
-	spans := exporter.GetSpans()
+	spans := traceExporter.GetSpans()
 	if len(spans) != 1 {
 		t.Fatalf("exported spans = %d, want 1", len(spans))
 	}
@@ -153,14 +218,47 @@ func TestRecordErrorWithSlug(t *testing.T) {
 	for _, value := range spans[0].Attributes {
 		attributes[value.Key] = value.Value
 	}
-	if got := attributes["error"].AsBool(); !got {
-		t.Error("error attribute = false, want true")
+	if _, found := attributes["error"]; found {
+		t.Error("non-standard error attribute was recorded")
 	}
-	if got := attributes["exception.slug"].AsString(); got != "err-test-operation" {
-		t.Errorf("exception.slug = %q, want err-test-operation", got)
+	if got := attributes["nwsl.error.code"].AsString(); got != "test.operation" {
+		t.Errorf("nwsl.error.code = %q, want test.operation", got)
+	}
+	if got := attributes["error.type"].AsString(); got == "" {
+		t.Error("error.type is empty")
 	}
 	if spans[0].Status.Code != codes.Error {
 		t.Errorf("span status = %v, want error", spans[0].Status.Code)
+	}
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
+	}
+	record := logExporter.records[0]
+	if got := record.EventName(); got != "exception" {
+		t.Errorf("event name = %q, want exception", got)
+	}
+	if got := record.Severity(); got != otellog.SeverityError {
+		t.Errorf("severity = %v, want ERROR", got)
+	}
+	if record.TraceID() != span.SpanContext().TraceID() || record.SpanID() != span.SpanContext().SpanID() {
+		t.Error("log record is not correlated with its span")
+	}
+	logAttributes := map[string]string{}
+	record.WalkAttributes(func(value attribute.KeyValue) bool {
+		logAttributes[string(value.Key)] = value.Value.AsString()
+		return true
+	})
+	if got := logAttributes["exception.message"]; got != "test failure" {
+		t.Errorf("exception.message = %q, want test failure", got)
+	}
+	if got := logAttributes["exception.type"]; got == "" {
+		t.Error("exception.type is empty")
+	}
+	if got := logAttributes["exception.stacktrace"]; got == "" {
+		t.Error("exception.stacktrace is empty")
+	}
+	if got := logAttributes["nwsl.error.code"]; got != "test.operation" {
+		t.Errorf("nwsl.error.code = %q, want test.operation", got)
 	}
 }
 
