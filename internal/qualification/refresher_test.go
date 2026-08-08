@@ -35,35 +35,35 @@ func TestCalculationTelemetrySummarizesFastLoopWork(t *testing.T) {
 	}
 	attributes := qualificationAttributeMap(summary.attributes(statuses))
 	for key, want := range map[string]int64{
-		"qualification.status_check_count":                         2,
-		"qualification.status_proof.skipped_count":                 1,
-		"qualification.status_proof.slow_count":                    1,
-		"qualification.status_proof.reduced_team_count.max":        2,
-		"qualification.status_proof.reduced_fixture_count.max":     3,
-		"qualification.status_proof.connected_component_count.max": 1,
-		"qualification.status_proof.subset_probe_count.total":      4,
-		"qualification.status_proof.visited_state_count.total":     5,
-		"qualification.status_proof.memo_hit_count.total":          6,
-		"qualification.status_proof.prune_count.total":             7,
-		"qualification.no_help_batch_count":                        1,
-		"qualification.no_help_batch.skipped_count":                2,
-		"qualification.no_help_batch.slow_count":                   1,
-		"qualification.result.status.not_clinched_count":           1,
-		"qualification.result.status.unresolved_count":             1,
-		"qualification.result.method.cheap_bound_count":            1,
-		"qualification.result.method.compute_budget_count":         1,
-		"qualification.result.no_help.guaranteed_count":            1,
-		"qualification.result.no_help.unresolved_count":            1,
-		"qualification.result.budget_exhausted_count":              1,
+		"nwsl.qualification.status_check_count":                         2,
+		"nwsl.qualification.status_proof.skipped_count":                 1,
+		"nwsl.qualification.status_proof.slow_count":                    1,
+		"nwsl.qualification.status_proof.reduced_team_count.max":        2,
+		"nwsl.qualification.status_proof.reduced_fixture_count.max":     3,
+		"nwsl.qualification.status_proof.connected_component_count.max": 1,
+		"nwsl.qualification.status_proof.subset_probe_count.total":      4,
+		"nwsl.qualification.status_proof.visited_state_count.total":     5,
+		"nwsl.qualification.status_proof.memo_hit_count.total":          6,
+		"nwsl.qualification.status_proof.prune_count.total":             7,
+		"nwsl.qualification.no_help_batch_count":                        1,
+		"nwsl.qualification.no_help_batch.skipped_count":                2,
+		"nwsl.qualification.no_help_batch.slow_count":                   1,
+		"nwsl.qualification.result.status.not_clinched_count":           1,
+		"nwsl.qualification.result.status.unresolved_count":             1,
+		"nwsl.qualification.result.method.cheap_bound_count":            1,
+		"nwsl.qualification.result.method.compute_budget_count":         1,
+		"nwsl.qualification.result.no_help.guaranteed_count":            1,
+		"nwsl.qualification.result.no_help.unresolved_count":            1,
+		"nwsl.qualification.result.budget_exhausted_count":              1,
 	} {
 		if got := attributes[key].AsInt64(); got != want {
 			t.Errorf("%s = %d, want %d", key, got, want)
 		}
 	}
-	if got := attributes["qualification.status_proof.slowest_team_id"].AsString(); got != "slow-team" {
+	if got := attributes["nwsl.qualification.status_proof.slowest_team_id"].AsString(); got != "slow-team" {
 		t.Errorf("slowest status-proof team = %q, want slow-team", got)
 	}
-	if got := attributes["qualification.no_help_batch.slowest_team_id"].AsString(); got != "slow-team" {
+	if got := attributes["nwsl.qualification.no_help_batch.slowest_team_id"].AsString(); got != "slow-team" {
 		t.Errorf("slowest no-help team = %q, want slow-team", got)
 	}
 }
@@ -87,11 +87,11 @@ func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
 		t.Fatalf("spans = %#v, want only qualification.refresh", spans)
 	}
 	attributes := qualificationAttributeMap(spans[0].Attributes)
-	if got := attributes["qualification.input_team_count"].AsInt64(); got != 0 {
-		t.Errorf("qualification.input_team_count = %d, want 0", got)
+	if got := attributes["nwsl.qualification.input_team_count"].AsInt64(); got != 0 {
+		t.Errorf("nwsl.qualification.input_team_count = %d, want 0", got)
 	}
-	if got := attributes["qualification.status_check_count"].AsInt64(); got != 0 {
-		t.Errorf("qualification.status_check_count = %d, want 0", got)
+	if got := attributes["nwsl.qualification.status_check_count"].AsInt64(); got != 0 {
+		t.Errorf("nwsl.qualification.status_check_count = %d, want 0", got)
 	}
 }
 

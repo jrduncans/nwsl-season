@@ -140,8 +140,8 @@ func (s *Scheduler) check() {
 	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.check",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", s.config.Season),
-			attribute.String("sync.stage", s.config.Stage),
+			attribute.String("nwsl.season", s.config.Season),
+			attribute.String("nwsl.stage", s.config.Stage),
 		),
 	)
 	defer span.End()
@@ -151,8 +151,8 @@ func (s *Scheduler) check() {
 	cancel()
 	if err != nil {
 		span.SetAttributes(
-			attribute.String("scheduler.action", "read_snapshot"),
-			attribute.String("scheduler.outcome", "failure"),
+			attribute.String("nwsl.scheduler.action", "read_snapshot"),
+			attribute.String("nwsl.scheduler.outcome", "failure"),
 		)
 		telemetry.RecordWarningWithType(ctx, span, err, "scheduler.refresh_snapshot", telemetry.ErrorTypeStorageFailure)
 		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
@@ -161,23 +161,23 @@ func (s *Scheduler) check() {
 
 	decision := Assess(snapshot, s.now().UTC(), s.config.CompletionGrace)
 	span.SetAttributes(
-		attribute.String("sync.decision", decision.Name),
-		attribute.String("sync.decision_reason", decision.Reason),
-		attribute.String("sync.fixture_id", decision.FixtureID),
+		attribute.String("nwsl.sync.decision", decision.Name),
+		attribute.String("nwsl.sync.decision_reason", decision.Reason),
+		attribute.String("nwsl.sync.fixture_id", decision.FixtureID),
 	)
 	s.logger.Info("cache refresh decision", "decision", decision.Name, "reason", decision.Reason,
 		"season", s.config.Season, "stage", s.config.Stage, "fixture_id", decision.FixtureID)
 	if decision.Name != decisionEligible {
 		span.SetAttributes(
-			attribute.String("scheduler.action", "recalculate"),
-			attribute.String("scheduler.sync.outcome", "not_requested"),
-			attribute.String("scheduler.forecast_warm.outcome", "not_needed"),
+			attribute.String("nwsl.scheduler.action", "recalculate"),
+			attribute.String("nwsl.scheduler.sync.outcome", "not_requested"),
+			attribute.String("nwsl.scheduler.forecast_warm.outcome", "not_needed"),
 		)
-		span.SetAttributes(attribute.String("scheduler.outcome", s.recalculateCachedClinching(ctx, span)))
+		span.SetAttributes(attribute.String("nwsl.scheduler.outcome", s.recalculateCachedClinching(ctx, span)))
 		return
 	}
 
-	span.SetAttributes(attribute.String("scheduler.action", "sync"))
+	span.SetAttributes(attribute.String("nwsl.scheduler.action", "sync"))
 	runCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	run, err := s.runner.Run(runCtx, syncer.RunOptions{
 		Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler", MinimumAttemptInterval: s.config.MinimumAttemptInterval,
@@ -185,17 +185,17 @@ func (s *Scheduler) check() {
 	cancel()
 	if errors.Is(err, cache.ErrSyncInProgress) {
 		span.SetAttributes(
-			attribute.Bool("error.expected", true),
-			attribute.String("scheduler.sync.outcome", "in_progress"),
-			attribute.String("scheduler.outcome", "deferred"),
+			attribute.Bool("nwsl.error.expected", true),
+			attribute.String("nwsl.scheduler.sync.outcome", "in_progress"),
+			attribute.String("nwsl.scheduler.outcome", "deferred"),
 		)
 		s.logger.Info("cache refresh deferred", "reason", "sync_in_progress", "season", s.config.Season, "stage", s.config.Stage)
 		return
 	}
 	if err != nil {
 		span.SetAttributes(
-			attribute.String("scheduler.sync.outcome", "failure"),
-			attribute.String("scheduler.outcome", "failure"),
+			attribute.String("nwsl.scheduler.sync.outcome", "failure"),
+			attribute.String("nwsl.scheduler.outcome", "failure"),
 		)
 		telemetry.MarkError(span, err)
 		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
@@ -210,7 +210,7 @@ func (s *Scheduler) check() {
 		if recalculateOutcome == "failure" || recalculateOutcome == "partial_failure" {
 			outcome = "partial_failure"
 		}
-		span.SetAttributes(attribute.String("scheduler.outcome", outcome))
+		span.SetAttributes(attribute.String("nwsl.scheduler.outcome", outcome))
 		return
 	}
 	if run.HistoryPruneError != "" {
@@ -220,10 +220,10 @@ func (s *Scheduler) check() {
 		"duration_ms", run.FinishedAt.Sub(run.StartedAt).Milliseconds(), "games_seen", run.GamesSeen,
 		"games_inserted", run.GamesInserted, "games_updated", run.GamesUpdated, "games_unchanged", run.GamesUnchanged)
 	if run.XGError != "" || run.QualificationError != "" || run.ScenarioError != "" {
-		span.SetAttributes(attribute.String("scheduler.outcome", "partial_failure"))
+		span.SetAttributes(attribute.String("nwsl.scheduler.outcome", "partial_failure"))
 		return
 	}
-	span.SetAttributes(attribute.String("scheduler.outcome", "synced"))
+	span.SetAttributes(attribute.String("nwsl.scheduler.outcome", "synced"))
 }
 
 // recalculateCachedClinching repairs missing or retryable derived batches
@@ -233,20 +233,20 @@ func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trac
 	runner, ok := s.runner.(calculationRunner)
 	if !ok {
 		span.SetAttributes(
-			attribute.Bool("scheduler.recalculation.attempted", false),
-			attribute.String("scheduler.recalculation.outcome", "unsupported"),
+			attribute.Bool("nwsl.scheduler.recalculation.attempted", false),
+			attribute.String("nwsl.scheduler.recalculation.outcome", "unsupported"),
 		)
 		return "current"
 	}
-	span.SetAttributes(attribute.Bool("scheduler.recalculation.attempted", true))
+	span.SetAttributes(attribute.Bool("nwsl.scheduler.recalculation.attempted", true))
 	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
 	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler"})
 	cancel()
 	if err != nil {
 		span.SetAttributes(
-			attribute.String("scheduler.recalculation.outcome", "failure"),
-			attribute.String("scheduler.qualification.outcome", "not_run"),
-			attribute.String("scheduler.scenario.outcome", "not_run"),
+			attribute.String("nwsl.scheduler.recalculation.outcome", "failure"),
+			attribute.String("nwsl.scheduler.qualification.outcome", "not_run"),
+			attribute.String("nwsl.scheduler.scenario.outcome", "not_run"),
 		)
 		telemetry.MarkError(span, err)
 		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
@@ -270,33 +270,33 @@ func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trac
 
 func schedulerRunAttributes(run cache.SyncRun) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.Bool("scheduler.sync.attempted", true),
-		attribute.Bool("scheduler.sync.skipped", run.Skipped),
-		attribute.String("scheduler.sync.outcome", schedulerSyncOutcome(run)),
-		attribute.String("scheduler.xg.outcome", schedulerXGOutcome(run)),
-		attribute.String("scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
-		attribute.String("scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+		attribute.Bool("nwsl.scheduler.sync.attempted", true),
+		attribute.Bool("nwsl.scheduler.sync.skipped", run.Skipped),
+		attribute.String("nwsl.scheduler.sync.outcome", schedulerSyncOutcome(run)),
+		attribute.String("nwsl.scheduler.xg.outcome", schedulerXGOutcome(run)),
+		attribute.String("nwsl.scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
+		attribute.String("nwsl.scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
 	}
 	if run.ID > 0 {
-		attributes = append(attributes, attribute.Int64("scheduler.sync_run_id", run.ID))
+		attributes = append(attributes, attribute.Int64("nwsl.scheduler.sync_run_id", run.ID))
 	}
 	if run.FixtureSnapshotID != "" {
-		attributes = append(attributes, attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID))
+		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
 	}
 	return attributes
 }
 
 func schedulerRecalculationAttributes(run cache.SyncRun) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.String("scheduler.recalculation.outcome", schedulerRecalculationOutcome(run)),
-		attribute.String("scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
-		attribute.String("scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+		attribute.String("nwsl.scheduler.recalculation.outcome", schedulerRecalculationOutcome(run)),
+		attribute.String("nwsl.scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
+		attribute.String("nwsl.scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
 	}
 	if run.ID > 0 {
-		attributes = append(attributes, attribute.Int64("scheduler.recalculation_source_sync_run_id", run.ID))
+		attributes = append(attributes, attribute.Int64("nwsl.scheduler.recalculation_source_sync_run_id", run.ID))
 	}
 	if run.FixtureSnapshotID != "" {
-		attributes = append(attributes, attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID))
+		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
 	}
 	return attributes
 }

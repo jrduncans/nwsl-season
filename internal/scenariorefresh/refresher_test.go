@@ -29,28 +29,28 @@ func TestCalculationTelemetrySummarizesTeamSearches(t *testing.T) {
 		{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: scenarios.LimitationBudgetExhausted}},
 	}))
 	for key, want := range map[string]int64{
-		"scenario.team_search_count":                 2,
-		"scenario.team_search.slow_count":            1,
-		"scenario.assignment_count.total":            84,
-		"scenario.certified_assignment_count.total":  2,
-		"scenario.unresolved_assignment_count.total": 3,
-		"scenario.search_node_count.total":           22,
-		"scenario.search_node_count.max":             20,
-		"scenario.oracle_call_count.total":           4,
-		"scenario.oracle_cache_hit_count.total":      5,
-		"scenario.visited_complete_count.total":      6,
-		"scenario.result.state.can_clinch_count":     1,
-		"scenario.result.state.unresolved_count":     1,
-		"scenario.result.budget_limited_count":       1,
+		"nwsl.scenario.team_search_count":                 2,
+		"nwsl.scenario.team_search.slow_count":            1,
+		"nwsl.scenario.assignment_count.total":            84,
+		"nwsl.scenario.certified_assignment_count.total":  2,
+		"nwsl.scenario.unresolved_assignment_count.total": 3,
+		"nwsl.scenario.search_node_count.total":           22,
+		"nwsl.scenario.search_node_count.max":             20,
+		"nwsl.scenario.oracle_call_count.total":           4,
+		"nwsl.scenario.oracle_cache_hit_count.total":      5,
+		"nwsl.scenario.visited_complete_count.total":      6,
+		"nwsl.scenario.result.state.can_clinch_count":     1,
+		"nwsl.scenario.result.state.unresolved_count":     1,
+		"nwsl.scenario.result.budget_limited_count":       1,
 	} {
 		if got := attributes[key].AsInt64(); got != want {
 			t.Errorf("%s = %d, want %d", key, got, want)
 		}
 	}
-	if got := attributes["scenario.team_search.slowest_team_id"].AsString(); got != "slow-team" {
+	if got := attributes["nwsl.scenario.team_search.slowest_team_id"].AsString(); got != "slow-team" {
 		t.Errorf("slowest team = %q, want slow-team", got)
 	}
-	if got := attributes["scenario.search_node_count.max_team_id"].AsString(); got != "slow-team" {
+	if got := attributes["nwsl.scenario.search_node_count.max_team_id"].AsString(); got != "slow-team" {
 		t.Errorf("most-search-nodes team = %q, want slow-team", got)
 	}
 }
@@ -74,11 +74,11 @@ func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
 		t.Fatalf("spans = %#v, want only scenario.refresh", spans)
 	}
 	attributes := scenarioAttributeMap(spans[0].Attributes)
-	if got := attributes["scenario.input_team_count"].AsInt64(); got != 0 {
-		t.Errorf("scenario.input_team_count = %d, want 0", got)
+	if got := attributes["nwsl.scenario.input_team_count"].AsInt64(); got != 0 {
+		t.Errorf("nwsl.scenario.input_team_count = %d, want 0", got)
 	}
-	if got := attributes["scenario.team_search_count"].AsInt64(); got != 0 {
-		t.Errorf("scenario.team_search_count = %d, want 0", got)
+	if got := attributes["nwsl.scenario.team_search_count"].AsInt64(); got != 0 {
+		t.Errorf("nwsl.scenario.team_search_count = %d, want 0", got)
 	}
 }
 

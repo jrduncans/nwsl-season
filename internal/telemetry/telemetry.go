@@ -247,7 +247,7 @@ func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error
 		return
 	}
 	record := otellog.Record{}
-	record.SetEventName("exception")
+	record.SetEventName(exceptionEventName(code))
 	record.SetSeverity(exceptionSeverity(err, severity))
 	record.SetBody(attribute.StringValue(err.Error()))
 	record.SetErr(err)
@@ -265,6 +265,13 @@ func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error
 	Logger().Emit(ctx, record)
 
 	markError(span, err, code)
+}
+
+func exceptionEventName(code string) string {
+	if code == "" {
+		return "exception"
+	}
+	return "nwsl." + code + ".exception"
 }
 
 func exceptionSeverity(err error, severity otellog.Severity) otellog.Severity {

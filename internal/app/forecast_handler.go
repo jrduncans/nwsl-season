@@ -46,8 +46,8 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	ctx, span := telemetry.Tracer().Start(ctx, "forecast.precache",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.Bool("forecast.preload", true),
-			attribute.String("forecast.trigger", trigger),
+			attribute.Bool("nwsl.forecast.preload", true),
+			attribute.String("nwsl.forecast.trigger", trigger),
 			attribute.String("nwsl.season", a.options.CurrentSeason),
 			attribute.String("nwsl.stage", a.options.Stage),
 		),
@@ -65,10 +65,10 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 			telemetry.MarkError(span, err)
 		}
 		span.SetAttributes(
-			attribute.Int("forecast.model_count", modelCount),
-			attribute.Int("forecast.failed_model_count", failedModels),
-			attribute.Int("forecast.precache.worker_count", workerCount),
-			attribute.String("forecast.precache.outcome", outcome),
+			attribute.Int("nwsl.forecast.model_count", modelCount),
+			attribute.Int("nwsl.forecast.failed_model_count", failedModels),
+			attribute.Int("nwsl.forecast.precache.worker_count", workerCount),
+			attribute.String("nwsl.forecast.precache.outcome", outcome),
 		)
 		span.End()
 	}()
@@ -154,10 +154,10 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	state.ModelID = forecast.CanonicalID(state.ModelID)
 	state.ComparisonModelID = forecast.CanonicalID(state.ComparisonModelID)
 	trace.SpanFromContext(r.Context()).SetAttributes(
-		attribute.String("forecast.trigger", "http"),
-		attribute.String("forecast.model_id", state.ModelID),
-		attribute.Bool("forecast.comparison_requested", state.ComparisonModelID != ""),
-		attribute.Int("forecast.fixed_assumption_count", len(state.Fixed)),
+		attribute.String("nwsl.forecast.trigger", "http"),
+		attribute.String("nwsl.forecast.model_id", state.ModelID),
+		attribute.Bool("nwsl.forecast.comparison_requested", state.ComparisonModelID != ""),
+		attribute.Int("nwsl.forecast.fixed_assumption_count", len(state.Fixed)),
 	)
 	data, season, err := a.forecastData(r)
 	if err != nil {

@@ -243,8 +243,8 @@ func TestRecordErrorWithCode(t *testing.T) {
 		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
 	}
 	record := logExporter.records[0]
-	if got := record.EventName(); got != "exception" {
-		t.Errorf("event name = %q, want exception", got)
+	if got := record.EventName(); got != "nwsl.test.operation.exception" {
+		t.Errorf("event name = %q, want nwsl.test.operation.exception", got)
 	}
 	if got := record.Severity(); got != otellog.SeverityError {
 		t.Errorf("severity = %v, want ERROR", got)
@@ -463,7 +463,7 @@ func TestRecordCompletedSpanPreservesOperationTiming(t *testing.T) {
 	started := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
 	finished := started.Add(37 * time.Millisecond)
 	ctx, parent := provider.Tracer("test").Start(context.Background(), "parent")
-	RecordCompletedSpan(ctx, "slow.work", started, finished, []attribute.KeyValue{attribute.String("work.id", "work-123")}, nil, "")
+	RecordCompletedSpan(ctx, "slow.work", started, finished, []attribute.KeyValue{attribute.String("nwsl.work.id", "work-123")}, nil, "")
 	parent.End()
 
 	for _, span := range exporter.GetSpans() {
@@ -477,8 +477,8 @@ func TestRecordCompletedSpanPreservesOperationTiming(t *testing.T) {
 		for _, value := range span.Attributes {
 			attributes[value.Key] = value.Value
 		}
-		if got := attributes["work.id"].AsString(); got != "work-123" {
-			t.Errorf("work.id = %q, want work-123", got)
+		if got := attributes["nwsl.work.id"].AsString(); got != "work-123" {
+			t.Errorf("nwsl.work.id = %q, want work-123", got)
 		}
 		return
 	}

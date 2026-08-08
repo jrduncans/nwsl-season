@@ -225,7 +225,7 @@ func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOption
 }
 
 func setSchedulerForecastWarmOutcome(ctx context.Context, outcome string) {
-	trace.SpanFromContext(ctx).SetAttributes(attribute.String("scheduler.forecast_warm.outcome", outcome))
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("nwsl.scheduler.forecast_warm.outcome", outcome))
 }
 
 func (r forecastWarmingRunner) Recalculate(ctx context.Context, options syncer.RecalculateOptions) (cache.SyncRun, error) {

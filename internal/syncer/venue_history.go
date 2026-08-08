@@ -24,9 +24,9 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 	ctx, span := telemetry.Tracer().Start(ctx, "sync.venue_history",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", currentSeason),
-			attribute.String("sync.stage", stage),
-			attribute.Int("sync.venue_history_requested_season_count", count),
+			attribute.String("nwsl.season", currentSeason),
+			attribute.String("nwsl.stage", stage),
+			attribute.Int("nwsl.sync.venue_history_requested_season_count", count),
 		),
 	)
 	refreshed := 0
@@ -40,8 +40,8 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 			telemetry.MarkError(span, err)
 		}
 		span.SetAttributes(
-			attribute.Int("sync.venue_history_refreshed_season_count", refreshed),
-			attribute.String("sync.venue_history.outcome", outcome),
+			attribute.Int("nwsl.sync.venue_history_refreshed_season_count", refreshed),
+			attribute.String("nwsl.sync.venue_history.outcome", outcome),
 		)
 		span.End()
 	}()
