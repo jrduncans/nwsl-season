@@ -160,29 +160,29 @@ func TestForecastExecutorRecordsRunInputs(t *testing.T) {
 	spans := exporter.GetSpans()
 	parent := findSpan(t, spans, "forecast.run")
 	attributes := spanAttributes(parent)
-	if got := attributes["forecast.trigger"].AsString(); got != "post_sync" {
-		t.Errorf("forecast.trigger = %q, want post_sync", got)
+	if got := attributes["nwsl.forecast.trigger"].AsString(); got != "post_sync" {
+		t.Errorf("nwsl.forecast.trigger = %q, want post_sync", got)
 	}
 	for key, want := range map[string]int{
-		"forecast.iteration_count":         50000,
-		"forecast.team_count":              2,
-		"forecast.fixture_count":           4,
-		"forecast.completed_fixture_count": 1,
-		"forecast.remaining_fixture_count": 3,
-		"forecast.fixed_assumption_count":  2,
-		"forecast.xg_observation_count":    1,
-		"forecast.playoff_place_count":     8,
+		"nwsl.forecast.iteration_count":         50000,
+		"nwsl.forecast.team_count":              2,
+		"nwsl.forecast.fixture_count":           4,
+		"nwsl.forecast.completed_fixture_count": 1,
+		"nwsl.forecast.remaining_fixture_count": 3,
+		"nwsl.forecast.fixed_assumption_count":  2,
+		"nwsl.forecast.xg_observation_count":    1,
+		"nwsl.forecast.playoff_place_count":     8,
 	} {
 		if got := int(attributes[key].AsInt64()); got != want {
 			t.Errorf("%s = %d, want %d", key, got, want)
 		}
 	}
-	modelIDs := attributes["forecast.model_ids"].AsStringSlice()
+	modelIDs := attributes["nwsl.forecast.model_ids"].AsStringSlice()
 	if len(modelIDs) != 1 || modelIDs[0] != "telemetry-test-v1" {
-		t.Errorf("forecast.model_ids = %q, want [telemetry-test-v1]", modelIDs)
+		t.Errorf("nwsl.forecast.model_ids = %q, want [telemetry-test-v1]", modelIDs)
 	}
-	if got := attributes["forecast.fixed_assumption_count"].AsInt64(); got != 2 {
-		t.Errorf("forecast.fixed_assumption_count = %d, want 2", got)
+	if got := attributes["nwsl.forecast.fixed_assumption_count"].AsInt64(); got != 2 {
+		t.Errorf("nwsl.forecast.fixed_assumption_count = %d, want 2", got)
 	}
 	for _, span := range spans {
 		if span.Name == "forecast.simulation" {

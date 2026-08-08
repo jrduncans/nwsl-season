@@ -52,13 +52,13 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	ctx, span := telemetry.Tracer().Start(ctx, "scenario.refresh",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", sync.Season),
-			attribute.String("sync.stage", sync.Stage),
-			attribute.String("cache.fixture_snapshot_id", sync.FixtureSnapshotID),
-			attribute.Int("scenario.team_count", len(teams)),
-			attribute.Int("scenario.fixture_count", len(games)),
-			attribute.Int64("scenario.budget_ms", budget.Milliseconds()),
-			attribute.Bool("scenario.forced", force),
+			attribute.String("nwsl.season", sync.Season),
+			attribute.String("nwsl.stage", sync.Stage),
+			attribute.String("nwsl.cache.fixture_snapshot_id", sync.FixtureSnapshotID),
+			attribute.Int("nwsl.scenario.team_count", len(teams)),
+			attribute.Int("nwsl.scenario.fixture_count", len(games)),
+			attribute.Int64("nwsl.scenario.budget_ms", budget.Milliseconds()),
+			attribute.Bool("nwsl.scenario.forced", force),
 		),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
@@ -66,8 +66,8 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	}
 	defer func() {
 		span.SetAttributes(
-			attribute.Bool("scenario.recalculated", recalculated),
-			attribute.String("scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
+			attribute.Bool("nwsl.scenario.recalculated", recalculated),
+			attribute.String("nwsl.scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
 		)
 		if err != nil {
 			telemetry.MarkError(span, err)
@@ -175,24 +175,24 @@ func (t *calculationTelemetry) recordTeamSearch(duration time.Duration, teamID s
 
 func (t calculationTelemetry) attributes(rows []cache.ScenarioResult) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.Int("scenario.team_search_count", t.teamSearches),
-		attribute.Float64("scenario.team_search.duration_total_ms", float64(t.teamSearchDuration)/float64(time.Millisecond)),
-		attribute.Float64("scenario.team_search.duration_max_ms", float64(t.slowestTeamSearch.duration)/float64(time.Millisecond)),
-		attribute.Int("scenario.team_search.slow_count", t.slowTeamSearches),
-		attribute.Int("scenario.assignment_count.total", t.total.assignments),
-		attribute.Int("scenario.certified_assignment_count.total", t.total.certifiedAssignments),
-		attribute.Int("scenario.unresolved_assignment_count.total", t.total.unresolvedAssignments),
-		attribute.Int("scenario.search_node_count.total", t.total.searchNodes),
-		attribute.Int("scenario.search_node_count.max", t.maxSearchNodes),
-		attribute.Int("scenario.oracle_call_count.total", t.total.oracleCalls),
-		attribute.Int("scenario.oracle_cache_hit_count.total", t.total.oracleCacheHits),
-		attribute.Int("scenario.visited_complete_count.total", t.total.visitedComplete),
+		attribute.Int("nwsl.scenario.team_search_count", t.teamSearches),
+		attribute.Float64("nwsl.scenario.team_search.duration_total_ms", float64(t.teamSearchDuration)/float64(time.Millisecond)),
+		attribute.Float64("nwsl.scenario.team_search.duration_max_ms", float64(t.slowestTeamSearch.duration)/float64(time.Millisecond)),
+		attribute.Int("nwsl.scenario.team_search.slow_count", t.slowTeamSearches),
+		attribute.Int("nwsl.scenario.assignment_count.total", t.total.assignments),
+		attribute.Int("nwsl.scenario.certified_assignment_count.total", t.total.certifiedAssignments),
+		attribute.Int("nwsl.scenario.unresolved_assignment_count.total", t.total.unresolvedAssignments),
+		attribute.Int("nwsl.scenario.search_node_count.total", t.total.searchNodes),
+		attribute.Int("nwsl.scenario.search_node_count.max", t.maxSearchNodes),
+		attribute.Int("nwsl.scenario.oracle_call_count.total", t.total.oracleCalls),
+		attribute.Int("nwsl.scenario.oracle_cache_hit_count.total", t.total.oracleCacheHits),
+		attribute.Int("nwsl.scenario.visited_complete_count.total", t.total.visitedComplete),
 	}
 	if t.slowestTeamSearch.duration > 0 {
-		attributes = append(attributes, attribute.String("scenario.team_search.slowest_team_id", t.slowestTeamSearch.teamID))
+		attributes = append(attributes, attribute.String("nwsl.scenario.team_search.slowest_team_id", t.slowestTeamSearch.teamID))
 	}
 	if t.maxSearchNodesTeamID != "" {
-		attributes = append(attributes, attribute.String("scenario.search_node_count.max_team_id", t.maxSearchNodesTeamID))
+		attributes = append(attributes, attribute.String("nwsl.scenario.search_node_count.max_team_id", t.maxSearchNodesTeamID))
 	}
 
 	stateCounts := map[scenarios.OpportunityState]int{}
@@ -210,9 +210,9 @@ func (t calculationTelemetry) attributes(rows []cache.ScenarioResult) []attribut
 		scenarios.OpportunityTiebreakDependent,
 		scenarios.OpportunityUnresolved,
 	} {
-		attributes = append(attributes, attribute.Int("scenario.result.state."+string(state)+"_count", stateCounts[state]))
+		attributes = append(attributes, attribute.Int("nwsl.scenario.result.state."+string(state)+"_count", stateCounts[state]))
 	}
-	return append(attributes, attribute.Int("scenario.result.budget_limited_count", budgetLimited))
+	return append(attributes, attribute.Int("nwsl.scenario.result.budget_limited_count", budgetLimited))
 }
 
 func scenarioSearchDiagnosticsFor(values map[competition.AchievementID]scenarios.Result) scenarioSearchDiagnostics {
@@ -239,11 +239,11 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		return telemetry.RecordWarningWithType(ctx, span, cause, "scenario.refresh", errorType)
 	}
 	span.SetAttributes(
-		attribute.Int("scenario.input_team_count", len(teams)),
-		attribute.Int("scenario.input_fixture_count", len(games)),
-		attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
-		attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
-		attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(r.Rules.Achievements)),
+		attribute.Int("nwsl.scenario.input_team_count", len(teams)),
+		attribute.Int("nwsl.scenario.input_fixture_count", len(games)),
+		attribute.Int("nwsl.scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
+		attribute.Int("nwsl.scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
+		attribute.StringSlice("nwsl.scenario.achievement_ids", scenarioAchievementIDs(r.Rules.Achievements)),
 	)
 	defer func() {
 		span.SetAttributes(calculation.attributes(result.rows)...)
@@ -299,11 +299,11 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		return calculated{}, recordCalculationException(err, telemetry.ErrorTypeInvalidData)
 	}
 	span.SetAttributes(
-		attribute.String("scenario.slate_id", slate.ID),
-		attribute.String("scenario.slate_state", string(slate.State)),
-		attribute.String("scenario.slate_source", string(slate.Source)),
-		attribute.Int("scenario.slate_fixture_count", len(slate.FixtureIDs)),
-		attribute.String("scenario.slate_reason", slate.Reason),
+		attribute.String("nwsl.scenario.slate_id", slate.ID),
+		attribute.String("nwsl.scenario.slate_state", string(slate.State)),
+		attribute.String("nwsl.scenario.slate_source", string(slate.Source)),
+		attribute.Int("nwsl.scenario.slate_fixture_count", len(slate.FixtureIDs)),
+		attribute.String("nwsl.scenario.slate_reason", slate.Reason),
 	)
 	order := []string{}
 	pending := append([]scenarios.ScheduledGame(nil), scheduled...)
@@ -374,14 +374,14 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 
 func scenarioGenerateTeamAttributes(teamID string, achievements []competition.Achievement, games []cache.Game, slate scenarios.Slate) []attribute.KeyValue {
 	return []attribute.KeyValue{
-		attribute.String("scenario.team_id", teamID),
-		attribute.StringSlice("scenario.achievement_ids", scenarioAchievementIDs(achievements)),
-		attribute.Int("scenario.achievement_count", len(achievements)),
-		attribute.Int("scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
-		attribute.Int("scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
-		attribute.String("scenario.slate_state", string(slate.State)),
-		attribute.String("scenario.slate_source", string(slate.Source)),
-		attribute.Int("scenario.slate_fixture_count", len(slate.FixtureIDs)),
+		attribute.String("nwsl.scenario.team_id", teamID),
+		attribute.StringSlice("nwsl.scenario.achievement_ids", scenarioAchievementIDs(achievements)),
+		attribute.Int("nwsl.scenario.achievement_count", len(achievements)),
+		attribute.Int("nwsl.scenario.completed_fixture_count", scenarioCompletedFixtures(games)),
+		attribute.Int("nwsl.scenario.remaining_fixture_count", scenarioRemainingFixtures(games)),
+		attribute.String("nwsl.scenario.slate_state", string(slate.State)),
+		attribute.String("nwsl.scenario.slate_source", string(slate.Source)),
+		attribute.Int("nwsl.scenario.slate_fixture_count", len(slate.FixtureIDs)),
 	}
 }
 
@@ -426,13 +426,13 @@ func scenarioAchievementIDs(values []competition.Achievement) []string {
 func scenarioResultAttributes(values map[competition.AchievementID]scenarios.Result) []attribute.KeyValue {
 	diagnostics := scenarioSearchDiagnosticsFor(values)
 	return []attribute.KeyValue{
-		attribute.Int("scenario.assignment_count", diagnostics.assignments),
-		attribute.Int("scenario.certified_assignment_count", diagnostics.certifiedAssignments),
-		attribute.Int("scenario.unresolved_assignment_count", diagnostics.unresolvedAssignments),
-		attribute.Int("scenario.search_node_count", diagnostics.searchNodes),
-		attribute.Int("scenario.oracle_call_count", diagnostics.oracleCalls),
-		attribute.Int("scenario.oracle_cache_hit_count", diagnostics.oracleCacheHits),
-		attribute.Int("scenario.visited_complete_count", diagnostics.visitedComplete),
+		attribute.Int("nwsl.scenario.assignment_count", diagnostics.assignments),
+		attribute.Int("nwsl.scenario.certified_assignment_count", diagnostics.certifiedAssignments),
+		attribute.Int("nwsl.scenario.unresolved_assignment_count", diagnostics.unresolvedAssignments),
+		attribute.Int("nwsl.scenario.search_node_count", diagnostics.searchNodes),
+		attribute.Int("nwsl.scenario.oracle_call_count", diagnostics.oracleCalls),
+		attribute.Int("nwsl.scenario.oracle_cache_hit_count", diagnostics.oracleCacheHits),
+		attribute.Int("nwsl.scenario.visited_complete_count", diagnostics.visitedComplete),
 	}
 }
 

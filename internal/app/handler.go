@@ -504,7 +504,7 @@ func (a *application) loadSeasonData(parent context.Context, season string) (dat
 	ctx, span := telemetry.Tracer().Start(parent, "cache.season.load",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("cache.name", "season"),
+			attribute.String("nwsl.cache.name", "season"),
 			attribute.String("nwsl.season", season),
 			attribute.String("nwsl.stage", a.options.Stage),
 		),
@@ -549,16 +549,16 @@ func seasonDataAttributes(data cache.SeasonData, season, stage string) []attribu
 	attributes := []attribute.KeyValue{
 		attribute.String("nwsl.season", season),
 		attribute.String("nwsl.stage", stage),
-		attribute.String("cache.fixture_snapshot_id", data.FixtureSnapshotID),
-		attribute.Int("season.team_count", len(data.Teams)),
-		attribute.Int("season.fixture_count", len(data.Games)),
-		attribute.Int("season.completed_fixture_count", completed),
-		attribute.Int("season.remaining_fixture_count", remaining),
-		attribute.Int("season.xg_available_count", xgAvailable),
-		attribute.Int("season.xg_unavailable_count", xgUnavailable),
+		attribute.String("nwsl.cache.fixture_snapshot_id", data.FixtureSnapshotID),
+		attribute.Int("nwsl.season.team_count", len(data.Teams)),
+		attribute.Int("nwsl.season.fixture_count", len(data.Games)),
+		attribute.Int("nwsl.season.completed_fixture_count", completed),
+		attribute.Int("nwsl.season.remaining_fixture_count", remaining),
+		attribute.Int("nwsl.season.xg_available_count", xgAvailable),
+		attribute.Int("nwsl.season.xg_unavailable_count", xgUnavailable),
 	}
 	if data.LastSuccess != nil {
-		attributes = append(attributes, attribute.Float64("cache.last_success_age_seconds", time.Since(data.LastSuccess.FinishedAt).Seconds()))
+		attributes = append(attributes, attribute.Float64("nwsl.cache.last_success_age_seconds", time.Since(data.LastSuccess.FinishedAt).Seconds()))
 	}
 	return attributes
 }

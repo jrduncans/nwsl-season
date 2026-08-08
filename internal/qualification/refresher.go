@@ -102,32 +102,32 @@ func (t *calculationTelemetry) recordNoHelpBatch(duration time.Duration, teamID 
 
 func (t calculationTelemetry) attributes(statuses []cache.QualificationStatus) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.Int("qualification.status_check_count", t.statusChecks),
-		attribute.Int("qualification.status_proof.skipped_count", t.skippedStatusProofs),
-		attribute.Float64("qualification.status_proof.duration_total_ms", float64(t.statusProofDuration)/float64(time.Millisecond)),
-		attribute.Float64("qualification.status_proof.duration_max_ms", float64(t.slowestStatusProof.duration)/float64(time.Millisecond)),
-		attribute.Int("qualification.status_proof.slow_count", t.slowStatusProofs),
-		attribute.Int("qualification.status_proof.reduced_team_count.max", t.maxReducedTeams),
-		attribute.Int("qualification.status_proof.reduced_fixture_count.max", t.maxReducedFixtures),
-		attribute.Int("qualification.status_proof.connected_component_count.max", t.maxConnectedComponents),
-		attribute.Int("qualification.status_proof.subset_probe_count.total", t.totalSubsetProbes),
-		attribute.Int("qualification.status_proof.visited_state_count.total", t.totalVisitedStates),
-		attribute.Int("qualification.status_proof.memo_hit_count.total", t.totalMemoHits),
-		attribute.Int("qualification.status_proof.prune_count.total", t.totalPrunes),
-		attribute.Int("qualification.no_help_batch_count", t.noHelpBatches),
-		attribute.Int("qualification.no_help_batch.skipped_count", t.skippedNoHelpBatches),
-		attribute.Float64("qualification.no_help_batch.duration_total_ms", float64(t.noHelpDuration)/float64(time.Millisecond)),
-		attribute.Float64("qualification.no_help_batch.duration_max_ms", float64(t.slowestNoHelpBatch.duration)/float64(time.Millisecond)),
-		attribute.Int("qualification.no_help_batch.slow_count", t.slowNoHelpBatches),
+		attribute.Int("nwsl.qualification.status_check_count", t.statusChecks),
+		attribute.Int("nwsl.qualification.status_proof.skipped_count", t.skippedStatusProofs),
+		attribute.Float64("nwsl.qualification.status_proof.duration_total_ms", float64(t.statusProofDuration)/float64(time.Millisecond)),
+		attribute.Float64("nwsl.qualification.status_proof.duration_max_ms", float64(t.slowestStatusProof.duration)/float64(time.Millisecond)),
+		attribute.Int("nwsl.qualification.status_proof.slow_count", t.slowStatusProofs),
+		attribute.Int("nwsl.qualification.status_proof.reduced_team_count.max", t.maxReducedTeams),
+		attribute.Int("nwsl.qualification.status_proof.reduced_fixture_count.max", t.maxReducedFixtures),
+		attribute.Int("nwsl.qualification.status_proof.connected_component_count.max", t.maxConnectedComponents),
+		attribute.Int("nwsl.qualification.status_proof.subset_probe_count.total", t.totalSubsetProbes),
+		attribute.Int("nwsl.qualification.status_proof.visited_state_count.total", t.totalVisitedStates),
+		attribute.Int("nwsl.qualification.status_proof.memo_hit_count.total", t.totalMemoHits),
+		attribute.Int("nwsl.qualification.status_proof.prune_count.total", t.totalPrunes),
+		attribute.Int("nwsl.qualification.no_help_batch_count", t.noHelpBatches),
+		attribute.Int("nwsl.qualification.no_help_batch.skipped_count", t.skippedNoHelpBatches),
+		attribute.Float64("nwsl.qualification.no_help_batch.duration_total_ms", float64(t.noHelpDuration)/float64(time.Millisecond)),
+		attribute.Float64("nwsl.qualification.no_help_batch.duration_max_ms", float64(t.slowestNoHelpBatch.duration)/float64(time.Millisecond)),
+		attribute.Int("nwsl.qualification.no_help_batch.slow_count", t.slowNoHelpBatches),
 	}
 	if t.slowestStatusProof.duration > 0 {
 		attributes = append(attributes,
-			attribute.String("qualification.status_proof.slowest_team_id", t.slowestStatusProof.teamID),
-			attribute.String("qualification.status_proof.slowest_achievement_id", t.slowestStatusProof.achievementID),
+			attribute.String("nwsl.qualification.status_proof.slowest_team_id", t.slowestStatusProof.teamID),
+			attribute.String("nwsl.qualification.status_proof.slowest_achievement_id", t.slowestStatusProof.achievementID),
 		)
 	}
 	if t.slowestNoHelpBatch.duration > 0 {
-		attributes = append(attributes, attribute.String("qualification.no_help_batch.slowest_team_id", t.slowestNoHelpBatch.teamID))
+		attributes = append(attributes, attribute.String("nwsl.qualification.no_help_batch.slowest_team_id", t.slowestNoHelpBatch.teamID))
 	}
 
 	statusCounts := map[clinching.Status]int{}
@@ -144,7 +144,7 @@ func (t calculationTelemetry) attributes(statuses []cache.QualificationStatus) [
 		}
 	}
 	for _, status := range []clinching.Status{clinching.Clinched, clinching.NotClinched, clinching.Unresolved} {
-		attributes = append(attributes, attribute.Int("qualification.result.status."+string(status)+"_count", statusCounts[status]))
+		attributes = append(attributes, attribute.Int("nwsl.qualification.result.status."+string(status)+"_count", statusCounts[status]))
 	}
 	for _, method := range []clinching.ProofMethod{
 		clinching.ProofCheapBound,
@@ -156,7 +156,7 @@ func (t calculationTelemetry) attributes(statuses []cache.QualificationStatus) [
 		clinching.ProofIncompleteSchedule,
 		clinching.ProofImplied,
 	} {
-		attributes = append(attributes, attribute.Int("qualification.result.method."+string(method)+"_count", methodCounts[method]))
+		attributes = append(attributes, attribute.Int("nwsl.qualification.result.method."+string(method)+"_count", methodCounts[method]))
 	}
 	for _, state := range []clinching.NoHelpState{
 		clinching.NoHelpNotApplicable,
@@ -164,9 +164,9 @@ func (t calculationTelemetry) attributes(statuses []cache.QualificationStatus) [
 		clinching.NoHelpImpossible,
 		clinching.NoHelpUnresolved,
 	} {
-		attributes = append(attributes, attribute.Int("qualification.result.no_help."+string(state)+"_count", noHelpCounts[state]))
+		attributes = append(attributes, attribute.Int("nwsl.qualification.result.no_help."+string(state)+"_count", noHelpCounts[state]))
 	}
-	return append(attributes, attribute.Int("qualification.result.budget_exhausted_count", budgetExhausted))
+	return append(attributes, attribute.Int("nwsl.qualification.result.budget_exhausted_count", budgetExhausted))
 }
 
 func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (recalculated bool, err error) {
@@ -177,13 +177,13 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	ctx, span := telemetry.Tracer().Start(ctx, "qualification.refresh",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", syncRun.Season),
-			attribute.String("sync.stage", syncRun.Stage),
-			attribute.String("cache.fixture_snapshot_id", syncRun.FixtureSnapshotID),
-			attribute.Int("qualification.team_count", len(teams)),
-			attribute.Int("qualification.fixture_count", len(games)),
-			attribute.Int64("qualification.budget_ms", budget.Milliseconds()),
-			attribute.Bool("qualification.forced", force),
+			attribute.String("nwsl.season", syncRun.Season),
+			attribute.String("nwsl.stage", syncRun.Stage),
+			attribute.String("nwsl.cache.fixture_snapshot_id", syncRun.FixtureSnapshotID),
+			attribute.Int("nwsl.qualification.team_count", len(teams)),
+			attribute.Int("nwsl.qualification.fixture_count", len(games)),
+			attribute.Int64("nwsl.qualification.budget_ms", budget.Milliseconds()),
+			attribute.Bool("nwsl.qualification.forced", force),
 		),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
@@ -191,8 +191,8 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}
 	defer func() {
 		span.SetAttributes(
-			attribute.Bool("qualification.recalculated", recalculated),
-			attribute.String("qualification.outcome", calculationOutcome(recalculated, err)),
+			attribute.Bool("nwsl.qualification.recalculated", recalculated),
+			attribute.String("nwsl.qualification.outcome", calculationOutcome(recalculated, err)),
 		)
 		if err != nil {
 			telemetry.MarkError(span, err)
@@ -269,11 +269,11 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		return telemetry.RecordWarningWithType(ctx, span, cause, "qualification.refresh", errorType)
 	}
 	span.SetAttributes(
-		attribute.Int("qualification.input_team_count", len(teams)),
-		attribute.Int("qualification.input_fixture_count", len(games)),
-		attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
-		attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
-		attribute.StringSlice("qualification.achievement_ids", achievementIDs(r.Rules.Achievements)),
+		attribute.Int("nwsl.qualification.input_team_count", len(teams)),
+		attribute.Int("nwsl.qualification.input_fixture_count", len(games)),
+		attribute.Int("nwsl.qualification.completed_fixture_count", completedFixtures(games)),
+		attribute.Int("nwsl.qualification.remaining_fixture_count", remainingFixtures(games)),
+		attribute.StringSlice("nwsl.qualification.achievement_ids", achievementIDs(r.Rules.Achievements)),
 	)
 	defer func() {
 		span.SetAttributes(calculation.attributes(statuses)...)
@@ -447,35 +447,35 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 
 func qualificationStatusProofAttributes(teamID string, achievement competition.Achievement, games []cache.Game) []attribute.KeyValue {
 	return []attribute.KeyValue{
-		attribute.String("qualification.team_id", teamID),
-		attribute.String("qualification.achievement_id", string(achievement.ID)),
-		attribute.Int("qualification.top_k", achievement.TopK),
-		attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
-		attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+		attribute.String("nwsl.qualification.team_id", teamID),
+		attribute.String("nwsl.qualification.achievement_id", string(achievement.ID)),
+		attribute.Int("nwsl.qualification.top_k", achievement.TopK),
+		attribute.Int("nwsl.qualification.completed_fixture_count", completedFixtures(games)),
+		attribute.Int("nwsl.qualification.remaining_fixture_count", remainingFixtures(games)),
 	}
 }
 
 func qualificationStatusProofResultAttributes(value clinching.AchievementResult) []attribute.KeyValue {
 	return []attribute.KeyValue{
-		attribute.String("qualification.status", string(value.Status)),
-		attribute.String("qualification.method", string(value.Method)),
-		attribute.Int("qualification.reduced_team_count", value.Diagnostics.ReducedTeams),
-		attribute.Int("qualification.reduced_fixture_count", value.Diagnostics.ReducedFixtures),
-		attribute.Int("qualification.connected_component_count", value.Diagnostics.ConnectedComponents),
-		attribute.Int("qualification.subset_probe_count", value.Diagnostics.SubsetProbes),
-		attribute.Int("qualification.visited_state_count", value.Diagnostics.VisitedStates),
-		attribute.Int("qualification.memo_hit_count", value.Diagnostics.MemoHits),
-		attribute.Int("qualification.prune_count", value.Diagnostics.TotalPrunes),
+		attribute.String("nwsl.qualification.status", string(value.Status)),
+		attribute.String("nwsl.qualification.method", string(value.Method)),
+		attribute.Int("nwsl.qualification.reduced_team_count", value.Diagnostics.ReducedTeams),
+		attribute.Int("nwsl.qualification.reduced_fixture_count", value.Diagnostics.ReducedFixtures),
+		attribute.Int("nwsl.qualification.connected_component_count", value.Diagnostics.ConnectedComponents),
+		attribute.Int("nwsl.qualification.subset_probe_count", value.Diagnostics.SubsetProbes),
+		attribute.Int("nwsl.qualification.visited_state_count", value.Diagnostics.VisitedStates),
+		attribute.Int("nwsl.qualification.memo_hit_count", value.Diagnostics.MemoHits),
+		attribute.Int("nwsl.qualification.prune_count", value.Diagnostics.TotalPrunes),
 	}
 }
 
 func qualificationNoHelpAttributes(teamID string, achievements []competition.Achievement, games []cache.Game) []attribute.KeyValue {
 	return []attribute.KeyValue{
-		attribute.String("qualification.team_id", teamID),
-		attribute.StringSlice("qualification.achievement_ids", achievementIDs(achievements)),
-		attribute.Int("qualification.achievement_count", len(achievements)),
-		attribute.Int("qualification.completed_fixture_count", completedFixtures(games)),
-		attribute.Int("qualification.remaining_fixture_count", remainingFixtures(games)),
+		attribute.String("nwsl.qualification.team_id", teamID),
+		attribute.StringSlice("nwsl.qualification.achievement_ids", achievementIDs(achievements)),
+		attribute.Int("nwsl.qualification.achievement_count", len(achievements)),
+		attribute.Int("nwsl.qualification.completed_fixture_count", completedFixtures(games)),
+		attribute.Int("nwsl.qualification.remaining_fixture_count", remainingFixtures(games)),
 	}
 }
 

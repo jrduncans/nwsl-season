@@ -107,10 +107,10 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	ctx, span := telemetry.Tracer().Start(ctx, "sync.run",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", options.Season),
-			attribute.String("sync.stage", options.Stage),
-			attribute.Bool("sync.forced", options.Force),
-			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
+			attribute.String("nwsl.season", options.Season),
+			attribute.String("nwsl.stage", options.Stage),
+			attribute.Bool("nwsl.sync.forced", options.Force),
+			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
 	recordRunException := func(cause error, errorType string) error {
@@ -121,9 +121,9 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		if err != nil {
 			if errors.Is(err, cache.ErrSyncInProgress) {
 				span.SetAttributes(
-					attribute.Bool("error.expected", true),
-					attribute.Bool("sync.skipped", true),
-					attribute.String("sync.outcome", "conflict"),
+					attribute.Bool("nwsl.error.expected", true),
+					attribute.Bool("nwsl.sync.skipped", true),
+					attribute.String("nwsl.sync.outcome", "conflict"),
 				)
 			} else {
 				telemetry.MarkError(span, err)
@@ -178,7 +178,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	fetchCtx, fetchSpan := telemetry.Tracer().Start(ctx, "sync.fetch_asa",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.Bool("sync.xg_requested", hasXGClient && hasXGCache),
+			attribute.Bool("nwsl.sync.xg_requested", hasXGClient && hasXGCache),
 		),
 	)
 	data := s.fetchASAData(fetchCtx, options, xgClient, hasXGClient && hasXGCache)
@@ -186,9 +186,9 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	data.gamesErr = telemetry.ClassifyError(data.gamesErr, telemetry.ErrorTypeUpstreamFailure)
 	data.xgErr = telemetry.ClassifyError(data.xgErr, telemetry.ErrorTypeUpstreamFailure)
 	fetchSpan.SetAttributes(
-		attribute.Int("sync.teams_fetched", len(data.teams)),
-		attribute.Int("sync.games_fetched", len(data.games)),
-		attribute.Int("sync.xg_rows_fetched", len(data.xg)),
+		attribute.Int("nwsl.sync.teams_fetched", len(data.teams)),
+		attribute.Int("nwsl.sync.games_fetched", len(data.games)),
+		attribute.Int("nwsl.sync.xg_rows_fetched", len(data.xg)),
 	)
 	if fetchErr := errors.Join(data.teamsErr, data.gamesErr); fetchErr != nil {
 		telemetry.RecordErrorWithCode(fetchCtx, fetchSpan, fetchErr, "sync.fetch_asa")
@@ -218,11 +218,11 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	replaceCtx, replaceSpan := telemetry.Tracer().Start(ctx, "cache.season.replace",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("cache.name", "season"),
-			attribute.String("sync.season", options.Season),
-			attribute.String("sync.stage", options.Stage),
-			attribute.Int("sync.team_count", len(cacheTeams)),
-			attribute.Int("sync.fixture_count", len(cacheGames)),
+			attribute.String("nwsl.cache.name", "season"),
+			attribute.String("nwsl.season", options.Season),
+			attribute.String("nwsl.stage", options.Stage),
+			attribute.Int("nwsl.sync.team_count", len(cacheTeams)),
+			attribute.Int("nwsl.sync.fixture_count", len(cacheGames)),
 		),
 	)
 	run, err = s.Store.ReplaceSeason(replaceCtx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
@@ -299,10 +299,10 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 	ctx, span := telemetry.Tracer().Start(ctx, "sync.recalculate",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", options.Season),
-			attribute.String("sync.stage", options.Stage),
-			attribute.Bool("sync.forced", options.Force),
-			attribute.String("sync.trigger", syncTrigger(options.Trigger)),
+			attribute.String("nwsl.season", options.Season),
+			attribute.String("nwsl.stage", options.Stage),
+			attribute.Bool("nwsl.sync.forced", options.Force),
+			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
 		),
 	)
 	recordRecalculationException := func(cause error, errorType string) error {
@@ -342,18 +342,18 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 
 func recalculateRunAttributes(run cache.SyncRun, err error) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.String("sync.recalculate.outcome", recalculateOutcome(run, err)),
-		attribute.Bool("sync.partial_failure", run.QualificationError != "" || run.ScenarioError != ""),
-		attribute.Bool("sync.qualification_recalculated", run.QualificationRecalculated),
-		attribute.Bool("sync.scenario_recalculated", run.ScenarioRecalculated),
-		attribute.String("sync.qualification.outcome", recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err)),
-		attribute.String("sync.scenario.outcome", recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err)),
+		attribute.String("nwsl.sync.recalculate.outcome", recalculateOutcome(run, err)),
+		attribute.Bool("nwsl.sync.partial_failure", run.QualificationError != "" || run.ScenarioError != ""),
+		attribute.Bool("nwsl.sync.qualification_recalculated", run.QualificationRecalculated),
+		attribute.Bool("nwsl.sync.scenario_recalculated", run.ScenarioRecalculated),
+		attribute.String("nwsl.sync.qualification.outcome", recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err)),
+		attribute.String("nwsl.sync.scenario.outcome", recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err)),
 	}
 	if run.ID > 0 {
-		attributes = append(attributes, attribute.Int64("sync.source_run_id", run.ID))
+		attributes = append(attributes, attribute.Int64("nwsl.sync.source_run_id", run.ID))
 	}
 	if run.FixtureSnapshotID != "" {
-		attributes = append(attributes, attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID))
+		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
 	}
 	return attributes
 }
@@ -440,10 +440,10 @@ func (s Service) refreshXG(ctx context.Context, store xgStore, options RunOption
 	ctx, span := telemetry.Tracer().Start(ctx, "sync.xg.refresh",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
-			attribute.String("sync.season", options.Season),
-			attribute.String("sync.stage", options.Stage),
-			attribute.Int("sync.fixture_count", len(games)),
-			attribute.Int("sync.xg_rows_fetched", len(source)),
+			attribute.String("nwsl.season", options.Season),
+			attribute.String("nwsl.stage", options.Stage),
+			attribute.Int("nwsl.sync.fixture_count", len(games)),
+			attribute.Int("nwsl.sync.xg_rows_fetched", len(source)),
 		),
 	)
 	defer func() {
@@ -451,11 +451,11 @@ func (s Service) refreshXG(ctx context.Context, store xgStore, options RunOption
 		if run.XGError != "" {
 			outcome = "failure"
 		}
-		span.SetAttributes(attribute.String("sync.xg.outcome", outcome))
+		span.SetAttributes(attribute.String("nwsl.sync.xg.outcome", outcome))
 		if run.XGRun != nil {
 			span.SetAttributes(
-				attribute.Int64("sync.xg.available_games", run.XGRun.AvailableGames),
-				attribute.Int64("sync.xg.unavailable_games", run.XGRun.UnavailableGames),
+				attribute.Int64("nwsl.sync.xg.available_games", run.XGRun.AvailableGames),
+				attribute.Int64("nwsl.sync.xg.unavailable_games", run.XGRun.UnavailableGames),
 			)
 		}
 		span.End()
@@ -488,27 +488,27 @@ func syncTrigger(value string) string {
 
 func syncRunAttributes(run cache.SyncRun) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.String("sync.outcome", run.Outcome),
-		attribute.Bool("sync.skipped", run.Skipped),
-		attribute.Int("sync.teams_seen", run.TeamsUpserted),
-		attribute.Int("sync.games_seen", run.GamesSeen),
-		attribute.Int("sync.teams_inserted", run.TeamsInserted),
-		attribute.Int("sync.teams_updated", run.TeamsUpdated),
-		attribute.Int("sync.teams_unchanged", run.TeamsUnchanged),
-		attribute.Int("sync.games_inserted", run.GamesInserted),
-		attribute.Int("sync.games_updated", run.GamesUpdated),
-		attribute.Int("sync.games_unchanged", run.GamesUnchanged),
-		attribute.Int("sync.games_deleted", run.GamesDeleted),
-		attribute.String("cache.fixture_snapshot_id", run.FixtureSnapshotID),
-		attribute.Bool("sync.partial_failure", run.XGError != "" || run.QualificationError != "" || run.ScenarioError != ""),
-		attribute.String("sync.xg.outcome", syncComponentOutcome(run.XGRun != nil, run.XGError)),
-		attribute.String("sync.qualification.outcome", syncComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
-		attribute.String("sync.scenario.outcome", syncComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+		attribute.String("nwsl.sync.outcome", run.Outcome),
+		attribute.Bool("nwsl.sync.skipped", run.Skipped),
+		attribute.Int("nwsl.sync.teams_seen", run.TeamsUpserted),
+		attribute.Int("nwsl.sync.games_seen", run.GamesSeen),
+		attribute.Int("nwsl.sync.teams_inserted", run.TeamsInserted),
+		attribute.Int("nwsl.sync.teams_updated", run.TeamsUpdated),
+		attribute.Int("nwsl.sync.teams_unchanged", run.TeamsUnchanged),
+		attribute.Int("nwsl.sync.games_inserted", run.GamesInserted),
+		attribute.Int("nwsl.sync.games_updated", run.GamesUpdated),
+		attribute.Int("nwsl.sync.games_unchanged", run.GamesUnchanged),
+		attribute.Int("nwsl.sync.games_deleted", run.GamesDeleted),
+		attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID),
+		attribute.Bool("nwsl.sync.partial_failure", run.XGError != "" || run.QualificationError != "" || run.ScenarioError != ""),
+		attribute.String("nwsl.sync.xg.outcome", syncComponentOutcome(run.XGRun != nil, run.XGError)),
+		attribute.String("nwsl.sync.qualification.outcome", syncComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
+		attribute.String("nwsl.sync.scenario.outcome", syncComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
 	}
 	if run.XGRun != nil {
 		attributes = append(attributes,
-			attribute.Int64("sync.xg.available_games", run.XGRun.AvailableGames),
-			attribute.Int64("sync.xg.unavailable_games", run.XGRun.UnavailableGames),
+			attribute.Int64("nwsl.sync.xg.available_games", run.XGRun.AvailableGames),
+			attribute.Int64("nwsl.sync.xg.unavailable_games", run.XGRun.UnavailableGames),
 		)
 	}
 	return attributes

@@ -88,19 +88,19 @@ func TestRunRecordsDetailedTelemetry(t *testing.T) {
 
 	span := findTelemetrySpan(t, exporter.GetSpans(), "sync.run")
 	attributes := telemetryAttributes(span)
-	if got := attributes["sync.trigger"].AsString(); got != "cli" {
-		t.Errorf("sync.trigger = %q, want cli", got)
+	if got := attributes["nwsl.sync.trigger"].AsString(); got != "cli" {
+		t.Errorf("nwsl.sync.trigger = %q, want cli", got)
 	}
-	if got := attributes["sync.games_seen"].AsInt64(); got != 1 {
-		t.Errorf("sync.games_seen = %d, want 1", got)
+	if got := attributes["nwsl.sync.games_seen"].AsInt64(); got != 1 {
+		t.Errorf("nwsl.sync.games_seen = %d, want 1", got)
 	}
-	if got := attributes["sync.partial_failure"].AsBool(); got {
-		t.Error("sync.partial_failure = true, want false")
+	if got := attributes["nwsl.sync.partial_failure"].AsBool(); got {
+		t.Error("nwsl.sync.partial_failure = true, want false")
 	}
-	if got := attributes["cache.fixture_snapshot_id"].AsString(); got == "" {
-		t.Error("cache.fixture_snapshot_id is empty")
+	if got := attributes["nwsl.cache.fixture_snapshot_id"].AsString(); got == "" {
+		t.Error("nwsl.cache.fixture_snapshot_id is empty")
 	}
-	if got := telemetryAttributes(findTelemetrySpan(t, exporter.GetSpans(), "cache.season.replace"))["sync.games_inserted"].AsInt64(); got != 1 {
+	if got := telemetryAttributes(findTelemetrySpan(t, exporter.GetSpans(), "cache.season.replace"))["nwsl.sync.games_inserted"].AsInt64(); got != 1 {
 		t.Errorf("cache replacement sync.games_inserted = %d, want 1", got)
 	}
 }
@@ -188,10 +188,10 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 		t.Errorf("conflict span status = %v, want unset", conflictSpan.Status.Code)
 	}
 	conflictAttributes := telemetryAttributes(conflictSpan)
-	if !conflictAttributes["error.expected"].AsBool() {
+	if !conflictAttributes["nwsl.error.expected"].AsBool() {
 		t.Error("conflict span error.expected = false, want true")
 	}
-	if got := conflictAttributes["sync.outcome"].AsString(); got != "conflict" {
+	if got := conflictAttributes["nwsl.sync.outcome"].AsString(); got != "conflict" {
 		t.Errorf("conflict span sync.outcome = %q, want conflict", got)
 	}
 }

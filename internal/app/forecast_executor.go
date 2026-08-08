@@ -62,7 +62,7 @@ func newForecastExecutor(concurrency int, timeout time.Duration) *forecastExecut
 func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (results []simulation.Result, err error) {
 	trigger := forecastTrigger(ctx)
 	spanAttributes := forecastRunAttributes(tasks)
-	spanAttributes = append(spanAttributes, attribute.String("forecast.trigger", trigger))
+	spanAttributes = append(spanAttributes, attribute.String("nwsl.forecast.trigger", trigger))
 	ctx, span := telemetry.Tracer().Start(ctx, "forecast.run",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(spanAttributes...),
@@ -71,13 +71,13 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	outcome := "computed"
 	defer func() {
 		span.SetAttributes(
-			attribute.Int("forecast.cache_hits", cacheHits),
-			attribute.Int("forecast.calculation_count", len(tasks)-cacheHits),
-			attribute.String("forecast.outcome", outcome),
+			attribute.Int("nwsl.forecast.cache_hits", cacheHits),
+			attribute.Int("nwsl.forecast.calculation_count", len(tasks)-cacheHits),
+			attribute.String("nwsl.forecast.outcome", outcome),
 		)
 		if err != nil {
 			if errors.Is(err, errForecastOverloaded) {
-				span.SetAttributes(attribute.Bool("error.expected", true))
+				span.SetAttributes(attribute.Bool("nwsl.error.expected", true))
 			} else if trigger != "http" {
 				err = telemetry.RecordWarningWithType(ctx, span, err, "forecast.run", telemetry.ErrorTypeCalculationFailure)
 			} else {
@@ -147,8 +147,8 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 
 func forecastRunAttributes(tasks []forecastTask) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
-		attribute.Int("forecast.task_count", len(tasks)),
-		attribute.StringSlice("forecast.model_ids", forecastModelIDs(tasks)),
+		attribute.Int("nwsl.forecast.task_count", len(tasks)),
+		attribute.StringSlice("nwsl.forecast.model_ids", forecastModelIDs(tasks)),
 	}
 	if len(tasks) > 0 {
 		attributes = append(attributes, forecastSharedInputAttributes(tasks[0].request)...)
@@ -189,13 +189,13 @@ func forecastSharedInputAttributes(request simulation.Request) []attribute.KeyVa
 		}
 	}
 	return []attribute.KeyValue{
-		attribute.Int("forecast.iteration_count", request.Iterations),
-		attribute.Int("forecast.team_count", len(request.Teams)),
-		attribute.Int("forecast.fixture_count", len(request.Games)),
-		attribute.Int("forecast.completed_fixture_count", completed),
-		attribute.Int("forecast.remaining_fixture_count", remaining),
-		attribute.Int("forecast.fixed_assumption_count", len(request.Fixed)),
-		attribute.Int("forecast.xg_observation_count", len(request.XGoals)),
-		attribute.Int("forecast.playoff_place_count", request.PlayoffPlaces),
+		attribute.Int("nwsl.forecast.iteration_count", request.Iterations),
+		attribute.Int("nwsl.forecast.team_count", len(request.Teams)),
+		attribute.Int("nwsl.forecast.fixture_count", len(request.Games)),
+		attribute.Int("nwsl.forecast.completed_fixture_count", completed),
+		attribute.Int("nwsl.forecast.remaining_fixture_count", remaining),
+		attribute.Int("nwsl.forecast.fixed_assumption_count", len(request.Fixed)),
+		attribute.Int("nwsl.forecast.xg_observation_count", len(request.XGoals)),
+		attribute.Int("nwsl.forecast.playoff_place_count", request.PlayoffPlaces),
 	}
 }
