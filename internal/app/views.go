@@ -40,6 +40,7 @@ type seasonPage struct {
 	UpcomingFixtureGroups  []fixtureGroupView
 	FixtureTeams           []teamNameView
 	Remaining              int
+	HasFixtureOutlooks     bool
 }
 
 type navigationItem struct {
@@ -193,6 +194,15 @@ type fixtureView struct {
 	Completed  bool
 	Remaining  bool
 	Status     string
+	Outlook    *fixtureOutlookView
+}
+
+// fixtureOutlookView is the pre-match, three-way result distribution shown on
+// the fixtures page. Its shares remain numeric so the same values drive the
+// displayed percentages and the proportional bar.
+type fixtureOutlookView struct {
+	HomeWin, Draw, AwayWin             float64
+	HomeWinText, DrawText, AwayWinText string
 }
 
 type teamNameView struct {
@@ -518,6 +528,10 @@ func addScheduleIndicators(rows []tableRowView, strength strengthView) []tableRo
 }
 
 func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGroupView {
+	return fixtureGroupsWithOutlooks(data, location, nil)
+}
+
+func fixtureGroupsWithOutlooks(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView) []fixtureGroupView {
 	teams := make(map[string]teamNameView, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
@@ -552,6 +566,9 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 			Remaining: game.Status == remainingStatus,
 			Status:    game.Status,
 		}
+		if outlook, ok := outlooks[game.ASAID]; ok && view.Remaining {
+			view.Outlook = &outlook
+		}
 		if view.Completed && game.HomeScore.Valid && game.AwayScore.Valid {
 			view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
 			if xg, ok := xgoals[game.ASAID]; ok {
@@ -569,7 +586,11 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 // Result matchdays are shown newest first; unfinished matchdays remain in
 // kickoff order.
 func fixtureGroupsByStatus(data cache.SeasonData, location *time.Location) (results, upcoming []fixtureGroupView) {
-	for _, group := range fixtureGroups(data, location) {
+	return fixtureGroupsByStatusWithOutlooks(data, location, nil)
+}
+
+func fixtureGroupsByStatusWithOutlooks(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView) (results, upcoming []fixtureGroupView) {
+	for _, group := range fixtureGroupsWithOutlooks(data, location, outlooks) {
 		hasResult := false
 		hasUnfinished := false
 		for _, game := range group.Games {

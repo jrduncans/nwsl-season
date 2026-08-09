@@ -13,7 +13,7 @@ from the cached fixtures when a season page or CLI report is requested.
 
 ## Features
 
-- Season overview with results, upcoming fixtures, standings, goals, and xG.
+- Season overview with results, upcoming fixtures, xG Poisson match outlooks, standings, goals, and xG.
 - Per-game and total standings views for seasons with uneven schedules.
 - Remaining schedule difficulty with raw and home/away-adjusted comparisons.
 - Qualification proofs for the Shield, top-four seed, and playoff places.
