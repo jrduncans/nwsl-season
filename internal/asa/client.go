@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -28,11 +30,16 @@ const (
 )
 
 var errResponseBodyTooLarge = errors.New("response body exceeds size limit")
+var defaultRetryDelays = []time.Duration{250 * time.Millisecond, time.Second}
 
 // Client fetches data from the American Soccer Analysis API.
 type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
+	// RetryDelays controls the bounded retry sequence after transient transport
+	// and HTTP failures. Nil uses the production defaults; a non-nil empty slice
+	// disables retries.
+	RetryDelays []time.Duration
 }
 
 // GamesFilters contains the supported /nwsl/games query parameters.
@@ -118,27 +125,7 @@ func (c Client) Games(ctx context.Context, filters GamesFilters) ([]Game, error)
 		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%s: build request: %w", op, err)
-	}
-
-	response, err := c.httpClient().Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("%s: send request: %w", op, err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))
-	}
-
-	games, err := decodeGames(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%s: decode response: %w", op, err)
-	}
-
-	return games, nil
+	return fetchArray(ctx, c, endpoint, op, decodeGames)
 }
 
 // Teams fetches NWSL teams from ASA.
@@ -152,27 +139,7 @@ func (c Client) Teams(ctx context.Context, filters TeamsFilters) ([]Team, error)
 		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%s: build request: %w", op, err)
-	}
-
-	response, err := c.httpClient().Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("%s: send request: %w", op, err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))
-	}
-
-	teams, err := decodeTeams(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%s: decode response: %w", op, err)
-	}
-
-	return teams, nil
+	return fetchArray(ctx, c, endpoint, op, decodeTeams)
 }
 
 // GameXGoals fetches ASA's team-model game expected-goals observations.
@@ -185,23 +152,82 @@ func (c Client) GameXGoals(ctx context.Context, filters XGoalsFilters) ([]GameXG
 	if err != nil {
 		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	return fetchArray(ctx, c, endpoint, op, decodeXGoals)
+}
+
+func fetchArray[T any](ctx context.Context, c Client, endpoint, op string, decode func(io.Reader) ([]T, error)) ([]T, error) {
+	request, err := retryablehttp.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%s: build request: %w", op, err)
 	}
-	response, err := c.httpClient().Do(request)
+
+	response, err := c.retryClient().Do(request)
 	if err != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
 		return nil, fmt.Errorf("%s: send request: %w", op, err)
 	}
 	defer response.Body.Close()
+
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))
 	}
-	values, err := decodeXGoals(response.Body)
+
+	values, err := decode(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode response: %w", op, err)
 	}
 	return values, nil
+}
+
+func (c Client) retryDelays() []time.Duration {
+	if c.RetryDelays != nil {
+		return c.RetryDelays
+	}
+	return defaultRetryDelays
+}
+
+func (c Client) retryClient() *retryablehttp.Client {
+	delays := c.retryDelays()
+	client := retryablehttp.NewClient()
+	// The instrumented stdlib client sits inside retryablehttp so each physical
+	// attempt remains a separate downstream HTTP span.
+	client.HTTPClient = c.httpClient()
+	client.Logger = nil
+	client.RetryMax = len(delays)
+	client.CheckRetry = asaRetryPolicy
+	client.Backoff = configuredBackoff(delays)
+	client.ErrorHandler = retryablehttp.PassthroughErrorHandler
+	return client
+}
+
+func asaRetryPolicy(ctx context.Context, response *http.Response, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if response != nil && (response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooEarly) {
+		return true, nil
+	}
+	return retryablehttp.DefaultRetryPolicy(ctx, response, err)
+}
+
+func configuredBackoff(delays []time.Duration) retryablehttp.Backoff {
+	return func(_, _ time.Duration, attempt int, response *http.Response) time.Duration {
+		if len(delays) == 0 {
+			return 0
+		}
+		if attempt >= len(delays) {
+			attempt = len(delays) - 1
+		}
+		delay := delays[attempt]
+		// Keep the configured floor, but honor a longer Retry-After on the
+		// rate-limit and service-unavailable responses supported by the library.
+		if retryAfter := retryablehttp.DefaultBackoff(delay, delay, 0, response); retryAfter > delay {
+			return retryAfter
+		}
+		return delay
+	}
 }
 
 func decodeGames(body io.Reader) ([]Game, error) {

@@ -14,7 +14,6 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_SYNC_STAGE", "")
 	t.Setenv("NWSL_SYNC_CHECK_INTERVAL", "")
 	t.Setenv("NWSL_SYNC_COMPLETION_GRACE", "")
-	t.Setenv("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", "")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "")
 	t.Setenv("NWSL_QUALIFICATION_BUDGET", "")
 	t.Setenv("NWSL_SCENARIO_BUDGET", "")
@@ -39,7 +38,7 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	if got.SyncSeason != defaultSyncSeason || got.SyncStage != defaultSyncStage {
 		t.Errorf("sync season/stage = %q/%q, want %q/%q", got.SyncSeason, got.SyncStage, defaultSyncSeason, defaultSyncStage)
 	}
-	if got.SyncCheckInterval != defaultSyncCheckInterval || got.SyncCompletionGrace != defaultSyncCompletionGrace || got.SyncMinAttemptInterval != defaultSyncMinAttemptInterval || got.SyncTimeout != defaultSyncTimeout {
+	if got.SyncCheckInterval != defaultSyncCheckInterval || got.SyncCompletionGrace != defaultSyncCompletionGrace || got.SyncTimeout != defaultSyncTimeout {
 		t.Errorf("sync durations = %+v, want defaults", got)
 	}
 	if got.ForecastConcurrency != 4 || got.ForecastTimeout != defaultForecastTimeout {
@@ -63,7 +62,6 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	t.Setenv("NWSL_SYNC_STAGE", "Challenge Cup")
 	t.Setenv("NWSL_SYNC_CHECK_INTERVAL", "7m")
 	t.Setenv("NWSL_SYNC_COMPLETION_GRACE", "4h")
-	t.Setenv("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", "45m")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "25s")
 	t.Setenv("NWSL_QUALIFICATION_BUDGET", "12s")
 	t.Setenv("NWSL_SCENARIO_BUDGET", "75s")
@@ -85,7 +83,7 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	if got.DBPath != "testdata/nwsl-season.sqlite" {
 		t.Errorf("DBPath = %q, want %q", got.DBPath, "testdata/nwsl-season.sqlite")
 	}
-	if got.SyncSeason != "2027" || got.SyncStage != "Challenge Cup" || got.SyncCheckInterval.String() != "7m0s" || got.SyncCompletionGrace.String() != "4h0m0s" || got.SyncMinAttemptInterval.String() != "45m0s" || got.SyncTimeout.String() != "25s" {
+	if got.SyncSeason != "2027" || got.SyncStage != "Challenge Cup" || got.SyncCheckInterval.String() != "7m0s" || got.SyncCompletionGrace.String() != "4h0m0s" || got.SyncTimeout.String() != "25s" {
 		t.Errorf("sync overrides = %+v, want configured values", got)
 	}
 	if got.ForecastConcurrency != 3 || got.ForecastTimeout != 40*time.Second {

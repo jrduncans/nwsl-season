@@ -54,7 +54,7 @@ from drifting apart. Avoid refreshing during normal page requests.
 
 The Phase 8 scheduler uses cached kickoff times to make network requests only
 when a fixture could plausibly have completed and the cache is not yet final.
-It rate-limits every attempt, including failures. See
+Eligible retries follow the scheduler cadence. See
 [`08-operations.md`](08-operations.md) for the full policy.
 
 ## Concurrency and resilience

@@ -89,7 +89,6 @@ type SyncRun struct {
 	GamesInserted      int
 	GamesUpdated       int
 	GamesUnchanged     int
-	Skipped            bool
 	FixtureSnapshotID  string
 	QualificationError string
 	ScenarioError      string

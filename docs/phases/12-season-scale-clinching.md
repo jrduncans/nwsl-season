@@ -813,7 +813,7 @@ Add tests in the same slice as their production code. The minimum matrix is:
 - Qualification runs only after fixture commit succeeds.
 - Qualification failure leaves fixture success and xG behavior unchanged and
   is observable as a warning.
-- Skipped/rate-limited fixture refreshes do not recalculate an existing snapshot.
+- No-op fixture checks do not recalculate an existing snapshot.
 
 `internal/app/handler_test.go`
 

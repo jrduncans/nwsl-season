@@ -102,9 +102,8 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		ForecastTimeout:     cfg.ForecastTimeout,
 	})
 	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger}, scheduler.Config{
-		Season: cfg.SyncSeason, Stage: cfg.SyncStage, CheckInterval: cfg.SyncCheckInterval,
-		CompletionGrace: cfg.SyncCompletionGrace, MinimumAttemptInterval: cfg.SyncMinAttemptInterval,
-		Timeout: cfg.SyncTimeout,
+		Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: rules.ExpectedTeams, GamesPerTeam: rules.GamesPerTeam, CheckInterval: cfg.SyncCheckInterval,
+		CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout,
 	}, logger)
 	if err != nil {
 		return fmt.Errorf("create refresh scheduler: %w", err)
@@ -206,7 +205,7 @@ func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOption
 		setSchedulerForecastWarmOutcome(ctx, "not_run")
 		return run, err
 	}
-	if run.Skipped || !forecastInputsChanged(run) {
+	if !forecastInputsChanged(run) {
 		setSchedulerForecastWarmOutcome(ctx, "not_needed")
 		return run, err
 	}

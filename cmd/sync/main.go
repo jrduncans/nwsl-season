@@ -40,9 +40,8 @@ func run() (exitCode int) {
 	stage := flag.String("stage", cfg.SyncStage, "NWSL competition stage to fetch")
 	baseURL := flag.String("base-url", asa.DefaultBaseURL, "ASA API base URL")
 	dbPath := flag.String("db", cfg.DBPath, "SQLite cache database path")
-	minInterval := flag.Duration("min-interval", cfg.SyncMinAttemptInterval, "skip if the same season and stage was attempted within this duration")
 	recalculate := flag.Bool("recalculate", false, "recalculate qualification and clinching scenarios from cached fixtures without syncing ASA data")
-	force := flag.Bool("force", false, "bypass the sync interval and force all clinching calculations")
+	force := flag.Bool("force", false, "force all clinching calculations after synchronizing source data")
 	requireXG := flag.Bool("require-xg", false, "exit nonzero when fixtures sync but xG refresh fails")
 	pruneHistoryBefore := flag.String("prune-history-before", "", "delete superseded run history finished before this RFC 3339 timestamp, then exit")
 	flag.Parse()
@@ -98,7 +97,9 @@ func run() (exitCode int) {
 		ScenarioTimeout:      cfg.ScenarioBudget,
 		HistoryRetention:     cfg.HistoryRetention,
 	}
+	expectedTeams, gamesPerTeam := 0, 0
 	if rules, ok := competition.ForSeason(*season, *stage); ok {
+		expectedTeams, gamesPerTeam = rules.ExpectedTeams, rules.GamesPerTeam
 		service.Qualification = qualification.Refresher{Store: db, Rules: rules, Budget: cfg.QualificationBudget, Progress: operations.QualificationTelemetry(logger)}
 		service.Scenarios = scenariorefresh.Refresher{Store: db, Rules: rules, Budget: cfg.ScenarioBudget, Progress: operations.ScenarioTelemetry(logger)}
 	} else {
@@ -131,22 +132,18 @@ func run() (exitCode int) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.SyncTimeout)
 	defer cancel()
 	run, err := service.Run(ctx, syncer.RunOptions{
-		Season:                 *season,
-		Stage:                  *stage,
-		Trigger:                "cli",
-		MinimumAttemptInterval: *minInterval,
-		Force:                  *force,
+		Season:        *season,
+		Stage:         *stage,
+		ExpectedTeams: expectedTeams,
+		GamesPerTeam:  gamesPerTeam,
+		Trigger:       "cli",
+		Force:         *force,
 	})
 	if err != nil {
 		logger.Error("sync ASA cache", "error", err)
 		return 1
 	}
 
-	if run.Skipped {
-		fmt.Printf("Skipped sync for %s %s because the cache was attempted recently.\n", *season, *stage)
-		fmt.Printf("Last attempt: %s (%s).\n", run.FinishedAt.Format(time.RFC3339), run.Outcome)
-		return 0
-	}
 	fmt.Printf("Synced %d games and %d teams for %s %s into %s.\n", run.GamesUpserted, run.TeamsUpserted, *season, *stage, *dbPath)
 	fmt.Printf("Deleted %d stale games. Last successful sync: %s.\n", run.GamesDeleted, run.FinishedAt.Format(time.RFC3339))
 	if run.XGRun != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -82,7 +83,9 @@ func TestRunRecordsDetailedTelemetry(t *testing.T) {
 		teams: testTeams(),
 		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
 	}, Store: newTestDB(t)}
-	if _, err := service.Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season", Trigger: "cli"}); err != nil {
+	if _, err := service.Run(context.Background(), RunOptions{
+		Season: "2024", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 1, Trigger: "cli",
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -93,6 +96,15 @@ func TestRunRecordsDetailedTelemetry(t *testing.T) {
 	}
 	if got := attributes["nwsl.sync.games_seen"].AsInt64(); got != 1 {
 		t.Errorf("nwsl.sync.games_seen = %d, want 1", got)
+	}
+	if got := attributes["nwsl.sync.expected_fixture_count"].AsInt64(); got != 1 {
+		t.Errorf("nwsl.sync.expected_fixture_count = %d, want 1", got)
+	}
+	if got := attributes["nwsl.sync.reconciled_fixture_count"].AsInt64(); got != 1 {
+		t.Errorf("nwsl.sync.reconciled_fixture_count = %d, want 1", got)
+	}
+	if got := attributes["nwsl.sync.inventory_retry_outcome"].AsString(); got != "not_needed" {
+		t.Errorf("nwsl.sync.inventory_retry_outcome = %q, want not_needed", got)
 	}
 	if got := attributes["nwsl.sync.partial_failure"].AsBool(); got {
 		t.Error("nwsl.sync.partial_failure = true, want false")
@@ -483,7 +495,7 @@ func TestRecalculateUsesCachedFixturesWithoutCallingASA(t *testing.T) {
 	}
 }
 
-func TestRunSkipsRecentSuccessfulSync(t *testing.T) {
+func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 
@@ -502,27 +514,20 @@ func TestRunSkipsRecentSuccessfulSync(t *testing.T) {
 	}
 
 	client.games[0] = testGame("game-1", "FullTime", ptr(3), ptr(0))
-	second, err := service.Run(ctx, RunOptions{
-		Season:                 "2024",
-		Stage:                  "Regular Season",
-		MinimumAttemptInterval: time.Hour,
-	})
+	second, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.ID != first.ID {
-		t.Fatalf("second run ID = %d, want skipped run to return previous ID %d", second.ID, first.ID)
+	if second.ID == first.ID {
+		t.Fatalf("second run ID = %d, want a new sync after %d", second.ID, first.ID)
 	}
-	if !second.Skipped {
-		t.Fatal("second run was not marked skipped")
-	}
-	if client.teamsCalls != 1 || client.gamesCalls != 1 {
-		t.Fatalf("ASA calls after skipped run = teams %d games %d, want still 1 and 1", client.teamsCalls, client.gamesCalls)
+	if client.teamsCalls != 2 || client.gamesCalls != 2 {
+		t.Fatalf("ASA calls after second run = teams %d games %d, want 2 and 2", client.teamsCalls, client.gamesCalls)
 	}
 
 	game := cachedGame(t, ctx, db, "2024", "Regular Season", "game-1")
-	if !game.HomeScore.Valid || game.HomeScore.Int64 != 1 {
-		t.Fatalf("home score = %+v, want cached score preserved", game.HomeScore)
+	if !game.HomeScore.Valid || game.HomeScore.Int64 != 3 {
+		t.Fatalf("home score = %+v, want refreshed score 3", game.HomeScore)
 	}
 }
 
@@ -554,6 +559,142 @@ func TestRunHardDeletesMissingGamesAfterSuccessfulFetch(t *testing.T) {
 	count := cachedGameCount(t, ctx, db, "2024", "Regular Season")
 	if count != 1 {
 		t.Fatalf("cached game count = %d, want 1", count)
+	}
+}
+
+func TestRunRejectsIncompleteKnownScheduleAndPreservesExistingRows(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{
+			testGame("game-1", "FullTime", ptr(1), ptr(0)),
+			testGame("game-2", "PreMatch", nil, nil),
+		},
+	}
+	service := Service{ASA: &client, Store: db}
+	options := RunOptions{Season: "2024", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 2}
+
+	if _, err := service.Run(ctx, options); err != nil {
+		t.Fatal(err)
+	}
+	client.games = []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}
+	if _, err := service.Run(ctx, options); err == nil {
+		t.Fatal("Run() error = nil, want incomplete schedule validation error")
+	}
+	if client.gamesCalls != 3 {
+		t.Fatalf("season game calls = %d, want initial sync plus two calls for the incomplete sync", client.gamesCalls)
+	}
+
+	if count := cachedGameCount(t, ctx, db, "2024", "Regular Season"); count != 2 {
+		t.Fatalf("cached game count = %d, want original 2-game schedule preserved", count)
+	}
+	status, err := db.Status(ctx, "2024", "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LastAttempt == nil || status.LastAttempt.Outcome != "failure" {
+		t.Fatalf("last attempt = %+v, want failed validation attempt", status.LastAttempt)
+	}
+}
+
+func TestRunRetriesIncompleteKnownScheduleBeforeRejectingIt(t *testing.T) {
+	ctx := context.Background()
+	client := fakeASA{
+		teams: testTeams(),
+		gameResponses: [][]asa.Game{
+			{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+			{
+				testGame("game-1", "FullTime", ptr(1), ptr(0)),
+				testGame("game-2", "PreMatch", nil, nil),
+			},
+		},
+	}
+	db := newTestDB(t)
+	service := Service{ASA: &client, Store: db}
+
+	run, err := service.Run(ctx, RunOptions{
+		Season: "2024", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 2,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want retry to recover complete inventory", err)
+	}
+	if client.gamesCalls != 2 {
+		t.Fatalf("season game calls = %d, want initial request and one inventory retry", client.gamesCalls)
+	}
+	if run.GamesSeen != 2 || cachedGameCount(t, ctx, db, "2024", "Regular Season") != 2 {
+		t.Fatalf("sync run = %+v, want recovered two-game schedule", run)
+	}
+}
+
+func TestRunReconcilesTargetFixtureAheadOfSeasonCollection(t *testing.T) {
+	ctx := context.Background()
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "PreMatch", nil, nil)},
+		targetGames: map[string][]asa.Game{
+			"game-1": {testGame("game-1", "FullTime", ptr(2), ptr(1))},
+		},
+	}
+	service := Service{ASA: &client, Store: newTestDB(t)}
+
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", TargetFixtureID: "game-1"}); err != nil {
+		t.Fatal(err)
+	}
+	game := cachedGame(t, ctx, service.Store.(*cache.DB), "2024", "Regular Season", "game-1")
+	if game.Status != "FullTime" || !game.HomeScore.Valid || game.HomeScore.Int64 != 2 || !game.AwayScore.Valid || game.AwayScore.Int64 != 1 {
+		t.Fatalf("cached target game = %+v, want targeted final result", game)
+	}
+	if calls := client.targetGameCalls("game-1"); calls != 1 {
+		t.Fatalf("targeted game calls = %d, want 1", calls)
+	}
+}
+
+func TestRunUsesTargetFixtureToCompleteLaggingSeasonCollection(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{
+			testGame("game-2", "PreMatch", nil, nil),
+		},
+		targetGames: map[string][]asa.Game{
+			"game-1": {testGame("game-1", "FullTime", ptr(1), ptr(1))},
+		},
+	}
+	service := Service{ASA: &client, Store: db}
+
+	run, err := service.Run(ctx, RunOptions{
+		Season: "2024", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 2, TargetFixtureID: "game-1",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want targeted collection repair", err)
+	}
+	if run.GamesSeen != 2 || run.GamesInserted != 2 {
+		t.Fatalf("sync run = %+v, want two repaired fixtures", run)
+	}
+	if count := cachedGameCount(t, ctx, db, "2024", "Regular Season"); count != 2 {
+		t.Fatalf("cached game count = %d, want repaired two-game schedule", count)
+	}
+}
+
+func TestRunIgnoresFailedTargetedFixtureLookup(t *testing.T) {
+	ctx := context.Background()
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "PreMatch", nil, nil)},
+		targetErrors: map[string]error{
+			"game-1": errors.New("target endpoint unavailable"),
+		},
+	}
+	service := Service{ASA: &client, Store: newTestDB(t)}
+
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", TargetFixtureID: "game-1"}); err != nil {
+		t.Fatalf("Run() error = %v, want season collection fallback", err)
+	}
+	game := cachedGame(t, ctx, service.Store.(*cache.DB), "2024", "Regular Season", "game-1")
+	if game.Status != "PreMatch" {
+		t.Fatalf("cached target game status = %q, want season collection value", game.Status)
 	}
 }
 
@@ -656,7 +797,7 @@ func TestRunRecordsFetchFailureAndPreservesExistingRows(t *testing.T) {
 	}
 }
 
-func TestRunRateLimitsFailedAttemptAndForceBypassesIt(t *testing.T) {
+func TestRunAllowsSyncAfterFailedAttempt(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	client := fakeASA{teams: testTeams(), games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}}
@@ -671,20 +812,12 @@ func TestRunRateLimitsFailedAttemptAndForceBypassesIt(t *testing.T) {
 	}
 
 	client.teamsErr = nil
-	skipped, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", MinimumAttemptInterval: time.Hour})
+	run, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !skipped.Skipped || skipped.Outcome != "failure" || client.teamsCalls != 1 {
-		t.Fatalf("rate-limited run = %+v; teams calls = %d, want skipped failed attempt and 1 call", skipped, client.teamsCalls)
-	}
-
-	forced, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", MinimumAttemptInterval: time.Hour, Force: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if forced.Skipped || client.teamsCalls != 2 || client.gamesCalls != 2 {
-		t.Fatalf("forced run = %+v; calls teams=%d games=%d, want completed refresh", forced, client.teamsCalls, client.gamesCalls)
+	if run.Outcome != "success" || client.teamsCalls != 2 || client.gamesCalls != 2 {
+		t.Fatalf("retry run = %+v; calls teams=%d games=%d, want successful second attempt", run, client.teamsCalls, client.gamesCalls)
 	}
 }
 
@@ -727,13 +860,18 @@ func newTestDB(t *testing.T) *cache.DB {
 }
 
 type fakeASA struct {
-	teams        []asa.Team
-	teamsErr     error
-	teamsCalls   int
-	games        []asa.Game
-	gamesErr     error
-	gamesCalls   int
-	gamesFilters asa.GamesFilters
+	mu            sync.Mutex
+	teams         []asa.Team
+	teamsErr      error
+	teamsCalls    int
+	games         []asa.Game
+	gameResponses [][]asa.Game
+	gamesErr      error
+	gamesCalls    int
+	gamesFilters  asa.GamesFilters
+	targetGames   map[string][]asa.Game
+	targetErrors  map[string]error
+	targetCalls   map[string]int
 }
 
 type historyASA struct{ calls map[string]int }
@@ -810,6 +948,8 @@ func (r orderedRefresher) Refresh(_ context.Context, _ cache.SyncRun, _ []cache.
 }
 
 func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.teamsCalls++
 	if f.teamsErr != nil {
 		return nil, f.teamsErr
@@ -818,12 +958,35 @@ func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
 }
 
 func (f *fakeASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.gamesCalls++
 	f.gamesFilters = filters
+	if filters.GameID != "" {
+		if f.targetCalls == nil {
+			f.targetCalls = make(map[string]int)
+		}
+		f.targetCalls[filters.GameID]++
+		if err := f.targetErrors[filters.GameID]; err != nil {
+			return nil, err
+		}
+		return f.targetGames[filters.GameID], nil
+	}
 	if f.gamesErr != nil {
 		return nil, f.gamesErr
 	}
+	if len(f.gameResponses) > 0 {
+		games := f.gameResponses[0]
+		f.gameResponses = f.gameResponses[1:]
+		return games, nil
+	}
 	return f.games, nil
+}
+
+func (f *fakeASA) targetGameCalls(id string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.targetCalls[id]
 }
 
 func testTeams() []asa.Team {

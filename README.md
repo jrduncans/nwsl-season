@@ -23,8 +23,11 @@ from the cached fixtures when a season page or CLI report is requested.
 - Health and cache-status endpoints for operators.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240
-fixtures, and eight playoff places. Qualification indicators are suppressed
-when the cached fixture inventory is incomplete.
+fixtures, and eight playoff places. A refresh rejects an incomplete or uneven
+known fixture inventory, preserving the prior complete cache. For an overdue
+fixture, the scheduler also checks ASA's game-specific endpoint so a result can
+arrive before the season collection catches up. Qualification indicators are
+suppressed when the cached fixture inventory is incomplete.
 
 ## Quick start
 
@@ -63,7 +66,6 @@ Useful endpoints:
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the scheduler checks cache freshness. |
 | `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before an unfinished fixture is stale. |
-| `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA attempts, including failures. |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Maximum duration of one ASA refresh and cache transaction. |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum time for one qualification calculation batch. |
 | `NWSL_SCENARIO_BUDGET` | `2m` | Maximum time for one clinching-scenario discovery batch; it runs independently after fixture sync and qualification. |
@@ -86,7 +88,7 @@ the process-local result cache, so the initial request for each model can be
 served without running a simulation. A missing or unusable fixture cache only
 skips this warm-up; it does not prevent the server from starting. Later
 successful fixture or xG cache changes refresh those baseline results; no-op
-and rate-limited checks leave the warmed cache intact.
+checks leave the warmed cache intact.
 
 ## Observability
 
@@ -206,9 +208,9 @@ Refresh the local ASA cache:
 go run ./cmd/sync -season 2026
 ```
 
-Use `-force` to bypass the minimum-attempt interval and rebuild qualification
-and scenario results. Use `-require-xg` when an xG refresh failure should make
-the command exit nonzero.
+Use `-force` to rebuild qualification and scenario results even when completed
+derived-data batches already exist. Use `-require-xg` when an xG refresh
+failure should make the command exit nonzero.
 
 Recalculate qualification and clinching scenarios from the last successful
 fixture snapshot without contacting ASA:
