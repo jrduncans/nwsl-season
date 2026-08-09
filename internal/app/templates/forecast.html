@@ -54,8 +54,9 @@
     <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by top-4 chance. Expand a team’s finish distribution for its range of outcomes.</p></div>
     <p class="forecast-cutline"><strong>Playoff line:</strong> top {{.PlayoffPlaces}}</p>
   </div>
-  <div class="table-scroll">
-    <table class="forecast-table">
+  <p class="forecast-scroll-hint" id="forecast-scroll-hint">Swipe left on the table to see every column <span aria-hidden="true">→</span></p>
+  <div class="table-scroll forecast-table-scroll" tabindex="0" role="region" aria-label="Scrollable {{.Season}} regular-season forecast">
+    <table class="forecast-table" aria-describedby="forecast-scroll-hint">
       <caption>{{.Season}} regular-season forecast</caption>
       <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Top 4</th><th scope="col">Playoffs</th><th class="forecast-shield" scope="col">Shield</th></tr></thead>
       <tbody>{{range .Rows}}
