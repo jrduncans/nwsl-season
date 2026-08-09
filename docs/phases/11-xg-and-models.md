@@ -136,8 +136,8 @@ and raw payload.
 The command and scheduler may report fixture success plus an xG warning in the
 same run. `/cache/status` and forecast pages must show fixture and xG freshness
 separately. A completed game still marked xG-unavailable keeps the scheduler
-eligible for another rate-limited refresh, allowing publication lag to heal
-without harming fixture availability.
+eligible for another refresh on the next scheduler check, allowing publication
+lag to heal without harming fixture availability.
 
 ## Locked cache contract
 
@@ -736,7 +736,7 @@ Modify:
   preservation after failure, and fixture-success/xG-failure cases.
 - `internal/scheduler/scheduler.go`: retry while a completed fixture is
   xG-unavailable and log fixture and xG outcomes separately.
-- `internal/scheduler/scheduler_test.go`: eligibility and rate-limited retry.
+- `internal/scheduler/scheduler_test.go`: eligibility and scheduler retry cadence.
 - `cmd/sync/main.go`: print xG coverage/freshness and support `-require-xg`; with
   that flag, exit nonzero after a fixture-success/xG-failure result.
 - `cmd/server/main.go`: no new environment option; log independent xG warnings.

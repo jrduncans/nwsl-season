@@ -22,7 +22,7 @@ request unless a refresh is eligible. It must stop accepting new work during
 server shutdown and let an active refresh finish (up to its context deadline)
 before closing SQLite.
 
-## Eligibility and rate limits
+## Eligibility and request cadence
 
 A scheduled ASA refresh is eligible when one of the following is true:
 
@@ -30,6 +30,9 @@ A scheduled ASA refresh is eligible when one of the following is true:
 - A cached fixture has a valid kickoff at least two hours in the past and is
   not a `FullTime` result with both scores. The two-hour completion grace leaves
   room for ASA publication delay while reducing the wait for completed results.
+- The configured fixed schedule is incomplete or uneven. A 2026 regular-season
+  snapshot must contain all 240 fixtures and give each of the 16 teams 30
+  appearances.
 - The scheduler cannot determine whether the cache covers the current match
   window, for example because a known fixture has an invalid kickoff or an
   unsupported status.
@@ -48,19 +51,22 @@ configuration so production timing can be adjusted without a code change:
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage that the server may refresh automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the server inspects cached fixtures locally. |
 | `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before a non-final fixture can make a refresh eligible. |
-| `NWSL_SYNC_MIN_ATTEMPT_INTERVAL` | `30m` | Minimum time between ASA requests for the same season and stage, regardless of whether the previous attempt succeeded. |
 | `NWSL_SYNC_TIMEOUT` | `20s` | Bound on a single ASA refresh, including its database transaction. |
 
-The rate limit applies to failures too, so an ASA outage cannot create a request
-loop. Once an eligible fixture is returned as `FullTime` with both scores, it no
-longer causes refreshes. An in-process mutex and a short-lived SQLite lease keep
-manual and scheduled syncs from overlapping, including when the maintenance
-command runs in a separate process.
+An eligible cache may start one refresh on each five-minute scheduler check.
+Each ASA request uses a small bounded retry sequence for transient transport,
+`408`, `425`, `429`, and `5xx` failures. Once an eligible fixture is returned as
+`FullTime` with both scores, it no longer causes refreshes. An in-process mutex
+and a short-lived SQLite lease keep manual and scheduled syncs from overlapping,
+including when the maintenance command runs in a separate process.
 
 This policy relies on ASA returning scheduled fixtures before they are played.
-If that assumption proves false, record the observed behavior and extend the
-eligibility rule with a narrowly scoped schedule-discovery probe; do not turn
-ordinary page loads into polling.
+For an eligible overdue cached fixture, the sync also queries ASA's
+game-specific endpoint and uses it only when it is terminal or newer than the
+season collection's copy. This narrowly scoped reconciliation lets a
+game-specific result repair a lagging collection response without turning page
+loads into polling. A complete-season response that violates a configured
+fixture inventory is rejected before any cache rows are changed.
 
 ## Forced refresh for corrections
 
@@ -70,13 +76,13 @@ Provide an explicit `-force` mode on `cmd/sync`:
 go run ./cmd/sync -season 2026 -force
 ```
 
-It bypasses the scheduler/interval eligibility checks, performs the normal
-complete-season fetch and atomic replacement, and rebuilds qualification and
-scenario batches even if complete batches already exist for the resulting
-snapshot. It is intended for rare ASA corrections, algorithm changes, initial
-recovery, or diagnosis—not for routine operation. It must not delete the
-existing cache before a validated replacement is ready; a failed forced refresh
-leaves the last good snapshot intact.
+The command performs the normal complete-season fetch and atomic replacement
+without consulting scheduler eligibility. `-force` additionally rebuilds
+qualification and scenario batches even if complete batches already exist for
+the resulting snapshot. It is intended for rare ASA corrections, algorithm
+changes, initial recovery, or diagnosis—not for routine operation. It must not
+delete the existing cache before a validated replacement is ready; a failed
+forced refresh leaves the last good snapshot intact.
 
 Derived clinching data can also be recalculated without an ASA request or any
 mutation to synchronized fixture, team, xG, or sync-audit data:
@@ -103,9 +109,9 @@ Track and expose:
 - Which season and filters were requested.
 - A concise failure reason in logs and `/cache/status`.
 - Cache age on public pages.
-- Whether the scheduler decided the cache was eligible, skipped it as current,
-  or was rate-limited. These decisions belong in structured logs; successful and
-  failed network attempts continue to be recorded in `sync_runs`.
+- Whether the scheduler decided the cache was eligible or skipped it as current.
+  These decisions belong in structured logs; successful and failed network
+  attempts continue to be recorded in `sync_runs`.
 
 ## Deployment concerns
 
@@ -160,10 +166,10 @@ configuration are not part of this project.
 
 - The single server process automatically refreshes a missing cache and a
   current-season fixture that is plausibly complete but not final.
-- A complete known match window causes no ASA request, and both successful and
-  failed attempts obey the configured minimum attempt interval.
-- A documented forced refresh bypasses normal eligibility without exposing an
-  HTTP trigger or risking the last good cache.
+- A complete known match window causes no ASA request, while an eligible cache
+  can retry on the next five-minute scheduler check.
+- A documented maintenance refresh bypasses normal eligibility without exposing
+  an HTTP trigger or risking the last good cache.
 - Scheduled refresh failures and scheduler decisions are visible without
   corrupting the last good data.
 - Deployments preserve the SQLite file.

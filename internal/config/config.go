@@ -16,13 +16,12 @@ const (
 	defaultHTTPAddr = defaultHTTPHost + ":" + defaultHTTPPort
 	defaultDataDir  = "data"
 
-	defaultSyncSeason             = "2026"
-	defaultSyncStage              = "Regular Season"
-	defaultSyncCheckInterval      = 5 * time.Minute
-	defaultSyncCompletionGrace    = 2 * time.Hour
-	defaultSyncMinAttemptInterval = 30 * time.Minute
-	defaultSyncTimeout            = 20 * time.Second
-	defaultQualificationBudget    = 5 * time.Second
+	defaultSyncSeason          = "2026"
+	defaultSyncStage           = "Regular Season"
+	defaultSyncCheckInterval   = 5 * time.Minute
+	defaultSyncCompletionGrace = 2 * time.Hour
+	defaultSyncTimeout         = 20 * time.Second
+	defaultQualificationBudget = 5 * time.Second
 	// Scenario discovery runs after the fixture sync and qualification proof in
 	// its own context. Give a busy late-season slate enough time to find
 	// certified conditions without extending either of those calculations.
@@ -38,17 +37,16 @@ type Config struct {
 	DataDir  string
 	DBPath   string
 
-	SyncSeason             string
-	SyncStage              string
-	SyncCheckInterval      time.Duration
-	SyncCompletionGrace    time.Duration
-	SyncMinAttemptInterval time.Duration
-	SyncTimeout            time.Duration
-	QualificationBudget    time.Duration
-	ScenarioBudget         time.Duration
-	HistoryRetention       time.Duration
-	ForecastConcurrency    int
-	ForecastTimeout        time.Duration
+	SyncSeason          string
+	SyncStage           string
+	SyncCheckInterval   time.Duration
+	SyncCompletionGrace time.Duration
+	SyncTimeout         time.Duration
+	QualificationBudget time.Duration
+	ScenarioBudget      time.Duration
+	HistoryRetention    time.Duration
+	ForecastConcurrency int
+	ForecastTimeout     time.Duration
 }
 
 // FromEnvironment reads configuration, applying local-development defaults.
@@ -59,10 +57,6 @@ func FromEnvironment() (Config, error) {
 		return Config{}, err
 	}
 	completionGrace, err := durationFromEnvironment("NWSL_SYNC_COMPLETION_GRACE", defaultSyncCompletionGrace)
-	if err != nil {
-		return Config{}, err
-	}
-	minimumAttemptInterval, err := durationFromEnvironment("NWSL_SYNC_MIN_ATTEMPT_INTERVAL", defaultSyncMinAttemptInterval)
 	if err != nil {
 		return Config{}, err
 	}
@@ -96,17 +90,16 @@ func FromEnvironment() (Config, error) {
 		DataDir:  dataDir,
 		DBPath:   filepath.Join(dataDir, "nwsl-season.sqlite"),
 
-		SyncSeason:             valueOrDefault("NWSL_SYNC_SEASON", defaultSyncSeason),
-		SyncStage:              valueOrDefault("NWSL_SYNC_STAGE", defaultSyncStage),
-		SyncCheckInterval:      checkInterval,
-		SyncCompletionGrace:    completionGrace,
-		SyncMinAttemptInterval: minimumAttemptInterval,
-		SyncTimeout:            timeout,
-		QualificationBudget:    qualificationBudget,
-		ScenarioBudget:         scenarioBudget,
-		HistoryRetention:       historyRetention,
-		ForecastConcurrency:    forecastConcurrency,
-		ForecastTimeout:        forecastTimeout,
+		SyncSeason:          valueOrDefault("NWSL_SYNC_SEASON", defaultSyncSeason),
+		SyncStage:           valueOrDefault("NWSL_SYNC_STAGE", defaultSyncStage),
+		SyncCheckInterval:   checkInterval,
+		SyncCompletionGrace: completionGrace,
+		SyncTimeout:         timeout,
+		QualificationBudget: qualificationBudget,
+		ScenarioBudget:      scenarioBudget,
+		HistoryRetention:    historyRetention,
+		ForecastConcurrency: forecastConcurrency,
+		ForecastTimeout:     forecastTimeout,
 	}, nil
 }
 

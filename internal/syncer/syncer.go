@@ -26,6 +26,9 @@ var (
 )
 
 const allGameStatuses = fixtures.AbandonedStatus + "," + fixtures.CompletedStatus + "," + fixtures.PreMatchStatus
+const incompleteInventoryRetryDelay = 250 * time.Millisecond
+
+var errIncompleteFixtureInventory = errors.New("incomplete fixture inventory")
 
 // ASAClient is the ASA surface required by the sync service.
 type ASAClient interface {
@@ -44,8 +47,6 @@ type xgStore interface {
 type Store interface {
 	ReplaceSeason(context.Context, string, string, []cache.Team, []cache.Game, time.Time) (cache.SyncRun, error)
 	RecordFailure(context.Context, string, string, time.Time, error) error
-	LastSuccess(context.Context, string, string) (*cache.SyncRun, error)
-	LastAttempt(context.Context, string, string) (*cache.SyncRun, error)
 	TryAcquireSyncLease(context.Context, string, string, time.Time) (bool, error)
 	ReleaseSyncLease(context.Context, string, string) error
 }
@@ -82,12 +83,21 @@ type ScenarioRefresher interface {
 type RunOptions struct {
 	Season string
 	Stage  string
+	// ExpectedTeams and GamesPerTeam describe a known, fixed schedule. When
+	// both are set, an incomplete or uneven ASA collection is rejected before
+	// it can replace a complete local snapshot. Leave both zero for historical
+	// seasons whose format is not configured here.
+	ExpectedTeams int
+	GamesPerTeam  int
+	// TargetFixtureID is an overdue cached fixture selected by the scheduler.
+	// The season collection remains the primary source, while this single-game
+	// lookup can fill a lagging collection response with a newer result.
+	TargetFixtureID string
 	// Trigger identifies the caller that started this sync (for example,
 	// "scheduler", "cli", or "venue_history"). It is trace context, not
 	// persisted cache state.
-	Trigger                string
-	MinimumAttemptInterval time.Duration
-	Force                  bool
+	Trigger string
+	Force   bool
 	// SourceOnly stores fixtures, xG, and venue summaries without running
 	// current-season qualification/scenario calculations.
 	SourceOnly bool
@@ -111,6 +121,8 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 			attribute.String("nwsl.stage", options.Stage),
 			attribute.Bool("nwsl.sync.forced", options.Force),
 			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
+			attribute.String("nwsl.sync.target_fixture_id", options.TargetFixtureID),
+			attribute.Int("nwsl.sync.expected_fixture_count", expectedFixtureCount(options)),
 		),
 	)
 	recordRunException := func(cause error, errorType string) error {
@@ -162,17 +174,6 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		_ = s.Store.ReleaseSyncLease(releaseCtx, leaseKey(options), holder)
 	}()
 
-	if !options.Force && options.MinimumAttemptInterval > 0 {
-		run, err := s.Store.LastAttempt(ctx, options.Season, options.Stage)
-		if err != nil {
-			return cache.SyncRun{}, recordRunException(fmt.Errorf("check recent sync: %w", err), telemetry.ErrorTypeStorageFailure)
-		}
-		if run != nil && !run.FinishedAt.Add(options.MinimumAttemptInterval).Before(startedAt) {
-			run.Skipped = true
-			return *run, nil
-		}
-	}
-
 	xgClient, hasXGClient := s.ASA.(xgASAClient)
 	xgCache, hasXGCache := s.Store.(xgStore)
 	fetchCtx, fetchSpan := telemetry.Tracer().Start(ctx, "sync.fetch_asa",
@@ -184,10 +185,14 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	data := s.fetchASAData(fetchCtx, options, xgClient, hasXGClient && hasXGCache)
 	data.teamsErr = telemetry.ClassifyError(data.teamsErr, telemetry.ErrorTypeUpstreamFailure)
 	data.gamesErr = telemetry.ClassifyError(data.gamesErr, telemetry.ErrorTypeUpstreamFailure)
+	data.targetGameErr = telemetry.ClassifyError(data.targetGameErr, telemetry.ErrorTypeUpstreamFailure)
 	data.xgErr = telemetry.ClassifyError(data.xgErr, telemetry.ErrorTypeUpstreamFailure)
 	fetchSpan.SetAttributes(
 		attribute.Int("nwsl.sync.teams_fetched", len(data.teams)),
 		attribute.Int("nwsl.sync.games_fetched", len(data.games)),
+		attribute.Bool("nwsl.sync.target_fixture_requested", options.TargetFixtureID != ""),
+		attribute.Int("nwsl.sync.target_fixture_rows_fetched", len(data.targetGames)),
+		attribute.String("nwsl.sync.target_fixture_fetch_outcome", targetFetchOutcome(options.TargetFixtureID, data.targetGameErr)),
 		attribute.Int("nwsl.sync.xg_rows_fetched", len(data.xg)),
 	)
 	if fetchErr := errors.Join(data.teamsErr, data.gamesErr); fetchErr != nil {
@@ -201,8 +206,47 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch games: %w", data.gamesErr))
 	}
 	teams, games := data.teams, data.games
+	targetOutcome := "not_requested"
+	if data.targetGameErr == nil {
+		games, targetOutcome = reconcileTargetGame(options, teams, games, data.targetGames)
+	} else if options.TargetFixtureID != "" {
+		targetOutcome = "lookup_failed"
+	}
 
-	if err := validate(options, teams, games); err != nil {
+	validationErr := validate(options, teams, games)
+	inventoryRetryOutcome := "not_needed"
+	if errors.Is(validationErr, errIncompleteFixtureInventory) {
+		inventoryRetryOutcome = "attempted"
+		if waitErr := waitForInventoryRetry(ctx); waitErr != nil {
+			validationErr = errors.Join(validationErr, fmt.Errorf("wait to retry incomplete fixture inventory: %w", waitErr))
+			inventoryRetryOutcome = "canceled"
+		} else {
+			retryGames, retryErr := s.ASA.Games(ctx, seasonGamesFilters(options))
+			if retryErr != nil {
+				retryErr = telemetry.ClassifyError(retryErr, telemetry.ErrorTypeUpstreamFailure)
+				validationErr = errors.Join(validationErr, fmt.Errorf("retry incomplete fixture inventory: %w", retryErr))
+				inventoryRetryOutcome = "fetch_failed"
+			} else {
+				games = retryGames
+				if data.targetGameErr == nil {
+					games, targetOutcome = reconcileTargetGame(options, teams, games, data.targetGames)
+				}
+				validationErr = validate(options, teams, games)
+				if validationErr == nil {
+					inventoryRetryOutcome = "recovered"
+				} else {
+					inventoryRetryOutcome = "still_invalid"
+				}
+			}
+		}
+	}
+	span.SetAttributes(
+		attribute.String("nwsl.sync.target_reconciliation_outcome", targetOutcome),
+		attribute.String("nwsl.sync.inventory_retry_outcome", inventoryRetryOutcome),
+		attribute.Int("nwsl.sync.reconciled_fixture_count", len(games)),
+	)
+	if validationErr != nil {
+		err := validationErr
 		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
 	}
 
@@ -250,12 +294,14 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 }
 
 type asaSyncData struct {
-	teams    []asa.Team
-	teamsErr error
-	games    []asa.Game
-	gamesErr error
-	xg       []asa.GameXGoals
-	xgErr    error
+	teams         []asa.Team
+	teamsErr      error
+	games         []asa.Game
+	gamesErr      error
+	targetGames   []asa.Game
+	targetGameErr error
+	xg            []asa.GameXGoals
+	xgErr         error
 }
 
 // fetchASAData requests the independent ASA resources at the same time. xG
@@ -272,12 +318,19 @@ func (s Service) fetchASAData(ctx context.Context, options RunOptions, xgClient 
 	}()
 	go func() {
 		defer group.Done()
-		data.games, data.gamesErr = s.ASA.Games(ctx, asa.GamesFilters{
-			SeasonName: options.Season,
-			StageName:  options.Stage,
-			Status:     allGameStatuses,
-		})
+		data.games, data.gamesErr = s.ASA.Games(ctx, seasonGamesFilters(options))
 	}()
+	if strings.TrimSpace(options.TargetFixtureID) != "" {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			data.targetGames, data.targetGameErr = s.ASA.Games(ctx, asa.GamesFilters{
+				GameID:     options.TargetFixtureID,
+				SeasonName: options.Season,
+				StageName:  options.Stage,
+			})
+		}()
+	}
 	if fetchXG {
 		group.Add(1)
 		go func() {
@@ -489,7 +542,6 @@ func syncTrigger(value string) string {
 func syncRunAttributes(run cache.SyncRun) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
 		attribute.String("nwsl.sync.outcome", run.Outcome),
-		attribute.Bool("nwsl.sync.skipped", run.Skipped),
 		attribute.Int("nwsl.sync.teams_seen", run.TeamsUpserted),
 		attribute.Int("nwsl.sync.games_seen", run.GamesSeen),
 		attribute.Int("nwsl.sync.teams_inserted", run.TeamsInserted),
@@ -568,6 +620,9 @@ func validate(options RunOptions, teams []asa.Team, games []asa.Game) error {
 		return errors.New("validate ASA response: teams response is empty")
 	}
 	if len(games) == 0 {
+		if options.ExpectedTeams != 0 || options.GamesPerTeam != 0 {
+			return validateExpectedFixtureInventory(options, games)
+		}
 		return errors.New("validate ASA response: games response is empty")
 	}
 
@@ -623,7 +678,115 @@ func validate(options RunOptions, teams []asa.Team, games []asa.Game) error {
 			return fmt.Errorf("validate ASA response: %s is FullTime without both scores", label)
 		}
 	}
+	return validateExpectedFixtureInventory(options, games)
+}
+
+func validateExpectedFixtureInventory(options RunOptions, games []asa.Game) error {
+	if options.ExpectedTeams == 0 && options.GamesPerTeam == 0 {
+		return nil
+	}
+	if options.ExpectedTeams < 1 || options.GamesPerTeam < 1 || options.ExpectedTeams*options.GamesPerTeam%2 != 0 {
+		return errors.New("validate sync options: expected teams and games per team must describe an even schedule")
+	}
+
+	expectedGames := options.ExpectedTeams * options.GamesPerTeam / 2
+	if len(games) != expectedGames {
+		return fmt.Errorf("%w: validate ASA response: expected %d fixtures for configured schedule, got %d", errIncompleteFixtureInventory, expectedGames, len(games))
+	}
+	appearances := make(map[string]int, options.ExpectedTeams)
+	for _, game := range games {
+		appearances[game.HomeTeamID]++
+		appearances[game.AwayTeamID]++
+	}
+	if len(appearances) != options.ExpectedTeams {
+		return fmt.Errorf("%w: validate ASA response: expected %d scheduled teams, got %d", errIncompleteFixtureInventory, options.ExpectedTeams, len(appearances))
+	}
+	for teamID, count := range appearances {
+		if count != options.GamesPerTeam {
+			return fmt.Errorf("%w: validate ASA response: team %q has %d fixtures, want %d", errIncompleteFixtureInventory, teamID, count, options.GamesPerTeam)
+		}
+	}
 	return nil
+}
+
+// reconcileTargetGame supplements a complete-season collection with the
+// scheduler's one overdue fixture. ASA can publish a game-specific result
+// before its broader collection catches up, so prefer a terminal or newer
+// target response without allowing a stale target response to regress data.
+// A malformed or empty targeted response is intentionally ignored: the
+// collection remains sufficient to complete a normal sync.
+func reconcileTargetGame(options RunOptions, teams []asa.Team, games, target []asa.Game) ([]asa.Game, string) {
+	if strings.TrimSpace(options.TargetFixtureID) == "" || len(target) != 1 || target[0].GameID != options.TargetFixtureID {
+		if options.TargetFixtureID == "" {
+			return games, "not_requested"
+		}
+		return games, "not_found"
+	}
+	if validate(RunOptions{Season: options.Season, Stage: options.Stage}, teams, target) != nil {
+		return games, "invalid_target"
+	}
+
+	for i, existing := range games {
+		if existing.GameID != target[0].GameID {
+			continue
+		}
+		if targetGamePreferred(existing, target[0]) {
+			games = append([]asa.Game(nil), games...)
+			games[i] = target[0]
+			return games, "target_replaced"
+		}
+		return games, "collection_preferred"
+	}
+	return append(append([]asa.Game(nil), games...), target[0]), "target_appended"
+}
+
+func targetGamePreferred(collection, target asa.Game) bool {
+	collectionTerminal := terminalGame(collection)
+	targetTerminal := terminalGame(target)
+	if targetTerminal != collectionTerminal {
+		return targetTerminal
+	}
+	targetUpdated, targetErr := fixtures.ParseKickoff(target.LastUpdatedUTC)
+	collectionUpdated, collectionErr := fixtures.ParseKickoff(collection.LastUpdatedUTC)
+	targetOK := targetErr == nil
+	collectionOK := collectionErr == nil
+	return targetOK && (!collectionOK || targetUpdated.After(collectionUpdated))
+}
+
+func terminalGame(game asa.Game) bool {
+	return game.Status == fixtures.AbandonedStatus || (game.Status == fixtures.CompletedStatus && game.HomeScore != nil && game.AwayScore != nil)
+}
+
+func seasonGamesFilters(options RunOptions) asa.GamesFilters {
+	return asa.GamesFilters{SeasonName: options.Season, StageName: options.Stage, Status: allGameStatuses}
+}
+
+func expectedFixtureCount(options RunOptions) int {
+	if options.ExpectedTeams < 1 || options.GamesPerTeam < 1 || options.ExpectedTeams*options.GamesPerTeam%2 != 0 {
+		return 0
+	}
+	return options.ExpectedTeams * options.GamesPerTeam / 2
+}
+
+func targetFetchOutcome(targetID string, err error) string {
+	if targetID == "" {
+		return "not_requested"
+	}
+	if err != nil {
+		return "failure"
+	}
+	return "success"
+}
+
+func waitForInventoryRetry(ctx context.Context) error {
+	timer := time.NewTimer(incompleteInventoryRetryDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func mapTeams(teams []asa.Team) ([]cache.Team, error) {

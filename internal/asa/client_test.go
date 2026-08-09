@@ -3,10 +3,12 @@ package asa
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -220,7 +222,7 @@ func TestTeamsReturnsErrorForNon2xx(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := Client{BaseURL: server.URL, HTTPClient: server.Client(), RetryDelays: []time.Duration{}}
 
 	_, err := client.Teams(context.Background(), TeamsFilters{})
 	if err == nil {
@@ -258,7 +260,7 @@ func TestGamesReturnsErrorForNon2xx(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := Client{BaseURL: server.URL, HTTPClient: server.Client(), RetryDelays: []time.Duration{}}
 
 	_, err := client.Games(context.Background(), GamesFilters{})
 	if err == nil {
@@ -307,6 +309,116 @@ func TestGamesReturnsContextError(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+func TestClientRetriesTransientHTTPStatuses(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) < 3 {
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	client := Client{
+		BaseURL:     server.URL,
+		HTTPClient:  server.Client(),
+		RetryDelays: []time.Duration{0, 0},
+	}
+	ctx, parent := otel.Tracer("test").Start(context.Background(), "sync.run")
+	_, err := client.Teams(ctx, TeamsFilters{})
+	parent.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("requests = %d, want 3", got)
+	}
+	clientSpans := 0
+	for _, span := range exporter.GetSpans() {
+		if span.SpanKind == trace.SpanKindClient {
+			clientSpans++
+		}
+	}
+	if clientSpans != 3 {
+		t.Fatalf("downstream HTTP spans = %d, want one for each of 3 attempts", clientSpans)
+	}
+}
+
+func TestClientDoesNotRetryNonTransientHTTPStatus(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := Client{
+		BaseURL:     server.URL,
+		HTTPClient:  server.Client(),
+		RetryDelays: []time.Duration{0, 0},
+	}
+	if _, err := client.Teams(context.Background(), TeamsFilters{}); err == nil {
+		t.Fatal("err = nil, want HTTP error")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
+	}
+}
+
+func TestClientRetriesTransportErrors(t *testing.T) {
+	var calls atomic.Int32
+	client := Client{
+		BaseURL: "https://example.test",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if calls.Add(1) < 3 {
+				return nil, errors.New("temporary transport failure")
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`[]`)),
+				Request:    request,
+			}, nil
+		})},
+		RetryDelays: []time.Duration{0, 0},
+	}
+
+	if _, err := client.Teams(context.Background(), TeamsFilters{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("requests = %d, want 3", got)
+	}
+}
+
+func TestASARetryPolicyAddsRequestTimeoutAndTooEarly(t *testing.T) {
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooEarly} {
+		retry, err := asaRetryPolicy(context.Background(), &http.Response{StatusCode: status}, nil)
+		if err != nil || !retry {
+			t.Errorf("status %d: retry = %t, err = %v; want retry", status, retry, err)
+		}
+	}
+}
+
+func TestConfiguredBackoffHonorsLongerRetryAfter(t *testing.T) {
+	response := &http.Response{
+		StatusCode: http.StatusServiceUnavailable,
+		Header:     http.Header{"Retry-After": []string{"2"}},
+	}
+	if got := configuredBackoff([]time.Duration{250 * time.Millisecond})(0, 0, 0, response); got != 2*time.Second {
+		t.Fatalf("backoff = %s, want 2s Retry-After", got)
 	}
 }
 
@@ -464,4 +576,10 @@ func TestCheckedInFixturesFitResponseLimits(t *testing.T) {
 			t.Errorf("%s is %d bytes, want at most half of the %d-byte response limit", test.path, info.Size(), test.limit)
 		}
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }

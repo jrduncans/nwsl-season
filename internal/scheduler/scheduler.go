@@ -43,12 +43,13 @@ type calculationRunner interface {
 
 // Config configures one current-season scheduler.
 type Config struct {
-	Season                 string
-	Stage                  string
-	CheckInterval          time.Duration
-	CompletionGrace        time.Duration
-	MinimumAttemptInterval time.Duration
-	Timeout                time.Duration
+	Season          string
+	Stage           string
+	ExpectedTeams   int
+	GamesPerTeam    int
+	CheckInterval   time.Duration
+	CompletionGrace time.Duration
+	Timeout         time.Duration
 }
 
 // Decision records a local refresh decision. It deliberately excludes outcomes
@@ -83,13 +84,15 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 	if config.Season == "" || config.Stage == "" {
 		return nil, fmt.Errorf("scheduler season and stage are required")
 	}
+	if err := validateScheduleConfig(config); err != nil {
+		return nil, err
+	}
 	for _, value := range []struct {
 		name  string
 		value time.Duration
 	}{
 		{"check interval", config.CheckInterval},
 		{"completion grace", config.CompletionGrace},
-		{"minimum attempt interval", config.MinimumAttemptInterval},
 		{"timeout", config.Timeout},
 	} {
 		if value.value <= 0 {
@@ -159,11 +162,13 @@ func (s *Scheduler) check() {
 		return
 	}
 
-	decision := Assess(snapshot, s.now().UTC(), s.config.CompletionGrace)
+	decision := Assess(snapshot, s.now().UTC(), s.config.CompletionGrace, s.config.ExpectedTeams, s.config.GamesPerTeam)
 	span.SetAttributes(
 		attribute.String("nwsl.sync.decision", decision.Name),
 		attribute.String("nwsl.sync.decision_reason", decision.Reason),
 		attribute.String("nwsl.sync.fixture_id", decision.FixtureID),
+		attribute.Int("nwsl.scheduler.cached_fixture_count", len(snapshot.Games)),
+		attribute.Int("nwsl.scheduler.expected_fixture_count", expectedFixtureCount(s.config.ExpectedTeams, s.config.GamesPerTeam)),
 	)
 	s.logger.Info("cache refresh decision", "decision", decision.Name, "reason", decision.Reason,
 		"season", s.config.Season, "stage", s.config.Stage, "fixture_id", decision.FixtureID)
@@ -180,7 +185,8 @@ func (s *Scheduler) check() {
 	span.SetAttributes(attribute.String("nwsl.scheduler.action", "sync"))
 	runCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	run, err := s.runner.Run(runCtx, syncer.RunOptions{
-		Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler", MinimumAttemptInterval: s.config.MinimumAttemptInterval,
+		Season: s.config.Season, Stage: s.config.Stage, ExpectedTeams: s.config.ExpectedTeams, GamesPerTeam: s.config.GamesPerTeam,
+		TargetFixtureID: targetFixtureID(decision), Trigger: "scheduler",
 	})
 	cancel()
 	if errors.Is(err, cache.ErrSyncInProgress) {
@@ -202,17 +208,6 @@ func (s *Scheduler) check() {
 		return
 	}
 	span.SetAttributes(schedulerRunAttributes(run)...)
-	if run.Skipped {
-		s.logger.Info("cache refresh decision", "decision", "rate_limited", "season", s.config.Season, "stage", s.config.Stage,
-			"last_attempt", run.FinishedAt.UTC().Format(time.RFC3339), "last_outcome", run.Outcome)
-		recalculateOutcome := s.recalculateCachedClinching(ctx, span)
-		outcome := "rate_limited"
-		if recalculateOutcome == "failure" || recalculateOutcome == "partial_failure" {
-			outcome = "partial_failure"
-		}
-		span.SetAttributes(attribute.String("nwsl.scheduler.outcome", outcome))
-		return
-	}
 	if run.HistoryPruneError != "" {
 		s.logger.Warn("automatic cache history prune failed", "season", s.config.Season, "stage", s.config.Stage, "error", run.HistoryPruneError)
 	}
@@ -271,7 +266,6 @@ func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trac
 func schedulerRunAttributes(run cache.SyncRun) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{
 		attribute.Bool("nwsl.scheduler.sync.attempted", true),
-		attribute.Bool("nwsl.scheduler.sync.skipped", run.Skipped),
 		attribute.String("nwsl.scheduler.sync.outcome", schedulerSyncOutcome(run)),
 		attribute.String("nwsl.scheduler.xg.outcome", schedulerXGOutcome(run)),
 		attribute.String("nwsl.scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
@@ -302,9 +296,6 @@ func schedulerRecalculationAttributes(run cache.SyncRun) []attribute.KeyValue {
 }
 
 func schedulerSyncOutcome(run cache.SyncRun) string {
-	if run.Skipped {
-		return "rate_limited"
-	}
 	if run.XGError != "" || run.QualificationError != "" || run.ScenarioError != "" {
 		return "partial_failure"
 	}
@@ -312,9 +303,6 @@ func schedulerSyncOutcome(run cache.SyncRun) string {
 }
 
 func schedulerXGOutcome(run cache.SyncRun) string {
-	if run.Skipped {
-		return "not_run"
-	}
 	if run.XGError != "" {
 		return "failure"
 	}
@@ -322,6 +310,13 @@ func schedulerXGOutcome(run cache.SyncRun) string {
 		return "complete"
 	}
 	return "not_requested"
+}
+
+func targetFixtureID(decision Decision) string {
+	if decision.Reason == "plausibly_complete_fixture" {
+		return decision.FixtureID
+	}
+	return ""
 }
 
 func schedulerRecalculationOutcome(run cache.SyncRun) string {
@@ -345,12 +340,15 @@ func schedulerComponentOutcome(completed bool, failure string) string {
 }
 
 // Assess determines whether the cached match window needs an ASA request.
-func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.Duration) Decision {
+func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.Duration, expectedTeams, gamesPerTeam int) Decision {
 	if snapshot.LastSuccess == nil {
 		return Decision{Name: decisionEligible, Reason: "missing_successful_snapshot"}
 	}
 	if len(snapshot.Games) == 0 {
 		return Decision{Name: decisionEligible, Reason: "empty_fixture_cache"}
+	}
+	if !hasExpectedFixtureInventory(snapshot.Games, expectedTeams, gamesPerTeam) {
+		return Decision{Name: decisionEligible, Reason: "incomplete_fixture_cache"}
 	}
 	for _, game := range snapshot.Games {
 		if !knownStatus(game.Status) {
@@ -367,8 +365,7 @@ func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.
 	}
 	// A migrated fixture cache has no xG audit row yet. Treat that as an
 	// incomplete snapshot, then keep retrying explicit unavailable games so ASA
-	// publication lag can heal. The service's attempt interval still rate-limits
-	// both cases.
+	// publication lag can heal on a later scheduler check.
 	if snapshot.XGStatus.LastSuccess == nil {
 		return Decision{Name: decisionEligible, Reason: "missing_successful_xg_snapshot"}
 	}
@@ -388,6 +385,46 @@ func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.
 		}
 	}
 	return Decision{Name: decisionCurrent, Reason: "known_match_window_is_current"}
+}
+
+func validateScheduleConfig(config Config) error {
+	if config.ExpectedTeams == 0 && config.GamesPerTeam == 0 {
+		return nil
+	}
+	if config.ExpectedTeams < 1 || config.GamesPerTeam < 1 || config.ExpectedTeams*config.GamesPerTeam%2 != 0 {
+		return errors.New("scheduler expected teams and games per team must describe an even schedule")
+	}
+	return nil
+}
+
+func hasExpectedFixtureInventory(games []cache.Game, expectedTeams, gamesPerTeam int) bool {
+	if expectedTeams == 0 && gamesPerTeam == 0 {
+		return true
+	}
+	if len(games) != expectedTeams*gamesPerTeam/2 {
+		return false
+	}
+	appearances := make(map[string]int, expectedTeams)
+	for _, game := range games {
+		appearances[game.HomeTeamID]++
+		appearances[game.AwayTeamID]++
+	}
+	if len(appearances) != expectedTeams {
+		return false
+	}
+	for _, count := range appearances {
+		if count != gamesPerTeam {
+			return false
+		}
+	}
+	return true
+}
+
+func expectedFixtureCount(expectedTeams, gamesPerTeam int) int {
+	if expectedTeams < 1 || gamesPerTeam < 1 || expectedTeams*gamesPerTeam%2 != 0 {
+		return 0
+	}
+	return expectedTeams * gamesPerTeam / 2
 }
 
 func knownStatus(status string) bool {
