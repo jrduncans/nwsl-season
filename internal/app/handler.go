@@ -392,7 +392,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
-	page, err := a.loadSeasonPage(r)
+	page, err := a.loadSeasonPageWithFixtureOutlooks(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -431,6 +431,14 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
+	return a.loadSeasonPageFor(r, nil)
+}
+
+func (a *application) loadSeasonPageWithFixtureOutlooks(r *http.Request) (seasonPage, error) {
+	return a.loadSeasonPageFor(r, fixtureOutlooks)
+}
+
+func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.SeasonData) map[string]fixtureOutlookView) (seasonPage, error) {
 	if a.store == nil {
 		return seasonPage{}, fmt.Errorf("season cache unavailable")
 	}
@@ -454,7 +462,11 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	scheduleView := strengthViewFrom(scheduleStrength)
 	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(a.options.Rules)), scheduleView)
 	standingsView, xgAvailable, completedMatches := addXGValues(standingsView, data)
-	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatus(data, a.options.Location)
+	var outlooks map[string]fixtureOutlookView
+	if outlooksFor != nil {
+		outlooks = outlooksFor(data)
+	}
+	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatusWithOutlooks(data, a.options.Location, outlooks)
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
@@ -473,6 +485,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
+		HasFixtureOutlooks:     len(outlooks) > 0,
 	}
 	if completedMatches > 0 && xgAvailable < completedMatches {
 		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)

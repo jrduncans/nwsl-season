@@ -10,11 +10,12 @@
   <button class="fixture-view-button" type="button" data-fixture-view-button="results" aria-pressed="true">Results</button>
   <button class="fixture-view-button" type="button" data-fixture-view-button="upcoming" aria-pressed="false">Upcoming</button>
 </div>
+{{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include an xG Poisson outlook for each result. <a href="{{.ForecastPath}}">Explore the season forecast</a>.</p>{{end}}
 
 <section data-fixture-view="results">
 {{range .ResultFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status{{if not .InProgress}} hidden{{end}}>{{if .InProgress}}In progress{{end}}</span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span>{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>
@@ -22,8 +23,14 @@
 <section data-fixture-view="upcoming">
 {{range .UpcomingFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status hidden></span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span></li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}</span>{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>
 {{template "foot" .}}{{end}}
+
+{{define "fixtureOutlook"}}<div class="fixture-outlook" role="group" aria-label="xG Poisson outlook: {{.HomeTeam.Name}} has a {{.Outlook.HomeWinText}} chance of winning, the draw chance is {{.Outlook.DrawText}}, and {{.AwayTeam.Name}} has a {{.Outlook.AwayWinText}} chance of winning.">
+  <span class="fixture-outlook-model">xG Poisson outlook</span>
+  <div class="fixture-outcome-labels" aria-hidden="true"><span class="fixture-outcome-home">Home win <strong>{{.Outlook.HomeWinText}}</strong></span><span class="fixture-outcome-draw">Draw <strong>{{.Outlook.DrawText}}</strong></span><span class="fixture-outcome-away">Away win <strong>{{.Outlook.AwayWinText}}</strong></span></div>
+  <div class="fixture-outcome-bar" aria-hidden="true"><span class="fixture-outcome-segment fixture-outcome-home" style="--fixture-outcome-share: {{.Outlook.HomeWin}}"></span><span class="fixture-outcome-segment fixture-outcome-draw" style="--fixture-outcome-share: {{.Outlook.Draw}}"></span><span class="fixture-outcome-segment fixture-outcome-away" style="--fixture-outcome-share: {{.Outlook.AwayWin}}"></span></div>
+</div>{{end}}

@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -16,6 +18,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -480,10 +483,52 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="."`, `href="forecast"`} {
+	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="."`, `href="forecast"`, "Scheduled fixtures include an xG Poisson outlook for each result.", `class="fixture-outlook"`, "Home win <strong>", "Draw <strong>", "Away win <strong>", `class="fixture-outcome-segment fixture-outcome-home"`, `style="--fixture-outcome-share: `} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
+	}
+	if got := strings.Count(response.Body.String(), `class="fixture-outlook"`); got != 5 {
+		t.Errorf("rendered %d fixture outlooks, want one for each of 5 remaining fixtures", got)
+	}
+}
+
+func TestFixtureOutlooksUseTheDefaultModelForRemainingFixtures(t *testing.T) {
+	data := testSeasonData()
+	outlooks := fixtureOutlooks(data)
+
+	if got, want := len(outlooks), 5; got != want {
+		t.Fatalf("fixture outlook count = %d, want %d", got, want)
+	}
+	for id, outlook := range outlooks {
+		if outlook.HomeWin <= 0 || outlook.Draw <= 0 || outlook.AwayWin <= 0 {
+			t.Errorf("%s outcome probabilities = %#v, want positive values", id, outlook)
+		}
+		if total := outlook.HomeWin + outlook.Draw + outlook.AwayWin; math.Abs(total-1) > 1e-9 {
+			t.Errorf("%s outcome probability total = %.12f, want 1", id, total)
+		}
+		if outlook.HomeWinText != percent(outlook.HomeWin) || outlook.DrawText != percent(outlook.Draw) || outlook.AwayWinText != percent(outlook.AwayWin) {
+			t.Errorf("%s rendered outcome text = %#v, want values formatted as percentages", id, outlook)
+		}
+	}
+}
+
+func TestFixtureOutlooksDoNotAttachToCompletedFixtures(t *testing.T) {
+	data := testSeasonData()
+	outlooks := fixtureOutlooks(data)
+	groups := fixtureGroupsWithOutlooks(data, time.UTC, outlooks)
+
+	if groups[0].Games[0].Outlook != nil {
+		t.Fatalf("completed fixture outlook = %#v, want nil", groups[0].Games[0].Outlook)
+	}
+	if groups[1].Games[0].Outlook == nil {
+		t.Fatal("remaining fixture outlook = nil, want xG Poisson outlook")
+	}
+}
+
+func TestFixtureOutlooksGracefullyOmitFailedFits(t *testing.T) {
+	if got := fixtureOutlooksFor(testSeasonData(), fixtureOutlookFitFailure{}); len(got) != 0 {
+		t.Fatalf("fixture outlooks = %#v, want no outlooks after a failed fit", got)
 	}
 }
 
@@ -1091,6 +1136,16 @@ type fakeStore struct {
 	status cache.Status
 	season cache.SeasonData
 	err    error
+}
+
+type fixtureOutlookFitFailure struct{}
+
+func (fixtureOutlookFitFailure) Info() forecast.Info {
+	return forecast.Info{ID: "fixture-outlook-fit-failure"}
+}
+
+func (fixtureOutlookFitFailure) Fit(forecast.FitInput) (forecast.Predictor, error) {
+	return nil, errors.New("xG input unavailable")
 }
 
 type fullFakeStore struct {
