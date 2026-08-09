@@ -170,7 +170,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `href="https://github.com/jrduncans/nwsl-season"`, ">SD</th>", "Harder"} {
+	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `class="github-link" href="https://github.com/jrduncans/nwsl-season"`, `aria-label="View the project source on GitHub"`, ">SD</th>", "Harder"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
