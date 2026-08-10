@@ -326,6 +326,9 @@ directory even though the current season data can be rebuilt from ASA.
 
 ## Documentation
 
+- [How synchronization works](docs/sync-logic-guide.md) diagrams scheduler
+  eligibility, ASA requests, targeted result reconciliation, validation, and
+  durable cache replacement.
 - [How clinching works](docs/clinching-logic-guide.md) explains qualification
   proofs, conservative tiebreak handling, no-help paths, and slate scenarios.
 - [How Forecast Lab works](docs/forecast-lab-guide.md) explains model presets,
