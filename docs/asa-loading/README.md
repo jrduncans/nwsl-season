@@ -58,6 +58,7 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P2-05 Authoritative stage xG persistence](phase-2/p2-05-authoritative-stage-xg-persistence.md) | Complete | Terra | Sol | P2-01, P2-03 |
 | [P2-06 Targeted checked-xG persistence](phase-2/p2-06-targeted-checked-xg-persistence.md) | Complete | Terra | Sol | P2-04, P2-05 |
 | [Phase 3 Hot-path replacement](phase-3/p3-hot-path-replacement.md) | Complete | Terra | Primary; Sol for concurrency | P2-01 through P2-06 |
+| [Phase 4 Historical seasons](phase-4/p4-historical-seasons.md) | Ready | Terra | Primary | Phase 3 |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
@@ -75,6 +76,11 @@ and xG checks, schedules authoritative discovery and weekly inventory audits,
 applies bounded correction cadences and a request budget, and executes jobs
 sequentially under shared scope leases. Material changes trigger only their
 permitted current-scope derived work.
+
+Phase 4 is ready as one factual historical-seasons implementation. It adds the
+regular seasons already used by model evaluation, a sequential catalog
+backfill command, and cache-only season navigation/load states without
+inventing historical competition rules.
 
 ## Packet template
 
