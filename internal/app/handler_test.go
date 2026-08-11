@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -53,10 +54,10 @@ func TestHome(t *testing.T) {
 	}
 }
 
-func TestHandlerUsesPresentationRulesForUnknownSeason(t *testing.T) {
+func TestDefaultOptionsLeavesRulesZeroForUnknownSeason(t *testing.T) {
 	options := defaultOptions(Options{CurrentSeason: "2027", Stage: "Regular Season"})
-	if options.Rules.Version != "presentation-fallback-v1" || playoffPlaces(options.Rules) != 8 || options.Rules.GamesPerTeam != 30 {
-		t.Fatalf("fallback rules = %+v", options.Rules)
+	if hasRules(options.Rules) {
+		t.Fatalf("unknown configured rules = %+v, want zero", options.Rules)
 	}
 }
 
@@ -65,12 +66,17 @@ func TestRulesForSeasonUsesConfiguredRulesAndReturnsCopies(t *testing.T) {
 	explicit.Version = "configured-v1"
 	application := newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2099", Rules: explicit, Location: time.UTC}, nil)
 
-	current := application.app.rulesForSeason("2099")
-	if !reflect.DeepEqual(current, explicit) {
+	current, ok := application.app.rulesForSeason("2099")
+	if ok || hasRules(current) {
+		t.Fatalf("uncataloged current rules = %+v, %t; want none", current, ok)
+	}
+	application = newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2026", Rules: explicit, Location: time.UTC}, nil)
+	current, ok = application.app.rulesForSeason("2026")
+	if !ok || !reflect.DeepEqual(current, explicit) {
 		t.Fatalf("current rules = %+v, want explicit %+v", current, explicit)
 	}
 	current.Achievements[0].TopK = 99
-	if again := application.app.rulesForSeason("2099"); again.Achievements[0].TopK != explicit.Achievements[0].TopK {
+	if again, _ := application.app.rulesForSeason("2026"); again.Achievements[0].TopK != explicit.Achievements[0].TopK {
 		t.Fatalf("mutated returned rules affected later request: %+v", again)
 	}
 }
@@ -78,14 +84,116 @@ func TestRulesForSeasonUsesConfiguredRulesAndReturnsCopies(t *testing.T) {
 func TestRulesForSeasonUsesCatalogAndRequestFallback(t *testing.T) {
 	application := newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2099", Rules: testRules(17), Location: time.UTC}, nil)
 
-	catalogRules := application.app.rulesForSeason("2026")
-	if catalogRules.Version != "2026-regular-v2" || catalogRules.GamesPerTeam != 30 || playoffPlaces(catalogRules) != 8 {
+	catalogRules, ok := application.app.rulesForSeason("2026")
+	if !ok || catalogRules.Version != "2026-regular-v2" || catalogRules.GamesPerTeam != 30 || playoffPlaces(catalogRules) != 8 {
 		t.Fatalf("catalog rules = %+v", catalogRules)
 	}
 	fallbackApplication := newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2099", Stage: "Invented Stage", Rules: testRules(17), Location: time.UTC}, nil)
-	fallback := fallbackApplication.app.rulesForSeason("2088")
-	if fallback.Version != "presentation-fallback-v1" || fallback.Season != "2088" || fallback.Stage != "Invented Stage" {
-		t.Fatalf("fallback rules = %+v", fallback)
+	fallback, ok := fallbackApplication.app.rulesForSeason("2088")
+	if ok || hasRules(fallback) {
+		t.Fatalf("uncataloged rules = %+v, %t; want none", fallback, ok)
+	}
+}
+
+func TestRequestCompetitionUsesOnlyExactCapabilities(t *testing.T) {
+	rules := testRules(2)
+	standingsOnly := requestCompetition{Cataloged: true, Entry: competition.Entry{Capabilities: []competition.Capability{competition.CapabilityStandings}}}
+	if !standingsOnly.standingsAvailable() || standingsOnly.xgAvailable() || standingsOnly.scheduleDifficultyAvailable() || standingsOnly.forecastAvailable(rules, true) {
+		t.Fatalf("standings-only availability is not capability exact")
+	}
+	if standingsOnly.fixturesAvailable() {
+		t.Fatal("cataloged entry without fixtures acquired fixture capability")
+	}
+	unknown := requestCompetition{}
+	if !unknown.fixturesAvailable() || !unknown.xgAvailable() || unknown.standingsAvailable() || unknown.forecastAvailable(rules, true) {
+		t.Fatalf("unknown scope availability = %+v", unknown)
+	}
+	forecastWithoutRules := requestCompetition{Cataloged: true, Entry: competition.Entry{Capabilities: []competition.Capability{competition.CapabilityForecast}}}
+	if forecastWithoutRules.forecastAvailable(competition.Rules{}, false) {
+		t.Fatal("forecast became available without verified playoff rules")
+	}
+}
+
+func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
+	application := newApplicationWithForecastExecutor(nil, Options{Location: time.UTC}, nil)
+	var fixtures bytes.Buffer
+	if err := application.app.pages.ExecuteTemplate(&fixtures, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fixtures.String(), "Scheduled fixtures include an xG Poisson outlook") || strings.Contains(fixtures.String(), "Explore the season forecast") {
+		t.Fatalf("fixtures outlook note linked an unavailable forecast: %s", fixtures.String())
+	}
+
+	var standings bytes.Buffer
+	if err := application.app.pages.ExecuteTemplate(&standings, "currentTable", seasonPage{}); err != nil {
+		t.Fatal(err)
+	}
+	body := standings.String()
+	for _, want := range []string{"Per game", "Totals"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("score-only standings missing %q", want)
+		}
+	}
+	if strings.Contains(body, `data-standings-stat-button`) || strings.Contains(body, ">xG<") {
+		t.Errorf("score-only standings rendered xG controls: %s", body)
+	}
+}
+
+func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
+	data := testSeasonData()
+	data.XGoals = append(data.XGoals, cache.GameXG{GameID: "completed", Availability: cache.XGAvailable, HomeXG: sql.NullFloat64{Float64: 2.36, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.11, Valid: true}})
+	handler := NewHandler(fakeStore{season: data})
+
+	seasonResponse := httptest.NewRecorder()
+	handler.ServeHTTP(seasonResponse, httptest.NewRequest(http.MethodGet, "/seasons/2099", nil))
+	if seasonResponse.Code != http.StatusOK {
+		t.Fatalf("season status = %d, want 200", seasonResponse.Code)
+	}
+	seasonBody := seasonResponse.Body.String()
+	for _, want := range []string{unknownFormatNotice, `href="2099/fixtures"`} {
+		if !strings.Contains(seasonBody, want) {
+			t.Errorf("factual season page missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{`<table class="standings"`, "qualification-badge", "playoff-line", "expected regular-season", "16 expected", "30 fixtures", "top 8"} {
+		if strings.Contains(seasonBody, forbidden) {
+			t.Errorf("factual season page contains %q", forbidden)
+		}
+	}
+
+	fixturesResponse := httptest.NewRecorder()
+	handler.ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2099/fixtures", nil))
+	if fixturesResponse.Code != http.StatusOK {
+		t.Fatalf("fixtures status = %d, want 200", fixturesResponse.Code)
+	}
+	fixturesBody := fixturesResponse.Body.String()
+	for _, want := range []string{unknownFormatNotice, "2–1", "xG 2.36–1.11", "Results &amp; fixtures"} {
+		if !strings.Contains(fixturesBody, want) {
+			t.Errorf("factual fixtures page missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"expected regular-season", "fixture-outlook", "Forecast lab", "Schedule difficulty", "Clinching scenarios"} {
+		if strings.Contains(fixturesBody, forbidden) {
+			t.Errorf("factual fixtures page contains %q", forbidden)
+		}
+	}
+}
+
+func TestUnavailableFeaturesDoNotReadUnknownScope(t *testing.T) {
+	store := &recordingStore{fakeStore: fakeStore{season: testSeasonData()}}
+	application := NewHandler(store)
+	for _, route := range []string{"schedule-difficulty", "forecast", "clinching", "model-evaluation"} {
+		response := httptest.NewRecorder()
+		application.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2099/"+route, nil))
+		if response.Code != http.StatusNotFound {
+			t.Errorf("%s status = %d, want 404", route, response.Code)
+		}
+		if !strings.Contains(response.Body.String(), "unavailable for 2099 Regular Season") || !strings.Contains(response.Body.String(), "Return to the season") || strings.Contains(response.Body.String(), `href="/`) {
+			t.Errorf("%s did not render explanatory relative unavailable page", route)
+		}
+	}
+	if store.seasonReads != 0 {
+		t.Fatalf("unsupported routes read season %d times", store.seasonReads)
 	}
 }
 
@@ -791,7 +899,7 @@ func TestScheduleDifficultyNoteDetectsExcludedStatusesAndConfiguredCoverage(t *t
 			{ASAID: "abandoned", Status: fixtures.AbandonedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo"},
 		},
 	}
-	note := scheduleDifficultyNote(data, rules)
+	note := scheduleDifficultyNote(data, &competition.InventoryExpectation{Teams: rules.ExpectedTeams, GamesPerTeam: rules.GamesPerTeam, Games: 4})
 	for _, want := range []string{"2 of 4 expected teams", "2 of 4 expected regular-season fixtures", "status excluded"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("note = %q, want %q", note, want)
@@ -1057,7 +1165,7 @@ func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing
 			{ASAID: "future", Status: "PreMatch", HomeTeamID: "alpha", AwayTeamID: "charlie"},
 		},
 	}
-	note := forecastScheduleNote(data, 1, false, false)
+	note := forecastScheduleNote(data, &competition.InventoryExpectation{GamesPerTeam: 1}, false, false)
 	for _, want := range []string{"cannot be simulated", "excluded", "team(s) do not have"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("note = %q, want %q", note, want)
@@ -1275,6 +1383,16 @@ type fakeStore struct {
 	status cache.Status
 	season cache.SeasonData
 	err    error
+}
+
+type recordingStore struct {
+	fakeStore
+	seasonReads int
+}
+
+func (f *recordingStore) Season(ctx context.Context, season, stage string) (cache.SeasonData, error) {
+	f.seasonReads++
+	return f.fakeStore.Season(ctx, season, stage)
 }
 
 type fixtureOutlookFitFailure struct{}

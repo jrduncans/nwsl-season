@@ -116,12 +116,18 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 }
 
 func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
+	scope := a.requestScope(r)
+	rules, verified := a.rulesForSeason(scope.Season)
+	if !scope.clinchingAvailable(rules, verified) {
+		a.renderUnavailableFeature(w, r, scope, "Clinching scenarios")
+		return
+	}
 	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
 	}
-	rules := a.rulesForSeason(page.Season)
+	rules, _ = a.rulesForSeason(page.Season)
 	page.Title = page.Season + " clinching scenarios"
 	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, AlreadyClinched: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
@@ -318,15 +324,15 @@ func defaultOptions(options Options) Options {
 	if options.Stage == "" {
 		options.Stage = defaultStage
 	}
-	if options.Rules.Season == "" {
+	if !hasRules(options.Rules) {
 		if rules, ok := competition.ForSeason(options.CurrentSeason, options.Stage); ok {
 			options.Rules = rules
-		} else {
-			options.Rules = presentationFallbackRules(options.CurrentSeason, options.Stage)
 		}
 	}
-	if err := options.Rules.Validate(); err != nil {
-		panic(fmt.Sprintf("invalid application rules: %v", err))
+	if hasRules(options.Rules) {
+		if err := options.Rules.Validate(); err != nil {
+			panic(fmt.Sprintf("invalid application rules: %v", err))
+		}
 	}
 	if options.ForecastIterations <= 0 {
 		options.ForecastIterations = defaultForecastIterations
@@ -343,32 +349,87 @@ func defaultOptions(options Options) Options {
 	return options
 }
 
-// presentationFallbackRules retains the pre-rules behavior for an unknown
-// configured season. It supports page rendering but uses a distinct version,
-// so no persisted qualification result can be mistaken for a verified rule set.
-func presentationFallbackRules(season, stage string) competition.Rules {
-	return competition.Rules{
-		Season: season, Stage: stage, Version: "presentation-fallback-v1", ExpectedTeams: 16, GamesPerTeam: 30,
-		Achievements: []competition.Achievement{
-			{ID: competition.AchievementShield, Label: "Shield", TopK: 1},
-			{ID: competition.AchievementHomePlayoff, Label: "Top-four seed", TopK: 4},
-			{ID: competition.AchievementPlayoffs, Label: "Playoffs", TopK: 8},
-		},
+// rulesForSeason returns an isolated copy of the rules for an HTTP request.
+// The configured catalog scope keeps its explicit Options value for
+// compatibility. Uncataloged scopes deliberately have no presentation rules.
+func (a *application) rulesForSeason(season string) (competition.Rules, bool) {
+	entry, ok := competition.Lookup(season, a.options.Stage)
+	if !ok || entry.Rules == nil {
+		return competition.Rules{}, false
 	}
+	if season == a.options.CurrentSeason && hasRules(a.options.Rules) {
+		return a.options.Rules.Copy(), true
+	}
+	return entry.Rules.Copy(), true
 }
 
-// rulesForSeason returns an isolated copy of the rules for an HTTP request.
-// The configured scope keeps its explicit Options value for compatibility;
-// every other scope is selected from the catalog or rendered with the
-// temporary presentation fallback.
-func (a *application) rulesForSeason(season string) competition.Rules {
-	if season == a.options.CurrentSeason {
-		return a.options.Rules.Copy()
+func hasRules(rules competition.Rules) bool {
+	return rules.Season != "" || rules.Stage != "" || rules.Version != "" || rules.ExpectedTeams != 0 || rules.GamesPerTeam != 0 || len(rules.Achievements) != 0
+}
+
+type requestCompetition struct {
+	Season    string
+	Stage     string
+	Entry     competition.Entry
+	Cataloged bool
+}
+
+func (a *application) requestScope(r *http.Request) requestCompetition {
+	season := r.PathValue("season")
+	if season == "" {
+		season = a.options.CurrentSeason
 	}
-	if entry, ok := competition.Lookup(season, a.options.Stage); ok && entry.Rules != nil {
-		return entry.Rules.Copy()
+	entry, cataloged := competition.Lookup(season, a.options.Stage)
+	return requestCompetition{Season: season, Stage: a.options.Stage, Entry: entry, Cataloged: cataloged}
+}
+
+func (s requestCompetition) supports(capability competition.Capability) bool {
+	return s.Cataloged && s.Entry.Supports(capability)
+}
+
+func (s requestCompetition) fixturesAvailable() bool {
+	return !s.Cataloged || s.supports(competition.CapabilityFixtures)
+}
+
+func (s requestCompetition) xgAvailable() bool {
+	return !s.Cataloged || s.supports(competition.CapabilityXG)
+}
+
+func (s requestCompetition) standingsAvailable() bool {
+	return s.supports(competition.CapabilityStandings)
+}
+
+func (s requestCompetition) scheduleDifficultyAvailable() bool {
+	return s.supports(competition.CapabilityScheduleDifficulty)
+}
+
+func (s requestCompetition) forecastCapabilityAvailable() bool {
+	return s.supports(competition.CapabilityForecast)
+}
+
+func (s requestCompetition) qualificationAvailable() bool {
+	return s.supports(competition.CapabilityQualification)
+}
+
+func (s requestCompetition) scenariosAvailable() bool {
+	return s.supports(competition.CapabilityScenarios)
+}
+
+func (s requestCompetition) forecastAvailable(rules competition.Rules, verified bool) bool {
+	return s.forecastCapabilityAvailable() && verified && hasPlayoffAchievement(rules)
+}
+
+func (s requestCompetition) clinchingAvailable(rules competition.Rules, verified bool) bool {
+	return s.qualificationAvailable() && s.scenariosAvailable() && verified && hasRules(rules)
+}
+
+func hasPlayoffAchievement(rules competition.Rules) bool {
+	for _, achievement := range rules.Achievements {
+		if achievement.ID == competition.AchievementPlayoffs {
+			return true
+		}
 	}
-	return presentationFallbackRules(season, a.options.Stage)
+	return false
 }
 
 func playoffPlaces(rules competition.Rules) int {
@@ -407,7 +468,16 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
-	page, err := a.loadSeasonPageWithFixtureOutlooks(r)
+	scope := a.requestScope(r)
+	if !scope.fixturesAvailable() {
+		a.renderUnavailableFeature(w, r, scope, "Results and fixtures")
+		return
+	}
+	var outlooks func(cache.SeasonData) map[string]fixtureOutlookView
+	if scope.forecastCapabilityAvailable() {
+		outlooks = fixtureOutlooks
+	}
+	page, err := a.loadSeasonPageFor(r, outlooks)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -416,6 +486,11 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request) {
+	scope := a.requestScope(r)
+	if !scope.scheduleDifficultyAvailable() {
+		a.renderUnavailableFeature(w, r, scope, "Schedule difficulty")
+		return
+	}
 	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
@@ -425,6 +500,12 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 }
 
 func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
+	scope := a.requestScope(r)
+	rules, verified := a.rulesForSeason(scope.Season)
+	if !scope.forecastAvailable(rules, verified) {
+		a.renderUnavailableFeature(w, r, scope, "Model evaluation")
+		return
+	}
 	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
@@ -449,19 +530,13 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	return a.loadSeasonPageFor(r, nil)
 }
 
-func (a *application) loadSeasonPageWithFixtureOutlooks(r *http.Request) (seasonPage, error) {
-	return a.loadSeasonPageFor(r, fixtureOutlooks)
-}
-
 func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.SeasonData) map[string]fixtureOutlookView) (seasonPage, error) {
 	if a.store == nil {
 		return seasonPage{}, fmt.Errorf("season cache unavailable")
 	}
-	season := r.PathValue("season")
-	if season == "" {
-		season = a.options.CurrentSeason
-	}
-	rules := a.rulesForSeason(season)
+	scope := a.requestScope(r)
+	season := scope.Season
+	rules, rulesVerified := a.rulesForSeason(season)
 	data, err := a.loadSeasonData(r.Context(), season)
 	if err != nil {
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
@@ -470,19 +545,36 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
 	}
 
+	var standingsView []tableRowView
+	var totalTable []standings.TableRow
+	var scheduleView strengthView
+	completedMatches, xgAvailable := 0, 0
 	domainGames := standingsGames(data.Games)
-	actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
-	totalTable := standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
-	venue := forecastVenueSample(data)
-	scheduleStrength := strength.CalculateWithVenueSample(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
-	scheduleView := strengthViewFrom(scheduleStrength)
-	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(rules)), scheduleView)
-	standingsView, xgAvailable, completedMatches := addXGValues(standingsView, data)
+	if scope.scheduleDifficultyAvailable() {
+		venue := forecastVenueSample(data)
+		scheduleStrength := strength.CalculateWithVenueSample(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
+		scheduleView = strengthViewFrom(scheduleStrength)
+	}
+	if scope.standingsAvailable() {
+		actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
+		totalTable = standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
+		playoffLine := 0
+		if rulesVerified && hasPlayoffAchievement(rules) {
+			playoffLine = playoffPlaces(rules)
+		}
+		standingsView = tableViews(actualTable, playoffLine)
+		if scope.scheduleDifficultyAvailable() {
+			standingsView = addScheduleIndicators(standingsView, scheduleView)
+		}
+		if scope.xgAvailable() {
+			standingsView, xgAvailable, completedMatches = addXGValues(standingsView, data)
+		}
+	}
 	var outlooks map[string]fixtureOutlookView
 	if outlooksFor != nil {
 		outlooks = outlooksFor(data)
 	}
-	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatusWithOutlooks(data, a.options.Location, outlooks)
+	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatusWithOutlooksFor(data, a.options.Location, outlooks, scope.xgAvailable())
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
@@ -490,7 +582,12 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		HomePath:               relativeURL(r.URL.Path, "/"),
 		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
-		Standings:              addTotalPositions(standingsView, totalTable, playoffPlaces(rules)),
+		HasStandings:           scope.standingsAvailable(),
+		HasFixtures:            scope.fixturesAvailable(),
+		HasXG:                  scope.xgAvailable(),
+		HasScheduleDifficulty:  scope.scheduleDifficultyAvailable(),
+		HasForecast:            scope.forecastAvailable(rules, rulesVerified),
+		Standings:              addTotalPositions(standingsView, totalTable, playoffLineFor(rules, rulesVerified)),
 		Strength:               scheduleView,
 		ResultFixtureGroups:    resultFixtureGroups,
 		UpcomingFixtureGroups:  upcomingFixtureGroups,
@@ -501,12 +598,12 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
-		HasFixtureOutlooks:     len(outlooks) > 0,
+		HasFixtureOutlooks:     scope.forecastCapabilityAvailable() && len(outlooks) > 0,
 	}
-	if completedMatches > 0 && xgAvailable < completedMatches {
+	if scope.xgAvailable() && completedMatches > 0 && xgAvailable < completedMatches {
 		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)
 	}
-	page.Navigation = seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)))
+	page.Navigation = seasonNavigation(r.URL.Path, scope, "/seasons/"+url.PathEscape(season)+strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)), rules, rulesVerified)
 	for _, game := range data.Games {
 		if game.Status == remainingStatus {
 			page.Remaining++
@@ -515,16 +612,32 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 	}
-	page.ScheduleNote = scheduleDifficultyNote(data, rules)
+	if scope.scheduleDifficultyAvailable() {
+		page.ScheduleNote = scheduleDifficultyNote(data, scope.Entry.Inventory)
+	}
+	if !scope.Cataloged {
+		page.FormatNotice = unknownFormatNotice
+	} else if !scope.standingsAvailable() {
+		page.FormatNotice = "Standings are unavailable for this scope."
+	}
 	if qualificationStore, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
-	}); ok && data.FixtureSnapshotID != "" && rules.Version != "" {
+	}); ok && scope.qualificationAvailable() && rulesVerified && data.FixtureSnapshotID != "" && rules.Version != "" {
 		if snapshot, found, lookupErr := qualificationStore.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
 			page.Standings = qualificationViews(page.Standings, snapshot.Statuses)
 		}
 	}
 
 	return page, nil
+}
+
+const unknownFormatNotice = "The competition format is not verified, so standings, forecasts, and clinching calculations are unavailable."
+
+func playoffLineFor(rules competition.Rules, verified bool) int {
+	if verified && hasPlayoffAchievement(rules) {
+		return playoffPlaces(rules)
+	}
+	return 0
 }
 
 // loadSeasonData makes local-cache latency visible as a distinct operation and
@@ -592,17 +705,16 @@ func seasonDataAttributes(data cache.SeasonData, season, stage string) []attribu
 	return attributes
 }
 
-func scheduleDifficultyNote(data cache.SeasonData, rules competition.Rules) string {
-	expectedGames := rules.ExpectedTeams * rules.GamesPerTeam / 2
+func scheduleDifficultyNote(data cache.SeasonData, inventory *competition.InventoryExpectation) string {
 	notes := make([]string, 0, 4)
 	if !historicalVenueReady(data, false) {
 		notes = append(notes, "Two-season home/away history is still syncing; the venue adjustment temporarily uses this season only.")
 	}
-	if len(data.Teams) != rules.ExpectedTeams {
-		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected teams.", len(data.Teams), rules.ExpectedTeams))
+	if inventory != nil && inventory.Teams > 0 && len(data.Teams) != inventory.Teams {
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected teams.", len(data.Teams), inventory.Teams))
 	}
-	if len(data.Games) != expectedGames {
-		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), expectedGames))
+	if inventory != nil && inventory.Games > 0 && len(data.Games) != inventory.Games {
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), inventory.Games))
 	}
 
 	appearances := make(map[string]int, len(data.Teams))
@@ -618,13 +730,15 @@ func scheduleDifficultyNote(data cache.SeasonData, rules competition.Rules) stri
 		notes = append(notes, fmt.Sprintf("%d fixture(s) have a status excluded from schedule difficulty.", unsupported))
 	}
 	uneven := 0
-	for _, team := range data.Teams {
-		if appearances[team.ID] != rules.GamesPerTeam {
-			uneven++
+	if inventory != nil && inventory.GamesPerTeam > 0 {
+		for _, team := range data.Teams {
+			if appearances[team.ID] != inventory.GamesPerTeam {
+				uneven++
+			}
 		}
-	}
-	if uneven > 0 {
-		notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", uneven, rules.GamesPerTeam))
+		if uneven > 0 {
+			notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", uneven, inventory.GamesPerTeam))
+		}
 	}
 	return strings.Join(notes, " ")
 }
@@ -715,6 +829,17 @@ func (a *application) renderError(w http.ResponseWriter, r *http.Request, err er
 	a.render(w, "error", errorPage{
 		Title: "Season unavailable", Message: err.Error(),
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+	})
+}
+
+func (a *application) renderUnavailableFeature(w http.ResponseWriter, r *http.Request, scope requestCompetition, feature string) {
+	rules, verified := a.rulesForSeason(scope.Season)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	a.render(w, "error", errorPage{
+		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
+		HomePath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(scope.Season)), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		Navigation: seasonNavigation(r.URL.Path, scope, "", rules, verified),
 	})
 }
 

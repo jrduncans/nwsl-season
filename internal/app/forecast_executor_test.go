@@ -83,6 +83,17 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 	}
 }
 
+func TestPrecacheForecastsSkipsUncatalogedConfiguredScope(t *testing.T) {
+	store := &recordingStore{fakeStore: fakeStore{season: testSeasonData()}}
+	application := newApplicationWithForecastExecutor(store, Options{CurrentSeason: "2099", ForecastIterations: 20, Location: time.UTC}, newForecastExecutor(1, time.Second))
+	if err := application.PrecacheForecasts(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.seasonReads != 0 {
+		t.Fatalf("precache read uncataloged season %d times", store.seasonReads)
+	}
+}
+
 func TestForecastExecutorRejectsWorkWhenCapacityIsFull(t *testing.T) {
 	executor := newForecastExecutor(1, time.Second)
 	started := make(chan struct{})
