@@ -59,6 +59,7 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P2-06 Targeted checked-xG persistence](phase-2/p2-06-targeted-checked-xg-persistence.md) | Complete | Terra | Sol | P2-04, P2-05 |
 | [Phase 3 Hot-path replacement](phase-3/p3-hot-path-replacement.md) | Complete | Terra | Primary; Sol for concurrency | P2-01 through P2-06 |
 | [Phase 4 Historical seasons](phase-4/p4-historical-seasons.md) | Complete | Terra | Primary | Phase 3 |
+| [Phase 5 Archived correction sweeps](phase-5/p5-cold-correction-maintenance.md) | Ready | Terra | Primary; Sol for concurrency | Phase 4 |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
@@ -82,6 +83,11 @@ factual public catalog entries, one sequential command backfills them through
 the split-operation compatibility facade, and cache-only pages provide season
 navigation and truthful load states without inventing historical competition
 rules.
+
+Phase 5 is ready as the remaining cold-maintenance slice. The hot correction
+tiers stay unchanged; this phase adds deterministic monthly archived
+games-then-xG sweeps, global cold-work serialization, due-only maintenance,
+and historical correction reporting.
 
 ## Packet template
 
