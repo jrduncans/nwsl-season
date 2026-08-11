@@ -226,7 +226,7 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 	}
 }
 
-func TestHistoricalCatalogPagesRenderCachedFactsAndSelector(t *testing.T) {
+func TestHistoricalCatalogPagesRenderCachedFactsWithoutPublicSelector(t *testing.T) {
 	data := testSeasonData()
 	handler := NewHandler(fakeStore{season: data})
 	for _, path := range []string{"/seasons/2019/regular-season", "/seasons/2019/regular-season/fixtures"} {
@@ -236,7 +236,7 @@ func TestHistoricalCatalogPagesRenderCachedFactsAndSelector(t *testing.T) {
 			t.Fatalf("%s status = %d, want 200", path, response.Code)
 		}
 		body := response.Body.String()
-		for _, want := range []string{historicalFormatNotice, "2019 Regular Season", "2026 Regular Season"} {
+		for _, want := range []string{historicalFormatNotice} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s missing %q", path, want)
 			}
@@ -244,16 +244,10 @@ func TestHistoricalCatalogPagesRenderCachedFactsAndSelector(t *testing.T) {
 		if strings.HasSuffix(path, "/fixtures") && !strings.Contains(body, "2–1") {
 			t.Errorf("%s did not render cached result", path)
 		}
-		previous := -1
-		for _, label := range []string{"2026 Regular Season", "2025 Regular Season", "2024 Regular Season", "2023 Regular Season", "2022 Regular Season", "2021 Regular Season", "2019 Regular Season", "2018 Regular Season", "2017 Regular Season", "2016 Regular Season"} {
-			position := strings.Index(body, ">"+label+"</a>")
-			if position < previous {
-				t.Errorf("%s selector order is not descending at %q", path, label)
+		for _, hidden := range []string{"Season selector", "Stage selector", "2026 Regular Season", "2025 Regular Season", "Playoffs"} {
+			if strings.Contains(body, hidden) {
+				t.Errorf("%s unexpectedly rendered %q", path, hidden)
 			}
-			previous = position
-		}
-		if !strings.Contains(body, `aria-current="page">2019 Regular Season</a>`) {
-			t.Errorf("%s selector did not mark 2019 current", path)
 		}
 		for _, forbidden := range []string{"Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8"} {
 			if strings.Contains(body, forbidden) {
@@ -788,7 +782,7 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="."`, `href="forecast"`, "Scheduled fixtures include an xG Poisson outlook for each result.", `class="fixture-outlook"`, "Home win <strong>", "Draw <strong>", "Away win <strong>", `class="fixture-outcome-segment fixture-outcome-home"`, `style="--fixture-outcome-share: `} {
+	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Scheduled", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="../regular-season"`, `href="forecast"`, "Scheduled fixtures include an xG Poisson outlook for each result.", `class="fixture-outlook"`, "Home win <strong>", "Draw <strong>", "Away win <strong>", `class="fixture-outcome-segment fixture-outcome-home"`, `style="--fixture-outcome-share: `} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -1341,7 +1335,7 @@ func TestForecastPreservesReverseProxyBasePath(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
-	if strings.Contains(response.Body.String(), `href="/`) || !strings.Contains(response.Body.String(), `href="."`) {
+	if strings.Contains(response.Body.String(), `href="/`) || !strings.Contains(response.Body.String(), `href="../regular-season"`) {
 		t.Fatalf("forecast page does not preserve relative base-path links: %s", response.Body.String())
 	}
 }
@@ -1376,6 +1370,9 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 				if !strings.Contains(navigation, ">"+label+"</a>") {
 					t.Errorf("navigation does not contain %q", label)
 				}
+			}
+			if test.path != "/seasons/2026/regular-season" && !strings.Contains(navigation, `href="../regular-season">Standings</a>`) {
+				t.Error("nested page standings link does not target the canonical regular-season route")
 			}
 			if strings.Contains(navigation, `>Model evaluation</a>`) {
 				t.Error("navigation still includes Model evaluation")

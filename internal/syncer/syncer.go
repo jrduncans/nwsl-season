@@ -218,7 +218,11 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	if options.SourceOnly {
 		return run, nil
 	}
-	if gameResult.FixtureInputsChanged && gameResult.Games != nil {
+	// Give the refreshers every successfully loaded inventory, not only a
+	// changed one. They cheaply no-op for a current snapshot, while an
+	// unchanged source fetch must still be able to fill a missing derived
+	// batch left by a previous failed run or a newly deployed calculation.
+	if gameResult.Games != nil {
 		run = s.refreshCalculations(context.WithoutCancel(ctx), run, gameResult.Games.Teams, gameResult.Games.Games, options.Force)
 	}
 	return s.pruneHistory(run), nil

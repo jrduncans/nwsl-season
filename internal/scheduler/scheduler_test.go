@@ -265,6 +265,24 @@ func TestSchedulerColdCorrectionDoesNotRecalculateHistoricalQualification(t *tes
 	}
 }
 
+func TestSchedulerRefreshesCurrentCalculationsBeforeColdMaintenance(t *testing.T) {
+	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
+	current := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("current", fixtures.PreMatchStatus, now.Add(time.Hour))})
+	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
+	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{current, archive}}}
+	runner := &historicalCorrectionRunner{}
+	s, err := New(store, runner, testPlannerConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	s.check()
+	if len(runner.operations) != 1 || runner.operations[0].Season != "2025" || runner.recalculations != 1 {
+		t.Fatalf("operations=%+v recalculations=%d", runner.operations, runner.recalculations)
+	}
+}
+
 func coldPlanningScope(season string, due *time.Time) cache.PlanningScopeSnapshot {
 	scope := planningScope(season, "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.CompletedStatus, time.Date(2033, 1, 1, 0, 0, 0, 0, time.UTC))})
 	scope.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted

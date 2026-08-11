@@ -322,6 +322,32 @@ func TestRunRefreshesXGBeforeDerivedCalculations(t *testing.T) {
 	}
 }
 
+func TestRunRefreshesDerivedCalculationsAfterUnchangedInventory(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	order := []string{}
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	service := Service{
+		ASA:           &client,
+		Store:         db,
+		Qualification: orderedRefresher{order: &order, label: "qualification"},
+		Scenarios:     orderedRefresher{order: &order, label: "scenarios"},
+	}
+
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"qualification", "scenarios", "qualification", "scenarios"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("refresh order = %v, want %v", order, want)
+	}
+}
+
 func TestMapXGoalsPreservesExpectedPoints(t *testing.T) {
 	homePoints, awayPoints := 2.47, .367
 	values, err := mapXGoals([]asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 2.36, AwayTeamXGoals: 1.11, HomeXPoints: &homePoints, AwayXPoints: &awayPoints}})

@@ -1076,6 +1076,12 @@ func stripBasePath(requestPath string) (string, bool) {
 }
 
 func relativeURL(fromPath, targetPath string) string {
+	// A stage's canonical route has no trailing slash. From a nested page, a
+	// plain "." resolves to the stage directory instead, which does not match a
+	// route. Step up and name the stage explicitly in that one case.
+	if path.Dir(fromPath) == targetPath {
+		return "../" + path.Base(targetPath)
+	}
 	fromParts := urlPathParts(path.Dir(fromPath))
 	targetParts := urlPathParts(targetPath)
 	common := 0

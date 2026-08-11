@@ -141,20 +141,33 @@ func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
-	tickCtx, tickCancel := context.WithTimeout(context.Background(), s.config.Timeout)
-	defer tickCancel()
-	ctx, span := telemetry.Tracer().Start(tickCtx, "scheduler.check", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(attribute.String("nwsl.season", s.config.Season), attribute.String("nwsl.stage", s.config.Stage)))
+	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.check", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(attribute.String("nwsl.season", s.config.Season), attribute.String("nwsl.stage", s.config.Stage)))
 	defer span.End()
-	snapshot, err := s.store.PlanningSnapshot(ctx)
+	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
+	snapshot, err := s.store.PlanningSnapshot(planningCtx)
+	planningCancel()
 	if err != nil {
 		span.SetAttributes(attribute.String("nwsl.scheduler.action", "read_planning_snapshot"), attribute.String("nwsl.scheduler.outcome", "failure"))
 		telemetry.RecordWarningWithType(ctx, span, err, "scheduler.planning_snapshot", telemetry.ErrorTypeStorageFailure)
 		return
 	}
+	// Source jobs use the split-operation API, so they do not invoke
+	// syncer.Service.Run's derived-data refresh. Recheck an already published
+	// current inventory before any maintenance work: a slow or failed archived
+	// request must not indefinitely block a missing clinching batch.
+	preflightCalculation := "not_needed"
+	if currentInventoryAvailable(snapshot, s.config.Season, s.config.Stage) {
+		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)
+	}
+	span.SetAttributes(attribute.String("nwsl.scheduler.clinching_preflight_outcome", preflightCalculation))
 	jobs := Plan(snapshot, s.config, s.now().UTC())
 	span.SetAttributes(attribute.Int("nwsl.scheduler.job_count", len(jobs)), attribute.Int("nwsl.scheduler.request_budget", requestBudget(s.config)))
 	if len(jobs) == 0 {
-		span.SetAttributes(attribute.String("nwsl.scheduler.action", "recalculate"), attribute.Int("nwsl.scheduler.request_count", 0), attribute.String("nwsl.scheduler.outcome", s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)))
+		outcome := preflightCalculation
+		if outcome == "not_needed" {
+			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)
+		}
+		span.SetAttributes(attribute.String("nwsl.scheduler.action", "recalculate"), attribute.Int("nwsl.scheduler.request_count", 0), attribute.String("nwsl.scheduler.outcome", outcome))
 		return
 	}
 	requests := 0
@@ -167,11 +180,8 @@ jobsLoop:
 			break jobsLoop
 		default:
 		}
-		if ctx.Err() != nil {
-			tickOutcome = "expired"
-			break
-		}
-		jobCtx, jobSpan := telemetry.Tracer().Start(ctx, "scheduler.job", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(jobAttributes(job, syncer.OperationResult{}, "planned", requests)...))
+		requestCtx, requestCancel := context.WithTimeout(ctx, s.config.Timeout)
+		jobCtx, jobSpan := telemetry.Tracer().Start(requestCtx, "scheduler.job", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(jobAttributes(job, syncer.OperationResult{}, "planned", requests)...))
 		outcome, result, attempted, jobErr := s.executeJob(jobCtx, job)
 		if attempted {
 			requests++
@@ -181,6 +191,7 @@ jobsLoop:
 			telemetry.MarkError(jobSpan, jobErr)
 		}
 		jobSpan.End()
+		requestCancel()
 		if outcome == "failure" {
 			tickOutcome = "failure"
 			break
@@ -200,6 +211,18 @@ jobsLoop:
 		}
 	}
 	span.SetAttributes(attribute.Int("nwsl.scheduler.request_count", requests), attribute.String("nwsl.scheduler.outcome", tickOutcome))
+}
+
+func currentInventoryAvailable(snapshot cache.PlanningSnapshot, season, stage string) bool {
+	for _, scope := range snapshot.Scopes {
+		if scope.Readiness.Scope.Season != season || scope.Readiness.Scope.Stage != stage {
+			continue
+		}
+		return scope.Readiness.Scope.Lifecycle == cache.SourceScopeActive &&
+			scope.Readiness.Readiness == cache.SourceReadinessAvailable &&
+			len(scope.Games) > 0
+	}
+	return false
 }
 
 func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.OperationResult, bool, error) {
