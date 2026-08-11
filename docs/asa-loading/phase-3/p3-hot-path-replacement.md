@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: In progress — Workstream A Complete; Workstream B Ready
+- Status: Complete
 - Implementation: Terra
 - Review: primary agent; use a separate Sol gate only for scheduler concurrency
   or lease changes
@@ -132,7 +132,7 @@ the same failure through both legacy and generalized paths.
 
 ## Workstream B: due-job planner and scheduler execution
 
-- Status: Ready
+- Status: Complete
 
 ### Planning snapshot
 

@@ -90,10 +90,6 @@ type RunOptions struct {
 	// seasons whose format is not configured here.
 	ExpectedTeams int
 	GamesPerTeam  int
-	// TargetFixtureID is retained only for the pre-Phase-3 scheduler call
-	// shape. The compatibility facade no longer performs target reconciliation;
-	// Workstream B replaces this field with batched checked operations.
-	TargetFixtureID string
 	// Trigger identifies the caller that started this sync (for example,
 	// "scheduler", "cli", or "venue_history"). It is trace context, not
 	// persisted cache state.

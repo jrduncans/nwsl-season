@@ -10,8 +10,9 @@ import (
 )
 
 type CheckedXGRequest struct {
-	GameID    string
-	NextDueAt *time.Time
+	GameID            string
+	NextDueAt         *time.Time
+	MaterialNextDueAt *time.Time
 }
 
 type GameXGCheckState struct {
@@ -145,9 +146,11 @@ func (c *DB) UpsertCheckedXG(ctx context.Context, season, stage string, requeste
 
 	ids := make([]string, 0, len(requests))
 	due := make(map[string]*time.Time, len(requests))
+	requestsByID := make(map[string]CheckedXGRequest, len(requests))
 	for _, request := range requests {
 		ids = append(ids, request.GameID)
 		due[request.GameID] = request.NextDueAt
+		requestsByID[request.GameID] = request
 	}
 	sort.Strings(ids)
 	material := false
@@ -170,7 +173,11 @@ func (c *DB) UpsertCheckedXG(ctx context.Context, season, stage string, requeste
 				audit.RowsUnchanged++
 			}
 		}
-		if err := upsertGameXGCheck(ctx, tx, id, audit.FinishedAt, due[id], false, returnedValue, rowMaterial); err != nil {
+		nextDue := due[id]
+		if rowMaterial && requestsByID[id].MaterialNextDueAt != nil {
+			nextDue = requestsByID[id].MaterialNextDueAt
+		}
+		if err := upsertGameXGCheck(ctx, tx, id, audit.FinishedAt, nextDue, false, returnedValue, rowMaterial); err != nil {
 			return XGRefreshResult{}, err
 		}
 	}
@@ -215,12 +222,18 @@ func prepareCheckedXG(season, stage string, requested []CheckedXGRequest, return
 		}
 		seen[request.GameID] = true
 		requests[i] = request
-		if request.NextDueAt != nil {
-			if request.NextDueAt.Before(metadata.FinishedAt) {
+		for _, dueValue := range []*time.Time{request.NextDueAt, request.MaterialNextDueAt} {
+			if dueValue != nil && dueValue.Before(metadata.FinishedAt) {
 				return nil, SourceRefreshAudit{}, errors.New("xG check due is before finish")
 			}
+		}
+		if request.NextDueAt != nil {
 			due := request.NextDueAt.UTC().Truncate(time.Second)
 			requests[i].NextDueAt = &due
+		}
+		if request.MaterialNextDueAt != nil {
+			due := request.MaterialNextDueAt.UTC().Truncate(time.Second)
+			requests[i].MaterialNextDueAt = &due
 		}
 	}
 	returnedIDs := make(map[string]bool, len(returned))

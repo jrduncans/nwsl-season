@@ -109,7 +109,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		ForecastConcurrency: cfg.ForecastConcurrency,
 		ForecastTimeout:     cfg.ForecastTimeout,
 	})
-	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger}, scheduler.Config{
+	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger, currentSeason: cfg.SyncSeason, currentStage: cfg.SyncStage}, scheduler.Config{
 		Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: rules.ExpectedTeams, GamesPerTeam: rules.GamesPerTeam, CheckInterval: cfg.SyncCheckInterval,
 		CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout,
 	}, logger)
@@ -202,9 +202,30 @@ func shutdownHTTPServer(server *http.Server) error {
 // refreshes the process-local baseline forecast cache only when an input to a
 // forecast actually changed.
 type forecastWarmingRunner struct {
-	service     syncer.Service
-	application *app.Application
-	logger      *slog.Logger
+	service       syncer.Service
+	application   *app.Application
+	logger        *slog.Logger
+	currentSeason string
+	currentStage  string
+}
+
+func (r forecastWarmingRunner) Execute(ctx context.Context, operation syncer.Operation) (syncer.OperationResult, error) {
+	result, err := r.service.Execute(ctx, operation)
+	if err != nil {
+		setSchedulerForecastWarmOutcome(ctx, "not_run")
+		return result, err
+	}
+	if operation.Season != r.currentSeason || operation.Stage != r.currentStage || (!result.FixtureInputsChanged && !result.XGInputsChanged) {
+		setSchedulerForecastWarmOutcome(ctx, "not_needed")
+		return result, nil
+	}
+	if err := r.application.PrecacheForecastsWithTrigger(context.WithoutCancel(ctx), "post_source_job"); err != nil {
+		setSchedulerForecastWarmOutcome(ctx, "failed")
+		r.logger.Warn("pre-cache forecasts after source job", "season", operation.Season, "stage", operation.Stage, "error", err)
+		return result, nil
+	}
+	setSchedulerForecastWarmOutcome(ctx, "complete")
+	return result, nil
 }
 
 func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOptions) (cache.SyncRun, error) {

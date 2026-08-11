@@ -33,8 +33,10 @@ const (
 // OperationGameRequest carries the independent cadence pointer for one
 // targeted identity. The adapter sorts and copies these before issuing ASA.
 type OperationGameRequest struct {
-	GameID    string
-	NextDueAt *time.Time
+	GameID               string
+	NextDueAt            *time.Time
+	NextDueAfter         time.Duration
+	MaterialNextDueAfter time.Duration
 }
 
 // Operation describes one sequential source request and its corresponding
@@ -49,10 +51,11 @@ type Operation struct {
 	Trigger   cache.SourceRefreshTrigger
 	Force     bool
 
-	StartedAt     time.Time
-	FinishedAt    time.Time // executor-observed completion time
-	NextFullDueAt *time.Time
-	Expectation   *competition.InventoryExpectation
+	StartedAt        time.Time
+	FinishedAt       time.Time // executor-observed completion time
+	NextFullDueAt    *time.Time
+	NextFullDueAfter time.Duration
+	Expectation      *competition.InventoryExpectation
 }
 
 // OperationResult exposes only results committed by the owning cache API.
@@ -277,10 +280,16 @@ func normalizeOperation(operation Operation) (Operation, error) {
 				due := requests[i].NextDueAt.UTC()
 				requests[i].NextDueAt = &due
 			}
+			if requests[i].NextDueAfter < 0 || requests[i].MaterialNextDueAfter < 0 || (requests[i].NextDueAt != nil && (requests[i].NextDueAfter != 0 || requests[i].MaterialNextDueAfter != 0)) {
+				return Operation{}, errors.New("targeted source operation has invalid due policy")
+			}
 		}
 		operation.Requested = requests
 	} else if len(operation.Requested) != 0 {
 		return Operation{}, errors.New("full source operation has targeted game IDs or due time")
+	}
+	if operation.NextFullDueAfter < 0 || (operation.NextFullDueAt != nil && operation.NextFullDueAfter != 0) || (operation.Mode != OperationFull && operation.NextFullDueAfter != 0) {
+		return Operation{}, errors.New("invalid full source operation due policy")
 	}
 	if operation.NextFullDueAt != nil {
 		if operation.Mode != OperationFull || (!operation.FinishedAt.IsZero() && operation.NextFullDueAt.Before(operation.FinishedAt)) {
@@ -297,7 +306,12 @@ func normalizeOperation(operation Operation) (Operation, error) {
 }
 
 func fullMetadata(operation Operation) cache.FullRefreshMetadata {
-	return cache.FullRefreshMetadata{Trigger: operation.Trigger, StartedAt: operation.StartedAt, FinishedAt: operation.FinishedAt, NextFullDueAt: operation.NextFullDueAt}
+	due := operation.NextFullDueAt
+	if operation.NextFullDueAfter != 0 {
+		value := operation.FinishedAt.Add(operation.NextFullDueAfter)
+		due = &value
+	}
+	return cache.FullRefreshMetadata{Trigger: operation.Trigger, StartedAt: operation.StartedAt, FinishedAt: operation.FinishedAt, NextFullDueAt: due}
 }
 
 func targetedMetadata(operation Operation) cache.TargetedRefreshMetadata {
@@ -307,7 +321,17 @@ func targetedMetadata(operation Operation) cache.TargetedRefreshMetadata {
 func checkedGameRequests(operation Operation) []cache.CheckedGameRequest {
 	requests := make([]cache.CheckedGameRequest, len(operation.Requested))
 	for i, request := range operation.Requested {
-		requests[i] = cache.CheckedGameRequest{ASAID: request.GameID, NextDueAt: request.NextDueAt}
+		next := request.NextDueAt
+		if request.NextDueAfter != 0 {
+			value := operation.FinishedAt.Add(request.NextDueAfter)
+			next = &value
+		}
+		var material *time.Time
+		if request.MaterialNextDueAfter != 0 {
+			value := operation.FinishedAt.Add(request.MaterialNextDueAfter)
+			material = &value
+		}
+		requests[i] = cache.CheckedGameRequest{ASAID: request.GameID, NextDueAt: next, MaterialNextDueAt: material}
 	}
 	return requests
 }
@@ -315,7 +339,17 @@ func checkedGameRequests(operation Operation) []cache.CheckedGameRequest {
 func checkedXGRequests(operation Operation) []cache.CheckedXGRequest {
 	requests := make([]cache.CheckedXGRequest, len(operation.Requested))
 	for i, request := range operation.Requested {
-		requests[i] = cache.CheckedXGRequest{GameID: request.GameID, NextDueAt: request.NextDueAt}
+		next := request.NextDueAt
+		if request.NextDueAfter != 0 {
+			value := operation.FinishedAt.Add(request.NextDueAfter)
+			next = &value
+		}
+		var material *time.Time
+		if request.MaterialNextDueAfter != 0 {
+			value := operation.FinishedAt.Add(request.MaterialNextDueAfter)
+			material = &value
+		}
+		requests[i] = cache.CheckedXGRequest{GameID: request.GameID, NextDueAt: next, MaterialNextDueAt: material}
 	}
 	return requests
 }

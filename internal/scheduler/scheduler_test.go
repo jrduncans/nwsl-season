@@ -3,210 +3,213 @@ package scheduler
 import (
 	"context"
 	"database/sql"
-	"sync/atomic"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
 
-func TestAssess(t *testing.T) {
-	now := time.Date(2026, 7, 13, 20, 0, 0, 0, time.UTC)
-	success := &cache.SyncRun{FinishedAt: now.Add(-time.Hour)}
-	xgSuccess := &cache.XGSyncRun{FinishedAt: now.Add(-time.Hour), Outcome: "success"}
-	final := schedulerGame("final", "2026-07-13 12:00:00 UTC", "FullTime", true, true)
-
-	for _, test := range []struct {
-		name       string
-		snapshot   cache.RefreshSnapshot
-		wantName   string
-		wantReason string
-		wantID     string
-	}{
-		{
-			name:       "missing successful snapshot",
-			snapshot:   cache.RefreshSnapshot{Games: []cache.Game{final}},
-			wantName:   decisionEligible,
-			wantReason: "missing_successful_snapshot",
-		},
-		{
-			name:       "empty fixtures",
-			snapshot:   cache.RefreshSnapshot{LastSuccess: success},
-			wantName:   decisionEligible,
-			wantReason: "empty_fixture_cache",
-		},
-		{
-			name: "stale pre-match fixture",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{
-				schedulerGame("stale", "2026-07-13 15:00:00 UTC", "PreMatch", false, false),
-			}},
-			wantName: decisionEligible, wantReason: "plausibly_complete_fixture", wantID: "stale",
-		},
-		{
-			name: "full time without scores",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{
-				schedulerGame("missing-score", "2026-07-13 15:00:00 UTC", "FullTime", false, false),
-			}},
-			wantName: decisionEligible, wantReason: "plausibly_complete_fixture", wantID: "missing-score",
-		},
-		{
-			name: "invalid kickoff",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{
-				schedulerGame("invalid-time", "not-a-time", "PreMatch", false, false),
-			}},
-			wantName: decisionEligible, wantReason: "invalid_kickoff", wantID: "invalid-time",
-		},
-		{
-			name: "unsupported status",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{
-				schedulerGame("unknown", "2026-07-20 15:00:00 UTC", "Delayed", false, false),
-			}},
-			wantName: decisionEligible, wantReason: "unsupported_status", wantID: "unknown",
-		},
-		{
-			name:     "missing successful xg snapshot",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, Games: []cache.Game{final}},
-			wantName: decisionEligible, wantReason: "missing_successful_xg_snapshot",
-		},
-		{
-			name: "current known window",
-			snapshot: cache.RefreshSnapshot{LastSuccess: success, XGStatus: cache.XGStatus{LastSuccess: xgSuccess}, Games: []cache.Game{
-				final,
-				schedulerGame("future", "2026-07-20 15:00:00 UTC", "PreMatch", false, false),
-			}},
-			wantName: decisionCurrent, wantReason: "known_match_window_is_current",
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			got := Assess(test.snapshot, now, 3*time.Hour, 0, 0)
-			if got.Name != test.wantName || got.Reason != test.wantReason || got.FixtureID != test.wantID {
-				t.Fatalf("Assess() = %+v, want name=%q reason=%q fixture=%q", got, test.wantName, test.wantReason, test.wantID)
-			}
-		})
+func TestPlanBatchesDueTargetedJobsAndHonorsBudget(t *testing.T) {
+	now := time.Date(2033, 6, 10, 12, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("two", fixtures.PreMatchStatus, now.Add(-time.Hour)), plannedGame("one", fixtures.PreMatchStatus, now.Add(-time.Hour))})
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: timePointer(now)}, {GameID: "two", NextDueAt: timePointer(now)}}
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || !reflect.DeepEqual(jobIDs(jobs[0]), []string{"one", "two"}) {
+		t.Fatalf("jobs = %+v", jobs)
+	}
+	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, Config{Season: "2033", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, Timeout: time.Second, SourceRequestBudget: 0}, now)
+	if len(jobs) != 1 {
+		t.Fatalf("default budget jobs = %+v", jobs)
 	}
 }
 
-func TestAssessTreatsAnIncompleteKnownScheduleAsEligible(t *testing.T) {
-	now := time.Date(2026, 8, 9, 3, 0, 0, 0, time.UTC)
-	snapshot := cache.RefreshSnapshot{
-		LastSuccess: &cache.SyncRun{FinishedAt: now.Add(-time.Hour)},
-		Games: []cache.Game{
-			{ASAID: "only-fixture", HomeTeamID: "home", AwayTeamID: "away", KickoffUTC: now.Add(24 * time.Hour).Format(time.RFC3339), Status: "PreMatch"},
-		},
+func TestPlanXGCadenceAndInitialFullXG(t *testing.T) {
+	now := time.Date(2033, 7, 10, 12, 0, 0, 0, time.UTC)
+	terminal := now.Add(-24 * time.Hour)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("xg", fixtures.CompletedStatus, now.Add(-24*time.Hour))})
+	scope.Games[0].HomeScore, scope.Games[0].AwayScore = score(1), score(0)
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "xg", FirstTerminalObservedAt: &terminal, NextDueAt: timePointer(now)}}
+	// No xG full state triggers one bootstrap full request before targeted work.
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) == 0 || jobs[0].Kind != JobCheckedGames || jobs[1].Kind != JobFullXG {
+		t.Fatalf("initial xG jobs = %+v", jobs)
 	}
-
-	got := Assess(snapshot, now, 2*time.Hour, 2, 2)
-	if got.Name != decisionEligible || got.Reason != "incomplete_fixture_cache" {
-		t.Fatalf("Assess() = %+v, want incomplete fixture cache eligibility", got)
+	state := cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.XGFull = &state
+	scope.ResultChecks[0].NextDueAt = timePointer(now.Add(6 * time.Hour))
+	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedXG || jobIDs(jobs[0])[0] != "xg" || jobs[0].Operation.Requested[0].NextDueAfter != 5*time.Minute || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 6*time.Hour {
+		t.Fatalf("missing xG jobs = %+v", jobs)
+	}
+	available := cache.GameXG{GameID: "xg", Availability: cache.XGAvailable}
+	scope.XG = []cache.GameXG{available}
+	first := now.Add(-6 * 24 * time.Hour)
+	scope.XGChecks = []cache.GameXGCheckState{{GameID: "xg", FirstAvailableObservedAt: &first, NextDueAt: timePointer(now)}}
+	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Operation.Requested[0].NextDueAfter != 24*time.Hour || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 6*time.Hour {
+		t.Fatalf("daily correction job = %+v", jobs)
+	}
+	late := now.Add(-31 * 24 * time.Hour)
+	scope.ResultChecks[0].FirstTerminalObservedAt = &late
+	scope.XGChecks[0].FirstAvailableObservedAt = &late
+	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now); len(jobs) != 0 {
+		t.Fatalf("post-window jobs = %+v", jobs)
+	}
+	material := now.Add(-time.Hour)
+	scope.XGChecks[0].LastMaterialChangeAt = &material
+	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now); len(jobs) != 1 || jobs[0].Operation.Requested[0].NextDueAfter != 6*time.Hour {
+		t.Fatalf("material restart jobs = %+v", jobs)
 	}
 }
 
-func TestSchedulerRunsImmediatelyAndStops(t *testing.T) {
-	now := time.Now().UTC()
-	store := schedulerStore{snapshot: cache.RefreshSnapshot{
-		LastSuccess: &cache.SyncRun{FinishedAt: now},
-		Games:       []cache.Game{schedulerGame("stale", now.Add(-4*time.Hour).Format(time.RFC3339), "PreMatch", false, false)},
-	}}
-	runner := &schedulerRunner{called: make(chan struct{}, 1)}
-	s, err := New(store, runner, Config{
-		Season: "2026", Stage: "Regular Season", CheckInterval: time.Hour,
-		CompletionGrace: 3 * time.Hour, Timeout: time.Second,
-	}, nil)
+func TestPlanAbandonedUsesTerminalCorrectionCadence(t *testing.T) {
+	now := time.Date(2033, 8, 1, 0, 0, 0, 0, time.UTC)
+	first := now.Add(-6 * 24 * time.Hour)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("abandoned", fixtures.AbandonedStatus, now.Add(-10*time.Hour))})
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "abandoned", FirstTerminalObservedAt: &first, NextDueAt: timePointer(now)}}
+	state := cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.XGFull = &state
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || jobs[0].Operation.Requested[0].NextDueAfter != 24*time.Hour {
+		t.Fatalf("abandoned job = %+v", jobs)
+	}
+}
+
+func TestPlanBootstrapUsesOneFullInventoryThenOneFullXG(t *testing.T) {
+	now := time.Date(2033, 8, 2, 0, 0, 0, 0, time.UTC)
+	missing := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{missing}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames {
+		t.Fatalf("missing-inventory bootstrap jobs = %+v", jobs)
+	}
+	available := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("future", fixtures.PreMatchStatus, now.Add(time.Hour))})
+	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{available}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullXG {
+		t.Fatalf("available bootstrap jobs = %+v", jobs)
+	}
+}
+
+func TestPlanAuditsActiveCompleteInventoryWeekly(t *testing.T) {
+	now := time.Date(2033, 8, 2, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("future", fixtures.PreMatchStatus, now.Add(time.Hour))})
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.GamesFull.NextFullDueAt = timePointer(now)
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Reason != "weekly_inventory_audit" {
+		t.Fatalf("weekly active inventory jobs = %+v", jobs)
+	}
+	scope.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now); len(jobs) != 0 {
+		t.Fatalf("completed inventory jobs = %+v", jobs)
+	}
+}
+
+func TestPlanUsesConfiguredCorrectionDefaults(t *testing.T) {
+	now := time.Date(2033, 8, 3, 0, 0, 0, 0, time.UTC)
+	first := now.Add(-time.Hour)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("final", fixtures.CompletedStatus, now.Add(-time.Hour))})
+	scope.Games[0].HomeScore, scope.Games[0].AwayScore = score(1), score(0)
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "final", FirstTerminalObservedAt: &first, NextDueAt: timePointer(now)}}
+	config := testPlannerConfig()
+	config.CorrectionInterval = 2 * time.Hour
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, config, now)
+	if len(jobs) == 0 || jobs[0].Kind != JobCheckedGames || jobs[0].Operation.Requested[0].NextDueAfter != 2*time.Hour || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 2*time.Hour {
+		t.Fatalf("configured correction job = %+v", jobs)
+	}
+}
+
+func TestSchedulerExecutesPlannedJobsSequentially(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: timePointer(now)}}
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
+	runner := &operationRunner{}
+	s, err := New(store, runner, testPlannerConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Start()
-	select {
-	case <-runner.called:
-	case <-time.After(time.Second):
-		t.Fatal("scheduler did not run its startup check")
-	}
-	s.Stop()
-	s.Wait()
-	if runner.calls.Load() != 1 {
-		t.Fatalf("runner calls = %d, want 1", runner.calls.Load())
-	}
-	if got := runner.lastOptions.TargetFixtureID; got != "stale" {
-		t.Fatalf("target fixture = %q, want stale", got)
+	s.now = func() time.Time { return now }
+	s.check()
+	if len(runner.operations) != 1 || runner.operations[0].Resource != syncer.OperationGames || runner.operations[0].Mode != syncer.OperationTargeted || store.acquired != 1 || store.released != 1 {
+		t.Fatalf("operations=%+v leases=%d/%d", runner.operations, store.acquired, store.released)
 	}
 }
 
-func TestSchedulerRecalculatesWhenFixtureCacheIsCurrent(t *testing.T) {
-	now := time.Now().UTC()
-	store := schedulerStore{snapshot: cache.RefreshSnapshot{
-		LastSuccess: &cache.SyncRun{FinishedAt: now},
-		XGStatus:    cache.XGStatus{LastSuccess: &cache.XGSyncRun{FinishedAt: now, Outcome: "success"}},
-		Games:       []cache.Game{schedulerGame("future", now.Add(time.Hour).Format(time.RFC3339), "PreMatch", false, false)},
-	}}
-	runner := &recalculatingSchedulerRunner{schedulerRunner: schedulerRunner{called: make(chan struct{}, 1)}, recalculated: make(chan struct{}, 1)}
-	s, err := New(store, runner, Config{
-		Season: "2026", Stage: "Regular Season", CheckInterval: time.Hour,
-		CompletionGrace: 3 * time.Hour, Timeout: time.Second,
-	}, nil)
+func TestSchedulerStopPreventsStartingAnotherPlannedJob(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	current := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	upcoming := planningScope("2034", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	upcoming.Readiness.Scope.Lifecycle = cache.SourceScopeUpcoming
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{current, upcoming}}}
+	runner := &operationRunner{}
+	s, err := New(store, runner, testPlannerConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Start()
-	select {
-	case <-runner.recalculated:
-	case <-time.After(time.Second):
-		t.Fatal("scheduler did not recalculate the current fixture cache")
-	}
-	s.Stop()
-	s.Wait()
-	if runner.calls.Load() != 0 {
-		t.Fatalf("source sync calls = %d, want 0", runner.calls.Load())
+	s.now = func() time.Time { return now }
+	runner.afterExecute = s.Stop
+	s.check()
+	if len(runner.operations) != 1 || store.acquired != 1 || store.released != 1 {
+		t.Fatalf("operations=%d leases=%d/%d", len(runner.operations), store.acquired, store.released)
 	}
 }
 
-func TestTargetFixtureIDIsLimitedToOverdueResults(t *testing.T) {
-	if got := targetFixtureID(Decision{Reason: "plausibly_complete_fixture", FixtureID: "game-1"}); got != "game-1" {
-		t.Fatalf("overdue target = %q, want game-1", got)
+func planningScope(season, stage string, readiness cache.SourceReadiness, games []cache.Game) cache.PlanningScopeSnapshot {
+	scope := cache.PlanningScopeSnapshot{Readiness: cache.SeasonReadinessSnapshot{Scope: cache.SourceScope{Season: season, Stage: stage, Lifecycle: cache.SourceScopeActive}, Readiness: readiness, Completeness: cache.InventoryCompletenessComplete}, Games: games}
+	if readiness == cache.SourceReadinessAvailable {
+		due := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+		scope.GamesFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGames, Season: season, Stage: stage, NextFullDueAt: &due}
 	}
-	for _, reason := range []string{"xg_unavailable", "unsupported_status", "invalid_kickoff", "incomplete_fixture_cache"} {
-		if got := targetFixtureID(Decision{Reason: reason, FixtureID: "game-1"}); got != "" {
-			t.Errorf("reason %q target = %q, want empty", reason, got)
-		}
+	return scope
+}
+func plannedGame(id, status string, kickoff time.Time) cache.Game {
+	return cache.Game{ASAID: id, Season: "2033", Stage: "Regular Season", KickoffUTC: kickoff.Format(time.RFC3339), Status: status, HomeTeamID: "home", AwayTeamID: "away"}
+}
+func score(value int) sql.NullInt64          { return sql.NullInt64{Int64: int64(value), Valid: true} }
+func timePointer(value time.Time) *time.Time { return &value }
+func jobIDs(job Job) []string {
+	out := make([]string, len(job.Operation.Requested))
+	for i, v := range job.Operation.Requested {
+		out[i] = v.GameID
 	}
+	return out
+}
+func testPlannerConfig() Config {
+	return Config{Season: "2033", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, Timeout: time.Second, SourceRequestBudget: 3}
 }
 
-func schedulerGame(id, kickoff, status string, homeScore, awayScore bool) cache.Game {
-	game := cache.Game{ASAID: id, KickoffUTC: kickoff, Status: status}
-	if homeScore {
-		game.HomeScore = sql.NullInt64{Int64: 1, Valid: true}
-	}
-	if awayScore {
-		game.AwayScore = sql.NullInt64{Int64: 0, Valid: true}
-	}
-	return game
+type planningStore struct {
+	snapshot           cache.PlanningSnapshot
+	acquired, released int
 }
 
-type schedulerStore struct{ snapshot cache.RefreshSnapshot }
-
-func (s schedulerStore) RefreshSnapshot(context.Context, string, string) (cache.RefreshSnapshot, error) {
+func (s *planningStore) PlanningSnapshot(context.Context) (cache.PlanningSnapshot, error) {
 	return s.snapshot, nil
 }
-
-type schedulerRunner struct {
-	called      chan struct{}
-	calls       atomic.Int32
-	lastOptions syncer.RunOptions
+func (s *planningStore) TryAcquireSyncLease(context.Context, string, string, time.Time) (bool, error) {
+	s.acquired++
+	return true, nil
+}
+func (s *planningStore) ReleaseSyncLease(context.Context, string, string) error {
+	s.released++
+	return nil
 }
 
-func (r *schedulerRunner) Run(_ context.Context, options syncer.RunOptions) (cache.SyncRun, error) {
-	r.calls.Add(1)
-	r.lastOptions = options
-	r.called <- struct{}{}
-	return cache.SyncRun{StartedAt: time.Now(), FinishedAt: time.Now()}, nil
+type operationRunner struct {
+	operations   []syncer.Operation
+	afterExecute func()
 }
 
-type recalculatingSchedulerRunner struct {
-	schedulerRunner
-	recalculated chan struct{}
-}
-
-func (r *recalculatingSchedulerRunner) Recalculate(context.Context, syncer.RecalculateOptions) (cache.SyncRun, error) {
-	r.recalculated <- struct{}{}
-	return cache.SyncRun{QualificationRecalculated: true, ScenarioRecalculated: true}, nil
+func (r *operationRunner) Execute(_ context.Context, op syncer.Operation) (syncer.OperationResult, error) {
+	r.operations = append(r.operations, op)
+	if r.afterExecute != nil {
+		r.afterExecute()
+	}
+	return syncer.OperationResult{Operation: op, Games: &cache.GameRefreshResult{Audit: cache.SourceRefreshAudit{RequestedRows: len(op.Requested)}}}, nil
 }

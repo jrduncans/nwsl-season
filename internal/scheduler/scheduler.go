@@ -1,4 +1,4 @@
-// Package scheduler decides when the server should refresh its local ASA cache.
+// Package scheduler plans and executes bounded, due ASA source operations.
 package scheduler
 
 import (
@@ -10,105 +10,91 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
-	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-const (
-	decisionEligible = "eligible"
-	decisionCurrent  = "current"
-)
-
-// SnapshotStore supplies the local data needed to decide whether to refresh.
 type SnapshotStore interface {
-	RefreshSnapshot(context.Context, string, string) (cache.RefreshSnapshot, error)
+	PlanningSnapshot(context.Context) (cache.PlanningSnapshot, error)
+	TryAcquireSyncLease(context.Context, string, string, time.Time) (bool, error)
+	ReleaseSyncLease(context.Context, string, string) error
 }
 
-// Runner performs a complete atomic sync when the scheduler makes it eligible.
-// Implementations own exception logging for returned errors; the scheduler
-// marks its orchestration span without recording that same exception again.
 type Runner interface {
-	Run(context.Context, syncer.RunOptions) (cache.SyncRun, error)
+	Execute(context.Context, syncer.Operation) (syncer.OperationResult, error)
 }
 
-// calculationRunner is optional so schedulers can still be used with runners
-// that only synchronize source data. syncer.Service implements it to restore
-// missing derived clinching batches from an otherwise current fixture cache.
 type calculationRunner interface {
 	Recalculate(context.Context, syncer.RecalculateOptions) (cache.SyncRun, error)
 }
 
-// Config configures one current-season scheduler.
 type Config struct {
-	Season          string
-	Stage           string
-	ExpectedTeams   int
-	GamesPerTeam    int
-	CheckInterval   time.Duration
-	CompletionGrace time.Duration
-	Timeout         time.Duration
+	Season                string
+	Stage                 string
+	ExpectedTeams         int
+	GamesPerTeam          int
+	CheckInterval         time.Duration
+	CompletionGrace       time.Duration
+	Timeout               time.Duration
+	SourceRequestBudget   int
+	CorrectionInterval    time.Duration
+	CorrectionDaily       time.Duration
+	CorrectionFastWindow  time.Duration
+	CorrectionFinalWindow time.Duration
+	InventoryInterval     time.Duration
 }
 
-// Decision records a local refresh decision. It deliberately excludes outcomes
-// of actual network attempts, which are recorded in cache sync_runs instead.
-type Decision struct {
-	Name      string
-	Reason    string
-	FixtureID string
-}
-
-// Scheduler runs cache checks serially in one server process.
 type Scheduler struct {
-	store  SnapshotStore
-	runner Runner
-	config Config
-	logger *slog.Logger
-	now    func() time.Time
-
+	store    SnapshotStore
+	runner   Runner
+	config   Config
+	logger   *slog.Logger
+	now      func() time.Time
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
 }
 
-// New constructs a scheduler. Start must be called once before Stop or Wait.
 func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger) (*Scheduler, error) {
 	if store == nil {
-		return nil, fmt.Errorf("scheduler store is required")
+		return nil, errors.New("scheduler store is required")
 	}
 	if runner == nil {
-		return nil, fmt.Errorf("scheduler runner is required")
+		return nil, errors.New("scheduler runner is required")
 	}
 	if config.Season == "" || config.Stage == "" {
-		return nil, fmt.Errorf("scheduler season and stage are required")
+		return nil, errors.New("scheduler season and stage are required")
 	}
 	if err := validateScheduleConfig(config); err != nil {
 		return nil, err
 	}
-	for _, value := range []struct {
+	for _, field := range []struct {
 		name  string
 		value time.Duration
-	}{
-		{"check interval", config.CheckInterval},
-		{"completion grace", config.CompletionGrace},
-		{"timeout", config.Timeout},
-	} {
-		if value.value <= 0 {
-			return nil, fmt.Errorf("scheduler %s must be positive", value.name)
+	}{{"check interval", config.CheckInterval}, {"completion grace", config.CompletionGrace}, {"timeout", config.Timeout}} {
+		if field.value <= 0 {
+			return nil, fmt.Errorf("scheduler %s must be positive", field.name)
+		}
+	}
+	if config.SourceRequestBudget < 0 {
+		return nil, errors.New("scheduler source request budget must not be negative")
+	}
+	for _, field := range []struct {
+		name  string
+		value time.Duration
+	}{{"correction interval", config.CorrectionInterval}, {"correction daily", config.CorrectionDaily}, {"correction fast window", config.CorrectionFastWindow}, {"correction final window", config.CorrectionFinalWindow}, {"inventory interval", config.InventoryInterval}} {
+		if field.value < 0 {
+			return nil, fmt.Errorf("scheduler %s must not be negative", field.name)
 		}
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Scheduler{
-		store: store, runner: runner, config: config, logger: logger, now: time.Now,
-		stop: make(chan struct{}), done: make(chan struct{}),
-	}, nil
+	return &Scheduler{store: store, runner: runner, config: config, logger: logger, now: time.Now, stop: make(chan struct{}), done: make(chan struct{})}, nil
 }
 
-// Start makes an immediate local decision, then checks on the configured ticker.
 func (s *Scheduler) Start() {
 	go func() {
 		defer close(s.done)
@@ -130,196 +116,105 @@ func (s *Scheduler) Start() {
 		}
 	}()
 }
-
-// Stop prevents future checks. It does not cancel an active bounded refresh.
-func (s *Scheduler) Stop() {
-	s.stopOnce.Do(func() { close(s.stop) })
-}
-
-// Wait blocks until the active check, if any, has finished.
+func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
-	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.check",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.season", s.config.Season),
-			attribute.String("nwsl.stage", s.config.Stage),
-		),
-	)
+	tickCtx, tickCancel := context.WithTimeout(context.Background(), s.config.Timeout)
+	defer tickCancel()
+	ctx, span := telemetry.Tracer().Start(tickCtx, "scheduler.check", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(attribute.String("nwsl.season", s.config.Season), attribute.String("nwsl.stage", s.config.Stage)))
 	defer span.End()
-
-	snapshotCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
-	snapshot, err := s.store.RefreshSnapshot(snapshotCtx, s.config.Season, s.config.Stage)
-	cancel()
+	snapshot, err := s.store.PlanningSnapshot(ctx)
 	if err != nil {
-		span.SetAttributes(
-			attribute.String("nwsl.scheduler.action", "read_snapshot"),
-			attribute.String("nwsl.scheduler.outcome", "failure"),
-		)
-		telemetry.RecordWarningWithType(ctx, span, err, "scheduler.refresh_snapshot", telemetry.ErrorTypeStorageFailure)
-		s.logger.Error("cache refresh decision", "decision", "check_failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
+		span.SetAttributes(attribute.String("nwsl.scheduler.action", "read_planning_snapshot"), attribute.String("nwsl.scheduler.outcome", "failure"))
+		telemetry.RecordWarningWithType(ctx, span, err, "scheduler.planning_snapshot", telemetry.ErrorTypeStorageFailure)
 		return
 	}
-
-	decision := Assess(snapshot, s.now().UTC(), s.config.CompletionGrace, s.config.ExpectedTeams, s.config.GamesPerTeam)
-	span.SetAttributes(
-		attribute.String("nwsl.sync.decision", decision.Name),
-		attribute.String("nwsl.sync.decision_reason", decision.Reason),
-		attribute.String("nwsl.sync.fixture_id", decision.FixtureID),
-		attribute.Int("nwsl.scheduler.cached_fixture_count", len(snapshot.Games)),
-		attribute.Int("nwsl.scheduler.expected_fixture_count", expectedFixtureCount(s.config.ExpectedTeams, s.config.GamesPerTeam)),
-	)
-	s.logger.Info("cache refresh decision", "decision", decision.Name, "reason", decision.Reason,
-		"season", s.config.Season, "stage", s.config.Stage, "fixture_id", decision.FixtureID)
-	if decision.Name != decisionEligible {
-		span.SetAttributes(
-			attribute.String("nwsl.scheduler.action", "recalculate"),
-			attribute.String("nwsl.scheduler.sync.outcome", "not_requested"),
-			attribute.String("nwsl.scheduler.forecast_warm.outcome", "not_needed"),
-		)
-		span.SetAttributes(attribute.String("nwsl.scheduler.outcome", s.recalculateCachedClinching(ctx, span)))
+	jobs := Plan(snapshot, s.config, s.now().UTC())
+	span.SetAttributes(attribute.Int("nwsl.scheduler.job_count", len(jobs)), attribute.Int("nwsl.scheduler.request_budget", requestBudget(s.config)))
+	if len(jobs) == 0 {
+		span.SetAttributes(attribute.String("nwsl.scheduler.action", "recalculate"), attribute.Int("nwsl.scheduler.request_count", 0), attribute.String("nwsl.scheduler.outcome", s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)))
 		return
 	}
-
-	span.SetAttributes(attribute.String("nwsl.scheduler.action", "sync"))
-	runCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
-	run, err := s.runner.Run(runCtx, syncer.RunOptions{
-		Season: s.config.Season, Stage: s.config.Stage, ExpectedTeams: s.config.ExpectedTeams, GamesPerTeam: s.config.GamesPerTeam,
-		TargetFixtureID: targetFixtureID(decision), Trigger: "scheduler",
-	})
-	cancel()
-	if errors.Is(err, cache.ErrSyncInProgress) {
-		span.SetAttributes(
-			attribute.Bool("nwsl.error.expected", true),
-			attribute.String("nwsl.scheduler.sync.outcome", "in_progress"),
-			attribute.String("nwsl.scheduler.outcome", "deferred"),
-		)
-		s.logger.Info("cache refresh deferred", "reason", "sync_in_progress", "season", s.config.Season, "stage", s.config.Stage)
-		return
+	requests := 0
+	tickOutcome := "complete"
+jobsLoop:
+	for _, job := range jobs {
+		select {
+		case <-s.stop:
+			tickOutcome = "stopped"
+			break jobsLoop
+		default:
+		}
+		if ctx.Err() != nil {
+			tickOutcome = "expired"
+			break
+		}
+		jobCtx, jobSpan := telemetry.Tracer().Start(ctx, "scheduler.job", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(jobAttributes(job, syncer.OperationResult{}, "planned", requests)...))
+		outcome, result, attempted, jobErr := s.executeJob(jobCtx, job)
+		if attempted {
+			requests++
+		}
+		jobSpan.SetAttributes(jobAttributes(job, result, outcome, requests)...)
+		if jobErr != nil {
+			telemetry.MarkError(jobSpan, jobErr)
+		}
+		jobSpan.End()
+		if outcome == "failure" {
+			tickOutcome = "failure"
+			break
+		}
+		if outcome == "deferred" {
+			tickOutcome = "deferred"
+		}
+		if result.Games != nil && result.FixtureInputsChanged && job.Operation.Season == s.config.Season && job.Operation.Stage == s.config.Stage {
+			derivedOutcome := s.recalculateCachedClinching(ctx, span, job.Operation.Season, job.Operation.Stage)
+			if derivedOutcome == "failure" || derivedOutcome == "partial_failure" {
+				tickOutcome = "partial_failure"
+			}
+		}
 	}
-	if err != nil {
-		span.SetAttributes(
-			attribute.String("nwsl.scheduler.sync.outcome", "failure"),
-			attribute.String("nwsl.scheduler.outcome", "failure"),
-		)
-		telemetry.MarkError(span, err)
-		s.logger.Error("cache refresh failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
-		return
-	}
-	span.SetAttributes(schedulerRunAttributes(run)...)
-	if run.HistoryPruneError != "" {
-		s.logger.Warn("automatic cache history prune failed", "season", s.config.Season, "stage", s.config.Stage, "error", run.HistoryPruneError)
-	}
-	s.logger.Info("cache refresh succeeded", "season", s.config.Season, "stage", s.config.Stage,
-		"duration_ms", run.FinishedAt.Sub(run.StartedAt).Milliseconds(), "games_seen", run.GamesSeen,
-		"games_inserted", run.GamesInserted, "games_updated", run.GamesUpdated, "games_unchanged", run.GamesUnchanged)
-	if run.XGError != "" || run.QualificationError != "" || run.ScenarioError != "" {
-		span.SetAttributes(attribute.String("nwsl.scheduler.outcome", "partial_failure"))
-		return
-	}
-	span.SetAttributes(attribute.String("nwsl.scheduler.outcome", "synced"))
+	span.SetAttributes(attribute.Int("nwsl.scheduler.request_count", requests), attribute.String("nwsl.scheduler.outcome", tickOutcome))
 }
 
-// recalculateCachedClinching repairs missing or retryable derived batches
-// without an ASA request. In particular, it lets a restarted server recover a
-// page that is pending only because the fixture cache was already current.
-func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span) string {
+func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.OperationResult, bool, error) {
+	now := s.now().UTC()
+	key := jobLeaseKey(job)
+	holder := fmt.Sprintf("scheduler-%d", now.UnixNano())
+	acquired, err := s.store.TryAcquireSyncLease(parent, key, holder, now.Add(s.config.Timeout))
+	if err != nil {
+		s.logger.Error("acquire source job lease", "job", job.Kind, "error", err)
+		return "failure", syncer.OperationResult{}, false, err
+	}
+	if !acquired {
+		return "deferred", syncer.OperationResult{}, false, nil
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.store.ReleaseSyncLease(releaseCtx, key, holder)
+	}()
+	job.Operation.StartedAt = now
+	result, err := s.runner.Execute(parent, job.Operation)
+	if err != nil {
+		s.logger.Error("source job failed", "job", job.Kind, "season", job.Operation.Season, "stage", job.Operation.Stage, "error", err)
+		return "failure", result, true, err
+	}
+	return "complete", result, true, nil
+}
+
+func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span, season, stage string) string {
 	runner, ok := s.runner.(calculationRunner)
 	if !ok {
-		span.SetAttributes(
-			attribute.Bool("nwsl.scheduler.recalculation.attempted", false),
-			attribute.String("nwsl.scheduler.recalculation.outcome", "unsupported"),
-		)
 		return "current"
 	}
-	span.SetAttributes(attribute.Bool("nwsl.scheduler.recalculation.attempted", true))
 	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
-	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: s.config.Season, Stage: s.config.Stage, Trigger: "scheduler"})
+	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: season, Stage: stage, Trigger: "scheduler"})
 	cancel()
 	if err != nil {
-		span.SetAttributes(
-			attribute.String("nwsl.scheduler.recalculation.outcome", "failure"),
-			attribute.String("nwsl.scheduler.qualification.outcome", "not_run"),
-			attribute.String("nwsl.scheduler.scenario.outcome", "not_run"),
-		)
 		telemetry.MarkError(span, err)
-		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage, "error", err)
 		return "failure"
 	}
-	span.SetAttributes(schedulerRecalculationAttributes(run)...)
-	if run.QualificationError != "" || run.ScenarioError != "" {
-		s.logger.Error("cached clinching recalculation failed", "season", s.config.Season, "stage", s.config.Stage,
-			"qualification_error", run.QualificationError, "scenario_error", run.ScenarioError)
-		return "partial_failure"
-	}
-	if run.QualificationRecalculated || run.ScenarioRecalculated {
-		s.logger.Info("cached clinching recalculated", "season", s.config.Season, "stage", s.config.Stage,
-			"qualification_recalculated", run.QualificationRecalculated, "scenario_recalculated", run.ScenarioRecalculated)
-	}
-	if run.QualificationRecalculated || run.ScenarioRecalculated {
-		return "complete"
-	}
-	return "current"
-}
-
-func schedulerRunAttributes(run cache.SyncRun) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.Bool("nwsl.scheduler.sync.attempted", true),
-		attribute.String("nwsl.scheduler.sync.outcome", schedulerSyncOutcome(run)),
-		attribute.String("nwsl.scheduler.xg.outcome", schedulerXGOutcome(run)),
-		attribute.String("nwsl.scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
-		attribute.String("nwsl.scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
-	}
-	if run.ID > 0 {
-		attributes = append(attributes, attribute.Int64("nwsl.scheduler.sync_run_id", run.ID))
-	}
-	if run.FixtureSnapshotID != "" {
-		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
-	}
-	return attributes
-}
-
-func schedulerRecalculationAttributes(run cache.SyncRun) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.scheduler.recalculation.outcome", schedulerRecalculationOutcome(run)),
-		attribute.String("nwsl.scheduler.qualification.outcome", schedulerComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
-		attribute.String("nwsl.scheduler.scenario.outcome", schedulerComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
-	}
-	if run.ID > 0 {
-		attributes = append(attributes, attribute.Int64("nwsl.scheduler.recalculation_source_sync_run_id", run.ID))
-	}
-	if run.FixtureSnapshotID != "" {
-		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
-	}
-	return attributes
-}
-
-func schedulerSyncOutcome(run cache.SyncRun) string {
-	if run.XGError != "" || run.QualificationError != "" || run.ScenarioError != "" {
-		return "partial_failure"
-	}
-	return "success"
-}
-
-func schedulerXGOutcome(run cache.SyncRun) string {
-	if run.XGError != "" {
-		return "failure"
-	}
-	if run.XGRun != nil {
-		return "complete"
-	}
-	return "not_requested"
-}
-
-func targetFixtureID(decision Decision) string {
-	if decision.Reason == "plausibly_complete_fixture" {
-		return decision.FixtureID
-	}
-	return ""
-}
-
-func schedulerRecalculationOutcome(run cache.SyncRun) string {
 	if run.QualificationError != "" || run.ScenarioError != "" {
 		return "partial_failure"
 	}
@@ -329,64 +224,30 @@ func schedulerRecalculationOutcome(run cache.SyncRun) string {
 	return "current"
 }
 
-func schedulerComponentOutcome(completed bool, failure string) string {
-	if failure != "" {
-		return "failure"
-	}
-	if completed {
-		return "complete"
-	}
-	return "current"
+func jobLeaseKey(job Job) string {
+	// Match Service.Run's compatibility lease while it remains a supported
+	// manual path. Phase 3 intentionally serializes all source resources for
+	// one scope rather than risking a full compatibility run racing a job.
+	return job.Operation.Season + "\x00" + job.Operation.Stage
 }
-
-// Assess determines whether the cached match window needs an ASA request.
-func Assess(snapshot cache.RefreshSnapshot, now time.Time, completionGrace time.Duration, expectedTeams, gamesPerTeam int) Decision {
-	if snapshot.LastSuccess == nil {
-		return Decision{Name: decisionEligible, Reason: "missing_successful_snapshot"}
+func requestBudget(config Config) int {
+	if config.SourceRequestBudget > 0 {
+		return config.SourceRequestBudget
 	}
-	if len(snapshot.Games) == 0 {
-		return Decision{Name: decisionEligible, Reason: "empty_fixture_cache"}
-	}
-	if !hasExpectedFixtureInventory(snapshot.Games, expectedTeams, gamesPerTeam) {
-		return Decision{Name: decisionEligible, Reason: "incomplete_fixture_cache"}
-	}
-	for _, game := range snapshot.Games {
-		if !knownStatus(game.Status) {
-			return Decision{Name: decisionEligible, Reason: "unsupported_status", FixtureID: game.ASAID}
-		}
-		kickoff, err := fixtures.ParseKickoff(game.KickoffUTC)
-		if err != nil {
-			return Decision{Name: decisionEligible, Reason: "invalid_kickoff", FixtureID: game.ASAID}
-		}
-		if settled(game) || now.Before(kickoff.Add(completionGrace)) {
-			continue
-		}
-		return Decision{Name: decisionEligible, Reason: "plausibly_complete_fixture", FixtureID: game.ASAID}
-	}
-	// A migrated fixture cache has no xG audit row yet. Treat that as an
-	// incomplete snapshot, then keep retrying explicit unavailable games so ASA
-	// publication lag can heal on a later scheduler check.
-	if snapshot.XGStatus.LastSuccess == nil {
-		return Decision{Name: decisionEligible, Reason: "missing_successful_xg_snapshot"}
-	}
-	if snapshot.XGStatus.LastAttempt != nil {
-		byID := map[string]cache.GameXG{}
-		for _, value := range snapshot.XGoals {
-			byID[value.GameID] = value
-		}
-		for _, game := range snapshot.Games {
-			if game.Status != fixtures.CompletedStatus {
-				continue
-			}
-			value, ok := byID[game.ASAID]
-			if !ok || value.Availability == cache.XGUnavailable {
-				return Decision{Name: decisionEligible, Reason: "xg_unavailable", FixtureID: game.ASAID}
-			}
-		}
-	}
-	return Decision{Name: decisionCurrent, Reason: "known_match_window_is_current"}
+	return defaultSourceRequestBudget
 }
-
+func jobAttributes(job Job, result syncer.OperationResult, outcome string, requests int) []attribute.KeyValue {
+	returned, material := 0, false
+	if result.Games != nil {
+		returned = result.Games.Audit.ReturnedRows
+		material = result.FixtureInputsChanged
+	}
+	if result.XG != nil {
+		returned = result.XG.Audit.ReturnedRows
+		material = result.XGInputsChanged
+	}
+	return []attribute.KeyValue{attribute.String("nwsl.scheduler.job_kind", string(job.Kind)), attribute.String("nwsl.scheduler.job_outcome", outcome), attribute.String("nwsl.scheduler.job_reason", job.Reason), attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage), attribute.Int("nwsl.scheduler.job_requested_rows", len(job.Operation.Requested)), attribute.Int("nwsl.scheduler.job_returned_rows", returned), attribute.Bool("nwsl.scheduler.job_material", material), attribute.Int("nwsl.scheduler.request_count", requests)}
+}
 func validateScheduleConfig(config Config) error {
 	if config.ExpectedTeams == 0 && config.GamesPerTeam == 0 {
 		return nil
@@ -396,46 +257,9 @@ func validateScheduleConfig(config Config) error {
 	}
 	return nil
 }
-
-func hasExpectedFixtureInventory(games []cache.Game, expectedTeams, gamesPerTeam int) bool {
-	if expectedTeams == 0 && gamesPerTeam == 0 {
-		return true
-	}
-	if len(games) != expectedTeams*gamesPerTeam/2 {
-		return false
-	}
-	appearances := make(map[string]int, expectedTeams)
-	for _, game := range games {
-		appearances[game.HomeTeamID]++
-		appearances[game.AwayTeamID]++
-	}
-	if len(appearances) != expectedTeams {
-		return false
-	}
-	for _, count := range appearances {
-		if count != gamesPerTeam {
-			return false
-		}
-	}
-	return true
-}
-
-func expectedFixtureCount(expectedTeams, gamesPerTeam int) int {
-	if expectedTeams < 1 || gamesPerTeam < 1 || expectedTeams*gamesPerTeam%2 != 0 {
+func expectedFixtureCount(teams, games int) int {
+	if teams < 1 || games < 1 || teams*games%2 != 0 {
 		return 0
 	}
-	return expectedTeams * gamesPerTeam / 2
-}
-
-func knownStatus(status string) bool {
-	switch status {
-	case fixtures.CompletedStatus, fixtures.PreMatchStatus, fixtures.AbandonedStatus:
-		return true
-	default:
-		return false
-	}
-}
-
-func settled(game cache.Game) bool {
-	return game.Status == fixtures.CompletedStatus && game.HomeScore.Valid && game.AwayScore.Valid
+	return teams * games / 2
 }

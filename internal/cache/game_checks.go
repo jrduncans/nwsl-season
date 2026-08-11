@@ -13,8 +13,9 @@ type TargetedRefreshMetadata struct {
 	StartedAt, FinishedAt time.Time
 }
 type CheckedGameRequest struct {
-	ASAID     string
-	NextDueAt *time.Time
+	ASAID             string
+	NextDueAt         *time.Time
+	MaterialNextDueAt *time.Time
 }
 type GameResultCheckState struct {
 	GameID, Season, Stage                                    string
@@ -161,7 +162,11 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 		}
 	}
 	for _, r := range requests {
-		if err := upsertGameResultCheck(ctx, tx, r.ASAID, audit.FinishedAt, r.NextDueAt, false, terminalByID[r.ASAID], materialByID[r.ASAID]); err != nil {
+		due := r.NextDueAt
+		if materialByID[r.ASAID] && r.MaterialNextDueAt != nil {
+			due = r.MaterialNextDueAt
+		}
+		if err := upsertGameResultCheck(ctx, tx, r.ASAID, audit.FinishedAt, due, false, terminalByID[r.ASAID], materialByID[r.ASAID]); err != nil {
 			return GameRefreshResult{}, err
 		}
 	}
@@ -213,12 +218,18 @@ func prepareCheckedGames(season, stage string, requested []CheckedGameRequest, r
 		}
 		seen[r.ASAID] = true
 		out[i] = r
-		if r.NextDueAt != nil {
-			if r.NextDueAt.Before(metadata.FinishedAt) {
+		for _, due := range []*time.Time{r.NextDueAt, r.MaterialNextDueAt} {
+			if due != nil && due.Before(metadata.FinishedAt) {
 				return nil, SourceRefreshAudit{}, errors.New("game check due is before finish")
 			}
+		}
+		if r.NextDueAt != nil {
 			d := r.NextDueAt.UTC().Truncate(time.Second)
 			out[i].NextDueAt = &d
+		}
+		if r.MaterialNextDueAt != nil {
+			d := r.MaterialNextDueAt.UTC().Truncate(time.Second)
+			out[i].MaterialNextDueAt = &d
 		}
 	}
 	returnedIDs := map[string]bool{}
