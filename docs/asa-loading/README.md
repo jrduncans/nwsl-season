@@ -50,13 +50,12 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P1-02 Persisted source-scope registry](phase-1/p1-02-persisted-source-scope-registry.md) | Complete | Terra | Sol | P1-01 |
 | [P1-03 Request-scoped competition rules](phase-1/p1-03-request-scoped-competition-rules.md) | Complete | Terra | Sol | P1-01, P1-02 |
 | [P1-04 Capability-aware factual HTTP](phase-1/p1-04-capability-aware-factual-http.md) | Complete | Terra | Sol | P1-01, P1-03 |
-| [P1-05 Persisted season readiness](phase-1/p1-05-persisted-season-readiness.md) | Ready | Terra | Sol | P1-01, P1-02, P1-04 |
+| [P1-05 Persisted season readiness](phase-1/p1-05-persisted-season-readiness.md) | Complete | Terra | Sol | P1-01, P1-02, P1-04 |
 
-P1-04 removes invented competition-format assumptions from HTTP requests and
-gates rule-dependent pages with catalog capabilities while retaining factual
-fixtures and xG for an unknown cached scope. P1-05 is the next ready Phase 1
-packet; it adds a read-only persisted inventory/readiness view without changing
-loading or HTTP behavior.
+P1-05 adds a read-only persisted source-readiness and verified-inventory
+snapshot without changing loading or HTTP behavior. Historical catalog
+population, public historical navigation, and the multi-scope loading planner
+remain subsequent work.
 
 ## Packet template
 

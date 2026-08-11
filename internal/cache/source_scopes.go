@@ -140,7 +140,13 @@ func promoteRetainedUpcomingSourceScopes(ctx context.Context, tx *sql.Tx, now ti
 
 // SourceScopes returns every registered scope in deterministic source order.
 func (c *DB) SourceScopes(ctx context.Context) ([]SourceScope, error) {
-	rows, err := c.db.QueryContext(ctx, `SELECT
+	return sourceScopes(ctx, c.db)
+}
+
+func sourceScopes(ctx context.Context, dbq interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}) ([]SourceScope, error) {
+	rows, err := dbq.QueryContext(ctx, `SELECT
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at
 		FROM source_scopes
 		ORDER BY season DESC, stage ASC`)
