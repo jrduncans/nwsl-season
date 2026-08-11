@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: Complete
 - Intended implementation model: GPT-5.6 Luna, medium reasoning
 - Required review: Terra or Sol
 - Depends on: the existing ASA loading plan
@@ -259,4 +259,3 @@ Report:
 - every verification command and its outcome;
 - any deviation from this packet;
 - any issue the registry or HTTP integration packet should account for.
-

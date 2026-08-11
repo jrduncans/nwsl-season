@@ -46,13 +46,13 @@ packets may run concurrently only when their allowed file lists do not overlap.
 
 | Packet | Status | Implementation | Review | Depends on |
 | --- | --- | --- | --- | --- |
-| [P1-01 Competition catalog core](phase-1/p1-01-competition-catalog-core.md) | Ready | Luna | Terra or Sol | Existing loading plan |
+| [P1-01 Competition catalog core](phase-1/p1-01-competition-catalog-core.md) | Complete | Luna | Terra or Sol | Existing loading plan |
+| [P1-02 Persisted source-scope registry](phase-1/p1-02-persisted-source-scope-registry.md) | Ready | Terra | Sol | P1-01 |
 
-The next packet should not be made ready until P1-01 is reviewed. It will cover
-the persisted source-scope registry and must settle the minimal Phase 1/Phase 2
-schema boundary before implementation.
+P1-02 owns persistent scope identity, registration provenance, lifecycle, and
+discovery readiness. Per-resource attempts, due times, refresh modes, and
+change counts remain in Phase 2's generalized source-state and audit schema.
 
 ## Packet template
 
 Use [the work-packet template](work-packet-template.md) for subsequent slices.
-
