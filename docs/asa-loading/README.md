@@ -57,6 +57,7 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P2-04 Targeted checked-game persistence](phase-2/p2-04-targeted-checked-game-persistence.md) | Complete | Terra | Sol | P2-03 |
 | [P2-05 Authoritative stage xG persistence](phase-2/p2-05-authoritative-stage-xg-persistence.md) | Complete | Terra | Sol | P2-01, P2-03 |
 | [P2-06 Targeted checked-xG persistence](phase-2/p2-06-targeted-checked-xg-persistence.md) | Complete | Terra | Sol | P2-04, P2-05 |
+| [Phase 3 Hot-path replacement](phase-3/p3-hot-path-replacement.md) | Ready | Terra | Primary; Sol for concurrency | P2-01 through P2-06 |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
@@ -67,8 +68,9 @@ persistence, protected available/unavailable observation state,
 legacy/generalized full-audit lineage, and atomic venue xG readiness without a
 schema change. P2-06 adds separate targeted xG check/due
 state, the narrower non-deleting requested-ID operation, and atomic full-xG
-maintenance of that state without changing the network or scheduler path. The
-split-operation compatibility adapter is next.
+maintenance of that state without changing the network or scheduler path.
+Phase 3 is planned as two broader checkpoints: first the split-operation sync
+adapter, then the due-job planner and scheduler integration.
 
 ## Packet template
 
