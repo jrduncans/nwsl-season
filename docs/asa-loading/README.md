@@ -47,11 +47,13 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | Packet | Status | Implementation | Review | Depends on |
 | --- | --- | --- | --- | --- |
 | [P1-01 Competition catalog core](phase-1/p1-01-competition-catalog-core.md) | Complete | Luna | Terra or Sol | Existing loading plan |
-| [P1-02 Persisted source-scope registry](phase-1/p1-02-persisted-source-scope-registry.md) | Ready | Terra | Sol | P1-01 |
+| [P1-02 Persisted source-scope registry](phase-1/p1-02-persisted-source-scope-registry.md) | Complete | Terra | Sol | P1-01 |
+| [P1-03 Request-scoped competition rules](phase-1/p1-03-request-scoped-competition-rules.md) | Ready | Terra | Sol | P1-01, P1-02 |
 
-P1-02 owns persistent scope identity, registration provenance, lifecycle, and
-discovery readiness. Per-resource attempts, due times, refresh modes, and
-change counts remain in Phase 2's generalized source-state and audit schema.
+P1-03 moves HTTP rule selection from process scope to request scope without yet
+changing unsupported-season presentation. Capability-aware route availability,
+removal of the 16/30/8 fallback, and persisted readiness remain later Phase 1
+packets.
 
 ## Packet template
 
