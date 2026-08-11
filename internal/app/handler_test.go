@@ -21,6 +21,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
+	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
@@ -56,6 +57,35 @@ func TestHandlerUsesPresentationRulesForUnknownSeason(t *testing.T) {
 	options := defaultOptions(Options{CurrentSeason: "2027", Stage: "Regular Season"})
 	if options.Rules.Version != "presentation-fallback-v1" || playoffPlaces(options.Rules) != 8 || options.Rules.GamesPerTeam != 30 {
 		t.Fatalf("fallback rules = %+v", options.Rules)
+	}
+}
+
+func TestRulesForSeasonUsesConfiguredRulesAndReturnsCopies(t *testing.T) {
+	explicit := testRules(17)
+	explicit.Version = "configured-v1"
+	application := newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2099", Rules: explicit, Location: time.UTC}, nil)
+
+	current := application.app.rulesForSeason("2099")
+	if !reflect.DeepEqual(current, explicit) {
+		t.Fatalf("current rules = %+v, want explicit %+v", current, explicit)
+	}
+	current.Achievements[0].TopK = 99
+	if again := application.app.rulesForSeason("2099"); again.Achievements[0].TopK != explicit.Achievements[0].TopK {
+		t.Fatalf("mutated returned rules affected later request: %+v", again)
+	}
+}
+
+func TestRulesForSeasonUsesCatalogAndRequestFallback(t *testing.T) {
+	application := newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2099", Rules: testRules(17), Location: time.UTC}, nil)
+
+	catalogRules := application.app.rulesForSeason("2026")
+	if catalogRules.Version != "2026-regular-v2" || catalogRules.GamesPerTeam != 30 || playoffPlaces(catalogRules) != 8 {
+		t.Fatalf("catalog rules = %+v", catalogRules)
+	}
+	fallbackApplication := newApplicationWithForecastExecutor(nil, Options{CurrentSeason: "2099", Stage: "Invented Stage", Rules: testRules(17), Location: time.UTC}, nil)
+	fallback := fallbackApplication.app.rulesForSeason("2088")
+	if fallback.Version != "presentation-fallback-v1" || fallback.Season != "2088" || fallback.Stage != "Invented Stage" {
+		t.Fatalf("fallback rules = %+v", fallback)
 	}
 }
 
@@ -246,6 +276,37 @@ func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	}
 }
 
+func TestNonCurrentCatalogSeasonUsesCatalogRulesForStandingsScheduleAndQualification(t *testing.T) {
+	data := catalogSeasonData()
+	data.FixtureSnapshotID = "snapshot-2026"
+	store := &recordingFullFakeStore{
+		fullFakeStore: fullFakeStore{
+			fakeStore:     fakeStore{season: data},
+			qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}},
+		},
+	}
+	configured := testRules(17)
+	configured.Version = "configured-v1"
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2099", Rules: configured, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{`data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`, "6 of 240 expected regular-season fixtures"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body does not contain %q", want)
+		}
+	}
+	if got, want := store.qualificationRulesVersions, []string{"2026-regular-v2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("qualification rules versions = %v, want %v", got, want)
+	}
+	if got, want := store.qualificationSnapshotIDs, []string{"snapshot-2026"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("qualification snapshots = %v, want %v", got, want)
+	}
+}
+
 func TestSeasonRendersXGInStandingsWithoutCoverageWarning(t *testing.T) {
 	data := testSeasonData()
 	data.XGoals = []cache.GameXG{{
@@ -303,6 +364,40 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		if strings.Contains(body, value) {
 			t.Errorf("body contains removed or internal text %q", value)
 		}
+	}
+}
+
+func TestClinchingNonCurrentCatalogSeasonUsesCatalogRulesVersion(t *testing.T) {
+	data := catalogSeasonData()
+	data.FixtureSnapshotID = "snapshot-2026"
+	store := &recordingFullFakeStore{
+		fullFakeStore: fullFakeStore{
+			fakeStore:     fakeStore{season: data},
+			qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}},
+			scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{
+				State: scenarios.SlateReady, Source: scenarios.SourceMatchday, FixtureIDs: []string{"future-1"},
+			}}},
+		},
+	}
+	configured := testRules(17)
+	configured.Version = "configured-v1"
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2099", Rules: configured, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/clinching", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	if got, want := store.qualificationRulesVersions, []string{"2026-regular-v2", "2026-regular-v2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("qualification rules versions = %v, want %v", got, want)
+	}
+	if got, want := store.scenarioRulesVersions, []string{"2026-regular-v2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("scenario rules versions = %v, want %v", got, want)
+	}
+	if got, want := store.scenarioSnapshotIDs, []string{"snapshot-2026"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("scenario snapshots = %v, want %v", got, want)
+	}
+	if got, want := store.scenarioDefinitionVersions, []string{scenarios.DefinitionVersion}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("scenario definition versions = %v, want %v", got, want)
 	}
 }
 
@@ -780,6 +875,50 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	}
 }
 
+func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
+	data := catalogSeasonData()
+	configured := testRules(17)
+	configured.Version = "configured-v1"
+	options := defaultOptions(Options{CurrentSeason: "2099", Rules: configured, ForecastIterations: 20, Location: time.UTC})
+	executor := newForecastExecutor(1, time.Second)
+	application := newApplicationWithForecastExecutor(fakeStore{season: data}, options, executor)
+	requests := []simulation.Request{}
+	application.app.forecasts.run = func(ctx context.Context, request simulation.Request) (simulation.Result, error) {
+		requests = append(requests, request)
+		return simulation.Run(ctx, request)
+	}
+	response := httptest.NewRecorder()
+	application.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast?v=2&m=current-pace-v1&c=results-poisson-v1", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	if len(requests) != 2 {
+		t.Fatalf("simulation requests = %+v, want active and comparison requests", requests)
+	}
+	for _, request := range requests {
+		if request.PlayoffPlaces != 8 {
+			t.Fatalf("simulation request = %+v, want 8 playoff places", request)
+		}
+	}
+	state := forecaststate.State{ModelID: "current-pace-v1", ComparisonModelID: "results-poisson-v1", Fixed: map[string]simulation.Outcome{}}
+	catalogKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, 8)
+	configuredKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, playoffPlaces(configured))
+	if _, found := application.app.forecasts.cache[catalogKey]; !found {
+		t.Fatal("forecast cache has no result keyed with the catalog playoff-place count")
+	}
+	if configuredKey != catalogKey {
+		if _, found := application.app.forecasts.cache[configuredKey]; found {
+			t.Fatal("forecast cache used the configured current-scope playoff-place count")
+		}
+	}
+	for _, want := range []string{"Playoff line:</strong> top 8", "6 of 240 expected regular-season fixtures"} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Errorf("body does not contain %q", want)
+		}
+	}
+}
+
 func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *testing.T) {
 	data := testSeasonData()
 	data.Teams = append(data.Teams, standings.Team{ID: "charlie", Name: "Charlie FC"})
@@ -1155,6 +1294,31 @@ type fullFakeStore struct {
 	scenarioFound *bool
 }
 
+type recordingFullFakeStore struct {
+	fullFakeStore
+	qualificationSnapshotIDs   []string
+	qualificationRulesVersions []string
+	scenarioSnapshotIDs        []string
+	scenarioRulesVersions      []string
+	scenarioDefinitionVersions []string
+}
+
+func (f *recordingFullFakeStore) QualificationForSnapshot(_ context.Context, snapshotID, rulesVersion string) (cache.QualificationSnapshot, bool, error) {
+	f.qualificationSnapshotIDs = append(f.qualificationSnapshotIDs, snapshotID)
+	f.qualificationRulesVersions = append(f.qualificationRulesVersions, rulesVersion)
+	return f.qualification, true, nil
+}
+
+func (f *recordingFullFakeStore) ScenarioForSnapshot(_ context.Context, snapshotID, rulesVersion, definitionVersion string) (cache.ScenarioSnapshot, bool, error) {
+	f.scenarioSnapshotIDs = append(f.scenarioSnapshotIDs, snapshotID)
+	f.scenarioRulesVersions = append(f.scenarioRulesVersions, rulesVersion)
+	f.scenarioDefinitionVersions = append(f.scenarioDefinitionVersions, definitionVersion)
+	if f.scenarioFound != nil {
+		return f.scenario, *f.scenarioFound, nil
+	}
+	return f.scenario, true, nil
+}
+
 func (f fullFakeStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
 	return f.qualification, true, nil
 }
@@ -1201,6 +1365,14 @@ func testSeasonData() cache.SeasonData {
 			KickoffUTC: fmt.Sprintf("2026-07-%02d 19:00:00 UTC", 10+index), Status: "PreMatch",
 			HomeTeamID: "alpha", AwayTeamID: "bravo", Matchday: sql.NullInt64{Int64: int64(index + 1), Valid: true},
 		})
+	}
+	return data
+}
+
+func catalogSeasonData() cache.SeasonData {
+	data := testSeasonData()
+	for index := 1; index <= 14; index++ {
+		data.Teams = append(data.Teams, standings.Team{ID: fmt.Sprintf("team-%02d", index), Name: fmt.Sprintf("Team %02d", index)})
 	}
 	return data
 }

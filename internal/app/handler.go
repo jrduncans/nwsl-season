@@ -121,6 +121,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
+	rules := a.rulesForSeason(page.Season)
 	page.Title = page.Season + " clinching scenarios"
 	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, AlreadyClinched: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
@@ -154,7 +155,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	if store, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
 	}); ok {
-		value, found, err := store.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version)
+		value, found, err := store.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version)
 		if err != nil {
 			a.renderError(w, r, err)
 			return
@@ -169,7 +170,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Slice(view.AlreadyClinched, func(i, j int) bool { return clinchingRowLess(view.AlreadyClinched[i], view.AlreadyClinched[j]) })
-	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version, scenarios.DefinitionVersion)
+	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -356,6 +357,20 @@ func presentationFallbackRules(season, stage string) competition.Rules {
 	}
 }
 
+// rulesForSeason returns an isolated copy of the rules for an HTTP request.
+// The configured scope keeps its explicit Options value for compatibility;
+// every other scope is selected from the catalog or rendered with the
+// temporary presentation fallback.
+func (a *application) rulesForSeason(season string) competition.Rules {
+	if season == a.options.CurrentSeason {
+		return a.options.Rules.Copy()
+	}
+	if entry, ok := competition.Lookup(season, a.options.Stage); ok && entry.Rules != nil {
+		return entry.Rules.Copy()
+	}
+	return presentationFallbackRules(season, a.options.Stage)
+}
+
 func playoffPlaces(rules competition.Rules) int {
 	for _, achievement := range rules.Achievements {
 		if achievement.ID == competition.AchievementPlayoffs {
@@ -446,6 +461,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if season == "" {
 		season = a.options.CurrentSeason
 	}
+	rules := a.rulesForSeason(season)
 	data, err := a.loadSeasonData(r.Context(), season)
 	if err != nil {
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
@@ -460,7 +476,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	venue := forecastVenueSample(data)
 	scheduleStrength := strength.CalculateWithVenueSample(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
 	scheduleView := strengthViewFrom(scheduleStrength)
-	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(a.options.Rules)), scheduleView)
+	standingsView := addScheduleIndicators(tableViews(actualTable, playoffPlaces(rules)), scheduleView)
 	standingsView, xgAvailable, completedMatches := addXGValues(standingsView, data)
 	var outlooks map[string]fixtureOutlookView
 	if outlooksFor != nil {
@@ -474,7 +490,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		HomePath:               relativeURL(r.URL.Path, "/"),
 		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
-		Standings:              addTotalPositions(standingsView, totalTable, playoffPlaces(a.options.Rules)),
+		Standings:              addTotalPositions(standingsView, totalTable, playoffPlaces(rules)),
 		Strength:               scheduleView,
 		ResultFixtureGroups:    resultFixtureGroups,
 		UpcomingFixtureGroups:  upcomingFixtureGroups,
@@ -499,11 +515,11 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 	}
-	page.ScheduleNote = scheduleDifficultyNote(data, a.options.Rules)
+	page.ScheduleNote = scheduleDifficultyNote(data, rules)
 	if qualificationStore, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
-	}); ok && data.FixtureSnapshotID != "" && a.options.Rules.Version != "" {
-		if snapshot, found, lookupErr := qualificationStore.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, a.options.Rules.Version); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
+	}); ok && data.FixtureSnapshotID != "" && rules.Version != "" {
+		if snapshot, found, lookupErr := qualificationStore.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
 			page.Standings = qualificationViews(page.Standings, snapshot.Statuses)
 		}
 	}

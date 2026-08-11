@@ -59,6 +59,9 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 		if len(request.Fixed) != 0 {
 			t.Fatalf("fixed assumptions = %#v, want none", request.Fixed)
 		}
+		if got, want := request.PlayoffPlaces, playoffPlaces(options.Rules); got != want {
+			t.Fatalf("playoff places = %d, want configured current-scope %d", got, want)
+		}
 		calls.Add(1)
 		return simulation.Result{Model: request.Model.Info(), Iterations: request.Iterations}, nil
 	}

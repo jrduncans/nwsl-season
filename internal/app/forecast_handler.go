@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
@@ -159,7 +160,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		attribute.Bool("nwsl.forecast.comparison_requested", state.ComparisonModelID != ""),
 		attribute.Int("nwsl.forecast.fixed_assumption_count", len(state.Fixed)),
 	)
-	data, season, err := a.forecastData(r)
+	data, season, rules, err := a.forecastData(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -200,11 +201,12 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	}
 	xgoals := forecastXGoals(data)
 	venue := forecastVenueSample(data)
-	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}
-	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: request}}
+	places := playoffPlaces(rules)
+	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places}
+	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, places), request: request}}
 	if state.ComparisonModelID != "" {
 		entry, _ := forecast.Lookup(state.ComparisonModelID)
-		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}})
+		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places}})
 	}
 	results, err := a.forecasts.results(withForecastTrigger(r.Context(), "http"), tasks)
 	if err != nil {
@@ -228,7 +230,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	if len(results) == 2 {
 		comparison = &results[1]
 	}
-	a.render(w, "forecast", a.forecastPage(r, data, season, state, result, comparison, teamID))
+	a.render(w, "forecast", a.forecastPage(r, data, season, rules, state, result, comparison, teamID))
 }
 
 // forecastResultKey identifies a deterministic simulation result. Fixture
@@ -281,25 +283,26 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 	return hex.EncodeToString(sum[:])
 }
 
-func (a *application) forecastData(r *http.Request) (data cache.SeasonData, season string, err error) {
+func (a *application) forecastData(r *http.Request) (data cache.SeasonData, season string, rules competition.Rules, err error) {
 	if a.store == nil {
-		return cache.SeasonData{}, "", fmt.Errorf("season cache unavailable")
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("season cache unavailable")
 	}
 	season = r.PathValue("season")
 	if season == "" {
 		season = a.options.CurrentSeason
 	}
+	rules = a.rulesForSeason(season)
 	data, err = a.loadSeasonData(r.Context(), season)
 	if err != nil {
-		return cache.SeasonData{}, "", fmt.Errorf("load %s season: %w", season, err)
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("load %s season: %w", season, err)
 	}
 	if len(data.Games) == 0 {
-		return cache.SeasonData{}, "", fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
 	}
-	return data, season, nil
+	return data, season, rules, nil
 }
 
-func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) forecastPage {
+func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, rules competition.Rules, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) forecastPage {
 	base := forecastURL(r.URL.Path, season, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
 	canonical := forecastURL(r.URL.Path, season, state, "")
 	page := forecastPage{
@@ -310,7 +313,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
-		Rows: forecastComparisonRows(result, comparison, playoffPlaces(a.options.Rules)), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(a.options.Rules),
+		Rows: forecastComparisonRows(result, comparison, playoffPlaces(rules)), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules),
 	}
 	for _, entry := range forecast.Catalog() {
 		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})
@@ -337,7 +340,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	}
 	usesHistoricalVenue := strings.HasPrefix(result.Model.ID, "results-poisson-") || strings.HasPrefix(result.Model.ID, "xg-poisson-") ||
 		(comparison != nil && (strings.HasPrefix(comparison.Model.ID, "results-poisson-") || strings.HasPrefix(comparison.Model.ID, "xg-poisson-")))
-	page.ScheduleNote = forecastScheduleNote(data, a.options.Rules.GamesPerTeam, usesHistoricalVenue, page.ShowXGCoverage)
+	page.ScheduleNote = forecastScheduleNote(data, rules.GamesPerTeam, usesHistoricalVenue, page.ShowXGCoverage)
 	// The rendered selector is filtered for a useful no-JavaScript fallback.
 	// The complete list remains in a template for immediate client-side changes.
 	page.AllFixtures = forecastFixtures(data, state, a.options.Location, "")
