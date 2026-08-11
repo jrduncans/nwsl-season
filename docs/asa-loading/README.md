@@ -53,12 +53,12 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P1-05 Persisted season readiness](phase-1/p1-05-persisted-season-readiness.md) | Complete | Terra | Sol | P1-01, P1-02, P1-04 |
 | [P2-01 Source-refresh audit/state foundation](phase-2/p2-01-source-refresh-audit-state-foundation.md) | Complete | Terra | Sol | P1-02, P1-05 |
 | [P2-02 Independent team-catalog persistence](phase-2/p2-02-independent-team-catalog-persistence.md) | Complete | Terra | Sol | P2-01 |
-| [P2-03 Authoritative game-inventory persistence](phase-2/p2-03-authoritative-game-inventory-persistence.md) | Ready | Terra | Sol | P2-02 |
+| [P2-03 Authoritative game-inventory persistence](phase-2/p2-03-authoritative-game-inventory-persistence.md) | Complete | Terra | Sol | P2-02 |
 
-Phase 1, P2-01, and P2-02 are complete. P2-03 is ready as the next Phase 2
-packet: it adds authoritative game-inventory persistence with safe empty
-discovery, complete fixture snapshots, legacy lineage, and generalized audit/
-state. Targeted checked-game persistence follows in P2-04.
+Phase 1 and P2-01 through P2-03 are complete. Authoritative game-inventory
+persistence now provides safe empty discovery, complete fixture snapshots,
+legacy lineage, generalized audit/state, and exact venue/xG invalidation.
+Targeted checked-game persistence is next in P2-04.
 
 ## Packet template
 
