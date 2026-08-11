@@ -71,22 +71,23 @@ type SourceResourceScopeState struct {
 	UpdatedAt         time.Time
 }
 
+// FullRefreshMetadata is caller-observed timing and cadence metadata for a
+// successful authoritative source collection.
+type FullRefreshMetadata struct {
+	Trigger       SourceRefreshTrigger
+	StartedAt     time.Time
+	FinishedAt    time.Time
+	NextFullDueAt *time.Time
+}
+
 // RecordSourceRefresh appends one source refresh audit and advances the
 // associated full-refresh state only for a newer successful full refresh.
 func (c *DB) RecordSourceRefresh(ctx context.Context, audit SourceRefreshAudit, nextFullDueAt *time.Time) (SourceRefreshAudit, error) {
-	if audit.ID != 0 {
-		return SourceRefreshAudit{}, errors.New("source refresh audit ID must be zero")
-	}
-	if err := validateSourceRefreshAudit(audit); err != nil {
+	var err error
+	audit, nextFullDueAt, err = prepareSourceRefresh(audit, nextFullDueAt)
+	if err != nil {
 		return SourceRefreshAudit{}, err
 	}
-	if nextFullDueAt != nil && (audit.Outcome != SourceRefreshSuccess || audit.Mode != SourceRefreshFull) {
-		return SourceRefreshAudit{}, errors.New("next full due time requires a successful full source refresh")
-	}
-	if nextFullDueAt != nil && nextFullDueAt.Before(audit.FinishedAt) {
-		return SourceRefreshAudit{}, errors.New("next full due time is before source refresh finish")
-	}
-	audit, nextFullDueAt = normalizeSourceRefreshTimes(audit, nextFullDueAt)
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SourceRefreshAudit{}, fmt.Errorf("begin source refresh record: %w", err)
@@ -99,6 +100,23 @@ func (c *DB) RecordSourceRefresh(ctx context.Context, audit SourceRefreshAudit, 
 		return SourceRefreshAudit{}, fmt.Errorf("commit source refresh record: %w", err)
 	}
 	return audit, nil
+}
+
+func prepareSourceRefresh(audit SourceRefreshAudit, nextFullDueAt *time.Time) (SourceRefreshAudit, *time.Time, error) {
+	if audit.ID != 0 {
+		return SourceRefreshAudit{}, nil, errors.New("source refresh audit ID must be zero")
+	}
+	if err := validateSourceRefreshAudit(audit); err != nil {
+		return SourceRefreshAudit{}, nil, err
+	}
+	if nextFullDueAt != nil && (audit.Outcome != SourceRefreshSuccess || audit.Mode != SourceRefreshFull) {
+		return SourceRefreshAudit{}, nil, errors.New("next full due time requires a successful full source refresh")
+	}
+	if nextFullDueAt != nil && nextFullDueAt.Before(audit.FinishedAt) {
+		return SourceRefreshAudit{}, nil, errors.New("next full due time is before source refresh finish")
+	}
+	audit, nextFullDueAt = normalizeSourceRefreshTimes(audit, nextFullDueAt)
+	return audit, nextFullDueAt, nil
 }
 
 // normalizeSourceRefreshTimes matches the cache's existing RFC3339 storage

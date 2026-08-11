@@ -336,6 +336,22 @@ func TestRecordSourceRefreshRejectsInvalidRawSubsecondOrdering(t *testing.T) {
 	}
 }
 
+func TestPrepareSourceRefreshNormalizesAndCopiesDueTime(t *testing.T) {
+	finished := testSourceRefreshTime(2026, 7, 1, 12).Add(900 * time.Millisecond)
+	due := finished.Add(time.Hour)
+	audit, copiedDue, err := prepareSourceRefresh(testSourceRefreshAudit(SourceResourceGames, "2026", "Regular Season", SourceRefreshFull, SourceRefreshSuccess, finished), &due)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !audit.StartedAt.Equal(testSourceRefreshTime(2026, 7, 1, 11).Add(59*time.Minute)) || !audit.FinishedAt.Equal(testSourceRefreshTime(2026, 7, 1, 12)) || copiedDue == nil || !copiedDue.Equal(testSourceRefreshTime(2026, 7, 1, 13)) {
+		t.Fatalf("prepared source refresh = %+v, due %v", audit, copiedDue)
+	}
+	due = testSourceRefreshTime(2026, 7, 2, 12)
+	if !copiedDue.Equal(testSourceRefreshTime(2026, 7, 1, 13)) {
+		t.Fatalf("prepared due pointer changed to %s", copiedDue)
+	}
+}
+
 func TestSourceRefreshReadOrderingFilteringScannersAndPointers(t *testing.T) {
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)

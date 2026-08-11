@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: Complete
 - Intended implementation model: GPT-5.6 Terra, high reasoning
 - Required review: Sol
 - Depends on: P2-01 source-refresh audit/state foundation

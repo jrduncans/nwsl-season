@@ -52,12 +52,12 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P1-04 Capability-aware factual HTTP](phase-1/p1-04-capability-aware-factual-http.md) | Complete | Terra | Sol | P1-01, P1-03 |
 | [P1-05 Persisted season readiness](phase-1/p1-05-persisted-season-readiness.md) | Complete | Terra | Sol | P1-01, P1-02, P1-04 |
 | [P2-01 Source-refresh audit/state foundation](phase-2/p2-01-source-refresh-audit-state-foundation.md) | Complete | Terra | Sol | P1-02, P1-05 |
-| [P2-02 Independent team-catalog persistence](phase-2/p2-02-independent-team-catalog-persistence.md) | Ready | Terra | Sol | P2-01 |
+| [P2-02 Independent team-catalog persistence](phase-2/p2-02-independent-team-catalog-persistence.md) | Complete | Terra | Sol | P2-01 |
 
-Phase 1 and P2-01 are complete. P2-02 is ready as the next Phase 2 packet: it
-adds atomic, non-deleting team-catalog persistence with generalized full-refresh
-audit/state while leaving the current syncer and legacy combined write path
-unchanged.
+Phase 1, P2-01, and P2-02 are complete. Atomic, non-deleting team-catalog
+persistence now records generalized full-refresh audit/state while leaving the
+current syncer and legacy combined write path unchanged. Authoritative and
+targeted game persistence is the next Phase 2 packet.
 
 ## Packet template
 
