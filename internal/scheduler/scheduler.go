@@ -160,15 +160,37 @@ func (s *Scheduler) check() {
 		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)
 	}
 	span.SetAttributes(attribute.String("nwsl.scheduler.clinching_preflight_outcome", preflightCalculation))
-	jobs := Plan(snapshot, s.config, s.now().UTC())
+	now := s.now().UTC()
+	jobs := Plan(snapshot, s.config, now)
+	availableJobs := Plan(snapshot, unlimitedRequestBudget(s.config), now)
 	span.SetAttributes(attribute.Int("nwsl.scheduler.job_count", len(jobs)), attribute.Int("nwsl.scheduler.request_budget", requestBudget(s.config)))
 	if len(jobs) == 0 {
+		span.AddEvent("scheduler.decision", trace.WithAttributes(
+			attribute.String("nwsl.scheduler.decision", "not_check"),
+			attribute.String("nwsl.scheduler.reason", "no_source_request_due"),
+		))
 		outcome := preflightCalculation
 		if outcome == "not_needed" {
 			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)
 		}
 		span.SetAttributes(attribute.String("nwsl.scheduler.action", "recalculate"), attribute.Int("nwsl.scheduler.request_count", 0), attribute.String("nwsl.scheduler.outcome", outcome))
 		return
+	}
+	for _, job := range jobs {
+		span.AddEvent("scheduler.decision", trace.WithAttributes(
+			attribute.String("nwsl.scheduler.decision", "check"),
+			attribute.String("nwsl.scheduler.reason", job.Reason),
+			attribute.String("nwsl.scheduler.job_kind", string(job.Kind)),
+			attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage),
+			attribute.Int("nwsl.scheduler.requested_rows", len(job.Operation.Requested)),
+		))
+	}
+	if len(availableJobs) > len(jobs) {
+		span.AddEvent("scheduler.decision", trace.WithAttributes(
+			attribute.String("nwsl.scheduler.decision", "not_check"),
+			attribute.String("nwsl.scheduler.reason", "source_request_budget_exhausted"),
+			attribute.Int("nwsl.scheduler.deferred_job_count", len(availableJobs)-len(jobs)),
+		))
 	}
 	requests := 0
 	tickOutcome := "complete"
@@ -187,6 +209,12 @@ jobsLoop:
 			requests++
 		}
 		jobSpan.SetAttributes(jobAttributes(job, result, outcome, requests)...)
+		if strings.HasPrefix(outcome, "deferred") {
+			jobSpan.AddEvent("scheduler.decision", trace.WithAttributes(
+				attribute.String("nwsl.scheduler.decision", "not_check"),
+				attribute.String("nwsl.scheduler.reason", outcome),
+			))
+		}
 		if jobErr != nil {
 			telemetry.MarkError(jobSpan, jobErr)
 		}
@@ -351,6 +379,11 @@ func requestBudget(config Config) int {
 		return config.SourceRequestBudget
 	}
 	return defaultSourceRequestBudget
+}
+
+func unlimitedRequestBudget(config Config) Config {
+	config.SourceRequestBudget = int(^uint(0) >> 1)
+	return config
 }
 func jobAttributes(job Job, result syncer.OperationResult, outcome string, requests int) []attribute.KeyValue {
 	returned, material := 0, false

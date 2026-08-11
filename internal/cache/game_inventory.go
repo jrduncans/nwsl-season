@@ -20,6 +20,10 @@ type GameRefreshResult struct {
 	SyncRun *SyncRun
 	Teams   []Team
 	Games   []Game
+	// PreviousGames is the cached inventory immediately before this source
+	// observation. It lets callers explain an update decision against the
+	// exact source version that was already live, without another read.
+	PreviousGames []Game
 }
 
 var ErrUnknownGameTeams = errors.New("game inventory references unknown teams")
@@ -179,7 +183,7 @@ func (c *DB) ReplaceGameInventory(ctx context.Context, season, stage string, gam
 	if err := tx.Commit(); err != nil {
 		return GameRefreshResult{}, fmt.Errorf("commit game inventory refresh: %w", err)
 	}
-	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post)}, nil
+	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before)}, nil
 }
 
 func validateGameInventoryInput(season, stage string, games []Game, expected *competition.InventoryExpectation) error {

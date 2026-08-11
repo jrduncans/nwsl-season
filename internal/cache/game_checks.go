@@ -198,7 +198,7 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 	if err := tx.Commit(); err != nil {
 		return GameRefreshResult{}, fmt.Errorf("commit targeted game refresh: %w", err)
 	}
-	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post)}, nil
+	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before)}, nil
 }
 func prepareCheckedGames(season, stage string, requested []CheckedGameRequest, returned []Game, metadata TargetedRefreshMetadata) ([]CheckedGameRequest, SourceRefreshAudit, error) {
 	if invalidTrimmed(season) || invalidTrimmed(stage) {
