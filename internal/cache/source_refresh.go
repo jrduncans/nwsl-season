@@ -39,6 +39,7 @@ const (
 	SourceTriggerStartup      SourceRefreshTrigger = "startup"
 	SourceTriggerCLI          SourceRefreshTrigger = "cli"
 	SourceTriggerBackfill     SourceRefreshTrigger = "backfill"
+	SourceTriggerMaintenance  SourceRefreshTrigger = "maintenance"
 	SourceTriggerVenueHistory SourceRefreshTrigger = "venue_history"
 )
 

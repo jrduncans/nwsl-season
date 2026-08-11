@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"hash/fnv"
 	"sort"
 	"time"
 
@@ -12,6 +13,13 @@ import (
 
 type JobKind string
 
+type JobClass string
+
+const (
+	JobHot  JobClass = "hot"
+	JobCold JobClass = "cold"
+)
+
 const (
 	JobFullGames    JobKind = "full_games"
 	JobFullXG       JobKind = "full_xg"
@@ -21,6 +29,7 @@ const (
 
 type Job struct {
 	Kind      JobKind
+	Class     JobClass
 	Operation syncer.Operation
 	Reason    string
 }
@@ -32,6 +41,7 @@ const (
 	defaultCorrectionFastWindow  = 5 * 24 * time.Hour
 	defaultCorrectionFinalWindow = 30 * 24 * time.Hour
 	defaultInventoryInterval     = 7 * 24 * time.Hour
+	defaultColdSweepInterval     = 30 * 24 * time.Hour
 )
 
 // Plan is pure: it selects ordered, batched jobs without making requests or
@@ -52,20 +62,94 @@ func Plan(snapshot cache.PlanningSnapshot, config Config, now time.Time) []Job {
 	for _, priority := range priorities {
 		jobs = append(jobs, priority...)
 	}
-	budget := config.SourceRequestBudget
-	if budget <= 0 {
-		budget = defaultSourceRequestBudget
+	if len(jobs) > 0 {
+		for i := range jobs {
+			jobs[i].Class = JobHot
+		}
+		budget := config.SourceRequestBudget
+		if budget <= 0 {
+			budget = defaultSourceRequestBudget
+		}
+		if len(jobs) > budget {
+			jobs = jobs[:budget]
+		}
+		return jobs
 	}
-	if len(jobs) > budget {
-		jobs = jobs[:budget]
+	return planColdSweep(snapshot, config, now)
+}
+
+type coldCandidate struct {
+	job Job
+	due time.Time
+}
+
+func planColdSweep(snapshot cache.PlanningSnapshot, config Config, now time.Time) []Job {
+	candidates := make([]coldCandidate, 0)
+	for _, scope := range snapshot.Scopes {
+		id := scope.Readiness.Scope
+		if id.Lifecycle != cache.SourceScopeCompleted || scope.Readiness.Readiness != cache.SourceReadinessAvailable || len(scope.Games) == 0 || scope.GamesFull == nil || scope.GamesFull.LastFullSuccessAt == nil {
+			continue
+		}
+		gamesDue, gamesAt := coldDue(scope.GamesFull, id.Season, id.Stage, config, now)
+		if gamesDue {
+			candidates = append(candidates, coldCandidate{due: gamesAt, job: Job{Kind: JobFullGames, Class: JobCold, Reason: "archived_correction_sweep", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config)}}})
+			continue
+		}
+		if scope.XGFull == nil || scope.XGFull.LastFullSuccessAt == nil || scope.XGFull.LastFullSuccessAt.Before(*scope.GamesFull.LastFullSuccessAt) {
+			candidates = append(candidates, coldCandidate{due: *scope.GamesFull.LastFullSuccessAt, job: Job{Kind: JobFullXG, Class: JobCold, Reason: "archived_xg_after_games", Operation: syncer.Operation{Resource: syncer.OperationGameXG, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config)}}})
+			continue
+		}
+		xgDue, xgAt := coldDue(scope.XGFull, id.Season, id.Stage, config, now)
+		if xgDue {
+			candidates = append(candidates, coldCandidate{due: xgAt, job: Job{Kind: JobFullGames, Class: JobCold, Reason: "archived_correction_sweep", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config)}}})
+		}
 	}
-	return jobs
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].due.Equal(candidates[j].due) {
+			return candidates[i].due.Before(candidates[j].due)
+		}
+		a, b := candidates[i].job.Operation, candidates[j].job.Operation
+		if a.Season != b.Season {
+			return a.Season > b.Season
+		}
+		return a.Stage < b.Stage
+	})
+	return []Job{candidates[0].job}
+}
+
+func coldDue(state *cache.SourceResourceScopeState, season, stage string, config Config, now time.Time) (bool, time.Time) {
+	if state == nil || state.LastFullSuccessAt == nil {
+		return false, time.Time{}
+	}
+	due := state.NextFullDueAt
+	if due == nil {
+		value := state.LastFullSuccessAt.Add(coldSweepOffset(season, stage, coldSweepInterval(config)))
+		due = &value
+	}
+	return !due.After(now), *due
+}
+
+func coldSweepOffset(season, stage string, interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(season))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(stage))
+	return time.Duration(hash.Sum64() % uint64(interval))
 }
 
 func planningScopes(snapshot cache.PlanningSnapshot, config Config) []cache.PlanningScopeSnapshot {
 	out := []cache.PlanningScopeSnapshot{}
 	for _, scope := range snapshot.Scopes {
 		id := scope.Readiness.Scope
+		if id.Lifecycle == cache.SourceScopeCompleted {
+			continue
+		}
 		if id.Season == config.Season && id.Stage == config.Stage || id.Lifecycle == cache.SourceScopeUpcoming && id.Stage == "Regular Season" {
 			out = append(out, scope)
 		}
@@ -292,4 +376,10 @@ func inventoryInterval(config Config) time.Duration {
 		return config.InventoryInterval
 	}
 	return defaultInventoryInterval
+}
+func coldSweepInterval(config Config) time.Duration {
+	if config.ColdSweepInterval > 0 {
+		return config.ColdSweepInterval
+	}
+	return defaultColdSweepInterval
 }

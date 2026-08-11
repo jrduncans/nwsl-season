@@ -108,6 +108,151 @@ func TestPlanAuditsActiveCompleteInventoryWeekly(t *testing.T) {
 	}
 }
 
+func TestPlanColdSweepsCompletedScopesOneAtATimeAndChainsGamesThenXG(t *testing.T) {
+	now := time.Date(2033, 10, 1, 0, 0, 0, 0, time.UTC)
+	archive := planningScope("2025", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.CompletedStatus, now.Add(-40*24*time.Hour))})
+	archive.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	lastGames := now.Add(-31 * 24 * time.Hour)
+	archive.GamesFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGames, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: &lastGames}
+	config := testPlannerConfig()
+	config.ColdSweepInterval = 30 * 24 * time.Hour
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{archive}}, config, now)
+	if len(jobs) != 1 || jobs[0].Class != JobCold || jobs[0].Kind != JobFullGames || jobs[0].Operation.NextFullDueAfter != 30*24*time.Hour {
+		t.Fatalf("cold games job = %+v", jobs)
+	}
+	gamesDue := now.Add(30 * 24 * time.Hour)
+	archive.GamesFull.NextFullDueAt = &gamesDue
+	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{archive}}, config, now)
+	if len(jobs) != 1 || jobs[0].Class != JobCold || jobs[0].Kind != JobFullXG || jobs[0].Reason != "archived_xg_after_games" {
+		t.Fatalf("paired xG job = %+v", jobs)
+	}
+	lastXG := now
+	archive.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: &lastXG, NextFullDueAt: &gamesDue}
+	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{archive}}, config, now); len(jobs) != 0 {
+		t.Fatalf("not-due archive jobs = %+v", jobs)
+	}
+}
+
+func TestPlanColdSweepUsesPersistedDueAndHotWorkWins(t *testing.T) {
+	now := time.Date(2033, 10, 1, 0, 0, 0, 0, time.UTC)
+	first, second := now.Add(-time.Hour), now.Add(-2*time.Hour)
+	archives := []cache.PlanningScopeSnapshot{
+		coldPlanningScope("2025", &first), coldPlanningScope("2024", &second),
+	}
+	jobs := Plan(cache.PlanningSnapshot{Scopes: archives}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Operation.Season != "2024" {
+		t.Fatalf("cold due ordering = %+v", jobs)
+	}
+	if coldSweepOffset("2025", "Regular Season", 30*24*time.Hour) != coldSweepOffset("2025", "Regular Season", 30*24*time.Hour) {
+		t.Fatal("cold staggering is not deterministic")
+	}
+	hot := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	jobs = Plan(cache.PlanningSnapshot{Scopes: append(archives, hot)}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Class != JobHot || jobs[0].Operation.Season != "2033" {
+		t.Fatalf("hot suppression jobs = %+v", jobs)
+	}
+}
+
+func TestColdExecutionAcquiresGlobalThenScopeAndReleasesReverse(t *testing.T) {
+	now := time.Date(2033, 10, 2, 0, 0, 0, 0, time.UTC)
+	store := &planningStore{}
+	runner := &operationRunner{}
+	s, err := New(store, runner, testPlannerConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	job := Job{Class: JobCold, Kind: JobFullGames, Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: "2025", Stage: "Regular Season"}}
+	if outcome, _, attempted, err := s.executeJob(context.Background(), job); err != nil || outcome != "complete" || !attempted {
+		t.Fatalf("cold execution = %q %t %v", outcome, attempted, err)
+	}
+	wantAcquire := []string{coldSweepLeaseKey, "2025\x00Regular Season"}
+	wantRelease := []string{"2025\x00Regular Season", coldSweepLeaseKey}
+	if !reflect.DeepEqual(store.keys, wantAcquire) || !reflect.DeepEqual(store.releaseKeys, wantRelease) {
+		t.Fatalf("lease order = %v / %v, want %v / %v", store.keys, store.releaseKeys, wantAcquire, wantRelease)
+	}
+}
+
+func TestColdExecutionCleansUpGlobalLeaseWhenScopeIsUnavailable(t *testing.T) {
+	now := time.Date(2033, 10, 2, 0, 0, 0, 0, time.UTC)
+	store := &planningStore{acquireResults: []bool{true, false}}
+	s, err := New(store, &operationRunner{}, testPlannerConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	job := Job{Class: JobCold, Kind: JobFullGames, Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: "2025", Stage: "Regular Season"}}
+	if outcome, _, attempted, err := s.executeJob(context.Background(), job); err != nil || outcome != "deferred_scope_lease" || attempted {
+		t.Fatalf("cold scope conflict = %q %t %v", outcome, attempted, err)
+	}
+	if !reflect.DeepEqual(store.releaseKeys, []string{coldSweepLeaseKey}) {
+		t.Fatalf("partial acquisition releases = %v", store.releaseKeys)
+	}
+}
+
+func TestColdExecutionDefersBeforeScopeWhenGlobalLeaseIsUnavailable(t *testing.T) {
+	store := &planningStore{acquireResults: []bool{false}}
+	s, err := New(store, &operationRunner{}, testPlannerConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := Job{Class: JobCold, Kind: JobFullGames, Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: "2025", Stage: "Regular Season"}}
+	if outcome, _, attempted, err := s.executeJob(context.Background(), job); err != nil || outcome != "deferred_global_lease" || attempted {
+		t.Fatalf("cold global conflict = %q %t %v", outcome, attempted, err)
+	}
+	if len(store.keys) != 1 || len(store.releaseKeys) != 0 {
+		t.Fatalf("global conflict leases = %v / %v", store.keys, store.releaseKeys)
+	}
+}
+
+func TestSweepDueArchivedUsesMaintenanceTriggerAndFreshHotPreemption(t *testing.T) {
+	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
+	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	hot := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	store := &sequencePlanningStore{snapshots: []cache.PlanningSnapshot{{Scopes: []cache.PlanningScopeSnapshot{archive}}, {Scopes: []cache.PlanningScopeSnapshot{hot}}}}
+	runner := &operationRunner{}
+	s, err := New(store, runner, testPlannerConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	report, err := s.SweepDueArchived(context.Background())
+	if err != nil || !report.Deferred || report.Reason != "hot_work_due" || report.Requests != 1 || len(report.Entries) != 1 {
+		t.Fatalf("sweep report = %+v, %v", report, err)
+	}
+	if len(runner.operations) != 1 || runner.operations[0].Trigger != cache.SourceTriggerMaintenance || runner.operations[0].Resource != syncer.OperationGames {
+		t.Fatalf("maintenance operation = %+v", runner.operations)
+	}
+}
+
+func TestSchedulerColdCorrectionDoesNotRecalculateHistoricalQualification(t *testing.T) {
+	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
+	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{archive}}}
+	runner := &historicalCorrectionRunner{}
+	config := testPlannerConfig()
+	config.Season = "2025"
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	s.check()
+	if len(runner.operations) != 1 || runner.recalculations != 0 {
+		t.Fatalf("operations=%d historical recalculations=%d", len(runner.operations), runner.recalculations)
+	}
+}
+
+func coldPlanningScope(season string, due *time.Time) cache.PlanningScopeSnapshot {
+	scope := planningScope(season, "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.CompletedStatus, time.Date(2033, 1, 1, 0, 0, 0, 0, time.UTC))})
+	scope.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	last := time.Date(2033, 1, 1, 0, 0, 0, 0, time.UTC)
+	scope.GamesFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGames, Season: season, Stage: "Regular Season", LastFullSuccessAt: &last, NextFullDueAt: due}
+	lastXG := last
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: season, Stage: "Regular Season", LastFullSuccessAt: &lastXG, NextFullDueAt: due}
+	return scope
+}
+
 func TestPlanUsesConfiguredCorrectionDefaults(t *testing.T) {
 	now := time.Date(2033, 8, 3, 0, 0, 0, 0, time.UTC)
 	first := now.Add(-time.Hour)
@@ -187,23 +332,66 @@ func testPlannerConfig() Config {
 type planningStore struct {
 	snapshot           cache.PlanningSnapshot
 	acquired, released int
+	keys, releaseKeys  []string
+	acquireResults     []bool
 }
 
 func (s *planningStore) PlanningSnapshot(context.Context) (cache.PlanningSnapshot, error) {
 	return s.snapshot, nil
 }
-func (s *planningStore) TryAcquireSyncLease(context.Context, string, string, time.Time) (bool, error) {
+func (s *planningStore) TryAcquireSyncLease(_ context.Context, key, _ string, _ time.Time) (bool, error) {
 	s.acquired++
+	s.keys = append(s.keys, key)
+	if len(s.acquireResults) > 0 {
+		result := s.acquireResults[0]
+		s.acquireResults = s.acquireResults[1:]
+		return result, nil
+	}
 	return true, nil
 }
-func (s *planningStore) ReleaseSyncLease(context.Context, string, string) error {
+
+type sequencePlanningStore struct {
+	snapshots []cache.PlanningSnapshot
+	reads     int
+	planningStore
+}
+
+func (s *sequencePlanningStore) PlanningSnapshot(context.Context) (cache.PlanningSnapshot, error) {
+	index := s.reads
+	s.reads++
+	if index >= len(s.snapshots) {
+		return cache.PlanningSnapshot{}, nil
+	}
+	return s.snapshots[index], nil
+}
+func (s *planningStore) ReleaseSyncLease(_ context.Context, key, _ string) error {
 	s.released++
+	s.releaseKeys = append(s.releaseKeys, key)
 	return nil
 }
 
 type operationRunner struct {
 	operations   []syncer.Operation
 	afterExecute func()
+}
+
+type historicalCorrectionRunner struct {
+	operationRunner
+	recalculations int
+}
+
+func (r *historicalCorrectionRunner) Execute(_ context.Context, op syncer.Operation) (syncer.OperationResult, error) {
+	r.operations = append(r.operations, op)
+	return syncer.OperationResult{
+		Operation:            op,
+		Games:                &cache.GameRefreshResult{},
+		FixtureInputsChanged: true,
+	}, nil
+}
+
+func (r *historicalCorrectionRunner) Recalculate(context.Context, syncer.RecalculateOptions) (cache.SyncRun, error) {
+	r.recalculations++
+	return cache.SyncRun{}, nil
 }
 
 func (r *operationRunner) Execute(_ context.Context, op syncer.Operation) (syncer.OperationResult, error) {

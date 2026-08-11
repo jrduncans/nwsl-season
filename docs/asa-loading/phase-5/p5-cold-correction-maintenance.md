@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: Complete
 - Implementation: Terra
 - Review: primary agent; one Sol gate for leases and concurrency
 - Depends on: Phase 4

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
@@ -44,6 +46,7 @@ type Config struct {
 	CorrectionFastWindow  time.Duration
 	CorrectionFinalWindow time.Duration
 	InventoryInterval     time.Duration
+	ColdSweepInterval     time.Duration
 }
 
 type Scheduler struct {
@@ -55,6 +58,24 @@ type Scheduler struct {
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
+}
+
+const coldSweepLeaseKey = "cold-sweep"
+
+type SweepEntry struct {
+	Job      Job
+	Result   syncer.OperationResult
+	Material bool
+}
+
+// SweepReport describes one explicit, sequential archived maintenance pass.
+// It never retains a lease between source requests.
+type SweepReport struct {
+	Entries       []SweepEntry
+	Requests      int
+	Reason        string
+	Deferred      bool
+	EvidenceDirty bool
 }
 
 func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger) (*Scheduler, error) {
@@ -84,7 +105,7 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 	for _, field := range []struct {
 		name  string
 		value time.Duration
-	}{{"correction interval", config.CorrectionInterval}, {"correction daily", config.CorrectionDaily}, {"correction fast window", config.CorrectionFastWindow}, {"correction final window", config.CorrectionFinalWindow}, {"inventory interval", config.InventoryInterval}} {
+	}{{"correction interval", config.CorrectionInterval}, {"correction daily", config.CorrectionDaily}, {"correction fast window", config.CorrectionFastWindow}, {"correction final window", config.CorrectionFinalWindow}, {"inventory interval", config.InventoryInterval}, {"cold sweep interval", config.ColdSweepInterval}} {
 		if field.value < 0 {
 			return nil, fmt.Errorf("scheduler %s must not be negative", field.name)
 		}
@@ -164,14 +185,18 @@ jobsLoop:
 			tickOutcome = "failure"
 			break
 		}
-		if outcome == "deferred" {
+		if strings.HasPrefix(outcome, "deferred") {
 			tickOutcome = "deferred"
 		}
-		if result.Games != nil && result.FixtureInputsChanged && job.Operation.Season == s.config.Season && job.Operation.Stage == s.config.Stage {
+		if job.Class == JobHot && result.Games != nil && result.FixtureInputsChanged && job.Operation.Season == s.config.Season && job.Operation.Stage == s.config.Stage {
 			derivedOutcome := s.recalculateCachedClinching(ctx, span, job.Operation.Season, job.Operation.Stage)
 			if derivedOutcome == "failure" || derivedOutcome == "partial_failure" {
 				tickOutcome = "partial_failure"
 			}
+		}
+		if job.Class == JobCold && (result.FixtureInputsChanged || result.XGInputsChanged) && historicalEvidenceScope(job.Operation.Season, job.Operation.Stage) {
+			span.SetAttributes(attribute.Bool("nwsl.scheduler.evaluation_evidence_dirty", true))
+			s.logger.Info("historical correction changed evaluation evidence", "season", job.Operation.Season, "stage", job.Operation.Stage, "resource", job.Kind)
 		}
 	}
 	span.SetAttributes(attribute.Int("nwsl.scheduler.request_count", requests), attribute.String("nwsl.scheduler.outcome", tickOutcome))
@@ -179,15 +204,30 @@ jobsLoop:
 
 func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.OperationResult, bool, error) {
 	now := s.now().UTC()
-	key := jobLeaseKey(job)
 	holder := fmt.Sprintf("scheduler-%d", now.UnixNano())
+	if job.Class == JobCold {
+		acquired, err := s.store.TryAcquireSyncLease(parent, coldSweepLeaseKey, holder, now.Add(s.config.Timeout))
+		if err != nil {
+			s.logger.Error("acquire cold sweep lease", "job", job.Kind, "error", err)
+			return "failure", syncer.OperationResult{}, false, err
+		}
+		if !acquired {
+			return "deferred_global_lease", syncer.OperationResult{}, false, nil
+		}
+		defer func() {
+			releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = s.store.ReleaseSyncLease(releaseCtx, coldSweepLeaseKey, holder)
+		}()
+	}
+	key := jobLeaseKey(job)
 	acquired, err := s.store.TryAcquireSyncLease(parent, key, holder, now.Add(s.config.Timeout))
 	if err != nil {
 		s.logger.Error("acquire source job lease", "job", job.Kind, "error", err)
 		return "failure", syncer.OperationResult{}, false, err
 	}
 	if !acquired {
-		return "deferred", syncer.OperationResult{}, false, nil
+		return "deferred_scope_lease", syncer.OperationResult{}, false, nil
 	}
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -201,6 +241,59 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 		return "failure", result, true, err
 	}
 	return "complete", result, true, nil
+}
+
+// SweepDueArchived repeatedly takes fresh snapshots and executes only the one
+// due cold job selected by Plan. A newly due hot job therefore ends the pass
+// before another archived request starts.
+func (s *Scheduler) SweepDueArchived(parent context.Context) (SweepReport, error) {
+	report := SweepReport{Entries: []SweepEntry{}}
+	for {
+		if err := parent.Err(); err != nil {
+			report.Reason = "context_expired"
+			return report, err
+		}
+		snapshot, err := s.store.PlanningSnapshot(parent)
+		if err != nil {
+			report.Reason = "snapshot_failure"
+			return report, err
+		}
+		jobs := Plan(snapshot, s.config, s.now().UTC())
+		if len(jobs) == 0 {
+			report.Reason = "complete"
+			return report, nil
+		}
+		job := jobs[0]
+		if job.Class != JobCold {
+			report.Reason, report.Deferred = "hot_work_due", true
+			return report, nil
+		}
+		job.Operation.Trigger = cache.SourceTriggerMaintenance
+		requestCtx, cancel := context.WithTimeout(parent, s.config.Timeout)
+		outcome, result, attempted, err := s.executeJob(requestCtx, job)
+		cancel()
+		if attempted {
+			report.Requests++
+		}
+		if strings.HasPrefix(outcome, "deferred") {
+			report.Reason, report.Deferred = strings.TrimPrefix(outcome, "deferred_"), true
+			return report, nil
+		}
+		if err != nil {
+			report.Reason = "request_failure"
+			return report, err
+		}
+		material := result.FixtureInputsChanged || result.XGInputsChanged
+		report.Entries = append(report.Entries, SweepEntry{Job: job, Result: result, Material: material})
+		if material && historicalEvidenceScope(job.Operation.Season, job.Operation.Stage) {
+			report.EvidenceDirty = true
+		}
+	}
+}
+
+func historicalEvidenceScope(season, stage string) bool {
+	entry, found := competition.Lookup(season, stage)
+	return found && entry.Public && entry.SourceAvailable && entry.Rules == nil
 }
 
 func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span, season, stage string) string {
@@ -246,7 +339,7 @@ func jobAttributes(job Job, result syncer.OperationResult, outcome string, reque
 		returned = result.XG.Audit.ReturnedRows
 		material = result.XGInputsChanged
 	}
-	return []attribute.KeyValue{attribute.String("nwsl.scheduler.job_kind", string(job.Kind)), attribute.String("nwsl.scheduler.job_outcome", outcome), attribute.String("nwsl.scheduler.job_reason", job.Reason), attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage), attribute.Int("nwsl.scheduler.job_requested_rows", len(job.Operation.Requested)), attribute.Int("nwsl.scheduler.job_returned_rows", returned), attribute.Bool("nwsl.scheduler.job_material", material), attribute.Int("nwsl.scheduler.request_count", requests)}
+	return []attribute.KeyValue{attribute.String("nwsl.scheduler.job_kind", string(job.Kind)), attribute.String("nwsl.scheduler.job_class", string(job.Class)), attribute.String("nwsl.scheduler.job_outcome", outcome), attribute.String("nwsl.scheduler.job_reason", job.Reason), attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage), attribute.Int("nwsl.scheduler.job_requested_rows", len(job.Operation.Requested)), attribute.Int("nwsl.scheduler.job_returned_rows", returned), attribute.Bool("nwsl.scheduler.job_material", material), attribute.Int("nwsl.scheduler.request_count", requests)}
 }
 func validateScheduleConfig(config Config) error {
 	if config.ExpectedTeams == 0 && config.GamesPerTeam == 0 {

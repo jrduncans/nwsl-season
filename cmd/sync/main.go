@@ -19,6 +19,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
+	"github.com/jrduncans/nwsl-season/internal/scheduler"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
@@ -50,8 +51,19 @@ func run() (exitCode int) {
 	force := flag.Bool("force", false, "force all clinching calculations after synchronizing source data")
 	requireXG := flag.Bool("require-xg", false, "exit nonzero when fixtures sync but xG refresh fails")
 	backfillHistorical := flag.Bool("backfill-historical", false, "sequentially refresh every supported historical regular season")
+	sweepDueArchived := flag.Bool("sweep-due-archived", false, "sequentially refresh currently due archived correction resources")
 	pruneHistoryBefore := flag.String("prune-history-before", "", "delete superseded run history finished before this RFC 3339 timestamp, then exit")
 	flag.Parse()
+	maintenanceModes := 0
+	for _, enabled := range []bool{*recalculate, *backfillHistorical, *sweepDueArchived, *pruneHistoryBefore != ""} {
+		if enabled {
+			maintenanceModes++
+		}
+	}
+	if maintenanceModes > 1 {
+		fmt.Fprintln(os.Stderr, "sync: maintenance modes are mutually exclusive")
+		return 1
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	providers, err := telemetry.Configure(context.Background(), logger, "nwsl-season-sync")
@@ -100,11 +112,6 @@ func run() (exitCode int) {
 		fmt.Printf("Pruned history before %s: %d sync runs, %d xG sync runs, %d qualification runs (%d statuses), %d scenario runs (%d results), and %d expired sync leases.\n", cutoff.UTC().Format(time.RFC3339), result.SyncRuns, result.XGSyncRuns, result.QualificationRuns, result.QualificationStatuses, result.ScenarioRuns, result.ScenarioResults, result.ExpiredSyncLeases)
 		return 0
 	}
-	if *backfillHistorical && *recalculate {
-		logger.Error("historical backfill cannot recalculate clinching data")
-		return 1
-	}
-
 	service := syncer.Service{
 		ASA:                  client,
 		Store:                db,
@@ -147,6 +154,32 @@ func run() (exitCode int) {
 		if err := runHistoricalBackfill(historicalBackfillEntries(cfg.SyncSeason), cfg.SyncTimeout, service.Run, os.Stdout); err != nil {
 			logger.Error("backfill historical ASA cache", "error", err)
 			return 1
+		}
+		return 0
+	}
+	if *sweepDueArchived {
+		maintenance, err := scheduler.New(db, service, scheduler.Config{
+			Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: expectedTeams, GamesPerTeam: gamesPerTeam,
+			CheckInterval: cfg.SyncCheckInterval, CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout,
+		}, logger)
+		if err != nil {
+			logger.Error("create archived maintenance scheduler", "error", err)
+			return 1
+		}
+		report, err := maintenance.SweepDueArchived(context.Background())
+		for _, entry := range report.Entries {
+			fmt.Printf("Archived %s %s %s: %s.\n", entry.Job.Kind, entry.Job.Operation.Season, entry.Job.Operation.Stage, maintenanceOutcome(entry.Material))
+		}
+		fmt.Printf("Archived sweep %s after %d request(s).\n", report.Reason, report.Requests)
+		if report.EvidenceDirty {
+			fmt.Println("Model-evaluation evidence requires regeneration for a materially corrected historical scope.")
+		}
+		if err != nil {
+			logger.Error("sweep due archived resources", "reason", report.Reason, "error", err)
+			return 1
+		}
+		if report.Deferred {
+			logger.Warn("archived sweep deferred", "reason", report.Reason)
 		}
 		return 0
 	}
@@ -233,6 +266,13 @@ func calculationOutcome(recalculated bool) string {
 		return "recalculated"
 	}
 	return "already current"
+}
+
+func maintenanceOutcome(material bool) string {
+	if material {
+		return "material change"
+	}
+	return "no-op"
 }
 
 func historyPruneCount(result cache.HistoryPruneResult) int64 {

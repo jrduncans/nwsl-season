@@ -197,7 +197,7 @@ func (r forecastWarmingRunner) Execute(ctx context.Context, operation syncer.Ope
 		setSchedulerForecastWarmOutcome(ctx, "not_run")
 		return result, err
 	}
-	if operation.Season != r.currentSeason || operation.Stage != r.currentStage || (!result.FixtureInputsChanged && !result.XGInputsChanged) {
+	if !r.forecastInputsForScope(operation.Season, operation.Stage) || (!result.FixtureInputsChanged && !result.XGInputsChanged) {
 		setSchedulerForecastWarmOutcome(ctx, "not_needed")
 		return result, nil
 	}
@@ -208,6 +208,25 @@ func (r forecastWarmingRunner) Execute(ctx context.Context, operation syncer.Ope
 	}
 	setSchedulerForecastWarmOutcome(ctx, "complete")
 	return result, nil
+}
+
+func (r forecastWarmingRunner) forecastInputsForScope(season, stage string) bool {
+	if stage != r.currentStage {
+		return false
+	}
+	if season == r.currentSeason {
+		return true
+	}
+	previous, err := competition.PreviousRegularSeasons(r.currentSeason, 2)
+	if err != nil {
+		return false
+	}
+	for _, candidate := range previous {
+		if season == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOptions) (cache.SyncRun, error) {

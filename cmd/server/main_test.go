@@ -56,6 +56,24 @@ func TestForecastInputsChanged(t *testing.T) {
 	}
 }
 
+func TestForecastWarmingRunnerUsesOnlyCurrentAndPreviousTwoRegularSeasons(t *testing.T) {
+	runner := forecastWarmingRunner{currentSeason: "2026", currentStage: "Regular Season"}
+	for _, test := range []struct {
+		season, stage string
+		want          bool
+	}{
+		{"2026", "Regular Season", true},
+		{"2025", "Regular Season", true},
+		{"2024", "Regular Season", true},
+		{"2023", "Regular Season", false},
+		{"2025", "Playoffs", false},
+	} {
+		if got := runner.forecastInputsForScope(test.season, test.stage); got != test.want {
+			t.Errorf("forecastInputsForScope(%q, %q) = %t, want %t", test.season, test.stage, got, test.want)
+		}
+	}
+}
+
 func TestNewHTTPServerAppliesConnectionLimits(t *testing.T) {
 	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
 	server := newHTTPServer("127.0.0.1:8080", handler, 40*time.Second)
