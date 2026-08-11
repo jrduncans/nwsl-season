@@ -326,6 +326,9 @@ directory even though the current season data can be rebuilt from ASA.
 
 ## Documentation
 
+- [ASA data catalog and loading plan](docs/asa-data-catalog-and-loading-plan.md)
+  records current source fields and consumers, freshness requirements, known
+  historical/playoff gaps, and the proposed targeted-loading redesign.
 - [How synchronization works](docs/sync-logic-guide.md) diagrams scheduler
   eligibility, ASA requests, targeted result reconciliation, validation, and
   durable cache replacement.
