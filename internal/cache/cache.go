@@ -26,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 9
+const schemaVersion = 10
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -518,6 +518,72 @@ func (c *DB) Migrate(ctx context.Context) error {
 		if err := recordMigration(ctx, tx, 9); err != nil {
 			return err
 		}
+		version = 9
+	}
+	if version < 10 {
+		for _, statement := range []string{
+			`CREATE TABLE source_refresh_audits (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				resource TEXT NOT NULL
+					CHECK (resource IN ('teams','games','game_xg')),
+				season TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				mode TEXT NOT NULL
+					CHECK (mode IN ('full','targeted','recalculate')),
+				trigger TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				finished_at TEXT NOT NULL,
+				outcome TEXT NOT NULL
+					CHECK (outcome IN ('success','failure')),
+				error_summary TEXT NOT NULL,
+				requested_rows INTEGER NOT NULL CHECK (requested_rows >= 0),
+				returned_rows INTEGER NOT NULL CHECK (returned_rows >= 0),
+				rows_inserted INTEGER NOT NULL CHECK (rows_inserted >= 0),
+				rows_updated INTEGER NOT NULL CHECK (rows_updated >= 0),
+				rows_unchanged INTEGER NOT NULL CHECK (rows_unchanged >= 0),
+				rows_deleted INTEGER NOT NULL CHECK (rows_deleted >= 0),
+				downstream_inputs_changed INTEGER NOT NULL
+					CHECK (downstream_inputs_changed IN (0,1)),
+				CHECK (
+					(resource = 'teams' AND season = '' AND stage = '') OR
+					(resource IN ('games','game_xg') AND season <> '' AND stage <> '')
+				),
+				CHECK (
+					(outcome = 'success' AND error_summary = '') OR
+					(outcome = 'failure' AND error_summary <> '')
+				),
+				CHECK (mode = 'full' OR rows_deleted = 0)
+			)`,
+			`CREATE INDEX source_refresh_audits_scope_idx
+				ON source_refresh_audits (
+					resource, season, stage, finished_at DESC, id DESC
+				)`,
+			`CREATE TABLE source_resource_scope_state (
+				resource TEXT NOT NULL
+					CHECK (resource IN ('teams','games','game_xg')),
+				season TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				last_full_success_at TEXT,
+				next_full_due_at TEXT,
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY (resource, season, stage),
+				CHECK (
+					(resource = 'teams' AND season = '' AND stage = '') OR
+					(resource IN ('games','game_xg') AND season <> '' AND stage <> '')
+				)
+			)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 10: %w", err)
+			}
+		}
+		if err := backfillSourceResourceScopeState(ctx, tx, time.Now().UTC()); err != nil {
+			return fmt.Errorf("apply migration 10: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 10); err != nil {
+			return err
+		}
+		version = 10
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
@@ -531,6 +597,72 @@ func tableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
 		return false, fmt.Errorf("check migration table %q: %w", name, err)
 	}
 	return count > 0, nil
+}
+
+func tableHasColumns(ctx context.Context, tx *sql.Tx, name string, wanted ...string) (bool, error) {
+	exists, err := tableExists(ctx, tx, name)
+	if err != nil || !exists {
+		return exists, err
+	}
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(`+name+`)`)
+	if err != nil {
+		return false, fmt.Errorf("inspect columns for table %q: %w", name, err)
+	}
+	defer rows.Close()
+	columns := make(map[string]struct{})
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var column, kind string
+		var defaultValue any
+		if err := rows.Scan(&cid, &column, &kind, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, fmt.Errorf("scan columns for table %q: %w", name, err)
+		}
+		columns[column] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate columns for table %q: %w", name, err)
+	}
+	for _, column := range wanted {
+		if _, ok := columns[column]; !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func backfillSourceResourceScopeState(ctx context.Context, tx *sql.Tx, now time.Time) error {
+	now = now.UTC()
+	backfillGames, err := tableHasColumns(ctx, tx, "sync_runs", "season", "stage", "outcome", "finished_at")
+	if err != nil {
+		return err
+	}
+	if backfillGames {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+			resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+		) SELECT 'games', season, stage, MAX(finished_at), NULL, ?
+		FROM sync_runs WHERE outcome = 'success' GROUP BY season, stage`, formatTime(now)); err != nil {
+			return fmt.Errorf("backfill games source refresh state: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+			resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+		) SELECT 'teams', '', '', MAX(finished_at), NULL, ?
+		FROM sync_runs WHERE outcome = 'success' HAVING COUNT(*) > 0`, formatTime(now)); err != nil {
+			return fmt.Errorf("backfill teams source refresh state: %w", err)
+		}
+	}
+	backfillXG, err := tableHasColumns(ctx, tx, "xg_sync_runs", "season", "stage", "outcome", "finished_at")
+	if err != nil {
+		return err
+	}
+	if backfillXG {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+			resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+		) SELECT 'game_xg', season, stage, MAX(finished_at), NULL, ?
+		FROM xg_sync_runs WHERE outcome = 'success' GROUP BY season, stage`, formatTime(now)); err != nil {
+			return fmt.Errorf("backfill game xG source refresh state: %w", err)
+		}
+	}
+	return nil
 }
 
 // backfillSourceScopes also tolerates the deliberately minimal old-schema

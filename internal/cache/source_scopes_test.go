@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestMigrationNineCreatesSourceScopeTableAndConstraints(t *testing.T) {
+func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 
@@ -16,8 +16,8 @@ func TestMigrationNineCreatesSourceScopeTableAndConstraints(t *testing.T) {
 	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if schemaVersion != 9 || version != schemaVersion {
-		t.Fatalf("schema version = %d, want 9", version)
+	if schemaVersion != 10 || version != schemaVersion {
+		t.Fatalf("schema version = %d, want 10", version)
 	}
 	_, err := db.db.ExecContext(ctx, `INSERT INTO source_scopes (
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at
