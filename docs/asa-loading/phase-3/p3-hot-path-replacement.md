@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: In progress — Workstream A Complete; Workstream B Ready
 - Implementation: Terra
 - Review: primary agent; use a separate Sol gate only for scheduler concurrency
   or lease changes
@@ -42,6 +42,8 @@ new orchestration boundary and rely on the cache package for row-level
 semantics.
 
 ## Workstream A: split-operation sync adapter
+
+- Status: Complete
 
 ### Operation boundary
 
@@ -129,6 +131,8 @@ the same failure through both legacy and generalized paths.
   than adapted.
 
 ## Workstream B: due-job planner and scheduler execution
+
+- Status: Ready
 
 ### Planning snapshot
 

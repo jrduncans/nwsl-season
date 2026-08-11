@@ -1,0 +1,186 @@
+package syncer
+
+import (
+	"context"
+	"database/sql"
+	"reflect"
+	"testing"
+	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/asa"
+	"github.com/jrduncans/nwsl-season/internal/cache"
+)
+
+func TestExecuteTargetedOperationsUseOneSortedRequestAndPreserveOmissions(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	seedOperationScope(t, ctx, db, "one", "two")
+	dueOne := time.Date(2032, 1, 2, 2, 0, 0, 0, time.UTC)
+	dueTwo := time.Date(2032, 1, 2, 3, 0, 0, 0, time.UTC)
+	client := &operationASA{games: map[string][]asa.Game{"one,two": {testGame("one", "FullTime", ptr(1), ptr(0))}}, xg: map[string][]asa.GameXGoals{"one,two": {}}}
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 1, 1, 1, 0, 0, 0, time.UTC))}
+
+	gameResult, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "two", NextDueAt: &dueTwo}, {GameID: "one", NextDueAt: &dueOne}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gameResult.Games == nil || gameResult.Games.Audit.RequestedRows != 2 || gameResult.Games.Audit.ReturnedRows != 1 || !reflect.DeepEqual(client.calls, []string{"games:one,two"}) {
+		t.Fatalf("targeted games result/calls = %+v %v", gameResult.Games, client.calls)
+	}
+	for id, due := range map[string]time.Time{"one": dueOne, "two": dueTwo} {
+		state, ok, stateErr := db.GameResultCheckState(ctx, id)
+		if stateErr != nil || !ok || state.NextDueAt == nil || !state.NextDueAt.Equal(due) {
+			t.Fatalf("game %s check state = %+v, ok=%t, err=%v", id, state, ok, stateErr)
+		}
+	}
+
+	client.calls = nil
+	xgResult, err := service.Execute(ctx, Operation{Resource: OperationGameXG, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "two", NextDueAt: &dueTwo}, {GameID: "one", NextDueAt: &dueOne}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if xgResult.XG == nil || xgResult.XG.Audit.RequestedRows != 2 || xgResult.XG.Audit.ReturnedRows != 0 || !reflect.DeepEqual(client.calls, []string{"xg:one,two"}) {
+		t.Fatalf("targeted xG result/calls = %+v %v", xgResult.XG, client.calls)
+	}
+	values, err := db.GameXGStates(ctx, "2024", "Regular Season")
+	if err != nil || len(values) != 0 {
+		t.Fatalf("targeted omission fabricated xG values = %+v, err=%v", values, err)
+	}
+	for id, due := range map[string]time.Time{"one": dueOne, "two": dueTwo} {
+		state, ok, stateErr := db.GameXGCheckState(ctx, id)
+		if stateErr != nil || !ok || state.NextDueAt == nil || !state.NextDueAt.Equal(due) {
+			t.Fatalf("xG %s check state = %+v, ok=%t, err=%v", id, state, ok, stateErr)
+		}
+	}
+}
+
+func TestExecuteRecoversUnknownTeamsWithoutRefetchingGames(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {testGame("one", "FullTime", ptr(1), ptr(0))}}}
+	clock := fixedOperationClock(time.Date(2032, 2, 1, 0, 0, 0, 0, time.UTC), time.Date(2032, 2, 1, 0, 1, 0, 0, time.UTC))
+	result, err := (Service{ASA: client, Store: db, Now: clock}).Execute(ctx, Operation{Resource: OperationGames, Mode: OperationFull, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Games == nil || result.TeamAudit == nil || !reflect.DeepEqual(client.calls, []string{"games:", "teams:"}) {
+		t.Fatalf("unknown-team recovery = result %+v calls %v", result, client.calls)
+	}
+	if result.Games.Audit.FinishedAt.IsZero() || result.TeamAudit.FinishedAt.IsZero() || !result.Operation.FinishedAt.Equal(result.Games.Audit.FinishedAt) {
+		t.Fatalf("operations did not capture finished observations: %+v %+v", result.Games.Audit, result.TeamAudit)
+	}
+}
+
+func TestExecuteFullOperationOwnsExactlyOneResourceRequest(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {testGame("one", "FullTime", ptr(1), ptr(0))}}, xg: map[string][]asa.GameXGoals{"": {{GameID: "one", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: .8}}}}
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 4, 1, 0, 0, 0, 0, time.UTC))}
+
+	if _, err := service.Execute(ctx, Operation{Resource: OperationTeams, Mode: OperationFull, Trigger: cache.SourceTriggerCLI}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(client.calls, []string{"teams:"}) {
+		t.Fatalf("team operation calls = %v", client.calls)
+	}
+	client.calls = nil
+	if _, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationFull, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerCLI}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(client.calls, []string{"games:"}) {
+		t.Fatalf("full games operation calls = %v", client.calls)
+	}
+	client.calls = nil
+	if _, err := service.Execute(ctx, Operation{Resource: OperationGameXG, Mode: OperationFull, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerCLI}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(client.calls, []string{"xg:"}) {
+		t.Fatalf("full xG operation calls = %v", client.calls)
+	}
+}
+
+func TestExecuteRecordsOneGeneralizedFailureForOwningOperation(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := &operationASA{gamesErr: context.DeadlineExceeded}
+	_, err := (Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 5, 1, 0, 0, 0, 0, time.UTC))}).Execute(ctx, Operation{Resource: OperationGames, Mode: OperationFull, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want fetch failure")
+	}
+	audits, auditErr := db.SourceRefreshAudits(ctx, cache.SourceResourceGames, "2024", "Regular Season")
+	if auditErr != nil || len(audits) != 1 || audits[0].Outcome != cache.SourceRefreshFailure || audits[0].Mode != cache.SourceRefreshFull {
+		t.Fatalf("failure audits = %+v, err=%v", audits, auditErr)
+	}
+}
+
+func TestRunCompatibilityUsesSplitOperationsAndSkipsXGForEmptyDiscovery(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {}}}
+	run, err := (Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 3, 1, 0, 0, 0, 0, time.UTC))}).Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", Trigger: "cli"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.ID != 0 || !reflect.DeepEqual(client.calls, []string{"games:"}) {
+		t.Fatalf("empty compatibility discovery run/calls = %+v %v", run, client.calls)
+	}
+	audits, err := db.SourceRefreshAudits(ctx, cache.SourceResourceGames, "2024", "Regular Season")
+	if err != nil || len(audits) != 1 || audits[0].Outcome != cache.SourceRefreshSuccess {
+		t.Fatalf("empty game discovery audit = %+v, err=%v", audits, err)
+	}
+}
+
+func seedOperationScope(t *testing.T, ctx context.Context, db *cache.DB, ids ...string) {
+	t.Helper()
+	now := time.Date(2031, 12, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := db.UpsertTeams(ctx, []cache.Team{{ASAID: "home", Name: "Home"}, {ASAID: "away", Name: "Away"}}, cache.FullRefreshMetadata{Trigger: cache.SourceTriggerBackfill, StartedAt: now, FinishedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	games := make([]cache.Game, 0, len(ids))
+	for _, id := range ids {
+		games = append(games, cache.Game{ASAID: id, Season: "2024", Stage: "Regular Season", KickoffUTC: "2024-11-03 22:30:00 UTC", Status: "FullTime", HomeTeamID: "home", AwayTeamID: "away", HomeScore: cacheScore(1), AwayScore: cacheScore(0), LastUpdatedUTC: "2024-11-07 15:57:43 UTC", RawJSON: `{}`})
+	}
+	if _, err := db.ReplaceGameInventory(ctx, "2024", "Regular Season", games, nil, cache.FullRefreshMetadata{Trigger: cache.SourceTriggerBackfill, StartedAt: now, FinishedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func cacheScore(value int) (result sql.NullInt64) {
+	return sql.NullInt64{Int64: int64(value), Valid: true}
+}
+
+type operationASA struct {
+	teams    []asa.Team
+	games    map[string][]asa.Game
+	xg       map[string][]asa.GameXGoals
+	gamesErr error
+	calls    []string
+}
+
+func (f *operationASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
+	f.calls = append(f.calls, "teams:")
+	return append([]asa.Team(nil), f.teams...), nil
+}
+func (f *operationASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game, error) {
+	f.calls = append(f.calls, "games:"+filters.GameID)
+	if f.gamesErr != nil {
+		return nil, f.gamesErr
+	}
+	return append([]asa.Game(nil), f.games[filters.GameID]...), nil
+}
+func (f *operationASA) GameXGoals(_ context.Context, filters asa.XGoalsFilters) ([]asa.GameXGoals, error) {
+	f.calls = append(f.calls, "xg:"+filters.GameID)
+	return append([]asa.GameXGoals(nil), f.xg[filters.GameID]...), nil
+}
+
+func fixedOperationClock(values ...time.Time) func() time.Time {
+	index := 0
+	return func() time.Time {
+		if index < len(values)-1 {
+			value := values[index]
+			index++
+			return value
+		}
+		return values[len(values)-1]
+	}
+}

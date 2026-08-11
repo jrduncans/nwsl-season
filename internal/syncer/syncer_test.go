@@ -45,8 +45,12 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	if first.GamesUpserted != 2 || first.GamesDeleted != 0 {
 		t.Fatalf("first run counts = %+v, want 2 upserted and 0 deleted", first)
 	}
+	if first.TeamsUpserted != 2 || first.TeamsInserted != 2 {
+		t.Fatalf("first run team counts = %+v, want recovered catalog counts", first)
+	}
 
 	client.games[0] = testGame("game-1", "FullTime", ptr(2), ptr(2))
+	client.games[0].LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
 	second, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"})
 	if err != nil {
 		t.Fatal(err)
@@ -100,20 +104,11 @@ func TestRunRecordsDetailedTelemetry(t *testing.T) {
 	if got := attributes["nwsl.sync.expected_fixture_count"].AsInt64(); got != 1 {
 		t.Errorf("nwsl.sync.expected_fixture_count = %d, want 1", got)
 	}
-	if got := attributes["nwsl.sync.reconciled_fixture_count"].AsInt64(); got != 1 {
-		t.Errorf("nwsl.sync.reconciled_fixture_count = %d, want 1", got)
-	}
-	if got := attributes["nwsl.sync.inventory_retry_outcome"].AsString(); got != "not_needed" {
-		t.Errorf("nwsl.sync.inventory_retry_outcome = %q, want not_needed", got)
-	}
 	if got := attributes["nwsl.sync.partial_failure"].AsBool(); got {
 		t.Error("nwsl.sync.partial_failure = true, want false")
 	}
 	if got := attributes["nwsl.cache.fixture_snapshot_id"].AsString(); got == "" {
 		t.Error("nwsl.cache.fixture_snapshot_id is empty")
-	}
-	if got := telemetryAttributes(findTelemetrySpan(t, exporter.GetSpans(), "cache.season.replace"))["nwsl.sync.games_inserted"].AsInt64(); got != 1 {
-		t.Errorf("cache replacement sync.games_inserted = %d, want 1", got)
 	}
 }
 
@@ -144,8 +139,8 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 	if len(logExporter.records) != 1 {
 		t.Fatalf("exception log records = %d, want 1", len(logExporter.records))
 	}
-	if got := syncerLogAttribute(logExporter.records[0], "nwsl.error.code"); got != "sync.fetch_asa" {
-		t.Errorf("exception code = %q, want sync.fetch_asa", got)
+	if got := syncerLogAttribute(logExporter.records[0], "nwsl.error.code"); got != "sync.run" {
+		t.Errorf("exception code = %q, want sync.run", got)
 	}
 	if got := syncerLogAttribute(logExporter.records[0], "exception.type"); got != telemetry.ErrorTypeUpstreamFailure {
 		t.Errorf("fetch exception type = %q, want %q", got, telemetry.ErrorTypeUpstreamFailure)
@@ -153,14 +148,12 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 	if got := logExporter.records[0].Severity(); got != otellog.SeverityError {
 		t.Errorf("fetch exception severity = %v, want ERROR", got)
 	}
-	for _, name := range []string{"sync.fetch_asa", "sync.run"} {
-		span := findTelemetrySpan(t, traceExporter.GetSpans(), name)
-		if span.Status.Code != codes.Error {
-			t.Errorf("%s status is not error", name)
-		}
-		if got := telemetryAttributes(span)["error.type"].AsString(); got != telemetry.ErrorTypeUpstreamFailure {
-			t.Errorf("%s error.type = %q, want %q", name, got, telemetry.ErrorTypeUpstreamFailure)
-		}
+	span := findTelemetrySpan(t, traceExporter.GetSpans(), "sync.run")
+	if span.Status.Code != codes.Error {
+		t.Error("sync.run status is not error")
+	}
+	if got := telemetryAttributes(span)["error.type"].AsString(); got != telemetry.ErrorTypeUpstreamFailure {
+		t.Errorf("sync.run error.type = %q, want %q", got, telemetry.ErrorTypeUpstreamFailure)
 	}
 
 	if _, err := (Service{}).Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season"}); err == nil {
@@ -248,47 +241,6 @@ func syncerLogAttribute(record sdklog.Record, key string) string {
 		return true
 	})
 	return value
-}
-
-func TestRunFetchesASAResourcesConcurrently(t *testing.T) {
-	db := newTestDB(t)
-	release := make(chan struct{})
-	client := blockingASA{
-		teamsStarted: make(chan struct{}),
-		gamesStarted: make(chan struct{}),
-		xgStarted:    make(chan struct{}),
-		release:      release,
-	}
-	released := false
-	defer func() {
-		if !released {
-			close(release)
-		}
-	}()
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := (Service{ASA: &client, Store: db}).Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season"})
-		done <- err
-	}()
-
-	for name, started := range map[string]<-chan struct{}{
-		"teams": client.teamsStarted,
-		"games": client.gamesStarted,
-		"xG":    client.xgStarted,
-	} {
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatalf("%s request did not start while the other ASA request was blocked", name)
-		}
-	}
-
-	close(release)
-	released = true
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestEnsureVenueHistorySyncsMissingSeasonsOnce(t *testing.T) {
@@ -440,11 +392,9 @@ func TestRunInvalidExpectedPointsPreservesLastGoodXGSnapshot(t *testing.T) {
 	if len(season.XGoals) != 1 || season.XGoals[0].HomeXPoints.Float64 != homePoints || season.XGoals[0].AwayXPoints.Float64 != awayPoints {
 		t.Fatalf("xG values = %+v, want prior good expected-points snapshot", season.XGoals)
 	}
-	if season.XGStatus.LastAttempt == nil || season.XGStatus.LastAttempt.Outcome != "failure" {
-		t.Fatalf("last xG attempt = %+v, want recorded failure", season.XGStatus.LastAttempt)
-	}
-	if season.XGStatus.LastSuccess == nil || season.XGStatus.LastSuccess.ID == season.XGStatus.LastAttempt.ID {
-		t.Fatalf("last xG success = %+v, want prior successful snapshot", season.XGStatus.LastSuccess)
+	audits, auditErr := db.SourceRefreshAudits(ctx, cache.SourceResourceGameXG, "2024", "Regular Season")
+	if auditErr != nil || len(audits) < 2 || audits[0].Outcome != cache.SourceRefreshFailure {
+		t.Fatalf("xG source audits = %+v, err=%v, want generalized failure after success", audits, auditErr)
 	}
 }
 
@@ -514,6 +464,7 @@ func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 	}
 
 	client.games[0] = testGame("game-1", "FullTime", ptr(3), ptr(0))
+	client.games[0].LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
 	second, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"})
 	if err != nil {
 		t.Fatal(err)
@@ -521,8 +472,8 @@ func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 	if second.ID == first.ID {
 		t.Fatalf("second run ID = %d, want a new sync after %d", second.ID, first.ID)
 	}
-	if client.teamsCalls != 2 || client.gamesCalls != 2 {
-		t.Fatalf("ASA calls after second run = teams %d games %d, want 2 and 2", client.teamsCalls, client.gamesCalls)
+	if client.teamsCalls != 1 || client.gamesCalls != 2 {
+		t.Fatalf("ASA calls after second run = teams %d games %d, want 1 and 2", client.teamsCalls, client.gamesCalls)
 	}
 
 	game := cachedGame(t, ctx, db, "2024", "Regular Season", "game-1")
@@ -582,119 +533,19 @@ func TestRunRejectsIncompleteKnownScheduleAndPreservesExistingRows(t *testing.T)
 	if _, err := service.Run(ctx, options); err == nil {
 		t.Fatal("Run() error = nil, want incomplete schedule validation error")
 	}
-	if client.gamesCalls != 3 {
-		t.Fatalf("season game calls = %d, want initial sync plus two calls for the incomplete sync", client.gamesCalls)
+	if client.gamesCalls != 2 {
+		t.Fatalf("season game calls = %d, want one request per full operation", client.gamesCalls)
 	}
 
 	if count := cachedGameCount(t, ctx, db, "2024", "Regular Season"); count != 2 {
 		t.Fatalf("cached game count = %d, want original 2-game schedule preserved", count)
 	}
-	status, err := db.Status(ctx, "2024", "Regular Season")
+	audits, err := db.SourceRefreshAudits(ctx, cache.SourceResourceGames, "2024", "Regular Season")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.LastAttempt == nil || status.LastAttempt.Outcome != "failure" {
-		t.Fatalf("last attempt = %+v, want failed validation attempt", status.LastAttempt)
-	}
-}
-
-func TestRunRetriesIncompleteKnownScheduleBeforeRejectingIt(t *testing.T) {
-	ctx := context.Background()
-	client := fakeASA{
-		teams: testTeams(),
-		gameResponses: [][]asa.Game{
-			{testGame("game-1", "FullTime", ptr(1), ptr(0))},
-			{
-				testGame("game-1", "FullTime", ptr(1), ptr(0)),
-				testGame("game-2", "PreMatch", nil, nil),
-			},
-		},
-	}
-	db := newTestDB(t)
-	service := Service{ASA: &client, Store: db}
-
-	run, err := service.Run(ctx, RunOptions{
-		Season: "2024", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 2,
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v, want retry to recover complete inventory", err)
-	}
-	if client.gamesCalls != 2 {
-		t.Fatalf("season game calls = %d, want initial request and one inventory retry", client.gamesCalls)
-	}
-	if run.GamesSeen != 2 || cachedGameCount(t, ctx, db, "2024", "Regular Season") != 2 {
-		t.Fatalf("sync run = %+v, want recovered two-game schedule", run)
-	}
-}
-
-func TestRunReconcilesTargetFixtureAheadOfSeasonCollection(t *testing.T) {
-	ctx := context.Background()
-	client := fakeASA{
-		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "PreMatch", nil, nil)},
-		targetGames: map[string][]asa.Game{
-			"game-1": {testGame("game-1", "FullTime", ptr(2), ptr(1))},
-		},
-	}
-	service := Service{ASA: &client, Store: newTestDB(t)}
-
-	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", TargetFixtureID: "game-1"}); err != nil {
-		t.Fatal(err)
-	}
-	game := cachedGame(t, ctx, service.Store.(*cache.DB), "2024", "Regular Season", "game-1")
-	if game.Status != "FullTime" || !game.HomeScore.Valid || game.HomeScore.Int64 != 2 || !game.AwayScore.Valid || game.AwayScore.Int64 != 1 {
-		t.Fatalf("cached target game = %+v, want targeted final result", game)
-	}
-	if calls := client.targetGameCalls("game-1"); calls != 1 {
-		t.Fatalf("targeted game calls = %d, want 1", calls)
-	}
-}
-
-func TestRunUsesTargetFixtureToCompleteLaggingSeasonCollection(t *testing.T) {
-	ctx := context.Background()
-	db := newTestDB(t)
-	client := fakeASA{
-		teams: testTeams(),
-		games: []asa.Game{
-			testGame("game-2", "PreMatch", nil, nil),
-		},
-		targetGames: map[string][]asa.Game{
-			"game-1": {testGame("game-1", "FullTime", ptr(1), ptr(1))},
-		},
-	}
-	service := Service{ASA: &client, Store: db}
-
-	run, err := service.Run(ctx, RunOptions{
-		Season: "2024", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 2, TargetFixtureID: "game-1",
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v, want targeted collection repair", err)
-	}
-	if run.GamesSeen != 2 || run.GamesInserted != 2 {
-		t.Fatalf("sync run = %+v, want two repaired fixtures", run)
-	}
-	if count := cachedGameCount(t, ctx, db, "2024", "Regular Season"); count != 2 {
-		t.Fatalf("cached game count = %d, want repaired two-game schedule", count)
-	}
-}
-
-func TestRunIgnoresFailedTargetedFixtureLookup(t *testing.T) {
-	ctx := context.Background()
-	client := fakeASA{
-		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "PreMatch", nil, nil)},
-		targetErrors: map[string]error{
-			"game-1": errors.New("target endpoint unavailable"),
-		},
-	}
-	service := Service{ASA: &client, Store: newTestDB(t)}
-
-	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season", TargetFixtureID: "game-1"}); err != nil {
-		t.Fatalf("Run() error = %v, want season collection fallback", err)
-	}
-	game := cachedGame(t, ctx, service.Store.(*cache.DB), "2024", "Regular Season", "game-1")
-	if game.Status != "PreMatch" {
-		t.Fatalf("cached target game status = %q, want season collection value", game.Status)
+	if len(audits) < 2 || audits[0].Outcome != cache.SourceRefreshFailure {
+		t.Fatalf("source audits = %+v, want failed validation attempt", audits)
 	}
 }
 
@@ -721,15 +572,12 @@ func TestRunRejectsEmptyGamesAndPreservesExistingRows(t *testing.T) {
 		t.Fatalf("cached game count = %d, want existing row preserved", count)
 	}
 
-	status, err := db.Status(ctx, "2024", "Regular Season")
+	audits, err := db.SourceRefreshAudits(ctx, cache.SourceResourceGames, "2024", "Regular Season")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.LastAttempt == nil || status.LastAttempt.Outcome != "failure" {
-		t.Fatalf("last attempt = %+v, want failure", status.LastAttempt)
-	}
-	if status.LastSuccess == nil || status.LastSuccess.Outcome != "success" {
-		t.Fatalf("last success = %+v, want success", status.LastSuccess)
+	if len(audits) < 2 || audits[0].Outcome != cache.SourceRefreshFailure {
+		t.Fatalf("source audits = %+v, want failure", audits)
 	}
 }
 
@@ -761,15 +609,12 @@ func TestRunRejectsSelfFixtureAndPreservesExistingRows(t *testing.T) {
 		t.Fatalf("cached game = %+v, want previous successful fixture", game)
 	}
 
-	status, err := db.Status(ctx, "2024", "Regular Season")
+	audits, err := db.SourceRefreshAudits(ctx, cache.SourceResourceGames, "2024", "Regular Season")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.LastAttempt == nil || status.LastAttempt.Outcome != "failure" {
-		t.Fatalf("last attempt = %+v, want recorded failure", status.LastAttempt)
-	}
-	if status.LastSuccess == nil || status.LastSuccess.Outcome != "success" {
-		t.Fatalf("last success = %+v, want original success", status.LastSuccess)
+	if len(audits) < 2 || audits[0].Outcome != cache.SourceRefreshFailure {
+		t.Fatalf("source audits = %+v, want recorded failure", audits)
 	}
 }
 
