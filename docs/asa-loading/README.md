@@ -55,13 +55,17 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P2-02 Independent team-catalog persistence](phase-2/p2-02-independent-team-catalog-persistence.md) | Complete | Terra | Sol | P2-01 |
 | [P2-03 Authoritative game-inventory persistence](phase-2/p2-03-authoritative-game-inventory-persistence.md) | Complete | Terra | Sol | P2-02 |
 | [P2-04 Targeted checked-game persistence](phase-2/p2-04-targeted-checked-game-persistence.md) | Complete | Terra | Sol | P2-03 |
+| [P2-05 Authoritative stage xG persistence](phase-2/p2-05-authoritative-stage-xg-persistence.md) | Ready | Terra | Sol | P2-01, P2-03 |
 
 Phase 1 and P2-01 through P2-04 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
 and per-game result cadence state, complete fixture snapshot lineage,
 generalized audit/state, and exact venue/xG invalidation without changing
-current network or scheduler behavior. Independent full/targeted xG persistence
-is the next Phase 2 packet.
+current network or scheduler behavior. P2-05 is ready next: it adds authoritative
+stage xG persistence, protected available/unavailable observation state,
+legacy/generalized full-audit lineage, and atomic venue xG readiness without a
+schema change. P2-06 will add separate targeted xG check/due state and the
+narrower non-deleting requested-ID operation.
 
 ## Packet template
 
