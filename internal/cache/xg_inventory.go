@@ -116,6 +116,7 @@ func (c *DB) ReplaceStageXG(ctx context.Context, season, stage string, values []
 	for _, id := range ids {
 		g := candidate[id]
 		v, ok := returned[id]
+		returnedAvailable := ok && v.Availability == XGAvailable
 		if !ok {
 			v = GameXG{GameID: id, Availability: XGUnavailable, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID}
 		}
@@ -131,6 +132,9 @@ func (c *DB) ReplaceStageXG(ctx context.Context, season, stage string, values []
 			audit.RowsUpdated++
 		default:
 			audit.RowsUnchanged++
+		}
+		if err := upsertGameXGCheck(ctx, tx, id, audit.FinishedAt, nil, true, returnedAvailable, mat); err != nil {
+			return XGRefreshResult{}, err
 		}
 	}
 	out, err := stageXGStates(ctx, tx, season, stage)
@@ -179,7 +183,10 @@ func validateStageXG(v GameXG) error {
 	return nil
 }
 func writeStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowChange, bool, error) {
-	old, err := loadGameXG(ctx, tx, v.GameID)
+	if v.Availability == XGAvailable {
+		return writeAvailableStageXG(ctx, tx, v, at)
+	}
+	_, err := loadGameXG(ctx, tx, v.GameID)
 	if errors.Is(err, sql.ErrNoRows) {
 		ch, e := writeGameXG(ctx, tx, v, at)
 		return ch, v.Availability == XGAvailable, e
@@ -187,19 +194,44 @@ func writeStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowC
 	if err != nil {
 		return 0, false, err
 	}
-	if v.Availability == XGUnavailable {
-		_, e := tx.ExecContext(ctx, `UPDATE game_xg SET last_checked_at=? WHERE asa_game_id=? AND last_checked_at<?`, formatTime(at), v.GameID, formatTime(at))
-		return rowUnchanged, false, e
+	_, e := tx.ExecContext(ctx, `UPDATE game_xg SET last_checked_at=? WHERE asa_game_id=? AND last_checked_at<?`, formatTime(at), v.GameID, formatTime(at))
+	return rowUnchanged, false, e
+}
+
+func writeAvailableStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowChange, bool, error) {
+	old, err := loadGameXG(ctx, tx, v.GameID)
+	if errors.Is(err, sql.ErrNoRows) {
+		change, err := writeGameXG(ctx, tx, v, at)
+		return change, true, err
 	}
-	if old.Availability == XGAvailable && at.Before(old.LastCheckedAt) || old.Availability == XGAvailable && at.Equal(old.LastCheckedAt) && old != v {
-		return rowUnchanged, false, nil
+	if err != nil {
+		return 0, false, err
 	}
-	mat := old.Availability != v.Availability || old.HomeXG != v.HomeXG || old.AwayXG != v.AwayXG || old.HomeXPoints != v.HomeXPoints || old.AwayXPoints != v.AwayXPoints
-	ch, e := writeGameXG(ctx, tx, v, at)
-	if e == nil && old.Availability == XGUnavailable && v.Availability == XGAvailable && !at.After(old.LastCheckedAt) {
-		_, e = tx.ExecContext(ctx, `UPDATE game_xg SET last_checked_at=? WHERE asa_game_id=?`, formatTime(old.LastCheckedAt), v.GameID)
+	if old.Availability == XGAvailable {
+		identical := sameAvailableXG(old, v)
+		if !identical && !at.After(old.LastCheckedAt) {
+			return rowUnchanged, false, nil
+		}
+		if identical && !at.After(old.LastCheckedAt) {
+			return rowUnchanged, false, nil
+		}
+		change, err := writeGameXG(ctx, tx, v, at)
+		return change, availableXGMaterialChange(old, v), err
 	}
-	return ch, mat, e
+	material := true
+	change, err := writeGameXG(ctx, tx, v, at)
+	if err == nil && !at.After(old.LastCheckedAt) {
+		_, err = tx.ExecContext(ctx, `UPDATE game_xg SET last_checked_at=? WHERE asa_game_id=?`, formatTime(old.LastCheckedAt), v.GameID)
+	}
+	return change, material, err
+}
+
+func sameAvailableXG(old, incoming GameXG) bool {
+	return old.Availability == incoming.Availability && old.HomeTeamID == incoming.HomeTeamID && old.AwayTeamID == incoming.AwayTeamID && old.HomeXG == incoming.HomeXG && old.AwayXG == incoming.AwayXG && old.HomeXPoints == incoming.HomeXPoints && old.AwayXPoints == incoming.AwayXPoints && old.RawJSON == incoming.RawJSON
+}
+
+func availableXGMaterialChange(old, incoming GameXG) bool {
+	return old.Availability != incoming.Availability || old.HomeXG != incoming.HomeXG || old.AwayXG != incoming.AwayXG || old.HomeXPoints != incoming.HomeXPoints || old.AwayXPoints != incoming.AwayXPoints
 }
 
 func stageXGStates(ctx context.Context, q queryer, season, stage string) ([]GameXG, error) {

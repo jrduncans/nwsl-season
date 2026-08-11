@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: Complete
 - Intended implementation model: GPT-5.6 Terra, high reasoning
 - Required review: Sol
 - Depends on: P2-04 targeted checked-game persistence and P2-05 authoritative

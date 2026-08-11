@@ -100,6 +100,9 @@ func (c *DB) ReplaceGameInventory(ctx context.Context, season, stage string, gam
 			continue
 		}
 		if found && (existing.HomeTeamID != game.HomeTeamID || existing.AwayTeamID != game.AwayTeamID) {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM game_xg_checks WHERE asa_game_id=?`, game.ASAID); err != nil {
+				return GameRefreshResult{}, fmt.Errorf("delete incompatible game xG check %q: %w", game.ASAID, err)
+			}
 			var hasXG int
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_xg WHERE asa_game_id=?)`, game.ASAID).Scan(&hasXG); err != nil {
 				return GameRefreshResult{}, fmt.Errorf("check game xG %q: %w", game.ASAID, err)
