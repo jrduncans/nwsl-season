@@ -50,7 +50,7 @@ type Entry struct {
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-var catalog = []Entry{{
+var catalog = append(historicalRegularSeasonEntries(), Entry{
 	Season:          "2026",
 	Stage:           "Regular Season",
 	Label:           "2026 Regular Season",
@@ -70,7 +70,26 @@ var catalog = []Entry{{
 		CapabilityQualification,
 		CapabilityScenarios,
 	},
-}}
+})
+
+func historicalRegularSeasonEntries() []Entry {
+	seasons := []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025"}
+	entries := make([]Entry, 0, len(seasons))
+	for _, season := range seasons {
+		entries = append(entries, Entry{
+			Season:          season,
+			Stage:           "Regular Season",
+			Label:           season + " Regular Season",
+			Slug:            "regular-season",
+			Kind:            StageKindLeagueTable,
+			Public:          true,
+			Primary:         true,
+			SourceAvailable: true,
+			Capabilities:    []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG},
+		})
+	}
+	return entries
+}
 
 func (e Entry) Validate() error {
 	for name, value := range map[string]string{

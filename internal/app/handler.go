@@ -542,6 +542,9 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
 	}
 	if len(data.Games) == 0 {
+		if historicalCatalogScope(scope) {
+			return a.historicalLoadPage(r, scope)
+		}
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
 	}
 
@@ -595,6 +598,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
 		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
 		CurrentPath:            seasonURL(r.URL.Path, season),
+		SeasonSelector:         seasonSelector(r.URL.Path, season),
 		SeasonPath:             seasonURL(r.URL.Path, season),
 		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
@@ -615,7 +619,9 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if scope.scheduleDifficultyAvailable() {
 		page.ScheduleNote = scheduleDifficultyNote(data, scope.Entry.Inventory)
 	}
-	if !scope.Cataloged {
+	if historicalCatalogScope(scope) {
+		page.FormatNotice = historicalFormatNotice
+	} else if !scope.Cataloged {
 		page.FormatNotice = unknownFormatNotice
 	} else if !scope.standingsAvailable() {
 		page.FormatNotice = "Standings are unavailable for this scope."
@@ -632,6 +638,39 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 }
 
 const unknownFormatNotice = "The competition format is not verified, so standings, forecasts, and clinching calculations are unavailable."
+const historicalFormatNotice = "Historical results are factual. Competition format, forecasting, and clinching calculations are not verified for this season."
+
+func historicalCatalogScope(scope requestCompetition) bool {
+	return scope.Cataloged && scope.Entry.Public && scope.Entry.Rules == nil
+}
+
+func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
+	notice := "Historical data has not been loaded yet. Run the historical backfill command to load this season."
+	if store, ok := a.store.(interface {
+		SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error)
+	}); ok {
+		readiness, found, err := store.SeasonReadiness(r.Context(), scope.Season, scope.Stage)
+		if err != nil {
+			return seasonPage{}, fmt.Errorf("load historical readiness: %w", err)
+		}
+		if found && readiness.Readiness == cache.SourceReadinessNotPublished {
+			notice = "ASA has not published historical data for this season."
+		}
+	}
+	return seasonPage{
+		Title:          scope.Season + " NWSL season",
+		Season:         scope.Season,
+		Stage:          scope.Stage,
+		HomePath:       relativeURL(r.URL.Path, "/"),
+		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
+		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
+		SeasonPath:     seasonURL(r.URL.Path, scope.Season),
+		FixturesPath:   relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(scope.Season)+"/fixtures"),
+		CurrentPath:    seasonURL(r.URL.Path, scope.Season),
+		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
+		FormatNotice:   notice,
+	}, nil
+}
 
 func playoffLineFor(rules competition.Rules, verified bool) int {
 	if verified && hasPlayoffAchievement(rules) {
@@ -829,6 +868,7 @@ func (a *application) renderError(w http.ResponseWriter, r *http.Request, err er
 	a.render(w, "error", errorPage{
 		Title: "Season unavailable", Message: err.Error(),
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season),
 	})
 }
 
@@ -839,7 +879,8 @@ func (a *application) renderUnavailableFeature(w http.ResponseWriter, r *http.Re
 	a.render(w, "error", errorPage{
 		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
 		HomePath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(scope.Season)), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
-		Navigation: seasonNavigation(r.URL.Path, scope, "", rules, verified),
+		Navigation:     seasonNavigation(r.URL.Path, scope, "", rules, verified),
+		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
 	})
 }
 

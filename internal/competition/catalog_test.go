@@ -34,9 +34,32 @@ func TestLookup2026RegularSeason(t *testing.T) {
 }
 
 func TestLookupUnknownScopes(t *testing.T) {
-	for _, scope := range [][2]string{{"2027", "Regular Season"}, {"2026", "Playoffs"}} {
+	for _, scope := range [][2]string{{"2027", "Regular Season"}, {"2026", "Playoffs"}, {"2020", "Regular Season"}} {
 		if _, ok := Lookup(scope[0], scope[1]); ok {
 			t.Fatalf("Lookup(%q, %q) unexpectedly succeeded", scope[0], scope[1])
+		}
+	}
+}
+
+func TestHistoricalRegularSeasonCatalogIsSourceOnlyAndFactual(t *testing.T) {
+	wantSeasons := []string{"2025", "2024", "2023", "2022", "2021", "2019", "2018", "2017", "2016"}
+	entries := PublicEntries()
+	if len(entries) != len(wantSeasons)+1 {
+		t.Fatalf("public entries = %d, want %d", len(entries), len(wantSeasons)+1)
+	}
+	for i, season := range wantSeasons {
+		entry := entries[i+1]
+		if entry.Season != season || entry.Stage != "Regular Season" || !entry.Public || !entry.Primary || !entry.SourceAvailable || entry.Inventory != nil || entry.Rules != nil {
+			t.Fatalf("historical entry %d = %+v", i, entry)
+		}
+		wantCapabilities := []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG}
+		if len(entry.Capabilities) != len(wantCapabilities) {
+			t.Fatalf("%s capabilities = %v", season, entry.Capabilities)
+		}
+		for j, capability := range wantCapabilities {
+			if entry.Capabilities[j] != capability {
+				t.Fatalf("%s capabilities = %v, want %v", season, entry.Capabilities, wantCapabilities)
+			}
 		}
 	}
 }

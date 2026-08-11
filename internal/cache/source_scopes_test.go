@@ -97,6 +97,15 @@ func TestEnsureSourceScopesSeedsAndMergesAtFixedClock(t *testing.T) {
 	want := []SourceScope{
 		{Season: "2027", Stage: "Regular Season", Registration: SourceScopeProvisional, Lifecycle: SourceScopeUpcoming, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
 		{Season: "2026", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeActive, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2025", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2024", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2023", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2022", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2021", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2019", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2018", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2017", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2016", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
 	}
 	if !reflect.DeepEqual(scopes, want) {
 		t.Fatalf("seeded scopes = %+v, want %+v", scopes, want)
@@ -110,14 +119,14 @@ func TestEnsureSourceScopesRetainsStaleConfiguredScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scopes) != 3 {
-		t.Fatalf("seeded scope count = %d, want 3", len(scopes))
+	if len(scopes) != 12 {
+		t.Fatalf("seeded scope count = %d, want 12", len(scopes))
 	}
 	stale, found, err := db.SourceScope(ctx, "1999", "Invented")
 	if err != nil || !found {
 		t.Fatalf("stale configured scope = %+v, %t, %v", stale, found, err)
 	}
-	if stale.Registration != SourceScopeConfigured || stale.Lifecycle != SourceScopeActive {
+	if stale.Registration != SourceScopeConfigured || stale.Lifecycle != SourceScopeCompleted {
 		t.Fatalf("stale configured scope = %+v", stale)
 	}
 }
@@ -185,9 +194,9 @@ func TestEnsureSourceScopesPromotesRetainedUpcomingScopesWithoutChangingComplete
 	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2028, time.January, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
 	}
-	active, found, err := db.SourceScope(ctx, "2027", "Regular Season")
-	if err != nil || !found || active.Lifecycle != SourceScopeActive {
-		t.Fatalf("former future scope = %+v, %t, %v", active, found, err)
+	past, found, err := db.SourceScope(ctx, "2027", "Regular Season")
+	if err != nil || !found || past.Lifecycle != SourceScopeCompleted {
+		t.Fatalf("former future scope = %+v, %t, %v", past, found, err)
 	}
 	completed, found, err := db.SourceScope(ctx, "2026", "Regular Season")
 	if err != nil || !found || completed.Lifecycle != SourceScopeCompleted {
@@ -196,6 +205,24 @@ func TestEnsureSourceScopesPromotesRetainedUpcomingScopesWithoutChangingComplete
 	future, found, err := db.SourceScope(ctx, "2029", "Regular Season")
 	if err != nil || !found || future.Lifecycle != SourceScopeUpcoming {
 		t.Fatalf("new future scope = %+v, %t, %v", future, found, err)
+	}
+}
+
+func TestEnsureSourceScopesCompletesExistingPastCatalogScope(t *testing.T) {
+	ctx := context.Background()
+	db := openSourceScopeTestDB(t)
+	stamp := "2025-01-01T00:00:00Z"
+	if _, err := db.db.ExecContext(ctx, `INSERT INTO source_scopes (
+		season, stage, registration, lifecycle, discovery, registered_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?)`, "2025", "Regular Season", SourceScopeObserved, SourceScopeActive, SourceScopeAvailable, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	scope, found, err := db.SourceScope(ctx, "2025", "Regular Season")
+	if err != nil || !found || scope.Registration != SourceScopeCatalog || scope.Lifecycle != SourceScopeCompleted || scope.Discovery != SourceScopeAvailable {
+		t.Fatalf("upgraded scope = %+v, %t, %v", scope, found, err)
 	}
 }
 

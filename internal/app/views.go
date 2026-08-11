@@ -31,6 +31,7 @@ type seasonPage struct {
 	ClinchingPath          string
 	CurrentPath            string
 	Navigation             []navigationItem
+	SeasonSelector         []seasonSelectorItem
 	Freshness              string
 	FreshnessFallback      string
 	ScheduleNote           string
@@ -54,6 +55,23 @@ type navigationItem struct {
 	Label   string
 	Path    string
 	Current bool
+}
+
+type seasonSelectorItem struct {
+	Label    string
+	Path     string
+	Selected bool
+}
+
+func seasonSelector(from, selectedSeason string) []seasonSelectorItem {
+	entries := competition.PublicEntries()
+	items := make([]seasonSelectorItem, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, seasonSelectorItem{
+			Label: entry.Label, Path: relativeURL(from, "/seasons/"+url.PathEscape(entry.Season)), Selected: entry.Season == selectedSeason,
+		})
+	}
+	return items
 }
 
 func seasonNavigation(from string, scope requestCompetition, current string, rules competition.Rules, verified bool) []navigationItem {
@@ -234,6 +252,7 @@ type errorPage struct {
 	StylesheetPath    string
 	ScriptPath        string
 	Navigation        []navigationItem
+	SeasonSelector    []seasonSelectorItem
 	Freshness         string
 	FreshnessFallback string
 }

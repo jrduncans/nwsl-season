@@ -179,6 +179,61 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 	}
 }
 
+func TestHistoricalCatalogPagesRenderCachedFactsAndSelector(t *testing.T) {
+	data := testSeasonData()
+	handler := NewHandler(fakeStore{season: data})
+	for _, path := range []string{"/seasons/2019", "/seasons/2019/fixtures"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, response.Code)
+		}
+		body := response.Body.String()
+		for _, want := range []string{historicalFormatNotice, "2019 Regular Season", "2026 Regular Season"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s missing %q", path, want)
+			}
+		}
+		if strings.HasSuffix(path, "/fixtures") && !strings.Contains(body, "2–1") {
+			t.Errorf("%s did not render cached result", path)
+		}
+		previous := -1
+		for _, label := range []string{"2026 Regular Season", "2025 Regular Season", "2024 Regular Season", "2023 Regular Season", "2022 Regular Season", "2021 Regular Season", "2019 Regular Season", "2018 Regular Season", "2017 Regular Season", "2016 Regular Season"} {
+			position := strings.Index(body, ">"+label+"</a>")
+			if position < previous {
+				t.Errorf("%s selector order is not descending at %q", path, label)
+			}
+			previous = position
+		}
+		if !strings.Contains(body, `aria-current="page">2019 Regular Season</a>`) {
+			t.Errorf("%s selector did not mark 2019 current", path)
+		}
+		for _, forbidden := range []string{"Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8"} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s unexpectedly rendered %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestHistoricalCatalogEmptyCacheRendersLoadState(t *testing.T) {
+	for _, test := range []struct {
+		name, notice string
+		store        Store
+	}{
+		{name: "unknown", notice: "has not been loaded yet", store: fakeStore{}},
+		{name: "not published", notice: "has not published historical data", store: historicalReadinessStore{fakeStore: fakeStore{}, readiness: cache.SeasonReadinessSnapshot{Readiness: cache.SourceReadinessNotPublished}, found: true}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			NewHandler(test.store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2018/fixtures", nil))
+			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.notice) {
+				t.Fatalf("historical empty response = %d %q", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestUnavailableFeaturesDoNotReadUnknownScope(t *testing.T) {
 	store := &recordingStore{fakeStore: fakeStore{season: testSeasonData()}}
 	application := NewHandler(store)
@@ -1461,6 +1516,16 @@ func (f fakeStore) Status(context.Context, string, string) (cache.Status, error)
 
 func (f fakeStore) Season(context.Context, string, string) (cache.SeasonData, error) {
 	return f.season, f.err
+}
+
+type historicalReadinessStore struct {
+	fakeStore
+	readiness cache.SeasonReadinessSnapshot
+	found     bool
+}
+
+func (f historicalReadinessStore) SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error) {
+	return f.readiness, f.found, nil
 }
 
 func testSeasonData() cache.SeasonData {

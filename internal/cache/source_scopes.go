@@ -128,11 +128,15 @@ func (c *DB) EnsureSourceScopes(ctx context.Context, configuredSeason, configure
 
 func promoteRetainedUpcomingSourceScopes(ctx context.Context, tx *sql.Tx, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE source_scopes
-		SET lifecycle = ?, updated_at = ?
+		SET lifecycle = CASE
+				WHEN CAST(season AS INTEGER) < ? THEN ?
+				ELSE ?
+			END,
+			updated_at = ?
 		WHERE lifecycle = ?
 			AND season GLOB '[0-9][0-9][0-9][0-9]'
 			AND CAST(season AS INTEGER) <= ?`,
-		SourceScopeActive, formatTime(now), SourceScopeUpcoming, now.Year()); err != nil {
+		now.Year(), SourceScopeCompleted, SourceScopeActive, formatTime(now), SourceScopeUpcoming, now.Year()); err != nil {
 		return fmt.Errorf("promote retained upcoming source scopes: %w", err)
 	}
 	return nil
@@ -250,7 +254,9 @@ func mergeSourceScope(existing SourceScope, incoming sourceScopeSeed, currentYea
 	if sourceScopeRegistrationPrecedence(incoming.registration) > sourceScopeRegistrationPrecedence(existing.Registration) {
 		merged.Registration = incoming.registration
 	}
-	if existing.Lifecycle == SourceScopeUpcoming && !sourceScopeSeasonIsFuture(existing.Season, currentYear) {
+	if sourceScopeSeasonIsPast(existing.Season, currentYear) && existing.Lifecycle != SourceScopeCompleted {
+		merged.Lifecycle = SourceScopeCompleted
+	} else if existing.Lifecycle == SourceScopeUpcoming && !sourceScopeSeasonIsFuture(existing.Season, currentYear) {
 		merged.Lifecycle = SourceScopeActive
 	}
 	return merged, merged.Registration != existing.Registration || merged.Lifecycle != existing.Lifecycle
@@ -260,7 +266,23 @@ func seedLifecycle(season string, currentYear int) SourceScopeLifecycle {
 	if sourceScopeSeasonIsFuture(season, currentYear) {
 		return SourceScopeUpcoming
 	}
+	if sourceScopeSeasonIsPast(season, currentYear) {
+		return SourceScopeCompleted
+	}
 	return SourceScopeActive
+}
+
+func sourceScopeSeasonIsPast(season string, currentYear int) bool {
+	if len(season) != 4 {
+		return false
+	}
+	for _, character := range season {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	year, err := strconv.Atoi(season)
+	return err == nil && year < currentYear
 }
 
 func sourceScopeSeasonIsFuture(season string, currentYear int) bool {

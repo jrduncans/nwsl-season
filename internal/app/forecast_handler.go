@@ -327,7 +327,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		Title: "Forecast lab · " + season + " NWSL season", Season: season,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 		SeasonPath: seasonURL(r.URL.Path, season), ForecastPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		Navigation: seasonNavigation(r.URL.Path, scope, "/seasons/"+url.PathEscape(season)+"/forecast", rules, verified), ModelEvaluationPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
+		Navigation: seasonNavigation(r.URL.Path, scope, "/seasons/"+url.PathEscape(season)+"/forecast", rules, verified), SeasonSelector: seasonSelector(r.URL.Path, season), ModelEvaluationPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
@@ -530,5 +530,5 @@ func forecastURL(fromPath, season string, state forecaststate.State, teamID stri
 func (a *application) renderScenarioBadRequest(w http.ResponseWriter, r *http.Request, title string, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js")})
+	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
 }
