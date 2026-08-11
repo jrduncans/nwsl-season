@@ -16,8 +16,8 @@ func TestMigrationTenCreatesAuditStateTablesAndConstraints(t *testing.T) {
 	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 10 || schemaVersion != 10 {
-		t.Fatalf("schema version = %d / %d, want 10", version, schemaVersion)
+	if version != 11 || schemaVersion != 11 {
+		t.Fatalf("schema version = %d / %d, want 11", version, schemaVersion)
 	}
 	var indexCount int
 	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='source_refresh_audits_scope_idx'`).Scan(&indexCount); err != nil {
@@ -105,6 +105,9 @@ func TestMigrationTenBackfillsLegacySuccessStateAndPreservesRows(t *testing.T) {
 		`DROP INDEX source_refresh_audits_scope_idx`,
 		`DROP TABLE source_refresh_audits`,
 		`DROP TABLE source_resource_scope_state`,
+		`DROP INDEX game_result_checks_due_idx`,
+		`DROP TABLE game_result_checks`,
+		`DELETE FROM schema_migrations WHERE version = 11`,
 		`DELETE FROM schema_migrations WHERE version = 10`,
 	} {
 		if _, err := legacy.ExecContext(ctx, statement); err != nil {
@@ -140,6 +143,9 @@ func TestMigrationTenBackfillsLegacySuccessStateAndPreservesRows(t *testing.T) {
 	}
 	if state, found, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2023", "Cached Only"); err != nil || found || state != (SourceResourceScopeState{}) {
 		t.Fatalf("cached rows created refresh state %+v, %t, %v", state, found, err)
+	}
+	if state, found, err := db.GameResultCheckState(ctx, "cached-game"); err != nil || found || state != (GameResultCheckState{}) {
+		t.Fatalf("cached row without successful lineage created result-check state %+v, %t, %v", state, found, err)
 	}
 	if audits, err := db.SourceRefreshAudits(ctx, SourceResourceGames, "2024", "Regular Season"); err != nil || len(audits) != 0 || audits == nil {
 		t.Fatalf("generalized audit backfill = %#v, %v", audits, err)

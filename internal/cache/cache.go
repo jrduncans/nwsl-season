@@ -26,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 10
+const schemaVersion = 11
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -585,8 +585,50 @@ func (c *DB) Migrate(ctx context.Context) error {
 		}
 		version = 10
 	}
+	if version < 11 {
+		for _, statement := range []string{
+			`CREATE TABLE game_result_checks (
+				asa_game_id TEXT PRIMARY KEY REFERENCES games(asa_game_id) ON DELETE CASCADE,
+				last_checked_at TEXT NOT NULL,
+				first_terminal_observed_at TEXT,
+				last_material_change_at TEXT,
+				next_due_at TEXT
+			)`,
+			`CREATE INDEX game_result_checks_due_idx ON game_result_checks (next_due_at, asa_game_id)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 11: %w", err)
+			}
+		}
+		if err := backfillGameResultChecks(ctx, tx); err != nil {
+			return fmt.Errorf("apply migration 11: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 11); err != nil {
+			return err
+		}
+		version = 11
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
+	}
+	return nil
+}
+
+func backfillGameResultChecks(ctx context.Context, tx *sql.Tx) error {
+	gamesOK, err := tableHasColumns(ctx, tx, "games", "asa_game_id", "season", "stage")
+	if err != nil || !gamesOK {
+		return err
+	}
+	runsOK, err := tableHasColumns(ctx, tx, "sync_runs", "season", "stage", "outcome", "finished_at")
+	if err != nil || !runsOK {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO game_result_checks (asa_game_id,last_checked_at,first_terminal_observed_at,last_material_change_at,next_due_at)
+		SELECT g.asa_game_id, MAX(r.finished_at), NULL, NULL, NULL
+		FROM games g JOIN sync_runs r ON r.season=g.season AND r.stage=g.stage
+		WHERE r.outcome='success' GROUP BY g.asa_game_id`)
+	if err != nil {
+		return fmt.Errorf("backfill game result checks: %w", err)
 	}
 	return nil
 }

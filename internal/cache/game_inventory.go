@@ -94,6 +94,9 @@ func (c *DB) ReplaceGameInventory(ctx context.Context, season, stage string, gam
 		existing, found := old[game.ASAID]
 		if found && !preferIncomingGame(existing, game) {
 			audit.RowsUnchanged++
+			if err := upsertGameResultCheck(ctx, tx, game.ASAID, audit.FinishedAt, nil, true, gameTerminal(game), false); err != nil {
+				return GameRefreshResult{}, err
+			}
 			continue
 		}
 		if found && (existing.HomeTeamID != game.HomeTeamID || existing.AwayTeamID != game.AwayTeamID) {
@@ -122,6 +125,9 @@ func (c *DB) ReplaceGameInventory(ctx context.Context, season, stage string, gam
 			audit.RowsUpdated++
 		default:
 			audit.RowsUnchanged++
+		}
+		if err := upsertGameResultCheck(ctx, tx, game.ASAID, audit.FinishedAt, nil, true, gameTerminal(game), !found || (change == rowUpdated && !equalFixtureGame(existing, game))); err != nil {
+			return GameRefreshResult{}, err
 		}
 	}
 	keep := make(map[string]struct{}, len(games))
@@ -185,39 +191,47 @@ func validateGameInventoryInput(season, stage string, games []Game, expected *co
 	}
 	seen := make(map[string]struct{}, len(games))
 	for _, game := range games {
-		if invalidTrimmed(game.ASAID) || invalidTrimmed(game.HomeTeamID) || invalidTrimmed(game.AwayTeamID) || invalidTrimmed(game.KickoffUTC) || invalidTrimmed(game.Status) || invalidTrimmed(game.LastUpdatedUTC) {
-			return errors.New("game inventory contains blank or untrimmed game fields")
-		}
-		if game.Season != season || game.Stage != stage {
-			return fmt.Errorf("game %q does not match requested scope", game.ASAID)
-		}
-		if game.HomeTeamID == game.AwayTeamID {
-			return fmt.Errorf("game %q has identical teams", game.ASAID)
+		if err := validateGameRow(season, stage, game); err != nil {
+			return err
 		}
 		if _, ok := seen[game.ASAID]; ok {
 			return fmt.Errorf("game inventory contains duplicate game ID %q", game.ASAID)
 		}
 		seen[game.ASAID] = struct{}{}
-		if _, err := fixtures.ParseKickoff(game.KickoffUTC); err != nil {
-			return fmt.Errorf("game %q has invalid kickoff: %w", game.ASAID, err)
-		}
-		if _, err := fixtures.ParseKickoff(game.LastUpdatedUTC); err != nil {
-			return fmt.Errorf("game %q has invalid last update: %w", game.ASAID, err)
-		}
-		if game.Status != fixtures.PreMatchStatus && game.Status != fixtures.CompletedStatus && game.Status != fixtures.AbandonedStatus {
-			return fmt.Errorf("game %q has invalid status", game.ASAID)
-		}
-		if game.HomeScore.Valid != game.AwayScore.Valid || (game.HomeScore.Valid && (game.HomeScore.Int64 < 0 || game.AwayScore.Int64 < 0)) {
-			return fmt.Errorf("game %q has invalid scores", game.ASAID)
-		}
-		if game.Status == fixtures.CompletedStatus && !game.HomeScore.Valid {
-			return fmt.Errorf("game %q is FullTime without scores", game.ASAID)
-		}
-		if game.Matchday.Valid && game.Matchday.Int64 < 0 {
-			return fmt.Errorf("game %q has invalid matchday", game.ASAID)
-		}
 	}
 	return validateInventoryExpectation(games, expected)
+}
+
+// validateGameRow is shared by authoritative and targeted game persistence.
+func validateGameRow(season, stage string, game Game) error {
+	if invalidTrimmed(game.ASAID) || invalidTrimmed(game.HomeTeamID) || invalidTrimmed(game.AwayTeamID) || invalidTrimmed(game.KickoffUTC) || invalidTrimmed(game.Status) || invalidTrimmed(game.LastUpdatedUTC) {
+		return errors.New("game inventory contains blank or untrimmed game fields")
+	}
+	if game.Season != season || game.Stage != stage {
+		return fmt.Errorf("game %q does not match requested scope", game.ASAID)
+	}
+	if game.HomeTeamID == game.AwayTeamID {
+		return fmt.Errorf("game %q has identical teams", game.ASAID)
+	}
+	if _, err := fixtures.ParseKickoff(game.KickoffUTC); err != nil {
+		return fmt.Errorf("game %q has invalid kickoff: %w", game.ASAID, err)
+	}
+	if _, err := fixtures.ParseKickoff(game.LastUpdatedUTC); err != nil {
+		return fmt.Errorf("game %q has invalid last update: %w", game.ASAID, err)
+	}
+	if game.Status != fixtures.PreMatchStatus && game.Status != fixtures.CompletedStatus && game.Status != fixtures.AbandonedStatus {
+		return fmt.Errorf("game %q has invalid status", game.ASAID)
+	}
+	if game.HomeScore.Valid != game.AwayScore.Valid || (game.HomeScore.Valid && (game.HomeScore.Int64 < 0 || game.AwayScore.Int64 < 0)) {
+		return fmt.Errorf("game %q has invalid scores", game.ASAID)
+	}
+	if game.Status == fixtures.CompletedStatus && !game.HomeScore.Valid {
+		return fmt.Errorf("game %q is FullTime without scores", game.ASAID)
+	}
+	if game.Matchday.Valid && game.Matchday.Int64 < 0 {
+		return fmt.Errorf("game %q has invalid matchday", game.ASAID)
+	}
+	return nil
 }
 
 func validateInventoryExpectation(games []Game, expected *competition.InventoryExpectation) error {
