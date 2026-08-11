@@ -60,6 +60,7 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [Phase 3 Hot-path replacement](phase-3/p3-hot-path-replacement.md) | Complete | Terra | Primary; Sol for concurrency | P2-01 through P2-06 |
 | [Phase 4 Historical seasons](phase-4/p4-historical-seasons.md) | Complete | Terra | Primary | Phase 3 |
 | [Phase 5 Archived correction sweeps](phase-5/p5-cold-correction-maintenance.md) | Complete | Terra | Primary; Sol for concurrency | Phase 4 |
+| [Phase 6 Basic factual playoffs](phase-6/p6-basic-playoffs.md) | Ready | Terra | Primary; Sol for schema/stage isolation | Phase 5 |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
@@ -87,6 +88,10 @@ rules.
 Phase 5 is complete. The hot correction tiers stay unchanged; deterministic
 monthly archived games-then-xG sweeps now use global cold-work serialization,
 due-only maintenance, and historical correction reporting.
+
+Phase 6 is ready as the basic-playoffs slice. It adds the current Playoffs
+catalog scope, explicit stage URLs, normalized knockout facts, and existing
+full/targeted scheduler jobs without inferring a bracket or playoff rules.
 
 ## Packet template
 
