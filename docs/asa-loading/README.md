@@ -51,11 +51,11 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P1-03 Request-scoped competition rules](phase-1/p1-03-request-scoped-competition-rules.md) | Complete | Terra | Sol | P1-01, P1-02 |
 | [P1-04 Capability-aware factual HTTP](phase-1/p1-04-capability-aware-factual-http.md) | Complete | Terra | Sol | P1-01, P1-03 |
 | [P1-05 Persisted season readiness](phase-1/p1-05-persisted-season-readiness.md) | Complete | Terra | Sol | P1-01, P1-02, P1-04 |
+| [P2-01 Source-refresh audit/state foundation](phase-2/p2-01-source-refresh-audit-state-foundation.md) | Ready | Terra | Sol | P1-02, P1-05 |
 
-P1-05 adds a read-only persisted source-readiness and verified-inventory
-snapshot without changing loading or HTTP behavior. Historical catalog
-population, public historical navigation, and the multi-scope loading planner
-remain subsequent work.
+Phase 1 is complete. P2-01 is the next ready packet; it adds generalized source
+audit and per-resource full-refresh state without changing current sync,
+scheduler, deletion, or derived-data behavior.
 
 ## Packet template
 
