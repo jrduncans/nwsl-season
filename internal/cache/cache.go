@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/clinching"
@@ -25,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 8
+const schemaVersion = 9
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -493,6 +494,30 @@ func (c *DB) Migrate(ctx context.Context) error {
 		if err := recordMigration(ctx, tx, 8); err != nil {
 			return err
 		}
+		version = 8
+	}
+	if version < 9 {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE source_scopes (
+			season TEXT NOT NULL,
+			stage TEXT NOT NULL,
+			registration TEXT NOT NULL
+				CHECK (registration IN ('catalog','configured','provisional','observed')),
+			lifecycle TEXT NOT NULL
+				CHECK (lifecycle IN ('upcoming','active','completed')),
+			discovery TEXT NOT NULL
+				CHECK (discovery IN ('unknown','not_published','available')),
+			registered_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (season, stage)
+		)`); err != nil {
+			return fmt.Errorf("apply migration 9: %w", err)
+		}
+		if err := backfillSourceScopes(ctx, tx, time.Now().UTC()); err != nil {
+			return fmt.Errorf("apply migration 9: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 9); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
@@ -506,6 +531,64 @@ func tableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
 		return false, fmt.Errorf("check migration table %q: %w", name, err)
 	}
 	return count > 0, nil
+}
+
+// backfillSourceScopes also tolerates the deliberately minimal old-schema
+// fixtures used by migration tests. A real version-8 database has all three
+// source tables, so its query is the full union described by migration 9.
+func backfillSourceScopes(ctx context.Context, tx *sql.Tx, now time.Time) error {
+	hasGames, err := tableExists(ctx, tx, "games")
+	if err != nil {
+		return err
+	}
+	hasSyncRuns, err := tableExists(ctx, tx, "sync_runs")
+	if err != nil {
+		return err
+	}
+	hasXGRuns, err := tableExists(ctx, tx, "xg_sync_runs")
+	if err != nil {
+		return err
+	}
+
+	identities := make([]string, 0, 3)
+	if hasGames {
+		identities = append(identities, "SELECT season, stage FROM games")
+	}
+	if hasSyncRuns {
+		identities = append(identities, "SELECT season, stage FROM sync_runs")
+	}
+	if hasXGRuns {
+		identities = append(identities, "SELECT season, stage FROM xg_sync_runs")
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+
+	gameDiscovery := "0"
+	if hasGames {
+		gameDiscovery = "EXISTS (SELECT 1 FROM games g WHERE g.season = identities.season AND g.stage = identities.stage)"
+	}
+	successfulSync := "0"
+	if hasSyncRuns {
+		successfulSync = "EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.season = identities.season AND sr.stage = identities.stage AND sr.outcome = 'success')"
+	}
+	statement := fmt.Sprintf(`INSERT INTO source_scopes (
+		season, stage, registration, lifecycle, discovery, registered_at, updated_at
+	)
+	SELECT identities.season, identities.stage, 'observed', 'active',
+		CASE
+			WHEN %s THEN 'available'
+			WHEN %s THEN 'not_published'
+			ELSE 'unknown'
+		END,
+		?, ?
+	FROM (
+		%s
+	) AS identities`, gameDiscovery, successfulSync, strings.Join(identities, "\nUNION\n"))
+	if _, err := tx.ExecContext(ctx, statement, formatTime(now), formatTime(now)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func migrationVersion(ctx context.Context, tx *sql.Tx) (int, error) {

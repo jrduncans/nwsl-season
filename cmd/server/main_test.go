@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -10,7 +12,24 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/config"
 )
+
+func TestRunStopsWhenSourceScopeSeedingFails(t *testing.T) {
+	originalEnsure := ensureSourceScopeRegistry
+	ensureSourceScopeRegistry = func(context.Context, *cache.DB, string, string, time.Time) error {
+		return errors.New("source scope registry unavailable")
+	}
+	t.Cleanup(func() { ensureSourceScopeRegistry = originalEnsure })
+	err := run(context.Background(), config.Config{
+		DBPath:     t.TempDir() + "/cache.sqlite",
+		SyncSeason: "2026",
+		SyncStage:  "Regular Season",
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err == nil || !strings.Contains(err.Error(), "seed source scope registry") {
+		t.Fatalf("run error = %v, want source-scope seeding failure", err)
+	}
+}
 
 func TestForecastInputsChanged(t *testing.T) {
 	tests := []struct {

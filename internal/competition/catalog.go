@@ -199,6 +199,24 @@ func PublicEntries() []Entry {
 	return entries
 }
 
+// SourceEntries returns defensive copies of catalog entries with an available
+// ASA source. Source entries may be private because source availability and
+// public product availability are intentionally separate concerns.
+func SourceEntries() []Entry {
+	return sourceEntries(catalog)
+}
+
+func sourceEntries(catalog []Entry) []Entry {
+	entries := make([]Entry, 0, len(catalog))
+	for _, entry := range catalog {
+		if entry.SourceAvailable {
+			entries = append(entries, entry.Copy())
+		}
+	}
+	sortEntries(entries)
+	return entries
+}
+
 func sortEntries(entries []Entry) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Season != entries[j].Season {

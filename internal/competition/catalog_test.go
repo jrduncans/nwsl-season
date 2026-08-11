@@ -78,6 +78,32 @@ func TestPublicEntryOrderingHelper(t *testing.T) {
 	}
 }
 
+func TestSourceEntriesFilteringOrderingAndCopies(t *testing.T) {
+	entries := []Entry{
+		{Season: "2025", Stage: "Regular Season", Label: "2025", SourceAvailable: true},
+		{Season: "2026", Stage: "Private", Label: "Private", Primary: false, SourceAvailable: true, Inventory: &InventoryExpectation{Teams: 2}, Capabilities: []Capability{CapabilityFixtures}},
+		{Season: "2026", Stage: "Primary", Label: "Primary", Primary: true, SourceAvailable: true, Inventory: &InventoryExpectation{Teams: 4}, Capabilities: []Capability{CapabilityFixtures}},
+		{Season: "2027", Stage: "Unavailable", Label: "Unavailable", SourceAvailable: false},
+	}
+
+	got := sourceEntries(entries)
+	if len(got) != 3 {
+		t.Fatalf("source entries = %d, want 3", len(got))
+	}
+	labels := []string{got[0].Label, got[1].Label, got[2].Label}
+	want := []string{"Primary", "Private", "2025"}
+	for i := range want {
+		if labels[i] != want[i] {
+			t.Fatalf("source entry ordering = %v, want %v", labels, want)
+		}
+	}
+	got[0].Inventory.Teams = 99
+	got[0].Capabilities[0] = CapabilityBracket
+	if entries[2].Inventory.Teams != 4 || entries[2].Capabilities[0] != CapabilityFixtures {
+		t.Fatalf("source entries exposed catalog mutation: %+v", entries[2])
+	}
+}
+
 func validEntry() Entry {
 	return Entry{Season: "2026", Stage: "Test", Label: "Test", Slug: "test", Kind: StageKindLeagueTable, SourceAvailable: true}
 }

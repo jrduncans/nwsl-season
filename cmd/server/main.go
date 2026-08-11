@@ -37,6 +37,11 @@ const (
 	telemetryShutdownTimeout  = 10 * time.Second
 )
 
+var ensureSourceScopeRegistry = func(ctx context.Context, db *cache.DB, season, stage string, now time.Time) error {
+	_, err := db.EnsureSourceScopes(ctx, season, stage, now)
+	return err
+}
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	if err := config.LoadEnvironmentFile(); err != nil {
@@ -78,6 +83,9 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("open cache database %q: %w", cfg.DBPath, err)
 	}
 	defer db.Close()
+	if err := ensureSourceScopeRegistry(ctx, db, cfg.SyncSeason, cfg.SyncStage, time.Now().UTC()); err != nil {
+		return fmt.Errorf("seed source scope registry: %w", err)
+	}
 
 	service := syncer.Service{
 		ASA: asa.Client{HTTPClient: &http.Client{

@@ -22,6 +22,11 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
 
+var ensureSourceScopeRegistry = func(ctx context.Context, db *cache.DB, season, stage string, now time.Time) error {
+	_, err := db.EnsureSourceScopes(ctx, season, stage, now)
+	return err
+}
+
 func main() {
 	os.Exit(run())
 }
@@ -75,6 +80,10 @@ func run() (exitCode int) {
 		return 1
 	}
 	defer db.Close()
+	if err := ensureSourceScopeRegistry(context.Background(), db, cfg.SyncSeason, cfg.SyncStage, time.Now().UTC()); err != nil {
+		logger.Error("seed source scope registry", "error", err)
+		return 1
+	}
 	if *pruneHistoryBefore != "" {
 		cutoff, err := time.Parse(time.RFC3339, *pruneHistoryBefore)
 		if err != nil {
