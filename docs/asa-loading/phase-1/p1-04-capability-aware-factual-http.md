@@ -7,7 +7,7 @@
 - Required review: Sol
 - Depends on: P1-01 competition catalog core and P1-03 request-scoped
   competition rules
-- Blocks: season inventory/readiness APIs, historical catalog population, and
+- Blocks: P1-05 persisted season readiness, historical catalog population, and
   public historical navigation
 
 ## Goal
