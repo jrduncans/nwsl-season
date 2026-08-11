@@ -73,6 +73,19 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	}
 }
 
+func TestMapGamesUsesKickoffWhenASAOmitLastUpdated(t *testing.T) {
+	game := testGame("scheduled-game", "PreMatch", nil, nil)
+	game.LastUpdatedUTC = ""
+
+	mapped, err := mapGames(RunOptions{Season: "2024", Stage: "Regular Season"}, []asa.Game{game})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := mapped[0].LastUpdatedUTC, game.DateTimeUTC; got != want {
+		t.Fatalf("last updated timestamp = %q, want kickoff fallback %q", got, want)
+	}
+}
+
 func TestRunRecordsDetailedTelemetry(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))

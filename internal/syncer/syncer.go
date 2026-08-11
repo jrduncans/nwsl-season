@@ -462,6 +462,15 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 			}
 			raw = string(marshaled)
 		}
+		// ASA omits last_updated_utc on scheduled, not-yet-played fixtures.
+		// Use the stable kickoff time as the source-version fallback: it is
+		// already required for every fixture and avoids treating each fetch as
+		// a new update merely because it was observed at a different time.
+		lastUpdatedUTC := game.LastUpdatedUTC
+		if lastUpdatedUTC == "" {
+			lastUpdatedUTC = game.DateTimeUTC
+		}
+
 		cacheGames = append(cacheGames, cache.Game{
 			ASAID:           game.GameID,
 			Season:          options.Season,
@@ -475,7 +484,7 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 			Matchday:        nullInt(game.Matchday),
 			ExpandedMinutes: nullInt(game.ExpandedMinutes),
 			KnockoutGame:    game.KnockoutGame,
-			LastUpdatedUTC:  game.LastUpdatedUTC,
+			LastUpdatedUTC:  lastUpdatedUTC,
 			RawJSON:         raw,
 		})
 	}

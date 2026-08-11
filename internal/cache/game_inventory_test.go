@@ -158,6 +158,30 @@ func TestReplaceGameInventoryLineagePreferenceAndMateriality(t *testing.T) {
 	}
 }
 
+func TestReplaceGameInventoryAcceptsEarlierPreMatchReschedule(t *testing.T) {
+	db, ctx := inventoryDB(t)
+	original := inventoryGame("rescheduled", "PreMatch", 0, 0)
+	original.KickoffUTC = "2030-01-01T16:00:00Z"
+	// This mirrors the deterministic fallback used when ASA omits
+	// last_updated_utc for an unplayed game.
+	original.LastUpdatedUTC = original.KickoffUTC
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{original}, nil, inventoryMetadata()); err != nil {
+		t.Fatal(err)
+	}
+
+	earlier := original
+	earlier.KickoffUTC = "2030-01-01T12:00:00Z"
+	earlier.LastUpdatedUTC = earlier.KickoffUTC
+	result, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{earlier}, nil, inventoryMetadata())
+	if err != nil || result.Audit.RowsUpdated != 1 || !result.Audit.DownstreamInputsChanged {
+		t.Fatalf("earlier reschedule = %+v, %v", result, err)
+	}
+	stored, err := db.seasonGames(ctx, "2030", "Example")
+	if err != nil || len(stored) != 1 || stored[0].KickoffUTC != earlier.KickoffUTC {
+		t.Fatalf("stored games = %+v, %v", stored, err)
+	}
+}
+
 func TestReplaceGameInventoryRawOnlyPreservesVenueXG(t *testing.T) {
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "FullTime", 2, 1)

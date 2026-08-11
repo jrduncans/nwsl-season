@@ -355,6 +355,13 @@ func preferIncomingGame(cached, incoming Game) bool {
 	if gameTerminal(cached) && !gameTerminal(incoming) {
 		return false
 	}
+	// Scheduled ASA fixtures can omit last_updated_utc. In that case the
+	// adapter uses kickoff as a stable fallback, so an earlier reschedule would
+	// otherwise look stale. The complete inventory remains authoritative for
+	// material changes to a fixture that is still pre-match.
+	if cached.Status == fixtures.PreMatchStatus && incoming.Status == fixtures.PreMatchStatus && !equalFixtureGame(cached, incoming) {
+		return true
+	}
 	incomingTime, err := fixtures.ParseKickoff(incoming.LastUpdatedUTC)
 	if err != nil {
 		return false
