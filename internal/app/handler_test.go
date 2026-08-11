@@ -49,7 +49,7 @@ func TestStageRoutesRedirectLegacyAndRenderPlayoffFacts(t *testing.T) {
 	handler := NewHandlerWithOptions(fakeStore{season: data}, Options{CurrentSeason: "2026", Location: time.UTC})
 	legacy := httptest.NewRecorder()
 	handler.ServeHTTP(legacy, httptest.NewRequest(http.MethodGet, "/seasons/2026/fixtures?x=1", nil))
-	if legacy.Code != http.StatusSeeOther || legacy.Header().Get("Location") != "/seasons/2026/regular-season/fixtures?x=1" {
+	if legacy.Code != http.StatusSeeOther || legacy.Header().Get("Location") != "regular-season/fixtures?x=1" {
 		t.Fatalf("legacy=%d %q", legacy.Code, legacy.Header().Get("Location"))
 	}
 	playoffs := httptest.NewRecorder()
@@ -352,6 +352,27 @@ func TestTrailingSlashSeasonPathRedirectsToCanonicalRelativePath(t *testing.T) {
 	}
 	if location := response.Header().Get("Location"); location != "../2026?v=1" {
 		t.Fatalf("location = %q, want relative canonical path", location)
+	}
+}
+
+func TestBasePathLegacyRoutesRedirectToPrimaryStage(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	for _, test := range []struct {
+		path string
+		want string
+	}{
+		{path: "/nwsl-season/seasons/2026", want: "2026/regular-season"},
+		{path: "/nwsl-season/seasons/2026/fixtures?x=1", want: "regular-season/fixtures?x=1"},
+		{path: "/nwsl-season/seasons/2026/forecast", want: "regular-season/forecast"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
+
+			if response.Code != http.StatusSeeOther || response.Header().Get("Location") != test.want {
+				t.Fatalf("status = %d, location = %q; want %q", response.Code, response.Header().Get("Location"), test.want)
+			}
+		})
 	}
 }
 

@@ -529,14 +529,17 @@ func (a *application) redirectPrimaryStage(w http.ResponseWriter, r *http.Reques
 	if ok {
 		slug = entry.Slug
 	}
-	relative := "/seasons/" + url.PathEscape(season) + "/" + slug
+	target := "/seasons/" + url.PathEscape(season) + "/" + slug
 	if tail := strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)); tail != "" {
-		relative += tail
+		target += tail
 	}
+	// Keep compatibility redirects relative so a reverse proxy's mount path
+	// (for example, /nwsl-season/) stays in the browser URL.
+	relative := relativeURL(r.URL.Path, target)
 	if r.URL.RawQuery != "" {
 		relative += "?" + r.URL.RawQuery
 	}
-	http.Redirect(w, r, relative, http.StatusSeeOther)
+	redirectRelative(w, relative, http.StatusSeeOther)
 }
 
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
