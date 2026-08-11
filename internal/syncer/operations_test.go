@@ -9,6 +9,9 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestExecuteTargetedOperationsUseOneSortedRequestAndPreserveOmissions(t *testing.T) {
@@ -69,6 +72,49 @@ func TestExecuteRecoversUnknownTeamsWithoutRefetchingGames(t *testing.T) {
 	if result.Games.Audit.FinishedAt.IsZero() || result.TeamAudit.FinishedAt.IsZero() || !result.Operation.FinishedAt.Equal(result.Games.Audit.FinishedAt) {
 		t.Fatalf("operations did not capture finished observations: %+v %+v", result.Games.Audit, result.TeamAudit)
 	}
+}
+
+func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	seedOperationScope(t, ctx, db, "one")
+	incoming := testGame("one", "FullTime", ptr(1), ptr(0))
+	incoming.LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
+	client := &operationASA{games: map[string][]asa.Game{"one": {incoming}}}
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 1, 1, 1, 0, 0, 0, time.UTC))}
+	if _, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "one"}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, span := range exporter.GetSpans() {
+		if span.Name != "sync.source_operation" {
+			continue
+		}
+		for _, event := range span.Events {
+			if event.Name != "sync.game_freshness" {
+				continue
+			}
+			values := map[string]string{}
+			for _, value := range event.Attributes {
+				values[string(value.Key)] = value.Value.AsString()
+			}
+			if values["nwsl.cache.game.last_updated_utc"] != "2024-11-07 15:57:43 UTC" || values["nwsl.asa.game.last_updated_utc"] != incoming.LastUpdatedUTC || values["nwsl.sync.decision"] != "updated" || values["nwsl.sync.reason"] != "asa_last_updated_newer" {
+				t.Fatalf("freshness event = %#v", values)
+			}
+			return
+		}
+	}
+	t.Fatal("sync.game_freshness event not recorded")
 }
 
 func TestExecuteFullOperationOwnsExactlyOneResourceRequest(t *testing.T) {

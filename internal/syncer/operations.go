@@ -11,6 +11,10 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // OperationResource identifies the one ASA collection an operation owns.
@@ -97,7 +101,19 @@ func (s Service) Execute(ctx context.Context, operation Operation) (OperationRes
 	if !ok {
 		return OperationResult{}, errors.New("sync store does not support split source operations")
 	}
-	return s.execute(ctx, store, operation, true)
+	ctx, span := telemetry.Tracer().Start(ctx, "sync.source_operation",
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(operationAttributes(operation)...),
+	)
+	result, err := s.execute(ctx, store, operation, true)
+	span.SetAttributes(operationResultAttributes(result, err)...)
+	if err != nil {
+		// The caller owns exception emission so Run can report one failure at
+		// its compatibility boundary without duplicate Honeycomb exception logs.
+		telemetry.MarkError(span, err)
+	}
+	span.End()
+	return result, err
 }
 
 func (s Service) execute(ctx context.Context, store operationStore, operation Operation, allowTeamRecovery bool) (result OperationResult, err error) {
@@ -125,6 +141,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		if err != nil {
 			return result, fmt.Errorf("fetch teams: %w", err)
 		}
+		recordASAResponse(trace.SpanFromContext(ctx), operation, len(teams))
 		mapped, err := mapTeams(teams)
 		if err != nil {
 			return result, err
@@ -148,6 +165,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		if err != nil {
 			return result, fmt.Errorf("fetch games: %w", err)
 		}
+		recordASAResponse(trace.SpanFromContext(ctx), operation, len(games))
 		mapped, err := mapGames(RunOptions{Season: operation.Season, Stage: operation.Stage}, games)
 		if err != nil {
 			return result, err
@@ -174,6 +192,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		}
 		result.Games = &gameResult
 		result.FixtureInputsChanged = gameResult.Audit.DownstreamInputsChanged
+		recordGameFreshnessEvents(trace.SpanFromContext(ctx), operation, mapped, gameResult.PreviousGames)
 		return result, nil
 
 	case OperationGameXG:
@@ -189,6 +208,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		if err != nil {
 			return result, fmt.Errorf("fetch game xG: %w", err)
 		}
+		recordASAResponse(trace.SpanFromContext(ctx), operation, len(values))
 		mapped, err := mapXGoals(values)
 		if err != nil {
 			return result, err
@@ -208,6 +228,131 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		return result, nil
 	}
 	return result, errors.New("unsupported source operation")
+}
+
+func operationAttributes(operation Operation) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.String("nwsl.sync.resource", string(operation.Resource)),
+		attribute.String("nwsl.sync.mode", string(operation.Mode)),
+		attribute.String("nwsl.sync.trigger", string(operation.Trigger)),
+		attribute.Int("nwsl.sync.requested_rows", len(operation.Requested)),
+	}
+	if operation.Season != "" {
+		attributes = append(attributes, attribute.String("nwsl.season", operation.Season))
+	}
+	if operation.Stage != "" {
+		attributes = append(attributes, attribute.String("nwsl.stage", operation.Stage))
+	}
+	return attributes
+}
+
+func recordASAResponse(span trace.Span, operation Operation, rows int) {
+	span.AddEvent("sync.asa_response", trace.WithAttributes(
+		attribute.String("nwsl.sync.resource", string(operation.Resource)),
+		attribute.String("nwsl.sync.mode", string(operation.Mode)),
+		attribute.Int("nwsl.asa.returned_rows", rows),
+	))
+}
+
+func operationResultAttributes(result OperationResult, err error) []attribute.KeyValue {
+	audit := resultAudit(result)
+	if audit == nil {
+		if err != nil {
+			return []attribute.KeyValue{attribute.String("nwsl.sync.operation.outcome", "failure")}
+		}
+		return []attribute.KeyValue{attribute.String("nwsl.sync.operation.outcome", "complete")}
+	}
+	decision, reason := "updated", "source_data_changed"
+	if audit.RowsInserted == 0 && audit.RowsUpdated == 0 && audit.RowsDeleted == 0 {
+		decision, reason = "not_updated", "source_data_unchanged"
+	}
+	return []attribute.KeyValue{
+		attribute.String("nwsl.sync.operation.outcome", "complete"),
+		attribute.Int("nwsl.sync.returned_rows", audit.ReturnedRows),
+		attribute.Int("nwsl.sync.rows_inserted", audit.RowsInserted),
+		attribute.Int("nwsl.sync.rows_updated", audit.RowsUpdated),
+		attribute.Int("nwsl.sync.rows_unchanged", audit.RowsUnchanged),
+		attribute.Int("nwsl.sync.rows_deleted", audit.RowsDeleted),
+		attribute.Bool("nwsl.sync.downstream_inputs_changed", audit.DownstreamInputsChanged),
+		attribute.String("nwsl.sync.update.decision", decision),
+		attribute.String("nwsl.sync.update.reason", reason),
+	}
+}
+
+func resultAudit(result OperationResult) *cache.SourceRefreshAudit {
+	if result.Games != nil {
+		return &result.Games.Audit
+	}
+	if result.XG != nil {
+		return &result.XG.Audit
+	}
+	return result.TeamAudit
+}
+
+// recordGameFreshnessEvents puts both versions on the span created for the
+// exact ASA games call. Game IDs are intentionally event attributes: they are
+// useful for following a surprising source correction, but are not span-level
+// grouping dimensions.
+func recordGameFreshnessEvents(span trace.Span, operation Operation, incoming, previous []cache.Game) {
+	cached := make(map[string]cache.Game, len(previous))
+	for _, game := range previous {
+		cached[game.ASAID] = game
+	}
+	if len(incoming) == 0 {
+		span.AddEvent("sync.game_freshness", trace.WithAttributes(
+			attribute.String("nwsl.sync.decision", "not_updated"),
+			attribute.String("nwsl.sync.reason", "asa_returned_no_games"),
+			attribute.String("nwsl.sync.resource", string(operation.Resource)),
+		))
+		return
+	}
+	for _, game := range incoming {
+		current, found := cached[game.ASAID]
+		decision, reason := gameUpdateDecision(current, game, found)
+		currentUpdated := ""
+		if found {
+			currentUpdated = current.LastUpdatedUTC
+		}
+		span.AddEvent("sync.game_freshness", trace.WithAttributes(
+			attribute.String("nwsl.asa.game.id", game.ASAID),
+			attribute.String("nwsl.cache.game.last_updated_utc", currentUpdated),
+			attribute.String("nwsl.asa.game.last_updated_utc", game.LastUpdatedUTC),
+			attribute.String("nwsl.sync.decision", decision),
+			attribute.String("nwsl.sync.reason", reason),
+		))
+	}
+}
+
+func gameUpdateDecision(cached, incoming cache.Game, found bool) (decision, reason string) {
+	if !found {
+		return "updated", "new_game"
+	}
+	if gameIsTerminal(incoming) && !gameIsTerminal(cached) {
+		return "updated", "incoming_terminal_result"
+	}
+	if gameIsTerminal(cached) && !gameIsTerminal(incoming) {
+		return "not_updated", "incoming_reverted_terminal_status"
+	}
+	if cached.Status == fixtures.PreMatchStatus && incoming.Status == fixtures.PreMatchStatus && !sameGame(cached, incoming) {
+		return "updated", "prematch_fixture_change"
+	}
+	if sameGame(cached, incoming) {
+		return "not_updated", "source_data_unchanged"
+	}
+	incomingUpdated, incomingErr := fixtures.ParseKickoff(incoming.LastUpdatedUTC)
+	cachedUpdated, cachedErr := fixtures.ParseKickoff(cached.LastUpdatedUTC)
+	if incomingErr == nil && (cachedErr != nil || incomingUpdated.After(cachedUpdated)) {
+		return "updated", "asa_last_updated_newer"
+	}
+	return "not_updated", "asa_last_updated_not_newer"
+}
+
+func gameIsTerminal(game cache.Game) bool {
+	return game.Status == fixtures.AbandonedStatus || (game.Status == fixtures.CompletedStatus && game.HomeScore.Valid && game.AwayScore.Valid)
+}
+
+func sameGame(left, right cache.Game) bool {
+	return left.ASAID == right.ASAID && left.Season == right.Season && left.Stage == right.Stage && left.KickoffUTC == right.KickoffUTC && left.Status == right.Status && left.HomeTeamID == right.HomeTeamID && left.AwayTeamID == right.AwayTeamID && left.HomeScore == right.HomeScore && left.AwayScore == right.AwayScore && left.Matchday == right.Matchday && left.ExpandedMinutes == right.ExpandedMinutes && left.KnockoutGame == right.KnockoutGame && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
 }
 
 func (s Service) writeGames(ctx context.Context, store operationStore, operation Operation, games []cache.Game) (cache.GameRefreshResult, error) {
