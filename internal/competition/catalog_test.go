@@ -34,23 +34,48 @@ func TestLookup2026RegularSeason(t *testing.T) {
 }
 
 func TestLookupUnknownScopes(t *testing.T) {
-	for _, scope := range [][2]string{{"2027", "Regular Season"}, {"2026", "Playoffs"}, {"2020", "Regular Season"}} {
+	for _, scope := range [][2]string{{"2027", "Regular Season"}, {"2020", "Regular Season"}} {
 		if _, ok := Lookup(scope[0], scope[1]); ok {
 			t.Fatalf("Lookup(%q, %q) unexpectedly succeeded", scope[0], scope[1])
 		}
+	}
+	if entry, ok := Lookup("2026", "Playoffs"); !ok || entry.Kind != StageKindKnockout || entry.Primary || entry.Inventory != nil || entry.Rules != nil || !entry.Supports(CapabilityFixtures) || !entry.Supports(CapabilityXG) {
+		t.Fatalf("playoff entry=%+v,%t", entry, ok)
+	}
+}
+
+func TestCatalogValidationRejectsAmbiguousPublicRouting(t *testing.T) {
+	base := Entry{Season: "2040", Stage: "Regular", Label: "2040 Regular", Slug: "regular", Kind: StageKindLeagueTable, Public: true, Primary: true, SourceAvailable: true}
+	if err := validateCatalog([]Entry{base, {Season: "2040", Stage: "Playoffs", Label: "2040 Playoffs", Slug: "regular", Kind: StageKindKnockout, Public: true, SourceAvailable: true}}); err == nil {
+		t.Fatal("duplicate slug succeeded")
+	}
+	other := base
+	other.Stage, other.Label, other.Slug = "Other", "2040 Other", "other"
+	if err := validateCatalog([]Entry{base, other}); err == nil {
+		t.Fatal("multiple public primaries succeeded")
+	}
+	if entry, ok := PrimaryEntry("2026"); !ok || entry.Stage != "Regular Season" {
+		t.Fatalf("primary=%+v,%t", entry, ok)
+	}
+	entries := PublicEntriesForSeason("2026")
+	if len(entries) != 2 || entries[0].Stage != "Regular Season" || entries[1].Stage != "Playoffs" {
+		t.Fatalf("stages=%+v", entries)
 	}
 }
 
 func TestHistoricalRegularSeasonCatalogIsSourceOnlyAndFactual(t *testing.T) {
 	wantSeasons := []string{"2025", "2024", "2023", "2022", "2021", "2019", "2018", "2017", "2016"}
 	entries := PublicEntries()
-	if len(entries) != len(wantSeasons)+1 {
-		t.Fatalf("public entries = %d, want %d", len(entries), len(wantSeasons)+1)
+	if len(entries) != len(wantSeasons)+2 {
+		t.Fatalf("public entries = %d, want %d", len(entries), len(wantSeasons)+2)
 	}
-	for i, season := range wantSeasons {
-		entry := entries[i+1]
+	for _, season := range wantSeasons {
+		entry, ok := Lookup(season, "Regular Season")
+		if !ok {
+			t.Fatalf("missing historical entry %s", season)
+		}
 		if entry.Season != season || entry.Stage != "Regular Season" || !entry.Public || !entry.Primary || !entry.SourceAvailable || entry.Inventory != nil || entry.Rules != nil {
-			t.Fatalf("historical entry %d = %+v", i, entry)
+			t.Fatalf("historical entry %s = %+v", season, entry)
 		}
 		wantCapabilities := []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG}
 		if len(entry.Capabilities) != len(wantCapabilities) {

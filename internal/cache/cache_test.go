@@ -55,6 +55,115 @@ func TestOpenConfiguresEverySQLiteConnection(t *testing.T) {
 	}
 }
 
+func TestMigrationThirteenAddsOnlyPlayoffGameColumns(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var version int
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 13 {
+		t.Fatalf("version=%d,%v", version, err)
+	}
+	columns := map[string]struct{}{}
+	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(games)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, kind string
+		var notNull, pk int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &pk); err != nil {
+			t.Fatal(err)
+		}
+		columns[name] = struct{}{}
+	}
+	if _, ok := columns["expanded_minutes"]; !ok {
+		t.Fatal("expanded_minutes missing")
+	}
+	if _, ok := columns["knockout_game"]; !ok {
+		t.Fatal("knockout_game missing")
+	}
+}
+
+func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/cache.sqlite"
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	teams := []Team{{ASAID: "alpha", Name: "Alpha"}, {ASAID: "bravo", Name: "Bravo"}}
+	game := cachedGame("playoff", "2040", "Example", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+	run, err := db.ReplaceSeason(ctx, "2040", "Example", teams, []Game{game}, time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := run.FixtureSnapshotID
+	if _, err := db.db.ExecContext(ctx, `UPDATE games SET raw_json='{"expanded_minutes":120,"knockout_game":true}' WHERE asa_game_id='playoff'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{`ALTER TABLE games DROP COLUMN expanded_minutes`, `ALTER TABLE games DROP COLUMN knockout_game`, `DELETE FROM schema_migrations WHERE version=13`} {
+		if _, err := db.db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	data, err := db.Season(ctx, "2040", "Example")
+	if err != nil || len(data.Games) != 1 || !data.Games[0].ExpandedMinutes.Valid || data.Games[0].ExpandedMinutes.Int64 != 120 || !data.Games[0].KnockoutGame {
+		t.Fatalf("season=%+v,%v", data, err)
+	}
+	current, err := db.LastSuccess(ctx, "2040", "Example")
+	if err != nil || current == nil || current.FixtureSnapshotID != data.FixtureSnapshotID || current.FixtureSnapshotID == before {
+		t.Fatalf("snapshot=%+v %q before=%q err=%v", current, data.FixtureSnapshotID, before, err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	again, err := db.LastSuccess(ctx, "2040", "Example")
+	if err != nil || again.FixtureSnapshotID != current.FixtureSnapshotID {
+		t.Fatalf("reopen=%+v,%v", again, err)
+	}
+	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(games)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundDefault := false
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, kind string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &pk); err != nil {
+			t.Fatal(err)
+		}
+		if name == "knockout_game" && notNull == 1 && fmt.Sprint(defaultValue) == "0" {
+			foundDefault = true
+		}
+	}
+	if err := rows.Close(); err != nil || !foundDefault {
+		t.Fatalf("knockout column default/check shape found=%t err=%v", foundDefault, err)
+	}
+	if _, err := db.db.ExecContext(ctx, `UPDATE games SET knockout_game=2 WHERE asa_game_id='playoff'`); err == nil {
+		t.Fatal("knockout check accepted 2")
+	}
+}
+
 func TestSQLiteForeignKeyCascadeOnNewPooledConnection(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")

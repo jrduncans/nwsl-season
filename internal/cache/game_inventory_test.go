@@ -85,6 +85,31 @@ func TestReplaceGameInventoryUnknownTeamsAndValidationAreWriteFree(t *testing.T)
 	}
 }
 
+func TestPlayoffGameFieldsAreValidatedAndMaterial(t *testing.T) {
+	db, ctx := inventoryDB(t)
+	game := inventoryGame("playoff", "FullTime", 1, 0)
+	game.Season, game.Stage = "2026", "Playoffs"
+	game.ExpandedMinutes = sql.NullInt64{Int64: 120, Valid: true}
+	if _, err := db.ReplaceGameInventory(ctx, "2026", "Playoffs", []Game{game}, nil, inventoryMetadata()); err == nil {
+		t.Fatal("unclassified playoff game succeeded")
+	}
+	game.KnockoutGame = true
+	first, err := db.ReplaceGameInventory(ctx, "2026", "Playoffs", []Game{game}, nil, inventoryMetadata())
+	if err != nil || !first.Audit.DownstreamInputsChanged {
+		t.Fatalf("first=%+v,%v", first, err)
+	}
+	changed := game
+	changed.ExpandedMinutes = sql.NullInt64{Int64: 130, Valid: true}
+	changed.LastUpdatedUTC = "2030-01-01T12:00:00Z"
+	second, err := db.ReplaceGameInventory(ctx, "2026", "Playoffs", []Game{changed}, nil, inventoryMetadata())
+	if err != nil || second.Audit.RowsUpdated != 1 || !second.Audit.DownstreamInputsChanged || second.SyncRun.FixtureSnapshotID == first.SyncRun.FixtureSnapshotID {
+		t.Fatalf("changed=%+v,%v", second, err)
+	}
+	if games, err := db.seasonGames(ctx, "2026", "Playoffs"); err != nil || len(games) != 1 || !games[0].KnockoutGame || !games[0].ExpandedMinutes.Valid || games[0].ExpandedMinutes.Int64 != 130 {
+		t.Fatalf("games=%+v,%v", games, err)
+	}
+}
+
 func TestReplaceGameInventoryLineagePreferenceAndMateriality(t *testing.T) {
 	db, ctx := inventoryDB(t)
 	first := inventoryGame("one", "PreMatch", 0, 0)

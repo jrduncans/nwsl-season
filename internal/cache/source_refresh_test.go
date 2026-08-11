@@ -16,8 +16,8 @@ func TestMigrationTenCreatesAuditStateTablesAndConstraints(t *testing.T) {
 	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 12 || schemaVersion != 12 {
-		t.Fatalf("schema version = %d / %d, want 12", version, schemaVersion)
+	if version != 13 || schemaVersion != 13 {
+		t.Fatalf("schema version = %d / %d, want 13", version, schemaVersion)
 	}
 	var indexCount int
 	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='source_refresh_audits_scope_idx'`).Scan(&indexCount); err != nil {
@@ -102,6 +102,7 @@ func TestMigrationTenBackfillsLegacySuccessStateAndPreservesRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		`DELETE FROM schema_migrations WHERE version = 13`,
 		`DROP INDEX game_xg_checks_due_idx`,
 		`DROP TABLE game_xg_checks`,
 		`DELETE FROM schema_migrations WHERE version = 12`,

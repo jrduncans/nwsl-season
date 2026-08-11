@@ -16,8 +16,8 @@ func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
 	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if schemaVersion != 12 || version != schemaVersion {
-		t.Fatalf("schema version = %d, want 12", version)
+	if schemaVersion != 13 || version != schemaVersion {
+		t.Fatalf("schema version = %d, want 13", version)
 	}
 	_, err := db.db.ExecContext(ctx, `INSERT INTO source_scopes (
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at
@@ -96,6 +96,7 @@ func TestEnsureSourceScopesSeedsAndMergesAtFixedClock(t *testing.T) {
 	}
 	want := []SourceScope{
 		{Season: "2027", Stage: "Regular Season", Registration: SourceScopeProvisional, Lifecycle: SourceScopeUpcoming, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+		{Season: "2026", Stage: "Playoffs", Registration: SourceScopeCatalog, Lifecycle: SourceScopeActive, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
 		{Season: "2026", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeActive, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
 		{Season: "2025", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
 		{Season: "2024", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
@@ -119,8 +120,8 @@ func TestEnsureSourceScopesRetainsStaleConfiguredScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scopes) != 12 {
-		t.Fatalf("seeded scope count = %d, want 12", len(scopes))
+	if len(scopes) != 13 {
+		t.Fatalf("seeded scope count = %d, want 13", len(scopes))
 	}
 	stale, found, err := db.SourceScope(ctx, "1999", "Invented")
 	if err != nil || !found {

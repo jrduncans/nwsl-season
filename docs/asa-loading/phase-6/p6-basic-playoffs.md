@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: Complete
 - Implementation: Terra
 - Review: primary agent; one Sol gate for migration and stage isolation
 - Depends on: Phase 5

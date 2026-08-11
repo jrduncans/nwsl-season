@@ -50,7 +50,7 @@ type Entry struct {
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-var catalog = append(historicalRegularSeasonEntries(), Entry{
+var catalog = append(append(historicalRegularSeasonEntries(), Entry{
 	Season:          "2026",
 	Stage:           "Regular Season",
 	Label:           "2026 Regular Season",
@@ -70,7 +70,39 @@ var catalog = append(historicalRegularSeasonEntries(), Entry{
 		CapabilityQualification,
 		CapabilityScenarios,
 	},
+}), Entry{
+	Season: "2026", Stage: "Playoffs", Label: "2026 Playoffs", Slug: "playoffs",
+	Kind: StageKindKnockout, Public: true, SourceAvailable: true,
+	Capabilities: []Capability{CapabilityFixtures, CapabilityXG},
 })
+
+func init() {
+	if err := validateCatalog(catalog); err != nil {
+		panic(err)
+	}
+}
+
+func validateCatalog(entries []Entry) error {
+	slugs := map[string]bool{}
+	primaries := map[string]bool{}
+	for _, entry := range entries {
+		if err := entry.Validate(); err != nil {
+			return err
+		}
+		key := entry.Season + "\x00" + entry.Slug
+		if slugs[key] {
+			return fmt.Errorf("duplicate stage slug %q for season %q", entry.Slug, entry.Season)
+		}
+		slugs[key] = true
+		if entry.Public && entry.Primary {
+			if primaries[entry.Season] {
+				return fmt.Errorf("multiple public primary stages for season %q", entry.Season)
+			}
+			primaries[entry.Season] = true
+		}
+	}
+	return nil
+}
 
 func historicalRegularSeasonEntries() []Entry {
 	seasons := []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025"}
@@ -205,6 +237,43 @@ func Lookup(season, stage string) (Entry, bool) {
 		}
 	}
 	return Entry{}, false
+}
+
+// LookupSlug finds a public stage by its canonical URL slug.
+func LookupSlug(season, slug string) (Entry, bool) {
+	for _, entry := range catalog {
+		if entry.Season == season && entry.Slug == slug && entry.Public {
+			return entry.Copy(), true
+		}
+	}
+	return Entry{}, false
+}
+
+// PrimaryEntry returns the one public primary stage for a season.
+func PrimaryEntry(season string) (Entry, bool) {
+	for _, entry := range catalog {
+		if entry.Season == season && entry.Public && entry.Primary {
+			return entry.Copy(), true
+		}
+	}
+	return Entry{}, false
+}
+
+// PublicEntriesForSeason returns public stages in deterministic navigation order.
+func PublicEntriesForSeason(season string) []Entry {
+	entries := []Entry{}
+	for _, entry := range catalog {
+		if entry.Season == season && entry.Public {
+			entries = append(entries, entry.Copy())
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Primary != entries[j].Primary {
+			return entries[i].Primary
+		}
+		return entries[i].Label < entries[j].Label
+	})
+	return entries
 }
 
 func PublicEntries() []Entry {

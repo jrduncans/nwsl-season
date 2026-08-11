@@ -154,8 +154,23 @@ func errorsFrom(values <-chan error) []error {
 }
 
 func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
+	// Direct callers (not the ServeMux) may provide a canonical URL without
+	// path values. Preserve that narrow compatibility seam for tests and
+	// embedded callers; routed legacy URLs still redirect below.
+	if r.PathValue("stage") == "" && strings.Contains(r.URL.Path, "/regular-season/") {
+		r.SetPathValue("season", strings.Split(strings.TrimPrefix(r.URL.Path, "/seasons/"), "/")[0])
+		r.SetPathValue("stage", "regular-season")
+	}
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
 	scope := a.requestScope(r)
-	rules, verified := a.rulesForSeason(scope.Season)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
+	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
 	if !scope.forecastAvailable(rules, verified) {
 		a.renderUnavailableFeature(w, r, scope, "Forecast lab")
 		return
@@ -205,7 +220,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 			a.renderScenarioBadRequest(w, r, "Invalid forecast scenario", err)
 			return
 		}
-		redirectRelative(w, forecastURL(r.URL.Path, season, state, ""), http.StatusSeeOther)
+		redirectRelative(w, forecastURL(r.URL.Path, season, scope.Entry.Slug, state, ""), http.StatusSeeOther)
 		return
 	}
 	active, ok := forecast.Lookup(state.ModelID)
@@ -304,11 +319,11 @@ func (a *application) forecastData(r *http.Request) (data cache.SeasonData, seas
 	scope := a.requestScope(r)
 	season = scope.Season
 	var verified bool
-	rules, verified = a.rulesForSeason(season)
+	rules, verified = a.rulesForSeason(season, scope.Stage)
 	if !scope.forecastAvailable(rules, verified) {
 		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("forecast is unavailable for %s %s", season, scope.Stage)
 	}
-	data, err = a.loadSeasonData(r.Context(), season)
+	data, err = a.loadSeasonData(r.Context(), season, scope.Stage)
 	if err != nil {
 		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("load %s season: %w", season, err)
 	}
@@ -320,14 +335,14 @@ func (a *application) forecastData(r *http.Request) (data cache.SeasonData, seas
 
 func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, rules competition.Rules, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) forecastPage {
 	scope := a.requestScope(r)
-	_, verified := a.rulesForSeason(season)
-	base := forecastURL(r.URL.Path, season, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
-	canonical := forecastURL(r.URL.Path, season, state, "")
+	_, verified := a.rulesForSeason(season, scope.Stage)
+	base := forecastURL(r.URL.Path, season, scope.Entry.Slug, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
+	canonical := forecastURL(r.URL.Path, season, scope.Entry.Slug, state, "")
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
-		SeasonPath: seasonURL(r.URL.Path, season), ForecastPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		Navigation: seasonNavigation(r.URL.Path, scope, "/seasons/"+url.PathEscape(season)+"/forecast", rules, verified), SeasonSelector: seasonSelector(r.URL.Path, season), ModelEvaluationPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
+		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		Navigation: seasonNavigation(r.URL.Path, scope, r.URL.Path, rules, verified), SeasonSelector: seasonSelector(r.URL.Path, season), StageSelector: stageSelector(r.URL.Path, season, scope.Stage), ModelEvaluationPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
@@ -372,7 +387,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		page.DefaultAwayTeam = page.AllFixtures[0].Away.Name
 	}
 	page.Assumptions = forecastAssumptions(data, state, func(gameID string) string {
-		return forecastURL(r.URL.Path, season, state.Without(gameID), "")
+		return forecastURL(r.URL.Path, season, scope.Entry.Slug, state.Without(gameID), "")
 	}, a.options.Location)
 	return page
 }
@@ -502,8 +517,8 @@ func seasonHasTeam(data cache.SeasonData, id string) bool {
 	return false
 }
 
-func forecastURL(fromPath, season string, state forecaststate.State, teamID string) string {
-	target := "/seasons/" + url.PathEscape(season) + "/forecast"
+func forecastURL(fromPath, season, stageSlug string, state forecaststate.State, teamID string) string {
+	target := stageURL(season, stageSlug) + "/forecast"
 	path := relativeURL(fromPath, target)
 	values := url.Values{}
 	// Generated scenario URLs are always explicit v2 state, including the

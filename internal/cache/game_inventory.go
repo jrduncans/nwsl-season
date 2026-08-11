@@ -234,6 +234,12 @@ func validateGameRow(season, stage string, game Game) error {
 	if game.Matchday.Valid && game.Matchday.Int64 < 0 {
 		return fmt.Errorf("game %q has invalid matchday", game.ASAID)
 	}
+	if game.ExpandedMinutes.Valid && game.ExpandedMinutes.Int64 < 0 {
+		return fmt.Errorf("game %q has invalid expanded minutes", game.ASAID)
+	}
+	if entry, ok := competition.Lookup(season, stage); ok && entry.Kind == competition.StageKindKnockout && !game.KnockoutGame {
+		return fmt.Errorf("game %q is missing knockout classification", game.ASAID)
+	}
 	return nil
 }
 

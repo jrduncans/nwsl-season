@@ -231,7 +231,7 @@ func TestForecastHandlerReturns429WhenForecastCapacityIsFull(t *testing.T) {
 	defer func() { <-application.forecasts.slots }()
 
 	response := httptest.NewRecorder()
-	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast", nil))
+	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast", nil))
 	if response.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusTooManyRequests)
 	}
@@ -250,7 +250,7 @@ func TestForecastHandlerReturns503WhenForecastTimesOut(t *testing.T) {
 	application := &application{store: fakeStore{season: testSeasonData()}, options: options, forecasts: executor}
 
 	response := httptest.NewRecorder()
-	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast", nil))
+	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast", nil))
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
 	}
@@ -263,7 +263,7 @@ func TestForecastCapacityDoesNotBlockOrdinaryRoutes(t *testing.T) {
 	defer func() { <-executor.slots }()
 	handler := newHandlerWithForecastExecutor(fakeStore{season: testSeasonData()}, options, executor)
 
-	for _, path := range []string{"/healthz", "/cache/status", "/seasons/2026"} {
+	for _, path := range []string{"/healthz", "/cache/status", "/seasons/2026/regular-season"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {

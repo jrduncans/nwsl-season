@@ -106,7 +106,7 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 	old := map[string]Game{}
 	for _, r := range requests {
 		var g Game
-		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, r.ASAID).Scan(&g.ASAID, &g.Season, &g.Stage, &g.KickoffUTC, &g.Status, &g.HomeTeamID, &g.AwayTeamID, &g.HomeScore, &g.AwayScore, &g.Matchday, &g.LastUpdatedUTC, &g.RawJSON)
+		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,expanded_minutes,knockout_game,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, r.ASAID).Scan(&g.ASAID, &g.Season, &g.Stage, &g.KickoffUTC, &g.Status, &g.HomeTeamID, &g.AwayTeamID, &g.HomeScore, &g.AwayScore, &g.Matchday, &g.ExpandedMinutes, &g.KnockoutGame, &g.LastUpdatedUTC, &g.RawJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			return GameRefreshResult{}, fmt.Errorf("requested game %q is not cached", r.ASAID)
 		}
@@ -303,5 +303,5 @@ func upsertGameResultCheck(ctx context.Context, tx *sql.Tx, id string, finished 
 	return err
 }
 func equalFixtureGame(a, b Game) bool {
-	return a.ASAID == b.ASAID && a.Status == b.Status && a.HomeTeamID == b.HomeTeamID && a.AwayTeamID == b.AwayTeamID && a.HomeScore == b.HomeScore && a.AwayScore == b.AwayScore && a.KickoffUTC == b.KickoffUTC && a.Matchday == b.Matchday
+	return a.ASAID == b.ASAID && a.Status == b.Status && a.HomeTeamID == b.HomeTeamID && a.AwayTeamID == b.AwayTeamID && a.HomeScore == b.HomeScore && a.AwayScore == b.AwayScore && a.KickoffUTC == b.KickoffUTC && a.Matchday == b.Matchday && a.ExpandedMinutes == b.ExpandedMinutes && a.KnockoutGame == b.KnockoutGame
 }

@@ -11,6 +11,7 @@
     <a class="brand" href="{{.HomePath}}">NWSL Season Explorer</a>
     {{if .Navigation}}<nav class="site-nav" aria-label="Season sections"><ul>{{range .Navigation}}<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a></li>{{end}}</ul></nav>{{end}}
     {{if .SeasonSelector}}<nav class="season-selector" aria-label="Season selector"><ul>{{range .SeasonSelector}}<li><a href="{{.Path}}"{{if .Selected}} aria-current="page"{{end}}>{{.Label}}</a></li>{{end}}</ul></nav>{{end}}
+    {{if .StageSelector}}<nav class="season-selector" aria-label="Stage selector"><ul>{{range .StageSelector}}<li><a href="{{.Path}}"{{if .Selected}} aria-current="page"{{end}}>{{.Label}}</a></li>{{end}}</ul></nav>{{end}}
   </header>
   <main class="page">{{end}}
 

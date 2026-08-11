@@ -52,7 +52,7 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12"} {
+	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12"} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
 			legacy.Close()
 			t.Fatal(err)
@@ -72,7 +72,7 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 		t.Fatalf("backfill=%+v,%v", states, err)
 	}
 	var version, audits, runs int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 12 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 13 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_refresh_audits WHERE resource='game_xg'`).Scan(&audits); err != nil {

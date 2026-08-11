@@ -463,18 +463,20 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 			raw = string(marshaled)
 		}
 		cacheGames = append(cacheGames, cache.Game{
-			ASAID:          game.GameID,
-			Season:         options.Season,
-			Stage:          options.Stage,
-			KickoffUTC:     game.DateTimeUTC,
-			Status:         game.Status,
-			HomeTeamID:     game.HomeTeamID,
-			AwayTeamID:     game.AwayTeamID,
-			HomeScore:      nullInt(game.HomeScore),
-			AwayScore:      nullInt(game.AwayScore),
-			Matchday:       nullInt(game.Matchday),
-			LastUpdatedUTC: game.LastUpdatedUTC,
-			RawJSON:        raw,
+			ASAID:           game.GameID,
+			Season:          options.Season,
+			Stage:           options.Stage,
+			KickoffUTC:      game.DateTimeUTC,
+			Status:          game.Status,
+			HomeTeamID:      game.HomeTeamID,
+			AwayTeamID:      game.AwayTeamID,
+			HomeScore:       nullInt(game.HomeScore),
+			AwayScore:       nullInt(game.AwayScore),
+			Matchday:        nullInt(game.Matchday),
+			ExpandedMinutes: nullInt(game.ExpandedMinutes),
+			KnockoutGame:    game.KnockoutGame,
+			LastUpdatedUTC:  game.LastUpdatedUTC,
+			RawJSON:         raw,
 		})
 	}
 	return cacheGames, nil

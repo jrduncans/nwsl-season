@@ -103,12 +103,20 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	application := &application{store: store, options: options, pages: pages, forecasts: forecasts}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", application.root)
+	// Compatibility routes redirect to the primary public stage; rendered pages
+	// always carry an explicit stage slug.
 	mux.HandleFunc("GET /seasons/{season}", application.season)
 	mux.HandleFunc("GET /seasons/{season}/fixtures", application.fixtures)
 	mux.HandleFunc("GET /seasons/{season}/schedule-difficulty", application.scheduleDifficulty)
 	mux.HandleFunc("GET /seasons/{season}/forecast", application.forecast)
 	mux.HandleFunc("GET /seasons/{season}/model-evaluation", application.modelEvaluation)
 	mux.HandleFunc("GET /seasons/{season}/clinching", application.clinching)
+	mux.HandleFunc("GET /seasons/{season}/{stage}", application.season)
+	mux.HandleFunc("GET /seasons/{season}/{stage}/fixtures", application.fixtures)
+	mux.HandleFunc("GET /seasons/{season}/{stage}/schedule-difficulty", application.scheduleDifficulty)
+	mux.HandleFunc("GET /seasons/{season}/{stage}/forecast", application.forecast)
+	mux.HandleFunc("GET /seasons/{season}/{stage}/model-evaluation", application.modelEvaluation)
+	mux.HandleFunc("GET /seasons/{season}/{stage}/clinching", application.clinching)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
@@ -116,8 +124,16 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 }
 
 func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
 	scope := a.requestScope(r)
-	rules, verified := a.rulesForSeason(scope.Season)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
+	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
 	if !scope.clinchingAvailable(rules, verified) {
 		a.renderUnavailableFeature(w, r, scope, "Clinching scenarios")
 		return
@@ -127,7 +143,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	rules, _ = a.rulesForSeason(page.Season)
+	rules, _ = a.rulesForSeason(page.Season, page.Stage)
 	page.Title = page.Season + " clinching scenarios"
 	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, AlreadyClinched: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
@@ -138,7 +154,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.render(w, "clinching", view)
 		return
 	}
-	data, err := a.loadSeasonData(r.Context(), page.Season)
+	data, err := a.loadSeasonData(r.Context(), page.Season, page.Stage)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -352,12 +368,16 @@ func defaultOptions(options Options) Options {
 // rulesForSeason returns an isolated copy of the rules for an HTTP request.
 // The configured catalog scope keeps its explicit Options value for
 // compatibility. Uncataloged scopes deliberately have no presentation rules.
-func (a *application) rulesForSeason(season string) (competition.Rules, bool) {
-	entry, ok := competition.Lookup(season, a.options.Stage)
+func (a *application) rulesForSeason(season string, stages ...string) (competition.Rules, bool) {
+	stage := a.options.Stage
+	if len(stages) != 0 {
+		stage = stages[0]
+	}
+	entry, ok := competition.Lookup(season, stage)
 	if !ok || entry.Rules == nil {
 		return competition.Rules{}, false
 	}
-	if season == a.options.CurrentSeason && hasRules(a.options.Rules) {
+	if season == a.options.CurrentSeason && stage == a.options.Stage && hasRules(a.options.Rules) {
 		return a.options.Rules.Copy(), true
 	}
 	return entry.Rules.Copy(), true
@@ -372,6 +392,7 @@ type requestCompetition struct {
 	Stage     string
 	Entry     competition.Entry
 	Cataloged bool
+	Valid     bool
 }
 
 func (a *application) requestScope(r *http.Request) requestCompetition {
@@ -379,8 +400,24 @@ func (a *application) requestScope(r *http.Request) requestCompetition {
 	if season == "" {
 		season = a.options.CurrentSeason
 	}
-	entry, cataloged := competition.Lookup(season, a.options.Stage)
-	return requestCompetition{Season: season, Stage: a.options.Stage, Entry: entry, Cataloged: cataloged}
+	slug := r.PathValue("stage")
+	if slug == "" {
+		if entry, ok := competition.PrimaryEntry(season); ok {
+			return requestCompetition{Season: season, Stage: entry.Stage, Entry: entry, Cataloged: true, Valid: true}
+		}
+		return requestCompetition{Season: season, Stage: defaultStage, Entry: competition.Entry{Season: season, Stage: defaultStage, Slug: "regular-season"}, Valid: true}
+	}
+	entry, cataloged := competition.LookupSlug(season, slug)
+	if cataloged {
+		return requestCompetition{Season: season, Stage: entry.Stage, Entry: entry, Cataloged: true, Valid: true}
+	}
+	if len(competition.PublicEntriesForSeason(season)) != 0 {
+		return requestCompetition{Season: season, Valid: false}
+	}
+	if slug == "regular-season" {
+		return requestCompetition{Season: season, Stage: defaultStage, Entry: competition.Entry{Season: season, Stage: defaultStage, Slug: "regular-season"}, Valid: true}
+	}
+	return requestCompetition{Season: season, Valid: false}
 }
 
 func (s requestCompetition) supports(capability competition.Capability) bool {
@@ -450,10 +487,24 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason), http.StatusSeeOther)
+	entry, ok := competition.PrimaryEntry(a.options.CurrentSeason)
+	if !ok {
+		redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/regular-season", http.StatusSeeOther)
+		return
+	}
+	redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/"+entry.Slug, http.StatusSeeOther)
 }
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
+	scope := a.requestScope(r)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
 	view := r.URL.Query().Get("view")
 	if view != "" {
 		a.renderScenarioBadRequest(w, r, "Invalid season view", fmt.Errorf("unsupported season view %q", view))
@@ -464,11 +515,40 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
+	if scope.Entry.Kind == competition.StageKindKnockout {
+		a.render(w, "fixtures", page)
+		return
+	}
 	a.render(w, "season", page)
 }
 
+func (a *application) redirectPrimaryStage(w http.ResponseWriter, r *http.Request) {
+	season := r.PathValue("season")
+	entry, ok := competition.PrimaryEntry(season)
+	slug := "regular-season"
+	if ok {
+		slug = entry.Slug
+	}
+	relative := "/seasons/" + url.PathEscape(season) + "/" + slug
+	if tail := strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)); tail != "" {
+		relative += tail
+	}
+	if r.URL.RawQuery != "" {
+		relative += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, relative, http.StatusSeeOther)
+}
+
 func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
 	scope := a.requestScope(r)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
 	if !scope.fixturesAvailable() {
 		a.renderUnavailableFeature(w, r, scope, "Results and fixtures")
 		return
@@ -486,7 +566,15 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
 	scope := a.requestScope(r)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
 	if !scope.scheduleDifficultyAvailable() {
 		a.renderUnavailableFeature(w, r, scope, "Schedule difficulty")
 		return
@@ -500,8 +588,16 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 }
 
 func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
 	scope := a.requestScope(r)
-	rules, verified := a.rulesForSeason(scope.Season)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
+	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
 	if !scope.forecastAvailable(rules, verified) {
 		a.renderUnavailableFeature(w, r, scope, "Model evaluation")
 		return
@@ -536,8 +632,11 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 	scope := a.requestScope(r)
 	season := scope.Season
-	rules, rulesVerified := a.rulesForSeason(season)
-	data, err := a.loadSeasonData(r.Context(), season)
+	if !scope.Valid {
+		return seasonPage{}, fmt.Errorf("unknown competition stage")
+	}
+	rules, rulesVerified := a.rulesForSeason(season, scope.Stage)
+	data, err := a.loadSeasonData(r.Context(), season, scope.Stage)
 	if err != nil {
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
 	}
@@ -545,7 +644,10 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		if historicalCatalogScope(scope) {
 			return a.historicalLoadPage(r, scope)
 		}
-		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
+		if scope.Cataloged && scope.Entry.Kind == competition.StageKindKnockout {
+			return a.playoffLoadPage(r, scope)
+		}
+		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
 	}
 
 	var standingsView []tableRowView
@@ -581,7 +683,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
-		Stage:                  a.options.Stage,
+		Stage:                  scope.Stage,
 		HomePath:               relativeURL(r.URL.Path, "/"),
 		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
@@ -595,19 +697,20 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		ResultFixtureGroups:    resultFixtureGroups,
 		UpcomingFixtureGroups:  upcomingFixtureGroups,
 		FixtureTeams:           fixtureTeams(data.Teams),
-		ForecastPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		ClinchingPath:          relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/clinching"),
-		CurrentPath:            seasonURL(r.URL.Path, season),
+		ForecastPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		ClinchingPath:          relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/clinching"),
+		CurrentPath:            relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
 		SeasonSelector:         seasonSelector(r.URL.Path, season),
-		SeasonPath:             seasonURL(r.URL.Path, season),
-		FixturesPath:           relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/fixtures"),
-		ScheduleDifficultyPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/schedule-difficulty"),
+		StageSelector:          stageSelector(r.URL.Path, season, scope.Stage),
+		SeasonPath:             relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
+		FixturesPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/fixtures"),
+		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
 		HasFixtureOutlooks:     scope.forecastCapabilityAvailable() && len(outlooks) > 0,
 	}
 	if scope.xgAvailable() && completedMatches > 0 && xgAvailable < completedMatches {
 		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)
 	}
-	page.Navigation = seasonNavigation(r.URL.Path, scope, "/seasons/"+url.PathEscape(season)+strings.TrimPrefix(r.URL.Path, "/seasons/"+url.PathEscape(season)), rules, rulesVerified)
+	page.Navigation = seasonNavigation(r.URL.Path, scope, r.URL.Path, rules, rulesVerified)
 	for _, game := range data.Games {
 		if game.Status == remainingStatus {
 			page.Remaining++
@@ -641,7 +744,23 @@ const unknownFormatNotice = "The competition format is not verified, so standing
 const historicalFormatNotice = "Historical results are factual. Competition format, forecasting, and clinching calculations are not verified for this season."
 
 func historicalCatalogScope(scope requestCompetition) bool {
-	return scope.Cataloged && scope.Entry.Public && scope.Entry.Rules == nil
+	return scope.Cataloged && scope.Entry.Public && scope.Entry.Kind == competition.StageKindLeagueTable && scope.Entry.Rules == nil
+}
+
+func (a *application) playoffLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
+	notice := "Playoff fixtures have not been loaded yet."
+	if store, ok := a.store.(interface {
+		SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error)
+	}); ok {
+		readiness, found, err := store.SeasonReadiness(r.Context(), scope.Season, scope.Stage)
+		if err != nil {
+			return seasonPage{}, fmt.Errorf("load playoff readiness: %w", err)
+		}
+		if found && readiness.Readiness == cache.SourceReadinessNotPublished {
+			notice = "ASA has not published playoff data yet."
+		}
+	}
+	return seasonPage{Title: scope.Season + " playoffs", Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonSelector: seasonSelector(r.URL.Path, scope.Season), StageSelector: stageSelector(r.URL.Path, scope.Season, scope.Stage), FormatNotice: notice}, nil
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -664,10 +783,11 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 		HomePath:       relativeURL(r.URL.Path, "/"),
 		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
-		SeasonPath:     seasonURL(r.URL.Path, scope.Season),
-		FixturesPath:   relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(scope.Season)+"/fixtures"),
-		CurrentPath:    seasonURL(r.URL.Path, scope.Season),
+		SeasonPath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
+		FixturesPath:   relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"),
+		CurrentPath:    relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
 		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
+		StageSelector:  stageSelector(r.URL.Path, scope.Season, scope.Stage),
 		FormatNotice:   notice,
 	}, nil
 }
@@ -681,13 +801,17 @@ func playoffLineFor(rules competition.Rules, verified bool) int {
 
 // loadSeasonData makes local-cache latency visible as a distinct operation and
 // adds the version and completeness of the data to the enclosing request span.
-func (a *application) loadSeasonData(parent context.Context, season string) (data cache.SeasonData, err error) {
+func (a *application) loadSeasonData(parent context.Context, season string, stages ...string) (data cache.SeasonData, err error) {
+	stage := a.options.Stage
+	if len(stages) != 0 {
+		stage = stages[0]
+	}
 	ctx, span := telemetry.Tracer().Start(parent, "cache.season.load",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
 			attribute.String("nwsl.cache.name", "season"),
 			attribute.String("nwsl.season", season),
-			attribute.String("nwsl.stage", a.options.Stage),
+			attribute.String("nwsl.stage", stage),
 		),
 	)
 	defer func() {
@@ -696,11 +820,11 @@ func (a *application) loadSeasonData(parent context.Context, season string) (dat
 		}
 		span.End()
 	}()
-	data, err = a.store.Season(ctx, season, a.options.Stage)
+	data, err = a.store.Season(ctx, season, stage)
 	if err != nil {
 		return cache.SeasonData{}, err
 	}
-	attributes := seasonDataAttributes(data, season, a.options.Stage)
+	attributes := seasonDataAttributes(data, season, stage)
 	span.SetAttributes(attributes...)
 	trace.SpanFromContext(parent).SetAttributes(attributes...)
 	return data, nil
@@ -869,18 +993,20 @@ func (a *application) renderError(w http.ResponseWriter, r *http.Request, err er
 		Title: "Season unavailable", Message: err.Error(),
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 		SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season),
+		StageSelector:  stageSelector(r.URL.Path, a.requestScope(r).Season, a.requestScope(r).Stage),
 	})
 }
 
 func (a *application) renderUnavailableFeature(w http.ResponseWriter, r *http.Request, scope requestCompetition, feature string) {
-	rules, verified := a.rulesForSeason(scope.Season)
+	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 	a.render(w, "error", errorPage{
 		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
-		HomePath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(scope.Season)), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		HomePath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 		Navigation:     seasonNavigation(r.URL.Path, scope, "", rules, verified),
 		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
+		StageSelector:  stageSelector(r.URL.Path, scope.Season, scope.Stage),
 	})
 }
 

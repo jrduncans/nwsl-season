@@ -93,6 +93,28 @@ func TestPlanBootstrapUsesOneFullInventoryThenOneFullXG(t *testing.T) {
 	}
 }
 
+func TestPlanIncludesActiveCurrentPlayoffsAfterRegularScope(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil)
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{playoffs, regular}}, Config{Season: "2026", Stage: "Regular Season", SourceRequestBudget: 3}, now)
+	if len(jobs) != 2 || jobs[0].Operation.Stage != "Regular Season" || jobs[1].Operation.Stage != "Playoffs" || jobs[1].Operation.Expectation != nil {
+		t.Fatalf("jobs=%+v", jobs)
+	}
+}
+
+func TestPlanPrioritizesRegularChecksBeforePlayoffDiscovery(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("regular", fixtures.PreMatchStatus, now.Add(-time.Hour))})
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: timePointer(now)}}
+	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season"}
+	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil)
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{playoffs, regular}}, Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}, now)
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || jobs[0].Operation.Stage != "Regular Season" {
+		t.Fatalf("jobs=%+v", jobs)
+	}
+}
+
 func TestPlanAuditsActiveCompleteInventoryWeekly(t *testing.T) {
 	now := time.Date(2033, 8, 2, 0, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("future", fixtures.PreMatchStatus, now.Add(time.Hour))})

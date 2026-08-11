@@ -50,14 +50,8 @@ const (
 func Plan(snapshot cache.PlanningSnapshot, config Config, now time.Time) []Job {
 	now = now.UTC()
 	scopes := planningScopes(snapshot, config)
-	initialXG := planInitialXG(scopes)
-	priorities := [][]Job{
-		planMissingInventory(scopes, config, now),
-		planCheckedGames(scopes, config, now),
-		initialXG,
-		planCheckedXG(scopes, config, now, initialXG),
-		planWeeklyInventory(scopes, config, now),
-	}
+	league, playoffs := splitStageScopes(scopes)
+	priorities := append(hotPriorities(league, config, now), hotPriorities(playoffs, config, now)...)
 	jobs := []Job{}
 	for _, priority := range priorities {
 		jobs = append(jobs, priority...)
@@ -76,6 +70,23 @@ func Plan(snapshot cache.PlanningSnapshot, config Config, now time.Time) []Job {
 		return jobs
 	}
 	return planColdSweep(snapshot, config, now)
+}
+
+func splitStageScopes(scopes []cache.PlanningScopeSnapshot) (league, playoffs []cache.PlanningScopeSnapshot) {
+	for _, scope := range scopes {
+		entry, ok := competition.Lookup(scope.Readiness.Scope.Season, scope.Readiness.Scope.Stage)
+		if ok && entry.Kind == competition.StageKindKnockout {
+			playoffs = append(playoffs, scope)
+			continue
+		}
+		league = append(league, scope)
+	}
+	return league, playoffs
+}
+
+func hotPriorities(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) [][]Job {
+	initialXG := planInitialXG(scopes)
+	return [][]Job{planMissingInventory(scopes, config, now), planCheckedGames(scopes, config, now), initialXG, planCheckedXG(scopes, config, now, initialXG), planWeeklyInventory(scopes, config, now)}
 }
 
 type coldCandidate struct {
@@ -150,7 +161,9 @@ func planningScopes(snapshot cache.PlanningSnapshot, config Config) []cache.Plan
 		if id.Lifecycle == cache.SourceScopeCompleted {
 			continue
 		}
-		if id.Season == config.Season && id.Stage == config.Stage || id.Lifecycle == cache.SourceScopeUpcoming && id.Stage == "Regular Season" {
+		entry, cataloged := competition.Lookup(id.Season, id.Stage)
+		currentCatalogStage := id.Season == config.Season && id.Lifecycle == cache.SourceScopeActive && cataloged && entry.SourceAvailable
+		if (id.Season == config.Season && id.Stage == config.Stage) || currentCatalogStage || id.Lifecycle == cache.SourceScopeUpcoming && id.Stage == "Regular Season" {
 			out = append(out, scope)
 		}
 	}
@@ -158,6 +171,13 @@ func planningScopes(snapshot cache.PlanningSnapshot, config Config) []cache.Plan
 		a, b := out[i].Readiness.Scope, out[j].Readiness.Scope
 		if a.Season != b.Season {
 			return a.Season > b.Season
+		}
+		if a.Season == config.Season {
+			aEntry, aOK := competition.Lookup(a.Season, a.Stage)
+			bEntry, bOK := competition.Lookup(b.Season, b.Stage)
+			if aOK && bOK && aEntry.Kind != bEntry.Kind {
+				return aEntry.Kind == competition.StageKindLeagueTable
+			}
 		}
 		return a.Stage < b.Stage
 	})
