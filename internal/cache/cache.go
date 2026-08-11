@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/clinching"
@@ -25,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 8
+const schemaVersion = 13
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -56,18 +57,20 @@ type Team struct {
 
 // Game is the normalized game row stored in SQLite.
 type Game struct {
-	ASAID          string
-	Season         string
-	Stage          string
-	KickoffUTC     string
-	Status         string
-	HomeTeamID     string
-	AwayTeamID     string
-	HomeScore      sql.NullInt64
-	AwayScore      sql.NullInt64
-	Matchday       sql.NullInt64
-	LastUpdatedUTC string
-	RawJSON        string
+	ASAID           string
+	Season          string
+	Stage           string
+	KickoffUTC      string
+	Status          string
+	HomeTeamID      string
+	AwayTeamID      string
+	HomeScore       sql.NullInt64
+	AwayScore       sql.NullInt64
+	Matchday        sql.NullInt64
+	ExpandedMinutes sql.NullInt64
+	KnockoutGame    bool
+	LastUpdatedUTC  string
+	RawJSON         string
 }
 
 // SyncRun contains the audit row for a refresh attempt.
@@ -493,9 +496,316 @@ func (c *DB) Migrate(ctx context.Context) error {
 		if err := recordMigration(ctx, tx, 8); err != nil {
 			return err
 		}
+		version = 8
+	}
+	if version < 9 {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE source_scopes (
+			season TEXT NOT NULL,
+			stage TEXT NOT NULL,
+			registration TEXT NOT NULL
+				CHECK (registration IN ('catalog','configured','provisional','observed')),
+			lifecycle TEXT NOT NULL
+				CHECK (lifecycle IN ('upcoming','active','completed')),
+			discovery TEXT NOT NULL
+				CHECK (discovery IN ('unknown','not_published','available')),
+			registered_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (season, stage)
+		)`); err != nil {
+			return fmt.Errorf("apply migration 9: %w", err)
+		}
+		if err := backfillSourceScopes(ctx, tx, time.Now().UTC()); err != nil {
+			return fmt.Errorf("apply migration 9: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 9); err != nil {
+			return err
+		}
+		version = 9
+	}
+	if version < 10 {
+		for _, statement := range []string{
+			`CREATE TABLE source_refresh_audits (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				resource TEXT NOT NULL
+					CHECK (resource IN ('teams','games','game_xg')),
+				season TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				mode TEXT NOT NULL
+					CHECK (mode IN ('full','targeted','recalculate')),
+				trigger TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				finished_at TEXT NOT NULL,
+				outcome TEXT NOT NULL
+					CHECK (outcome IN ('success','failure')),
+				error_summary TEXT NOT NULL,
+				requested_rows INTEGER NOT NULL CHECK (requested_rows >= 0),
+				returned_rows INTEGER NOT NULL CHECK (returned_rows >= 0),
+				rows_inserted INTEGER NOT NULL CHECK (rows_inserted >= 0),
+				rows_updated INTEGER NOT NULL CHECK (rows_updated >= 0),
+				rows_unchanged INTEGER NOT NULL CHECK (rows_unchanged >= 0),
+				rows_deleted INTEGER NOT NULL CHECK (rows_deleted >= 0),
+				downstream_inputs_changed INTEGER NOT NULL
+					CHECK (downstream_inputs_changed IN (0,1)),
+				CHECK (
+					(resource = 'teams' AND season = '' AND stage = '') OR
+					(resource IN ('games','game_xg') AND season <> '' AND stage <> '')
+				),
+				CHECK (
+					(outcome = 'success' AND error_summary = '') OR
+					(outcome = 'failure' AND error_summary <> '')
+				),
+				CHECK (mode = 'full' OR rows_deleted = 0)
+			)`,
+			`CREATE INDEX source_refresh_audits_scope_idx
+				ON source_refresh_audits (
+					resource, season, stage, finished_at DESC, id DESC
+				)`,
+			`CREATE TABLE source_resource_scope_state (
+				resource TEXT NOT NULL
+					CHECK (resource IN ('teams','games','game_xg')),
+				season TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				last_full_success_at TEXT,
+				next_full_due_at TEXT,
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY (resource, season, stage),
+				CHECK (
+					(resource = 'teams' AND season = '' AND stage = '') OR
+					(resource IN ('games','game_xg') AND season <> '' AND stage <> '')
+				)
+			)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 10: %w", err)
+			}
+		}
+		if err := backfillSourceResourceScopeState(ctx, tx, time.Now().UTC()); err != nil {
+			return fmt.Errorf("apply migration 10: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 10); err != nil {
+			return err
+		}
+		version = 10
+	}
+	if version < 11 {
+		for _, statement := range []string{
+			`CREATE TABLE game_result_checks (
+				asa_game_id TEXT PRIMARY KEY REFERENCES games(asa_game_id) ON DELETE CASCADE,
+				last_checked_at TEXT NOT NULL,
+				first_terminal_observed_at TEXT,
+				last_material_change_at TEXT,
+				next_due_at TEXT
+			)`,
+			`CREATE INDEX game_result_checks_due_idx ON game_result_checks (next_due_at, asa_game_id)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 11: %w", err)
+			}
+		}
+		if err := backfillGameResultChecks(ctx, tx); err != nil {
+			return fmt.Errorf("apply migration 11: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 11); err != nil {
+			return err
+		}
+		version = 11
+	}
+	if version < 12 {
+		for _, statement := range []string{
+			`CREATE TABLE game_xg_checks (
+				asa_game_id TEXT PRIMARY KEY REFERENCES games(asa_game_id) ON DELETE CASCADE,
+				last_checked_at TEXT NOT NULL,
+				first_available_observed_at TEXT,
+				last_material_change_at TEXT,
+				next_due_at TEXT
+			)`,
+			`CREATE INDEX game_xg_checks_due_idx ON game_xg_checks (next_due_at, asa_game_id)`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("apply migration 12: %w", err)
+			}
+		}
+		if err := backfillGameXGChecks(ctx, tx); err != nil {
+			return fmt.Errorf("apply migration 12: %w", err)
+		}
+		if err := recordMigration(ctx, tx, 12); err != nil {
+			return err
+		}
+		version = 12
+	}
+	if version < 13 {
+		gamesOK, err := tableHasColumns(ctx, tx, "games", "asa_game_id")
+		if err != nil {
+			return err
+		}
+		if gamesOK {
+			for _, change := range []struct{ column, statement string }{
+				{"expanded_minutes", `ALTER TABLE games ADD COLUMN expanded_minutes INTEGER`},
+				{"knockout_game", `ALTER TABLE games ADD COLUMN knockout_game INTEGER NOT NULL DEFAULT 0 CHECK (knockout_game IN (0,1))`},
+			} {
+				exists, err := tableHasColumns(ctx, tx, "games", change.column)
+				if err != nil {
+					return err
+				}
+				if exists {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx, change.statement); err != nil {
+					return fmt.Errorf("apply migration 13: %w", err)
+				}
+			}
+			if err := backfillPlayoffGameFields(ctx, tx); err != nil {
+				return fmt.Errorf("apply migration 13: %w", err)
+			}
+			if err := refreshFixtureSnapshotIDsForMigration(ctx, tx); err != nil {
+				return fmt.Errorf("apply migration 13: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 13); err != nil {
+			return err
+		}
+		version = 13
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
+	}
+	return nil
+}
+
+func backfillPlayoffGameFields(ctx context.Context, tx *sql.Tx) error {
+	ok, err := tableHasColumns(ctx, tx, "games", "asa_game_id", "raw_json")
+	if err != nil || !ok {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT asa_game_id, raw_json FROM games`)
+	if err != nil {
+		return err
+	}
+	type update struct {
+		id       string
+		minutes  any
+		knockout bool
+	}
+	updates := []update{}
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			return err
+		}
+		var source struct {
+			ExpandedMinutes *int  `json:"expanded_minutes"`
+			KnockoutGame    *bool `json:"knockout_game"`
+		}
+		if json.Unmarshal([]byte(raw), &source) != nil {
+			continue
+		}
+		var minutes any
+		if source.ExpandedMinutes != nil && *source.ExpandedMinutes >= 0 {
+			minutes = *source.ExpandedMinutes
+		}
+		updates = append(updates, update{id: id, minutes: minutes, knockout: source.KnockoutGame != nil && *source.KnockoutGame})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, value := range updates {
+		if _, err := tx.ExecContext(ctx, `UPDATE games SET expanded_minutes=?, knockout_game=? WHERE asa_game_id=?`, value.minutes, value.knockout, value.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// refreshFixtureSnapshotIDsForMigration moves pre-v13 fixture identities to
+// the v3 contract after normalized playoff fields have been backfilled. Only
+// each scope's current successful run is updated: older derived records stay
+// attached to their original factual snapshot and are simply non-current.
+func refreshFixtureSnapshotIDsForMigration(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT season, stage FROM games`)
+	if err != nil {
+		return err
+	}
+	type scope struct{ season, stage string }
+	scopes := []scope{}
+	for rows.Next() {
+		var value scope
+		if err := rows.Scan(&value.season, &value.stage); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		scopes = append(scopes, value)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, scope := range scopes {
+		run, err := latestRun(ctx, tx, "success", scope.season, scope.stage)
+		if err != nil || run == nil {
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		teams, err := inventoryTeams(ctx, tx, scope.season, scope.stage)
+		if err != nil {
+			return err
+		}
+		games, err := seasonGames(ctx, tx, scope.season, scope.stage)
+		if err != nil {
+			return err
+		}
+		snapshot, err := FixtureSnapshotID(teams, games)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE sync_runs SET fixture_snapshot_id=? WHERE id=?`, snapshot, run.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func backfillGameResultChecks(ctx context.Context, tx *sql.Tx) error {
+	gamesOK, err := tableHasColumns(ctx, tx, "games", "asa_game_id", "season", "stage")
+	if err != nil || !gamesOK {
+		return err
+	}
+	runsOK, err := tableHasColumns(ctx, tx, "sync_runs", "season", "stage", "outcome", "finished_at")
+	if err != nil || !runsOK {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO game_result_checks (asa_game_id,last_checked_at,first_terminal_observed_at,last_material_change_at,next_due_at)
+		SELECT g.asa_game_id, MAX(r.finished_at), NULL, NULL, NULL
+		FROM games g JOIN sync_runs r ON r.season=g.season AND r.stage=g.stage
+		WHERE r.outcome='success' GROUP BY g.asa_game_id`)
+	if err != nil {
+		return fmt.Errorf("backfill game result checks: %w", err)
+	}
+	return nil
+}
+
+func backfillGameXGChecks(ctx context.Context, tx *sql.Tx) error {
+	gamesOK, err := tableHasColumns(ctx, tx, "games", "asa_game_id")
+	if err != nil || !gamesOK {
+		return err
+	}
+	xgOK, err := tableHasColumns(ctx, tx, "game_xg", "asa_game_id", "last_checked_at", "first_observed_at")
+	if err != nil || !xgOK {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO game_xg_checks (
+		asa_game_id,last_checked_at,first_available_observed_at,last_material_change_at,next_due_at
+	) SELECT asa_game_id,last_checked_at,first_observed_at,NULL,NULL FROM game_xg`)
+	if err != nil {
+		return fmt.Errorf("backfill game xG checks: %w", err)
 	}
 	return nil
 }
@@ -506,6 +816,130 @@ func tableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
 		return false, fmt.Errorf("check migration table %q: %w", name, err)
 	}
 	return count > 0, nil
+}
+
+func tableHasColumns(ctx context.Context, tx *sql.Tx, name string, wanted ...string) (bool, error) {
+	exists, err := tableExists(ctx, tx, name)
+	if err != nil || !exists {
+		return exists, err
+	}
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(`+name+`)`)
+	if err != nil {
+		return false, fmt.Errorf("inspect columns for table %q: %w", name, err)
+	}
+	defer rows.Close()
+	columns := make(map[string]struct{})
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var column, kind string
+		var defaultValue any
+		if err := rows.Scan(&cid, &column, &kind, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, fmt.Errorf("scan columns for table %q: %w", name, err)
+		}
+		columns[column] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate columns for table %q: %w", name, err)
+	}
+	for _, column := range wanted {
+		if _, ok := columns[column]; !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func backfillSourceResourceScopeState(ctx context.Context, tx *sql.Tx, now time.Time) error {
+	now = now.UTC()
+	backfillGames, err := tableHasColumns(ctx, tx, "sync_runs", "season", "stage", "outcome", "finished_at")
+	if err != nil {
+		return err
+	}
+	if backfillGames {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+			resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+		) SELECT 'games', season, stage, MAX(finished_at), NULL, ?
+		FROM sync_runs WHERE outcome = 'success' GROUP BY season, stage`, formatTime(now)); err != nil {
+			return fmt.Errorf("backfill games source refresh state: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+			resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+		) SELECT 'teams', '', '', MAX(finished_at), NULL, ?
+		FROM sync_runs WHERE outcome = 'success' HAVING COUNT(*) > 0`, formatTime(now)); err != nil {
+			return fmt.Errorf("backfill teams source refresh state: %w", err)
+		}
+	}
+	backfillXG, err := tableHasColumns(ctx, tx, "xg_sync_runs", "season", "stage", "outcome", "finished_at")
+	if err != nil {
+		return err
+	}
+	if backfillXG {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+			resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+		) SELECT 'game_xg', season, stage, MAX(finished_at), NULL, ?
+		FROM xg_sync_runs WHERE outcome = 'success' GROUP BY season, stage`, formatTime(now)); err != nil {
+			return fmt.Errorf("backfill game xG source refresh state: %w", err)
+		}
+	}
+	return nil
+}
+
+// backfillSourceScopes also tolerates the deliberately minimal old-schema
+// fixtures used by migration tests. A real version-8 database has all three
+// source tables, so its query is the full union described by migration 9.
+func backfillSourceScopes(ctx context.Context, tx *sql.Tx, now time.Time) error {
+	hasGames, err := tableExists(ctx, tx, "games")
+	if err != nil {
+		return err
+	}
+	hasSyncRuns, err := tableExists(ctx, tx, "sync_runs")
+	if err != nil {
+		return err
+	}
+	hasXGRuns, err := tableExists(ctx, tx, "xg_sync_runs")
+	if err != nil {
+		return err
+	}
+
+	identities := make([]string, 0, 3)
+	if hasGames {
+		identities = append(identities, "SELECT season, stage FROM games")
+	}
+	if hasSyncRuns {
+		identities = append(identities, "SELECT season, stage FROM sync_runs")
+	}
+	if hasXGRuns {
+		identities = append(identities, "SELECT season, stage FROM xg_sync_runs")
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+
+	gameDiscovery := "0"
+	if hasGames {
+		gameDiscovery = "EXISTS (SELECT 1 FROM games g WHERE g.season = identities.season AND g.stage = identities.stage)"
+	}
+	successfulSync := "0"
+	if hasSyncRuns {
+		successfulSync = "EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.season = identities.season AND sr.stage = identities.stage AND sr.outcome = 'success')"
+	}
+	statement := fmt.Sprintf(`INSERT INTO source_scopes (
+		season, stage, registration, lifecycle, discovery, registered_at, updated_at
+	)
+	SELECT identities.season, identities.stage, 'observed', 'active',
+		CASE
+			WHEN %s THEN 'available'
+			WHEN %s THEN 'not_published'
+			ELSE 'unknown'
+		END,
+		?, ?
+	FROM (
+		%s
+	) AS identities`, gameDiscovery, successfulSync, strings.Join(identities, "\nUNION\n"))
+	if _, err := tx.ExecContext(ctx, statement, formatTime(now), formatTime(now)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func migrationVersion(ctx context.Context, tx *sql.Tx) (int, error) {
@@ -636,18 +1070,18 @@ func writeGame(ctx context.Context, tx *sql.Tx, game Game, now time.Time) (rowCh
 	var existing Game
 	err := tx.QueryRowContext(ctx, `SELECT
 		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-		home_score, away_score, matchday, last_updated_utc, raw_json
+		home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json
 		FROM games WHERE asa_game_id = ?`, game.ASAID).Scan(
 		&existing.ASAID, &existing.Season, &existing.Stage, &existing.KickoffUTC, &existing.Status,
 		&existing.HomeTeamID, &existing.AwayTeamID, &existing.HomeScore, &existing.AwayScore,
-		&existing.Matchday, &existing.LastUpdatedUTC, &existing.RawJSON)
+		&existing.Matchday, &existing.ExpandedMinutes, &existing.KnockoutGame, &existing.LastUpdatedUTC, &existing.RawJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO games (
 			asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-			home_score, away_score, matchday, last_updated_utc, raw_json, synced_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json, synced_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			game.ASAID, game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
-			nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), game.LastUpdatedUTC, game.RawJSON, formatTime(now)); err != nil {
+			nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), nullableInt(game.ExpandedMinutes), game.KnockoutGame, game.LastUpdatedUTC, game.RawJSON, formatTime(now)); err != nil {
 			return 0, fmt.Errorf("insert game %q: %w", game.ASAID, err)
 		}
 		return rowInserted, nil
@@ -660,10 +1094,10 @@ func writeGame(ctx context.Context, tx *sql.Tx, game Game, now time.Time) (rowCh
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE games SET
 		season = ?, stage = ?, kickoff_utc = ?, status = ?, home_team_id = ?, away_team_id = ?,
-		home_score = ?, away_score = ?, matchday = ?, last_updated_utc = ?, raw_json = ?, synced_at = ?
+		home_score = ?, away_score = ?, matchday = ?, expanded_minutes = ?, knockout_game = ?, last_updated_utc = ?, raw_json = ?, synced_at = ?
 		WHERE asa_game_id = ?`,
 		game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
-		nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), game.LastUpdatedUTC, game.RawJSON, formatTime(now), game.ASAID); err != nil {
+		nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), nullableInt(game.ExpandedMinutes), game.KnockoutGame, game.LastUpdatedUTC, game.RawJSON, formatTime(now), game.ASAID); err != nil {
 		return 0, fmt.Errorf("update game %q: %w", game.ASAID, err)
 	}
 	return rowUpdated, nil
@@ -674,7 +1108,7 @@ func equalGame(left, right Game) bool {
 		left.KickoffUTC == right.KickoffUTC && left.Status == right.Status &&
 		left.HomeTeamID == right.HomeTeamID && left.AwayTeamID == right.AwayTeamID &&
 		left.HomeScore == right.HomeScore && left.AwayScore == right.AwayScore &&
-		left.Matchday == right.Matchday && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
+		left.Matchday == right.Matchday && left.ExpandedMinutes == right.ExpandedMinutes && left.KnockoutGame == right.KnockoutGame && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
 }
 
 // RecordFailure records a failed refresh attempt without mutating cached data.
@@ -1261,7 +1695,7 @@ func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, err
 func seasonGames(ctx context.Context, dbq queryer, season, stage string) ([]Game, error) {
 	rows, err := dbq.QueryContext(ctx, `SELECT
 		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-		home_score, away_score, matchday, last_updated_utc, raw_json
+		home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json
 		FROM games
 		WHERE season = ? AND stage = ?
 		ORDER BY kickoff_utc, asa_game_id`, season, stage)
@@ -1276,7 +1710,7 @@ func seasonGames(ctx context.Context, dbq queryer, season, stage string) ([]Game
 		if err := rows.Scan(
 			&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status,
 			&game.HomeTeamID, &game.AwayTeamID, &game.HomeScore, &game.AwayScore,
-			&game.Matchday, &game.LastUpdatedUTC, &game.RawJSON,
+			&game.Matchday, &game.ExpandedMinutes, &game.KnockoutGame, &game.LastUpdatedUTC, &game.RawJSON,
 		); err != nil {
 			return nil, fmt.Errorf("scan season game: %w", err)
 		}
@@ -1464,7 +1898,7 @@ func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
 			writeSnapshotString("0")
 		}
 	}
-	writeSnapshotString("fixture-snapshot-v2")
+	writeSnapshotString("fixture-snapshot-v3")
 	for _, id := range ids {
 		writeSnapshotString(id)
 	}
@@ -1477,6 +1911,8 @@ func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
 		writeNull(g.AwayScore)
 		writeSnapshotString(g.KickoffUTC)
 		writeNull(g.Matchday)
+		writeNull(g.ExpandedMinutes)
+		writeSnapshotString(strconv.FormatBool(g.KnockoutGame))
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

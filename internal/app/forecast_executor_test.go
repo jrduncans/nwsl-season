@@ -59,6 +59,9 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 		if len(request.Fixed) != 0 {
 			t.Fatalf("fixed assumptions = %#v, want none", request.Fixed)
 		}
+		if got, want := request.PlayoffPlaces, playoffPlaces(options.Rules); got != want {
+			t.Fatalf("playoff places = %d, want configured current-scope %d", got, want)
+		}
 		calls.Add(1)
 		return simulation.Result{Model: request.Model.Info(), Iterations: request.Iterations}, nil
 	}
@@ -77,6 +80,17 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 		if _, found := application.app.forecasts.cache[key]; !found {
 			t.Errorf("cache has no baseline result for %s", entry.Model.Info().ID)
 		}
+	}
+}
+
+func TestPrecacheForecastsSkipsUncatalogedConfiguredScope(t *testing.T) {
+	store := &recordingStore{fakeStore: fakeStore{season: testSeasonData()}}
+	application := newApplicationWithForecastExecutor(store, Options{CurrentSeason: "2099", ForecastIterations: 20, Location: time.UTC}, newForecastExecutor(1, time.Second))
+	if err := application.PrecacheForecasts(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.seasonReads != 0 {
+		t.Fatalf("precache read uncataloged season %d times", store.seasonReads)
 	}
 }
 
@@ -217,7 +231,7 @@ func TestForecastHandlerReturns429WhenForecastCapacityIsFull(t *testing.T) {
 	defer func() { <-application.forecasts.slots }()
 
 	response := httptest.NewRecorder()
-	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast", nil))
+	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast", nil))
 	if response.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusTooManyRequests)
 	}
@@ -236,7 +250,7 @@ func TestForecastHandlerReturns503WhenForecastTimesOut(t *testing.T) {
 	application := &application{store: fakeStore{season: testSeasonData()}, options: options, forecasts: executor}
 
 	response := httptest.NewRecorder()
-	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/forecast", nil))
+	application.forecast(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast", nil))
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
 	}
@@ -249,7 +263,7 @@ func TestForecastCapacityDoesNotBlockOrdinaryRoutes(t *testing.T) {
 	defer func() { <-executor.slots }()
 	handler := newHandlerWithForecastExecutor(fakeStore{season: testSeasonData()}, options, executor)
 
-	for _, path := range []string{"/healthz", "/cache/status", "/seasons/2026"} {
+	for _, path := range []string{"/healthz", "/cache/status", "/seasons/2026/regular-season"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {

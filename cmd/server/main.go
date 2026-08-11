@@ -37,6 +37,11 @@ const (
 	telemetryShutdownTimeout  = 10 * time.Second
 )
 
+var ensureSourceScopeRegistry = func(ctx context.Context, db *cache.DB, season, stage string, now time.Time) error {
+	_, err := db.EnsureSourceScopes(ctx, season, stage, now)
+	return err
+}
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	if err := config.LoadEnvironmentFile(); err != nil {
@@ -78,6 +83,9 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("open cache database %q: %w", cfg.DBPath, err)
 	}
 	defer db.Close()
+	if err := ensureSourceScopeRegistry(ctx, db, cfg.SyncSeason, cfg.SyncStage, time.Now().UTC()); err != nil {
+		return fmt.Errorf("seed source scope registry: %w", err)
+	}
 
 	service := syncer.Service{
 		ASA: asa.Client{HTTPClient: &http.Client{
@@ -101,7 +109,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		ForecastConcurrency: cfg.ForecastConcurrency,
 		ForecastTimeout:     cfg.ForecastTimeout,
 	})
-	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger}, scheduler.Config{
+	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger, currentSeason: cfg.SyncSeason, currentStage: cfg.SyncStage}, scheduler.Config{
 		Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: rules.ExpectedTeams, GamesPerTeam: rules.GamesPerTeam, CheckInterval: cfg.SyncCheckInterval,
 		CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout,
 	}, logger)
@@ -114,20 +122,6 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		logger.Info("pre-cached baseline forecasts", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
 	}
 	refreshScheduler.Start()
-	historyCtx, historyCancel := context.WithCancel(ctx)
-	historyDone := make(chan struct{})
-	go func() {
-		defer close(historyDone)
-		if err := service.EnsureVenueHistory(historyCtx, cfg.SyncSeason, cfg.SyncStage, 2, cfg.SyncTimeout); err != nil && historyCtx.Err() == nil {
-			logger.Error("sync historical venue data", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
-			return
-		}
-		logger.Info("historical venue data ready", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "prior_seasons", 2)
-		if err := application.PrecacheForecastsWithTrigger(historyCtx, "venue_history"); err != nil && historyCtx.Err() == nil {
-			logger.Warn("pre-cache forecasts after historical venue sync", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
-		}
-	}()
-
 	server := newHTTPServer(cfg.HTTPAddr, otelhttp.NewHandler(application, "HTTP server", otelhttp.WithSpanNameFormatter(httpSpanName)), cfg.ForecastTimeout)
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
@@ -138,21 +132,17 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	case <-ctx.Done():
 		logger.Info("shutting down HTTP server", "reason", ctx.Err())
 	case err := <-serverErrors:
-		historyCancel()
 		refreshScheduler.Stop()
 		refreshScheduler.Wait()
-		<-historyDone
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return err
 	}
 
-	historyCancel()
 	refreshScheduler.Stop()
 	err = shutdownHTTPServer(server)
 	refreshScheduler.Wait()
-	<-historyDone
 	if err != nil {
 		return fmt.Errorf("gracefully shut down HTTP server: %w", err)
 	}
@@ -194,9 +184,49 @@ func shutdownHTTPServer(server *http.Server) error {
 // refreshes the process-local baseline forecast cache only when an input to a
 // forecast actually changed.
 type forecastWarmingRunner struct {
-	service     syncer.Service
-	application *app.Application
-	logger      *slog.Logger
+	service       syncer.Service
+	application   *app.Application
+	logger        *slog.Logger
+	currentSeason string
+	currentStage  string
+}
+
+func (r forecastWarmingRunner) Execute(ctx context.Context, operation syncer.Operation) (syncer.OperationResult, error) {
+	result, err := r.service.Execute(ctx, operation)
+	if err != nil {
+		setSchedulerForecastWarmOutcome(ctx, "not_run")
+		return result, err
+	}
+	if !r.forecastInputsForScope(operation.Season, operation.Stage) || (!result.FixtureInputsChanged && !result.XGInputsChanged) {
+		setSchedulerForecastWarmOutcome(ctx, "not_needed")
+		return result, nil
+	}
+	if err := r.application.PrecacheForecastsWithTrigger(context.WithoutCancel(ctx), "post_source_job"); err != nil {
+		setSchedulerForecastWarmOutcome(ctx, "failed")
+		r.logger.Warn("pre-cache forecasts after source job", "season", operation.Season, "stage", operation.Stage, "error", err)
+		return result, nil
+	}
+	setSchedulerForecastWarmOutcome(ctx, "complete")
+	return result, nil
+}
+
+func (r forecastWarmingRunner) forecastInputsForScope(season, stage string) bool {
+	if stage != r.currentStage {
+		return false
+	}
+	if season == r.currentSeason {
+		return true
+	}
+	previous, err := competition.PreviousRegularSeasons(r.currentSeason, 2)
+	if err != nil {
+		return false
+	}
+	for _, candidate := range previous {
+		if season == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOptions) (cache.SyncRun, error) {

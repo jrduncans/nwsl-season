@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -30,10 +31,18 @@ type seasonPage struct {
 	ClinchingPath          string
 	CurrentPath            string
 	Navigation             []navigationItem
+	SeasonSelector         []seasonSelectorItem
+	StageSelector          []seasonSelectorItem
 	Freshness              string
 	FreshnessFallback      string
 	ScheduleNote           string
 	XGWarning              string
+	FormatNotice           string
+	HasStandings           bool
+	HasFixtures            bool
+	HasXG                  bool
+	HasScheduleDifficulty  bool
+	HasForecast            bool
 	Standings              []tableRowView
 	Strength               strengthView
 	ResultFixtureGroups    []fixtureGroupView
@@ -49,17 +58,58 @@ type navigationItem struct {
 	Current bool
 }
 
-func seasonNavigation(from, season, current string) []navigationItem {
-	base := "/seasons/" + url.PathEscape(season)
+type seasonSelectorItem struct {
+	Label    string
+	Path     string
+	Selected bool
+}
+
+func seasonSelector(from, selectedSeason string) []seasonSelectorItem {
+	entries := competition.PublicEntries()
+	items := make([]seasonSelectorItem, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.Primary {
+			continue
+		}
+		items = append(items, seasonSelectorItem{
+			Label: entry.Label, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)), Selected: entry.Season == selectedSeason,
+		})
+	}
+	return items
+}
+
+func stageSelector(from, season, selectedStage string) []seasonSelectorItem {
+	entries := competition.PublicEntriesForSeason(season)
+	if len(entries) < 2 {
+		return nil
+	}
+	items := make([]seasonSelectorItem, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, seasonSelectorItem{Label: entry.Label, Path: relativeURL(from, stageURL(season, entry.Slug)), Selected: entry.Stage == selectedStage})
+	}
+	return items
+}
+
+func seasonNavigation(from string, scope requestCompetition, current string, rules competition.Rules, verified bool) []navigationItem {
+	base := stageURL(scope.Season, scope.Entry.Slug)
 	items := []struct {
 		label string
 		path  string
-	}{
-		{"Standings", base},
-		{"Results & fixtures", base + "/fixtures"},
-		{"Schedule difficulty", base + "/schedule-difficulty"},
-		{"Clinching scenarios", base + "/clinching"},
-		{"Forecast lab", base + "/forecast"},
+	}{}
+	if scope.standingsAvailable() {
+		items = append(items, struct{ label, path string }{"Standings", base})
+	}
+	if scope.fixturesAvailable() {
+		items = append(items, struct{ label, path string }{"Results & fixtures", base + "/fixtures"})
+	}
+	if scope.scheduleDifficultyAvailable() {
+		items = append(items, struct{ label, path string }{"Schedule difficulty", base + "/schedule-difficulty"})
+	}
+	if scope.clinchingAvailable(rules, verified) {
+		items = append(items, struct{ label, path string }{"Clinching scenarios", base + "/clinching"})
+	}
+	if scope.forecastAvailable(rules, verified) {
+		items = append(items, struct{ label, path string }{"Forecast lab", base + "/forecast"})
 	}
 	navigation := make([]navigationItem, 0, len(items))
 	for _, item := range items {
@@ -68,6 +118,10 @@ func seasonNavigation(from, season, current string) []navigationItem {
 		})
 	}
 	return navigation
+}
+
+func stageURL(season, slug string) string {
+	return "/seasons/" + url.PathEscape(season) + "/" + url.PathEscape(slug)
 }
 
 type strengthView struct {
@@ -184,17 +238,19 @@ type fixtureGroupView struct {
 }
 
 type fixtureView struct {
-	ID         string
-	Kickoff    string
-	KickoffUTC string
-	HomeTeam   teamNameView
-	AwayTeam   teamNameView
-	Score      string
-	XG         string
-	Completed  bool
-	Remaining  bool
-	Status     string
-	Outlook    *fixtureOutlookView
+	ID              string
+	Kickoff         string
+	KickoffUTC      string
+	HomeTeam        teamNameView
+	AwayTeam        teamNameView
+	Score           string
+	XG              string
+	Completed       bool
+	Remaining       bool
+	Status          string
+	ExpandedMinutes string
+	KnockoutGame    bool
+	Outlook         *fixtureOutlookView
 }
 
 // fixtureOutlookView is the pre-match, three-way result distribution shown on
@@ -212,12 +268,16 @@ type teamNameView struct {
 }
 
 type errorPage struct {
-	Title          string
-	Message        string
-	HomePath       string
-	StylesheetPath string
-	ScriptPath     string
-	Navigation     []navigationItem
+	Title             string
+	Message           string
+	HomePath          string
+	StylesheetPath    string
+	ScriptPath        string
+	Navigation        []navigationItem
+	SeasonSelector    []seasonSelectorItem
+	StageSelector     []seasonSelectorItem
+	Freshness         string
+	FreshnessFallback string
 }
 type clinchingPage struct {
 	seasonPage
@@ -532,6 +592,10 @@ func fixtureGroups(data cache.SeasonData, location *time.Location) []fixtureGrou
 }
 
 func fixtureGroupsWithOutlooks(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView) []fixtureGroupView {
+	return fixtureGroupsWithOutlooksFor(data, location, outlooks, true)
+}
+
+func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView, includeXG bool) []fixtureGroupView {
 	teams := make(map[string]teamNameView, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
@@ -562,17 +626,23 @@ func fixtureGroupsWithOutlooks(data cache.SeasonData, location *time.Location, o
 		view := fixtureView{
 			ID: game.ASAID, Kickoff: localKickoff.Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),
 			HomeTeam: teams[game.HomeTeamID], AwayTeam: teams[game.AwayTeamID],
-			Completed: game.Status == standings.CompletedStatus,
-			Remaining: game.Status == remainingStatus,
-			Status:    game.Status,
+			Completed:    game.Status == standings.CompletedStatus,
+			Remaining:    game.Status == remainingStatus,
+			Status:       game.Status,
+			KnockoutGame: game.KnockoutGame,
+		}
+		if game.KnockoutGame && game.ExpandedMinutes.Valid {
+			view.ExpandedMinutes = fmt.Sprintf("%d minutes", game.ExpandedMinutes.Int64)
 		}
 		if outlook, ok := outlooks[game.ASAID]; ok && view.Remaining {
 			view.Outlook = &outlook
 		}
 		if view.Completed && game.HomeScore.Valid && game.AwayScore.Valid {
 			view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
-			if xg, ok := xgoals[game.ASAID]; ok {
-				view.XG = fmt.Sprintf("%.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+			if includeXG {
+				if xg, ok := xgoals[game.ASAID]; ok {
+					view.XG = fmt.Sprintf("%.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+				}
 			}
 		}
 		groups[index].Games = append(groups[index].Games, view)
@@ -590,7 +660,11 @@ func fixtureGroupsByStatus(data cache.SeasonData, location *time.Location) (resu
 }
 
 func fixtureGroupsByStatusWithOutlooks(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView) (results, upcoming []fixtureGroupView) {
-	for _, group := range fixtureGroupsWithOutlooks(data, location, outlooks) {
+	return fixtureGroupsByStatusWithOutlooksFor(data, location, outlooks, true)
+}
+
+func fixtureGroupsByStatusWithOutlooksFor(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView, includeXG bool) (results, upcoming []fixtureGroupView) {
+	for _, group := range fixtureGroupsWithOutlooksFor(data, location, outlooks, includeXG) {
 		hasResult := false
 		hasUnfinished := false
 		for _, game := range group.Games {

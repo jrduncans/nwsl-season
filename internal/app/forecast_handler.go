@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
@@ -72,6 +73,14 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 		)
 		span.End()
 	}()
+	rules, verified := a.rulesForSeason(a.options.CurrentSeason)
+	scope := requestCompetition{Season: a.options.CurrentSeason, Stage: a.options.Stage}
+	if entry, ok := competition.Lookup(scope.Season, scope.Stage); ok {
+		scope.Entry, scope.Cataloged = entry, true
+	}
+	if !scope.forecastAvailable(rules, verified) {
+		return nil
+	}
 	if a.store == nil {
 		return recordPrecacheException(fmt.Errorf("season cache unavailable"), telemetry.ErrorTypeInvalidArgument)
 	}
@@ -87,7 +96,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	xgoals := forecastXGoals(data)
 	venue := forecastVenueSample(data)
 	games := standingsGames(data.Games)
-	places := playoffPlaces(a.options.Rules)
+	places := playoffPlaces(rules)
 	entries := forecast.Catalog()
 	modelCount = len(entries)
 	// Warm the model selected by a bare Forecast Lab URL first, so a startup
@@ -145,6 +154,27 @@ func errorsFrom(values <-chan error) []error {
 }
 
 func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
+	// Direct callers (not the ServeMux) may provide a canonical URL without
+	// path values. Preserve that narrow compatibility seam for tests and
+	// embedded callers; routed legacy URLs still redirect below.
+	if r.PathValue("stage") == "" && strings.Contains(r.URL.Path, "/regular-season/") {
+		r.SetPathValue("season", strings.Split(strings.TrimPrefix(r.URL.Path, "/seasons/"), "/")[0])
+		r.SetPathValue("stage", "regular-season")
+	}
+	if r.PathValue("stage") == "" {
+		a.redirectPrimaryStage(w, r)
+		return
+	}
+	scope := a.requestScope(r)
+	if !scope.Valid {
+		http.NotFound(w, r)
+		return
+	}
+	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
+	if !scope.forecastAvailable(rules, verified) {
+		a.renderUnavailableFeature(w, r, scope, "Forecast lab")
+		return
+	}
 	query := r.URL.Query()
 	state, err := forecaststate.ParseV2(query.Get("v"), query.Get("m"), query.Get("c"), query["p"], func(id string) bool { _, ok := forecast.Lookup(id); return ok }, forecast.Default().Model.Info().ID)
 	if err != nil {
@@ -159,7 +189,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		attribute.Bool("nwsl.forecast.comparison_requested", state.ComparisonModelID != ""),
 		attribute.Int("nwsl.forecast.fixed_assumption_count", len(state.Fixed)),
 	)
-	data, season, err := a.forecastData(r)
+	data, season, rules, err := a.forecastData(r)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -190,7 +220,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 			a.renderScenarioBadRequest(w, r, "Invalid forecast scenario", err)
 			return
 		}
-		redirectRelative(w, forecastURL(r.URL.Path, season, state, ""), http.StatusSeeOther)
+		redirectRelative(w, forecastURL(r.URL.Path, season, scope.Entry.Slug, state, ""), http.StatusSeeOther)
 		return
 	}
 	active, ok := forecast.Lookup(state.ModelID)
@@ -200,11 +230,12 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	}
 	xgoals := forecastXGoals(data)
 	venue := forecastVenueSample(data)
-	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}
-	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: request}}
+	places := playoffPlaces(rules)
+	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places}
+	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, places), request: request}}
 	if state.ComparisonModelID != "" {
 		entry, _ := forecast.Lookup(state.ComparisonModelID)
-		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, playoffPlaces(a.options.Rules)), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: playoffPlaces(a.options.Rules)}})
+		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places}})
 	}
 	results, err := a.forecasts.results(withForecastTrigger(r.Context(), "http"), tasks)
 	if err != nil {
@@ -228,7 +259,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	if len(results) == 2 {
 		comparison = &results[1]
 	}
-	a.render(w, "forecast", a.forecastPage(r, data, season, state, result, comparison, teamID))
+	a.render(w, "forecast", a.forecastPage(r, data, season, rules, state, result, comparison, teamID))
 }
 
 // forecastResultKey identifies a deterministic simulation result. Fixture
@@ -281,36 +312,41 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 	return hex.EncodeToString(sum[:])
 }
 
-func (a *application) forecastData(r *http.Request) (data cache.SeasonData, season string, err error) {
+func (a *application) forecastData(r *http.Request) (data cache.SeasonData, season string, rules competition.Rules, err error) {
 	if a.store == nil {
-		return cache.SeasonData{}, "", fmt.Errorf("season cache unavailable")
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("season cache unavailable")
 	}
-	season = r.PathValue("season")
-	if season == "" {
-		season = a.options.CurrentSeason
+	scope := a.requestScope(r)
+	season = scope.Season
+	var verified bool
+	rules, verified = a.rulesForSeason(season, scope.Stage)
+	if !scope.forecastAvailable(rules, verified) {
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("forecast is unavailable for %s %s", season, scope.Stage)
 	}
-	data, err = a.loadSeasonData(r.Context(), season)
+	data, err = a.loadSeasonData(r.Context(), season, scope.Stage)
 	if err != nil {
-		return cache.SeasonData{}, "", fmt.Errorf("load %s season: %w", season, err)
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("load %s season: %w", season, err)
 	}
 	if len(data.Games) == 0 {
-		return cache.SeasonData{}, "", fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
+		return cache.SeasonData{}, "", competition.Rules{}, fmt.Errorf("no cached games found for %s %s", season, a.options.Stage)
 	}
-	return data, season, nil
+	return data, season, rules, nil
 }
 
-func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) forecastPage {
-	base := forecastURL(r.URL.Path, season, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
-	canonical := forecastURL(r.URL.Path, season, state, "")
+func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, rules competition.Rules, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) forecastPage {
+	scope := a.requestScope(r)
+	_, verified := a.rulesForSeason(season, scope.Stage)
+	base := forecastURL(r.URL.Path, season, scope.Entry.Slug, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
+	canonical := forecastURL(r.URL.Path, season, scope.Entry.Slug, state, "")
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
-		SeasonPath: seasonURL(r.URL.Path, season), ForecastPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/forecast"),
-		Navigation: seasonNavigation(r.URL.Path, season, "/seasons/"+url.PathEscape(season)+"/forecast"), ModelEvaluationPath: relativeURL(r.URL.Path, "/seasons/"+url.PathEscape(season)+"/model-evaluation"),
+		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		Navigation: seasonNavigation(r.URL.Path, scope, r.URL.Path, rules, verified), SeasonSelector: seasonSelector(r.URL.Path, season), StageSelector: stageSelector(r.URL.Path, season, scope.Stage), ModelEvaluationPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
-		Rows: forecastComparisonRows(result, comparison, playoffPlaces(a.options.Rules)), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(a.options.Rules),
+		Rows: forecastComparisonRows(result, comparison, playoffPlaces(rules)), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules),
 	}
 	for _, entry := range forecast.Catalog() {
 		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})
@@ -337,7 +373,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	}
 	usesHistoricalVenue := strings.HasPrefix(result.Model.ID, "results-poisson-") || strings.HasPrefix(result.Model.ID, "xg-poisson-") ||
 		(comparison != nil && (strings.HasPrefix(comparison.Model.ID, "results-poisson-") || strings.HasPrefix(comparison.Model.ID, "xg-poisson-")))
-	page.ScheduleNote = forecastScheduleNote(data, a.options.Rules.GamesPerTeam, usesHistoricalVenue, page.ShowXGCoverage)
+	page.ScheduleNote = forecastScheduleNote(data, scope.Entry.Inventory, usesHistoricalVenue, page.ShowXGCoverage)
 	// The rendered selector is filtered for a useful no-JavaScript fallback.
 	// The complete list remains in a template for immediate client-side changes.
 	page.AllFixtures = forecastFixtures(data, state, a.options.Location, "")
@@ -351,7 +387,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		page.DefaultAwayTeam = page.AllFixtures[0].Away.Name
 	}
 	page.Assumptions = forecastAssumptions(data, state, func(gameID string) string {
-		return forecastURL(r.URL.Path, season, state.Without(gameID), "")
+		return forecastURL(r.URL.Path, season, scope.Entry.Slug, state.Without(gameID), "")
 	}, a.options.Location)
 	return page
 }
@@ -419,14 +455,13 @@ func forecastXGFreshness(data cache.SeasonData, location *time.Location) (freshn
 	return freshness, fallback, attempt != nil && (success == nil || attempt.FinishedAt.After(success.FinishedAt)) && attempt.Outcome != "success"
 }
 
-func forecastScheduleNote(data cache.SeasonData, gamesPerTeam int, usesHistoricalVenue, requireXG bool) string {
-	expectedGames := len(data.Teams) * gamesPerTeam / 2
+func forecastScheduleNote(data cache.SeasonData, inventory *competition.InventoryExpectation, usesHistoricalVenue, requireXG bool) string {
 	notes := make([]string, 0, 3)
 	if usesHistoricalVenue && !historicalVenueReady(data, requireXG) {
 		notes = append(notes, "Two-season home/away history is still syncing; venue rates temporarily use this season only.")
 	}
-	if len(data.Games) != expectedGames {
-		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), expectedGames))
+	if inventory != nil && inventory.Games > 0 && len(data.Games) != inventory.Games {
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), inventory.Games))
 	}
 
 	appearances := make(map[string]int, len(data.Teams))
@@ -442,13 +477,15 @@ func forecastScheduleNote(data cache.SeasonData, gamesPerTeam int, usesHistorica
 		notes = append(notes, fmt.Sprintf("%d fixture(s) have a status that cannot be simulated and are excluded.", unsupported))
 	}
 	teamsWithUnexpectedCounts := 0
-	for _, team := range data.Teams {
-		if appearances[team.ID] != gamesPerTeam {
-			teamsWithUnexpectedCounts++
+	if inventory != nil && inventory.GamesPerTeam > 0 {
+		for _, team := range data.Teams {
+			if appearances[team.ID] != inventory.GamesPerTeam {
+				teamsWithUnexpectedCounts++
+			}
 		}
-	}
-	if teamsWithUnexpectedCounts > 0 {
-		notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", teamsWithUnexpectedCounts, gamesPerTeam))
+		if teamsWithUnexpectedCounts > 0 {
+			notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", teamsWithUnexpectedCounts, inventory.GamesPerTeam))
+		}
 	}
 	return strings.Join(notes, " ")
 }
@@ -480,8 +517,8 @@ func seasonHasTeam(data cache.SeasonData, id string) bool {
 	return false
 }
 
-func forecastURL(fromPath, season string, state forecaststate.State, teamID string) string {
-	target := "/seasons/" + url.PathEscape(season) + "/forecast"
+func forecastURL(fromPath, season, stageSlug string, state forecaststate.State, teamID string) string {
+	target := stageURL(season, stageSlug) + "/forecast"
 	path := relativeURL(fromPath, target)
 	values := url.Values{}
 	// Generated scenario URLs are always explicit v2 state, including the
@@ -508,5 +545,5 @@ func forecastURL(fromPath, season string, state forecaststate.State, teamID stri
 func (a *application) renderScenarioBadRequest(w http.ResponseWriter, r *http.Request, title string, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js")})
+	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
 }

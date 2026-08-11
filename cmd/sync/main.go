@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,9 +19,15 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
+	"github.com/jrduncans/nwsl-season/internal/scheduler"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
+
+var ensureSourceScopeRegistry = func(ctx context.Context, db *cache.DB, season, stage string, now time.Time) error {
+	_, err := db.EnsureSourceScopes(ctx, season, stage, now)
+	return err
+}
 
 func main() {
 	os.Exit(run())
@@ -43,8 +50,20 @@ func run() (exitCode int) {
 	recalculate := flag.Bool("recalculate", false, "recalculate qualification and clinching scenarios from cached fixtures without syncing ASA data")
 	force := flag.Bool("force", false, "force all clinching calculations after synchronizing source data")
 	requireXG := flag.Bool("require-xg", false, "exit nonzero when fixtures sync but xG refresh fails")
+	backfillHistorical := flag.Bool("backfill-historical", false, "sequentially refresh every supported historical regular season")
+	sweepDueArchived := flag.Bool("sweep-due-archived", false, "sequentially refresh currently due archived correction resources")
 	pruneHistoryBefore := flag.String("prune-history-before", "", "delete superseded run history finished before this RFC 3339 timestamp, then exit")
 	flag.Parse()
+	maintenanceModes := 0
+	for _, enabled := range []bool{*recalculate, *backfillHistorical, *sweepDueArchived, *pruneHistoryBefore != ""} {
+		if enabled {
+			maintenanceModes++
+		}
+	}
+	if maintenanceModes > 1 {
+		fmt.Fprintln(os.Stderr, "sync: maintenance modes are mutually exclusive")
+		return 1
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	providers, err := telemetry.Configure(context.Background(), logger, "nwsl-season-sync")
@@ -75,6 +94,10 @@ func run() (exitCode int) {
 		return 1
 	}
 	defer db.Close()
+	if err := ensureSourceScopeRegistry(context.Background(), db, cfg.SyncSeason, cfg.SyncStage, time.Now().UTC()); err != nil {
+		logger.Error("seed source scope registry", "error", err)
+		return 1
+	}
 	if *pruneHistoryBefore != "" {
 		cutoff, err := time.Parse(time.RFC3339, *pruneHistoryBefore)
 		if err != nil {
@@ -89,7 +112,6 @@ func run() (exitCode int) {
 		fmt.Printf("Pruned history before %s: %d sync runs, %d xG sync runs, %d qualification runs (%d statuses), %d scenario runs (%d results), and %d expired sync leases.\n", cutoff.UTC().Format(time.RFC3339), result.SyncRuns, result.XGSyncRuns, result.QualificationRuns, result.QualificationStatuses, result.ScenarioRuns, result.ScenarioResults, result.ExpiredSyncLeases)
 		return 0
 	}
-
 	service := syncer.Service{
 		ASA:                  client,
 		Store:                db,
@@ -126,6 +148,39 @@ func run() (exitCode int) {
 		fmt.Printf("Checked clinching data for cached %s %s snapshot %s.\n", *season, *stage, run.FixtureSnapshotID)
 		fmt.Printf("Qualification: %s. Scenarios: %s.\n", calculationOutcome(run.QualificationRecalculated), calculationOutcome(run.ScenarioRecalculated))
 		printCalculationBudgetSummary(logger, db, run)
+		return 0
+	}
+	if *backfillHistorical {
+		if err := runHistoricalBackfill(historicalBackfillEntries(cfg.SyncSeason), cfg.SyncTimeout, service.Run, os.Stdout); err != nil {
+			logger.Error("backfill historical ASA cache", "error", err)
+			return 1
+		}
+		return 0
+	}
+	if *sweepDueArchived {
+		maintenance, err := scheduler.New(db, service, scheduler.Config{
+			Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: expectedTeams, GamesPerTeam: gamesPerTeam,
+			CheckInterval: cfg.SyncCheckInterval, CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout,
+		}, logger)
+		if err != nil {
+			logger.Error("create archived maintenance scheduler", "error", err)
+			return 1
+		}
+		report, err := maintenance.SweepDueArchived(context.Background())
+		for _, entry := range report.Entries {
+			fmt.Printf("Archived %s %s %s: %s.\n", entry.Job.Kind, entry.Job.Operation.Season, entry.Job.Operation.Stage, maintenanceOutcome(entry.Material))
+		}
+		fmt.Printf("Archived sweep %s after %d request(s).\n", report.Reason, report.Requests)
+		if report.EvidenceDirty {
+			fmt.Println("Model-evaluation evidence requires regeneration for a materially corrected historical scope.")
+		}
+		if err != nil {
+			logger.Error("sweep due archived resources", "reason", report.Reason, "error", err)
+			return 1
+		}
+		if report.Deferred {
+			logger.Warn("archived sweep deferred", "reason", report.Reason)
+		}
 		return 0
 	}
 
@@ -173,11 +228,51 @@ func run() (exitCode int) {
 	return 0
 }
 
+func historicalBackfillEntries(configuredSeason string) []competition.Entry {
+	entries := make([]competition.Entry, 0)
+	for _, entry := range competition.PublicEntries() {
+		if entry.Season == configuredSeason || entry.Stage != "Regular Season" || !entry.SourceAvailable || entry.Rules != nil {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func runHistoricalBackfill(entries []competition.Entry, timeout time.Duration, run func(context.Context, syncer.RunOptions) (cache.SyncRun, error), output io.Writer) error {
+	for _, entry := range entries {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		result, err := run(ctx, syncer.RunOptions{
+			Season: entry.Season, Stage: entry.Stage, Trigger: "backfill", Force: true, SourceOnly: true,
+		})
+		cancel()
+		if err != nil {
+			return fmt.Errorf("%s %s: %w", entry.Season, entry.Stage, err)
+		}
+		if result.XGError != "" {
+			return fmt.Errorf("%s %s: xG refresh: %s", entry.Season, entry.Stage, result.XGError)
+		}
+		fmt.Fprintf(output, "Backfilled %s %s: %d games", entry.Season, entry.Stage, result.GamesUpserted)
+		if result.XGRun != nil {
+			fmt.Fprintf(output, ", %d available xG and %d unavailable xG", result.XGRun.AvailableGames, result.XGRun.UnavailableGames)
+		}
+		fmt.Fprintln(output, ".")
+	}
+	return nil
+}
+
 func calculationOutcome(recalculated bool) string {
 	if recalculated {
 		return "recalculated"
 	}
 	return "already current"
+}
+
+func maintenanceOutcome(material bool) string {
+	if material {
+		return "material change"
+	}
+	return "no-op"
 }
 
 func historyPruneCount(result cache.HistoryPruneResult) int64 {

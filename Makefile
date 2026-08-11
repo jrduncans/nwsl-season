@@ -5,8 +5,6 @@ SYNC_PACKAGE := ./cmd/sync
 SYNC_BINARY := nwsl-season-sync
 BACKTEST_PACKAGE := ./cmd/backtest
 BACKTEST_BINARY := nwsl-season-backtest
-EVALUATION_SEASONS := 2016 2017 2018 2019 2021 2022 2023 2024 2025
-
 TARGET_OS ?= linux
 TARGET_ARCH ?= arm64
 
@@ -24,12 +22,10 @@ vet:
 backtest:
 	go run $(BACKTEST_PACKAGE)
 
-# This is intentionally explicit: it contacts ASA and replaces each historical
-# cache snapshot before the evaluator is allowed to replace evidence artifacts.
+# This is intentionally explicit: it contacts ASA in one sequential process and
+# replaces only the supported historical regular-season snapshots.
 backfill-evaluation-data:
-	@for season in $(EVALUATION_SEASONS); do \
-		go run $(SYNC_PACKAGE) -season $$season -stage "Regular Season" -force -require-xg || exit $$?; \
-	done
+	go run $(SYNC_PACKAGE) -backfill-historical
 
 model-evaluation:
 	$(MAKE) backfill-evaluation-data

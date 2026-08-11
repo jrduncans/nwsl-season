@@ -14,7 +14,6 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
-	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -25,10 +24,7 @@ var (
 	calculationMu stdsync.Mutex
 )
 
-const allGameStatuses = fixtures.AbandonedStatus + "," + fixtures.CompletedStatus + "," + fixtures.PreMatchStatus
-const incompleteInventoryRetryDelay = 250 * time.Millisecond
-
-var errIncompleteFixtureInventory = errors.New("incomplete fixture inventory")
+const allGameStatuses = "Abandoned,FullTime,PreMatch"
 
 // ASAClient is the ASA surface required by the sync service.
 type ASAClient interface {
@@ -38,15 +34,9 @@ type ASAClient interface {
 type xgASAClient interface {
 	GameXGoals(context.Context, asa.XGoalsFilters) ([]asa.GameXGoals, error)
 }
-type xgStore interface {
-	ReplaceGameXG(context.Context, string, string, []cache.Game, []cache.GameXG, time.Time) (cache.XGSyncRun, error)
-	RecordXGFailure(context.Context, string, string, time.Time, error) error
-}
 
 // Store is the cache surface required by the sync service.
 type Store interface {
-	ReplaceSeason(context.Context, string, string, []cache.Team, []cache.Game, time.Time) (cache.SyncRun, error)
-	RecordFailure(context.Context, string, string, time.Time, error) error
 	TryAcquireSyncLease(context.Context, string, string, time.Time) (bool, error)
 	ReleaseSyncLease(context.Context, string, string) error
 }
@@ -67,6 +57,17 @@ type Service struct {
 	QualificationTimeout time.Duration
 	ScenarioTimeout      time.Duration
 	HistoryRetention     time.Duration
+	// Now is an optional operation clock used to record source observations.
+	// Production uses the wall clock; tests and schedulers may supply a stable
+	// clock without precomputing a request's completion time.
+	Now func() time.Time
+}
+
+func (s Service) now() time.Time {
+	if s.Now != nil {
+		return s.Now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 // QualificationRefresher runs after the durable fixture transaction. It is
@@ -89,10 +90,6 @@ type RunOptions struct {
 	// seasons whose format is not configured here.
 	ExpectedTeams int
 	GamesPerTeam  int
-	// TargetFixtureID is an overdue cached fixture selected by the scheduler.
-	// The season collection remains the primary source, while this single-game
-	// lookup can fill a lagging collection response with a newer result.
-	TargetFixtureID string
 	// Trigger identifies the caller that started this sync (for example,
 	// "scheduler", "cli", or "venue_history"). It is trace context, not
 	// persisted cache state.
@@ -121,7 +118,6 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 			attribute.String("nwsl.stage", options.Stage),
 			attribute.Bool("nwsl.sync.forced", options.Force),
 			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
-			attribute.String("nwsl.sync.target_fixture_id", options.TargetFixtureID),
 			attribute.Int("nwsl.sync.expected_fixture_count", expectedFixtureCount(options)),
 		),
 	)
@@ -146,7 +142,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	runMu.Lock()
 	defer runMu.Unlock()
 
-	startedAt := time.Now().UTC()
+	startedAt := s.now()
 	if s.ASA == nil {
 		return cache.SyncRun{}, recordRunException(errors.New("sync ASA client is required"), telemetry.ErrorTypeInvalidArgument)
 	}
@@ -174,176 +170,62 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		_ = s.Store.ReleaseSyncLease(releaseCtx, leaseKey(options), holder)
 	}()
 
-	xgClient, hasXGClient := s.ASA.(xgASAClient)
-	xgCache, hasXGCache := s.Store.(xgStore)
-	fetchCtx, fetchSpan := telemetry.Tracer().Start(ctx, "sync.fetch_asa",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.Bool("nwsl.sync.xg_requested", hasXGClient && hasXGCache),
-		),
-	)
-	data := s.fetchASAData(fetchCtx, options, xgClient, hasXGClient && hasXGCache)
-	data.teamsErr = telemetry.ClassifyError(data.teamsErr, telemetry.ErrorTypeUpstreamFailure)
-	data.gamesErr = telemetry.ClassifyError(data.gamesErr, telemetry.ErrorTypeUpstreamFailure)
-	data.targetGameErr = telemetry.ClassifyError(data.targetGameErr, telemetry.ErrorTypeUpstreamFailure)
-	data.xgErr = telemetry.ClassifyError(data.xgErr, telemetry.ErrorTypeUpstreamFailure)
-	fetchSpan.SetAttributes(
-		attribute.Int("nwsl.sync.teams_fetched", len(data.teams)),
-		attribute.Int("nwsl.sync.games_fetched", len(data.games)),
-		attribute.Bool("nwsl.sync.target_fixture_requested", options.TargetFixtureID != ""),
-		attribute.Int("nwsl.sync.target_fixture_rows_fetched", len(data.targetGames)),
-		attribute.String("nwsl.sync.target_fixture_fetch_outcome", targetFetchOutcome(options.TargetFixtureID, data.targetGameErr)),
-		attribute.Int("nwsl.sync.xg_rows_fetched", len(data.xg)),
-	)
-	if fetchErr := errors.Join(data.teamsErr, data.gamesErr); fetchErr != nil {
-		telemetry.RecordErrorWithCode(fetchCtx, fetchSpan, fetchErr, "sync.fetch_asa")
+	if _, ok := s.Store.(operationStore); !ok {
+		return cache.SyncRun{}, recordRunException(errors.New("sync store does not support split source operations"), telemetry.ErrorTypeInvalidArgument)
 	}
-	fetchSpan.End()
-	if data.teamsErr != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch teams: %w", data.teamsErr))
+	trigger := cache.SourceRefreshTrigger(syncTrigger(options.Trigger))
+	var teamAudit *cache.SourceRefreshAudit
+	if options.Force {
+		teamOperation := compatibilityOperation(OperationTeams, OperationFull, options, trigger, startedAt)
+		teamResult, err := s.Execute(ctx, teamOperation)
+		if err != nil {
+			return cache.SyncRun{}, recordRunException(err, telemetry.ErrorTypeUpstreamFailure)
+		}
+		teamAudit = teamResult.TeamAudit
 	}
-	if data.gamesErr != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, fmt.Errorf("fetch games: %w", data.gamesErr))
+	gameOperation := compatibilityOperation(OperationGames, OperationFull, options, trigger, startedAt)
+	gameResult, err := s.Execute(ctx, gameOperation)
+	if err != nil {
+		return cache.SyncRun{}, recordRunException(err, telemetry.ErrorTypeUpstreamFailure)
 	}
-	teams, games := data.teams, data.games
-	targetOutcome := "not_requested"
-	if data.targetGameErr == nil {
-		games, targetOutcome = reconcileTargetGame(options, teams, games, data.targetGames)
-	} else if options.TargetFixtureID != "" {
-		targetOutcome = "lookup_failed"
+	if gameResult.Games != nil && gameResult.Games.SyncRun != nil {
+		run = *gameResult.Games.SyncRun
 	}
-
-	validationErr := validate(options, teams, games)
-	inventoryRetryOutcome := "not_needed"
-	if errors.Is(validationErr, errIncompleteFixtureInventory) {
-		inventoryRetryOutcome = "attempted"
-		if waitErr := waitForInventoryRetry(ctx); waitErr != nil {
-			validationErr = errors.Join(validationErr, fmt.Errorf("wait to retry incomplete fixture inventory: %w", waitErr))
-			inventoryRetryOutcome = "canceled"
-		} else {
-			retryGames, retryErr := s.ASA.Games(ctx, seasonGamesFilters(options))
-			if retryErr != nil {
-				retryErr = telemetry.ClassifyError(retryErr, telemetry.ErrorTypeUpstreamFailure)
-				validationErr = errors.Join(validationErr, fmt.Errorf("retry incomplete fixture inventory: %w", retryErr))
-				inventoryRetryOutcome = "fetch_failed"
-			} else {
-				games = retryGames
-				if data.targetGameErr == nil {
-					games, targetOutcome = reconcileTargetGame(options, teams, games, data.targetGames)
-				}
-				validationErr = validate(options, teams, games)
-				if validationErr == nil {
-					inventoryRetryOutcome = "recovered"
-				} else {
-					inventoryRetryOutcome = "still_invalid"
-				}
+	if teamAudit == nil {
+		teamAudit = gameResult.TeamAudit
+	}
+	if teamAudit != nil {
+		run.TeamsUpserted = teamAudit.RowsInserted + teamAudit.RowsUpdated + teamAudit.RowsUnchanged
+		run.TeamsInserted = teamAudit.RowsInserted
+		run.TeamsUpdated = teamAudit.RowsUpdated
+		run.TeamsUnchanged = teamAudit.RowsUnchanged
+	}
+	// An empty first discovery intentionally has no fixture publication/run;
+	// do not create a misleading ready xG observation for that scope.
+	if gameResult.Games != nil && gameResult.Games.SyncRun != nil {
+		if _, ok := s.ASA.(xgASAClient); ok {
+			xgOperation := compatibilityOperation(OperationGameXG, OperationFull, options, trigger, s.now())
+			xgResult, xgErr := s.Execute(ctx, xgOperation)
+			if xgErr != nil {
+				// xG remains a partial failure after the fixture transaction. Execute
+				// already wrote its one generalized failure audit.
+				run.XGError = xgErr.Error()
+			} else if xgResult.XG != nil {
+				run.XGRun = xgResult.XG.XGRun
 			}
 		}
-	}
-	span.SetAttributes(
-		attribute.String("nwsl.sync.target_reconciliation_outcome", targetOutcome),
-		attribute.String("nwsl.sync.inventory_retry_outcome", inventoryRetryOutcome),
-		attribute.Int("nwsl.sync.reconciled_fixture_count", len(games)),
-	)
-	if validationErr != nil {
-		err := validationErr
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
-	}
-
-	cacheTeams, err := mapTeams(teams)
-	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
-	}
-	cacheGames, err := mapGames(options, games)
-	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, recordRunException(err, telemetry.ErrorTypeInvalidData))
-	}
-
-	replaceCtx, replaceSpan := telemetry.Tracer().Start(ctx, "cache.season.replace",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.cache.name", "season"),
-			attribute.String("nwsl.season", options.Season),
-			attribute.String("nwsl.stage", options.Stage),
-			attribute.Int("nwsl.sync.team_count", len(cacheTeams)),
-			attribute.Int("nwsl.sync.fixture_count", len(cacheGames)),
-		),
-	)
-	run, err = s.Store.ReplaceSeason(replaceCtx, options.Season, options.Stage, cacheTeams, cacheGames, startedAt)
-	if err != nil {
-		err = telemetry.RecordErrorWithType(replaceCtx, replaceSpan, err, "cache.season.replace", telemetry.ErrorTypeStorageFailure)
-	} else {
-		replaceSpan.SetAttributes(syncRunAttributes(run)...)
-	}
-	replaceSpan.End()
-	if err != nil {
-		return cache.SyncRun{}, s.fail(ctx, options, startedAt, err)
-	}
-	// xG is fetched concurrently with the fixture inventory, but committing it
-	// still waits for the durable fixture snapshot above. The qualification and
-	// scenario passes can legitimately outlive the source-sync context through
-	// their independent derived budgets, so they remain after this step.
-	if hasXGClient && hasXGCache {
-		run = s.refreshXG(ctx, xgCache, options, startedAt, cacheGames, data.xg, data.xgErr, run)
 	}
 	if options.SourceOnly {
 		return run, nil
 	}
-	run = s.refreshCalculations(context.WithoutCancel(ctx), run, cacheTeams, cacheGames, options.Force)
+	// Give the refreshers every successfully loaded inventory, not only a
+	// changed one. They cheaply no-op for a current snapshot, while an
+	// unchanged source fetch must still be able to fill a missing derived
+	// batch left by a previous failed run or a newly deployed calculation.
+	if gameResult.Games != nil {
+		run = s.refreshCalculations(context.WithoutCancel(ctx), run, gameResult.Games.Teams, gameResult.Games.Games, options.Force)
+	}
 	return s.pruneHistory(run), nil
-}
-
-type asaSyncData struct {
-	teams         []asa.Team
-	teamsErr      error
-	games         []asa.Game
-	gamesErr      error
-	targetGames   []asa.Game
-	targetGameErr error
-	xg            []asa.GameXGoals
-	xgErr         error
-}
-
-// fetchASAData requests the independent ASA resources at the same time. xG
-// remains an optional source: its error is handled only after the fixture
-// snapshot commits successfully.
-func (s Service) fetchASAData(ctx context.Context, options RunOptions, xgClient xgASAClient, fetchXG bool) asaSyncData {
-	var data asaSyncData
-	var group stdsync.WaitGroup
-
-	group.Add(2)
-	go func() {
-		defer group.Done()
-		data.teams, data.teamsErr = s.ASA.Teams(ctx, asa.TeamsFilters{})
-	}()
-	go func() {
-		defer group.Done()
-		data.games, data.gamesErr = s.ASA.Games(ctx, seasonGamesFilters(options))
-	}()
-	if strings.TrimSpace(options.TargetFixtureID) != "" {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			data.targetGames, data.targetGameErr = s.ASA.Games(ctx, asa.GamesFilters{
-				GameID:     options.TargetFixtureID,
-				SeasonName: options.Season,
-				StageName:  options.Stage,
-			})
-		}()
-	}
-	if fetchXG {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			data.xg, data.xgErr = xgClient.GameXGoals(ctx, asa.XGoalsFilters{
-				SeasonName: options.Season,
-				StageName:  options.Stage,
-			})
-		}()
-	}
-
-	group.Wait()
-	return data
 }
 
 // Recalculate reruns derived clinching calculations from the last successful
@@ -489,49 +371,6 @@ func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, 
 	return run
 }
 
-func (s Service) refreshXG(ctx context.Context, store xgStore, options RunOptions, startedAt time.Time, games []cache.Game, source []asa.GameXGoals, sourceErr error, run cache.SyncRun) cache.SyncRun {
-	ctx, span := telemetry.Tracer().Start(ctx, "sync.xg.refresh",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.season", options.Season),
-			attribute.String("nwsl.stage", options.Stage),
-			attribute.Int("nwsl.sync.fixture_count", len(games)),
-			attribute.Int("nwsl.sync.xg_rows_fetched", len(source)),
-		),
-	)
-	defer func() {
-		outcome := "success"
-		if run.XGError != "" {
-			outcome = "failure"
-		}
-		span.SetAttributes(attribute.String("nwsl.sync.xg.outcome", outcome))
-		if run.XGRun != nil {
-			span.SetAttributes(
-				attribute.Int64("nwsl.sync.xg.available_games", run.XGRun.AvailableGames),
-				attribute.Int64("nwsl.sync.xg.unavailable_games", run.XGRun.UnavailableGames),
-			)
-		}
-		span.End()
-	}()
-	if sourceErr != nil {
-		cause := fmt.Errorf("fetch game xG: %w", sourceErr)
-		cause = telemetry.RecordWarningWithType(ctx, span, cause, "sync.refresh_xg", telemetry.ErrorTypeUpstreamFailure)
-		return s.xgWarning(ctx, store, options, startedAt, run, cause)
-	}
-	values, err := mapXGoals(source)
-	if err != nil {
-		err = telemetry.RecordWarningWithType(ctx, span, err, "sync.refresh_xg", telemetry.ErrorTypeInvalidData)
-		return s.xgWarning(ctx, store, options, startedAt, run, err)
-	}
-	xgRun, err := store.ReplaceGameXG(ctx, options.Season, options.Stage, games, values, startedAt)
-	if err != nil {
-		err = telemetry.RecordWarningWithType(ctx, span, err, "sync.refresh_xg", telemetry.ErrorTypeStorageFailure)
-		return s.xgWarning(ctx, store, options, startedAt, run, err)
-	}
-	run.XGRun = &xgRun
-	return run
-}
-
 func syncTrigger(value string) string {
 	if value == "" {
 		return "unspecified"
@@ -576,34 +415,6 @@ func syncComponentOutcome(completed bool, failure string) string {
 	return "not_run"
 }
 
-func (s Service) xgWarning(ctx context.Context, store xgStore, options RunOptions, startedAt time.Time, run cache.SyncRun, cause error) cache.SyncRun {
-	recordCtx := ctx
-	if ctx.Err() != nil {
-		var cancel context.CancelFunc
-		recordCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-	}
-	if err := store.RecordXGFailure(recordCtx, options.Season, options.Stage, startedAt, cause); err != nil {
-		run.XGError = cause.Error() + "; additionally failed to record xG failure: " + err.Error()
-	} else {
-		run.XGError = cause.Error()
-	}
-	return run
-}
-
-func (s Service) fail(ctx context.Context, options RunOptions, startedAt time.Time, cause error) error {
-	recordCtx := ctx
-	if ctx.Err() != nil {
-		var cancel context.CancelFunc
-		recordCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-	}
-	if err := s.Store.RecordFailure(recordCtx, options.Season, options.Stage, startedAt, cause); err != nil {
-		return fmt.Errorf("%w; additionally failed to record sync failure: %v", cause, err)
-	}
-	return cause
-}
-
 func leaseKey(options RunOptions) string {
 	return options.Season + "\x00" + options.Stage
 }
@@ -615,178 +426,11 @@ func leaseExpiry(ctx context.Context, startedAt time.Time) time.Time {
 	return startedAt.Add(time.Minute)
 }
 
-func validate(options RunOptions, teams []asa.Team, games []asa.Game) error {
-	if len(teams) == 0 {
-		return errors.New("validate ASA response: teams response is empty")
-	}
-	if len(games) == 0 {
-		if options.ExpectedTeams != 0 || options.GamesPerTeam != 0 {
-			return validateExpectedFixtureInventory(options, games)
-		}
-		return errors.New("validate ASA response: games response is empty")
-	}
-
-	teamIDs := make(map[string]struct{}, len(teams))
-	for i, team := range teams {
-		if strings.TrimSpace(team.TeamID) == "" {
-			return fmt.Errorf("validate ASA response: team %d is missing team_id", i)
-		}
-		teamIDs[team.TeamID] = struct{}{}
-	}
-
-	gameIDs := make(map[string]struct{}, len(games))
-	for i, game := range games {
-		label := fmt.Sprintf("game %d", i)
-		if game.GameID != "" {
-			label = fmt.Sprintf("game %q", game.GameID)
-		}
-		if strings.TrimSpace(game.GameID) == "" {
-			return fmt.Errorf("validate ASA response: %s is missing game_id", label)
-		}
-		if _, exists := gameIDs[game.GameID]; exists {
-			return fmt.Errorf("validate ASA response: duplicate game_id %q", game.GameID)
-		}
-		gameIDs[game.GameID] = struct{}{}
-		if strings.TrimSpace(game.SeasonName) == "" {
-			return fmt.Errorf("validate ASA response: %s is missing season_name", label)
-		}
-		if game.SeasonName != options.Season {
-			return fmt.Errorf("validate ASA response: %s season_name = %q, want %q", label, game.SeasonName, options.Season)
-		}
-		if strings.TrimSpace(game.DateTimeUTC) == "" {
-			return fmt.Errorf("validate ASA response: %s is missing date_time_utc", label)
-		}
-		if strings.TrimSpace(game.Status) == "" {
-			return fmt.Errorf("validate ASA response: %s is missing status", label)
-		}
-		if _, ok := teamIDs[game.HomeTeamID]; !ok {
-			return fmt.Errorf("validate ASA response: %s references unknown home team %q", label, game.HomeTeamID)
-		}
-		if _, ok := teamIDs[game.AwayTeamID]; !ok {
-			return fmt.Errorf("validate ASA response: %s references unknown away team %q", label, game.AwayTeamID)
-		}
-		if game.HomeTeamID == game.AwayTeamID {
-			return fmt.Errorf("validate ASA response: %s has the same home and away team %q", label, game.HomeTeamID)
-		}
-		if game.HomeScore != nil && *game.HomeScore < 0 {
-			return fmt.Errorf("validate ASA response: %s has negative home score", label)
-		}
-		if game.AwayScore != nil && *game.AwayScore < 0 {
-			return fmt.Errorf("validate ASA response: %s has negative away score", label)
-		}
-		if game.Status == fixtures.CompletedStatus && (game.HomeScore == nil || game.AwayScore == nil) {
-			return fmt.Errorf("validate ASA response: %s is FullTime without both scores", label)
-		}
-	}
-	return validateExpectedFixtureInventory(options, games)
-}
-
-func validateExpectedFixtureInventory(options RunOptions, games []asa.Game) error {
-	if options.ExpectedTeams == 0 && options.GamesPerTeam == 0 {
-		return nil
-	}
-	if options.ExpectedTeams < 1 || options.GamesPerTeam < 1 || options.ExpectedTeams*options.GamesPerTeam%2 != 0 {
-		return errors.New("validate sync options: expected teams and games per team must describe an even schedule")
-	}
-
-	expectedGames := options.ExpectedTeams * options.GamesPerTeam / 2
-	if len(games) != expectedGames {
-		return fmt.Errorf("%w: validate ASA response: expected %d fixtures for configured schedule, got %d", errIncompleteFixtureInventory, expectedGames, len(games))
-	}
-	appearances := make(map[string]int, options.ExpectedTeams)
-	for _, game := range games {
-		appearances[game.HomeTeamID]++
-		appearances[game.AwayTeamID]++
-	}
-	if len(appearances) != options.ExpectedTeams {
-		return fmt.Errorf("%w: validate ASA response: expected %d scheduled teams, got %d", errIncompleteFixtureInventory, options.ExpectedTeams, len(appearances))
-	}
-	for teamID, count := range appearances {
-		if count != options.GamesPerTeam {
-			return fmt.Errorf("%w: validate ASA response: team %q has %d fixtures, want %d", errIncompleteFixtureInventory, teamID, count, options.GamesPerTeam)
-		}
-	}
-	return nil
-}
-
-// reconcileTargetGame supplements a complete-season collection with the
-// scheduler's one overdue fixture. ASA can publish a game-specific result
-// before its broader collection catches up, so prefer a terminal or newer
-// target response without allowing a stale target response to regress data.
-// A malformed or empty targeted response is intentionally ignored: the
-// collection remains sufficient to complete a normal sync.
-func reconcileTargetGame(options RunOptions, teams []asa.Team, games, target []asa.Game) ([]asa.Game, string) {
-	if strings.TrimSpace(options.TargetFixtureID) == "" || len(target) != 1 || target[0].GameID != options.TargetFixtureID {
-		if options.TargetFixtureID == "" {
-			return games, "not_requested"
-		}
-		return games, "not_found"
-	}
-	if validate(RunOptions{Season: options.Season, Stage: options.Stage}, teams, target) != nil {
-		return games, "invalid_target"
-	}
-
-	for i, existing := range games {
-		if existing.GameID != target[0].GameID {
-			continue
-		}
-		if targetGamePreferred(existing, target[0]) {
-			games = append([]asa.Game(nil), games...)
-			games[i] = target[0]
-			return games, "target_replaced"
-		}
-		return games, "collection_preferred"
-	}
-	return append(append([]asa.Game(nil), games...), target[0]), "target_appended"
-}
-
-func targetGamePreferred(collection, target asa.Game) bool {
-	collectionTerminal := terminalGame(collection)
-	targetTerminal := terminalGame(target)
-	if targetTerminal != collectionTerminal {
-		return targetTerminal
-	}
-	targetUpdated, targetErr := fixtures.ParseKickoff(target.LastUpdatedUTC)
-	collectionUpdated, collectionErr := fixtures.ParseKickoff(collection.LastUpdatedUTC)
-	targetOK := targetErr == nil
-	collectionOK := collectionErr == nil
-	return targetOK && (!collectionOK || targetUpdated.After(collectionUpdated))
-}
-
-func terminalGame(game asa.Game) bool {
-	return game.Status == fixtures.AbandonedStatus || (game.Status == fixtures.CompletedStatus && game.HomeScore != nil && game.AwayScore != nil)
-}
-
-func seasonGamesFilters(options RunOptions) asa.GamesFilters {
-	return asa.GamesFilters{SeasonName: options.Season, StageName: options.Stage, Status: allGameStatuses}
-}
-
 func expectedFixtureCount(options RunOptions) int {
 	if options.ExpectedTeams < 1 || options.GamesPerTeam < 1 || options.ExpectedTeams*options.GamesPerTeam%2 != 0 {
 		return 0
 	}
 	return options.ExpectedTeams * options.GamesPerTeam / 2
-}
-
-func targetFetchOutcome(targetID string, err error) string {
-	if targetID == "" {
-		return "not_requested"
-	}
-	if err != nil {
-		return "failure"
-	}
-	return "success"
-}
-
-func waitForInventoryRetry(ctx context.Context) error {
-	timer := time.NewTimer(incompleteInventoryRetryDelay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 func mapTeams(teams []asa.Team) ([]cache.Team, error) {
@@ -822,19 +466,30 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 			}
 			raw = string(marshaled)
 		}
+		// ASA omits last_updated_utc on scheduled, not-yet-played fixtures.
+		// Use the stable kickoff time as the source-version fallback: it is
+		// already required for every fixture and avoids treating each fetch as
+		// a new update merely because it was observed at a different time.
+		lastUpdatedUTC := game.LastUpdatedUTC
+		if lastUpdatedUTC == "" {
+			lastUpdatedUTC = game.DateTimeUTC
+		}
+
 		cacheGames = append(cacheGames, cache.Game{
-			ASAID:          game.GameID,
-			Season:         options.Season,
-			Stage:          options.Stage,
-			KickoffUTC:     game.DateTimeUTC,
-			Status:         game.Status,
-			HomeTeamID:     game.HomeTeamID,
-			AwayTeamID:     game.AwayTeamID,
-			HomeScore:      nullInt(game.HomeScore),
-			AwayScore:      nullInt(game.AwayScore),
-			Matchday:       nullInt(game.Matchday),
-			LastUpdatedUTC: game.LastUpdatedUTC,
-			RawJSON:        raw,
+			ASAID:           game.GameID,
+			Season:          options.Season,
+			Stage:           options.Stage,
+			KickoffUTC:      game.DateTimeUTC,
+			Status:          game.Status,
+			HomeTeamID:      game.HomeTeamID,
+			AwayTeamID:      game.AwayTeamID,
+			HomeScore:       nullInt(game.HomeScore),
+			AwayScore:       nullInt(game.AwayScore),
+			Matchday:        nullInt(game.Matchday),
+			ExpandedMinutes: nullInt(game.ExpandedMinutes),
+			KnockoutGame:    game.KnockoutGame,
+			LastUpdatedUTC:  lastUpdatedUTC,
+			RawJSON:         raw,
 		})
 	}
 	return cacheGames, nil

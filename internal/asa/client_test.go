@@ -216,6 +216,24 @@ func TestGameXGoalsDecodesExpectedPoints(t *testing.T) {
 	}
 }
 
+func TestGameXGoalsSendsGameIDFilter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("game_id"); got != "game-1,game-2" {
+			t.Errorf("game_id query = %q, want game-1,game-2", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	_, err := (Client{BaseURL: server.URL, HTTPClient: server.Client()}).GameXGoals(context.Background(), XGoalsFilters{
+		GameID: "game-1,game-2", SeasonName: "2025", StageName: "Regular Season",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTeamsReturnsErrorForNon2xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad upstream", http.StatusBadGateway)

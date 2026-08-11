@@ -60,6 +60,7 @@ type TeamsFilters struct {
 
 // XGoalsFilters contains the supported /nwsl/games/xgoals query parameters.
 type XGoalsFilters struct {
+	GameID     string
 	SeasonName string
 	StageName  string
 }
@@ -146,6 +147,7 @@ func (c Client) Teams(ctx context.Context, filters TeamsFilters) ([]Team, error)
 func (c Client) GameXGoals(ctx context.Context, filters XGoalsFilters) ([]GameXGoals, error) {
 	const op = "asa game xgoals"
 	endpoint, err := c.resourceURL("/nwsl/games/xgoals", func(query url.Values) {
+		addQuery(query, "game_id", filters.GameID)
 		addQuery(query, "season_name", filters.SeasonName)
 		addQuery(query, "stage_name", filters.StageName)
 	})

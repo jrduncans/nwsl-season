@@ -20,7 +20,10 @@ const (
 	defaultSyncStage           = "Regular Season"
 	defaultSyncCheckInterval   = 5 * time.Minute
 	defaultSyncCompletionGrace = 2 * time.Hour
-	defaultSyncTimeout         = 20 * time.Second
+	// Full historical inventories can occasionally take longer than the short
+	// request budget suitable for targeted checks. The scheduler applies this
+	// limit independently to each source request.
+	defaultSyncTimeout         = 2 * time.Minute
 	defaultQualificationBudget = 5 * time.Second
 	// Scenario discovery runs after the fixture sync and qualification proof in
 	// its own context. Give a busy late-season slate enough time to find
