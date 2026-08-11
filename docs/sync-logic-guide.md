@@ -4,7 +4,8 @@ This guide describes the current path from a scheduler check or maintenance
 command to a durable season snapshot. The central rule is that ordinary web
 requests read SQLite only. ASA requests happen in the background scheduler,
 the sync command, or a startup refresh that fills a missing historical venue
-baseline.
+baseline. The proposed replacement for this season-snapshot model is in the
+[ASA data catalog and loading plan](asa-data-catalog-and-loading-plan.md).
 
 ## Terms and the historical venue baseline
 
