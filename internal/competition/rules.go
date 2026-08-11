@@ -51,8 +51,9 @@ func (r Rules) Validate() error {
 
 func (r Rules) Copy() Rules { r.Achievements = append([]Achievement(nil), r.Achievements...); return r }
 func ForSeason(season, stage string) (Rules, bool) {
-	if season == regular2026.Season && stage == regular2026.Stage {
-		return regular2026.Copy(), true
+	entry, ok := Lookup(season, stage)
+	if ok && entry.Rules != nil {
+		return entry.Rules.Copy(), true
 	}
 	return Rules{}, false
 }
