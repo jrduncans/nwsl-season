@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: Ready
+- Status: Complete
 - Intended implementation model: GPT-5.6 Terra, high reasoning
 - Required review: Sol
 - Depends on: P1-01 competition catalog core and P1-02 persisted source-scope
