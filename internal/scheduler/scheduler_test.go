@@ -29,10 +29,9 @@ func TestPlanBatchesDueTargetedJobsAndHonorsBudget(t *testing.T) {
 
 func TestPlanXGCadenceAndInitialFullXG(t *testing.T) {
 	now := time.Date(2033, 7, 10, 12, 0, 0, 0, time.UTC)
-	terminal := now.Add(-24 * time.Hour)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("xg", fixtures.CompletedStatus, now.Add(-24*time.Hour))})
 	scope.Games[0].HomeScore, scope.Games[0].AwayScore = score(1), score(0)
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "xg", FirstTerminalObservedAt: &terminal, NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "xg", LastCheckedAt: now.Add(-6 * time.Hour)}}
 	// No xG full state triggers one bootstrap full request before targeted work.
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
 	if len(jobs) == 0 || jobs[0].Kind != JobCheckedGames || jobs[1].Kind != JobFullXG {
@@ -40,41 +39,66 @@ func TestPlanXGCadenceAndInitialFullXG(t *testing.T) {
 	}
 	state := cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
 	scope.XGFull = &state
-	scope.ResultChecks[0].NextDueAt = timePointer(now.Add(6 * time.Hour))
+	scope.ResultChecks[0].LastCheckedAt = now
 	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
-	if len(jobs) != 1 || jobs[0].Kind != JobCheckedXG || jobIDs(jobs[0])[0] != "xg" || jobs[0].Operation.Requested[0].NextDueAfter != 5*time.Minute || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 6*time.Hour {
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedXG || jobIDs(jobs[0])[0] != "xg" || jobs[0].Operation.Requested[0].NextDueAfter != 5*time.Minute || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 5*time.Minute || jobs[0].Selection.MissingEligibleCount != 1 {
 		t.Fatalf("missing xG jobs = %+v", jobs)
 	}
 	available := cache.GameXG{GameID: "xg", Availability: cache.XGAvailable}
 	scope.XG = []cache.GameXG{available}
-	first := now.Add(-6 * 24 * time.Hour)
-	scope.XGChecks = []cache.GameXGCheckState{{GameID: "xg", FirstAvailableObservedAt: &first, NextDueAt: timePointer(now)}}
+	scope.XGChecks = []cache.GameXGCheckState{{GameID: "xg", LastCheckedAt: now.Add(-6 * time.Hour)}}
 	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
-	if len(jobs) != 1 || jobs[0].Operation.Requested[0].NextDueAfter != 24*time.Hour || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 6*time.Hour {
-		t.Fatalf("daily correction job = %+v", jobs)
+	if len(jobs) != 1 || jobs[0].Operation.Requested[0].NextDueAfter != 6*time.Hour || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 6*time.Hour || jobs[0].Selection.AvailableEligibleCount != 1 {
+		t.Fatalf("xG correction job = %+v", jobs)
 	}
-	late := now.Add(-31 * 24 * time.Hour)
-	scope.ResultChecks[0].FirstTerminalObservedAt = &late
-	scope.XGChecks[0].FirstAvailableObservedAt = &late
+	// Result polling stops after three days, while xG polling remains eligible
+	// through the fifth day, both anchored to kickoff rather than observation.
+	scope.Games[0].KickoffUTC = now.Add(-4 * 24 * time.Hour).Format(time.RFC3339)
+	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now); len(jobs) != 1 || jobs[0].Kind != JobCheckedXG {
+		t.Fatalf("result-window boundary jobs = %+v", jobs)
+	}
+	scope.Games[0].KickoffUTC = now.Add(-6 * 24 * time.Hour).Format(time.RFC3339)
 	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now); len(jobs) != 0 {
-		t.Fatalf("post-window jobs = %+v", jobs)
+		t.Fatalf("post-xG-window jobs = %+v", jobs)
 	}
-	material := now.Add(-time.Hour)
-	scope.XGChecks[0].LastMaterialChangeAt = &material
-	if jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now); len(jobs) != 1 || jobs[0].Operation.Requested[0].NextDueAfter != 6*time.Hour {
-		t.Fatalf("material restart jobs = %+v", jobs)
+}
+
+func TestPlanXGUsesIndependentMissingAndAvailableCadence(t *testing.T) {
+	now := time.Date(2033, 7, 11, 12, 0, 0, 0, time.UTC)
+	missing := plannedGame("missing", fixtures.CompletedStatus, now.Add(-24*time.Hour))
+	missing.HomeScore, missing.AwayScore = score(1), score(0)
+	available := plannedGame("available", fixtures.CompletedStatus, now.Add(-24*time.Hour))
+	available.HomeScore, available.AwayScore = score(2), score(1)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{missing, available})
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "available", LastCheckedAt: now}, {GameID: "missing", LastCheckedAt: now}}
+	scope.XG = []cache.GameXG{{GameID: "available", Availability: cache.XGAvailable}}
+	scope.XGChecks = []cache.GameXGCheckState{{GameID: "available", LastCheckedAt: now.Add(-4 * time.Hour)}, {GameID: "missing", LastCheckedAt: now.Add(-4 * time.Hour)}}
+	config := testPlannerConfig()
+	config.MissingXGInterval = 2 * time.Minute
+	config.XGCorrectionInterval = 3 * time.Hour
+
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, config, now)
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedXG || jobs[0].Selection.MissingEligibleCount != 1 || jobs[0].Selection.AvailableEligibleCount != 1 {
+		t.Fatalf("independent xG jobs = %+v", jobs)
+	}
+	byID := map[string]time.Duration{}
+	for _, request := range jobs[0].Operation.Requested {
+		byID[request.GameID] = request.NextDueAfter
+	}
+	if byID["missing"] != 2*time.Minute || byID["available"] != 3*time.Hour {
+		t.Fatalf("independent xG cadence = %+v", byID)
 	}
 }
 
 func TestPlanAbandonedUsesTerminalCorrectionCadence(t *testing.T) {
 	now := time.Date(2033, 8, 1, 0, 0, 0, 0, time.UTC)
-	first := now.Add(-6 * 24 * time.Hour)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("abandoned", fixtures.AbandonedStatus, now.Add(-10*time.Hour))})
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "abandoned", FirstTerminalObservedAt: &first, NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "abandoned", LastCheckedAt: now.Add(-6 * time.Hour)}}
 	state := cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
 	scope.XGFull = &state
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
-	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || jobs[0].Operation.Requested[0].NextDueAfter != 24*time.Hour {
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || jobs[0].Reason != "kickoff_window_result_poll" || jobs[0].Operation.Requested[0].NextDueAfter != 6*time.Hour {
 		t.Fatalf("abandoned job = %+v", jobs)
 	}
 }
@@ -301,7 +325,7 @@ func TestPlanUsesConfiguredCorrectionDefaults(t *testing.T) {
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
 	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "final", FirstTerminalObservedAt: &first, NextDueAt: timePointer(now)}}
 	config := testPlannerConfig()
-	config.CorrectionInterval = 2 * time.Hour
+	config.ResultCorrectionInterval = 2 * time.Hour
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, config, now)
 	if len(jobs) == 0 || jobs[0].Kind != JobCheckedGames || jobs[0].Operation.Requested[0].NextDueAfter != 2*time.Hour || jobs[0].Operation.Requested[0].MaterialNextDueAfter != 2*time.Hour {
 		t.Fatalf("configured correction job = %+v", jobs)

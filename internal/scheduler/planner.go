@@ -32,16 +32,39 @@ type Job struct {
 	Class     JobClass
 	Operation syncer.Operation
 	Reason    string
+	Selection selectionMetadata
+}
+
+type selectionMetadata struct {
+	Policy                  string
+	PollInterval            time.Duration
+	WatchWindow             time.Duration
+	CandidateCount          int
+	EligibleCount           int
+	ExpiredCount            int
+	InvalidKickoffCount     int
+	MissingCandidateCount   int
+	MissingEligibleCount    int
+	AvailableCandidateCount int
+	AvailableEligibleCount  int
+	MissingPollInterval     time.Duration
+	MissingWatchWindow      time.Duration
+	AvailablePollInterval   time.Duration
+	AvailableWatchWindow    time.Duration
+	OldestKickoff           time.Time
+	NewestKickoff           time.Time
 }
 
 const (
-	defaultSourceRequestBudget   = 3
-	defaultCorrectionInterval    = 6 * time.Hour
-	defaultCorrectionDaily       = 24 * time.Hour
-	defaultCorrectionFastWindow  = 5 * 24 * time.Hour
-	defaultCorrectionFinalWindow = 30 * 24 * time.Hour
-	defaultInventoryInterval     = 7 * 24 * time.Hour
-	defaultColdSweepInterval     = 30 * 24 * time.Hour
+	defaultSourceRequestBudget      = 3
+	defaultResultCorrectionInterval = 6 * time.Hour
+	defaultMissingXGInterval        = 5 * time.Minute
+	defaultXGCorrectionInterval     = 6 * time.Hour
+	defaultGameCorrectionWindow     = 3 * 24 * time.Hour
+	defaultMissingXGWindow          = 5 * 24 * time.Hour
+	defaultXGCorrectionWindow       = 5 * 24 * time.Hour
+	defaultInventoryInterval        = 7 * 24 * time.Hour
+	defaultColdSweepInterval        = 30 * 24 * time.Hour
 )
 
 // Plan is pure: it selects ordered, batched jobs without making requests or
@@ -235,12 +258,29 @@ func planCheckedGames(scopes []cache.PlanningScopeSnapshot, config Config, now t
 			checks[check.GameID] = check
 		}
 		requests := []syncer.OperationGameRequest{}
+		selection := selectionMetadata{Policy: "kickoff_window", PollInterval: resultCorrectionInterval(config), WatchWindow: gameCorrectionWindow(config)}
 		for _, game := range scope.Games {
 			check, found := checks[game.ASAID]
-			if !gameResultDue(game, check, found, config, now) {
+			if terminalGame(game) {
+				selection.CandidateCount++
+				due, reason, kickoff := terminalPollDecision(game, check, found, selection.WatchWindow, selection.PollInterval, now)
+				if !kickoff.IsZero() {
+					selection.OldestKickoff, selection.NewestKickoff = updateKickoffBounds(selection.OldestKickoff, selection.NewestKickoff, kickoff)
+				}
+				switch reason {
+				case "window_expired":
+					selection.ExpiredCount++
+				case "invalid_kickoff":
+					selection.InvalidKickoffCount++
+				}
+				if !due {
+					continue
+				}
+			} else if !gameResultDue(game, check, found, config, now) {
 				continue
 			}
-			normal, material := resultCadence(game, check, found, config, now)
+			selection.EligibleCount++
+			normal, material := resultCadence(game, config)
 			requests = append(requests, syncer.OperationGameRequest{GameID: game.ASAID, NextDueAfter: normal, MaterialNextDueAfter: material})
 		}
 		if len(requests) == 0 {
@@ -248,7 +288,7 @@ func planCheckedGames(scopes []cache.PlanningScopeSnapshot, config Config, now t
 		}
 		sort.Slice(requests, func(i, j int) bool { return requests[i].GameID < requests[j].GameID })
 		id := scope.Readiness.Scope
-		jobs = append(jobs, Job{Kind: JobCheckedGames, Reason: "due_result_checks", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationTargeted, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, Requested: requests}})
+		jobs = append(jobs, Job{Kind: JobCheckedGames, Reason: "kickoff_window_result_poll", Selection: selection, Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationTargeted, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, Requested: requests}})
 	}
 	return jobs
 }
@@ -267,26 +307,57 @@ func planCheckedXG(scopes []cache.PlanningScopeSnapshot, config Config, now time
 		for _, check := range scope.XGChecks {
 			checks[check.GameID] = check
 		}
-		resultChecks := map[string]cache.GameResultCheckState{}
-		for _, check := range scope.ResultChecks {
-			resultChecks[check.GameID] = check
-		}
 		values := map[string]cache.GameXG{}
 		for _, value := range scope.XG {
 			values[value.GameID] = value
 		}
 		requests := []syncer.OperationGameRequest{}
+		selection := selectionMetadata{
+			Policy:                "kickoff_window",
+			MissingPollInterval:   missingXGInterval(config),
+			MissingWatchWindow:    missingXGWindow(config),
+			AvailablePollInterval: xGCorrectionInterval(config),
+			AvailableWatchWindow:  xGCorrectionWindow(config),
+		}
 		for _, game := range scope.Games {
 			if game.Status != fixtures.CompletedStatus || !game.HomeScore.Valid || !game.AwayScore.Valid {
 				continue
 			}
-			check, found := checks[game.ASAID]
-			resultCheck, terminalKnown := resultChecks[game.ASAID]
 			value, available := values[game.ASAID]
-			if !xgDue(value, available, check, found, resultCheck, terminalKnown, config, now) {
+			isAvailable := available && value.Availability == cache.XGAvailable
+			if isAvailable {
+				selection.AvailableCandidateCount++
+			} else {
+				selection.MissingCandidateCount++
+			}
+			selection.CandidateCount++
+			kickoff, kickoffErr := fixtures.ParseKickoff(game.KickoffUTC)
+			if kickoffErr != nil {
+				selection.InvalidKickoffCount++
 				continue
 			}
-			normal, material := xgCadence(value, available, check, found, resultCheck, terminalKnown, config, now)
+			selection.OldestKickoff, selection.NewestKickoff = updateKickoffBounds(selection.OldestKickoff, selection.NewestKickoff, kickoff)
+			watchWindow := missingXGWindow(config)
+			pollInterval := missingXGInterval(config)
+			if isAvailable {
+				watchWindow = xGCorrectionWindow(config)
+				pollInterval = xGCorrectionInterval(config)
+			}
+			if !now.Before(kickoff.Add(watchWindow)) {
+				selection.ExpiredCount++
+				continue
+			}
+			check, found := checks[game.ASAID]
+			if !xgPollDue(check, found, pollInterval, now) {
+				continue
+			}
+			if isAvailable {
+				selection.AvailableEligibleCount++
+			} else {
+				selection.MissingEligibleCount++
+			}
+			selection.EligibleCount++
+			normal, material := xgCadence(pollInterval)
 			requests = append(requests, syncer.OperationGameRequest{GameID: game.ASAID, NextDueAfter: normal, MaterialNextDueAfter: material})
 		}
 		if len(requests) == 0 {
@@ -294,7 +365,7 @@ func planCheckedXG(scopes []cache.PlanningScopeSnapshot, config Config, now time
 		}
 		sort.Slice(requests, func(i, j int) bool { return requests[i].GameID < requests[j].GameID })
 		id := scope.Readiness.Scope
-		jobs = append(jobs, Job{Kind: JobCheckedXG, Reason: "due_xg_checks", Operation: syncer.Operation{Resource: syncer.OperationGameXG, Mode: syncer.OperationTargeted, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, Requested: requests}})
+		jobs = append(jobs, Job{Kind: JobCheckedXG, Reason: "kickoff_window_xg_poll", Selection: selection, Operation: syncer.Operation{Resource: syncer.OperationGameXG, Mode: syncer.OperationTargeted, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, Requested: requests}})
 	}
 	return jobs
 }
@@ -309,87 +380,95 @@ func gameResultDue(game cache.Game, state cache.GameResultCheckState, found bool
 			return false
 		}
 	}
-	if game.Status == fixtures.AbandonedStatus || (game.Status == fixtures.CompletedStatus && game.HomeScore.Valid && game.AwayScore.Valid) {
-		return !found || state.FirstTerminalObservedAt == nil || (correctionActive(state.FirstTerminalObservedAt, state.LastMaterialChangeAt, config, now) && (state.NextDueAt == nil || !state.NextDueAt.After(now)))
+	if terminalGame(game) {
+		due, _, _ := terminalPollDecision(game, state, found, gameCorrectionWindow(config), resultCorrectionInterval(config), now)
+		return due
 	}
 	return !found || state.NextDueAt == nil || !state.NextDueAt.After(now)
 }
-func resultCadence(game cache.Game, state cache.GameResultCheckState, found bool, config Config, now time.Time) (time.Duration, time.Duration) {
-	if game.Status != fixtures.AbandonedStatus && (game.Status != fixtures.CompletedStatus || !game.HomeScore.Valid || !game.AwayScore.Valid) {
-		return config.CheckInterval, correctionInterval(config)
-	}
-	return correctionCadence(state.FirstTerminalObservedAt, state.LastMaterialChangeAt, config, now)
+
+func terminalGame(game cache.Game) bool {
+	return game.Status == fixtures.AbandonedStatus || (game.Status == fixtures.CompletedStatus && game.HomeScore.Valid && game.AwayScore.Valid)
 }
-func xgDue(value cache.GameXG, exists bool, state cache.GameXGCheckState, found bool, terminal cache.GameResultCheckState, terminalKnown bool, config Config, now time.Time) bool {
-	if !terminalKnown || terminal.FirstTerminalObservedAt == nil {
-		return false
+
+func terminalPollDecision(game cache.Game, state cache.GameResultCheckState, found bool, window, interval time.Duration, now time.Time) (bool, string, time.Time) {
+	kickoff, err := fixtures.ParseKickoff(game.KickoffUTC)
+	if err != nil {
+		return false, "invalid_kickoff", time.Time{}
 	}
-	if !correctionActive(terminal.FirstTerminalObservedAt, state.LastMaterialChangeAt, config, now) {
-		return false
+	if !now.Before(kickoff.Add(window)) {
+		return false, "window_expired", kickoff
 	}
-	return !found || state.NextDueAt == nil || !state.NextDueAt.After(now)
+	if !found || state.LastCheckedAt.IsZero() {
+		return true, "due", kickoff
+	}
+	if now.Before(state.LastCheckedAt.Add(interval)) {
+		return false, "not_due", kickoff
+	}
+	return true, "due", kickoff
 }
-func xgCadence(value cache.GameXG, exists bool, state cache.GameXGCheckState, found bool, terminal cache.GameResultCheckState, terminalKnown bool, config Config, now time.Time) (time.Duration, time.Duration) {
-	if !exists || value.Availability != cache.XGAvailable {
-		return missingXGCadence(terminal.FirstTerminalObservedAt, now, config.CheckInterval, correctionInterval(config), correctionFastWindow(config), correctionDaily(config))
-	}
-	return correctionCadence(state.FirstAvailableObservedAt, state.LastMaterialChangeAt, config, now)
-}
-func correctionCadence(first, material *time.Time, config Config, now time.Time) (time.Duration, time.Duration) {
-	if !correctionActive(first, material, config, now) {
-		return 0, 0
-	}
-	anchor := first
-	if material != nil && (anchor == nil || material.After(*anchor)) {
-		anchor = material
-	}
-	if anchor == nil || now.Sub(*anchor) < correctionFastWindow(config) {
-		return correctionInterval(config), correctionInterval(config)
-	}
-	return correctionDaily(config), correctionInterval(config)
-}
-func correctionActive(first, material *time.Time, config Config, now time.Time) bool {
-	if first == nil {
+
+func xgPollDue(state cache.GameXGCheckState, found bool, interval time.Duration, now time.Time) bool {
+	if !found || state.LastCheckedAt.IsZero() {
 		return true
 	}
-	anchor := first
-	if material != nil && material.After(*anchor) {
-		anchor = material
-	}
-	if now.Sub(*anchor) < correctionFastWindow(config) {
-		return true
-	}
-	return now.Sub(*first) <= correctionFinalWindow(config)
+	return !now.Before(state.LastCheckedAt.Add(interval))
 }
-func missingXGCadence(first *time.Time, now time.Time, interval, material, fast, daily time.Duration) (time.Duration, time.Duration) {
-	if first == nil || now.Sub(*first) < fast {
-		return interval, material
+
+func updateKickoffBounds(oldest, newest, kickoff time.Time) (time.Time, time.Time) {
+	if oldest.IsZero() || kickoff.Before(oldest) {
+		oldest = kickoff
 	}
-	return daily, material
+	if newest.IsZero() || kickoff.After(newest) {
+		newest = kickoff
+	}
+	return oldest, newest
 }
-func correctionInterval(config Config) time.Duration {
-	if config.CorrectionInterval > 0 {
-		return config.CorrectionInterval
+
+func resultCadence(game cache.Game, config Config) (time.Duration, time.Duration) {
+	if !terminalGame(game) {
+		return config.CheckInterval, resultCorrectionInterval(config)
 	}
-	return defaultCorrectionInterval
+	return resultCorrectionInterval(config), resultCorrectionInterval(config)
 }
-func correctionDaily(config Config) time.Duration {
-	if config.CorrectionDaily > 0 {
-		return config.CorrectionDaily
-	}
-	return defaultCorrectionDaily
+func xgCadence(interval time.Duration) (time.Duration, time.Duration) {
+	return interval, interval
 }
-func correctionFastWindow(config Config) time.Duration {
-	if config.CorrectionFastWindow > 0 {
-		return config.CorrectionFastWindow
+func resultCorrectionInterval(config Config) time.Duration {
+	if config.ResultCorrectionInterval > 0 {
+		return config.ResultCorrectionInterval
 	}
-	return defaultCorrectionFastWindow
+	return defaultResultCorrectionInterval
 }
-func correctionFinalWindow(config Config) time.Duration {
-	if config.CorrectionFinalWindow > 0 {
-		return config.CorrectionFinalWindow
+func missingXGInterval(config Config) time.Duration {
+	if config.MissingXGInterval > 0 {
+		return config.MissingXGInterval
 	}
-	return defaultCorrectionFinalWindow
+	return defaultMissingXGInterval
+}
+func xGCorrectionInterval(config Config) time.Duration {
+	if config.XGCorrectionInterval > 0 {
+		return config.XGCorrectionInterval
+	}
+	return defaultXGCorrectionInterval
+}
+func gameCorrectionWindow(config Config) time.Duration {
+	if config.GameCorrectionWindow > 0 {
+		return config.GameCorrectionWindow
+	}
+	return defaultGameCorrectionWindow
+}
+func xGCorrectionWindow(config Config) time.Duration {
+	if config.XGCorrectionWindow > 0 {
+		return config.XGCorrectionWindow
+	}
+	return defaultXGCorrectionWindow
+}
+func missingXGWindow(config Config) time.Duration {
+	if config.MissingXGWindow > 0 {
+		return config.MissingXGWindow
+	}
+	return defaultMissingXGWindow
 }
 func inventoryInterval(config Config) time.Duration {
 	if config.InventoryInterval > 0 {

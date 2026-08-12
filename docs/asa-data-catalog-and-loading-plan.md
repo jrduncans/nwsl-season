@@ -328,9 +328,9 @@ publication behavior.
 | Newly registered season/stage scope | Discover whether its schedule has been published | Make the first full games discovery request immediately; an empty first response records “not published” without creating a public season |
 | Known, not-yet-completed season/stage inventory | Discover initial schedule publication plus added, removed, or rescheduled fixtures | Authoritative full games discovery/audit weekly from the upcoming state through verified completion; allow an immediate manual audit and schedule one after evidence of an inventory inconsistency |
 | Due result state | User-visible soon after a game | After kickoff plus completion grace, batch only unsettled game IDs on every five-minute scheduler tick until each is terminal |
-| Missing xG for a newly completed game | Expected soon after the result, but not required for standings | Batch completed game IDs with missing xG on every five-minute scheduler tick for the first five days; preserve cached fixture/result data on omission or failure |
-| Recently completed result correction watch | Scores and status can be corrected after first becoming terminal | Recheck terminal games by ID every 6 hours for five days after first terminal observation or a later material correction, then daily through day 30 |
-| Available recent xG correction watch | ASA commonly corrects xG in the days after a game | Recheck by ID every 6 hours until five days after xG is first observed or last materially changes, then daily through day 30 after terminal observation |
+| Missing xG for a newly completed game | Expected soon after the result, but not required for standings | Batch completed game IDs with missing xG every five minutes until five days after kickoff; preserve cached fixture/result data on omission or failure |
+| Recently completed result correction watch | Scores and status can be corrected after becoming terminal | Recheck terminal games by ID every 6 hours until three days after kickoff |
+| Available recent xG correction watch | ASA commonly corrects xG in the days after a game | Recheck by ID every 6 hours until five days after kickoff, whether xG is missing, newly available, or already available |
 | Active playoff inventory acceleration | Later rounds may appear only after earlier results | In addition to the weekly incomplete-scope audit, schedule an immediate inventory audit after a material earlier-round result when later-round inventory is uncertain |
 | Archived season corrections | Rare; no minute-level user need | Full games and full xG sweep monthly, on deployment/backfill policy, or immediately by maintenance command |
 | Historical venue summary | Derived locally | Recompute only after a relevant historical result or xG change |
@@ -341,12 +341,11 @@ All due IDs in the same season/stage and cadence class should be batched into
 one request. A six-hour correction watch is therefore one ASA call for the set
 of recent games, not one call per game.
 
-The five-day and 30-day windows start from the application's first terminal
-observation because ASA does not provide a completion timestamp distinct from
-kickoff. A material correction restarts the five-day six-hour watch, even when
-that extends beyond the original 30-day window. Missing xG stops being a
-five-minute job after five days and joins the daily correction check; this
-prevents permanently unavailable xG from keeping a season on the hot path.
+The result and xG windows start from the source kickoff time. A material
+correction does not restart or extend either window. Missing xG uses an
+independent five-minute cadence, while available xG uses an independent
+six-hour cadence; both stop at the five-day kickoff boundary. Full
+reconciliation is responsible for later corrections.
 
 The historical cadence is intentionally much slower than live result polling.
 ASA does not expose a `last_updated_since` filter, so an archived correction
@@ -420,9 +419,10 @@ next deliberate attempt.
 This operation does not fetch the full season in parallel or reconcile two
 copies of the same game. A stale or empty response preserves the cached row and
 keeps an unsettled result due for the next five-minute scheduler tick. Once a
-result becomes terminal, the row moves to the six-hour correction watch. The
-independent weekly inventory audit remains the safety net for schedule
-discovery, additions, and removals.
+result becomes terminal, the row moves to the kickoff-anchored six-hour
+correction watch. The independent weekly inventory audit remains the safety net
+for schedule discovery, additions, removals, and corrections outside the hot
+window.
 
 ### 4. Refresh xG independently
 
@@ -432,9 +432,9 @@ to `XGoalsFilters` to match the API contract.
 `RefreshXGByID` requests only completed games whose xG check is due. It upserts
 returned values, records requested IDs omitted from the response as still
 unavailable, and never erases an available value because of omission. Missing
-xG remains due on every five-minute scheduler tick during its first five days.
-Available xG follows the six-hour correction watch, and any material change
-restarts that watch because the source offers no finality marker.
+Missing xG follows its own five-minute kickoff-anchored watch for five days;
+available xG follows an independent six-hour kickoff-anchored correction watch
+for five days. A material change does not restart either watch.
 
 `ReconcileStageXG` remains a complete season/stage request for bootstrap and
 correction sweeps. It validates against the committed fixture inventory but is
@@ -628,8 +628,7 @@ from the new operations rather than adding more branches to `ReplaceSeason`.
   incomplete-inventory refetch.
 - Add weekly inventory discovery/audits for every known scope that has not been
   verified complete, including an empty upcoming scope; add five-minute
-  unresolved-result and missing-xG polling plus six-hour/daily correction
-  watches.
+  unresolved-result polling plus kickoff-anchored six-hour result/xG watches.
 - Warm/recalculate only the downstream products invalidated by material
   changes.
 
@@ -656,11 +655,11 @@ operations instead of the monolithic current-season sync.
 
 ### Phase 5: add correction tiers
 
-- Add six-hour checks for the first five days after a terminal result or xG
-  observation/change, daily checks through day 30, and monthly archived
-  full-audit due times.
-- Store first-observed-terminal and last-material-change timestamps so a
-  correction restarts the short watch without pretending unchanged xG is final.
+- Add six-hour checks for three days after game kickoff for result corrections,
+  five-minute checks for missing xG, and six-hour checks for available xG for
+  five days after kickoff, plus monthly archived full-audit due times.
+- Use kickoff and last-checked timestamps for hot selection; retain source
+  change telemetry without allowing a correction to restart the hot window.
 - Add one low-priority cold-sweep coordinator, stagger monthly scope due times,
   and enforce a single in-flight games-or-xG request across all cold sweeps.
 - Add maintenance commands for selected scopes and all due archived scopes.
@@ -690,11 +689,11 @@ The migration should include deterministic tests that prove:
 - Only a validated full inventory response can delete a disappeared game.
 - A due xG check makes no teams or games request and never erases available xG
   because of omission.
-- Missing xG remains eligible on every five-minute tick during the hot window;
-  available recent xG remains eligible every six hours even when prior checks
-  were unchanged.
-- A material result or xG correction restarts its five-day correction watch,
-  while unchanged xG does not falsely mark the source value final.
+- Missing xG remains eligible every five minutes and available xG every six
+  hours during the five-day kickoff window, even when prior checks were
+  unchanged.
+- Result corrections stop after three kickoff days and xG corrections stop
+  after five kickoff days; later changes are found by reconciliation.
 - A provisional next-calendar-year regular-season scope is checked weekly
   before the schedule exists; the rolling registry advances at the calendar
   year boundary even if primary-season configuration is stale. An empty
@@ -722,11 +721,16 @@ The migration should include deterministic tests that prove:
 - Audit rows identify resource, scope, mode, trigger, call counts, changes, and
   downstream invalidation.
 
-Telemetry should expose enough data to compare request volume and ASA
-publication delay before and after the migration: job type, requested ID count,
-returned count, result age at first terminal observation, xG delay, and whether
-a request made a material change. That evidence can tune the suggested
-cadences without coupling correctness to a guess about ASA timing.
+Telemetry should expose enough data to compare request volume and actual ASA
+corrections before and after the migration: job type, polling policy/window,
+candidate/eligible/expired counts, requested ID count, returned count, kickoff
+age, the missing/available xG polling intervals, and whether a normalized game
+or xG value actually changed. First-value observations, metadata-only changes,
+and rejected responses should be reported separately. Individual responses
+should expose accepted/rejected state, low-cardinality rejection kind and
+reason, compared timestamps where relevant, and old/new normalized values.
+That evidence can tune the three-day and five-day windows without coupling
+correctness to a guess about ASA timing.
 
 ## Decisions to confirm during implementation
 

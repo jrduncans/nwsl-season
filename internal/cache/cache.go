@@ -97,13 +97,37 @@ type SyncRun struct {
 	ScenarioError      string
 	// Recalculated flags are command-local outcomes and are not persisted in
 	// sync_runs. They make cache reuse visible to maintenance callers.
-	QualificationRecalculated bool
-	ScenarioRecalculated      bool
+	QualificationRecalculated    bool
+	QualificationRefreshRequired bool
+	QualificationRefreshReason   string
+	QualificationSnapshotChecked bool
+	QualificationSnapshotFound   bool
+	QualificationRulesVersion    string
+	ScenarioRecalculated         bool
+	ScenarioRefreshRequired      bool
+	ScenarioRefreshReason        string
+	ScenarioSnapshotChecked      bool
+	ScenarioSnapshotFound        bool
+	ScenarioRulesVersion         string
+	ScenarioDefinitionVersion    string
 	// XGRun/XGError describe the independent second refresh when available.
 	XGRun             *XGSyncRun
 	XGError           string
 	HistoryPrune      *HistoryPruneResult
 	HistoryPruneError string
+}
+
+// DerivedRefreshResult describes the decision made before a qualification or
+// scenario refresh. It is command-local state used to keep no-op decisions on
+// the parent sync span while reserving child spans for actual refresh work.
+type DerivedRefreshResult struct {
+	Recalculated      bool
+	Required          bool
+	Reason            string
+	SnapshotChecked   bool
+	SnapshotFound     bool
+	RulesVersion      string
+	DefinitionVersion string
 }
 
 // Status is the latest cache freshness summary.

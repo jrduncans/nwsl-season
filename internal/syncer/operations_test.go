@@ -79,6 +79,7 @@ func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
 	db := newTestDB(t)
 	seedOperationScope(t, ctx, db, "one")
 	incoming := testGame("one", "FullTime", ptr(1), ptr(0))
+	incoming.HomeScore = ptr(2)
 	incoming.LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
 	client := &operationASA{games: map[string][]asa.Game{"one": {incoming}}}
 
@@ -105,16 +106,230 @@ func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
 				continue
 			}
 			values := map[string]string{}
+			valueChanged := false
+			intValues := map[string]int64{}
 			for _, value := range event.Attributes {
+				if value.Key == "nwsl.sync.source_value_changed" {
+					valueChanged = value.Value.AsBool()
+					continue
+				}
+				switch string(value.Key) {
+				case "nwsl.sync.old.home_score", "nwsl.sync.new.home_score":
+					intValues[string(value.Key)] = value.Value.AsInt64()
+					continue
+				}
 				values[string(value.Key)] = value.Value.AsString()
 			}
-			if values["nwsl.cache.game.last_updated_utc"] != "2024-11-07 15:57:43 UTC" || values["nwsl.asa.game.last_updated_utc"] != incoming.LastUpdatedUTC || values["nwsl.sync.decision"] != "updated" || values["nwsl.sync.reason"] != "asa_last_updated_newer" {
-				t.Fatalf("freshness event = %#v", values)
+			if values["nwsl.cache.game.last_updated_utc"] != "2024-11-07 15:57:43 UTC" || values["nwsl.asa.game.last_updated_utc"] != incoming.LastUpdatedUTC || values["nwsl.sync.decision"] != "updated" || values["nwsl.sync.reason"] != "asa_last_updated_newer" || values["nwsl.sync.update_kind"] != "value_changed" || values["nwsl.sync.old.status"] != "FullTime" || values["nwsl.sync.new.status"] != "FullTime" || !valueChanged || intValues["nwsl.sync.old.home_score"] != 1 || intValues["nwsl.sync.new.home_score"] != 2 {
+				t.Fatalf("freshness event = %#v ints=%#v value_changed=%t", values, intValues, valueChanged)
 			}
 			return
 		}
 	}
 	t.Fatal("sync.game_freshness event not recorded")
+}
+
+func TestExecuteRecordsRejectedStaleGameResponseTelemetry(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	seedOperationScope(t, ctx, db, "one")
+	incoming := testGame("one", "FullTime", ptr(2), ptr(0))
+	incoming.LastUpdatedUTC = "2024-11-07 14:57:43 UTC"
+	client := &operationASA{games: map[string][]asa.Game{"one": {incoming}}}
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 1, 1, 1, 0, 0, 0, time.UTC))}
+	result, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "one"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.GameFreshness.ResponseRejected != 1 || result.GameFreshness.StaleRejected != 1 || result.GameFreshness.ValueChanged != 0 {
+		t.Fatalf("stale game freshness = %+v", result.GameFreshness)
+	}
+
+	for _, span := range exporter.GetSpans() {
+		if span.Name != "sync.source_operation" {
+			continue
+		}
+		aggregate := map[string]int64{}
+		aggregateBool := map[string]bool{}
+		for _, value := range span.Attributes {
+			switch string(value.Key) {
+			case "nwsl.sync.source_response_rejected_count", "nwsl.sync.source_stale_response_count":
+				aggregate[string(value.Key)] = value.Value.AsInt64()
+			case "nwsl.sync.source_response_rejected":
+				aggregateBool[string(value.Key)] = value.Value.AsBool()
+			}
+		}
+		if !aggregateBool["nwsl.sync.source_response_rejected"] || aggregate["nwsl.sync.source_response_rejected_count"] != 1 || aggregate["nwsl.sync.source_stale_response_count"] != 1 {
+			t.Fatalf("stale game aggregate = %#v / %#v", aggregateBool, aggregate)
+		}
+		for _, event := range span.Events {
+			if event.Name != "sync.game_freshness" {
+				continue
+			}
+			values := map[string]string{}
+			booleans := map[string]bool{}
+			for _, value := range event.Attributes {
+				switch string(value.Key) {
+				case "nwsl.sync.decision", "nwsl.sync.reason", "nwsl.sync.rejection_kind", "nwsl.sync.rejection_reason":
+					values[string(value.Key)] = value.Value.AsString()
+				case "nwsl.sync.response_accepted", "nwsl.sync.response_rejected", "nwsl.sync.source_value_changed":
+					booleans[string(value.Key)] = value.Value.AsBool()
+				}
+			}
+			if values["nwsl.sync.decision"] != "not_updated" || values["nwsl.sync.reason"] != "asa_last_updated_not_newer" || values["nwsl.sync.rejection_kind"] != "stale" || values["nwsl.sync.rejection_reason"] != "asa_last_updated_not_newer" || booleans["nwsl.sync.response_accepted"] || !booleans["nwsl.sync.response_rejected"] || booleans["nwsl.sync.source_value_changed"] {
+				t.Fatalf("stale game event = %#v / %#v", values, booleans)
+			}
+			return
+		}
+		t.Fatal("sync.game_freshness event not recorded")
+	}
+	t.Fatal("source operation span not recorded")
+}
+
+func TestExecuteRecordsActualXGValueCorrectionTelemetry(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	seedOperationScope(t, ctx, db, "one")
+	initial := cache.GameXG{GameID: "one", Availability: cache.XGAvailable, HomeTeamID: "home", AwayTeamID: "away", HomeXG: sql.NullFloat64{Float64: 1.1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0.8, Valid: true}, RawJSON: `{}`}
+	if _, err := db.ReplaceStageXG(ctx, "2024", "Regular Season", []cache.GameXG{initial}, cache.FullRefreshMetadata{Trigger: cache.SourceTriggerBackfill, StartedAt: time.Date(2031, 12, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 12, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
+		t.Fatal(err)
+	}
+	client := &operationASA{xg: map[string][]asa.GameXGoals{"one": {{GameID: "one", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 2.2, AwayTeamXGoals: .8}}}}
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 1, 1, 1, 0, 0, 0, time.UTC))}
+	if _, err := service.Execute(ctx, Operation{Resource: OperationGameXG, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "one"}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, span := range exporter.GetSpans() {
+		if span.Name != "sync.source_operation" {
+			continue
+		}
+		attributes := map[string]bool{}
+		counts := map[string]int{}
+		for _, value := range span.Attributes {
+			switch string(value.Key) {
+			case "nwsl.sync.source_value_changed":
+				attributes[string(value.Key)] = value.Value.AsBool()
+			case "nwsl.sync.source_value_changed_count":
+				counts[string(value.Key)] = int(value.Value.AsInt64())
+			}
+		}
+		if !attributes["nwsl.sync.source_value_changed"] || counts["nwsl.sync.source_value_changed_count"] != 1 {
+			t.Fatalf("xG correction span attributes = %#v / %#v", attributes, counts)
+		}
+		for _, event := range span.Events {
+			if event.Name != "sync.xg_freshness" {
+				continue
+			}
+			values := map[string]string{}
+			valueChanged := false
+			floatValues := map[string]float64{}
+			for _, value := range event.Attributes {
+				if value.Key == "nwsl.sync.source_value_changed" {
+					valueChanged = value.Value.AsBool()
+					continue
+				}
+				switch string(value.Key) {
+				case "nwsl.sync.old.home_xg", "nwsl.sync.new.home_xg":
+					floatValues[string(value.Key)] = value.Value.AsFloat64()
+					continue
+				}
+				values[string(value.Key)] = value.Value.AsString()
+			}
+			if values["nwsl.sync.update_kind"] != "value_changed" || !valueChanged || floatValues["nwsl.sync.old.home_xg"] != 1.1 || floatValues["nwsl.sync.new.home_xg"] != 2.2 {
+				t.Fatalf("xG freshness event = %#v floats=%#v value_changed=%t", values, floatValues, valueChanged)
+			}
+			return
+		}
+		t.Fatal("xG freshness event not recorded")
+	}
+	t.Fatal("source operation span not recorded")
+}
+
+func TestExecuteRecordsRejectedStaleXGResponseTelemetry(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	seedOperationScope(t, ctx, db, "one")
+	initial := cache.GameXG{GameID: "one", Availability: cache.XGAvailable, HomeTeamID: "home", AwayTeamID: "away", HomeXG: sql.NullFloat64{Float64: 1.1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0.8, Valid: true}, RawJSON: `{}`}
+	if _, err := db.ReplaceStageXG(ctx, "2024", "Regular Season", []cache.GameXG{initial}, cache.FullRefreshMetadata{Trigger: cache.SourceTriggerBackfill, StartedAt: time.Date(2033, 12, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2033, 12, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
+		t.Fatal(err)
+	}
+	client := &operationASA{xg: map[string][]asa.GameXGoals{"one": {{GameID: "one", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 2.2, AwayTeamXGoals: .8}}}}
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 1, 1, 1, 0, 0, 0, time.UTC))}
+	result, err := service.Execute(ctx, Operation{Resource: OperationGameXG, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "one"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.XG == nil || len(result.XG.Freshness) != 1 || !result.XG.Freshness[0].ResponseRejected || result.XG.Freshness[0].RejectionKind != "stale" {
+		t.Fatalf("stale xG freshness = %+v", result.XG)
+	}
+
+	for _, span := range exporter.GetSpans() {
+		if span.Name != "sync.source_operation" {
+			continue
+		}
+		aggregate := map[string]int64{}
+		aggregateBool := map[string]bool{}
+		for _, value := range span.Attributes {
+			switch string(value.Key) {
+			case "nwsl.sync.source_value_changed_count", "nwsl.sync.source_response_rejected_count", "nwsl.sync.source_stale_response_count":
+				aggregate[string(value.Key)] = value.Value.AsInt64()
+			case "nwsl.sync.source_value_changed", "nwsl.sync.source_response_rejected":
+				aggregateBool[string(value.Key)] = value.Value.AsBool()
+			}
+		}
+		if aggregateBool["nwsl.sync.source_value_changed"] || aggregate["nwsl.sync.source_value_changed_count"] != 0 || !aggregateBool["nwsl.sync.source_response_rejected"] || aggregate["nwsl.sync.source_response_rejected_count"] != 1 || aggregate["nwsl.sync.source_stale_response_count"] != 1 {
+			t.Fatalf("stale xG aggregate = %#v / %#v", aggregateBool, aggregate)
+		}
+		for _, event := range span.Events {
+			if event.Name != "sync.xg_freshness" {
+				continue
+			}
+			values := map[string]string{}
+			booleans := map[string]bool{}
+			for _, value := range event.Attributes {
+				switch string(value.Key) {
+				case "nwsl.sync.rejection_kind", "nwsl.sync.rejection_reason":
+					values[string(value.Key)] = value.Value.AsString()
+				case "nwsl.sync.response_accepted", "nwsl.sync.response_rejected", "nwsl.sync.source_value_changed":
+					booleans[string(value.Key)] = value.Value.AsBool()
+				}
+			}
+			if values["nwsl.sync.rejection_kind"] != "stale" || values["nwsl.sync.rejection_reason"] != "observation_not_newer_than_cached_check" || booleans["nwsl.sync.response_accepted"] || !booleans["nwsl.sync.response_rejected"] || booleans["nwsl.sync.source_value_changed"] {
+				t.Fatalf("stale xG event = %#v / %#v", values, booleans)
+			}
+			return
+		}
+		t.Fatal("sync.xg_freshness event not recorded")
+	}
+	t.Fatal("source operation span not recorded")
 }
 
 func TestExecuteFullOperationOwnsExactlyOneResourceRequest(t *testing.T) {

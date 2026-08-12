@@ -74,10 +74,10 @@ func (s Service) now() time.Time {
 // intentionally separate from Store so a qualification failure cannot relabel
 // a successful fixture refresh.
 type QualificationRefresher interface {
-	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (bool, error)
+	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (cache.DerivedRefreshResult, error)
 }
 type ScenarioRefresher interface {
-	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (bool, error)
+	Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (cache.DerivedRefreshResult, error)
 }
 
 // RunOptions configures one sync run.
@@ -107,6 +107,7 @@ type RecalculateOptions struct {
 	Stage   string
 	Force   bool
 	Trigger string
+	Reason  string
 }
 
 // Run fetches one complete ASA season/stage and atomically stores it.
@@ -238,6 +239,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 			attribute.String("nwsl.stage", options.Stage),
 			attribute.Bool("nwsl.sync.forced", options.Force),
 			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
+			attribute.String("nwsl.sync.recalculate.reason", recalculateReason(options.Reason)),
 		),
 	)
 	recordRecalculationException := func(cause error, errorType string) error {
@@ -272,7 +274,15 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 	// check may have a small source-sync timeout, while the qualification and
 	// scenario passes each have their own bounded budgets.
 	run = s.refreshCalculations(context.WithoutCancel(ctx), inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
+	span.SetAttributes(recalculateInputAttributes(s, inputs.Teams, inputs.Games, options.Force)...)
 	return s.pruneHistory(run), nil
+}
+
+func recalculateReason(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "unspecified"
+	}
+	return value
 }
 
 func recalculateRunAttributes(run cache.SyncRun, err error) []attribute.KeyValue {
@@ -280,9 +290,26 @@ func recalculateRunAttributes(run cache.SyncRun, err error) []attribute.KeyValue
 		attribute.String("nwsl.sync.recalculate.outcome", recalculateOutcome(run, err)),
 		attribute.Bool("nwsl.sync.partial_failure", run.QualificationError != "" || run.ScenarioError != ""),
 		attribute.Bool("nwsl.sync.qualification_recalculated", run.QualificationRecalculated),
+		attribute.Bool("nwsl.sync.qualification.refresh_required", run.QualificationRefreshRequired),
+		attribute.String("nwsl.sync.qualification.refresh_reason", refreshReason(run.QualificationRefreshReason, run.QualificationRecalculated, run.QualificationError, err)),
+		attribute.Bool("nwsl.sync.qualification.snapshot_checked", run.QualificationSnapshotChecked),
+		attribute.Bool("nwsl.sync.qualification.snapshot_found", run.QualificationSnapshotFound),
 		attribute.Bool("nwsl.sync.scenario_recalculated", run.ScenarioRecalculated),
-		attribute.String("nwsl.sync.qualification.outcome", recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err)),
-		attribute.String("nwsl.sync.scenario.outcome", recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err)),
+		attribute.Bool("nwsl.sync.scenario.refresh_required", run.ScenarioRefreshRequired),
+		attribute.String("nwsl.sync.scenario.refresh_reason", refreshReason(run.ScenarioRefreshReason, run.ScenarioRecalculated, run.ScenarioError, err)),
+		attribute.Bool("nwsl.sync.scenario.snapshot_checked", run.ScenarioSnapshotChecked),
+		attribute.Bool("nwsl.sync.scenario.snapshot_found", run.ScenarioSnapshotFound),
+		attribute.String("nwsl.sync.qualification.outcome", recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err, run.QualificationRefreshReason)),
+		attribute.String("nwsl.sync.scenario.outcome", recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err, run.ScenarioRefreshReason)),
+	}
+	if run.QualificationRulesVersion != "" {
+		attributes = append(attributes, attribute.String("nwsl.sync.qualification.rules_version", run.QualificationRulesVersion))
+	}
+	if run.ScenarioRulesVersion != "" {
+		attributes = append(attributes, attribute.String("nwsl.sync.scenario.rules_version", run.ScenarioRulesVersion))
+	}
+	if run.ScenarioDefinitionVersion != "" {
+		attributes = append(attributes, attribute.String("nwsl.sync.scenario.definition_version", run.ScenarioDefinitionVersion))
 	}
 	if run.ID > 0 {
 		attributes = append(attributes, attribute.Int64("nwsl.sync.source_run_id", run.ID))
@@ -291,6 +318,43 @@ func recalculateRunAttributes(run cache.SyncRun, err error) []attribute.KeyValue
 		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
 	}
 	return attributes
+}
+
+func recalculateInputAttributes(s Service, teams []cache.Team, games []cache.Game, force bool) []attribute.KeyValue {
+	qualificationBudget := s.QualificationTimeout
+	if qualificationBudget <= 0 {
+		qualificationBudget = 5 * time.Second
+	}
+	scenarioBudget := s.ScenarioTimeout
+	if scenarioBudget <= 0 {
+		scenarioBudget = 30 * time.Second
+	}
+	return []attribute.KeyValue{
+		// Keep the component-specific names used by qualification.refresh and
+		// scenario.refresh so no-op recalculations remain directly comparable
+		// with historical work-performing traces.
+		attribute.Int("nwsl.qualification.team_count", len(teams)),
+		attribute.Int("nwsl.qualification.fixture_count", len(games)),
+		attribute.Int64("nwsl.qualification.budget_ms", qualificationBudget.Milliseconds()),
+		attribute.Bool("nwsl.qualification.forced", force),
+		attribute.Int("nwsl.scenario.team_count", len(teams)),
+		attribute.Int("nwsl.scenario.fixture_count", len(games)),
+		attribute.Int64("nwsl.scenario.budget_ms", scenarioBudget.Milliseconds()),
+		attribute.Bool("nwsl.scenario.forced", force),
+	}
+}
+
+func refreshReason(reason string, recalculated bool, componentErr string, runErr error) string {
+	if reason != "" {
+		return reason
+	}
+	if runErr != nil || componentErr != "" {
+		return "not_evaluated"
+	}
+	if recalculated {
+		return "refresh_completed"
+	}
+	return "not_evaluated"
 }
 
 func recalculateOutcome(run cache.SyncRun, err error) string {
@@ -306,12 +370,15 @@ func recalculateOutcome(run cache.SyncRun, err error) string {
 	return "current"
 }
 
-func recalculateComponentOutcome(recalculated bool, failure string, runErr error) string {
+func recalculateComponentOutcome(recalculated bool, failure string, runErr error, reason string) string {
 	if runErr != nil {
 		return "not_run"
 	}
 	if failure != "" {
 		return "failure"
+	}
+	if reason == "not_configured" || reason == "qualification_failed" {
+		return reason
 	}
 	if recalculated {
 		return "complete"
@@ -348,12 +415,19 @@ func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, 
 			budget = 5 * time.Second
 		}
 		derivedCtx, cancel := context.WithTimeout(parent, budget)
-		recalculated, err := s.Qualification.Refresh(derivedCtx, run, teams, games, force)
+		result, err := s.Qualification.Refresh(derivedCtx, run, teams, games, force)
 		cancel()
-		run.QualificationRecalculated = recalculated
+		run.QualificationRecalculated = result.Recalculated
+		run.QualificationRefreshRequired = result.Required
+		run.QualificationRefreshReason = result.Reason
+		run.QualificationSnapshotChecked = result.SnapshotChecked
+		run.QualificationSnapshotFound = result.SnapshotFound
+		run.QualificationRulesVersion = result.RulesVersion
 		if err != nil {
 			run.QualificationError = err.Error()
 		}
+	} else {
+		run.QualificationRefreshReason = "not_configured"
 	}
 	if run.QualificationError == "" && s.Scenarios != nil {
 		budget := s.ScenarioTimeout
@@ -361,12 +435,22 @@ func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, 
 			budget = 30 * time.Second
 		}
 		derivedCtx, cancel := context.WithTimeout(parent, budget)
-		recalculated, err := s.Scenarios.Refresh(derivedCtx, run, teams, games, force)
+		result, err := s.Scenarios.Refresh(derivedCtx, run, teams, games, force)
 		cancel()
-		run.ScenarioRecalculated = recalculated
+		run.ScenarioRecalculated = result.Recalculated
+		run.ScenarioRefreshRequired = result.Required
+		run.ScenarioRefreshReason = result.Reason
+		run.ScenarioSnapshotChecked = result.SnapshotChecked
+		run.ScenarioSnapshotFound = result.SnapshotFound
+		run.ScenarioRulesVersion = result.RulesVersion
+		run.ScenarioDefinitionVersion = result.DefinitionVersion
 		if err != nil {
 			run.ScenarioError = err.Error()
 		}
+	} else if s.Scenarios == nil {
+		run.ScenarioRefreshReason = "not_configured"
+	} else {
+		run.ScenarioRefreshReason = "qualification_failed"
 	}
 	return run
 }

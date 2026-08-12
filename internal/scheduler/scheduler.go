@@ -33,20 +33,22 @@ type calculationRunner interface {
 }
 
 type Config struct {
-	Season                string
-	Stage                 string
-	ExpectedTeams         int
-	GamesPerTeam          int
-	CheckInterval         time.Duration
-	CompletionGrace       time.Duration
-	Timeout               time.Duration
-	SourceRequestBudget   int
-	CorrectionInterval    time.Duration
-	CorrectionDaily       time.Duration
-	CorrectionFastWindow  time.Duration
-	CorrectionFinalWindow time.Duration
-	InventoryInterval     time.Duration
-	ColdSweepInterval     time.Duration
+	Season                   string
+	Stage                    string
+	ExpectedTeams            int
+	GamesPerTeam             int
+	CheckInterval            time.Duration
+	CompletionGrace          time.Duration
+	Timeout                  time.Duration
+	SourceRequestBudget      int
+	ResultCorrectionInterval time.Duration
+	MissingXGInterval        time.Duration
+	XGCorrectionInterval     time.Duration
+	GameCorrectionWindow     time.Duration
+	MissingXGWindow          time.Duration
+	XGCorrectionWindow       time.Duration
+	InventoryInterval        time.Duration
+	ColdSweepInterval        time.Duration
 }
 
 type Scheduler struct {
@@ -105,7 +107,7 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 	for _, field := range []struct {
 		name  string
 		value time.Duration
-	}{{"correction interval", config.CorrectionInterval}, {"correction daily", config.CorrectionDaily}, {"correction fast window", config.CorrectionFastWindow}, {"correction final window", config.CorrectionFinalWindow}, {"inventory interval", config.InventoryInterval}, {"cold sweep interval", config.ColdSweepInterval}} {
+	}{{"result correction interval", config.ResultCorrectionInterval}, {"missing xG interval", config.MissingXGInterval}, {"xG correction interval", config.XGCorrectionInterval}, {"game correction window", config.GameCorrectionWindow}, {"missing xG window", config.MissingXGWindow}, {"xG correction window", config.XGCorrectionWindow}, {"inventory interval", config.InventoryInterval}, {"cold sweep interval", config.ColdSweepInterval}} {
 		if field.value < 0 {
 			return nil, fmt.Errorf("scheduler %s must not be negative", field.name)
 		}
@@ -141,7 +143,7 @@ func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
-	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.check", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(attribute.String("nwsl.season", s.config.Season), attribute.String("nwsl.stage", s.config.Stage)))
+	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.tick", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(attribute.String("nwsl.season", s.config.Season), attribute.String("nwsl.stage", s.config.Stage)))
 	defer span.End()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
 	snapshot, err := s.store.PlanningSnapshot(planningCtx)
@@ -157,7 +159,7 @@ func (s *Scheduler) check() {
 	// request must not indefinitely block a missing clinching batch.
 	preflightCalculation := "not_needed"
 	if currentInventoryAvailable(snapshot, s.config.Season, s.config.Stage) {
-		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)
+		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "preflight")
 	}
 	span.SetAttributes(attribute.String("nwsl.scheduler.clinching_preflight_outcome", preflightCalculation))
 	now := s.now().UTC()
@@ -171,19 +173,23 @@ func (s *Scheduler) check() {
 		))
 		outcome := preflightCalculation
 		if outcome == "not_needed" {
-			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage)
+			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "no_source_request_due")
 		}
 		span.SetAttributes(attribute.String("nwsl.scheduler.action", "recalculate"), attribute.Int("nwsl.scheduler.request_count", 0), attribute.String("nwsl.scheduler.outcome", outcome))
 		return
 	}
 	for _, job := range jobs {
-		span.AddEvent("scheduler.decision", trace.WithAttributes(
+		decisionAttributes := []attribute.KeyValue{
 			attribute.String("nwsl.scheduler.decision", "check"),
 			attribute.String("nwsl.scheduler.reason", job.Reason),
 			attribute.String("nwsl.scheduler.job_kind", string(job.Kind)),
 			attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage),
 			attribute.Int("nwsl.scheduler.requested_rows", len(job.Operation.Requested)),
-		))
+		}
+		if job.Selection.Policy != "" {
+			decisionAttributes = append(decisionAttributes, selectionAttributes(job.Selection)...)
+		}
+		span.AddEvent("scheduler.decision", trace.WithAttributes(decisionAttributes...))
 	}
 	if len(availableJobs) > len(jobs) {
 		span.AddEvent("scheduler.decision", trace.WithAttributes(
@@ -228,7 +234,7 @@ jobsLoop:
 			tickOutcome = "deferred"
 		}
 		if job.Class == JobHot && result.Games != nil && result.FixtureInputsChanged && job.Operation.Season == s.config.Season && job.Operation.Stage == s.config.Stage {
-			derivedOutcome := s.recalculateCachedClinching(ctx, span, job.Operation.Season, job.Operation.Stage)
+			derivedOutcome := s.recalculateCachedClinching(ctx, span, job.Operation.Season, job.Operation.Stage, "game_inputs_changed")
 			if derivedOutcome == "failure" || derivedOutcome == "partial_failure" {
 				tickOutcome = "partial_failure"
 			}
@@ -347,13 +353,13 @@ func historicalEvidenceScope(season, stage string) bool {
 	return found && entry.Public && entry.SourceAvailable && entry.Rules == nil
 }
 
-func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span, season, stage string) string {
+func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span, season, stage, reason string) string {
 	runner, ok := s.runner.(calculationRunner)
 	if !ok {
 		return "current"
 	}
 	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
-	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: season, Stage: stage, Trigger: "scheduler"})
+	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: season, Stage: stage, Trigger: "scheduler", Reason: reason})
 	cancel()
 	if err != nil {
 		telemetry.MarkError(span, err)
@@ -395,7 +401,74 @@ func jobAttributes(job Job, result syncer.OperationResult, outcome string, reque
 		returned = result.XG.Audit.ReturnedRows
 		material = result.XGInputsChanged
 	}
-	return []attribute.KeyValue{attribute.String("nwsl.scheduler.job_kind", string(job.Kind)), attribute.String("nwsl.scheduler.job_class", string(job.Class)), attribute.String("nwsl.scheduler.job_outcome", outcome), attribute.String("nwsl.scheduler.job_reason", job.Reason), attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage), attribute.Int("nwsl.scheduler.job_requested_rows", len(job.Operation.Requested)), attribute.Int("nwsl.scheduler.job_returned_rows", returned), attribute.Bool("nwsl.scheduler.job_material", material), attribute.Int("nwsl.scheduler.request_count", requests)}
+	attributes := []attribute.KeyValue{attribute.String("nwsl.scheduler.job_kind", string(job.Kind)), attribute.String("nwsl.scheduler.job_class", string(job.Class)), attribute.String("nwsl.scheduler.job_outcome", outcome), attribute.String("nwsl.scheduler.job_reason", job.Reason), attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage), attribute.Int("nwsl.scheduler.job_requested_rows", len(job.Operation.Requested)), attribute.Int("nwsl.scheduler.job_returned_rows", returned), attribute.Bool("nwsl.scheduler.job_material", material), attribute.Int("nwsl.scheduler.request_count", requests)}
+	if result.Games != nil {
+		attributes = append(attributes,
+			attribute.Bool("nwsl.scheduler.source_value_changed", result.GameFreshness.ValueChanged > 0),
+			attribute.Int("nwsl.scheduler.source_value_changed_count", result.GameFreshness.ValueChanged),
+			attribute.Int("nwsl.scheduler.source_value_initialized_count", result.GameFreshness.ValueInitialized),
+			attribute.Int("nwsl.scheduler.source_metadata_changed_count", result.GameFreshness.MetadataChanged),
+		)
+	}
+	if result.XG != nil {
+		var changed, initialized, metadata, missing int
+		for _, freshness := range result.XG.Freshness {
+			if freshness.ValueChanged {
+				changed++
+			}
+			if freshness.ValueInitialized {
+				initialized++
+			}
+			if freshness.MetadataChanged {
+				metadata++
+			}
+			if freshness.Missing {
+				missing++
+			}
+		}
+		attributes = append(attributes,
+			attribute.Bool("nwsl.scheduler.source_value_changed", changed > 0),
+			attribute.Int("nwsl.scheduler.source_value_changed_count", changed),
+			attribute.Int("nwsl.scheduler.source_value_initialized_count", initialized),
+			attribute.Int("nwsl.scheduler.source_metadata_changed_count", metadata),
+			attribute.Int("nwsl.scheduler.source_value_missing_count", missing),
+		)
+	}
+	if job.Selection.Policy != "" {
+		attributes = append(attributes, selectionAttributes(job.Selection)...)
+	}
+	return attributes
+}
+
+func selectionAttributes(selection selectionMetadata) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.String("nwsl.scheduler.selection_policy", selection.Policy),
+		attribute.Int("nwsl.scheduler.candidate_count", selection.CandidateCount),
+		attribute.Int("nwsl.scheduler.eligible_count", selection.EligibleCount),
+		attribute.Int("nwsl.scheduler.expired_count", selection.ExpiredCount),
+		attribute.Int("nwsl.scheduler.invalid_kickoff_count", selection.InvalidKickoffCount),
+		attribute.Int("nwsl.scheduler.missing_xg_candidate_count", selection.MissingCandidateCount),
+		attribute.Int("nwsl.scheduler.missing_xg_eligible_count", selection.MissingEligibleCount),
+		attribute.Int("nwsl.scheduler.available_xg_candidate_count", selection.AvailableCandidateCount),
+		attribute.Int("nwsl.scheduler.available_xg_eligible_count", selection.AvailableEligibleCount),
+		attribute.Int("nwsl.scheduler.missing_xg_poll_interval_seconds", int(selection.MissingPollInterval/time.Second)),
+		attribute.Int("nwsl.scheduler.missing_xg_watch_window_seconds", int(selection.MissingWatchWindow/time.Second)),
+		attribute.Int("nwsl.scheduler.xg_correction_interval_seconds", int(selection.AvailablePollInterval/time.Second)),
+		attribute.Int("nwsl.scheduler.xg_correction_watch_window_seconds", int(selection.AvailableWatchWindow/time.Second)),
+	}
+	if selection.PollInterval > 0 {
+		attributes = append(attributes, attribute.Int("nwsl.scheduler.poll_interval_seconds", int(selection.PollInterval/time.Second)))
+	}
+	if selection.WatchWindow > 0 {
+		attributes = append(attributes, attribute.Int("nwsl.scheduler.watch_window_seconds", int(selection.WatchWindow/time.Second)))
+	}
+	if !selection.OldestKickoff.IsZero() {
+		attributes = append(attributes, attribute.String("nwsl.scheduler.oldest_kickoff_utc", selection.OldestKickoff.UTC().Format(time.RFC3339)))
+	}
+	if !selection.NewestKickoff.IsZero() {
+		attributes = append(attributes, attribute.String("nwsl.scheduler.newest_kickoff_utc", selection.NewestKickoff.UTC().Format(time.RFC3339)))
+	}
+	return attributes
 }
 func validateScheduleConfig(config Config) error {
 	if config.ExpectedTeams == 0 && config.GamesPerTeam == 0 {

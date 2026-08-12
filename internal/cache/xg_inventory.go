@@ -10,9 +10,29 @@ import (
 )
 
 type XGRefreshResult struct {
-	Audit  SourceRefreshAudit
-	XGRun  *XGSyncRun
-	Values []GameXG
+	Audit     SourceRefreshAudit
+	XGRun     *XGSyncRun
+	Values    []GameXG
+	Freshness []XGFreshness
+}
+
+// XGFreshness describes whether a source observation supplied a first value,
+// changed an existing value, or only changed source metadata. It is returned
+// with the committed refresh so telemetry can distinguish corrections from
+// ordinary checks and first observations.
+type XGFreshness struct {
+	GameID           string
+	KickoffUTC       string
+	Old              *GameXG
+	New              GameXG
+	ResponseAccepted bool
+	ResponseRejected bool
+	RejectionKind    string
+	RejectionReason  string
+	ValueChanged     bool
+	ValueInitialized bool
+	MetadataChanged  bool
+	Missing          bool
 }
 
 func (c *DB) GameXGState(ctx context.Context, id string) (GameXG, bool, error) {
@@ -113,6 +133,7 @@ func (c *DB) ReplaceStageXG(ctx context.Context, season, stage string, values []
 		returned[v.GameID] = v
 	}
 	material := false
+	freshness := make([]XGFreshness, 0, len(ids))
 	for _, id := range ids {
 		g := candidate[id]
 		v, ok := returned[id]
@@ -120,10 +141,18 @@ func (c *DB) ReplaceStageXG(ctx context.Context, season, stage string, values []
 		if !ok {
 			v = GameXG{GameID: id, Availability: XGUnavailable, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID}
 		}
-		change, mat, err := writeStageXG(ctx, tx, v, audit.FinishedAt)
+		telemetryValue := v
+		telemetryValue.LastCheckedAt = audit.FinishedAt
+		old, oldErr := loadGameXG(ctx, tx, id)
+		oldFound := oldErr == nil
+		if oldErr != nil && !errors.Is(oldErr, sql.ErrNoRows) {
+			return XGRefreshResult{}, fmt.Errorf("load previous xG %q: %w", id, oldErr)
+		}
+		change, mat, accepted, err := writeStageXG(ctx, tx, v, audit.FinishedAt)
 		if err != nil {
 			return XGRefreshResult{}, err
 		}
+		freshness = append(freshness, xGFreshness(id, g.KickoffUTC, old, oldFound, telemetryValue, returnedAvailable, accepted))
 		material = material || mat
 		switch change {
 		case rowInserted:
@@ -174,7 +203,38 @@ func (c *DB) ReplaceStageXG(ctx context.Context, season, stage string, values []
 	if err := tx.Commit(); err != nil {
 		return XGRefreshResult{}, err
 	}
-	return XGRefreshResult{Audit: audit, XGRun: run, Values: append([]GameXG{}, out...)}, nil
+	return XGRefreshResult{Audit: audit, XGRun: run, Values: append([]GameXG{}, out...), Freshness: freshness}, nil
+}
+
+const xGStaleRejectionReason = "observation_not_newer_than_cached_check"
+
+func xGFreshness(id, kickoffUTC string, old GameXG, oldFound bool, incoming GameXG, returnedAvailable, accepted bool) XGFreshness {
+	freshness := XGFreshness{GameID: id, KickoffUTC: kickoffUTC, New: incoming, ResponseAccepted: accepted, ResponseRejected: !accepted}
+	if oldFound {
+		oldCopy := old
+		freshness.Old = &oldCopy
+	}
+	if !accepted {
+		freshness.RejectionKind = "stale"
+		freshness.RejectionReason = xGStaleRejectionReason
+		return freshness
+	}
+	if !returnedAvailable {
+		freshness.Missing = true
+		return freshness
+	}
+	if !oldFound || old.Availability != XGAvailable {
+		freshness.ValueInitialized = true
+		return freshness
+	}
+	if availableXGMaterialChange(old, incoming) {
+		freshness.ValueChanged = true
+		return freshness
+	}
+	if !sameAvailableXG(old, incoming) {
+		freshness.MetadataChanged = true
+	}
+	return freshness
 }
 func validateStageXG(v GameXG) error {
 	if invalidTrimmed(v.GameID) || invalidTrimmed(v.HomeTeamID) || invalidTrimmed(v.AwayTeamID) || v.HomeTeamID == v.AwayTeamID || v.Availability != XGAvailable || !v.HomeXG.Valid || !v.AwayXG.Valid || !finiteNonnegative(v.HomeXG.Float64) || !finiteNonnegative(v.AwayXG.Float64) || v.HomeXPoints.Valid != v.AwayXPoints.Valid || (v.HomeXPoints.Valid && (!validGameExpectedPoints(v.HomeXPoints.Float64) || !validGameExpectedPoints(v.AwayXPoints.Float64))) || v.FirstObservedAt != nil || !v.LastCheckedAt.IsZero() {
@@ -182,48 +242,48 @@ func validateStageXG(v GameXG) error {
 	}
 	return nil
 }
-func writeStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowChange, bool, error) {
+func writeStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowChange, bool, bool, error) {
 	if v.Availability == XGAvailable {
 		return writeAvailableStageXG(ctx, tx, v, at)
 	}
 	_, err := loadGameXG(ctx, tx, v.GameID)
 	if errors.Is(err, sql.ErrNoRows) {
 		ch, e := writeGameXG(ctx, tx, v, at)
-		return ch, v.Availability == XGAvailable, e
+		return ch, v.Availability == XGAvailable, true, e
 	}
 	if err != nil {
-		return 0, false, err
+		return 0, false, false, err
 	}
 	_, e := tx.ExecContext(ctx, `UPDATE game_xg SET last_checked_at=? WHERE asa_game_id=? AND last_checked_at<?`, formatTime(at), v.GameID, formatTime(at))
-	return rowUnchanged, false, e
+	return rowUnchanged, false, true, e
 }
 
-func writeAvailableStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowChange, bool, error) {
+func writeAvailableStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Time) (rowChange, bool, bool, error) {
 	old, err := loadGameXG(ctx, tx, v.GameID)
 	if errors.Is(err, sql.ErrNoRows) {
 		change, err := writeGameXG(ctx, tx, v, at)
-		return change, true, err
+		return change, true, true, err
 	}
 	if err != nil {
-		return 0, false, err
+		return 0, false, false, err
 	}
 	if old.Availability == XGAvailable {
 		identical := sameAvailableXG(old, v)
 		if !identical && !at.After(old.LastCheckedAt) {
-			return rowUnchanged, false, nil
+			return rowUnchanged, false, false, nil
 		}
 		if identical && !at.After(old.LastCheckedAt) {
-			return rowUnchanged, false, nil
+			return rowUnchanged, false, false, nil
 		}
 		change, err := writeGameXG(ctx, tx, v, at)
-		return change, availableXGMaterialChange(old, v), err
+		return change, availableXGMaterialChange(old, v), true, err
 	}
 	material := true
 	change, err := writeGameXG(ctx, tx, v, at)
 	if err == nil && !at.After(old.LastCheckedAt) {
 		_, err = tx.ExecContext(ctx, `UPDATE game_xg SET last_checked_at=? WHERE asa_game_id=?`, formatTime(old.LastCheckedAt), v.GameID)
 	}
-	return change, material, err
+	return change, material, true, err
 }
 
 func sameAvailableXG(old, incoming GameXG) bool {

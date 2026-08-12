@@ -169,11 +169,53 @@ func (t calculationTelemetry) attributes(statuses []cache.QualificationStatus) [
 	return append(attributes, attribute.Int("nwsl.qualification.result.budget_exhausted_count", budgetExhausted))
 }
 
-func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (recalculated bool, err error) {
+func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (result cache.DerivedRefreshResult, err error) {
 	budget := r.Budget
 	if budget <= 0 {
 		budget = 5 * time.Second
 	}
+	parentSpan := trace.SpanFromContext(ctx)
+	recordDecisionException := func(cause error, errorType string) error {
+		return telemetry.RecordWarningWithType(ctx, parentSpan, cause, "qualification.refresh", errorType)
+	}
+	if r.Store == nil {
+		return result, recordDecisionException(fmt.Errorf("qualification store is required"), telemetry.ErrorTypeInvalidArgument)
+	}
+	if err := r.Rules.Validate(); err != nil {
+		return result, recordDecisionException(err, telemetry.ErrorTypeInvalidArgument)
+	}
+	if syncRun.FixtureSnapshotID == "" {
+		return result, recordDecisionException(fmt.Errorf("fixture snapshot ID is required"), telemetry.ErrorTypeInvalidArgument)
+	}
+	r.Budget = budget
+	snapshot, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version)
+	if err != nil {
+		return result, recordDecisionException(err, telemetry.ErrorTypeStorageFailure)
+	}
+	result.SnapshotChecked = true
+	result.SnapshotFound = ok
+	result.RulesVersion = r.Rules.Version
+	refreshReason := "snapshot_missing"
+	if force {
+		refreshReason = "forced"
+	} else if ok {
+		retryKickoffOrder := shouldRetryKickoffOrder(snapshot, games)
+		retryComputeBudget := shouldRetryComputeBudget(snapshot)
+		switch {
+		case retryKickoffOrder && retryComputeBudget:
+			refreshReason = "kickoff_order_and_compute_budget_retry"
+		case retryKickoffOrder:
+			refreshReason = "kickoff_order_retry"
+		case retryComputeBudget:
+			refreshReason = "compute_budget_retry"
+		default:
+			result.Reason = "snapshot_current"
+			return result, nil
+		}
+	}
+	result.Recalculated = true
+	result.Required = true
+	result.Reason = refreshReason
 	ctx, span := telemetry.Tracer().Start(ctx, "qualification.refresh",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
@@ -184,6 +226,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 			attribute.Int("nwsl.qualification.fixture_count", len(games)),
 			attribute.Int64("nwsl.qualification.budget_ms", budget.Milliseconds()),
 			attribute.Bool("nwsl.qualification.forced", force),
+			attribute.String("nwsl.qualification.refresh_reason", refreshReason),
 		),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
@@ -191,44 +234,27 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}
 	defer func() {
 		span.SetAttributes(
-			attribute.Bool("nwsl.qualification.recalculated", recalculated),
-			attribute.String("nwsl.qualification.outcome", calculationOutcome(recalculated, err)),
+			attribute.Bool("nwsl.qualification.recalculated", result.Recalculated),
+			attribute.String("nwsl.qualification.outcome", calculationOutcome(result.Recalculated, err)),
 		)
 		if err != nil {
 			telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()
-	if r.Store == nil {
-		return false, recordRefreshException(fmt.Errorf("qualification store is required"), telemetry.ErrorTypeInvalidArgument)
-	}
-	if err := r.Rules.Validate(); err != nil {
-		return false, recordRefreshException(err, telemetry.ErrorTypeInvalidArgument)
-	}
-	if syncRun.FixtureSnapshotID == "" {
-		return false, recordRefreshException(fmt.Errorf("fixture snapshot ID is required"), telemetry.ErrorTypeInvalidArgument)
-	}
-	if r.Budget <= 0 {
-		r.Budget = 5 * time.Second
-	}
-	if snapshot, ok, err := r.Store.QualificationForSnapshot(ctx, syncRun.FixtureSnapshotID, r.Rules.Version); err != nil {
-		return false, recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
-	} else if ok && !force && !shouldRetryKickoffOrder(snapshot, games) && !shouldRetryComputeBudget(snapshot) {
-		return false, nil
-	}
 	run := cache.QualificationRun{FixtureSnapshotID: syncRun.FixtureSnapshotID, SourceSyncRunID: syncRun.ID, Season: syncRun.Season, Stage: syncRun.Stage, RulesVersion: r.Rules.Version, StartedAt: time.Now().UTC(), ExpectedStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games)
 	if err != nil {
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
-		return true, err
+		return result, err
 	}
 	_, err = r.Store.ReplaceQualification(context.Background(), run, values)
 	if err != nil {
 		err = recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
-		return true, err
+		return result, err
 	}
-	return true, nil
+	return result, nil
 }
 
 // Older batches could be marked complete after the refresher rejected ASA's
