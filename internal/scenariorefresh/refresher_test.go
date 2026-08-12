@@ -82,6 +82,54 @@ func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
 	}
 }
 
+func TestCurrentRefreshDoesNotEmitChildSpan(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := trace.NewTracerProvider(trace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	rules := competition.Rules{
+		Season: "2026", Stage: "Regular Season", Version: "rules-v1",
+		ExpectedTeams: 1, GamesPerTeam: 1,
+		Achievements: []competition.Achievement{{ID: competition.AchievementShield, Label: "Shield", TopK: 1}},
+	}
+	ctx, parent := telemetry.Tracer().Start(context.Background(), "sync.recalculate")
+	result, err := (Refresher{Store: currentScenarioStore{}, Rules: rules}).Refresh(ctx, cache.SyncRun{Season: rules.Season, Stage: rules.Stage, FixtureSnapshotID: "fixture-1"}, nil, nil, false)
+	parent.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Recalculated || result.Required || result.Reason != "snapshot_current" {
+		t.Fatalf("refresh result = %+v, want current no-op", result)
+	}
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || spans[0].Name != "sync.recalculate" {
+		t.Fatalf("spans = %#v, want only parent sync.recalculate", spans)
+	}
+}
+
+type currentScenarioStore struct{}
+
+func (currentScenarioStore) ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error) {
+	return cache.ScenarioSnapshot{}, true, nil
+}
+
+func (currentScenarioStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
+	return cache.QualificationSnapshot{}, false, nil
+}
+
+func (currentScenarioStore) ReplaceScenario(context.Context, cache.ScenarioRun, []cache.ScenarioResult) (cache.ScenarioSnapshot, error) {
+	return cache.ScenarioSnapshot{}, nil
+}
+
+func (currentScenarioStore) RecordScenarioFailure(context.Context, cache.ScenarioRun, error) error {
+	return nil
+}
+
 func scenarioAttributeMap(values []attribute.KeyValue) map[string]attribute.Value {
 	attributes := make(map[string]attribute.Value, len(values))
 	for _, value := range values {

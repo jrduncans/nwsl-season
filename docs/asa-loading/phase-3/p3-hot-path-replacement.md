@@ -171,17 +171,20 @@ Use configurable defaults, with fake-clock tests:
 
 - unresolved results after kickoff plus completion grace: every scheduler
   interval (normally five minutes);
-- completed games with missing xG: every scheduler interval for five days;
-- terminal result or available xG correction watch: every six hours for five
-  days after first observation or latest material change, then daily through
-  day 30; and
+- completed games with missing xG: every five minutes for five days after
+  kickoff;
+- terminal result correction watch: every six hours for three days after
+  kickoff; and
+- available xG correction watch: every six hours for five days after kickoff;
+  missing xG uses its independent five-minute cadence; and
 - incomplete/upcoming authoritative game inventory: weekly.
 
-First-observation and material-change clocks already persisted by Phase 2 are
-the anchors. A material correction restarts the five-day watch. An unchanged
-check advances its check/due clock but not its material clock. If migrated
-terminal data lacks an observation clock, schedule a result check to establish
-truthful observation state before relying on a correction window.
+Kickoff is the anchor for both terminal correction windows. An unchanged check
+advances its check/due clock, but a material result or xG correction does not
+extend or restart the kickoff window. If kickoff is invalid or unavailable,
+leave the identity for full reconciliation rather than making it immediately
+due. Full games/xG reconciliation remains the safety net after a hot window
+expires.
 
 Phase 5 owns monthly archived full sweeps, cross-scope cold coordination,
 staggering, and maintenance commands. Phase 3 must not add those policies.
@@ -207,18 +210,31 @@ derived batch is missing.
   one xG request.
 - A due result makes no teams, full-games, or xG request.
 - A due xG check makes no teams or games request.
-- Unresolved and missing-xG jobs remain due at five-minute cadence without
-  exponential backoff.
-- Six-hour/daily correction windows and material-change restarts are selected
-  by fixed clocks.
+- Unresolved and missing-xG jobs remain due at their independent five-minute
+  cadences without exponential backoff.
+- Result correction uses a three-day kickoff window and xG correction uses a
+  five-day kickoff window; neither is extended by a material change.
 - An empty upcoming scope is checked weekly without becoming publicly
   available until inventory exists.
 - The request budget defers lower-priority jobs without changing their due
   state.
 - A no-op job triggers no derived work; material game and xG jobs trigger only
   their permitted downstream products.
-- Scheduler telemetry records job kind, scope, requested/returned counts,
-  material-change outcome, and request count without duplicate exceptions.
+- Scheduler telemetry records job kind, scope, polling policy/window, candidate,
+  eligible, expired, and invalid-kickoff counts, requested/returned counts,
+  actual source-value changes, first-value observations, metadata-only changes,
+  and request count without duplicate exceptions.
+- `sync.source_operation` exposes `nwsl.sync.source_value_changed` and
+  `nwsl.sync.source_value_changed_count`, alongside response-rejection counts;
+  its `sync.game_freshness` and `sync.xg_freshness` events identify
+  `update_kind=value_changed` and include kickoff age. Every individual response
+  reports `nwsl.sync.response_accepted` or `nwsl.sync.response_rejected`; rejected
+  responses include low-cardinality `nwsl.sync.rejection_kind` and the concrete
+  `nwsl.sync.rejection_reason`. Correction and rejection events retain normalized
+  `nwsl.sync.old.*` and `nwsl.sync.new.*` values for game status/scores/fixture
+  fields and xG/xPoints, plus the compared check/observation times where relevant.
+  This makes actual corrections and stale source responses queryable
+  independently of `last_updated_utc` metadata changes.
 
 ## Allowed changes
 
@@ -257,7 +273,8 @@ Stop rather than broadening the phase if:
   batch;
 - a targeted operation requires an authoritative full response to remain
   correct;
-- truthful job selection requires inventing first-observation/material history;
+- kickoff-based job selection cannot establish a valid kickoff and safely
+  defer the identity to reconciliation;
 - the current cache APIs cannot keep a source write, due state, audit, and
   lineage atomic;
 - selective invalidation requires changing qualification/scenario contracts;

@@ -154,14 +154,27 @@ func (c *DB) UpsertCheckedXG(ctx context.Context, season, stage string, requeste
 	}
 	sort.Strings(ids)
 	material := false
+	freshness := make([]XGFreshness, 0, len(ids))
 	for _, id := range ids {
 		value, returnedValue := values[id]
+		old, oldErr := loadGameXG(ctx, tx, id)
+		oldFound := oldErr == nil
+		if oldErr != nil && !errors.Is(oldErr, sql.ErrNoRows) {
+			return XGRefreshResult{}, fmt.Errorf("load previous xG %q: %w", id, oldErr)
+		}
+		telemetryValue := value
+		if !returnedValue {
+			telemetryValue = GameXG{GameID: id, Availability: XGUnavailable, HomeTeamID: games[id].HomeTeamID, AwayTeamID: games[id].AwayTeamID}
+		}
+		telemetryValue.LastCheckedAt = audit.FinishedAt
+		accepted := true
 		rowMaterial := false
 		if returnedValue {
-			change, changed, err := writeAvailableStageXG(ctx, tx, value, audit.FinishedAt)
+			change, changed, responseAccepted, err := writeAvailableStageXG(ctx, tx, value, audit.FinishedAt)
 			if err != nil {
 				return XGRefreshResult{}, err
 			}
+			accepted = responseAccepted
 			rowMaterial = changed
 			material = material || changed
 			switch change {
@@ -173,6 +186,7 @@ func (c *DB) UpsertCheckedXG(ctx context.Context, season, stage string, requeste
 				audit.RowsUnchanged++
 			}
 		}
+		freshness = append(freshness, xGFreshness(id, games[id].KickoffUTC, old, oldFound, telemetryValue, returnedValue && value.Availability == XGAvailable, accepted))
 		nextDue := due[id]
 		if rowMaterial && requestsByID[id].MaterialNextDueAt != nil {
 			nextDue = requestsByID[id].MaterialNextDueAt
@@ -201,7 +215,7 @@ func (c *DB) UpsertCheckedXG(ctx context.Context, season, stage string, requeste
 	if err := tx.Commit(); err != nil {
 		return XGRefreshResult{}, fmt.Errorf("commit targeted xG refresh: %w", err)
 	}
-	return XGRefreshResult{Audit: audit, XGRun: run, Values: append([]GameXG{}, result...)}, nil
+	return XGRefreshResult{Audit: audit, XGRun: run, Values: append([]GameXG{}, result...), Freshness: freshness}, nil
 }
 
 func prepareCheckedXG(season, stage string, requested []CheckedXGRequest, returned []GameXG, metadata TargetedRefreshMetadata) ([]CheckedXGRequest, SourceRefreshAudit, error) {

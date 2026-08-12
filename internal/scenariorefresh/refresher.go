@@ -44,11 +44,45 @@ type Progress struct {
 	State        scenarios.OpportunityState
 }
 
-func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (recalculated bool, err error) {
+func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (result cache.DerivedRefreshResult, err error) {
 	budget := r.Budget
 	if budget <= 0 {
 		budget = 30 * time.Second
 	}
+	parentSpan := trace.SpanFromContext(ctx)
+	recordDecisionException := func(cause error, errorType string) error {
+		return telemetry.RecordWarningWithType(ctx, parentSpan, cause, "scenario.refresh", errorType)
+	}
+	if r.Store == nil {
+		return result, recordDecisionException(fmt.Errorf("scenario store is required"), telemetry.ErrorTypeInvalidArgument)
+	}
+	if err := r.Rules.Validate(); err != nil {
+		return result, recordDecisionException(err, telemetry.ErrorTypeInvalidArgument)
+	}
+	if sync.FixtureSnapshotID == "" {
+		return result, recordDecisionException(fmt.Errorf("fixture snapshot ID is required"), telemetry.ErrorTypeInvalidArgument)
+	}
+	snapshot, ok, err := r.Store.ScenarioForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version, scenarios.DefinitionVersion)
+	if err != nil {
+		return result, recordDecisionException(err, telemetry.ErrorTypeStorageFailure)
+	}
+	result.SnapshotChecked = true
+	result.SnapshotFound = ok
+	result.RulesVersion = r.Rules.Version
+	result.DefinitionVersion = scenarios.DefinitionVersion
+	refreshReason := "snapshot_missing"
+	if force {
+		refreshReason = "forced"
+	} else if ok {
+		if !shouldRetryComputeBudget(snapshot) {
+			result.Reason = "snapshot_current"
+			return result, nil
+		}
+		refreshReason = "compute_budget_retry"
+	}
+	result.Recalculated = true
+	result.Required = true
+	result.Reason = refreshReason
 	ctx, span := telemetry.Tracer().Start(ctx, "scenario.refresh",
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
@@ -59,6 +93,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 			attribute.Int("nwsl.scenario.fixture_count", len(games)),
 			attribute.Int64("nwsl.scenario.budget_ms", budget.Milliseconds()),
 			attribute.Bool("nwsl.scenario.forced", force),
+			attribute.String("nwsl.scenario.refresh_reason", refreshReason),
 		),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
@@ -66,40 +101,26 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	}
 	defer func() {
 		span.SetAttributes(
-			attribute.Bool("nwsl.scenario.recalculated", recalculated),
-			attribute.String("nwsl.scenario.outcome", scenarioCalculationOutcome(recalculated, err)),
+			attribute.Bool("nwsl.scenario.recalculated", result.Recalculated),
+			attribute.String("nwsl.scenario.outcome", scenarioCalculationOutcome(result.Recalculated, err)),
 		)
 		if err != nil {
 			telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()
-	if r.Store == nil {
-		return false, recordRefreshException(fmt.Errorf("scenario store is required"), telemetry.ErrorTypeInvalidArgument)
-	}
-	if err := r.Rules.Validate(); err != nil {
-		return false, recordRefreshException(err, telemetry.ErrorTypeInvalidArgument)
-	}
-	if sync.FixtureSnapshotID == "" {
-		return false, recordRefreshException(fmt.Errorf("fixture snapshot ID is required"), telemetry.ErrorTypeInvalidArgument)
-	}
-	if snapshot, ok, err := r.Store.ScenarioForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version, scenarios.DefinitionVersion); err != nil {
-		return false, recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
-	} else if ok && !force && !shouldRetryComputeBudget(snapshot) {
-		return false, nil
-	}
 	q, ok, err := r.Store.QualificationForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version)
 	if err != nil {
-		return false, recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
+		return result, recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
 	}
 	if !ok {
-		return false, recordRefreshException(fmt.Errorf("matching qualification batch is required"), telemetry.ErrorTypeInvalidData)
+		return result, recordRefreshException(fmt.Errorf("matching qualification batch is required"), telemetry.ErrorTypeInvalidData)
 	}
 	run := cache.ScenarioRun{FixtureSnapshotID: sync.FixtureSnapshotID, QualificationRunID: q.Run.ID, SourceSyncRunID: sync.ID, Season: sync.Season, Stage: sync.Stage, RulesVersion: r.Rules.Version, DefinitionVersion: scenarios.DefinitionVersion, StartedAt: time.Now().UTC(), ExpectedResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games, q)
 	if err != nil {
 		_ = r.Store.RecordScenarioFailure(context.Background(), run, err)
-		return true, err
+		return result, err
 	}
 	run.Slate = values.slate
 	_, err = r.Store.ReplaceScenario(context.Background(), run, values.rows)
@@ -107,7 +128,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 		err = recordRefreshException(err, telemetry.ErrorTypeStorageFailure)
 		_ = r.Store.RecordScenarioFailure(context.Background(), run, err)
 	}
-	return true, err
+	return result, err
 }
 
 // A timeout is a transient computational limitation, not a mathematical

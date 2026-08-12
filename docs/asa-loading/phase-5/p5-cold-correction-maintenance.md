@@ -17,9 +17,10 @@ job is due, starts at most one cold request per scheduler tick, and is globally
 serialized across processes. Operators can run all currently due archived work
 sequentially through the same planner and executor.
 
-Phase 3 already implemented five-minute, six-hour, and daily result/xG watches,
-first-observation clocks, material-change restarts, and the day-30 boundary.
-Do not duplicate or redesign them here.
+Phase 3 implements five-minute unsettled-result polling plus kickoff-anchored
+six-hour result and xG watches. Result polling ends three days after kickoff;
+xG polling ends five days after kickoff. Do not duplicate or redesign those
+hot windows here.
 
 ## Archived eligibility and cadence
 

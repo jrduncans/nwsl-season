@@ -484,6 +484,78 @@ func TestRecalculateUsesCachedFixturesWithoutCallingASA(t *testing.T) {
 	}
 }
 
+func TestRecalculateReportsCurrentDecisionsOnParentSpan(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	if _, err := (Service{ASA: &client, Store: db}).Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	service := Service{
+		Store:         db,
+		Qualification: currentRefresher{},
+		Scenarios:     currentRefresher{},
+	}
+	if _, err := service.Recalculate(ctx, RecalculateOptions{Season: "2024", Stage: "Regular Season", Trigger: "scheduler", Reason: "preflight"}); err != nil {
+		t.Fatal(err)
+	}
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || spans[0].Name != "sync.recalculate" {
+		t.Fatalf("spans = %#v, want only sync.recalculate", spans)
+	}
+	attributes := map[string]attribute.Value{}
+	for _, value := range spans[0].Attributes {
+		attributes[string(value.Key)] = value.Value
+	}
+	for key, want := range map[string]string{
+		"nwsl.sync.recalculate.reason":           "preflight",
+		"nwsl.sync.qualification.outcome":        "current",
+		"nwsl.sync.qualification.refresh_reason": "snapshot_current",
+		"nwsl.sync.qualification.rules_version":  "rules-v1",
+		"nwsl.sync.scenario.outcome":             "current",
+		"nwsl.sync.scenario.refresh_reason":      "snapshot_current",
+		"nwsl.sync.scenario.rules_version":       "rules-v1",
+		"nwsl.sync.scenario.definition_version":  "definition-v1",
+	} {
+		if got := attributes[key].AsString(); got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
+	}
+	for key := range map[string]struct{}{
+		"nwsl.sync.qualification_recalculated":     {},
+		"nwsl.sync.qualification.refresh_required": {},
+		"nwsl.sync.scenario_recalculated":          {},
+		"nwsl.sync.scenario.refresh_required":      {},
+	} {
+		if got := attributes[key].AsBool(); got {
+			t.Errorf("%s = true, want false", key)
+		}
+	}
+	for key := range map[string]struct{}{
+		"nwsl.sync.qualification.snapshot_checked": {},
+		"nwsl.sync.qualification.snapshot_found":   {},
+		"nwsl.sync.scenario.snapshot_checked":      {},
+		"nwsl.sync.scenario.snapshot_found":        {},
+	} {
+		if got := attributes[key].AsBool(); !got {
+			t.Errorf("%s = false, want true", key)
+		}
+	}
+}
+
 func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
@@ -823,12 +895,21 @@ type orderedRefresher struct {
 	forced *bool
 }
 
-func (r orderedRefresher) Refresh(_ context.Context, _ cache.SyncRun, _ []cache.Team, _ []cache.Game, force bool) (bool, error) {
+type currentRefresher struct{}
+
+func (currentRefresher) Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (cache.DerivedRefreshResult, error) {
+	return cache.DerivedRefreshResult{
+		Reason: "snapshot_current", SnapshotChecked: true, SnapshotFound: true,
+		RulesVersion: "rules-v1", DefinitionVersion: "definition-v1",
+	}, nil
+}
+
+func (r orderedRefresher) Refresh(_ context.Context, _ cache.SyncRun, _ []cache.Team, _ []cache.Game, force bool) (cache.DerivedRefreshResult, error) {
 	*r.order = append(*r.order, r.label)
 	if r.forced != nil {
 		*r.forced = force
 	}
-	return true, nil
+	return cache.DerivedRefreshResult{Recalculated: true, Required: true, Reason: "forced"}, nil
 }
 
 func (f *fakeASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {

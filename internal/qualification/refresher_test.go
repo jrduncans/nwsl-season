@@ -95,6 +95,50 @@ func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
 	}
 }
 
+func TestCurrentRefreshDoesNotEmitChildSpan(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := trace.NewTracerProvider(trace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	rules := competition.Rules{
+		Season: "2026", Stage: "Regular Season", Version: "rules-v1",
+		ExpectedTeams: 1, GamesPerTeam: 1,
+		Achievements: []competition.Achievement{{ID: competition.AchievementShield, Label: "Shield", TopK: 1}},
+	}
+	ctx, parent := telemetry.Tracer().Start(context.Background(), "sync.recalculate")
+	result, err := (Refresher{Store: currentQualificationStore{}, Rules: rules}).Refresh(ctx, cache.SyncRun{Season: rules.Season, Stage: rules.Stage, FixtureSnapshotID: "fixture-1"}, nil, nil, false)
+	parent.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Recalculated || result.Required || result.Reason != "snapshot_current" {
+		t.Fatalf("refresh result = %+v, want current no-op", result)
+	}
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || spans[0].Name != "sync.recalculate" {
+		t.Fatalf("spans = %#v, want only parent sync.recalculate", spans)
+	}
+}
+
+type currentQualificationStore struct{}
+
+func (currentQualificationStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
+	return cache.QualificationSnapshot{}, true, nil
+}
+
+func (currentQualificationStore) ReplaceQualification(context.Context, cache.QualificationRun, []cache.QualificationStatus) (cache.QualificationSnapshot, error) {
+	return cache.QualificationSnapshot{}, nil
+}
+
+func (currentQualificationStore) RecordQualificationFailure(context.Context, cache.QualificationRun, error) error {
+	return nil
+}
+
 func qualificationAttributeMap(values []attribute.KeyValue) map[string]attribute.Value {
 	attributes := make(map[string]attribute.Value, len(values))
 	for _, value := range values {
