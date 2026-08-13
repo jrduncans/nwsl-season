@@ -8,19 +8,27 @@ BACKTEST_BINARY := nwsl-season-backtest
 TARGET_OS ?= linux
 TARGET_ARCH ?= arm64
 
-.PHONY: test fmt vet lint backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+.PHONY: verify test fmt vet lint race vuln backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+
+verify: fmt lint vet test
 
 test:
 	go test ./...
 
 fmt:
-	go fmt ./...
+	golangci-lint fmt ./...
 
 vet:
 	go vet ./...
 
 lint:
 	golangci-lint run ./...
+
+race:
+	go test -race ./...
+
+vuln:
+	govulncheck ./...
 
 backtest:
 	go run $(BACKTEST_PACKAGE)

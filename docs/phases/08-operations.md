@@ -51,7 +51,7 @@ configuration so production timing can be adjusted without a code change:
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage that the server may refresh automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the server inspects cached fixtures locally. |
 | `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before a non-final fixture can make a refresh eligible. |
-| `NWSL_SYNC_TIMEOUT` | `20s` | Bound on a single ASA refresh, including its database transaction. |
+| `NWSL_SYNC_TIMEOUT` | `2m` | Bound on a single ASA refresh, including its database transaction. |
 
 An eligible cache may start one refresh on each five-minute scheduler check.
 Each ASA request uses a small bounded retry sequence for transient transport,

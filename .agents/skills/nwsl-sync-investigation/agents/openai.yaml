@@ -1,0 +1,4 @@
+interface:
+  display_name: "NWSL Sync Investigation"
+  short_description: "Trace sync, cache, and scheduler decisions"
+  default_prompt: "Use $nwsl-sync-investigation to investigate this NWSL sync issue."

@@ -37,18 +37,9 @@ If the vulnerability database cannot be reached, report that the scan was
 skipped rather than treating it as a clean result. Run it after dependency
 changes and before release work even when the code change appears unrelated.
 
-For changes involving authentication, authorization, HTTP input, filesystem or
-SQL handling, secrets, serialization, or other security-sensitive behavior,
-also run the embedded `gosec` analyzer:
-
-```sh
-golangci-lint run --enable-only gosec ./...
-```
-
-`gosec` is intentionally not part of `make lint` yet: the current codebase has
-an existing baseline of findings, including intended uses and findings that
-need human review. Do not add blanket suppressions; triage each finding before
-making `gosec` an enforced clean gate.
+`make lint` includes `gosec`. Keep suppressions narrow and justified; do not
+add blanket exclusions. Run `golangci-lint run --enable-only gosec ./...` only
+for focused diagnosis.
 
 ## Architecture and data integrity
 
@@ -62,6 +53,22 @@ making `gosec` an enforced clean gate.
 - Read [README.md](README.md) and the relevant guide in `docs/` before changing
   synchronization, qualification/clinching, or Forecast Lab behavior.
 
+## Documentation routing
+
+- For sync, cache, scheduler, and ASA-loading work, read the current
+  [synchronization guide](docs/sync-logic-guide.md) and
+  [ASA-loading index](docs/asa-loading/README.md).
+- For qualification and scenarios, read
+  [the clinching guide](docs/clinching-logic-guide.md). For Forecast behavior,
+  read [the Forecast Lab guide](docs/forecast-lab-guide.md). For model changes,
+  follow the evaluation protocol in [README.md](README.md) and its checked-in
+  evaluation evidence.
+- `docs/phases/` and completed work packets are design history unless they
+  explicitly identify current behavior. Verify their historical claims against
+  the current code.
+- When behavior or required checks change, update the active guide, `AGENTS.md`,
+  `Makefile`, and CI together.
+
 ## Observability and configuration
 
 - Keep telemetry error classification low-cardinality: use the established
@@ -71,6 +78,9 @@ making `gosec` an enforced clean gate.
 - Never commit secrets. `config.env` is intentionally ignored; use
   `config.env.example` for documented configuration shape. Do not put API keys,
   tokens, or real telemetry configuration in source, tests, or documentation.
+- `config.env` may be a 1Password-backed FIFO. Never read, display, copy, or
+  diff it. For isolated local runs that must not load user secrets, set
+  `NWSL_CONFIG_FILE=/dev/null`.
 
 ## Forecast model changes
 

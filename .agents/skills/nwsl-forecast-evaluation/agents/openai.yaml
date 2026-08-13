@@ -1,0 +1,4 @@
+interface:
+  display_name: "NWSL Forecast Evaluation"
+  short_description: "Safely run and assess forecast evaluations"
+  default_prompt: "Use $nwsl-forecast-evaluation to run a safe forecast evaluation diagnostic."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "NWSL Work Packet"
+  short_description: "Implement or review ASA work packets safely"
+  default_prompt: "Use $nwsl-work-packet to implement or review this ASA work packet."
