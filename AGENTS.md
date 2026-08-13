@@ -53,6 +53,22 @@ for focused diagnosis.
 - Read [README.md](README.md) and the relevant guide in `docs/` before changing
   synchronization, qualification/clinching, or Forecast Lab behavior.
 
+## Documentation routing
+
+- For sync, cache, scheduler, and ASA-loading work, read the current
+  [synchronization guide](docs/sync-logic-guide.md) and
+  [ASA-loading index](docs/asa-loading/README.md).
+- For qualification and scenarios, read
+  [the clinching guide](docs/clinching-logic-guide.md). For Forecast behavior,
+  read [the Forecast Lab guide](docs/forecast-lab-guide.md). For model changes,
+  follow the evaluation protocol in [README.md](README.md) and its checked-in
+  evaluation evidence.
+- `docs/phases/` and completed work packets are design history unless they
+  explicitly identify current behavior. Verify their historical claims against
+  the current code.
+- When behavior or required checks change, update the active guide, `AGENTS.md`,
+  `Makefile`, and CI together.
+
 ## Observability and configuration
 
 - Keep telemetry error classification low-cardinality: use the established
@@ -62,6 +78,9 @@ for focused diagnosis.
 - Never commit secrets. `config.env` is intentionally ignored; use
   `config.env.example` for documented configuration shape. Do not put API keys,
   tokens, or real telemetry configuration in source, tests, or documentation.
+- `config.env` may be a 1Password-backed FIFO. Never read, display, copy, or
+  diff it. For isolated local runs that must not load user secrets, set
+  `NWSL_CONFIG_FILE=/dev/null`.
 
 ## Forecast model changes
 
