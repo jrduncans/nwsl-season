@@ -189,7 +189,9 @@ func TestPlanColdSweepUsesPersistedDueAndHotWorkWins(t *testing.T) {
 	if len(jobs) != 1 || jobs[0].Operation.Season != "2024" {
 		t.Fatalf("cold due ordering = %+v", jobs)
 	}
-	if coldSweepOffset("2025", "Regular Season", 30*24*time.Hour) != coldSweepOffset("2025", "Regular Season", 30*24*time.Hour) {
+	firstOffset := coldSweepOffset("2025", "Regular Season", 30*24*time.Hour)
+	secondOffset := coldSweepOffset("2025", "Regular Season", 30*24*time.Hour)
+	if firstOffset != secondOffset {
 		t.Fatal("cold staggering is not deterministic")
 	}
 	hot := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)

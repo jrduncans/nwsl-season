@@ -86,19 +86,19 @@ func (s State) With(gameID string, outcome simulation.Outcome) (State, error) {
 	if gameID == "" || !outcome.Valid() {
 		return State{}, fmt.Errorf("invalid forecast assumption")
 	}
-	copy := s.copy()
-	if _, exists := copy.Fixed[gameID]; !exists && len(copy.Fixed) >= MaxFixed {
+	clone := s.copy()
+	if _, exists := clone.Fixed[gameID]; !exists && len(clone.Fixed) >= MaxFixed {
 		return State{}, fmt.Errorf("at most %d fixed results are allowed", MaxFixed)
 	}
-	copy.Fixed[gameID] = outcome
-	return copy, nil
+	clone.Fixed[gameID] = outcome
+	return clone, nil
 }
 
 // Without returns a copied state without gameID.
 func (s State) Without(gameID string) State {
-	copy := s.copy()
-	delete(copy.Fixed, gameID)
-	return copy
+	clone := s.copy()
+	delete(clone.Fixed, gameID)
+	return clone
 }
 
 func (s State) copy() State {

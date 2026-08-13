@@ -215,6 +215,7 @@ func TestResultValidateRejectsEmptyConditionOutcomes(t *testing.T) {
 func intPtr(value int) *int { return &value }
 
 func TestGenerateMatchesNaiveAssignmentTruthTable(t *testing.T) {
+	// #nosec G404 -- a fixed pseudo-random stream makes this truth-table test reproducible.
 	random := rand.New(rand.NewSource(20260722))
 	checked := 0
 	for trial := 0; trial < 80 && checked < 25; trial++ {

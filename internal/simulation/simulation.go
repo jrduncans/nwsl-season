@@ -110,6 +110,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 	}
 
 	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, predictor.SeedMaterial())
+	// #nosec G404 G115 -- a stable seed makes equivalent cached forecasts reproducible; the signed conversion preserves its bits.
 	rng := rand.New(rand.NewSource(int64(seed)))
 	byID := make(map[string]*accumulator, len(request.Teams))
 	for _, team := range request.Teams {

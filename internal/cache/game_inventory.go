@@ -334,7 +334,7 @@ func inventoryTeams(ctx context.Context, dbq queryer, season, stage string) ([]T
 	if err != nil {
 		return nil, fmt.Errorf("load inventory teams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	teams := []Team{}
 	for rows.Next() {
 		var t Team

@@ -254,7 +254,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	if path == "" {
 		return nil, errors.New("cache db path is required")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create cache directory: %w", err)
 	}
 
@@ -688,7 +688,6 @@ func (c *DB) Migrate(ctx context.Context) error {
 		if err := recordMigration(ctx, tx, 13); err != nil {
 			return err
 		}
-		version = 13
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
@@ -851,7 +850,7 @@ func tableHasColumns(ctx context.Context, tx *sql.Tx, name string, wanted ...str
 	if err != nil {
 		return false, fmt.Errorf("inspect columns for table %q: %w", name, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	columns := make(map[string]struct{})
 	for rows.Next() {
 		var cid, notNull, primaryKey int
@@ -947,6 +946,7 @@ func backfillSourceScopes(ctx context.Context, tx *sql.Tx, now time.Time) error 
 	if hasSyncRuns {
 		successfulSync = "EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.season = identities.season AND sr.stage = identities.stage AND sr.outcome = 'success')"
 	}
+	// #nosec G201 -- schema fragments are selected only from fixed literals above.
 	statement := fmt.Sprintf(`INSERT INTO source_scopes (
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at
 	)
@@ -1629,7 +1629,7 @@ func seasonXGoals(ctx context.Context, dbq queryer, season, stage string) ([]Gam
 	if err != nil {
 		return nil, fmt.Errorf("load xG: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	values := []GameXG{}
 	for rows.Next() {
 		var v GameXG
@@ -1668,7 +1668,7 @@ func standingsTeams(ctx context.Context, dbq queryer, season, stage string) ([]s
 	if err != nil {
 		return nil, fmt.Errorf("load standings teams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	teams := []standings.Team{}
 	for rows.Next() {
@@ -1693,7 +1693,7 @@ func (c *DB) standingsGames(ctx context.Context, season, stage string) ([]standi
 	if err != nil {
 		return nil, fmt.Errorf("load standings games: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	games := []standings.Game{}
 	for rows.Next() {
@@ -1726,7 +1726,7 @@ func seasonGames(ctx context.Context, dbq queryer, season, stage string) ([]Game
 	if err != nil {
 		return nil, fmt.Errorf("load season games: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	games := []Game{}
 	for rows.Next() {
@@ -1814,7 +1814,7 @@ func deleteMissingGames(ctx context.Context, tx *sql.Tx, season, stage string, g
 	if err != nil {
 		return 0, fmt.Errorf("load existing game ids: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	deleteIDs := []string{}
 	for rows.Next() {
@@ -1963,7 +1963,7 @@ func (c *DB) QualificationForSnapshot(ctx context.Context, snapshotID, rulesVers
 	if err != nil {
 		return out, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var v QualificationStatus
 		var achievement, status, method, nohelp string
@@ -2123,7 +2123,7 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 	if err != nil {
 		return out, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var v ScenarioResult
 		var achievement, state string
@@ -2178,7 +2178,7 @@ func (c *DB) ReplaceScenario(ctx context.Context, run ScenarioRun, values []Scen
 	}
 	seen := map[string]bool{}
 	for _, v := range values {
-		if err := v.Result.Validate(run.Slate); err != nil {
+		if err := v.Validate(run.Slate); err != nil {
 			return ScenarioSnapshot{}, err
 		}
 		k := v.TeamID + "\x00" + string(v.Achievement)
@@ -2261,9 +2261,9 @@ func summarizeError(err error) string {
 		return ""
 	}
 	text := err.Error()
-	const max = 1000
-	if len(text) > max {
-		return text[:max]
+	const maxLength = 1000
+	if len(text) > maxLength {
+		return text[:maxLength]
 	}
 	return text
 }

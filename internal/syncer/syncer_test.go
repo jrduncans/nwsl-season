@@ -847,37 +847,6 @@ func (f *historyASA) GameXGoals(_ context.Context, filters asa.XGoalsFilters) ([
 	return []asa.GameXGoals{{GameID: "game-" + filters.SeasonName, HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.5, AwayTeamXGoals: .8}}, nil
 }
 
-type blockingASA struct {
-	teamsStarted chan struct{}
-	gamesStarted chan struct{}
-	xgStarted    chan struct{}
-	release      <-chan struct{}
-}
-
-func (f *blockingASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
-	close(f.teamsStarted)
-	<-f.release
-	return testTeams(), nil
-}
-
-func (f *blockingASA) Games(context.Context, asa.GamesFilters) ([]asa.Game, error) {
-	close(f.gamesStarted)
-	<-f.release
-	return []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}, nil
-}
-
-func (f *blockingASA) GameXGoals(context.Context, asa.XGoalsFilters) ([]asa.GameXGoals, error) {
-	close(f.xgStarted)
-	<-f.release
-	return []asa.GameXGoals{{
-		GameID:         "game-1",
-		HomeTeamID:     "home",
-		AwayTeamID:     "away",
-		HomeTeamXGoals: 1.2,
-		AwayTeamXGoals: 0.6,
-	}}, nil
-}
-
 type traceASA struct {
 	fakeASA
 	order *[]string
@@ -946,12 +915,6 @@ func (f *fakeASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game
 		return games, nil
 	}
 	return f.games, nil
-}
-
-func (f *fakeASA) targetGameCalls(id string) int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.targetCalls[id]
 }
 
 func testTeams() []asa.Team {

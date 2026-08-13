@@ -41,17 +41,17 @@ func DiscreteCRPS(values []simulation.PointsProbability, observed int) float64 {
 	}
 	ordered := append([]simulation.PointsProbability(nil), values...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Points < ordered[j].Points })
-	min, max := ordered[0].Points, ordered[len(ordered)-1].Points
-	if observed < min {
-		min = observed
+	minimum, maximum := ordered[0].Points, ordered[len(ordered)-1].Points
+	if observed < minimum {
+		minimum = observed
 	}
-	if observed > max {
-		max = observed
+	if observed > maximum {
+		maximum = observed
 	}
 	cdf := 0.0
 	index := 0
 	sum := 0.0
-	for point := min; point <= max; point++ {
+	for point := minimum; point <= maximum; point++ {
 		for index < len(ordered) && ordered[index].Points <= point {
 			cdf += ordered[index].Probability
 			index++
@@ -106,12 +106,9 @@ func Calibration(predictions []float64, observed []bool) []CalibrationBin {
 		if i >= len(observed) {
 			break
 		}
-		index := int(p * 10)
-		if index > 9 {
-			index = 9
-		}
-		if index < 0 {
-			index = 0
+		index, ok := calibrationIndex(p, len(bins))
+		if !ok {
+			continue
 		}
 		bins[index].Count++
 		sums[index] += p
@@ -126,4 +123,21 @@ func Calibration(predictions []float64, observed []bool) []CalibrationBin {
 		}
 	}
 	return bins
+}
+
+func calibrationIndex(prediction float64, count int) (int, bool) {
+	if count == 0 || math.IsNaN(prediction) {
+		return 0, false
+	}
+	if prediction <= 0 {
+		return 0, true
+	}
+	if prediction >= 1 {
+		return count - 1, true
+	}
+	index := int(prediction * float64(count))
+	if index < 0 || index >= count {
+		return 0, false
+	}
+	return index, true
 }

@@ -69,7 +69,7 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 	if err := application.PrecacheForecasts(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := calls.Load(), int32(len(forecast.Catalog())); got != want {
+	if got, want := int(calls.Load()), len(forecast.Catalog()); got != want {
 		t.Fatalf("simulation calls = %d, want %d", got, want)
 	}
 

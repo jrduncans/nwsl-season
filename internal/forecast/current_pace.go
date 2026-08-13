@@ -2,6 +2,7 @@ package forecast
 
 import (
 	"fmt"
+
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 

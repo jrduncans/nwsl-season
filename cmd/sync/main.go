@@ -93,7 +93,7 @@ func run() (exitCode int) {
 		logger.Error("open cache database", "error", err, "db", *dbPath)
 		return 1
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := ensureSourceScopeRegistry(context.Background(), db, cfg.SyncSeason, cfg.SyncStage, time.Now().UTC()); err != nil {
 		logger.Error("seed source scope registry", "error", err)
 		return 1
@@ -252,11 +252,17 @@ func runHistoricalBackfill(entries []competition.Entry, timeout time.Duration, r
 		if result.XGError != "" {
 			return fmt.Errorf("%s %s: xG refresh: %s", entry.Season, entry.Stage, result.XGError)
 		}
-		fmt.Fprintf(output, "Backfilled %s %s: %d games", entry.Season, entry.Stage, result.GamesUpserted)
-		if result.XGRun != nil {
-			fmt.Fprintf(output, ", %d available xG and %d unavailable xG", result.XGRun.AvailableGames, result.XGRun.UnavailableGames)
+		if _, err := fmt.Fprintf(output, "Backfilled %s %s: %d games", entry.Season, entry.Stage, result.GamesUpserted); err != nil {
+			return fmt.Errorf("write backfill status: %w", err)
 		}
-		fmt.Fprintln(output, ".")
+		if result.XGRun != nil {
+			if _, err := fmt.Fprintf(output, ", %d available xG and %d unavailable xG", result.XGRun.AvailableGames, result.XGRun.UnavailableGames); err != nil {
+				return fmt.Errorf("write backfill xG status: %w", err)
+			}
+		}
+		if _, err := fmt.Fprintln(output, "."); err != nil {
+			return fmt.Errorf("write backfill completion: %w", err)
+		}
 	}
 	return nil
 }

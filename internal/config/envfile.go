@@ -49,11 +49,12 @@ type environmentValue struct {
 }
 
 func environmentFileValues(path string) ([]environmentValue, error) {
+	// #nosec G304 G703 -- NWSL_CONFIG_FILE intentionally selects the local configuration file.
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64*1024), maxEnvironmentLineBytes)

@@ -335,11 +335,11 @@ func betterThresholdWitness(left, right queryResult) bool {
 }
 
 func cloneOutcomes(values map[string]Outcome) map[string]Outcome {
-	copy := make(map[string]Outcome, len(values))
+	clone := make(map[string]Outcome, len(values))
 	for id, outcome := range values {
-		copy[id] = outcome
+		clone[id] = outcome
 	}
-	return copy
+	return clone
 }
 
 // solveThresholdMaximumOracle retains the former exact-maximum dynamic program
@@ -472,7 +472,7 @@ func solveComponent(ctx context.Context, ids []string, games []standings.Game, i
 	walk = func(i int, vals []int) (componentSolution, error) {
 		if diag.VisitedStates%1024 == 0 {
 			if err := ctx.Err(); err != nil {
-				return componentSolution{diag: diag}, fmt.Errorf("%w: %v", ErrComputeBudget, err)
+				return componentSolution{diag: diag}, fmt.Errorf("%w: %w", ErrComputeBudget, err)
 			}
 		}
 		diag.VisitedStates++

@@ -54,6 +54,7 @@ func TestResultsPoissonRejectsMalformedCompletedGame(t *testing.T) {
 
 func TestPoissonSampleIsDeterministicForSeed(t *testing.T) {
 	distribution := poissonDistribution{homeRate: 1.5, awayRate: 1.2}
+	// #nosec G404 -- identical pseudo-random streams verify deterministic sampling.
 	first, second := rand.New(rand.NewSource(44)), rand.New(rand.NewSource(44))
 	for range 20 {
 		if got, want := distribution.Sample(first), distribution.Sample(second); got != want {

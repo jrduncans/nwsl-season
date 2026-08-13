@@ -208,17 +208,17 @@ func (e Entry) Validate() error {
 }
 
 func (e Entry) Copy() Entry {
-	copy := e
+	clone := e
 	if e.Inventory != nil {
 		inventory := *e.Inventory
-		copy.Inventory = &inventory
+		clone.Inventory = &inventory
 	}
 	if e.Rules != nil {
 		rules := e.Rules.Copy()
-		copy.Rules = &rules
+		clone.Rules = &rules
 	}
-	copy.Capabilities = append([]Capability(nil), e.Capabilities...)
-	return copy
+	clone.Capabilities = append([]Capability(nil), e.Capabilities...)
+	return clone
 }
 
 func (e Entry) Supports(capability Capability) bool {

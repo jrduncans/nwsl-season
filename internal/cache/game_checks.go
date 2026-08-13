@@ -45,7 +45,7 @@ func (c *DB) GameResultCheckStates(ctx context.Context, season, stage string) ([
 	if err != nil {
 		return nil, fmt.Errorf("query game result checks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []GameResultCheckState{}
 	for rows.Next() {
 		s, e := scanGameResultCheckState(rows)
@@ -204,7 +204,7 @@ func prepareCheckedGames(season, stage string, requested []CheckedGameRequest, r
 	if invalidTrimmed(season) || invalidTrimmed(stage) {
 		return nil, SourceRefreshAudit{}, errors.New("targeted games have blank or untrimmed scope")
 	}
-	if requested == nil || len(requested) == 0 {
+	if len(requested) == 0 {
 		return nil, SourceRefreshAudit{}, errors.New("targeted game requests are empty")
 	}
 	if returned == nil {

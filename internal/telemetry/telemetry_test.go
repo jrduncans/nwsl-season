@@ -278,30 +278,30 @@ func TestExceptionSeverityReflectsDisposition(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
-		emit func(context.Context, oteltrace.Span, error)
+		emit func(context.Context, oteltrace.Span, error) error
 		want otellog.Severity
 	}{
 		{
 			name: "terminal operation failure",
 			err:  errors.New("terminal failure"),
-			emit: func(ctx context.Context, span oteltrace.Span, err error) {
-				RecordErrorWithType(ctx, span, err, "test.terminal", ErrorTypeCalculationFailure)
+			emit: func(ctx context.Context, span oteltrace.Span, err error) error {
+				return RecordErrorWithType(ctx, span, err, "test.terminal", ErrorTypeCalculationFailure)
 			},
 			want: otellog.SeverityError,
 		},
 		{
 			name: "handled partial failure",
 			err:  context.DeadlineExceeded,
-			emit: func(ctx context.Context, span oteltrace.Span, err error) {
-				RecordWarningWithType(ctx, span, err, "test.partial", ErrorTypeCalculationFailure)
+			emit: func(ctx context.Context, span oteltrace.Span, err error) error {
+				return RecordWarningWithType(ctx, span, err, "test.partial", ErrorTypeCalculationFailure)
 			},
 			want: otellog.SeverityWarn,
 		},
 		{
 			name: "normal cancellation",
 			err:  context.Canceled,
-			emit: func(ctx context.Context, span oteltrace.Span, err error) {
-				RecordErrorWithType(ctx, span, err, "test.canceled", ErrorTypeCalculationFailure)
+			emit: func(ctx context.Context, span oteltrace.Span, err error) error {
+				return RecordErrorWithType(ctx, span, err, "test.canceled", ErrorTypeCalculationFailure)
 			},
 			want: otellog.SeverityDebug,
 		},
@@ -321,7 +321,9 @@ func TestExceptionSeverityReflectsDisposition(t *testing.T) {
 			})
 
 			ctx, span := traceProvider.Tracer("test").Start(context.Background(), "test.operation")
-			test.emit(ctx, span, test.err)
+			if got := test.emit(ctx, span, test.err); !errors.Is(got, test.err) {
+				t.Fatalf("returned error = %v, want wrapping %v", got, test.err)
+			}
 			span.End()
 			if len(logExporter.records) != 1 {
 				t.Fatalf("exported log records = %d, want 1", len(logExporter.records))

@@ -123,7 +123,7 @@ func observedInventoryForScope(ctx context.Context, dbq queryer, season, stage s
 	if err != nil {
 		return observedInventory{}, fmt.Errorf("query observed fixture inventory %s %s: %w", season, stage, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	observed := observedInventory{appearances: map[string]int{}}
 	for rows.Next() {
@@ -158,8 +158,8 @@ func copyInventoryExpectation(inventory *competition.InventoryExpectation) *comp
 	if inventory == nil {
 		return nil
 	}
-	copy := *inventory
-	return &copy
+	clone := *inventory
+	return &clone
 }
 
 func evaluateSeasonReadiness(scope SourceScope, observed observedInventory, expected *competition.InventoryExpectation) (SourceReadiness, InventoryCompleteness, error) {
@@ -184,13 +184,8 @@ func evaluateSeasonReadiness(scope SourceScope, observed observedInventory, expe
 		return readiness, InventoryCompletenessUnknown, nil
 	}
 
-	complete := true
-	if expected.Teams != 0 && observed.teams != expected.Teams {
-		complete = false
-	}
-	if expected.Games != 0 && observed.games != expected.Games {
-		complete = false
-	}
+	complete := (expected.Teams == 0 || observed.teams == expected.Teams) &&
+		(expected.Games == 0 || observed.games == expected.Games)
 	if expected.GamesPerTeam != 0 {
 		if observed.teams != expected.Teams {
 			complete = false

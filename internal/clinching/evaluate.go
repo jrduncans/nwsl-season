@@ -3,7 +3,6 @@ package clinching
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -217,12 +216,4 @@ func mergeDiagnostics(to *Diagnostics, from Diagnostics) {
 	to.IndividualPrunes += from.IndividualPrunes
 	to.ComponentPrunes += from.ComponentPrunes
 	to.TotalPrunes += from.TotalPrunes
-}
-func sortedIDs(values map[string]int) []string {
-	ids := make([]string, 0, len(values))
-	for id := range values {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
 }

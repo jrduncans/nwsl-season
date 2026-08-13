@@ -34,7 +34,7 @@ const (
 	instrumentationName      = "github.com/jrduncans/nwsl-season"
 	defaultHoneycombEndpoint = "https://api.honeycomb.io"
 	defaultTelemetryService  = "nwsl-season-server"
-	honeycombAPIKeyEnv       = "HONEYCOMB_API_KEY"
+	honeycombAPIKeyEnv       = "HONEYCOMB_API_KEY" // #nosec G101 -- this is an environment-variable name, not a credential.
 	honeycombAPIEndpointEnv  = "HONEYCOMB_API_ENDPOINT"
 	legacyMetricsDatasetEnv  = "HONEYCOMB_METRICS_DATASET"
 

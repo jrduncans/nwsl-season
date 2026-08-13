@@ -48,7 +48,7 @@ func (c *DB) GameXGCheckStates(ctx context.Context, season, stage string) ([]Gam
 	if err != nil {
 		return nil, fmt.Errorf("query xG checks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	states := []GameXGCheckState{}
 	for rows.Next() {
 		state, err := scanGameXGCheckState(rows)
@@ -222,7 +222,7 @@ func prepareCheckedXG(season, stage string, requested []CheckedXGRequest, return
 	if invalidTrimmed(season) || invalidTrimmed(stage) {
 		return nil, SourceRefreshAudit{}, errors.New("targeted xG has blank or untrimmed scope")
 	}
-	if requested == nil || len(requested) == 0 {
+	if len(requested) == 0 {
 		return nil, SourceRefreshAudit{}, errors.New("targeted xG requests are empty")
 	}
 	if returned == nil {

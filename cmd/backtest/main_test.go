@@ -49,10 +49,12 @@ func TestRunWritesReportsFromCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G304 -- the path is constructed from this test's TempDir.
 	jsonValue, err := os.ReadFile(jsonPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G304 -- the path is constructed from this test's TempDir.
 	markdownValue, err := os.ReadFile(markdownPath)
 	if err != nil {
 		t.Fatal(err)
