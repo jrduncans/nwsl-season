@@ -1,5 +1,10 @@
+[settings.proxy]
+enable = true
+https = true
+port = 7777
+
 [daemons.server]
-run = "go run ./cmd/server"
-ready_port = 8080
-ready_http = "http://localhost:8080/healthz"
-watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod"]
+run = "exec env NWSL_HTTP_ADDR=127.0.0.1:$PORT go run ./cmd/server"
+port = { expect = [8080], bump = 10 }
+mise = true
+watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]
