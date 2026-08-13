@@ -32,7 +32,9 @@ func checkedXGFixture(t *testing.T) (context.Context, *DB, []Game, string) {
 	two := cachedGame("two", "2031", "Checks", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Valid: true})
 	two.KickoffUTC = "2031-01-02T00:00:00Z"
 	if _, err := db.ReplaceSeason(ctx, "2031", "Checks", teams, []Game{one, two}, time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close failed fixture database: %v", closeErr)
+		}
 		t.Fatal(err)
 	}
 	return ctx, db, []Game{one, two}, path
@@ -42,7 +44,9 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 	ctx, db, _, path := checkedXGFixture(t)
 	available := xgValue("one")
 	if _, err := db.ReplaceStageXG(ctx, "2031", "Checks", []GameXG{available}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close failed fixture database: %v", closeErr)
+		}
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -54,7 +58,9 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 	}
 	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12"} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
-			legacy.Close()
+			if closeErr := legacy.Close(); closeErr != nil {
+				t.Errorf("close legacy database: %v", closeErr)
+			}
 			t.Fatal(err)
 		}
 	}
@@ -318,14 +324,24 @@ func TestGameXGCheckReadContract(t *testing.T) {
 	if err != nil || again.NextDueAt == nil || again.NextDueAt.IsZero() {
 		t.Fatalf("non-defensive pointer=%+v,%v", again, err)
 	}
-	for _, column := range []string{"last_checked_at", "first_available_observed_at", "last_material_change_at", "next_due_at"} {
-		if _, err := db.db.ExecContext(ctx, `UPDATE game_xg_checks SET `+column+`='bad' WHERE asa_game_id='one'`); err != nil {
+	updates := []struct {
+		column    string
+		malformed string
+		reset     string
+	}{
+		{"last_checked_at", `UPDATE game_xg_checks SET last_checked_at='bad' WHERE asa_game_id='one'`, `UPDATE game_xg_checks SET last_checked_at='2031-01-01T00:00:00Z' WHERE asa_game_id='one'`},
+		{"first_available_observed_at", `UPDATE game_xg_checks SET first_available_observed_at='bad' WHERE asa_game_id='one'`, `UPDATE game_xg_checks SET first_available_observed_at='2031-01-01T00:00:00Z' WHERE asa_game_id='one'`},
+		{"last_material_change_at", `UPDATE game_xg_checks SET last_material_change_at='bad' WHERE asa_game_id='one'`, `UPDATE game_xg_checks SET last_material_change_at='2031-01-01T00:00:00Z' WHERE asa_game_id='one'`},
+		{"next_due_at", `UPDATE game_xg_checks SET next_due_at='bad' WHERE asa_game_id='one'`, `UPDATE game_xg_checks SET next_due_at='2031-01-01T00:00:00Z' WHERE asa_game_id='one'`},
+	}
+	for _, update := range updates {
+		if _, err := db.db.ExecContext(ctx, update.malformed); err != nil {
 			t.Fatal(err)
 		}
 		if _, _, err := db.GameXGCheckState(ctx, "one"); err == nil || !strings.Contains(err.Error(), "parse xG check") {
-			t.Fatalf("malformed %s accepted: %v", column, err)
+			t.Fatalf("malformed %s accepted: %v", update.column, err)
 		}
-		if _, err := db.db.ExecContext(ctx, `UPDATE game_xg_checks SET `+column+`='2031-01-01T00:00:00Z' WHERE asa_game_id='one'`); err != nil {
+		if _, err := db.db.ExecContext(ctx, update.reset); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -367,7 +383,9 @@ func TestMigrationTwelveMinimalFixtureSkipsBackfill(t *testing.T) {
 		`INSERT INTO schema_migrations VALUES (11,'2031-01-01T00:00:00Z')`,
 	} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
-			legacy.Close()
+			if closeErr := legacy.Close(); closeErr != nil {
+				t.Errorf("close legacy database: %v", closeErr)
+			}
 			t.Fatal(err)
 		}
 	}
@@ -554,7 +572,11 @@ func TestReplaceStageXGRollsBackXGCheckMaintenance(t *testing.T) {
 			beforeStates, _ := db.GameXGCheckStates(ctx, "2031", "Checks")
 			beforeRuns := xgRunHistory(t, ctx, db, "2031", "Checks")
 			beforeAudits, _ := db.SourceRefreshAudits(ctx, SourceResourceGameXG, "2031", "Checks")
-			if _, err := db.db.ExecContext(ctx, "CREATE TRIGGER abort_full_xg_check BEFORE "+tc.event+" ON game_xg_checks BEGIN SELECT RAISE(ABORT,'stop'); END"); err != nil {
+			triggerStatements := map[string]string{
+				"INSERT": "CREATE TRIGGER abort_full_xg_check BEFORE INSERT ON game_xg_checks BEGIN SELECT RAISE(ABORT,'stop'); END",
+				"UPDATE": "CREATE TRIGGER abort_full_xg_check BEFORE UPDATE ON game_xg_checks BEGIN SELECT RAISE(ABORT,'stop'); END",
+			}
+			if _, err := db.db.ExecContext(ctx, triggerStatements[tc.event]); err != nil {
 				t.Fatal(err)
 			}
 			result, err := db.ReplaceStageXG(ctx, "2031", "Checks", []GameXG{xgValue("one")}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 2, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 2, 1, 0, 0, time.UTC)})
@@ -578,7 +600,11 @@ func TestUpsertCheckedXGRollsBackValueAndCheckInsert(t *testing.T) {
 			beforeStates, _ := db.GameXGCheckStates(ctx, "2031", "Checks")
 			beforeRuns := xgRunHistory(t, ctx, db, "2031", "Checks")
 			beforeAudits, _ := db.SourceRefreshAudits(ctx, SourceResourceGameXG, "2031", "Checks")
-			if _, err := db.db.ExecContext(ctx, "CREATE TRIGGER abort_checked_xg_insert BEFORE INSERT ON "+target+" BEGIN SELECT RAISE(ABORT,'stop'); END"); err != nil {
+			triggerStatements := map[string]string{
+				"game_xg":        "CREATE TRIGGER abort_checked_xg_insert BEFORE INSERT ON game_xg BEGIN SELECT RAISE(ABORT,'stop'); END",
+				"game_xg_checks": "CREATE TRIGGER abort_checked_xg_insert BEFORE INSERT ON game_xg_checks BEGIN SELECT RAISE(ABORT,'stop'); END",
+			}
+			if _, err := db.db.ExecContext(ctx, triggerStatements[target]); err != nil {
 				t.Fatal(err)
 			}
 			result, err := db.UpsertCheckedXG(ctx, "2031", "Checks", []CheckedXGRequest{xgCheckRequest("one", 1)}, []GameXG{xgValue("one")}, xgCheckMetadata(1))

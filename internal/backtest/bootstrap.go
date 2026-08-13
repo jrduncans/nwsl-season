@@ -10,6 +10,7 @@ func PairedBootstrap(differences []float64, resamples int, seed int64) (float64,
 	if len(differences) == 0 || resamples <= 0 {
 		return 0, 0
 	}
+	// #nosec G404 -- paired bootstrap intervals must be reproducible for a supplied seed.
 	rng := rand.New(rand.NewSource(seed))
 	values := make([]float64, resamples)
 	for i := range values {

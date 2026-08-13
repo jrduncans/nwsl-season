@@ -26,7 +26,9 @@ func TestPrintTableIncludesPointsPerGame(t *testing.T) {
 	}
 
 	var output bytes.Buffer
-	printTable(&output, table)
+	if err := printTable(&output, table); err != nil {
+		t.Fatal(err)
+	}
 
 	want := "#  Team      P  W  D  L  GF  GA  GD  Pts  PPG   TB\n" +
 		"1  Alpha FC  3  2  0  1  5   3   2   6    2.00  \n" +

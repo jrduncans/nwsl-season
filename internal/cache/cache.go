@@ -254,7 +254,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	if path == "" {
 		return nil, errors.New("cache db path is required")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create cache directory: %w", err)
 	}
 
@@ -946,6 +946,7 @@ func backfillSourceScopes(ctx context.Context, tx *sql.Tx, now time.Time) error 
 	if hasSyncRuns {
 		successfulSync = "EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.season = identities.season AND sr.stage = identities.stage AND sr.outcome = 'success')"
 	}
+	// #nosec G201 -- schema fragments are selected only from fixed literals above.
 	statement := fmt.Sprintf(`INSERT INTO source_scopes (
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at
 	)

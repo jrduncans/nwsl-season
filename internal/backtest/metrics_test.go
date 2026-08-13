@@ -37,6 +37,18 @@ func TestCalibrationAndBootstrapAreDeterministic(t *testing.T) {
 	}
 }
 
+func TestCalibrationClampsInfinitePredictionsAndSkipsNaN(t *testing.T) {
+	bins := Calibration([]float64{math.Inf(-1), math.Inf(1), math.NaN()}, []bool{false, true, true})
+	if bins[0].Count != 1 || bins[9].Count != 1 {
+		t.Fatalf("bins = %+v", bins)
+	}
+	for _, bin := range bins {
+		if bin.Count > 1 {
+			t.Fatalf("NaN prediction was included: %+v", bins)
+		}
+	}
+}
+
 func TestReportStatesIncompleteEvaluation(t *testing.T) {
 	report := Report{Status: "not_run", CurrentDefaultModel: "results-poisson-v1", Limitations: []string{"historical evaluation is pending"}}
 	if got := Markdown(report); !strings.Contains(got, "not_run") || !strings.Contains(got, "results-poisson-v1") || !strings.Contains(got, "Development results") || !strings.Contains(got, "Final-test results") || !strings.Contains(got, "Pooled results") {

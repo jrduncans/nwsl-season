@@ -308,7 +308,9 @@ proxy/TLS configuration, configuration delivery, and backups.
 The runtime requires:
 
 - Exactly one server instance.
-- A writable, persistent `NWSL_DATA_DIR`.
+- A writable, persistent `NWSL_DATA_DIR`, restricted to the service user
+  (`0700` is recommended). The application uses that mode when it creates the
+  directory, but operators must tighten any existing directory themselves.
 - Network access to ASA for scheduled or operator-triggered refreshes.
 - Graceful delivery of `SIGINT` or `SIGTERM`.
 - Permission to bind `NWSL_HTTP_ADDR`.

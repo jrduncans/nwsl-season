@@ -356,7 +356,7 @@ func buildComponentCapacities(games []standings.Game, selected map[string]int, t
 }
 
 func packDeficitState(game int, deficits []int) (deficitState, bool) {
-	if game > int(^uint16(0)) || len(deficits) > 18 {
+	if game < 0 || game > int(^uint16(0)) || len(deficits) > 18 {
 		return deficitState{}, false
 	}
 	var lo, hi uint64

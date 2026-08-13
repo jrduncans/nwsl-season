@@ -174,6 +174,7 @@ func coldSweepOffset(season, stage string, interval time.Duration) time.Duration
 	_, _ = hash.Write([]byte(season))
 	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write([]byte(stage))
+	// #nosec G115 -- modulo a positive Duration is strictly below MaxInt64.
 	return time.Duration(hash.Sum64() % uint64(interval))
 }
 

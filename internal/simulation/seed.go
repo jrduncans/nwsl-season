@@ -72,5 +72,6 @@ func writeScore(h hash.Hash, value *int) {
 		return
 	}
 	_, _ = h.Write([]byte{1})
+	// #nosec G115 -- this stable hash deliberately encodes the score's two's-complement bit pattern.
 	writeUint(h, uint64(*value))
 }

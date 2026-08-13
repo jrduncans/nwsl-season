@@ -11,6 +11,7 @@ import (
 )
 
 func TestCutoffDecisionMatchesMaximumOracle(t *testing.T) {
+	// #nosec G404 -- a fixed pseudo-random stream makes this oracle comparison reproducible.
 	random := rand.New(rand.NewSource(20260721))
 	teamIDs := []string{"target", "a", "b", "c", "d"}
 	allGames := []standings.Game{
@@ -167,6 +168,7 @@ func TestUniversalSlateBlockerLeavesPossibleSlateForScenarioSearch(t *testing.T)
 }
 
 func TestBinaryNoHelpMatchesLinearPrefixEnumeration(t *testing.T) {
+	// #nosec G404 -- a fixed pseudo-random stream makes this enumeration test reproducible.
 	random := rand.New(rand.NewSource(20260722))
 	for trial := 0; trial < 100; trial++ {
 		teams := []standings.Team{{ID: "target"}, {ID: "a"}, {ID: "b"}, {ID: "c"}}

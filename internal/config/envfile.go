@@ -49,6 +49,7 @@ type environmentValue struct {
 }
 
 func environmentFileValues(path string) ([]environmentValue, error) {
+	// #nosec G304 G703 -- NWSL_CONFIG_FILE intentionally selects the local configuration file.
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err

@@ -369,11 +369,12 @@ func TestReplaceGameInventoryRollsBackOnLegacyAuditAndVenueTriggers(t *testing.T
 			beforeGames, _ := db.seasonGames(ctx, "2030", "Example")
 			beforeVenue, _ := db.VenueSummaries(ctx, []string{"2030"}, "Example")
 			beforeAudits, _ := db.SourceRefreshAudits(ctx, SourceResourceGames, "2030", "Example")
-			event := "INSERT"
-			if target == "venue_summaries" {
-				event = "UPDATE"
+			triggerStatements := map[string]string{
+				"sync_runs":             "CREATE TRIGGER abort_insert BEFORE INSERT ON sync_runs BEGIN SELECT RAISE(ABORT, 'stop'); END",
+				"source_refresh_audits": "CREATE TRIGGER abort_insert BEFORE INSERT ON source_refresh_audits BEGIN SELECT RAISE(ABORT, 'stop'); END",
+				"venue_summaries":       "CREATE TRIGGER abort_insert BEFORE UPDATE ON venue_summaries BEGIN SELECT RAISE(ABORT, 'stop'); END",
 			}
-			if _, err := db.db.ExecContext(ctx, "CREATE TRIGGER abort_insert BEFORE "+event+" ON "+target+" BEGIN SELECT RAISE(ABORT, 'stop'); END"); err != nil {
+			if _, err := db.db.ExecContext(ctx, triggerStatements[target]); err != nil {
 				t.Fatal(err)
 			}
 			one.HomeTeamID = "charlie"

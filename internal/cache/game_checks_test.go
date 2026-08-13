@@ -330,14 +330,23 @@ func TestGameResultCheckReadValidationScopeAndMalformedStorage(t *testing.T) {
 	if _, _, err := db.GameResultCheckState(ctx, "one"); err == nil {
 		t.Fatal("malformed timestamp accepted")
 	}
-	for _, column := range []string{"first_terminal_observed_at", "last_material_change_at", "next_due_at"} {
-		if _, err := db.db.ExecContext(ctx, `UPDATE game_result_checks SET last_checked_at='2030-01-01T00:00:00Z', `+column+`='bad' WHERE asa_game_id='one'`); err != nil {
+	updates := []struct {
+		column    string
+		malformed string
+		reset     string
+	}{
+		{"first_terminal_observed_at", `UPDATE game_result_checks SET last_checked_at='2030-01-01T00:00:00Z', first_terminal_observed_at='bad' WHERE asa_game_id='one'`, `UPDATE game_result_checks SET first_terminal_observed_at=NULL WHERE asa_game_id='one'`},
+		{"last_material_change_at", `UPDATE game_result_checks SET last_checked_at='2030-01-01T00:00:00Z', last_material_change_at='bad' WHERE asa_game_id='one'`, `UPDATE game_result_checks SET last_material_change_at=NULL WHERE asa_game_id='one'`},
+		{"next_due_at", `UPDATE game_result_checks SET last_checked_at='2030-01-01T00:00:00Z', next_due_at='bad' WHERE asa_game_id='one'`, `UPDATE game_result_checks SET next_due_at=NULL WHERE asa_game_id='one'`},
+	}
+	for _, update := range updates {
+		if _, err := db.db.ExecContext(ctx, update.malformed); err != nil {
 			t.Fatal(err)
 		}
 		if _, _, err := db.GameResultCheckState(ctx, "one"); err == nil {
-			t.Fatalf("malformed %s accepted", column)
+			t.Fatalf("malformed %s accepted", update.column)
 		}
-		if _, err := db.db.ExecContext(ctx, `UPDATE game_result_checks SET `+column+`=NULL WHERE asa_game_id='one'`); err != nil {
+		if _, err := db.db.ExecContext(ctx, update.reset); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -666,7 +675,9 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	}
 	want := time.Date(2030, 1, 3, 0, 0, 0, 0, time.UTC)
 	_ = wantRun
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	legacy, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -676,7 +687,9 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	legacy.Close()
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
 	db, err = Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)
@@ -688,7 +701,9 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	if !state.LastCheckedAt.Equal(want) {
 		t.Fatalf("checked=%v want %v", state.LastCheckedAt, want)
 	}
-	db.Close()
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if db, err = Open(ctx, path); err != nil {
 		t.Fatal(err)
 	}
@@ -716,7 +731,12 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 		}
 		cols[name] = true
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range []string{"asa_game_id", "last_checked_at", "first_terminal_observed_at", "last_material_change_at", "next_due_at"} {
 		if !cols[name] {
 			t.Fatalf("missing column %s", name)
@@ -756,7 +776,9 @@ func TestMigrationElevenToleratesMinimalV10Fixture(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	raw.Close()
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	db, err := Open(ctx, path)
 	if err != nil {
 		t.Fatal(err)

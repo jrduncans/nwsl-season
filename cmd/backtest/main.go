@@ -244,7 +244,7 @@ func setKeys(values map[string]bool) []string {
 
 func writeFile(path string, value []byte) error {
 	directory := filepath.Dir(path)
-	if err := os.MkdirAll(directory, 0o755); err != nil {
+	if err := os.MkdirAll(directory, 0o750); err != nil {
 		return fmt.Errorf("create report directory: %w", err)
 	}
 	temporary, err := os.CreateTemp(directory, ".backtest-*")
