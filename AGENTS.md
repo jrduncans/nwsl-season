@@ -37,18 +37,9 @@ If the vulnerability database cannot be reached, report that the scan was
 skipped rather than treating it as a clean result. Run it after dependency
 changes and before release work even when the code change appears unrelated.
 
-For changes involving authentication, authorization, HTTP input, filesystem or
-SQL handling, secrets, serialization, or other security-sensitive behavior,
-also run the embedded `gosec` analyzer:
-
-```sh
-golangci-lint run --enable-only gosec ./...
-```
-
-`gosec` is intentionally not part of `make lint` yet: the current codebase has
-an existing baseline of findings, including intended uses and findings that
-need human review. Do not add blanket suppressions; triage each finding before
-making `gosec` an enforced clean gate.
+`make lint` includes `gosec`. Keep suppressions narrow and justified; do not
+add blanket exclusions. Run `golangci-lint run --enable-only gosec ./...` only
+for focused diagnosis.
 
 ## Architecture and data integrity
 
