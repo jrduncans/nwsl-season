@@ -768,9 +768,9 @@ func TestLegacyReplaceGameXGRemainsIsolatedFromStageAuditState(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := time.Date(2030, 5, 1, 1, 0, 0, 0, time.FixedZone("legacy", -7*60*60))
-	before, after := time.Now().UTC(), time.Now().UTC()
+	before := time.Now().UTC()
 	run, err := db.ReplaceGameXG(ctx, "2030", "Legacy", []Game{g}, []GameXG{xgValue("one")}, started)
-	after = time.Now().UTC()
+	after := time.Now().UTC()
 	venues, venueErr := db.VenueSummaries(ctx, []string{"2030"}, "Legacy")
 	if err != nil || venueErr != nil || run.ID == 0 || !run.StartedAt.Equal(started.UTC()) || run.FinishedAt.Before(before) || run.FinishedAt.After(after) || run.RowsSeen != 1 || run.AvailableGames != 1 || run.UnavailableGames != 0 || run.RowsInserted != 1 || len(venues) != 1 || !venues[0].XGReady || venues[0].XGMatches != 1 || venues[0].HomeXG != 1.2 || venues[0].AwayXG != .8 {
 		t.Fatalf("legacy success=%+v,%v venue=%+v,%v", run, err, venues, venueErr)

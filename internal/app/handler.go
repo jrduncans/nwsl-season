@@ -1102,16 +1102,6 @@ func relativeURL(fromPath, targetPath string) string {
 	return strings.Join(parts, "/")
 }
 
-// seasonURL avoids a trailing-slash redirect when returning from a nested
-// season page such as /seasons/{season}/fixtures.
-func seasonURL(fromPath, season string) string {
-	target := "/seasons/" + url.PathEscape(season)
-	if path.Dir(fromPath) == target {
-		return "../" + path.Base(target)
-	}
-	return relativeURL(fromPath, target)
-}
-
 func redirectRelative(w http.ResponseWriter, location string, status int) {
 	w.Header().Set("Location", location)
 	w.WriteHeader(status)

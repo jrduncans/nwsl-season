@@ -78,7 +78,7 @@ func solveCutoff(ctx context.Context, p preparedSeason, threshold, k int) (cutof
 	var choose func(int, int) (bool, error)
 	choose = func(start, remaining int) (bool, error) {
 		if err := ctx.Err(); err != nil {
-			return false, fmt.Errorf("%w: %v", ErrComputeBudget, err)
+			return false, fmt.Errorf("%w: %w", ErrComputeBudget, err)
 		}
 		if remaining == 0 {
 			result.diag.SubsetProbes++
@@ -218,7 +218,7 @@ func solveCandidateSet(ctx context.Context, p preparedSeason, threshold int, sel
 	walk = func(gameIndex int) (bool, error) {
 		if result.diag.VisitedStates%512 == 0 {
 			if err := ctx.Err(); err != nil {
-				return false, fmt.Errorf("%w: %v", ErrComputeBudget, err)
+				return false, fmt.Errorf("%w: %w", ErrComputeBudget, err)
 			}
 		}
 		result.diag.VisitedStates++

@@ -41,17 +41,17 @@ func DiscreteCRPS(values []simulation.PointsProbability, observed int) float64 {
 	}
 	ordered := append([]simulation.PointsProbability(nil), values...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Points < ordered[j].Points })
-	min, max := ordered[0].Points, ordered[len(ordered)-1].Points
-	if observed < min {
-		min = observed
+	minimum, maximum := ordered[0].Points, ordered[len(ordered)-1].Points
+	if observed < minimum {
+		minimum = observed
 	}
-	if observed > max {
-		max = observed
+	if observed > maximum {
+		maximum = observed
 	}
 	cdf := 0.0
 	index := 0
 	sum := 0.0
-	for point := min; point <= max; point++ {
+	for point := minimum; point <= maximum; point++ {
 		for index < len(ordered) && ordered[index].Points <= point {
 			cdf += ordered[index].Probability
 			index++

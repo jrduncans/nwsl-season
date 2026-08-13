@@ -3,9 +3,10 @@ package forecast
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/jrduncans/nwsl-season/internal/standings"
 	"math"
 	"sort"
+
+	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 const xgPoissonID = "xg-poisson-v1"

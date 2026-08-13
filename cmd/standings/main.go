@@ -42,7 +42,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("open cache database %q: %w", *dbPath, err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	teams, games, err := db.StandingsInputs(ctx, *season, *stage)
 	if err != nil {
@@ -55,8 +55,7 @@ func run() error {
 	}
 
 	table := standings.Calculate(teams, games, rules)
-	printTable(os.Stdout, table)
-	return nil
+	return printTable(os.Stdout, table)
 }
 
 func standingsRules(order string) (standings.Rules, error) {
@@ -70,12 +69,14 @@ func standingsRules(order string) (standings.Rules, error) {
 	}
 }
 
-func printTable(output io.Writer, table []standings.TableRow) {
+func printTable(output io.Writer, table []standings.TableRow) error {
 	writer := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(writer, "#\tTeam\tP\tW\tD\tL\tGF\tGA\tGD\tPts\tPPG\tTB")
+	if _, err := fmt.Fprintln(writer, "#\tTeam\tP\tW\tD\tL\tGF\tGA\tGD\tPts\tPPG\tTB"); err != nil {
+		return err
+	}
 	for i, row := range table {
 		record := row.Record
-		fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.2f\t%s\n",
+		if _, err := fmt.Fprintf(writer, "%d\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.2f\t%s\n",
 			i+1,
 			standings.DisplayName(row.Team),
 			record.Played,
@@ -87,9 +88,11 @@ func printTable(output io.Writer, table []standings.TableRow) {
 			record.GoalDifference(),
 			record.Points,
 			pointsPerGame(record),
-			tieBreakNote(row.TieBreak))
+			tieBreakNote(row.TieBreak)); err != nil {
+			return err
+		}
 	}
-	writer.Flush()
+	return writer.Flush()
 }
 
 func pointsPerGame(record standings.Record) float64 {

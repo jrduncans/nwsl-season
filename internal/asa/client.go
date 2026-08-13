@@ -170,7 +170,7 @@ func fetchArray[T any](ctx context.Context, c Client, endpoint, op string, decod
 		}
 		return nil, fmt.Errorf("%s: send request: %w", op, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("%s: unexpected HTTP status %d: %s", op, response.StatusCode, limitedBody(response.Body))

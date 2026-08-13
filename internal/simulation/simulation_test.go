@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/rand"
 	"os"
@@ -16,13 +17,13 @@ type fixedModel struct{ score forecast.Scoreline }
 
 func (m fixedModel) Info() forecast.Info { return forecast.Info{ID: "fixed-v1", Name: "Fixed"} }
 func (m fixedModel) Fit(forecast.FitInput) (forecast.Predictor, error) {
-	return fixedPredictor{score: m.score}, nil
+	return fixedPredictor(m), nil
 }
 
 type fixedPredictor struct{ score forecast.Scoreline }
 
 func (p fixedPredictor) Distribution(standings.Game) (forecast.Distribution, error) {
-	return fixedDistribution{score: p.score}, nil
+	return fixedDistribution(p), nil
 }
 func (p fixedPredictor) SeedMaterial() []byte { return nil }
 
@@ -131,7 +132,7 @@ func TestRunHonorsCanceledContext(t *testing.T) {
 		Games: []standings.Game{{ID: "future", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "b"}},
 		Model: fixedModel{score: forecast.Scoreline{Home: 1, Away: 0}}, Iterations: 100, PlayoffPlaces: 1,
 	})
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
 }

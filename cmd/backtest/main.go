@@ -111,7 +111,7 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	if err != nil {
 		return fmt.Errorf("open cache %q: %w", *dbPath, err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	ids := setKeys(seasonIDs)
 	seasons := make([]backtest.Season, 0, len(ids))
 	for _, id := range ids {
@@ -166,7 +166,9 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	if err := writeFile(*markdownPath, []byte(backtest.Markdown(report))); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "Evaluated %d seasons; selected %s.\nWrote %s and %s.\n", len(seasons), report.SelectedModel, *jsonPath, *markdownPath)
+	if _, err := fmt.Fprintf(stdout, "Evaluated %d seasons; selected %s.\nWrote %s and %s.\n", len(seasons), report.SelectedModel, *jsonPath, *markdownPath); err != nil {
+		return fmt.Errorf("write summary: %w", err)
+	}
 	return nil
 }
 
@@ -250,13 +252,13 @@ func writeFile(path string, value []byte) error {
 		return fmt.Errorf("create temporary report: %w", err)
 	}
 	name := temporary.Name()
-	defer os.Remove(name)
+	defer func() { _ = os.Remove(name) }()
 	if _, err := temporary.Write(value); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("write report: %w", err)
 	}
 	if err := temporary.Chmod(0o644); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("set report permissions: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
@@ -269,7 +271,7 @@ func writeFile(path string, value []byte) error {
 }
 
 func gitCommit() string {
-	command := exec.Command("git", "rev-parse", "HEAD")
+	command := exec.CommandContext(context.Background(), "git", "rev-parse", "HEAD")
 	command.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
 	value, err := command.Output()
 	if err != nil {

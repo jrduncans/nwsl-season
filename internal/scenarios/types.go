@@ -101,7 +101,6 @@ func (r Result) BudgetLimited() bool {
 	return r.Limitation == LimitationBudgetExhausted || r.Limitation == LimitationBudgetPartial
 }
 
-func empty[T any]() []T { return []T{} }
 func canonicalOutcomes(in []clinching.Outcome) []clinching.Outcome {
 	seen := map[clinching.Outcome]bool{}
 	for _, v := range in {
@@ -141,15 +140,16 @@ func (s Slate) Validate() error {
 	if s.ID == "" || s.DefinitionVersion != DefinitionVersion || len(s.FixtureIDs) == 0 || s.StartsAtUTC.IsZero() || s.LatestKickoffUTC.IsZero() || s.CutoffUTC.IsZero() {
 		return fmt.Errorf("invalid ready slate")
 	}
-	if s.Source == SourceMatchday {
+	switch s.Source {
+	case SourceMatchday:
 		if s.Matchday <= 0 {
 			return fmt.Errorf("matchday slate lacks matchday")
 		}
-	} else if s.Source == SourceKickoffWindow {
+	case SourceKickoffWindow:
 		if s.Matchday != 0 {
 			return fmt.Errorf("window slate has matchday")
 		}
-	} else {
+	default:
 		return fmt.Errorf("invalid slate source %q", s.Source)
 	}
 	seen := map[string]bool{}

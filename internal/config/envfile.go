@@ -53,7 +53,7 @@ func environmentFileValues(path string) ([]environmentValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64*1024), maxEnvironmentLineBytes)

@@ -713,11 +713,3 @@ func applyOutcomePoints(points map[string]int, g standings.Game, o clinching.Out
 		points[g.AwayTeamID]++
 	}
 }
-
-func sortConditions(c []FixtureCondition, order []string) {
-	pos := map[string]int{}
-	for i, id := range order {
-		pos[id] = i
-	}
-	sort.Slice(c, func(i, j int) bool { return pos[c[i].GameID] < pos[c[j].GameID] })
-}

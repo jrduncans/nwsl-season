@@ -299,7 +299,7 @@ func stageXGStates(ctx context.Context, q queryer, season, stage string) ([]Game
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []GameXG{}
 	for rows.Next() {
 		var v GameXG

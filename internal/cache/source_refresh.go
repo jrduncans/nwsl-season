@@ -229,7 +229,7 @@ func (c *DB) SourceResourceScopeStates(ctx context.Context) ([]SourceResourceSco
 	if err != nil {
 		return nil, fmt.Errorf("query source refresh states: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	states := make([]SourceResourceScopeState, 0)
 	for rows.Next() {
 		state, err := scanSourceResourceScopeState(rows)
@@ -256,7 +256,7 @@ func (c *DB) SourceRefreshAudits(ctx context.Context, resource SourceResource, s
 	if err != nil {
 		return nil, fmt.Errorf("query source refresh audits: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	audits := make([]SourceRefreshAudit, 0)
 	for rows.Next() {
 		audit, err := scanSourceRefreshAudit(rows)

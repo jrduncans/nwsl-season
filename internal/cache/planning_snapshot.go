@@ -90,7 +90,7 @@ func planningResultChecks(ctx context.Context, q queryer, season, stage string) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []GameResultCheckState{}
 	for rows.Next() {
 		value, err := scanGameResultCheckState(rows)
@@ -107,7 +107,7 @@ func planningXGChecks(ctx context.Context, q queryer, season, stage string) ([]G
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []GameXGCheckState{}
 	for rows.Next() {
 		value, err := scanGameXGCheckState(rows)

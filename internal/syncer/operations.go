@@ -626,7 +626,7 @@ func (s Service) operationFailure(ctx context.Context, store operationStore, ope
 		ErrorSummary: cause.Error(),
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("%w; additionally failed to record source failure: %v", cause, err)
+		return fmt.Errorf("%w; additionally failed to record source failure: %w", cause, err)
 	}
 	return cause
 }

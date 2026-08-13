@@ -157,7 +157,7 @@ func sourceScopes(ctx context.Context, dbq interface {
 	if err != nil {
 		return nil, fmt.Errorf("query source scopes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	scopes := make([]SourceScope, 0)
 	for rows.Next() {

@@ -2,9 +2,10 @@ package clinching
 
 import (
 	"context"
+	"testing"
+
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/standings"
-	"testing"
 )
 
 func newGame(id, home, away string) standings.Game {

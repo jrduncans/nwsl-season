@@ -82,7 +82,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("open cache database %q: %w", cfg.DBPath, err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := ensureSourceScopeRegistry(ctx, db, cfg.SyncSeason, cfg.SyncStage, time.Now().UTC()); err != nil {
 		return fmt.Errorf("seed source scope registry: %w", err)
 	}

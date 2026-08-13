@@ -409,7 +409,6 @@ func TestSourceRefreshReadOrderingFilteringScannersAndPointers(t *testing.T) {
 	if state, found, err := db.SourceResourceScopeState(ctx, SourceResourceGameXG, "2024", "No Success"); err != nil || !found || state.LastFullSuccessAt != nil || state.NextFullDueAt != nil {
 		t.Fatalf("nullable state timestamps = %+v, %t, %v", state, found, err)
 	}
-	states[0].LastFullSuccessAt.Add(time.Hour)
 	*states[0].LastFullSuccessAt = base.Add(99 * time.Hour)
 	state, found, err := db.SourceResourceScopeState(ctx, SourceResourceTeams, "", "")
 	if err != nil || !found || !state.LastFullSuccessAt.Equal(base) {

@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - nilerr
+    - noctx
+    - predeclared
+    - unconvert
+    - usestdlibvars
+  exclusions:
+    rules:
+      # Test fixtures commonly discard cleanup errors and use context-free test helpers.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+run:
+  modules-download-mode: readonly
+  relative-path-mode: gomod
+  timeout: 5m
