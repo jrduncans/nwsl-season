@@ -2,4 +2,4 @@
 run = "go run ./cmd/server"
 ready_port = 8080
 ready_http = "http://localhost:8080/healthz"
-watch = ["internal/**/*.go", "cmd/server/**/*.go", "go.mod"]
+watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod"]
