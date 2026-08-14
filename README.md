@@ -54,6 +54,44 @@ Useful endpoints:
 - `/seasons/:season/forecast` — interactive forecast simulation.
 - `/seasons/:season/model-evaluation` — interactive historical forecast evaluation.
 
+## Pitchfork development server
+
+This repository includes a Pitchfork configuration for the local server. It
+reserves port 8080, automatically bumps to the next available port when
+needed, and passes the resolved port to the Go process. The reverse proxy keeps
+the browser URL stable at `https://nwsl.localhost:7777`.
+
+From the repository root, register the project once and start the supervisor:
+
+```sh
+pitchfork proxy add nwsl --dir "$PWD" --daemon server
+pitchfork supervisor start
+pitchfork start server
+open https://nwsl.localhost:7777
+```
+
+Port 7777 does not require `sudo`. If a system-level Pitchfork supervisor is
+already running, stop it once with `sudo pitchfork supervisor stop`, then run
+the user-level `pitchfork supervisor start` above so the normal CLI can manage
+the daemon without elevated privileges. Restart the supervisor after changing
+the proxy settings in `pitchfork.toml`.
+
+Useful lifecycle commands:
+
+```sh
+pitchfork status server
+pitchfork logs server --tail
+pitchfork restart server
+pitchfork stop server
+```
+
+The checked-in proxy settings avoid privileged keychain and `/etc/hosts`
+operations, so the user-level supervisor can start without `sudo`. Run
+`pitchfork proxy trust` once if your browser or curl does not trust the local
+CA, then reload the URL. The proxy slug is stored in the user-level Pitchfork
+config; the repository’s `pitchfork.toml` contains the shared port, readiness,
+retry, watching, and proxy settings.
+
 ## Configuration
 
 | Environment variable | Default | Purpose |
