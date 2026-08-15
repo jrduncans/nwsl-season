@@ -7,13 +7,14 @@ BACKTEST_PACKAGE := ./cmd/backtest
 BACKTEST_BINARY := nwsl-season-backtest
 TARGET_OS ?= linux
 TARGET_ARCH ?= arm64
-WEAVER ?= weaver
-WEAVER_VERSION := $(shell tr -d '\n' < .weaver-version)
+GOLANGCI_LINT ?= mise exec -- golangci-lint
+GOVULNCHECK ?= mise exec -- govulncheck
+WEAVER ?= mise exec -- weaver
 TELEMETRY_REGISTRY := ./telemetry/registry
 TELEMETRY_TEMPLATES := ./telemetry/templates
 TELEMETRY_DOCS := ./docs/telemetry/catalog
 
-.PHONY: verify test fmt vet lint race vuln telemetry-weaver-version telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+.PHONY: verify test fmt vet lint race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
 verify: fmt lint vet test
 
@@ -21,34 +22,27 @@ test:
 	go test ./...
 
 fmt:
-	golangci-lint fmt ./...
+	$(GOLANGCI_LINT) fmt ./...
 
 vet:
 	go vet ./...
 
 lint:
-	golangci-lint run ./...
+	$(GOLANGCI_LINT) run ./...
 
 race:
 	go test -race ./...
 
 vuln:
-	govulncheck ./...
-
-telemetry-weaver-version:
-	@actual_weaver_version="$$($(WEAVER) --version | awk '{print $$2}')"; \
-	if [ "$$actual_weaver_version" != "$(WEAVER_VERSION)" ]; then \
-		echo "weaver $$actual_weaver_version found; version $(WEAVER_VERSION) is required"; \
-		exit 1; \
-	fi
+	$(GOVULNCHECK) ./...
 
 telemetry-check-code:
 	sh ./telemetry/check-code-coverage.sh
 
-telemetry-check: telemetry-weaver-version telemetry-check-code
+telemetry-check: telemetry-check-code
 	$(WEAVER) --future registry check -r $(TELEMETRY_REGISTRY)
 
-telemetry-generate: telemetry-weaver-version
+telemetry-generate:
 	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown $(TELEMETRY_DOCS)
 
 telemetry-check-generated: telemetry-check
