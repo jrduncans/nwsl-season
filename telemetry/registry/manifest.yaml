@@ -1,0 +1,6 @@
+name: nwsl-season
+description: Semantic conventions for the NWSL Season application's telemetry.
+schema_url: https://github.com/jrduncans/nwsl-season/telemetry/schemas/0.1.0
+dependencies:
+  - schema_url: https://opentelemetry.io/schemas/1.43.0
+    registry_path: https://github.com/open-telemetry/semantic-conventions/archive/refs/tags/v1.43.0.zip[model]

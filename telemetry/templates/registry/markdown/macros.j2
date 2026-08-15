@@ -1,0 +1,55 @@
+{% macro attribute_type(attribute) -%}
+{%- if attribute.type is mapping -%}
+enum
+{%- elif attribute.type == "template[boolean]" -%}
+boolean template
+{%- elif attribute.type == "template[int]" -%}
+int template
+{%- elif attribute.type == "template[double]" -%}
+double template
+{%- elif attribute.type == "template[string]" -%}
+string template
+{%- elif attribute.type == "template[boolean[]]" -%}
+boolean[] template
+{%- elif attribute.type == "template[int[]]" -%}
+int[] template
+{%- elif attribute.type == "template[double[]]" -%}
+double[] template
+{%- elif attribute.type == "template[string[]]" -%}
+string[] template
+{%- else -%}
+{{ attribute.type }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro requirement(level) -%}
+{%- if level is string -%}
+{{ level | replace("_", " ") | title }}
+{%- elif level.conditionally_required -%}
+Conditional: {{ level.conditionally_required | replace("\n", " ") | trim }}
+{%- elif level.recommended -%}
+Recommended: {{ level.recommended | replace("\n", " ") | trim }}
+{%- else -%}
+Recommended
+{%- endif -%}
+{%- endmacro %}
+
+{% macro examples(attribute) -%}
+{%- if attribute.examples -%}
+`{{ attribute.examples | tojson }}`
+{%- elif attribute.type is mapping -%}
+`{{ attribute.type.members | map(attribute="value") | list | tojson }}`
+{%- else -%}
+—
+{%- endif -%}
+{%- endmacro %}
+
+{% macro signal_name(group) -%}
+{%- if group.type == "metric" -%}
+{{ group.metric_name }}
+{%- elif group.type == "event" -%}
+{{ group.name }}
+{%- else -%}
+{{ group.id }}
+{%- endif -%}
+{%- endmacro %}

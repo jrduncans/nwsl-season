@@ -1,0 +1,30 @@
+groups:
+  - id: span.nwsl.http.client
+    type: span
+    extends: span.http.client
+    span_kind: client
+    stability: development
+    brief: An outbound HTTP request from the NWSL Season ASA client.
+    note: |
+      The ASA client creates one CLIENT span for each HTTP attempt, including retries.
+      Its current span name is `HTTP {method} {url.path}`. The path is the escaped ASA
+      request path and can contain a season, stage, or requested game identifier.
+
+  - id: span.nwsl.http.server
+    type: span
+    extends: span.http.server
+    span_kind: server
+    stability: development
+    brief: An inbound request handled by the NWSL Season HTTP server.
+    note: |
+      The server uses the matched Go `http.ServeMux` pattern as the span name, for
+      example `GET /seasons/{season}/{stage}`. Unmatched requests use
+      `{method} unknown_route`.
+
+imports:
+  metrics:
+    - http.client.request.body.size
+    - http.client.request.duration
+    - http.server.request.body.size
+    - http.server.request.duration
+    - http.server.response.body.size
