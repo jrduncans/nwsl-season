@@ -1,0 +1,41 @@
+groups:
+  - id: registry.nwsl.error
+    type: attribute_group
+    display_name: NWSL Season Error Attributes
+    brief: Shared error and exception dimensions used by NWSL Season spans and correlated exception logs.
+    note: |
+      Error spans and exception logs share the same low-cardinality classification.
+      The operation-specific `nwsl.error.code` identifies where the failure was detected.
+      Correlated exception logs also contain the exception message and stack trace; the
+      message is intentionally kept off the span because it may be high-cardinality or sensitive.
+    attributes:
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the operation failed.
+        note: |
+          NWSL Season uses `canceled`, `timeout`, `invalid_argument`, `invalid_data`,
+          `conflict`, `upstream_failure`, `storage_failure`, `calculation_failure`,
+          or `_OTHER`. A concrete low-cardinality Go error type may be used when it is
+          more informative than `_OTHER`.
+        examples: ["canceled", "timeout", "invalid_data", "upstream_failure", "_OTHER"]
+      - id: nwsl.error.code
+        type: string
+        stability: development
+        brief: A stable identifier for the operation that detected an error.
+        examples: ["sync.fetch_asa", "scheduler.planning_snapshot", "forecast.run"]
+      - id: nwsl.error.expected
+        type: boolean
+        stability: development
+        brief: Whether the failed outcome is an expected operational result rather than an unexpected defect.
+        examples: [true]
+      - ref: exception.type
+        requirement_level:
+          conditionally_required: Present on correlated exception logs.
+        examples: ["timeout", "storage_failure", "calculation_failure"]
+      - ref: exception.message
+        requirement_level:
+          conditionally_required: Present on correlated exception logs and may contain sensitive information.
+        examples: ["fetch ASA games: upstream request failed"]
+      - ref: exception.stacktrace
+        requirement_level:
+          conditionally_required: Present on correlated exception logs.

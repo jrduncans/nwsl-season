@@ -1,0 +1,19 @@
+templates:
+  - pattern: index.md.j2
+    filter: "."
+    application_mode: single
+    file_name: README.md
+  - pattern: attributes.md.j2
+    filter: '.groups | map(select(.type == "attribute_group" and (.id | startswith("registry.nwsl."))))'
+    application_mode: single
+    file_name: attributes.md
+  - pattern: signals.md.j2
+    filter: '.groups | map(select(.type == "span" or .type == "metric" or .type == "event"))'
+    application_mode: single
+    file_name: signals.md
+
+acronyms:
+  - ASA
+  - HTTP
+  - NWSL
+  - OTel

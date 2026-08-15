@@ -1,0 +1,47 @@
+groups:
+  - id: registry.nwsl.resource
+    type: attribute_group
+    display_name: NWSL Season Resource Attributes
+    brief: Resource attributes that identify an NWSL Season process and deployment.
+    attributes:
+      - ref: service.name
+        requirement_level: required
+        note: Defaults to `nwsl-season-server` or `nwsl-season-sync` at the corresponding process boundary.
+        examples: ["nwsl-season-server", "nwsl-season-sync"]
+      - ref: service.version
+        requirement_level: required
+        note: Derived from Go build VCS metadata unless explicitly overridden through the OpenTelemetry resource environment.
+        examples: ["42bddeb38b9c57538726b0c6379bcd5db147b42f", "v1.0.0"]
+      - ref: service.instance.id
+        requirement_level:
+          recommended: Set in exported environments to identify the stable runtime instance.
+        examples: ["macos-test-shell", "local-vm-prod-1"]
+      - ref: deployment.environment.name
+        requirement_level:
+          recommended: Set in exported environments to distinguish test and production telemetry.
+        examples: ["test", "production"]
+      - ref: telemetry.sdk.name
+        requirement_level: required
+        examples: ["opentelemetry"]
+      - ref: telemetry.sdk.language
+        requirement_level: required
+        examples: ["go"]
+      - ref: telemetry.sdk.version
+        requirement_level: required
+        examples: ["1.45.0"]
+
+  - id: registry.nwsl.context
+    type: attribute_group
+    display_name: NWSL Season Context Attributes
+    brief: Shared application context used across operational spans.
+    attributes:
+      - id: nwsl.season
+        type: string
+        stability: development
+        brief: The competition season associated with an operation.
+        examples: ["2026"]
+      - id: nwsl.stage
+        type: string
+        stability: development
+        brief: The competition stage associated with an operation.
+        examples: ["Regular Season", "Playoffs"]

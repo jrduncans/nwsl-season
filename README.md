@@ -161,6 +161,13 @@ selected model plus the iteration, team, fixture, xG-observation, playoff-place,
 and fixed-assumption counts; calculation spans add the scoped fixture and
 achievement counts. They do not include individual assumed results.
 
+The source-controlled [telemetry catalog](docs/telemetry/README.md) defines the
+intended names, types, and meanings using OpenTelemetry semantic conventions.
+OpenTelemetry Weaver validates the registry and generates its checked-in
+reference documentation. The first catalog slice covers shared resource and
+error attributes plus the standard HTTP spans and optional HTTP metrics;
+application-domain coverage is expanded in subsequent slices.
+
 Local development remains silent and does not make telemetry network calls
 until an exporter is configured. Metrics are optional; traces and their
 correlated exception logs are enough to investigate a reported problem in

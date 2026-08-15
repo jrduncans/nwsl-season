@@ -1,0 +1,22 @@
+name: Telemetry Catalog
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  telemetry-catalog:
+    name: Validate telemetry catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: open-telemetry/weaver/.github/actions/setup-weaver@26c685ff52b925056ff1d53476c6022638c01220 # v0.25.1
+        with:
+          version: 0.25.1
+      - run: make telemetry-check
+      - run: make telemetry-check-generated

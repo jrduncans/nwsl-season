@@ -7,8 +7,13 @@ BACKTEST_PACKAGE := ./cmd/backtest
 BACKTEST_BINARY := nwsl-season-backtest
 TARGET_OS ?= linux
 TARGET_ARCH ?= arm64
+WEAVER ?= weaver
+WEAVER_VERSION := $(shell tr -d '\n' < .weaver-version)
+TELEMETRY_REGISTRY := ./telemetry/registry
+TELEMETRY_TEMPLATES := ./telemetry/templates
+TELEMETRY_DOCS := ./docs/telemetry/catalog
 
-.PHONY: verify test fmt vet lint race vuln backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+.PHONY: verify test fmt vet lint race vuln telemetry-weaver-version telemetry-check telemetry-generate telemetry-check-generated backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
 verify: fmt lint vet test
 
@@ -29,6 +34,26 @@ race:
 
 vuln:
 	govulncheck ./...
+
+telemetry-weaver-version:
+	@actual_weaver_version="$$($(WEAVER) --version | awk '{print $$2}')"; \
+	if [ "$$actual_weaver_version" != "$(WEAVER_VERSION)" ]; then \
+		echo "weaver $$actual_weaver_version found; version $(WEAVER_VERSION) is required"; \
+		exit 1; \
+	fi
+
+telemetry-check: telemetry-weaver-version
+	$(WEAVER) --future registry check -r $(TELEMETRY_REGISTRY)
+
+telemetry-generate: telemetry-weaver-version
+	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown $(TELEMETRY_DOCS)
+
+telemetry-check-generated: telemetry-check
+	@set -eu; \
+	telemetry_generated_dir="$$(mktemp -d)"; \
+	trap 'rm -r "$$telemetry_generated_dir"' EXIT; \
+	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown "$$telemetry_generated_dir"; \
+	diff -ru "$(TELEMETRY_DOCS)" "$$telemetry_generated_dir"
 
 backtest:
 	go run $(BACKTEST_PACKAGE)
