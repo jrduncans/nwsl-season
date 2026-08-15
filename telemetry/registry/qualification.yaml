@@ -1,0 +1,348 @@
+groups:
+  - id: registry.nwsl.qualification
+    type: attribute_group
+    display_name: Qualification Attributes
+    brief: Dimensions and aggregate solver diagnostics for qualification and clinching calculations.
+    note: Team and achievement identifiers are high-cardinality drill-down fields. Outcome, method, and refresh-reason fields are bounded vocabularies suitable for grouping.
+    attributes:
+      - id: nwsl.qualification.team_count
+        type: int
+        stability: development
+        brief: Number of teams supplied to the qualification refresh.
+      - id: nwsl.qualification.fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures supplied to the qualification refresh.
+      - id: nwsl.qualification.input_team_count
+        type: int
+        stability: development
+        brief: Number of teams accepted as calculation input.
+      - id: nwsl.qualification.input_fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures accepted as calculation input.
+      - id: nwsl.qualification.completed_fixture_count
+        type: int
+        stability: development
+        brief: Number of completed fixtures in the qualification input.
+      - id: nwsl.qualification.remaining_fixture_count
+        type: int
+        stability: development
+        brief: Number of remaining fixtures in the qualification input.
+      - id: nwsl.qualification.achievement_ids
+        type: string[]
+        stability: development
+        brief: Stable identifiers of achievements evaluated by the calculation.
+        examples: [["shield", "top_four", "playoffs"]]
+      - id: nwsl.qualification.achievement_count
+        type: int
+        stability: development
+        brief: Number of achievements evaluated for one team.
+      - id: nwsl.qualification.budget_ms
+        type: int
+        stability: development
+        brief: Shared calculation budget in milliseconds.
+        examples: [5000]
+      - id: nwsl.qualification.forced
+        type: boolean
+        stability: development
+        brief: Whether the caller explicitly requested recalculation.
+      - id: nwsl.qualification.recalculated
+        type: boolean
+        stability: development
+        brief: Whether a new qualification batch was calculated.
+      - id: nwsl.qualification.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of the qualification refresh.
+        examples: ["recalculated", "current", "failure"]
+      - id: nwsl.qualification.refresh_reason
+        type: string
+        stability: development
+        brief: The low-cardinality reason a new qualification batch was required.
+        examples: ["missing_snapshot", "forced", "kickoff_order_retry", "compute_budget_retry", "kickoff_order_and_compute_budget_retry"]
+      - id: nwsl.qualification.team_id
+        type: string
+        stability: development
+        brief: The high-cardinality ASA identifier of the team being evaluated.
+        examples: ["team-123"]
+      - id: nwsl.qualification.achievement_id
+        type: string
+        stability: development
+        brief: The stable competition achievement being evaluated.
+        examples: ["shield", "top_four", "playoffs"]
+      - id: nwsl.qualification.top_k
+        type: int
+        stability: development
+        brief: The highest qualifying table position for the achievement.
+        examples: [1, 4, 8]
+      - id: nwsl.qualification.status
+        type: string
+        stability: development
+        brief: The low-cardinality result of an individual qualification proof.
+        examples: ["clinched", "not_clinched", "unresolved"]
+      - id: nwsl.qualification.method
+        type: string
+        stability: development
+        brief: The low-cardinality proof method that produced an individual result.
+        examples: ["cheap_bound", "points_optimization", "accessible_tiebreak", "missing_disciplinary_rule", "unproved_score_tiebreak", "compute_budget", "incomplete_schedule", "implied_achievement"]
+      - id: nwsl.qualification.reduced_team_count
+        type: int
+        stability: development
+        brief: Number of teams retained in an individual reduced proof problem.
+      - id: nwsl.qualification.reduced_fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures retained in an individual reduced proof problem.
+      - id: nwsl.qualification.connected_component_count
+        type: int
+        stability: development
+        brief: Number of disconnected fixture components in an individual proof problem.
+      - id: nwsl.qualification.subset_probe_count
+        type: int
+        stability: development
+        brief: Number of opponent subsets probed by an individual proof.
+      - id: nwsl.qualification.visited_state_count
+        type: int
+        stability: development
+        brief: Number of solver states visited by an individual proof.
+      - id: nwsl.qualification.memo_hit_count
+        type: int
+        stability: development
+        brief: Number of memoized states reused by an individual proof.
+      - id: nwsl.qualification.prune_count
+        type: int
+        stability: development
+        brief: Number of search branches pruned by an individual proof.
+      - id: nwsl.qualification.status_check_count
+        type: int
+        stability: development
+        brief: Number of team and achievement qualification statuses checked in the batch.
+      - id: nwsl.qualification.status_proof.skipped_count
+        type: int
+        stability: development
+        brief: Number of individual status proofs skipped because a prior result implied them.
+      - id: nwsl.qualification.status_proof.duration_total_ms
+        type: double
+        stability: development
+        brief: Total wall-clock milliseconds spent in individual status proofs.
+      - id: nwsl.qualification.status_proof.duration_max_ms
+        type: double
+        stability: development
+        brief: Maximum wall-clock milliseconds spent in one individual status proof.
+      - id: nwsl.qualification.status_proof.slow_count
+        type: int
+        stability: development
+        brief: Number of individual status proofs exceeding the slow-operation threshold.
+      - id: nwsl.qualification.status_proof.slowest_team_id
+        type: string
+        stability: development
+        brief: The high-cardinality team identifier associated with the slowest status proof.
+        examples: ["team-123"]
+      - id: nwsl.qualification.status_proof.slowest_achievement_id
+        type: string
+        stability: development
+        brief: The stable achievement identifier associated with the slowest status proof.
+        examples: ["playoffs"]
+      - id: nwsl.qualification.status_proof.reduced_team_count.max
+        type: int
+        stability: development
+        brief: Maximum reduced team count across all status proofs in the batch.
+      - id: nwsl.qualification.status_proof.reduced_fixture_count.max
+        type: int
+        stability: development
+        brief: Maximum reduced fixture count across all status proofs in the batch.
+      - id: nwsl.qualification.status_proof.connected_component_count.max
+        type: int
+        stability: development
+        brief: Maximum connected-component count across all status proofs in the batch.
+      - id: nwsl.qualification.status_proof.subset_probe_count.total
+        type: int
+        stability: development
+        brief: Total opponent subset probes across all status proofs in the batch.
+      - id: nwsl.qualification.status_proof.visited_state_count.total
+        type: int
+        stability: development
+        brief: Total solver states visited across all status proofs in the batch.
+      - id: nwsl.qualification.status_proof.memo_hit_count.total
+        type: int
+        stability: development
+        brief: Total memoized-state hits across all status proofs in the batch.
+      - id: nwsl.qualification.status_proof.prune_count.total
+        type: int
+        stability: development
+        brief: Total search branches pruned across all status proofs in the batch.
+      - id: nwsl.qualification.no_help_batch_count
+        type: int
+        stability: development
+        brief: Number of per-team no-help path batches evaluated.
+      - id: nwsl.qualification.no_help_batch.skipped_count
+        type: int
+        stability: development
+        brief: Number of no-help batches skipped because none of the team's results required one.
+      - id: nwsl.qualification.no_help_batch.duration_total_ms
+        type: double
+        stability: development
+        brief: Total wall-clock milliseconds spent in no-help path batches.
+      - id: nwsl.qualification.no_help_batch.duration_max_ms
+        type: double
+        stability: development
+        brief: Maximum wall-clock milliseconds spent in one no-help path batch.
+      - id: nwsl.qualification.no_help_batch.slow_count
+        type: int
+        stability: development
+        brief: Number of no-help batches exceeding the slow-operation threshold.
+      - id: nwsl.qualification.no_help_batch.slowest_team_id
+        type: string
+        stability: development
+        brief: The high-cardinality team identifier associated with the slowest no-help batch.
+        examples: ["team-123"]
+      - id: nwsl.qualification.result.status.clinched_count
+        type: int
+        stability: development
+        brief: Number of persisted qualification results with clinched status.
+      - id: nwsl.qualification.result.status.not_clinched_count
+        type: int
+        stability: development
+        brief: Number of persisted qualification results with not-clinched status.
+      - id: nwsl.qualification.result.status.unresolved_count
+        type: int
+        stability: development
+        brief: Number of persisted qualification results with unresolved status.
+      - id: nwsl.qualification.result.method.cheap_bound_count
+        type: int
+        stability: development
+        brief: Number of results proved by inexpensive bounds.
+      - id: nwsl.qualification.result.method.points_optimization_count
+        type: int
+        stability: development
+        brief: Number of results proved by exact points optimization.
+      - id: nwsl.qualification.result.method.accessible_tiebreak_count
+        type: int
+        stability: development
+        brief: Number of results proved using available completed-season tiebreak data.
+      - id: nwsl.qualification.result.method.missing_disciplinary_rule_count
+        type: int
+        stability: development
+        brief: Number of unresolved results requiring unavailable disciplinary data.
+      - id: nwsl.qualification.result.method.unproved_score_tiebreak_count
+        type: int
+        stability: development
+        brief: Number of unresolved results requiring a future score tiebreak.
+      - id: nwsl.qualification.result.method.compute_budget_count
+        type: int
+        stability: development
+        brief: Number of unresolved results caused by calculation budget exhaustion.
+      - id: nwsl.qualification.result.method.incomplete_schedule_count
+        type: int
+        stability: development
+        brief: Number of unresolved results caused by an incomplete or unsafe schedule.
+      - id: nwsl.qualification.result.method.implied_achievement_count
+        type: int
+        stability: development
+        brief: Number of results implied by a stronger achievement proof.
+      - id: nwsl.qualification.result.no_help.not_applicable_count
+        type: int
+        stability: development
+        brief: Number of results for which a no-help path is not applicable.
+      - id: nwsl.qualification.result.no_help.guaranteed_count
+        type: int
+        stability: development
+        brief: Number of results with a guaranteed no-help winning path.
+      - id: nwsl.qualification.result.no_help.impossible_count
+        type: int
+        stability: development
+        brief: Number of results where winning out cannot guarantee the achievement.
+      - id: nwsl.qualification.result.no_help.unresolved_count
+        type: int
+        stability: development
+        brief: Number of results whose no-help path could not be resolved.
+      - id: nwsl.qualification.result.budget_exhausted_count
+        type: int
+        stability: development
+        brief: Number of results affected by status-proof or no-help calculation budget exhaustion.
+
+  - id: span.nwsl.qualification.refresh
+    type: span
+    name: qualification.refresh
+    span_kind: internal
+    stability: development
+    brief: One persisted qualification batch refresh for a fixture snapshot.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.cache.fixture_snapshot_id
+        requirement_level: required
+      - ref: nwsl.qualification.team_count
+      - ref: nwsl.qualification.fixture_count
+      - ref: nwsl.qualification.input_team_count
+      - ref: nwsl.qualification.input_fixture_count
+      - ref: nwsl.qualification.completed_fixture_count
+      - ref: nwsl.qualification.remaining_fixture_count
+      - ref: nwsl.qualification.achievement_ids
+      - ref: nwsl.qualification.budget_ms
+      - ref: nwsl.qualification.forced
+      - ref: nwsl.qualification.refresh_reason
+      - ref: nwsl.qualification.recalculated
+      - ref: nwsl.qualification.outcome
+        requirement_level: required
+      - ref: nwsl.qualification.status_check_count
+      - ref: nwsl.qualification.status_proof.duration_total_ms
+      - ref: nwsl.qualification.status_proof.duration_max_ms
+      - ref: nwsl.qualification.status_proof.slow_count
+      - ref: nwsl.qualification.no_help_batch.duration_total_ms
+      - ref: nwsl.qualification.no_help_batch.duration_max_ms
+      - ref: nwsl.qualification.no_help_batch.slow_count
+      - ref: nwsl.qualification.result.budget_exhausted_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the qualification refresh failed.
+
+  - id: span.nwsl.qualification.status_proof
+    type: span
+    name: qualification.status_proof
+    span_kind: internal
+    stability: development
+    brief: A slow or failed individual team and achievement qualification proof.
+    note: Successful spans are emitted only when the proof exceeds the slow-operation threshold; failures are always emitted.
+    attributes:
+      - ref: nwsl.qualification.team_id
+        requirement_level: required
+      - ref: nwsl.qualification.achievement_id
+        requirement_level: required
+      - ref: nwsl.qualification.top_k
+      - ref: nwsl.qualification.completed_fixture_count
+      - ref: nwsl.qualification.remaining_fixture_count
+      - ref: nwsl.qualification.status
+      - ref: nwsl.qualification.method
+      - ref: nwsl.qualification.reduced_team_count
+      - ref: nwsl.qualification.reduced_fixture_count
+      - ref: nwsl.qualification.connected_component_count
+      - ref: nwsl.qualification.subset_probe_count
+      - ref: nwsl.qualification.visited_state_count
+      - ref: nwsl.qualification.memo_hit_count
+      - ref: nwsl.qualification.prune_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the individual status proof failed.
+
+  - id: span.nwsl.qualification.no_help_batch
+    type: span
+    name: qualification.no_help_batch
+    span_kind: internal
+    stability: development
+    brief: A slow or failed batch of no-help path calculations for one team.
+    note: Successful spans are emitted only when the batch exceeds the slow-operation threshold; failures are always emitted.
+    attributes:
+      - ref: nwsl.qualification.team_id
+        requirement_level: required
+      - ref: nwsl.qualification.achievement_ids
+        requirement_level: required
+      - ref: nwsl.qualification.achievement_count
+      - ref: nwsl.qualification.completed_fixture_count
+      - ref: nwsl.qualification.remaining_fixture_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the no-help batch failed.

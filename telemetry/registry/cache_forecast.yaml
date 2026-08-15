@@ -1,0 +1,247 @@
+groups:
+  - id: registry.nwsl.cache
+    type: attribute_group
+    display_name: Cache and Season Attributes
+    brief: Dimensions describing the cached season snapshot used by a request or calculation.
+    attributes:
+      - id: nwsl.cache.name
+        type: string
+        stability: development
+        brief: The low-cardinality logical cache being accessed.
+        examples: ["season"]
+      - id: nwsl.cache.fixture_snapshot_id
+        type: string
+        stability: development
+        brief: The high-cardinality immutable identifier of the published fixture snapshot.
+        examples: ["f5e278eaf83f"]
+      - id: nwsl.cache.last_success_age_seconds
+        type: double
+        stability: development
+        brief: Seconds elapsed since the latest successful source synchronization for the loaded scope.
+        examples: [42.5]
+      - id: nwsl.cache.game.last_updated_utc
+        type: string
+        stability: development
+        brief: The high-cardinality RFC 3339 source timestamp stored for a cached game.
+        examples: ["2026-08-15T18:30:00Z"]
+      - id: nwsl.season.team_count
+        type: int
+        stability: development
+        brief: Number of teams in the loaded season snapshot.
+        examples: [16]
+      - id: nwsl.season.fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures in the loaded season snapshot.
+        examples: [240]
+      - id: nwsl.season.completed_fixture_count
+        type: int
+        stability: development
+        brief: Number of completed fixtures in the loaded season snapshot.
+        examples: [120]
+      - id: nwsl.season.remaining_fixture_count
+        type: int
+        stability: development
+        brief: Number of remaining fixtures in the loaded season snapshot.
+        examples: [120]
+      - id: nwsl.season.xg_available_count
+        type: int
+        stability: development
+        brief: Number of cached fixtures with available expected-goals observations.
+        examples: [110]
+      - id: nwsl.season.xg_unavailable_count
+        type: int
+        stability: development
+        brief: Number of cached fixtures explicitly observed without expected-goals data.
+        examples: [10]
+
+  - id: registry.nwsl.forecast
+    type: attribute_group
+    display_name: Forecast Attributes
+    brief: Dimensions describing Forecast Lab requests, calculations, and cache warming.
+    attributes:
+      - id: nwsl.forecast.trigger
+        type: string
+        stability: development
+        brief: The low-cardinality caller that initiated forecast work.
+        examples: ["http", "startup", "post_source_job", "post_sync", "unspecified"]
+      - id: nwsl.forecast.preload
+        type: boolean
+        stability: development
+        brief: Whether forecast work is proactive cache warming rather than an interactive request.
+        examples: [true]
+      - id: nwsl.forecast.model_id
+        type: string
+        stability: development
+        brief: The stable identifier of the primary forecast model selected by an HTTP request.
+        examples: ["xg-poisson-home-two-seasons-v1"]
+      - id: nwsl.forecast.model_ids
+        type: string[]
+        stability: development
+        brief: Stable identifiers of all forecast models calculated by an operation.
+        examples: [["results-poisson-home-two-seasons-v1", "xg-poisson-home-two-seasons-v1"]]
+      - id: nwsl.forecast.comparison_requested
+        type: boolean
+        stability: development
+        brief: Whether the HTTP request selected a comparison model.
+        examples: [true]
+      - id: nwsl.forecast.task_count
+        type: int
+        stability: development
+        brief: Number of model calculations requested from the forecast executor.
+        examples: [2]
+      - id: nwsl.forecast.cache_hits
+        type: int
+        stability: development
+        brief: Number of requested model results served from the process-local forecast cache.
+        examples: [1]
+      - id: nwsl.forecast.calculation_count
+        type: int
+        stability: development
+        brief: Number of requested model results calculated instead of served from cache.
+        examples: [1]
+      - id: nwsl.forecast.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of a forecast executor run.
+        examples: ["computed", "cache_hit", "overloaded", "timed_out", "failure"]
+      - id: nwsl.forecast.iteration_count
+        type: int
+        stability: development
+        brief: Number of simulated seasons requested for each model.
+        examples: [50000]
+      - id: nwsl.forecast.team_count
+        type: int
+        stability: development
+        brief: Number of teams supplied to the forecast calculation.
+        examples: [16]
+      - id: nwsl.forecast.fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures supplied to the forecast calculation.
+        examples: [240]
+      - id: nwsl.forecast.completed_fixture_count
+        type: int
+        stability: development
+        brief: Number of completed fixtures supplied to the forecast calculation.
+        examples: [120]
+      - id: nwsl.forecast.remaining_fixture_count
+        type: int
+        stability: development
+        brief: Number of remaining fixtures simulated by the forecast calculation.
+        examples: [120]
+      - id: nwsl.forecast.fixed_assumption_count
+        type: int
+        stability: development
+        brief: Number of visitor-selected fixture outcomes fixed in the forecast scenario.
+        examples: [2]
+      - id: nwsl.forecast.xg_observation_count
+        type: int
+        stability: development
+        brief: Number of expected-goals observations available to the selected forecast model.
+        examples: [110]
+      - id: nwsl.forecast.playoff_place_count
+        type: int
+        stability: development
+        brief: Number of league places that qualify for the playoffs in the simulated competition.
+        examples: [8]
+      - id: nwsl.forecast.model_count
+        type: int
+        stability: development
+        brief: Number of forecast models considered by a cache-warming operation.
+        examples: [4]
+      - id: nwsl.forecast.failed_model_count
+        type: int
+        stability: development
+        brief: Number of forecast models that failed during a cache-warming operation.
+        examples: [0]
+      - id: nwsl.forecast.precache.worker_count
+        type: int
+        stability: development
+        brief: Number of concurrent workers used by a forecast cache-warming operation.
+        examples: [2]
+      - id: nwsl.forecast.precache.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of forecast cache warming.
+        examples: ["complete", "failure"]
+
+  - id: span.nwsl.cache.season.load
+    type: span
+    name: cache.season.load
+    span_kind: internal
+    stability: development
+    brief: A read of one season and stage from the local SQLite cache.
+    note: The span also copies the resulting snapshot dimensions to its enclosing request span for direct Honeycomb filtering.
+    attributes:
+      - ref: nwsl.cache.name
+        requirement_level: required
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.cache.fixture_snapshot_id
+      - ref: nwsl.cache.last_success_age_seconds
+      - ref: nwsl.season.team_count
+      - ref: nwsl.season.fixture_count
+      - ref: nwsl.season.completed_fixture_count
+      - ref: nwsl.season.remaining_fixture_count
+      - ref: nwsl.season.xg_available_count
+      - ref: nwsl.season.xg_unavailable_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the cache load failed.
+
+  - id: span.nwsl.forecast.run
+    type: span
+    name: forecast.run
+    span_kind: internal
+    stability: development
+    brief: One bounded Forecast Lab executor request for one or more models.
+    attributes:
+      - ref: nwsl.forecast.trigger
+        requirement_level: required
+      - ref: nwsl.forecast.model_ids
+        requirement_level: required
+      - ref: nwsl.forecast.task_count
+        requirement_level: required
+      - ref: nwsl.forecast.cache_hits
+      - ref: nwsl.forecast.calculation_count
+      - ref: nwsl.forecast.outcome
+        requirement_level: required
+      - ref: nwsl.forecast.iteration_count
+      - ref: nwsl.forecast.team_count
+      - ref: nwsl.forecast.fixture_count
+      - ref: nwsl.forecast.completed_fixture_count
+      - ref: nwsl.forecast.remaining_fixture_count
+      - ref: nwsl.forecast.fixed_assumption_count
+      - ref: nwsl.forecast.xg_observation_count
+      - ref: nwsl.forecast.playoff_place_count
+      - ref: nwsl.error.expected
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the forecast run failed.
+
+  - id: span.nwsl.forecast.precache
+    type: span
+    name: forecast.precache
+    span_kind: internal
+    stability: development
+    brief: One proactive attempt to warm the process-local forecast result cache.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.forecast.trigger
+        requirement_level: required
+      - ref: nwsl.forecast.preload
+        requirement_level: required
+      - ref: nwsl.forecast.model_count
+      - ref: nwsl.forecast.failed_model_count
+      - ref: nwsl.forecast.precache.worker_count
+      - ref: nwsl.forecast.precache.outcome
+        requirement_level: required
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when forecast cache warming failed.

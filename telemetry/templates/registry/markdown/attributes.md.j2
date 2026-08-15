@@ -3,9 +3,10 @@
 
 # Telemetry attributes
 
-These are the shared resource, application-context, and error attributes in
-the first NWSL Season catalog slice. Definitions inherited from OpenTelemetry
-remain pinned to semantic conventions 1.43.0 through the registry manifest.
+These are the shared and application-domain attributes emitted by NWSL Season.
+Definitions inherited from OpenTelemetry remain pinned to semantic conventions
+1.43.0 through the registry manifest. Descriptions identify fields intended for
+routine grouping and high-cardinality fields intended for drill-down.
 
 {% for group in ctx %}
 ## {{ group.display_name | default(group.id) }}

@@ -1,0 +1,262 @@
+groups:
+  - id: registry.nwsl.scheduler
+    type: attribute_group
+    display_name: Scheduler Attributes
+    brief: Dimensions describing scheduler planning, source jobs, cadence selection, and material changes.
+    note: Job kinds, classes, decisions, outcomes, reasons, and selection policies are bounded vocabularies suitable for grouping. Job scope and kickoff timestamps are higher-cardinality drill-down fields.
+    attributes:
+      - id: nwsl.scheduler.action
+        type: string
+        stability: development
+        brief: The low-cardinality top-level action selected for a scheduler tick.
+        examples: ["read_planning_snapshot", "recalculate", "source_jobs"]
+      - id: nwsl.scheduler.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of a scheduler tick.
+        examples: ["complete", "failure", "partial_failure", "no_work"]
+      - id: nwsl.scheduler.clinching_preflight_outcome
+        type: string
+        stability: development
+        brief: The low-cardinality outcome of the cache-only clinching preflight.
+        examples: ["current", "complete", "partial_failure", "not_run"]
+      - id: nwsl.scheduler.job_count
+        type: int
+        stability: development
+        brief: Number of source jobs selected for the scheduler tick.
+      - id: nwsl.scheduler.request_budget
+        type: int
+        stability: development
+        brief: Maximum source requests permitted during the scheduler tick.
+      - id: nwsl.scheduler.request_count
+        type: int
+        stability: development
+        brief: Number of source requests attempted during the scheduler tick or job.
+      - id: nwsl.scheduler.decision
+        type: string
+        stability: development
+        brief: The low-cardinality check or no-check decision recorded by a scheduler decision event.
+        examples: ["check", "not_check"]
+      - id: nwsl.scheduler.reason
+        type: string
+        stability: development
+        brief: The low-cardinality reason recorded by a scheduler decision event.
+        examples: ["no_source_request_due", "source_request_budget_exhausted", "kickoff_window_result_poll"]
+      - id: nwsl.scheduler.deferred_job_count
+        type: int
+        stability: development
+        brief: Number of due source jobs deferred after the request budget was exhausted.
+      - id: nwsl.scheduler.job_kind
+        type: string
+        stability: development
+        brief: The bounded resource and request shape of a scheduler job.
+        examples: ["full_games", "full_xg", "checked_games", "checked_xg"]
+      - id: nwsl.scheduler.job_class
+        type: string
+        stability: development
+        brief: Whether a scheduler job belongs to the hot current scope or cold archived maintenance.
+        examples: ["hot", "cold"]
+      - id: nwsl.scheduler.job_outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of one scheduler job.
+        examples: ["complete", "failure", "deferred_global_lease", "deferred_scope_lease"]
+      - id: nwsl.scheduler.job_reason
+        type: string
+        stability: development
+        brief: The bounded planner reason that produced one scheduler job.
+        examples: ["kickoff_window_result_poll", "kickoff_window_xg_poll", "weekly_inventory_audit", "archived_correction_sweep"]
+      - id: nwsl.scheduler.job_scope
+        type: string
+        stability: development
+        brief: The season and stage scope of one scheduler job.
+        examples: ["2026/Regular Season"]
+      - id: nwsl.scheduler.job_requested_rows
+        type: int
+        stability: development
+        brief: Number of source identities requested by one scheduler job.
+      - id: nwsl.scheduler.job_returned_rows
+        type: int
+        stability: development
+        brief: Number of source rows returned by one scheduler job.
+      - id: nwsl.scheduler.job_material
+        type: boolean
+        stability: development
+        brief: Whether one scheduler job changed downstream source inputs.
+      - id: nwsl.scheduler.requested_rows
+        type: int
+        stability: development
+        brief: Number of source identities selected in a scheduler decision event.
+      - id: nwsl.scheduler.source_value_changed
+        type: boolean
+        stability: development
+        brief: Whether normalized source values changed during one scheduler job.
+      - id: nwsl.scheduler.source_value_changed_count
+        type: int
+        stability: development
+        brief: Number of normalized source values changed during one scheduler job.
+      - id: nwsl.scheduler.source_value_initialized_count
+        type: int
+        stability: development
+        brief: Number of previously missing source values initialized during one scheduler job.
+      - id: nwsl.scheduler.source_metadata_changed_count
+        type: int
+        stability: development
+        brief: Number of source rows whose metadata changed without a normalized value change.
+      - id: nwsl.scheduler.source_value_missing_count
+        type: int
+        stability: development
+        brief: Number of requested source values still missing after one scheduler job.
+      - id: nwsl.scheduler.evaluation_evidence_dirty
+        type: boolean
+        stability: development
+        brief: Whether cold source changes require regeneration of checked-in model evaluation evidence.
+      - id: nwsl.scheduler.forecast_warm.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality result of warming forecasts after material source work.
+        examples: ["complete", "failure", "not_run"]
+      - id: nwsl.scheduler.selection_policy
+        type: string
+        stability: development
+        brief: The bounded cadence policy used to select targeted source identities.
+        examples: ["kickoff_window"]
+      - id: nwsl.scheduler.candidate_count
+        type: int
+        stability: development
+        brief: Number of identities considered by a targeted selection policy.
+      - id: nwsl.scheduler.eligible_count
+        type: int
+        stability: development
+        brief: Number of targeted identities eligible at the observation time.
+      - id: nwsl.scheduler.expired_count
+        type: int
+        stability: development
+        brief: Number of targeted identities outside their polling watch window.
+      - id: nwsl.scheduler.invalid_kickoff_count
+        type: int
+        stability: development
+        brief: Number of targeted identities excluded because their kickoff time was invalid.
+      - id: nwsl.scheduler.missing_xg_candidate_count
+        type: int
+        stability: development
+        brief: Number of candidate fixtures with missing expected-goals data.
+      - id: nwsl.scheduler.missing_xg_eligible_count
+        type: int
+        stability: development
+        brief: Number of fixtures with missing expected-goals data eligible for polling.
+      - id: nwsl.scheduler.available_xg_candidate_count
+        type: int
+        stability: development
+        brief: Number of candidate fixtures with available expected-goals data.
+      - id: nwsl.scheduler.available_xg_eligible_count
+        type: int
+        stability: development
+        brief: Number of fixtures with available expected-goals data eligible for correction polling.
+      - id: nwsl.scheduler.poll_interval_seconds
+        type: int
+        stability: development
+        brief: Polling interval in seconds for the active targeted selection policy.
+      - id: nwsl.scheduler.watch_window_seconds
+        type: int
+        stability: development
+        brief: Watch-window duration in seconds for the active targeted selection policy.
+      - id: nwsl.scheduler.missing_xg_poll_interval_seconds
+        type: int
+        stability: development
+        brief: Polling interval in seconds for missing expected-goals data.
+      - id: nwsl.scheduler.missing_xg_watch_window_seconds
+        type: int
+        stability: development
+        brief: Watch-window duration in seconds for missing expected-goals data.
+      - id: nwsl.scheduler.xg_correction_interval_seconds
+        type: int
+        stability: development
+        brief: Correction polling interval in seconds for available expected-goals data.
+      - id: nwsl.scheduler.xg_correction_watch_window_seconds
+        type: int
+        stability: development
+        brief: Correction watch-window duration in seconds for available expected-goals data.
+      - id: nwsl.scheduler.oldest_kickoff_utc
+        type: string
+        stability: development
+        brief: The high-cardinality RFC 3339 kickoff time of the oldest selected identity.
+        examples: ["2026-08-15T18:30:00Z"]
+      - id: nwsl.scheduler.newest_kickoff_utc
+        type: string
+        stability: development
+        brief: The high-cardinality RFC 3339 kickoff time of the newest selected identity.
+        examples: ["2026-08-16T02:00:00Z"]
+
+  - id: span.nwsl.scheduler.tick
+    type: span
+    name: scheduler.tick
+    span_kind: internal
+    stability: development
+    brief: One scheduler planning and execution cycle.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.scheduler.action
+      - ref: nwsl.scheduler.outcome
+        requirement_level: required
+      - ref: nwsl.scheduler.clinching_preflight_outcome
+      - ref: nwsl.scheduler.job_count
+      - ref: nwsl.scheduler.request_budget
+      - ref: nwsl.scheduler.request_count
+      - ref: nwsl.scheduler.deferred_job_count
+      - ref: nwsl.scheduler.evaluation_evidence_dirty
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the scheduler tick failed.
+
+  - id: span.nwsl.scheduler.job
+    type: span
+    name: scheduler.job
+    span_kind: internal
+    stability: development
+    brief: One planned scheduler source job and its material-change result.
+    attributes:
+      - ref: nwsl.scheduler.job_kind
+        requirement_level: required
+      - ref: nwsl.scheduler.job_class
+        requirement_level: required
+      - ref: nwsl.scheduler.job_outcome
+        requirement_level: required
+      - ref: nwsl.scheduler.job_reason
+      - ref: nwsl.scheduler.job_scope
+      - ref: nwsl.scheduler.job_requested_rows
+      - ref: nwsl.scheduler.job_returned_rows
+      - ref: nwsl.scheduler.job_material
+      - ref: nwsl.scheduler.request_count
+      - ref: nwsl.scheduler.source_value_changed
+      - ref: nwsl.scheduler.source_value_changed_count
+      - ref: nwsl.scheduler.source_value_initialized_count
+      - ref: nwsl.scheduler.source_metadata_changed_count
+      - ref: nwsl.scheduler.source_value_missing_count
+      - ref: nwsl.scheduler.selection_policy
+      - ref: nwsl.scheduler.candidate_count
+      - ref: nwsl.scheduler.eligible_count
+      - ref: nwsl.scheduler.expired_count
+      - ref: nwsl.scheduler.invalid_kickoff_count
+      - ref: nwsl.scheduler.forecast_warm.outcome
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the scheduler job failed.
+
+  - id: event.nwsl.scheduler.decision
+    type: event
+    name: scheduler.decision
+    stability: development
+    brief: A point-in-time explanation of why the scheduler selected or skipped source work.
+    attributes:
+      - ref: nwsl.scheduler.decision
+        requirement_level: required
+      - ref: nwsl.scheduler.reason
+        requirement_level: required
+      - ref: nwsl.scheduler.job_kind
+      - ref: nwsl.scheduler.job_scope
+      - ref: nwsl.scheduler.requested_rows
+      - ref: nwsl.scheduler.deferred_job_count
