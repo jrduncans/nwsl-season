@@ -13,7 +13,7 @@ routine parent spans, slow-or-failing diagnostic spans, and span events.
 
 ## Developer workflow
 
-Install the Weaver version recorded in `.weaver-version`, then run:
+Install [Mise](https://mise.jdx.dev/), then run:
 
 ```sh
 make telemetry-check-code
@@ -28,6 +28,10 @@ and validates the registry with Weaver's future-facing rules.
 `telemetry-generate` refreshes the checked-in Markdown reference.
 `telemetry-check-generated` is the CI drift check and fails when generation
 changes a tracked catalog file.
+
+The Make targets invoke Weaver through Mise, which installs and runs the
+version declared in [`mise.toml`](../../mise.toml). Do not install or version
+Weaver separately for this repository.
 
 The code coverage check deliberately ignores attribute literals ending in a
 dot because those are prefixes completed from finite code values. Their

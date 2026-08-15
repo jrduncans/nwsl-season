@@ -31,11 +31,17 @@ suppressed when the cached fixture inventory is incomplete.
 
 ## Quick start
 
-Go 1.26 or newer is required.
+Go 1.26 or newer is required. For local development, install
+[Mise](https://mise.jdx.dev/) and provision the repository's tools:
 
 ```sh
-go run ./cmd/server
+mise install
+mise exec -- go run ./cmd/server
 ```
+
+`go.mod` remains the module's Go compatibility declaration; Mise provisions
+the matching Go release for local development. CI continues to read the Go
+version from `go.mod` through `actions/setup-go`.
 
 Visit <http://localhost:8080>. With the default configuration, the current
 season is available at <http://localhost:8080/seasons/2026> and Forecast Lab is

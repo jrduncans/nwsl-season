@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: open-telemetry/weaver/.github/actions/setup-weaver@26c685ff52b925056ff1d53476c6022638c01220 # v0.25.1
-        with:
-          version: 0.25.1
+      - uses: jdx/mise-action@v4
       - run: make telemetry-check
       - run: make telemetry-check-generated
