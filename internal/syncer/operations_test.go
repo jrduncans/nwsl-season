@@ -30,6 +30,12 @@ func TestExecuteTargetedOperationsUseOneSortedRequestAndPreserveOmissions(t *tes
 	if gameResult.Games == nil || gameResult.Games.Audit.RequestedRows != 2 || gameResult.Games.Audit.ReturnedRows != 1 || !reflect.DeepEqual(client.calls, []string{"games:one,two"}) {
 		t.Fatalf("targeted games result/calls = %+v %v", gameResult.Games, client.calls)
 	}
+	if len(client.gamesFilters) != 1 {
+		t.Fatalf("targeted games filters = %+v, want one request", client.gamesFilters)
+	}
+	if got := client.gamesFilters[0]; got.GameID != "one,two" || got.SeasonName != "2024" || got.StageName != "Regular Season" || got.Status != allGameStatuses {
+		t.Fatalf("targeted games filter = %+v, want sorted IDs, season/stage, and all statuses", got)
+	}
 	for id, due := range map[string]time.Time{"one": dueOne, "two": dueTwo} {
 		state, ok, stateErr := db.GameResultCheckState(ctx, id)
 		if stateErr != nil || !ok || state.NextDueAt == nil || !state.NextDueAt.Equal(due) {
@@ -411,11 +417,12 @@ func cacheScore(value int) (result sql.NullInt64) {
 }
 
 type operationASA struct {
-	teams    []asa.Team
-	games    map[string][]asa.Game
-	xg       map[string][]asa.GameXGoals
-	gamesErr error
-	calls    []string
+	teams        []asa.Team
+	games        map[string][]asa.Game
+	xg           map[string][]asa.GameXGoals
+	gamesErr     error
+	calls        []string
+	gamesFilters []asa.GamesFilters
 }
 
 func (f *operationASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
@@ -424,6 +431,7 @@ func (f *operationASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, err
 }
 func (f *operationASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game, error) {
 	f.calls = append(f.calls, "games:"+filters.GameID)
+	f.gamesFilters = append(f.gamesFilters, filters)
 	if f.gamesErr != nil {
 		return nil, f.gamesErr
 	}

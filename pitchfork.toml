@@ -1,8 +1,3 @@
-[settings.proxy]
-enable = true
-https = true
-port = 7777
-
 [daemons.server]
 run = "exec env NWSL_HTTP_ADDR=127.0.0.1:$PORT go run ./cmd/server"
 port = { expect = [8080], bump = 10 }
