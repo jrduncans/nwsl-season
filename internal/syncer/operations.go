@@ -170,9 +170,8 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 
 	case OperationGames:
 		filters := asa.GamesFilters{SeasonName: operation.Season, StageName: operation.Stage}
-		if operation.Mode == OperationFull {
-			filters.Status = allGameStatuses
-		} else {
+		filters.Status = allGameStatuses
+		if operation.Mode == OperationTargeted {
 			filters.GameID = strings.Join(operationGameIDs(operation), ",")
 		}
 		games, err := s.ASA.Games(ctx, filters)
