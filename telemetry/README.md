@@ -10,8 +10,8 @@ catalog.
 - `registry/*.yaml` defines the shared, HTTP, and application-domain contract.
   It uses Weaver's v1 registry model while the v2 definition language remains
   alpha.
-- `templates/registry/markdown` generates the checked-in reference under
-  `docs/telemetry/catalog`.
+- `templates/registry/markdown` generates domain-oriented checked-in reference
+  pages under `docs/telemetry/catalog`.
 - `check-code-coverage.sh` fails when a literal application span, event, or
   `nwsl.*` attribute emitted by Go is absent from the registry. Finite names
   assembled from bounded code values are recorded explicitly in the registry.
@@ -19,4 +19,4 @@ catalog.
 Run `make telemetry-check` and `make telemetry-check-generated` before
 committing a catalog change. See
 [`docs/telemetry/README.md`](../docs/telemetry/README.md) for the developer
-workflow and current coverage.
+workflow, generated catalog, and hand-written Honeycomb query cookbook.

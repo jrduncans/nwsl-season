@@ -170,9 +170,11 @@ achievement counts. They do not include individual assumed results.
 The source-controlled [telemetry catalog](docs/telemetry/README.md) defines the
 intended names, types, and meanings using OpenTelemetry semantic conventions.
 OpenTelemetry Weaver validates the registry and generates its checked-in
-reference documentation for shared, HTTP, cache, forecast, qualification,
-scenario, scheduler, and synchronization telemetry. CI also checks that
-literal application telemetry emitted by Go remains covered by the registry.
+domain reference documentation for shared, HTTP, cache, forecast,
+qualification, scenario, scheduler, and synchronization telemetry. Its
+[Honeycomb query cookbook](docs/telemetry/honeycomb-query-cookbook.md) provides
+focused investigation recipes. CI also checks that literal application
+telemetry emitted by Go remains covered by the registry.
 
 Local development remains silent and does not make telemetry network calls
 until an exporter is configured. Metrics are optional; traces and their
