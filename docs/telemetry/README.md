@@ -6,10 +6,12 @@ conventions and validated with OpenTelemetry Weaver. It is the intended
 contract for telemetry names, types, and meanings; the Go instrumentation is
 the implementation of that contract.
 
-The [generated catalog](catalog/README.md) covers shared resource and error
-attributes, HTTP client and server telemetry, and the cache, forecast,
-qualification, scenario, scheduler, and synchronization domains. It includes
-routine parent spans, slow-or-failing diagnostic spans, and span events.
+The [generated catalog](catalog/README.md) keeps each domain's attributes beside
+its HTTP metrics, spans, and events. It covers shared resources and errors,
+HTTP, cache, forecast, qualification, scenarios, scheduling, and
+synchronization. The hand-written [Honeycomb query cookbook](honeycomb-query-cookbook.md)
+turns that contract into investigation recipes without coupling the registry to
+one observability product.
 
 ## Developer workflow
 
@@ -43,4 +45,6 @@ semantic-conventions 1.43.0 dependency, so they require network access until a
 future slice packages or vendors that dependency.
 
 Do not edit files under `docs/telemetry/catalog` directly. Update the registry
-or templates and regenerate them instead.
+or templates and regenerate them instead. The query cookbook is intentionally
+maintained by hand; update it when investigation workflows or emitted behavior
+change.

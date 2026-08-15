@@ -3,14 +3,38 @@ templates:
     filter: "."
     application_mode: single
     file_name: README.md
-  - pattern: attributes.md.j2
-    filter: '.groups | map(select(.type == "attribute_group" and (.id | startswith("registry.nwsl."))))'
+  - pattern: domain.md.j2
+    filter: '.groups | map(select(.id == "registry.nwsl.resource" or .id == "registry.nwsl.context" or .id == "registry.nwsl.error"))'
     application_mode: single
-    file_name: attributes.md
-  - pattern: signals.md.j2
-    filter: '.groups | map(select(.type == "span" or .type == "metric" or .type == "event"))'
+    file_name: resources-and-errors.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select((.id | startswith("span.nwsl.http.")) or (.id | startswith("metric.http."))))'
     application_mode: single
-    file_name: signals.md
+    file_name: http.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select(.id == "registry.nwsl.cache" or (.id | startswith("span.nwsl.cache."))))'
+    application_mode: single
+    file_name: cache.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select(.id == "registry.nwsl.forecast" or (.id | startswith("span.nwsl.forecast."))))'
+    application_mode: single
+    file_name: forecast.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select((.id | startswith("registry.nwsl.qualification")) or (.id | startswith("span.nwsl.qualification."))))'
+    application_mode: single
+    file_name: qualification.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select((.id | startswith("registry.nwsl.scenario")) or (.id | startswith("span.nwsl.scenario."))))'
+    application_mode: single
+    file_name: scenarios.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select((.id | startswith("registry.nwsl.scheduler")) or (.id | startswith("span.nwsl.scheduler.")) or (.id | startswith("event.nwsl.scheduler."))))'
+    application_mode: single
+    file_name: scheduler.md
+  - pattern: domain.md.j2
+    filter: '.groups | map(select((.id | startswith("registry.nwsl.sync")) or (.id | startswith("span.nwsl.sync.")) or (.id | startswith("event.nwsl.sync."))))'
+    application_mode: single
+    file_name: synchronization.md
 
 acronyms:
   - ASA
