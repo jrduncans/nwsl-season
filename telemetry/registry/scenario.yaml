@@ -1,0 +1,273 @@
+groups:
+  - id: registry.nwsl.scenario
+    type: attribute_group
+    display_name: Clinching Scenario Attributes
+    brief: Dimensions and aggregate search diagnostics for next-slate clinching scenarios.
+    note: Team and slate identifiers are high-cardinality drill-down fields. Outcome, state, source, and refresh-reason fields are bounded vocabularies suitable for grouping.
+    attributes:
+      - id: nwsl.scenario.team_count
+        type: int
+        stability: development
+        brief: Number of teams supplied to the scenario refresh.
+      - id: nwsl.scenario.fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures supplied to the scenario refresh.
+      - id: nwsl.scenario.input_team_count
+        type: int
+        stability: development
+        brief: Number of teams accepted as scenario calculation input.
+      - id: nwsl.scenario.input_fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures accepted as scenario calculation input.
+      - id: nwsl.scenario.completed_fixture_count
+        type: int
+        stability: development
+        brief: Number of completed fixtures in the scenario input.
+      - id: nwsl.scenario.remaining_fixture_count
+        type: int
+        stability: development
+        brief: Number of remaining fixtures in the scenario input.
+      - id: nwsl.scenario.achievement_ids
+        type: string[]
+        stability: development
+        brief: Stable identifiers of achievements considered by the scenario search.
+        examples: [["shield", "top_four", "playoffs"]]
+      - id: nwsl.scenario.achievement_count
+        type: int
+        stability: development
+        brief: Number of achievements searched for one team.
+      - id: nwsl.scenario.budget_ms
+        type: int
+        stability: development
+        brief: Shared scenario calculation budget in milliseconds.
+        examples: [30000]
+      - id: nwsl.scenario.forced
+        type: boolean
+        stability: development
+        brief: Whether the caller explicitly requested scenario recalculation.
+      - id: nwsl.scenario.recalculated
+        type: boolean
+        stability: development
+        brief: Whether a new scenario batch was calculated.
+      - id: nwsl.scenario.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of the scenario refresh.
+        examples: ["recalculated", "current", "failure"]
+      - id: nwsl.scenario.refresh_reason
+        type: string
+        stability: development
+        brief: The low-cardinality reason a new scenario batch was required.
+        examples: ["snapshot_missing", "forced", "compute_budget_retry"]
+      - id: nwsl.scenario.slate_id
+        type: string
+        stability: development
+        brief: The high-cardinality stable identifier of the selected next-fixture slate.
+        examples: ["2026-08-22T23:30:00Z"]
+      - id: nwsl.scenario.slate_state
+        type: string
+        stability: development
+        brief: The low-cardinality availability state of the selected fixture slate.
+        examples: ["ready", "no_upcoming_fixtures", "unavailable"]
+      - id: nwsl.scenario.slate_source
+        type: string
+        stability: development
+        brief: The low-cardinality rule used to select the fixture slate.
+        examples: ["matchday", "kickoff_window"]
+      - id: nwsl.scenario.slate_fixture_count
+        type: int
+        stability: development
+        brief: Number of fixtures in the selected scenario slate.
+      - id: nwsl.scenario.slate_reason
+        type: string
+        stability: development
+        brief: A bounded explanation when the selected scenario slate is not ready.
+        examples: ["no upcoming fixtures"]
+      - id: nwsl.scenario.team_id
+        type: string
+        stability: development
+        brief: The high-cardinality ASA identifier of the team being searched.
+        examples: ["team-123"]
+      - id: nwsl.scenario.team_search_count
+        type: int
+        stability: development
+        brief: Number of per-team scenario searches performed in the batch.
+      - id: nwsl.scenario.team_search.duration_total_ms
+        type: double
+        stability: development
+        brief: Total wall-clock milliseconds spent in per-team scenario searches.
+      - id: nwsl.scenario.team_search.duration_max_ms
+        type: double
+        stability: development
+        brief: Maximum wall-clock milliseconds spent in one per-team scenario search.
+      - id: nwsl.scenario.team_search.slow_count
+        type: int
+        stability: development
+        brief: Number of per-team scenario searches exceeding the slow-operation threshold.
+      - id: nwsl.scenario.team_search.slowest_team_id
+        type: string
+        stability: development
+        brief: The high-cardinality team identifier associated with the slowest scenario search.
+        examples: ["team-123"]
+      - id: nwsl.scenario.assignment_count
+        type: int
+        stability: development
+        brief: Maximum slate assignment count considered in one per-team search.
+      - id: nwsl.scenario.certified_assignment_count
+        type: int
+        stability: development
+        brief: Number of assignments certified across achievements in one per-team search.
+      - id: nwsl.scenario.unresolved_assignment_count
+        type: int
+        stability: development
+        brief: Number of unresolved assignments across achievements in one per-team search.
+      - id: nwsl.scenario.search_node_count
+        type: int
+        stability: development
+        brief: Number of search nodes visited in one per-team scenario search.
+      - id: nwsl.scenario.oracle_call_count
+        type: int
+        stability: development
+        brief: Number of clinching-oracle calls in one per-team scenario search.
+      - id: nwsl.scenario.oracle_cache_hit_count
+        type: int
+        stability: development
+        brief: Number of reused oracle results in one per-team scenario search.
+      - id: nwsl.scenario.visited_complete_count
+        type: int
+        stability: development
+        brief: Number of complete fixture assignments visited in one per-team search.
+      - id: nwsl.scenario.assignment_count.total
+        type: int
+        stability: development
+        brief: Sum of maximum assignment counts across per-team scenario searches.
+      - id: nwsl.scenario.certified_assignment_count.total
+        type: int
+        stability: development
+        brief: Total certified assignments across the scenario batch.
+      - id: nwsl.scenario.unresolved_assignment_count.total
+        type: int
+        stability: development
+        brief: Total unresolved assignments across the scenario batch.
+      - id: nwsl.scenario.search_node_count.total
+        type: int
+        stability: development
+        brief: Total search nodes visited across the scenario batch.
+      - id: nwsl.scenario.search_node_count.max
+        type: int
+        stability: development
+        brief: Maximum search nodes visited for one team in the scenario batch.
+      - id: nwsl.scenario.search_node_count.max_team_id
+        type: string
+        stability: development
+        brief: The high-cardinality team identifier associated with the maximum search-node count.
+        examples: ["team-123"]
+      - id: nwsl.scenario.oracle_call_count.total
+        type: int
+        stability: development
+        brief: Total clinching-oracle calls across the scenario batch.
+      - id: nwsl.scenario.oracle_cache_hit_count.total
+        type: int
+        stability: development
+        brief: Total reused oracle results across the scenario batch.
+      - id: nwsl.scenario.visited_complete_count.total
+        type: int
+        stability: development
+        brief: Total complete fixture assignments visited across the scenario batch.
+      - id: nwsl.scenario.result.state.already_clinched_count
+        type: int
+        stability: development
+        brief: Number of results whose team had already clinched the achievement.
+      - id: nwsl.scenario.result.state.can_clinch_count
+        type: int
+        stability: development
+        brief: Number of results with at least one certified clinching path.
+      - id: nwsl.scenario.result.state.cannot_clinch_count
+        type: int
+        stability: development
+        brief: Number of results with no outcome-only clinching path on the slate.
+      - id: nwsl.scenario.result.state.tiebreak_dependent_count
+        type: int
+        stability: development
+        brief: Number of results whose slate opportunity depends on score tiebreaks.
+      - id: nwsl.scenario.result.state.unresolved_count
+        type: int
+        stability: development
+        brief: Number of results the scenario calculation could not resolve.
+      - id: nwsl.scenario.result.budget_limited_count
+        type: int
+        stability: development
+        brief: Number of results affected by scenario computation budget exhaustion.
+
+  - id: span.nwsl.scenario.refresh
+    type: span
+    name: scenario.refresh
+    span_kind: internal
+    stability: development
+    brief: One persisted next-slate scenario batch refresh for a fixture snapshot.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.cache.fixture_snapshot_id
+        requirement_level: required
+      - ref: nwsl.scenario.team_count
+      - ref: nwsl.scenario.fixture_count
+      - ref: nwsl.scenario.input_team_count
+      - ref: nwsl.scenario.input_fixture_count
+      - ref: nwsl.scenario.completed_fixture_count
+      - ref: nwsl.scenario.remaining_fixture_count
+      - ref: nwsl.scenario.achievement_ids
+      - ref: nwsl.scenario.budget_ms
+      - ref: nwsl.scenario.forced
+      - ref: nwsl.scenario.refresh_reason
+      - ref: nwsl.scenario.slate_id
+      - ref: nwsl.scenario.slate_state
+      - ref: nwsl.scenario.slate_source
+      - ref: nwsl.scenario.slate_fixture_count
+      - ref: nwsl.scenario.slate_reason
+      - ref: nwsl.scenario.recalculated
+      - ref: nwsl.scenario.outcome
+        requirement_level: required
+      - ref: nwsl.scenario.team_search_count
+      - ref: nwsl.scenario.team_search.duration_total_ms
+      - ref: nwsl.scenario.team_search.duration_max_ms
+      - ref: nwsl.scenario.team_search.slow_count
+      - ref: nwsl.scenario.search_node_count.total
+      - ref: nwsl.scenario.search_node_count.max
+      - ref: nwsl.scenario.result.budget_limited_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the scenario refresh failed.
+
+  - id: span.nwsl.scenario.generate_team
+    type: span
+    name: scenario.generate_team
+    span_kind: internal
+    stability: development
+    brief: A slow or failed scenario search for all configured achievements of one team.
+    note: Successful spans are emitted only when the search exceeds the slow-operation threshold; failures are always emitted.
+    attributes:
+      - ref: nwsl.scenario.team_id
+        requirement_level: required
+      - ref: nwsl.scenario.achievement_ids
+        requirement_level: required
+      - ref: nwsl.scenario.achievement_count
+      - ref: nwsl.scenario.completed_fixture_count
+      - ref: nwsl.scenario.remaining_fixture_count
+      - ref: nwsl.scenario.slate_state
+      - ref: nwsl.scenario.slate_source
+      - ref: nwsl.scenario.slate_fixture_count
+      - ref: nwsl.scenario.assignment_count
+      - ref: nwsl.scenario.certified_assignment_count
+      - ref: nwsl.scenario.unresolved_assignment_count
+      - ref: nwsl.scenario.search_node_count
+      - ref: nwsl.scenario.oracle_call_count
+      - ref: nwsl.scenario.oracle_cache_hit_count
+      - ref: nwsl.scenario.visited_complete_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the per-team scenario search failed.

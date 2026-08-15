@@ -13,7 +13,7 @@ TELEMETRY_REGISTRY := ./telemetry/registry
 TELEMETRY_TEMPLATES := ./telemetry/templates
 TELEMETRY_DOCS := ./docs/telemetry/catalog
 
-.PHONY: verify test fmt vet lint race vuln telemetry-weaver-version telemetry-check telemetry-generate telemetry-check-generated backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+.PHONY: verify test fmt vet lint race vuln telemetry-weaver-version telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
 verify: fmt lint vet test
 
@@ -42,7 +42,10 @@ telemetry-weaver-version:
 		exit 1; \
 	fi
 
-telemetry-check: telemetry-weaver-version
+telemetry-check-code:
+	sh ./telemetry/check-code-coverage.sh
+
+telemetry-check: telemetry-weaver-version telemetry-check-code
 	$(WEAVER) --future registry check -r $(TELEMETRY_REGISTRY)
 
 telemetry-generate: telemetry-weaver-version

@@ -3,10 +3,10 @@
 
 # Telemetry signals
 
-This slice catalogs the standard HTTP metrics emitted when metrics export is
-enabled and the application-specific HTTP client and server span conventions.
-Attributes marked `Opt In` belong to the upstream HTTP convention but are not
-emitted unless the instrumentation is explicitly configured to capture them.
+This reference catalogs standard HTTP telemetry and application spans and
+events for cache reads, forecasts, qualification, scenarios, scheduling, and
+synchronization. Attributes marked `Opt In` belong to an upstream convention
+but are not emitted unless instrumentation is explicitly configured for them.
 
 {% for group in ctx %}
 ## `{{ catalog.signal_name(group) }}`

@@ -3,11 +3,102 @@
 
 # Telemetry signals
 
-This slice catalogs the standard HTTP metrics emitted when metrics export is
-enabled and the application-specific HTTP client and server span conventions.
-Attributes marked `Opt In` belong to the upstream HTTP convention but are not
-emitted unless the instrumentation is explicitly configured to capture them.
+This reference catalogs standard HTTP telemetry and application spans and
+events for cache reads, forecasts, qualification, scenarios, scheduling, and
+synchronization. Attributes marked `Opt In` belong to an upstream convention
+but are not emitted unless instrumentation is explicitly configured for them.
 
+
+## `scheduler.decision`
+
+- Convention: `event.nwsl.scheduler.decision`
+- Signal type: event
+- Stability: development
+
+A point-in-time explanation of why the scheduler selected or skipped source work.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `nwsl.scheduler.decision` | string | Required | development | The low-cardinality check or no-check decision recorded by a scheduler decision event. |
+| `nwsl.scheduler.deferred_job_count` | int | Recommended | development | Number of due source jobs deferred after the request budget was exhausted. |
+| `nwsl.scheduler.job_kind` | string | Recommended | development | The bounded resource and request shape of a scheduler job. |
+| `nwsl.scheduler.job_scope` | string | Recommended | development | The season and stage scope of one scheduler job. |
+| `nwsl.scheduler.reason` | string | Required | development | The low-cardinality reason recorded by a scheduler decision event. |
+| `nwsl.scheduler.requested_rows` | int | Recommended | development | Number of source identities selected in a scheduler decision event. |
+
+## `sync.asa_response`
+
+- Convention: `event.nwsl.sync.asa_response`
+- Signal type: event
+- Stability: development
+
+A point-in-time summary of rows returned by one ASA response.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `nwsl.asa.returned_rows` | int | Required | development | Number of rows returned by one ASA response before persistence. |
+| `nwsl.sync.mode` | string | Required | development | Whether one source operation is authoritative or targeted. |
+| `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
+
+## `sync.game_freshness`
+
+- Convention: `event.nwsl.sync.game_freshness`
+- Signal type: event
+- Stability: development
+
+A point-in-time explanation of an individual fixture acceptance, rejection, or normalized change.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `nwsl.asa.game.id` | string | Recommended | development | The high-cardinality ASA game identifier described by a freshness event. |
+| `nwsl.asa.game.last_updated_utc` | string | Recommended | development | The high-cardinality RFC 3339 source-version timestamp on an incoming ASA game. |
+| `nwsl.cache.game.last_updated_utc` | string | Recommended | development | The high-cardinality RFC 3339 source timestamp stored for a cached game. |
+| `nwsl.sync.decision` | string | Required | development | The bounded per-value source persistence decision. |
+| `nwsl.sync.reason` | string | Required | development | The bounded reason for a per-value source persistence decision. |
+| `nwsl.sync.rejection_kind` | string | Recommended | development | The bounded category of source rejection. |
+| `nwsl.sync.rejection_reason` | string | Recommended | development | The bounded reason an incoming source value was rejected. |
+| `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
+| `nwsl.sync.response_accepted` | boolean | Recommended | development | Whether the incoming source value was accepted for persistence. |
+| `nwsl.sync.response_rejected` | boolean | Recommended | development | Whether the incoming source value was rejected by data-integrity guards. |
+| `nwsl.sync.source_metadata_changed` | boolean | Recommended | development | Whether source metadata changed without a normalized value change. |
+| `nwsl.sync.source_value_changed` | boolean | Recommended | development | Whether normalized source values changed. |
+| `nwsl.sync.source_value_initialized` | boolean | Recommended | development | Whether a previously missing normalized source value was initialized. |
+| `nwsl.sync.update_kind` | string | Recommended | development | The bounded category of normalized source change. |
+
+## `sync.xg_freshness`
+
+- Convention: `event.nwsl.sync.xg_freshness`
+- Signal type: event
+- Stability: development
+
+A point-in-time comparison of cached and incoming expected-goals values for one fixture.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `nwsl.asa.game.id` | string | Required | development | The high-cardinality ASA game identifier described by a freshness event. |
+| `nwsl.sync.kickoff_age_seconds` | int | Recommended | development | Seconds between the observed game kickoff and the source observation time. |
+| `nwsl.sync.kickoff_utc` | string | Recommended | development | The high-cardinality RFC 3339 kickoff time of the observed game. |
+| `nwsl.sync.new.availability` | string | Recommended | development | Incoming expected-goals availability after a source observation. |
+| `nwsl.sync.new.away_xg` | double | Recommended | development | Incoming away-team expected goals after a source change when present. |
+| `nwsl.sync.new.home_xg` | double | Recommended | development | Incoming home-team expected goals after a source change when present. |
+| `nwsl.sync.observation_finished_at` | string | Recommended | development | The high-cardinality RFC 3339 completion time of the source observation. |
+| `nwsl.sync.old.availability` | string | Recommended | development | Cached expected-goals availability before a source observation. |
+| `nwsl.sync.old.away_xg` | double | Recommended | development | Cached away-team expected goals before a source change when present. |
+| `nwsl.sync.old.home_xg` | double | Recommended | development | Cached home-team expected goals before a source change when present. |
+| `nwsl.sync.rejection_kind` | string | Recommended | development | The bounded category of source rejection. |
+| `nwsl.sync.rejection_reason` | string | Recommended | development | The bounded reason an incoming source value was rejected. |
+| `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
+| `nwsl.sync.response_accepted` | boolean | Recommended | development | Whether the incoming source value was accepted for persistence. |
+| `nwsl.sync.response_rejected` | boolean | Recommended | development | Whether the incoming source value was rejected by data-integrity guards. |
+| `nwsl.sync.source_metadata_changed` | boolean | Recommended | development | Whether source metadata changed without a normalized value change. |
+| `nwsl.sync.source_value_changed` | boolean | Recommended | development | Whether normalized source values changed. |
+| `nwsl.sync.source_value_initialized` | boolean | Recommended | development | Whether a previously missing normalized source value was initialized. |
+| `nwsl.sync.source_value_missing` | boolean | Recommended | development | Whether a requested normalized source value remains missing. |
+| `nwsl.sync.update_kind` | string | Recommended | development | The bounded category of normalized source change. |
 
 ## `http.client.request.body.size`
 
@@ -126,6 +217,82 @@ The size of the response payload body in bytes. This is the number of bytes tran
 | `url.scheme` | string | Required | stable | The [URI scheme](https://www.rfc-editor.org/rfc/rfc3986#section-3.1) component identifying the used protocol. |
 | `user_agent.synthetic.type` | enum | Opt In | development | Specifies the category of synthetic traffic, such as tests or bots. |
 
+## `cache.season.load`
+
+- Convention: `span.nwsl.cache.season.load`
+- Signal type: span, internal kind
+- Stability: development
+
+A read of one season and stage from the local SQLite cache.
+
+
+The span also copies the resulting snapshot dimensions to its enclosing request span for direct Honeycomb filtering.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the cache load failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.cache.fixture_snapshot_id` | string | Recommended | development | The high-cardinality immutable identifier of the published fixture snapshot. |
+| `nwsl.cache.last_success_age_seconds` | double | Recommended | development | Seconds elapsed since the latest successful source synchronization for the loaded scope. |
+| `nwsl.cache.name` | string | Required | development | The low-cardinality logical cache being accessed. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the loaded season snapshot. |
+| `nwsl.season.fixture_count` | int | Recommended | development | Number of fixtures in the loaded season snapshot. |
+| `nwsl.season.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the loaded season snapshot. |
+| `nwsl.season.team_count` | int | Recommended | development | Number of teams in the loaded season snapshot. |
+| `nwsl.season.xg_available_count` | int | Recommended | development | Number of cached fixtures with available expected-goals observations. |
+| `nwsl.season.xg_unavailable_count` | int | Recommended | development | Number of cached fixtures explicitly observed without expected-goals data. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+
+## `forecast.precache`
+
+- Convention: `span.nwsl.forecast.precache`
+- Signal type: span, internal kind
+- Stability: development
+
+One proactive attempt to warm the process-local forecast result cache.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when forecast cache warming failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.forecast.failed_model_count` | int | Recommended | development | Number of forecast models that failed during a cache-warming operation. |
+| `nwsl.forecast.model_count` | int | Recommended | development | Number of forecast models considered by a cache-warming operation. |
+| `nwsl.forecast.precache.outcome` | string | Required | development | The low-cardinality terminal outcome of forecast cache warming. |
+| `nwsl.forecast.precache.worker_count` | int | Recommended | development | Number of concurrent workers used by a forecast cache-warming operation. |
+| `nwsl.forecast.preload` | boolean | Required | development | Whether forecast work is proactive cache warming rather than an interactive request. |
+| `nwsl.forecast.trigger` | string | Required | development | The low-cardinality caller that initiated forecast work. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+
+## `forecast.run`
+
+- Convention: `span.nwsl.forecast.run`
+- Signal type: span, internal kind
+- Stability: development
+
+One bounded Forecast Lab executor request for one or more models.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the forecast run failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.error.expected` | boolean | Recommended | development | Whether the failed outcome is an expected operational result rather than an unexpected defect. |
+| `nwsl.forecast.cache_hits` | int | Recommended | development | Number of requested model results served from the process-local forecast cache. |
+| `nwsl.forecast.calculation_count` | int | Recommended | development | Number of requested model results calculated instead of served from cache. |
+| `nwsl.forecast.completed_fixture_count` | int | Recommended | development | Number of completed fixtures supplied to the forecast calculation. |
+| `nwsl.forecast.fixed_assumption_count` | int | Recommended | development | Number of visitor-selected fixture outcomes fixed in the forecast scenario. |
+| `nwsl.forecast.fixture_count` | int | Recommended | development | Number of fixtures supplied to the forecast calculation. |
+| `nwsl.forecast.iteration_count` | int | Recommended | development | Number of simulated seasons requested for each model. |
+| `nwsl.forecast.model_ids` | string[] | Required | development | Stable identifiers of all forecast models calculated by an operation. |
+| `nwsl.forecast.outcome` | string | Required | development | The low-cardinality terminal outcome of a forecast executor run. |
+| `nwsl.forecast.playoff_place_count` | int | Recommended | development | Number of league places that qualify for the playoffs in the simulated competition. |
+| `nwsl.forecast.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures simulated by the forecast calculation. |
+| `nwsl.forecast.task_count` | int | Required | development | Number of model calculations requested from the forecast executor. |
+| `nwsl.forecast.team_count` | int | Recommended | development | Number of teams supplied to the forecast calculation. |
+| `nwsl.forecast.trigger` | string | Required | development | The low-cardinality caller that initiated forecast work. |
+| `nwsl.forecast.xg_observation_count` | int | Recommended | development | Number of expected-goals observations available to the selected forecast model. |
+
 ## `span.nwsl.http.client`
 
 - Convention: `span.nwsl.http.client`
@@ -209,3 +376,330 @@ example `GET /seasons/{season}/{stage}`. Unmatched requests use
 | `url.scheme` | string | Required | stable | The [URI scheme](https://www.rfc-editor.org/rfc/rfc3986#section-3.1) component identifying the used protocol. |
 | `user_agent.original` | string | Recommended | stable | Value of the [HTTP User-Agent](https://www.rfc-editor.org/rfc/rfc9110.html#field.user-agent) header sent by the client. |
 | `user_agent.synthetic.type` | enum | Opt In | development | Specifies the category of synthetic traffic, such as tests or bots. |
+
+## `qualification.no_help_batch`
+
+- Convention: `span.nwsl.qualification.no_help_batch`
+- Signal type: span, internal kind
+- Stability: development
+
+A slow or failed batch of no-help path calculations for one team.
+
+
+Successful spans are emitted only when the batch exceeds the slow-operation threshold; failures are always emitted.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the no-help batch failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.qualification.achievement_count` | int | Recommended | development | Number of achievements evaluated for one team. |
+| `nwsl.qualification.achievement_ids` | string[] | Required | development | Stable identifiers of achievements evaluated by the calculation. |
+| `nwsl.qualification.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the qualification input. |
+| `nwsl.qualification.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the qualification input. |
+| `nwsl.qualification.team_id` | string | Required | development | The high-cardinality ASA identifier of the team being evaluated. |
+
+## `qualification.refresh`
+
+- Convention: `span.nwsl.qualification.refresh`
+- Signal type: span, internal kind
+- Stability: development
+
+One persisted qualification batch refresh for a fixture snapshot.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the qualification refresh failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.cache.fixture_snapshot_id` | string | Required | development | The high-cardinality immutable identifier of the published fixture snapshot. |
+| `nwsl.qualification.achievement_ids` | string[] | Recommended | development | Stable identifiers of achievements evaluated by the calculation. |
+| `nwsl.qualification.budget_ms` | int | Recommended | development | Shared calculation budget in milliseconds. |
+| `nwsl.qualification.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the qualification input. |
+| `nwsl.qualification.fixture_count` | int | Recommended | development | Number of fixtures supplied to the qualification refresh. |
+| `nwsl.qualification.forced` | boolean | Recommended | development | Whether the caller explicitly requested recalculation. |
+| `nwsl.qualification.input_fixture_count` | int | Recommended | development | Number of fixtures accepted as calculation input. |
+| `nwsl.qualification.input_team_count` | int | Recommended | development | Number of teams accepted as calculation input. |
+| `nwsl.qualification.no_help_batch.duration_max_ms` | double | Recommended | development | Maximum wall-clock milliseconds spent in one no-help path batch. |
+| `nwsl.qualification.no_help_batch.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in no-help path batches. |
+| `nwsl.qualification.no_help_batch.slow_count` | int | Recommended | development | Number of no-help batches exceeding the slow-operation threshold. |
+| `nwsl.qualification.outcome` | string | Required | development | The low-cardinality terminal outcome of the qualification refresh. |
+| `nwsl.qualification.recalculated` | boolean | Recommended | development | Whether a new qualification batch was calculated. |
+| `nwsl.qualification.refresh_reason` | string | Recommended | development | The low-cardinality reason a new qualification batch was required. |
+| `nwsl.qualification.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the qualification input. |
+| `nwsl.qualification.result.budget_exhausted_count` | int | Recommended | development | Number of results affected by status-proof or no-help calculation budget exhaustion. |
+| `nwsl.qualification.status_check_count` | int | Recommended | development | Number of team and achievement qualification statuses checked in the batch. |
+| `nwsl.qualification.status_proof.duration_max_ms` | double | Recommended | development | Maximum wall-clock milliseconds spent in one individual status proof. |
+| `nwsl.qualification.status_proof.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in individual status proofs. |
+| `nwsl.qualification.status_proof.slow_count` | int | Recommended | development | Number of individual status proofs exceeding the slow-operation threshold. |
+| `nwsl.qualification.team_count` | int | Recommended | development | Number of teams supplied to the qualification refresh. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+
+## `qualification.status_proof`
+
+- Convention: `span.nwsl.qualification.status_proof`
+- Signal type: span, internal kind
+- Stability: development
+
+A slow or failed individual team and achievement qualification proof.
+
+
+Successful spans are emitted only when the proof exceeds the slow-operation threshold; failures are always emitted.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the individual status proof failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.qualification.achievement_id` | string | Required | development | The stable competition achievement being evaluated. |
+| `nwsl.qualification.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the qualification input. |
+| `nwsl.qualification.connected_component_count` | int | Recommended | development | Number of disconnected fixture components in an individual proof problem. |
+| `nwsl.qualification.memo_hit_count` | int | Recommended | development | Number of memoized states reused by an individual proof. |
+| `nwsl.qualification.method` | string | Recommended | development | The low-cardinality proof method that produced an individual result. |
+| `nwsl.qualification.prune_count` | int | Recommended | development | Number of search branches pruned by an individual proof. |
+| `nwsl.qualification.reduced_fixture_count` | int | Recommended | development | Number of fixtures retained in an individual reduced proof problem. |
+| `nwsl.qualification.reduced_team_count` | int | Recommended | development | Number of teams retained in an individual reduced proof problem. |
+| `nwsl.qualification.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the qualification input. |
+| `nwsl.qualification.status` | string | Recommended | development | The low-cardinality result of an individual qualification proof. |
+| `nwsl.qualification.subset_probe_count` | int | Recommended | development | Number of opponent subsets probed by an individual proof. |
+| `nwsl.qualification.team_id` | string | Required | development | The high-cardinality ASA identifier of the team being evaluated. |
+| `nwsl.qualification.top_k` | int | Recommended | development | The highest qualifying table position for the achievement. |
+| `nwsl.qualification.visited_state_count` | int | Recommended | development | Number of solver states visited by an individual proof. |
+
+## `scenario.generate_team`
+
+- Convention: `span.nwsl.scenario.generate_team`
+- Signal type: span, internal kind
+- Stability: development
+
+A slow or failed scenario search for all configured achievements of one team.
+
+
+Successful spans are emitted only when the search exceeds the slow-operation threshold; failures are always emitted.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the per-team scenario search failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.scenario.achievement_count` | int | Recommended | development | Number of achievements searched for one team. |
+| `nwsl.scenario.achievement_ids` | string[] | Required | development | Stable identifiers of achievements considered by the scenario search. |
+| `nwsl.scenario.assignment_count` | int | Recommended | development | Maximum slate assignment count considered in one per-team search. |
+| `nwsl.scenario.certified_assignment_count` | int | Recommended | development | Number of assignments certified across achievements in one per-team search. |
+| `nwsl.scenario.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the scenario input. |
+| `nwsl.scenario.oracle_cache_hit_count` | int | Recommended | development | Number of reused oracle results in one per-team scenario search. |
+| `nwsl.scenario.oracle_call_count` | int | Recommended | development | Number of clinching-oracle calls in one per-team scenario search. |
+| `nwsl.scenario.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the scenario input. |
+| `nwsl.scenario.search_node_count` | int | Recommended | development | Number of search nodes visited in one per-team scenario search. |
+| `nwsl.scenario.slate_fixture_count` | int | Recommended | development | Number of fixtures in the selected scenario slate. |
+| `nwsl.scenario.slate_source` | string | Recommended | development | The low-cardinality rule used to select the fixture slate. |
+| `nwsl.scenario.slate_state` | string | Recommended | development | The low-cardinality availability state of the selected fixture slate. |
+| `nwsl.scenario.team_id` | string | Required | development | The high-cardinality ASA identifier of the team being searched. |
+| `nwsl.scenario.unresolved_assignment_count` | int | Recommended | development | Number of unresolved assignments across achievements in one per-team search. |
+| `nwsl.scenario.visited_complete_count` | int | Recommended | development | Number of complete fixture assignments visited in one per-team search. |
+
+## `scenario.refresh`
+
+- Convention: `span.nwsl.scenario.refresh`
+- Signal type: span, internal kind
+- Stability: development
+
+One persisted next-slate scenario batch refresh for a fixture snapshot.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the scenario refresh failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.cache.fixture_snapshot_id` | string | Required | development | The high-cardinality immutable identifier of the published fixture snapshot. |
+| `nwsl.scenario.achievement_ids` | string[] | Recommended | development | Stable identifiers of achievements considered by the scenario search. |
+| `nwsl.scenario.budget_ms` | int | Recommended | development | Shared scenario calculation budget in milliseconds. |
+| `nwsl.scenario.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the scenario input. |
+| `nwsl.scenario.fixture_count` | int | Recommended | development | Number of fixtures supplied to the scenario refresh. |
+| `nwsl.scenario.forced` | boolean | Recommended | development | Whether the caller explicitly requested scenario recalculation. |
+| `nwsl.scenario.input_fixture_count` | int | Recommended | development | Number of fixtures accepted as scenario calculation input. |
+| `nwsl.scenario.input_team_count` | int | Recommended | development | Number of teams accepted as scenario calculation input. |
+| `nwsl.scenario.outcome` | string | Required | development | The low-cardinality terminal outcome of the scenario refresh. |
+| `nwsl.scenario.recalculated` | boolean | Recommended | development | Whether a new scenario batch was calculated. |
+| `nwsl.scenario.refresh_reason` | string | Recommended | development | The low-cardinality reason a new scenario batch was required. |
+| `nwsl.scenario.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the scenario input. |
+| `nwsl.scenario.result.budget_limited_count` | int | Recommended | development | Number of results affected by scenario computation budget exhaustion. |
+| `nwsl.scenario.search_node_count.max` | int | Recommended | development | Maximum search nodes visited for one team in the scenario batch. |
+| `nwsl.scenario.search_node_count.total` | int | Recommended | development | Total search nodes visited across the scenario batch. |
+| `nwsl.scenario.slate_fixture_count` | int | Recommended | development | Number of fixtures in the selected scenario slate. |
+| `nwsl.scenario.slate_id` | string | Recommended | development | The high-cardinality stable identifier of the selected next-fixture slate. |
+| `nwsl.scenario.slate_reason` | string | Recommended | development | A bounded explanation when the selected scenario slate is not ready. |
+| `nwsl.scenario.slate_source` | string | Recommended | development | The low-cardinality rule used to select the fixture slate. |
+| `nwsl.scenario.slate_state` | string | Recommended | development | The low-cardinality availability state of the selected fixture slate. |
+| `nwsl.scenario.team_count` | int | Recommended | development | Number of teams supplied to the scenario refresh. |
+| `nwsl.scenario.team_search.duration_max_ms` | double | Recommended | development | Maximum wall-clock milliseconds spent in one per-team scenario search. |
+| `nwsl.scenario.team_search.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in per-team scenario searches. |
+| `nwsl.scenario.team_search.slow_count` | int | Recommended | development | Number of per-team scenario searches exceeding the slow-operation threshold. |
+| `nwsl.scenario.team_search_count` | int | Recommended | development | Number of per-team scenario searches performed in the batch. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+
+## `scheduler.job`
+
+- Convention: `span.nwsl.scheduler.job`
+- Signal type: span, internal kind
+- Stability: development
+
+One planned scheduler source job and its material-change result.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the scheduler job failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.scheduler.candidate_count` | int | Recommended | development | Number of identities considered by a targeted selection policy. |
+| `nwsl.scheduler.eligible_count` | int | Recommended | development | Number of targeted identities eligible at the observation time. |
+| `nwsl.scheduler.expired_count` | int | Recommended | development | Number of targeted identities outside their polling watch window. |
+| `nwsl.scheduler.forecast_warm.outcome` | string | Recommended | development | The low-cardinality result of warming forecasts after material source work. |
+| `nwsl.scheduler.invalid_kickoff_count` | int | Recommended | development | Number of targeted identities excluded because their kickoff time was invalid. |
+| `nwsl.scheduler.job_class` | string | Required | development | Whether a scheduler job belongs to the hot current scope or cold archived maintenance. |
+| `nwsl.scheduler.job_kind` | string | Required | development | The bounded resource and request shape of a scheduler job. |
+| `nwsl.scheduler.job_material` | boolean | Recommended | development | Whether one scheduler job changed downstream source inputs. |
+| `nwsl.scheduler.job_outcome` | string | Required | development | The low-cardinality terminal outcome of one scheduler job. |
+| `nwsl.scheduler.job_reason` | string | Recommended | development | The bounded planner reason that produced one scheduler job. |
+| `nwsl.scheduler.job_requested_rows` | int | Recommended | development | Number of source identities requested by one scheduler job. |
+| `nwsl.scheduler.job_returned_rows` | int | Recommended | development | Number of source rows returned by one scheduler job. |
+| `nwsl.scheduler.job_scope` | string | Recommended | development | The season and stage scope of one scheduler job. |
+| `nwsl.scheduler.request_count` | int | Recommended | development | Number of source requests attempted during the scheduler tick or job. |
+| `nwsl.scheduler.selection_policy` | string | Recommended | development | The bounded cadence policy used to select targeted source identities. |
+| `nwsl.scheduler.source_metadata_changed_count` | int | Recommended | development | Number of source rows whose metadata changed without a normalized value change. |
+| `nwsl.scheduler.source_value_changed` | boolean | Recommended | development | Whether normalized source values changed during one scheduler job. |
+| `nwsl.scheduler.source_value_changed_count` | int | Recommended | development | Number of normalized source values changed during one scheduler job. |
+| `nwsl.scheduler.source_value_initialized_count` | int | Recommended | development | Number of previously missing source values initialized during one scheduler job. |
+| `nwsl.scheduler.source_value_missing_count` | int | Recommended | development | Number of requested source values still missing after one scheduler job. |
+
+## `scheduler.tick`
+
+- Convention: `span.nwsl.scheduler.tick`
+- Signal type: span, internal kind
+- Stability: development
+
+One scheduler planning and execution cycle.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the scheduler tick failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.scheduler.action` | string | Recommended | development | The low-cardinality top-level action selected for a scheduler tick. |
+| `nwsl.scheduler.clinching_preflight_outcome` | string | Recommended | development | The low-cardinality outcome of the cache-only clinching preflight. |
+| `nwsl.scheduler.deferred_job_count` | int | Recommended | development | Number of due source jobs deferred after the request budget was exhausted. |
+| `nwsl.scheduler.evaluation_evidence_dirty` | boolean | Recommended | development | Whether cold source changes require regeneration of checked-in model evaluation evidence. |
+| `nwsl.scheduler.job_count` | int | Recommended | development | Number of source jobs selected for the scheduler tick. |
+| `nwsl.scheduler.outcome` | string | Required | development | The low-cardinality terminal outcome of a scheduler tick. |
+| `nwsl.scheduler.request_budget` | int | Recommended | development | Maximum source requests permitted during the scheduler tick. |
+| `nwsl.scheduler.request_count` | int | Recommended | development | Number of source requests attempted during the scheduler tick or job. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+
+## `sync.recalculate`
+
+- Convention: `span.nwsl.sync.recalculate`
+- Signal type: span, internal kind
+- Stability: development
+
+One cache-only qualification and scenario recalculation with no ASA requests.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when cache-only recalculation failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.cache.fixture_snapshot_id` | string | Recommended | development | The high-cardinality immutable identifier of the published fixture snapshot. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.sync.forced` | boolean | Recommended | development | Whether the caller explicitly requested a full refresh or recalculation. |
+| `nwsl.sync.partial_failure` | boolean | Recommended | development | Whether source work succeeded but one or more optional downstream components failed. |
+| `nwsl.sync.qualification.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream qualification component. |
+| `nwsl.sync.qualification.refresh_reason` | string | Recommended | development | The bounded qualification refresh or no-op reason. |
+| `nwsl.sync.qualification.refresh_required` | boolean | Recommended | development | Whether the qualification refresher determined that work was required. |
+| `nwsl.sync.qualification.snapshot_checked` | boolean | Recommended | development | Whether the qualification refresher checked for a current persisted snapshot. |
+| `nwsl.sync.qualification.snapshot_found` | boolean | Recommended | development | Whether a matching qualification snapshot was found. |
+| `nwsl.sync.qualification_recalculated` | boolean | Recommended | development | Whether qualification was recalculated during the parent operation. |
+| `nwsl.sync.recalculate.outcome` | string | Required | development | The low-cardinality terminal outcome of cache-only recalculation. |
+| `nwsl.sync.recalculate.reason` | string | Recommended | development | The bounded reason for a cache-only derived recalculation. |
+| `nwsl.sync.scenario.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream scenario component. |
+| `nwsl.sync.scenario.refresh_reason` | string | Recommended | development | The bounded scenario refresh or no-op reason. |
+| `nwsl.sync.scenario.refresh_required` | boolean | Recommended | development | Whether the scenario refresher determined that work was required. |
+| `nwsl.sync.scenario.snapshot_checked` | boolean | Recommended | development | Whether the scenario refresher checked for a current persisted snapshot. |
+| `nwsl.sync.scenario.snapshot_found` | boolean | Recommended | development | Whether a matching scenario snapshot was found. |
+| `nwsl.sync.scenario_recalculated` | boolean | Recommended | development | Whether scenarios were recalculated during the parent operation. |
+| `nwsl.sync.trigger` | string | Required | development | The low-cardinality caller that initiated synchronization or recalculation. |
+
+## `sync.run`
+
+- Convention: `span.nwsl.sync.run`
+- Signal type: span, internal kind
+- Stability: development
+
+One compatibility synchronization sequence for a selected season and stage.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the synchronization run failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.cache.fixture_snapshot_id` | string | Recommended | development | The high-cardinality immutable identifier of the published fixture snapshot. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.sync.expected_fixture_count` | int | Recommended | development | Expected complete fixture inventory size for the selected competition scope. |
+| `nwsl.sync.forced` | boolean | Recommended | development | Whether the caller explicitly requested a full refresh or recalculation. |
+| `nwsl.sync.games_seen` | int | Recommended | development | Number of game rows observed during the synchronization run. |
+| `nwsl.sync.outcome` | string | Required | development | The low-cardinality terminal outcome of the compatibility synchronization run. |
+| `nwsl.sync.partial_failure` | boolean | Recommended | development | Whether source work succeeded but one or more optional downstream components failed. |
+| `nwsl.sync.qualification.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream qualification component. |
+| `nwsl.sync.scenario.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream scenario component. |
+| `nwsl.sync.skipped` | boolean | Recommended | development | Whether synchronization was skipped because another lease holder was active. |
+| `nwsl.sync.teams_seen` | int | Recommended | development | Number of team rows observed during the synchronization run. |
+| `nwsl.sync.trigger` | string | Required | development | The low-cardinality caller that initiated synchronization or recalculation. |
+| `nwsl.sync.xg.outcome` | string | Recommended | development | The low-cardinality outcome of expected-goals synchronization. |
+
+## `sync.source_operation`
+
+- Convention: `span.nwsl.sync.source_operation`
+- Signal type: span, internal kind
+- Stability: development
+
+One ASA resource request and its corresponding cache mutation.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the source operation failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.season` | string | Recommended | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Recommended | development | The competition stage associated with an operation. |
+| `nwsl.sync.downstream_inputs_changed` | boolean | Recommended | development | Whether one source operation changed inputs consumed by derived calculations. |
+| `nwsl.sync.mode` | string | Required | development | Whether one source operation is authoritative or targeted. |
+| `nwsl.sync.operation.outcome` | string | Required | development | The low-cardinality terminal outcome of one source operation. |
+| `nwsl.sync.requested_rows` | int | Recommended | development | Number of source identities requested by one source operation. |
+| `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
+| `nwsl.sync.returned_rows` | int | Recommended | development | Number of source rows returned by one source operation. |
+| `nwsl.sync.rows_deleted` | int | Recommended | development | Number of source rows deleted by one authoritative source operation. |
+| `nwsl.sync.rows_inserted` | int | Recommended | development | Number of source rows inserted by one source operation. |
+| `nwsl.sync.rows_unchanged` | int | Recommended | development | Number of source rows unchanged by one source operation. |
+| `nwsl.sync.rows_updated` | int | Recommended | development | Number of source rows updated by one source operation. |
+| `nwsl.sync.source_metadata_changed_count` | int | Recommended | development | Number of source rows whose metadata changed without a normalized value change. |
+| `nwsl.sync.source_response_rejected` | boolean | Recommended | development | Whether at least one source response was rejected by data-integrity guards. |
+| `nwsl.sync.source_response_rejected_count` | int | Recommended | development | Number of source responses rejected by data-integrity guards. |
+| `nwsl.sync.source_stale_response_count` | int | Recommended | development | Number of source responses rejected because their source version was stale. |
+| `nwsl.sync.source_value_changed` | boolean | Recommended | development | Whether normalized source values changed. |
+| `nwsl.sync.source_value_changed_count` | int | Recommended | development | Number of normalized source values changed. |
+| `nwsl.sync.source_value_initialized_count` | int | Recommended | development | Number of previously missing normalized source values initialized. |
+| `nwsl.sync.trigger` | string | Required | development | The low-cardinality caller that initiated synchronization or recalculation. |
+| `nwsl.sync.update.decision` | string | Recommended | development | The bounded aggregate persistence decision for one source operation. |
+| `nwsl.sync.update.reason` | string | Recommended | development | The bounded reason for the aggregate source persistence decision. |
+
+## `sync.venue_history`
+
+- Convention: `span.nwsl.sync.venue_history`
+- Signal type: span, internal kind
+- Stability: development
+
+One bounded attempt to ensure historical venue summaries required by forecasts.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when historical venue refresh failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.sync.venue_history.outcome` | string | Required | development | The low-cardinality terminal outcome of historical venue refresh. |
+| `nwsl.sync.venue_history_refreshed_season_count` | int | Recommended | development | Number of historical venue seasons successfully refreshed. |
+| `nwsl.sync.venue_history_requested_season_count` | int | Recommended | development | Number of historical seasons requested for forecast venue history. |

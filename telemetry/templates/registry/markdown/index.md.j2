@@ -3,10 +3,10 @@
 # NWSL Season telemetry catalog
 
 This catalog is generated from the source registry in `telemetry/registry`.
-It covers the shared resource and error attributes, the HTTP spans emitted by
-the server and ASA client, and the optional HTTP metrics produced by `otelhttp`.
-
-Application-domain spans and attributes will be added in later catalog slices.
+It covers shared resource and error attributes, HTTP telemetry, and the cache,
+forecast, qualification, scenario, scheduler, and synchronization domains.
+The catalog records both routine parent spans and the slow-or-failing child
+spans and diagnostic events that appear only on interesting traces.
 
 ## Reference
 

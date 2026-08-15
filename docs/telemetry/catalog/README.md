@@ -3,10 +3,10 @@
 # NWSL Season telemetry catalog
 
 This catalog is generated from the source registry in `telemetry/registry`.
-It covers the shared resource and error attributes, the HTTP spans emitted by
-the server and ASA client, and the optional HTTP metrics produced by `otelhttp`.
-
-Application-domain spans and attributes will be added in later catalog slices.
+It covers shared resource and error attributes, HTTP telemetry, and the cache,
+forecast, qualification, scenario, scheduler, and synchronization domains.
+The catalog records both routine parent spans and the slow-or-failing child
+spans and diagnostic events that appear only on interesting traces.
 
 ## Reference
 
@@ -17,13 +17,38 @@ Application-domain spans and attributes will be added in later catalog slices.
 
 | Convention | Signal type | Stability | Description |
 | --- | --- | --- | --- |
+| `event.nwsl.scheduler.decision` | event | development | A point-in-time explanation of why the scheduler selected or skipped source work. |
+| `event.nwsl.sync.asa_response` | event | development | A point-in-time summary of rows returned by one ASA response. |
+| `event.nwsl.sync.game_freshness` | event | development | A point-in-time explanation of an individual fixture acceptance, rejection, or normalized change. |
+| `event.nwsl.sync.xg_freshness` | event | development | A point-in-time comparison of cached and incoming expected-goals values for one fixture. |
 | `metric.http.client.request.body.size` | metric | development | Size of HTTP client request bodies. |
 | `metric.http.client.request.duration` | metric | stable | Duration of HTTP client requests. |
 | `metric.http.server.request.body.size` | metric | development | Size of HTTP server request bodies. |
 | `metric.http.server.request.duration` | metric | stable | Duration of HTTP server requests. |
 | `metric.http.server.response.body.size` | metric | development | Size of HTTP server response bodies. |
+| `registry.nwsl.cache` | attribute group | not applicable | Dimensions describing the cached season snapshot used by a request or calculation. |
 | `registry.nwsl.context` | attribute group | not applicable | Shared application context used across operational spans. |
 | `registry.nwsl.error` | attribute group | not applicable | Shared error and exception dimensions used by NWSL Season spans and correlated exception logs. |
+| `registry.nwsl.forecast` | attribute group | not applicable | Dimensions describing Forecast Lab requests, calculations, and cache warming. |
+| `registry.nwsl.qualification` | attribute group | not applicable | Dimensions and aggregate solver diagnostics for qualification and clinching calculations. |
 | `registry.nwsl.resource` | attribute group | not applicable | Resource attributes that identify an NWSL Season process and deployment. |
+| `registry.nwsl.scenario` | attribute group | not applicable | Dimensions and aggregate search diagnostics for next-slate clinching scenarios. |
+| `registry.nwsl.scheduler` | attribute group | not applicable | Dimensions describing scheduler planning, source jobs, cadence selection, and material changes. |
+| `registry.nwsl.sync` | attribute group | not applicable | Dimensions describing source synchronization, cached recalculation, and persisted row changes. |
+| `registry.nwsl.sync.freshness` | attribute group | not applicable | Per-game dimensions explaining source acceptance, rejection, and normalized value changes. |
+| `span.nwsl.cache.season.load` | span | development | A read of one season and stage from the local SQLite cache. |
+| `span.nwsl.forecast.precache` | span | development | One proactive attempt to warm the process-local forecast result cache. |
+| `span.nwsl.forecast.run` | span | development | One bounded Forecast Lab executor request for one or more models. |
 | `span.nwsl.http.client` | span | development | An outbound HTTP request from the NWSL Season ASA client. |
 | `span.nwsl.http.server` | span | development | An inbound request handled by the NWSL Season HTTP server. |
+| `span.nwsl.qualification.no_help_batch` | span | development | A slow or failed batch of no-help path calculations for one team. |
+| `span.nwsl.qualification.refresh` | span | development | One persisted qualification batch refresh for a fixture snapshot. |
+| `span.nwsl.qualification.status_proof` | span | development | A slow or failed individual team and achievement qualification proof. |
+| `span.nwsl.scenario.generate_team` | span | development | A slow or failed scenario search for all configured achievements of one team. |
+| `span.nwsl.scenario.refresh` | span | development | One persisted next-slate scenario batch refresh for a fixture snapshot. |
+| `span.nwsl.scheduler.job` | span | development | One planned scheduler source job and its material-change result. |
+| `span.nwsl.scheduler.tick` | span | development | One scheduler planning and execution cycle. |
+| `span.nwsl.sync.recalculate` | span | development | One cache-only qualification and scenario recalculation with no ASA requests. |
+| `span.nwsl.sync.run` | span | development | One compatibility synchronization sequence for a selected season and stage. |
+| `span.nwsl.sync.source_operation` | span | development | One ASA resource request and its corresponding cache mutation. |
+| `span.nwsl.sync.venue_history` | span | development | One bounded attempt to ensure historical venue summaries required by forecasts. |

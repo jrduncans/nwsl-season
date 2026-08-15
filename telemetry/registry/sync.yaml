@@ -1,0 +1,723 @@
+groups:
+  - id: registry.nwsl.sync
+    type: attribute_group
+    display_name: Synchronization Attributes
+    brief: Dimensions describing source synchronization, cached recalculation, and persisted row changes.
+    note: Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounded vocabularies. Snapshot and source-run identifiers are high-cardinality drill-down fields.
+    attributes:
+      - id: nwsl.sync.trigger
+        type: string
+        stability: development
+        brief: The low-cardinality caller that initiated synchronization or recalculation.
+        examples: ["scheduler", "startup", "cli", "backfill", "maintenance", "venue_history", "unspecified"]
+      - id: nwsl.sync.forced
+        type: boolean
+        stability: development
+        brief: Whether the caller explicitly requested a full refresh or recalculation.
+      - id: nwsl.sync.expected_fixture_count
+        type: int
+        stability: development
+        brief: Expected complete fixture inventory size for the selected competition scope.
+      - id: nwsl.sync.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of the compatibility synchronization run.
+        examples: ["complete", "conflict", "failure"]
+      - id: nwsl.sync.skipped
+        type: boolean
+        stability: development
+        brief: Whether synchronization was skipped because another lease holder was active.
+      - id: nwsl.sync.partial_failure
+        type: boolean
+        stability: development
+        brief: Whether source work succeeded but one or more optional downstream components failed.
+      - id: nwsl.sync.teams_seen
+        type: int
+        stability: development
+        brief: Number of team rows observed during the synchronization run.
+      - id: nwsl.sync.teams_inserted
+        type: int
+        stability: development
+        brief: Number of team rows inserted during the synchronization run.
+      - id: nwsl.sync.teams_updated
+        type: int
+        stability: development
+        brief: Number of team rows updated during the synchronization run.
+      - id: nwsl.sync.teams_unchanged
+        type: int
+        stability: development
+        brief: Number of team rows unchanged during the synchronization run.
+      - id: nwsl.sync.games_seen
+        type: int
+        stability: development
+        brief: Number of game rows observed during the synchronization run.
+      - id: nwsl.sync.games_inserted
+        type: int
+        stability: development
+        brief: Number of game rows inserted during the synchronization run.
+      - id: nwsl.sync.games_updated
+        type: int
+        stability: development
+        brief: Number of game rows updated during the synchronization run.
+      - id: nwsl.sync.games_unchanged
+        type: int
+        stability: development
+        brief: Number of game rows unchanged during the synchronization run.
+      - id: nwsl.sync.games_deleted
+        type: int
+        stability: development
+        brief: Number of stale game rows removed by an authoritative refresh.
+      - id: nwsl.sync.xg.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality outcome of expected-goals synchronization.
+        examples: ["complete", "failure", "not_run"]
+      - id: nwsl.sync.xg.available_games
+        type: int
+        stability: development
+        brief: Number of games observed with available expected-goals data.
+      - id: nwsl.sync.xg.unavailable_games
+        type: int
+        stability: development
+        brief: Number of games explicitly observed without expected-goals data.
+      - id: nwsl.sync.qualification.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality outcome of the downstream qualification component.
+        examples: ["complete", "current", "failure", "not_run"]
+      - id: nwsl.sync.scenario.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality outcome of the downstream scenario component.
+        examples: ["complete", "current", "failure", "not_run", "qualification_failed"]
+      - id: nwsl.sync.recalculate.reason
+        type: string
+        stability: development
+        brief: The bounded reason for a cache-only derived recalculation.
+        examples: ["scheduler_preflight", "manual", "unspecified"]
+      - id: nwsl.sync.recalculate.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of cache-only recalculation.
+        examples: ["complete", "current", "partial_failure", "failure"]
+      - id: nwsl.sync.qualification_recalculated
+        type: boolean
+        stability: development
+        brief: Whether qualification was recalculated during the parent operation.
+      - id: nwsl.sync.qualification.refresh_required
+        type: boolean
+        stability: development
+        brief: Whether the qualification refresher determined that work was required.
+      - id: nwsl.sync.qualification.refresh_reason
+        type: string
+        stability: development
+        brief: The bounded qualification refresh or no-op reason.
+        examples: ["snapshot_current", "snapshot_missing", "forced", "compute_budget_retry", "not_evaluated"]
+      - id: nwsl.sync.qualification.snapshot_checked
+        type: boolean
+        stability: development
+        brief: Whether the qualification refresher checked for a current persisted snapshot.
+      - id: nwsl.sync.qualification.snapshot_found
+        type: boolean
+        stability: development
+        brief: Whether a matching qualification snapshot was found.
+      - id: nwsl.sync.qualification.rules_version
+        type: string
+        stability: development
+        brief: Stable version of the qualification rules used by the derived batch.
+        examples: ["2026-regular-season-v1"]
+      - id: nwsl.sync.scenario_recalculated
+        type: boolean
+        stability: development
+        brief: Whether scenarios were recalculated during the parent operation.
+      - id: nwsl.sync.scenario.refresh_required
+        type: boolean
+        stability: development
+        brief: Whether the scenario refresher determined that work was required.
+      - id: nwsl.sync.scenario.refresh_reason
+        type: string
+        stability: development
+        brief: The bounded scenario refresh or no-op reason.
+        examples: ["snapshot_current", "snapshot_missing", "forced", "compute_budget_retry", "qualification_failed"]
+      - id: nwsl.sync.scenario.snapshot_checked
+        type: boolean
+        stability: development
+        brief: Whether the scenario refresher checked for a current persisted snapshot.
+      - id: nwsl.sync.scenario.snapshot_found
+        type: boolean
+        stability: development
+        brief: Whether a matching scenario snapshot was found.
+      - id: nwsl.sync.scenario.rules_version
+        type: string
+        stability: development
+        brief: Stable version of the competition rules used by the scenario batch.
+        examples: ["2026-regular-season-v1"]
+      - id: nwsl.sync.scenario.definition_version
+        type: string
+        stability: development
+        brief: Stable version of the scenario definition used by the derived batch.
+        examples: ["next-slate-v3"]
+      - id: nwsl.sync.source_run_id
+        type: int
+        stability: development
+        brief: The high-cardinality database identifier of the source synchronization run.
+      - id: nwsl.sync.resource
+        type: string
+        stability: development
+        brief: The bounded ASA resource owned by one source operation.
+        examples: ["teams", "games", "game_xg"]
+      - id: nwsl.sync.mode
+        type: string
+        stability: development
+        brief: Whether one source operation is authoritative or targeted.
+        examples: ["full", "targeted"]
+      - id: nwsl.sync.requested_rows
+        type: int
+        stability: development
+        brief: Number of source identities requested by one source operation.
+      - id: nwsl.sync.returned_rows
+        type: int
+        stability: development
+        brief: Number of source rows returned by one source operation.
+      - id: nwsl.sync.operation.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of one source operation.
+        examples: ["complete", "failure"]
+      - id: nwsl.sync.rows_inserted
+        type: int
+        stability: development
+        brief: Number of source rows inserted by one source operation.
+      - id: nwsl.sync.rows_updated
+        type: int
+        stability: development
+        brief: Number of source rows updated by one source operation.
+      - id: nwsl.sync.rows_unchanged
+        type: int
+        stability: development
+        brief: Number of source rows unchanged by one source operation.
+      - id: nwsl.sync.rows_deleted
+        type: int
+        stability: development
+        brief: Number of source rows deleted by one authoritative source operation.
+      - id: nwsl.sync.downstream_inputs_changed
+        type: boolean
+        stability: development
+        brief: Whether one source operation changed inputs consumed by derived calculations.
+      - id: nwsl.sync.update.decision
+        type: string
+        stability: development
+        brief: The bounded aggregate persistence decision for one source operation.
+        examples: ["updated", "not_updated"]
+      - id: nwsl.sync.update.reason
+        type: string
+        stability: development
+        brief: The bounded reason for the aggregate source persistence decision.
+        examples: ["source_data_changed", "source_data_unchanged"]
+      - id: nwsl.sync.source_value_changed
+        type: boolean
+        stability: development
+        brief: Whether normalized source values changed.
+      - id: nwsl.sync.source_value_changed_count
+        type: int
+        stability: development
+        brief: Number of normalized source values changed.
+      - id: nwsl.sync.source_value_initialized
+        type: boolean
+        stability: development
+        brief: Whether a previously missing normalized source value was initialized.
+      - id: nwsl.sync.source_value_initialized_count
+        type: int
+        stability: development
+        brief: Number of previously missing normalized source values initialized.
+      - id: nwsl.sync.source_metadata_changed
+        type: boolean
+        stability: development
+        brief: Whether source metadata changed without a normalized value change.
+      - id: nwsl.sync.source_metadata_changed_count
+        type: int
+        stability: development
+        brief: Number of source rows whose metadata changed without a normalized value change.
+      - id: nwsl.sync.source_value_missing
+        type: boolean
+        stability: development
+        brief: Whether a requested normalized source value remains missing.
+      - id: nwsl.sync.source_value_missing_count
+        type: int
+        stability: development
+        brief: Number of requested normalized source values still missing.
+      - id: nwsl.sync.source_response_rejected
+        type: boolean
+        stability: development
+        brief: Whether at least one source response was rejected by data-integrity guards.
+      - id: nwsl.sync.source_response_rejected_count
+        type: int
+        stability: development
+        brief: Number of source responses rejected by data-integrity guards.
+      - id: nwsl.sync.source_stale_response_count
+        type: int
+        stability: development
+        brief: Number of source responses rejected because their source version was stale.
+      - id: nwsl.sync.venue_history_requested_season_count
+        type: int
+        stability: development
+        brief: Number of historical seasons requested for forecast venue history.
+      - id: nwsl.sync.venue_history_refreshed_season_count
+        type: int
+        stability: development
+        brief: Number of historical venue seasons successfully refreshed.
+      - id: nwsl.sync.venue_history.outcome
+        type: string
+        stability: development
+        brief: The low-cardinality terminal outcome of historical venue refresh.
+        examples: ["complete", "failure"]
+      - id: nwsl.asa.returned_rows
+        type: int
+        stability: development
+        brief: Number of rows returned by one ASA response before persistence.
+      - id: nwsl.asa.game.id
+        type: string
+        stability: development
+        brief: The high-cardinality ASA game identifier described by a freshness event.
+        examples: ["game-123"]
+      - id: nwsl.asa.game.last_updated_utc
+        type: string
+        stability: development
+        brief: The high-cardinality RFC 3339 source-version timestamp on an incoming ASA game.
+        examples: ["2026-08-15T18:30:00Z"]
+
+  - id: registry.nwsl.sync.freshness
+    type: attribute_group
+    display_name: Synchronization Freshness Event Attributes
+    brief: Per-game dimensions explaining source acceptance, rejection, and normalized value changes.
+    note: These attributes belong to point-in-time diagnostic span events and may be high-cardinality. Use the aggregate synchronization and scheduler fields for routine grouping.
+    attributes:
+      - id: nwsl.sync.decision
+        type: string
+        stability: development
+        brief: The bounded per-value source persistence decision.
+        examples: ["updated", "not_updated"]
+      - id: nwsl.sync.reason
+        type: string
+        stability: development
+        brief: The bounded reason for a per-value source persistence decision.
+        examples: ["new_game", "source_data_unchanged", "incoming_terminal_result"]
+      - id: nwsl.sync.update_kind
+        type: string
+        stability: development
+        brief: The bounded category of normalized source change.
+        examples: ["unchanged", "value_initialized", "value_changed", "metadata_changed"]
+      - id: nwsl.sync.response_accepted
+        type: boolean
+        stability: development
+        brief: Whether the incoming source value was accepted for persistence.
+      - id: nwsl.sync.response_rejected
+        type: boolean
+        stability: development
+        brief: Whether the incoming source value was rejected by data-integrity guards.
+      - id: nwsl.sync.rejection_kind
+        type: string
+        stability: development
+        brief: The bounded category of source rejection.
+        examples: ["stale", "terminal_regression", "policy"]
+      - id: nwsl.sync.rejection_reason
+        type: string
+        stability: development
+        brief: The bounded reason an incoming source value was rejected.
+        examples: ["incoming_reverted_terminal_status", "asa_last_updated_not_newer"]
+      - id: nwsl.sync.kickoff_utc
+        type: string
+        stability: development
+        brief: The high-cardinality RFC 3339 kickoff time of the observed game.
+        examples: ["2026-08-15T18:30:00Z"]
+      - id: nwsl.sync.kickoff_age_seconds
+        type: int
+        stability: development
+        brief: Seconds between the observed game kickoff and the source observation time.
+      - id: nwsl.sync.observation_finished_at
+        type: string
+        stability: development
+        brief: The high-cardinality RFC 3339 completion time of the source observation.
+        examples: ["2026-08-15T20:30:00Z"]
+      - id: nwsl.sync.old.status
+        type: string
+        stability: development
+        brief: Cached fixture status before an accepted source change.
+        examples: ["PreMatch"]
+      - id: nwsl.sync.new.status
+        type: string
+        stability: development
+        brief: Incoming fixture status after an accepted source change.
+        examples: ["FullTime"]
+      - id: nwsl.sync.old.kickoff_utc
+        type: string
+        stability: development
+        brief: Cached fixture kickoff time before an accepted source change.
+        examples: ["2026-08-15T18:30:00Z"]
+      - id: nwsl.sync.new.kickoff_utc
+        type: string
+        stability: development
+        brief: Incoming fixture kickoff time after an accepted source change.
+        examples: ["2026-08-15T19:00:00Z"]
+      - id: nwsl.sync.old.home_team_id
+        type: string
+        stability: development
+        brief: Cached high-cardinality home-team identifier before a source change.
+        examples: ["team-123"]
+      - id: nwsl.sync.new.home_team_id
+        type: string
+        stability: development
+        brief: Incoming high-cardinality home-team identifier after a source change.
+        examples: ["team-123"]
+      - id: nwsl.sync.old.away_team_id
+        type: string
+        stability: development
+        brief: Cached high-cardinality away-team identifier before a source change.
+        examples: ["team-456"]
+      - id: nwsl.sync.new.away_team_id
+        type: string
+        stability: development
+        brief: Incoming high-cardinality away-team identifier after a source change.
+        examples: ["team-456"]
+      - id: nwsl.sync.old.home_score_present
+        type: boolean
+        stability: development
+        brief: Whether the cached fixture had a home score before a source change.
+      - id: nwsl.sync.new.home_score_present
+        type: boolean
+        stability: development
+        brief: Whether the incoming fixture has a home score after a source change.
+      - id: nwsl.sync.old.away_score_present
+        type: boolean
+        stability: development
+        brief: Whether the cached fixture had an away score before a source change.
+      - id: nwsl.sync.new.away_score_present
+        type: boolean
+        stability: development
+        brief: Whether the incoming fixture has an away score after a source change.
+      - id: nwsl.sync.old.home_score
+        type: int
+        stability: development
+        brief: Cached home score before a source change when present.
+      - id: nwsl.sync.new.home_score
+        type: int
+        stability: development
+        brief: Incoming home score after a source change when present.
+      - id: nwsl.sync.old.away_score
+        type: int
+        stability: development
+        brief: Cached away score before a source change when present.
+      - id: nwsl.sync.new.away_score
+        type: int
+        stability: development
+        brief: Incoming away score after a source change when present.
+      - id: nwsl.sync.old.matchday_present
+        type: boolean
+        stability: development
+        brief: Whether the cached fixture had a matchday before a source change.
+      - id: nwsl.sync.new.matchday_present
+        type: boolean
+        stability: development
+        brief: Whether the incoming fixture has a matchday after a source change.
+      - id: nwsl.sync.old.matchday
+        type: int
+        stability: development
+        brief: Cached matchday before a source change when present.
+      - id: nwsl.sync.new.matchday
+        type: int
+        stability: development
+        brief: Incoming matchday after a source change when present.
+      - id: nwsl.sync.old.expanded_minutes_present
+        type: boolean
+        stability: development
+        brief: Whether cached expanded minutes were present before a source change.
+      - id: nwsl.sync.new.expanded_minutes_present
+        type: boolean
+        stability: development
+        brief: Whether incoming expanded minutes are present after a source change.
+      - id: nwsl.sync.old.expanded_minutes
+        type: int
+        stability: development
+        brief: Cached expanded minutes before a source change when present.
+      - id: nwsl.sync.new.expanded_minutes
+        type: int
+        stability: development
+        brief: Incoming expanded minutes after a source change when present.
+      - id: nwsl.sync.old.knockout_game
+        type: boolean
+        stability: development
+        brief: Whether the cached fixture was marked as a knockout game.
+      - id: nwsl.sync.new.knockout_game
+        type: boolean
+        stability: development
+        brief: Whether the incoming fixture is marked as a knockout game.
+      - id: nwsl.sync.old.availability
+        type: string
+        stability: development
+        brief: Cached expected-goals availability before a source observation.
+        examples: ["missing", "available", "unavailable"]
+      - id: nwsl.sync.new.availability
+        type: string
+        stability: development
+        brief: Incoming expected-goals availability after a source observation.
+        examples: ["available", "unavailable"]
+      - id: nwsl.sync.old.home_xg
+        type: double
+        stability: development
+        brief: Cached home-team expected goals before a source change when present.
+      - id: nwsl.sync.new.home_xg
+        type: double
+        stability: development
+        brief: Incoming home-team expected goals after a source change when present.
+      - id: nwsl.sync.old.away_xg
+        type: double
+        stability: development
+        brief: Cached away-team expected goals before a source change when present.
+      - id: nwsl.sync.new.away_xg
+        type: double
+        stability: development
+        brief: Incoming away-team expected goals after a source change when present.
+      - id: nwsl.sync.old.home_xpoints
+        type: double
+        stability: development
+        brief: Cached home-team expected points before a source change when present.
+      - id: nwsl.sync.new.home_xpoints
+        type: double
+        stability: development
+        brief: Incoming home-team expected points after a source change when present.
+      - id: nwsl.sync.old.away_xpoints
+        type: double
+        stability: development
+        brief: Cached away-team expected points before a source change when present.
+      - id: nwsl.sync.new.away_xpoints
+        type: double
+        stability: development
+        brief: Incoming away-team expected points after a source change when present.
+      - id: nwsl.sync.old.home_xg_present
+        type: boolean
+        stability: development
+        brief: Whether cached home-team expected goals were present.
+      - id: nwsl.sync.new.home_xg_present
+        type: boolean
+        stability: development
+        brief: Whether incoming home-team expected goals are present.
+      - id: nwsl.sync.old.away_xg_present
+        type: boolean
+        stability: development
+        brief: Whether cached away-team expected goals were present.
+      - id: nwsl.sync.new.away_xg_present
+        type: boolean
+        stability: development
+        brief: Whether incoming away-team expected goals are present.
+      - id: nwsl.sync.old.home_xpoints_present
+        type: boolean
+        stability: development
+        brief: Whether cached home-team expected points were present.
+      - id: nwsl.sync.new.home_xpoints_present
+        type: boolean
+        stability: development
+        brief: Whether incoming home-team expected points are present.
+      - id: nwsl.sync.old.away_xpoints_present
+        type: boolean
+        stability: development
+        brief: Whether cached away-team expected points were present.
+      - id: nwsl.sync.new.away_xpoints_present
+        type: boolean
+        stability: development
+        brief: Whether incoming away-team expected points are present.
+      - id: nwsl.sync.old.last_checked_at
+        type: string
+        stability: development
+        brief: High-cardinality RFC 3339 time the cached expected-goals value was last checked.
+        examples: ["2026-08-15T18:30:00Z"]
+      - id: nwsl.sync.new.last_checked_at
+        type: string
+        stability: development
+        brief: High-cardinality RFC 3339 time the incoming expected-goals value was checked.
+        examples: ["2026-08-15T20:30:00Z"]
+
+  - id: span.nwsl.sync.run
+    type: span
+    name: sync.run
+    span_kind: internal
+    stability: development
+    brief: One compatibility synchronization sequence for a selected season and stage.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.sync.trigger
+        requirement_level: required
+      - ref: nwsl.sync.forced
+      - ref: nwsl.sync.expected_fixture_count
+      - ref: nwsl.sync.outcome
+        requirement_level: required
+      - ref: nwsl.sync.skipped
+      - ref: nwsl.sync.partial_failure
+      - ref: nwsl.sync.teams_seen
+      - ref: nwsl.sync.games_seen
+      - ref: nwsl.cache.fixture_snapshot_id
+      - ref: nwsl.sync.xg.outcome
+      - ref: nwsl.sync.qualification.outcome
+      - ref: nwsl.sync.scenario.outcome
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the synchronization run failed.
+
+  - id: span.nwsl.sync.recalculate
+    type: span
+    name: sync.recalculate
+    span_kind: internal
+    stability: development
+    brief: One cache-only qualification and scenario recalculation with no ASA requests.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.sync.trigger
+        requirement_level: required
+      - ref: nwsl.sync.forced
+      - ref: nwsl.sync.recalculate.reason
+      - ref: nwsl.sync.recalculate.outcome
+        requirement_level: required
+      - ref: nwsl.sync.partial_failure
+      - ref: nwsl.sync.qualification_recalculated
+      - ref: nwsl.sync.qualification.refresh_required
+      - ref: nwsl.sync.qualification.refresh_reason
+      - ref: nwsl.sync.qualification.snapshot_checked
+      - ref: nwsl.sync.qualification.snapshot_found
+      - ref: nwsl.sync.qualification.outcome
+      - ref: nwsl.sync.scenario_recalculated
+      - ref: nwsl.sync.scenario.refresh_required
+      - ref: nwsl.sync.scenario.refresh_reason
+      - ref: nwsl.sync.scenario.snapshot_checked
+      - ref: nwsl.sync.scenario.snapshot_found
+      - ref: nwsl.sync.scenario.outcome
+      - ref: nwsl.cache.fixture_snapshot_id
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when cache-only recalculation failed.
+
+  - id: span.nwsl.sync.source_operation
+    type: span
+    name: sync.source_operation
+    span_kind: internal
+    stability: development
+    brief: One ASA resource request and its corresponding cache mutation.
+    attributes:
+      - ref: nwsl.season
+      - ref: nwsl.stage
+      - ref: nwsl.sync.resource
+        requirement_level: required
+      - ref: nwsl.sync.mode
+        requirement_level: required
+      - ref: nwsl.sync.trigger
+        requirement_level: required
+      - ref: nwsl.sync.requested_rows
+      - ref: nwsl.sync.returned_rows
+      - ref: nwsl.sync.operation.outcome
+        requirement_level: required
+      - ref: nwsl.sync.rows_inserted
+      - ref: nwsl.sync.rows_updated
+      - ref: nwsl.sync.rows_unchanged
+      - ref: nwsl.sync.rows_deleted
+      - ref: nwsl.sync.downstream_inputs_changed
+      - ref: nwsl.sync.update.decision
+      - ref: nwsl.sync.update.reason
+      - ref: nwsl.sync.source_value_changed
+      - ref: nwsl.sync.source_value_changed_count
+      - ref: nwsl.sync.source_value_initialized_count
+      - ref: nwsl.sync.source_metadata_changed_count
+      - ref: nwsl.sync.source_response_rejected
+      - ref: nwsl.sync.source_response_rejected_count
+      - ref: nwsl.sync.source_stale_response_count
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the source operation failed.
+
+  - id: span.nwsl.sync.venue_history
+    type: span
+    name: sync.venue_history
+    span_kind: internal
+    stability: development
+    brief: One bounded attempt to ensure historical venue summaries required by forecasts.
+    attributes:
+      - ref: nwsl.season
+        requirement_level: required
+      - ref: nwsl.stage
+        requirement_level: required
+      - ref: nwsl.sync.venue_history_requested_season_count
+      - ref: nwsl.sync.venue_history_refreshed_season_count
+      - ref: nwsl.sync.venue_history.outcome
+        requirement_level: required
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when historical venue refresh failed.
+
+  - id: event.nwsl.sync.asa_response
+    type: event
+    name: sync.asa_response
+    stability: development
+    brief: A point-in-time summary of rows returned by one ASA response.
+    attributes:
+      - ref: nwsl.sync.resource
+        requirement_level: required
+      - ref: nwsl.sync.mode
+        requirement_level: required
+      - ref: nwsl.asa.returned_rows
+        requirement_level: required
+
+  - id: event.nwsl.sync.game_freshness
+    type: event
+    name: sync.game_freshness
+    stability: development
+    brief: A point-in-time explanation of an individual fixture acceptance, rejection, or normalized change.
+    attributes:
+      - ref: nwsl.asa.game.id
+      - ref: nwsl.cache.game.last_updated_utc
+      - ref: nwsl.asa.game.last_updated_utc
+      - ref: nwsl.sync.resource
+        requirement_level: required
+      - ref: nwsl.sync.decision
+        requirement_level: required
+      - ref: nwsl.sync.reason
+        requirement_level: required
+      - ref: nwsl.sync.update_kind
+      - ref: nwsl.sync.source_value_changed
+      - ref: nwsl.sync.source_value_initialized
+      - ref: nwsl.sync.source_metadata_changed
+      - ref: nwsl.sync.response_accepted
+      - ref: nwsl.sync.response_rejected
+      - ref: nwsl.sync.rejection_kind
+      - ref: nwsl.sync.rejection_reason
+
+  - id: event.nwsl.sync.xg_freshness
+    type: event
+    name: sync.xg_freshness
+    stability: development
+    brief: A point-in-time comparison of cached and incoming expected-goals values for one fixture.
+    attributes:
+      - ref: nwsl.asa.game.id
+        requirement_level: required
+      - ref: nwsl.sync.resource
+        requirement_level: required
+      - ref: nwsl.sync.update_kind
+      - ref: nwsl.sync.kickoff_utc
+      - ref: nwsl.sync.kickoff_age_seconds
+      - ref: nwsl.sync.source_value_changed
+      - ref: nwsl.sync.source_value_initialized
+      - ref: nwsl.sync.source_metadata_changed
+      - ref: nwsl.sync.source_value_missing
+      - ref: nwsl.sync.response_accepted
+      - ref: nwsl.sync.response_rejected
+      - ref: nwsl.sync.rejection_kind
+      - ref: nwsl.sync.rejection_reason
+      - ref: nwsl.sync.observation_finished_at
+      - ref: nwsl.sync.old.availability
+      - ref: nwsl.sync.new.availability
+      - ref: nwsl.sync.old.home_xg
+      - ref: nwsl.sync.new.home_xg
+      - ref: nwsl.sync.old.away_xg
+      - ref: nwsl.sync.new.away_xg

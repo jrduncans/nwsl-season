@@ -50,6 +50,6 @@ Recommended
 {%- elif group.type == "event" -%}
 {{ group.name }}
 {%- else -%}
-{{ group.id }}
+{{ group.name | default(group.id) }}
 {%- endif -%}
 {%- endmacro %}
