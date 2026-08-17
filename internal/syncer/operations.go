@@ -13,6 +13,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -115,8 +116,7 @@ func (s Service) Execute(ctx context.Context, operation Operation) (OperationRes
 	if !ok {
 		return OperationResult{}, errors.New("sync store does not support split source operations")
 	}
-	ctx, span := telemetry.Tracer().Start(ctx, "sync.source_operation",
-		trace.WithSpanKind(trace.SpanKindInternal),
+	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncSourceOperation, trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(operationAttributes(operation)...),
 	)
 	result, err := s.execute(ctx, store, operation, true)
@@ -245,62 +245,35 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 }
 
 func operationAttributes(operation Operation) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.sync.resource", string(operation.Resource)),
-		attribute.String("nwsl.sync.mode", string(operation.Mode)),
-		attribute.String("nwsl.sync.trigger", string(operation.Trigger)),
-		attribute.Int("nwsl.sync.requested_rows", len(operation.Requested)),
-	}
+	attributes := []attribute.KeyValue{nwslconv.SyncResource(string(operation.Resource)), nwslconv.SyncMode(string(operation.Mode)), nwslconv.SyncTrigger(string(operation.Trigger)), nwslconv.SyncRequestedRows(len(operation.Requested))}
 	if operation.Season != "" {
-		attributes = append(attributes, attribute.String("nwsl.season", operation.Season))
+		attributes = append(attributes, nwslconv.Season(operation.Season))
 	}
 	if operation.Stage != "" {
-		attributes = append(attributes, attribute.String("nwsl.stage", operation.Stage))
+		attributes = append(attributes, nwslconv.Stage(operation.Stage))
 	}
 	return attributes
 }
 
 func recordASAResponse(span trace.Span, operation Operation, rows int) {
-	span.AddEvent("sync.asa_response", trace.WithAttributes(
-		attribute.String("nwsl.sync.resource", string(operation.Resource)),
-		attribute.String("nwsl.sync.mode", string(operation.Mode)),
-		attribute.Int("nwsl.asa.returned_rows", rows),
-	))
+	span.AddEvent(nwslconv.EventSyncASAResponse, trace.WithAttributes(nwslconv.SyncResource(string(operation.Resource)), nwslconv.SyncMode(string(operation.Mode)), nwslconv.ASAReturnedRows(rows)))
 }
 
 func operationResultAttributes(result OperationResult, err error) []attribute.KeyValue {
 	audit := resultAudit(result)
 	if audit == nil {
 		if err != nil {
-			return []attribute.KeyValue{attribute.String("nwsl.sync.operation.outcome", "failure")}
+			return []attribute.KeyValue{nwslconv.SyncOperationOutcome(nwslconv.SyncOperationOutcomeFailure)}
 		}
-		return []attribute.KeyValue{attribute.String("nwsl.sync.operation.outcome", "complete")}
+		return []attribute.KeyValue{nwslconv.SyncOperationOutcome(nwslconv.SyncOperationOutcomeComplete)}
 	}
-	decision, reason := "updated", "source_data_changed"
+	decision, reason := nwslconv.SyncUpdateDecisionUpdated, "source_data_changed"
 	if audit.RowsInserted == 0 && audit.RowsUpdated == 0 && audit.RowsDeleted == 0 {
-		decision, reason = "not_updated", "source_data_unchanged"
+		decision, reason = nwslconv.SyncUpdateDecisionNotUpdated, "source_data_unchanged"
 	}
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.sync.operation.outcome", "complete"),
-		attribute.Int("nwsl.sync.returned_rows", audit.ReturnedRows),
-		attribute.Int("nwsl.sync.rows_inserted", audit.RowsInserted),
-		attribute.Int("nwsl.sync.rows_updated", audit.RowsUpdated),
-		attribute.Int("nwsl.sync.rows_unchanged", audit.RowsUnchanged),
-		attribute.Int("nwsl.sync.rows_deleted", audit.RowsDeleted),
-		attribute.Bool("nwsl.sync.downstream_inputs_changed", audit.DownstreamInputsChanged),
-		attribute.String("nwsl.sync.update.decision", decision),
-		attribute.String("nwsl.sync.update.reason", reason),
-	}
+	attributes := []attribute.KeyValue{nwslconv.SyncOperationOutcome(nwslconv.SyncOperationOutcomeComplete), nwslconv.SyncReturnedRows(audit.ReturnedRows), nwslconv.SyncRowsInserted(audit.RowsInserted), nwslconv.SyncRowsUpdated(audit.RowsUpdated), nwslconv.SyncRowsUnchanged(audit.RowsUnchanged), nwslconv.SyncRowsDeleted(audit.RowsDeleted), nwslconv.SyncDownstreamInputsChanged(audit.DownstreamInputsChanged), nwslconv.SyncUpdateDecision(decision), nwslconv.SyncUpdateReason(reason)}
 	if result.Games != nil {
-		attributes = append(attributes,
-			attribute.Bool("nwsl.sync.source_value_changed", result.GameFreshness.ValueChanged > 0),
-			attribute.Int("nwsl.sync.source_value_changed_count", result.GameFreshness.ValueChanged),
-			attribute.Int("nwsl.sync.source_value_initialized_count", result.GameFreshness.ValueInitialized),
-			attribute.Int("nwsl.sync.source_metadata_changed_count", result.GameFreshness.MetadataChanged),
-			attribute.Bool("nwsl.sync.source_response_rejected", result.GameFreshness.ResponseRejected > 0),
-			attribute.Int("nwsl.sync.source_response_rejected_count", result.GameFreshness.ResponseRejected),
-			attribute.Int("nwsl.sync.source_stale_response_count", result.GameFreshness.StaleRejected),
-		)
+		attributes = append(attributes, nwslconv.SyncSourceValueChanged(result.GameFreshness.ValueChanged > 0), nwslconv.SyncSourceValueChangedCount(result.GameFreshness.ValueChanged), nwslconv.SyncSourceValueInitializedCount(result.GameFreshness.ValueInitialized), nwslconv.SyncSourceMetadataChangedCount(result.GameFreshness.MetadataChanged), nwslconv.SyncSourceResponseRejected(result.GameFreshness.ResponseRejected > 0), nwslconv.SyncSourceResponseRejectedCount(result.GameFreshness.ResponseRejected), nwslconv.SyncSourceStaleResponseCount(result.GameFreshness.StaleRejected))
 	}
 	if result.XG != nil {
 		var changed, initialized, metadata, missing, rejected, staleRejected int
@@ -324,16 +297,7 @@ func operationResultAttributes(result OperationResult, err error) []attribute.Ke
 				staleRejected++
 			}
 		}
-		attributes = append(attributes,
-			attribute.Bool("nwsl.sync.source_value_changed", changed > 0),
-			attribute.Int("nwsl.sync.source_value_changed_count", changed),
-			attribute.Int("nwsl.sync.source_value_initialized_count", initialized),
-			attribute.Int("nwsl.sync.source_metadata_changed_count", metadata),
-			attribute.Int("nwsl.sync.source_value_missing_count", missing),
-			attribute.Bool("nwsl.sync.source_response_rejected", rejected > 0),
-			attribute.Int("nwsl.sync.source_response_rejected_count", rejected),
-			attribute.Int("nwsl.sync.source_stale_response_count", staleRejected),
-		)
+		attributes = append(attributes, nwslconv.SyncSourceValueChanged(changed > 0), nwslconv.SyncSourceValueChangedCount(changed), nwslconv.SyncSourceValueInitializedCount(initialized), nwslconv.SyncSourceMetadataChangedCount(metadata), nwslconv.SyncSourceValueMissingCount(missing), nwslconv.SyncSourceResponseRejected(rejected > 0), nwslconv.SyncSourceResponseRejectedCount(rejected), nwslconv.SyncSourceStaleResponseCount(staleRejected))
 	}
 	return attributes
 }
@@ -359,11 +323,7 @@ func recordGameFreshnessEvents(span trace.Span, operation Operation, incoming, p
 		cached[game.ASAID] = game
 	}
 	if len(incoming) == 0 {
-		span.AddEvent("sync.game_freshness", trace.WithAttributes(
-			attribute.String("nwsl.sync.decision", "not_updated"),
-			attribute.String("nwsl.sync.reason", "asa_returned_no_games"),
-			attribute.String("nwsl.sync.resource", string(operation.Resource)),
-		))
+		span.AddEvent(nwslconv.EventSyncGameFreshness, trace.WithAttributes(nwslconv.SyncDecision(nwslconv.SyncDecisionNotUpdated), nwslconv.SyncReason("asa_returned_no_games"), nwslconv.SyncResource(string(operation.Resource))))
 		return summary
 	}
 	for _, game := range incoming {
@@ -371,7 +331,7 @@ func recordGameFreshnessEvents(span trace.Span, operation Operation, incoming, p
 		current, found := cached[game.ASAID]
 		decision, reason := gameUpdateDecision(current, game, found)
 		unchanged := found && sameGame(current, game)
-		responseRejected := found && !unchanged && decision != "updated"
+		responseRejected := found && !unchanged && decision != nwslconv.SyncDecisionUpdated
 		accepted := !responseRejected
 		valueChanged := found && accepted && gameValueChanged(current, game)
 		valueInitialized := !found
@@ -403,26 +363,12 @@ func recordGameFreshnessEvents(span trace.Span, operation Operation, incoming, p
 		if found {
 			currentUpdated = current.LastUpdatedUTC
 		}
-		attributes := []attribute.KeyValue{
-			attribute.String("nwsl.asa.game.id", game.ASAID),
-			attribute.String("nwsl.cache.game.last_updated_utc", currentUpdated),
-			attribute.String("nwsl.asa.game.last_updated_utc", game.LastUpdatedUTC),
-			attribute.String("nwsl.sync.decision", decision),
-			attribute.String("nwsl.sync.reason", reason),
-			attribute.String("nwsl.sync.update_kind", updateKind),
-			attribute.Bool("nwsl.sync.source_value_changed", valueChanged),
-			attribute.Bool("nwsl.sync.source_value_initialized", valueInitialized),
-			attribute.Bool("nwsl.sync.source_metadata_changed", metadataChanged),
-			attribute.Bool("nwsl.sync.response_accepted", accepted),
-			attribute.Bool("nwsl.sync.response_rejected", responseRejected),
-			attribute.String("nwsl.sync.rejection_kind", rejectionKind),
-			attribute.String("nwsl.sync.rejection_reason", rejectionReason),
-		}
+		attributes := []attribute.KeyValue{nwslconv.ASAGameID(game.ASAID), nwslconv.CacheGameLastUpdatedUTC(currentUpdated), nwslconv.ASAGameLastUpdatedUTC(game.LastUpdatedUTC), nwslconv.SyncDecision(decision), nwslconv.SyncReason(reason), nwslconv.SyncUpdateKind(updateKind), nwslconv.SyncSourceValueChanged(valueChanged), nwslconv.SyncSourceValueInitialized(valueInitialized), nwslconv.SyncSourceMetadataChanged(metadataChanged), nwslconv.SyncResponseAccepted(accepted), nwslconv.SyncResponseRejected(responseRejected), nwslconv.SyncRejectionKind(rejectionKind), nwslconv.SyncRejectionReason(rejectionReason)}
 		attributes = append(attributes, kickoffAgeAttributes(operation.FinishedAt, game.KickoffUTC)...)
 		if found {
 			attributes = append(attributes, gameValueAttributes(&current, game)...)
 		}
-		span.AddEvent("sync.game_freshness", trace.WithAttributes(attributes...))
+		span.AddEvent(nwslconv.EventSyncGameFreshness, trace.WithAttributes(attributes...))
 	}
 	return summary
 }
@@ -440,103 +386,96 @@ func recordXGFreshnessEvents(span trace.Span, operation Operation, freshness []c
 		case value.Missing:
 			kind = "value_missing"
 		}
-		attributes := []attribute.KeyValue{
-			attribute.String("nwsl.asa.game.id", value.GameID),
-			attribute.String("nwsl.sync.resource", string(operation.Resource)),
-			attribute.String("nwsl.sync.update_kind", kind),
-			attribute.String("nwsl.sync.kickoff_utc", value.KickoffUTC),
-			attribute.Bool("nwsl.sync.source_value_changed", value.ValueChanged),
-			attribute.Bool("nwsl.sync.source_value_initialized", value.ValueInitialized),
-			attribute.Bool("nwsl.sync.source_metadata_changed", value.MetadataChanged),
-			attribute.Bool("nwsl.sync.source_value_missing", value.Missing),
-			attribute.Bool("nwsl.sync.response_accepted", value.ResponseAccepted),
-			attribute.Bool("nwsl.sync.response_rejected", value.ResponseRejected),
-			attribute.String("nwsl.sync.rejection_kind", value.RejectionKind),
-			attribute.String("nwsl.sync.rejection_reason", value.RejectionReason),
-			attribute.String("nwsl.sync.observation_finished_at", operation.FinishedAt.UTC().Format(time.RFC3339)),
-		}
+		attributes := []attribute.KeyValue{nwslconv.ASAGameID(value.GameID), nwslconv.SyncResource(string(operation.Resource)), nwslconv.SyncUpdateKind(kind), nwslconv.SyncKickoffUTC(value.KickoffUTC), nwslconv.SyncSourceValueChanged(value.ValueChanged), nwslconv.SyncSourceValueInitialized(value.ValueInitialized), nwslconv.SyncSourceMetadataChanged(value.MetadataChanged), nwslconv.SyncSourceValueMissing(value.Missing), nwslconv.SyncResponseAccepted(value.ResponseAccepted), nwslconv.SyncResponseRejected(value.ResponseRejected), nwslconv.SyncRejectionKind(value.RejectionKind), nwslconv.SyncRejectionReason(value.RejectionReason), nwslconv.SyncObservationFinishedAt(operation.FinishedAt.UTC().Format(time.RFC3339))}
 		attributes = append(attributes, kickoffAgeAttributes(operation.FinishedAt, value.KickoffUTC)...)
-		attributes = append(attributes, xGValueAttributes("nwsl.sync.old", value.Old)...)
-		attributes = append(attributes, xGValueAttributes("nwsl.sync.new", &value.New)...)
-		span.AddEvent("sync.xg_freshness", trace.WithAttributes(attributes...))
+		attributes = append(attributes, xGValueAttributes(oldXGAttributes, value.Old)...)
+		attributes = append(attributes, xGValueAttributes(newXGAttributes, &value.New)...)
+		span.AddEvent(nwslconv.EventSyncXGFreshness, trace.WithAttributes(attributes...))
 	}
 }
 
 func gameValueAttributes(old *cache.Game, incoming cache.Game) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.sync.old.status", old.Status),
-		attribute.String("nwsl.sync.new.status", incoming.Status),
-		attribute.String("nwsl.sync.old.kickoff_utc", old.KickoffUTC),
-		attribute.String("nwsl.sync.new.kickoff_utc", incoming.KickoffUTC),
-		attribute.String("nwsl.sync.old.home_team_id", old.HomeTeamID),
-		attribute.String("nwsl.sync.new.home_team_id", incoming.HomeTeamID),
-		attribute.String("nwsl.sync.old.away_team_id", old.AwayTeamID),
-		attribute.String("nwsl.sync.new.away_team_id", incoming.AwayTeamID),
-		attribute.Bool("nwsl.sync.old.home_score_present", old.HomeScore.Valid),
-		attribute.Bool("nwsl.sync.new.home_score_present", incoming.HomeScore.Valid),
-		attribute.Bool("nwsl.sync.old.away_score_present", old.AwayScore.Valid),
-		attribute.Bool("nwsl.sync.new.away_score_present", incoming.AwayScore.Valid),
-		attribute.Bool("nwsl.sync.old.matchday_present", old.Matchday.Valid),
-		attribute.Bool("nwsl.sync.new.matchday_present", incoming.Matchday.Valid),
-		attribute.Bool("nwsl.sync.old.expanded_minutes_present", old.ExpandedMinutes.Valid),
-		attribute.Bool("nwsl.sync.new.expanded_minutes_present", incoming.ExpandedMinutes.Valid),
-		attribute.Bool("nwsl.sync.old.knockout_game", old.KnockoutGame),
-		attribute.Bool("nwsl.sync.new.knockout_game", incoming.KnockoutGame),
-	}
+	attributes := []attribute.KeyValue{nwslconv.SyncOldStatus(old.Status), nwslconv.SyncNewStatus(incoming.Status), nwslconv.SyncOldKickoffUTC(old.KickoffUTC), nwslconv.SyncNewKickoffUTC(incoming.KickoffUTC), nwslconv.SyncOldHomeTeamID(old.HomeTeamID), nwslconv.SyncNewHomeTeamID(incoming.HomeTeamID), nwslconv.SyncOldAwayTeamID(old.AwayTeamID), nwslconv.SyncNewAwayTeamID(incoming.AwayTeamID), nwslconv.SyncOldHomeScorePresent(old.HomeScore.Valid), nwslconv.SyncNewHomeScorePresent(incoming.HomeScore.Valid), nwslconv.SyncOldAwayScorePresent(old.AwayScore.Valid), nwslconv.SyncNewAwayScorePresent(incoming.AwayScore.Valid), nwslconv.SyncOldMatchdayPresent(old.Matchday.Valid), nwslconv.SyncNewMatchdayPresent(incoming.Matchday.Valid), nwslconv.SyncOldExpandedMinutesPresent(old.ExpandedMinutes.Valid), nwslconv.SyncNewExpandedMinutesPresent(incoming.ExpandedMinutes.Valid), nwslconv.SyncOldKnockoutGame(old.KnockoutGame), nwslconv.SyncNewKnockoutGame(incoming.KnockoutGame)}
 	if old.HomeScore.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.old.home_score", old.HomeScore.Int64))
+		attributes = append(attributes, nwslconv.SyncOldHomeScore(int(old.HomeScore.Int64)))
 	}
 	if incoming.HomeScore.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.new.home_score", incoming.HomeScore.Int64))
+		attributes = append(attributes, nwslconv.SyncNewHomeScore(int(incoming.HomeScore.Int64)))
 	}
 	if old.AwayScore.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.old.away_score", old.AwayScore.Int64))
+		attributes = append(attributes, nwslconv.SyncOldAwayScore(int(old.AwayScore.Int64)))
 	}
 	if incoming.AwayScore.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.new.away_score", incoming.AwayScore.Int64))
+		attributes = append(attributes, nwslconv.SyncNewAwayScore(int(incoming.AwayScore.Int64)))
 	}
 	if old.Matchday.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.old.matchday", old.Matchday.Int64))
+		attributes = append(attributes, nwslconv.SyncOldMatchday(int(old.Matchday.Int64)))
 	}
 	if incoming.Matchday.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.new.matchday", incoming.Matchday.Int64))
+		attributes = append(attributes, nwslconv.SyncNewMatchday(int(incoming.Matchday.Int64)))
 	}
 	if old.ExpandedMinutes.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.old.expanded_minutes", old.ExpandedMinutes.Int64))
+		attributes = append(attributes, nwslconv.SyncOldExpandedMinutes(int(old.ExpandedMinutes.Int64)))
 	}
 	if incoming.ExpandedMinutes.Valid {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.new.expanded_minutes", incoming.ExpandedMinutes.Int64))
+		attributes = append(attributes, nwslconv.SyncNewExpandedMinutes(int(incoming.ExpandedMinutes.Int64)))
 	}
 	return attributes
 }
 
-func xGValueAttributes(prefix string, value *cache.GameXG) []attribute.KeyValue {
+type xGAttributeSet struct {
+	availability, homeTeamID, awayTeamID, lastCheckedAt                  func(string) attribute.KeyValue
+	homeXGPresent, awayXGPresent, homeXpointsPresent, awayXpointsPresent func(bool) attribute.KeyValue
+	homeXG, awayXG, homeXpoints, awayXpoints                             func(float64) attribute.KeyValue
+}
+
+var oldXGAttributes = xGAttributeSet{
+	availability: nwslconv.SyncOldAvailability,
+	homeTeamID:   nwslconv.SyncOldHomeTeamID, awayTeamID: nwslconv.SyncOldAwayTeamID,
+	lastCheckedAt: nwslconv.SyncOldLastCheckedAt,
+	homeXGPresent: nwslconv.SyncOldHomeXGPresent, awayXGPresent: nwslconv.SyncOldAwayXGPresent,
+	homeXpointsPresent: nwslconv.SyncOldHomeXpointsPresent, awayXpointsPresent: nwslconv.SyncOldAwayXpointsPresent,
+	homeXG: nwslconv.SyncOldHomeXG, awayXG: nwslconv.SyncOldAwayXG,
+	homeXpoints: nwslconv.SyncOldHomeXpoints, awayXpoints: nwslconv.SyncOldAwayXpoints,
+}
+
+var newXGAttributes = xGAttributeSet{
+	availability: nwslconv.SyncNewAvailability,
+	homeTeamID:   nwslconv.SyncNewHomeTeamID, awayTeamID: nwslconv.SyncNewAwayTeamID,
+	lastCheckedAt: nwslconv.SyncNewLastCheckedAt,
+	homeXGPresent: nwslconv.SyncNewHomeXGPresent, awayXGPresent: nwslconv.SyncNewAwayXGPresent,
+	homeXpointsPresent: nwslconv.SyncNewHomeXpointsPresent, awayXpointsPresent: nwslconv.SyncNewAwayXpointsPresent,
+	homeXG: nwslconv.SyncNewHomeXG, awayXG: nwslconv.SyncNewAwayXG,
+	homeXpoints: nwslconv.SyncNewHomeXpoints, awayXpoints: nwslconv.SyncNewAwayXpoints,
+}
+
+func xGValueAttributes(keys xGAttributeSet, value *cache.GameXG) []attribute.KeyValue {
 	if value == nil {
-		return []attribute.KeyValue{attribute.String(prefix+".availability", "missing")}
+		return []attribute.KeyValue{keys.availability(nwslconv.SyncOldAvailabilityMissing)}
 	}
 	attributes := []attribute.KeyValue{
-		attribute.String(prefix+".availability", string(value.Availability)),
-		attribute.String(prefix+".home_team_id", value.HomeTeamID),
-		attribute.String(prefix+".away_team_id", value.AwayTeamID),
-		attribute.Bool(prefix+".home_xg_present", value.HomeXG.Valid),
-		attribute.Bool(prefix+".away_xg_present", value.AwayXG.Valid),
-		attribute.Bool(prefix+".home_xpoints_present", value.HomeXPoints.Valid),
-		attribute.Bool(prefix+".away_xpoints_present", value.AwayXPoints.Valid),
+		keys.availability(string(value.Availability)),
+		keys.homeTeamID(value.HomeTeamID),
+		keys.awayTeamID(value.AwayTeamID),
+		keys.homeXGPresent(value.HomeXG.Valid),
+		keys.awayXGPresent(value.AwayXG.Valid),
+		keys.homeXpointsPresent(value.HomeXPoints.Valid),
+		keys.awayXpointsPresent(value.AwayXPoints.Valid),
 	}
 	if !value.LastCheckedAt.IsZero() {
-		attributes = append(attributes, attribute.String(prefix+".last_checked_at", value.LastCheckedAt.UTC().Format(time.RFC3339)))
+		attributes = append(attributes, keys.lastCheckedAt(value.LastCheckedAt.UTC().Format(time.RFC3339)))
 	}
 	if value.HomeXG.Valid {
-		attributes = append(attributes, attribute.Float64(prefix+".home_xg", value.HomeXG.Float64))
+		attributes = append(attributes, keys.homeXG(value.HomeXG.Float64))
 	}
 	if value.AwayXG.Valid {
-		attributes = append(attributes, attribute.Float64(prefix+".away_xg", value.AwayXG.Float64))
+		attributes = append(attributes, keys.awayXG(value.AwayXG.Float64))
 	}
 	if value.HomeXPoints.Valid {
-		attributes = append(attributes, attribute.Float64(prefix+".home_xpoints", value.HomeXPoints.Float64))
+		attributes = append(attributes, keys.homeXpoints(value.HomeXPoints.Float64))
 	}
 	if value.AwayXPoints.Valid {
-		attributes = append(attributes, attribute.Float64(prefix+".away_xpoints", value.AwayXPoints.Float64))
+		attributes = append(attributes, keys.awayXpoints(value.AwayXPoints.Float64))
 	}
 	return attributes
 }
@@ -546,10 +485,7 @@ func kickoffAgeAttributes(observedAt time.Time, kickoffUTC string) []attribute.K
 	if err != nil || observedAt.IsZero() {
 		return nil
 	}
-	return []attribute.KeyValue{
-		attribute.String("nwsl.sync.kickoff_utc", kickoff.UTC().Format(time.RFC3339)),
-		attribute.Int64("nwsl.sync.kickoff_age_seconds", int64(observedAt.UTC().Sub(kickoff).Seconds())),
-	}
+	return []attribute.KeyValue{nwslconv.SyncKickoffUTC(kickoff.UTC().Format(time.RFC3339)), nwslconv.SyncKickoffAgeSeconds(int(int64(observedAt.UTC().Sub(kickoff).Seconds())))}
 }
 
 func gameUpdateDecision(cached, incoming cache.Game, found bool) (decision, reason string) {

@@ -40,7 +40,7 @@ Team and slate identifiers are high-cardinality drill-down fields. Outcome, stat
 | `nwsl.scenario.oracle_cache_hit_count.total` | int | Recommended | development | — | Total reused oracle results across the scenario batch. |
 | `nwsl.scenario.oracle_call_count` | int | Recommended | development | — | Number of clinching-oracle calls in one per-team scenario search. |
 | `nwsl.scenario.oracle_call_count.total` | int | Recommended | development | — | Total clinching-oracle calls across the scenario batch. |
-| `nwsl.scenario.outcome` | string | Recommended | development | `["recalculated","current","failure"]` | The low-cardinality terminal outcome of the scenario refresh. |
+| `nwsl.scenario.outcome` | enum | Recommended | development | `["recalculated","current","failure"]` | The low-cardinality terminal outcome of the scenario refresh. |
 | `nwsl.scenario.recalculated` | boolean | Recommended | development | — | Whether a new scenario batch was calculated. |
 | `nwsl.scenario.refresh_reason` | string | Recommended | development | `["snapshot_missing","forced","compute_budget_retry"]` | The low-cardinality reason a new scenario batch was required. |
 | `nwsl.scenario.remaining_fixture_count` | int | Recommended | development | — | Number of remaining fixtures in the scenario input. |
@@ -58,7 +58,7 @@ Team and slate identifiers are high-cardinality drill-down fields. Outcome, stat
 | `nwsl.scenario.slate_id` | string | Recommended | development | `["2026-08-22T23:30:00Z"]` | The high-cardinality stable identifier of the selected next-fixture slate. |
 | `nwsl.scenario.slate_reason` | string | Recommended | development | `["no upcoming fixtures"]` | A bounded explanation when the selected scenario slate is not ready. |
 | `nwsl.scenario.slate_source` | string | Recommended | development | `["matchday","kickoff_window"]` | The low-cardinality rule used to select the fixture slate. |
-| `nwsl.scenario.slate_state` | string | Recommended | development | `["ready","no_upcoming_fixtures","unavailable"]` | The low-cardinality availability state of the selected fixture slate. |
+| `nwsl.scenario.slate_state` | enum | Recommended | development | `["ready","no_upcoming_fixtures","unavailable"]` | The low-cardinality availability state of the selected fixture slate. |
 | `nwsl.scenario.team_count` | int | Recommended | development | — | Number of teams supplied to the scenario refresh. |
 | `nwsl.scenario.team_id` | string | Recommended | development | `["team-123"]` | The high-cardinality ASA identifier of the team being searched. |
 | `nwsl.scenario.team_search.duration_max_ms` | double | Recommended | development | — | Maximum wall-clock milliseconds spent in one per-team scenario search. |
@@ -104,7 +104,7 @@ Successful spans are emitted only when the search exceeds the slow-operation thr
 | `nwsl.scenario.search_node_count` | int | Recommended | development | Number of search nodes visited in one per-team scenario search. |
 | `nwsl.scenario.slate_fixture_count` | int | Recommended | development | Number of fixtures in the selected scenario slate. |
 | `nwsl.scenario.slate_source` | string | Recommended | development | The low-cardinality rule used to select the fixture slate. |
-| `nwsl.scenario.slate_state` | string | Recommended | development | The low-cardinality availability state of the selected fixture slate. |
+| `nwsl.scenario.slate_state` | enum | Recommended | development | The low-cardinality availability state of the selected fixture slate. |
 | `nwsl.scenario.team_id` | string | Required | development | The high-cardinality ASA identifier of the team being searched. |
 | `nwsl.scenario.unresolved_assignment_count` | int | Recommended | development | Number of unresolved assignments across achievements in one per-team search. |
 | `nwsl.scenario.visited_complete_count` | int | Recommended | development | Number of complete fixture assignments visited in one per-team search. |
@@ -130,7 +130,7 @@ One persisted next-slate scenario batch refresh for a fixture snapshot.
 | `nwsl.scenario.forced` | boolean | Recommended | development | Whether the caller explicitly requested scenario recalculation. |
 | `nwsl.scenario.input_fixture_count` | int | Recommended | development | Number of fixtures accepted as scenario calculation input. |
 | `nwsl.scenario.input_team_count` | int | Recommended | development | Number of teams accepted as scenario calculation input. |
-| `nwsl.scenario.outcome` | string | Required | development | The low-cardinality terminal outcome of the scenario refresh. |
+| `nwsl.scenario.outcome` | enum | Required | development | The low-cardinality terminal outcome of the scenario refresh. |
 | `nwsl.scenario.recalculated` | boolean | Recommended | development | Whether a new scenario batch was calculated. |
 | `nwsl.scenario.refresh_reason` | string | Recommended | development | The low-cardinality reason a new scenario batch was required. |
 | `nwsl.scenario.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the scenario input. |
@@ -141,7 +141,7 @@ One persisted next-slate scenario batch refresh for a fixture snapshot.
 | `nwsl.scenario.slate_id` | string | Recommended | development | The high-cardinality stable identifier of the selected next-fixture slate. |
 | `nwsl.scenario.slate_reason` | string | Recommended | development | A bounded explanation when the selected scenario slate is not ready. |
 | `nwsl.scenario.slate_source` | string | Recommended | development | The low-cardinality rule used to select the fixture slate. |
-| `nwsl.scenario.slate_state` | string | Recommended | development | The low-cardinality availability state of the selected fixture slate. |
+| `nwsl.scenario.slate_state` | enum | Recommended | development | The low-cardinality availability state of the selected fixture slate. |
 | `nwsl.scenario.team_count` | int | Recommended | development | Number of teams supplied to the scenario refresh. |
 | `nwsl.scenario.team_search.duration_max_ms` | double | Recommended | development | Maximum wall-clock milliseconds spent in one per-team scenario search. |
 | `nwsl.scenario.team_search.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in per-team scenario searches. |

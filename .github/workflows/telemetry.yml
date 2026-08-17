@@ -1,4 +1,4 @@
-name: Telemetry Catalog
+name: Telemetry Artifacts
 
 on:
   pull_request:
@@ -10,11 +10,10 @@ permissions:
   contents: read
 
 jobs:
-  telemetry-catalog:
-    name: Validate telemetry catalog
+  telemetry-artifacts:
+    name: Validate generated telemetry artifacts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
-      - run: make telemetry-check
       - run: make telemetry-check-generated

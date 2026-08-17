@@ -11,15 +11,26 @@ groups:
         brief: The low-cardinality top-level action selected for a scheduler tick.
         examples: ["read_planning_snapshot", "recalculate", "source_jobs"]
       - id: nwsl.scheduler.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: The selected scheduler work completed.}
+            - {id: current, value: current, stability: development, brief: Cached derived data was already current.}
+            - {id: failure, value: failure, stability: development, brief: Scheduler work failed.}
+            - {id: partial_failure, value: partial_failure, stability: development, brief: Source work completed with a derived-data failure.}
+            - {id: stopped, value: stopped, stability: development, brief: Scheduler shutdown stopped the tick.}
+            - {id: deferred, value: deferred, stability: development, brief: Lease contention deferred selected work.}
         stability: development
         brief: The low-cardinality terminal outcome of a scheduler tick.
-        examples: ["complete", "failure", "partial_failure", "no_work"]
       - id: nwsl.scheduler.clinching_preflight_outcome
-        type: string
+        type:
+          members:
+            - {id: not_needed, value: not_needed, stability: development, brief: No preflight calculation was needed.}
+            - {id: current, value: current, stability: development, brief: Cached clinching data was already current.}
+            - {id: complete, value: complete, stability: development, brief: Clinching data was recalculated.}
+            - {id: partial_failure, value: partial_failure, stability: development, brief: One clinching component failed.}
+            - {id: failure, value: failure, stability: development, brief: Clinching preflight failed.}
         stability: development
         brief: The low-cardinality outcome of the cache-only clinching preflight.
-        examples: ["current", "complete", "partial_failure", "not_run"]
       - id: nwsl.scheduler.job_count
         type: int
         stability: development
@@ -33,10 +44,12 @@ groups:
         stability: development
         brief: Number of source requests attempted during the scheduler tick or job.
       - id: nwsl.scheduler.decision
-        type: string
+        type:
+          members:
+            - {id: check, value: check, stability: development, brief: The source job was selected for checking.}
+            - {id: not_check, value: not_check, stability: development, brief: The source job was not checked.}
         stability: development
         brief: The low-cardinality check or no-check decision recorded by a scheduler decision event.
-        examples: ["check", "not_check"]
       - id: nwsl.scheduler.reason
         type: string
         stability: development
@@ -57,10 +70,15 @@ groups:
         brief: Whether a scheduler job belongs to the hot current scope or cold archived maintenance.
         examples: ["hot", "cold"]
       - id: nwsl.scheduler.job_outcome
-        type: string
+        type:
+          members:
+            - {id: planned, value: planned, stability: development, brief: The job span was initialized before execution.}
+            - {id: complete, value: complete, stability: development, brief: The source job completed.}
+            - {id: failure, value: failure, stability: development, brief: The source job failed.}
+            - {id: deferred_global_lease, value: deferred_global_lease, stability: development, brief: The global cold-sweep lease deferred the job.}
+            - {id: deferred_scope_lease, value: deferred_scope_lease, stability: development, brief: The scope lease deferred the job.}
         stability: development
         brief: The low-cardinality terminal outcome of one scheduler job.
-        examples: ["complete", "failure", "deferred_global_lease", "deferred_scope_lease"]
       - id: nwsl.scheduler.job_reason
         type: string
         stability: development
@@ -112,10 +130,14 @@ groups:
         stability: development
         brief: Whether cold source changes require regeneration of checked-in model evaluation evidence.
       - id: nwsl.scheduler.forecast_warm.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Forecast cache warming completed.}
+            - {id: failed, value: failed, stability: development, brief: Forecast cache warming failed without failing source work.}
+            - {id: not_run, value: not_run, stability: development, brief: Source work failed before forecast warming.}
+            - {id: not_needed, value: not_needed, stability: development, brief: Source inputs did not change.}
         stability: development
         brief: The low-cardinality result of warming forecasts after material source work.
-        examples: ["complete", "failure", "not_run"]
       - id: nwsl.scheduler.selection_policy
         type: string
         stability: development

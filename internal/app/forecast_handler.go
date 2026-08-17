@@ -22,7 +22,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
-	"go.opentelemetry.io/otel/attribute"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -44,33 +44,22 @@ func (a *Application) PrecacheForecastsWithTrigger(ctx context.Context, trigger 
 }
 
 func (a *application) precacheForecasts(ctx context.Context, trigger string) (err error) {
-	ctx, span := telemetry.Tracer().Start(ctx, "forecast.precache",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.Bool("nwsl.forecast.preload", true),
-			attribute.String("nwsl.forecast.trigger", trigger),
-			attribute.String("nwsl.season", a.options.CurrentSeason),
-			attribute.String("nwsl.stage", a.options.Stage),
-		),
+	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanForecastPrecache, trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(nwslconv.ForecastPreload(true), nwslconv.ForecastTrigger(trigger), nwslconv.Season(a.options.CurrentSeason), nwslconv.Stage(a.options.Stage)),
 	)
 	modelCount := 0
 	failedModels := 0
 	workerCount := 0
 	recordPrecacheException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, "forecast.precache", errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanForecastPrecache, errorType)
 	}
 	defer func() {
-		outcome := "complete"
+		outcome := nwslconv.ForecastPrecacheOutcomeComplete
 		if err != nil {
-			outcome = "failure"
+			outcome = nwslconv.ForecastPrecacheOutcomeFailure
 			telemetry.MarkError(span, err)
 		}
-		span.SetAttributes(
-			attribute.Int("nwsl.forecast.model_count", modelCount),
-			attribute.Int("nwsl.forecast.failed_model_count", failedModels),
-			attribute.Int("nwsl.forecast.precache.worker_count", workerCount),
-			attribute.String("nwsl.forecast.precache.outcome", outcome),
-		)
+		span.SetAttributes(nwslconv.ForecastModelCount(modelCount), nwslconv.ForecastFailedModelCount(failedModels), nwslconv.ForecastPrecacheWorkerCount(workerCount), nwslconv.ForecastPrecacheOutcome(outcome))
 		span.End()
 	}()
 	rules, verified := a.rulesForSeason(a.options.CurrentSeason)
@@ -183,12 +172,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	}
 	state.ModelID = forecast.CanonicalID(state.ModelID)
 	state.ComparisonModelID = forecast.CanonicalID(state.ComparisonModelID)
-	trace.SpanFromContext(r.Context()).SetAttributes(
-		attribute.String("nwsl.forecast.trigger", "http"),
-		attribute.String("nwsl.forecast.model_id", state.ModelID),
-		attribute.Bool("nwsl.forecast.comparison_requested", state.ComparisonModelID != ""),
-		attribute.Int("nwsl.forecast.fixed_assumption_count", len(state.Fixed)),
-	)
+	trace.SpanFromContext(r.Context()).SetAttributes(nwslconv.ForecastTrigger("http"), nwslconv.ForecastModelID(state.ModelID), nwslconv.ForecastComparisonRequested(state.ComparisonModelID != ""), nwslconv.ForecastFixedAssumptionCount(len(state.Fixed)))
 	data, season, rules, err := a.forecastData(r)
 	if err != nil {
 		a.renderError(w, r, err)

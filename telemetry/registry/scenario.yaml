@@ -52,10 +52,13 @@ groups:
         stability: development
         brief: Whether a new scenario batch was calculated.
       - id: nwsl.scenario.outcome
-        type: string
+        type:
+          members:
+            - {id: recalculated, value: recalculated, stability: development, brief: A new scenario batch was calculated.}
+            - {id: current, value: current, stability: development, brief: The persisted scenario batch was current.}
+            - {id: failure, value: failure, stability: development, brief: Scenario refresh failed.}
         stability: development
         brief: The low-cardinality terminal outcome of the scenario refresh.
-        examples: ["recalculated", "current", "failure"]
       - id: nwsl.scenario.refresh_reason
         type: string
         stability: development
@@ -67,10 +70,13 @@ groups:
         brief: The high-cardinality stable identifier of the selected next-fixture slate.
         examples: ["2026-08-22T23:30:00Z"]
       - id: nwsl.scenario.slate_state
-        type: string
+        type:
+          members:
+            - {id: ready, value: ready, stability: development, brief: The selected slate is ready for scenario search.}
+            - {id: no_upcoming_fixtures, value: no_upcoming_fixtures, stability: development, brief: No upcoming fixture slate exists.}
+            - {id: unavailable, value: unavailable, stability: development, brief: The fixture slate could not be selected safely.}
         stability: development
         brief: The low-cardinality availability state of the selected fixture slate.
-        examples: ["ready", "no_upcoming_fixtures", "unavailable"]
       - id: nwsl.scenario.slate_source
         type: string
         stability: development

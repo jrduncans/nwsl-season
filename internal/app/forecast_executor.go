@@ -10,6 +10,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/simulation"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -62,26 +63,21 @@ func newForecastExecutor(concurrency int, timeout time.Duration) *forecastExecut
 func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (results []simulation.Result, err error) {
 	trigger := forecastTrigger(ctx)
 	spanAttributes := forecastRunAttributes(tasks)
-	spanAttributes = append(spanAttributes, attribute.String("nwsl.forecast.trigger", trigger))
-	ctx, span := telemetry.Tracer().Start(ctx, "forecast.run",
-		trace.WithSpanKind(trace.SpanKindInternal),
+	spanAttributes = append(spanAttributes, nwslconv.ForecastTrigger(trigger))
+	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanForecastRun, trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(spanAttributes...),
 	)
 	cacheHits := 0
-	outcome := "computed"
+	outcome := nwslconv.ForecastOutcomeComputed
 	defer func() {
-		span.SetAttributes(
-			attribute.Int("nwsl.forecast.cache_hits", cacheHits),
-			attribute.Int("nwsl.forecast.calculation_count", len(tasks)-cacheHits),
-			attribute.String("nwsl.forecast.outcome", outcome),
-		)
+		span.SetAttributes(nwslconv.ForecastCacheHits(cacheHits), nwslconv.ForecastCalculationCount(len(tasks)-cacheHits), nwslconv.ForecastOutcome(outcome))
 		if err != nil {
 			if errors.Is(err, errForecastOverloaded) {
-				span.SetAttributes(attribute.Bool("nwsl.error.expected", true))
+				span.SetAttributes(nwslconv.ErrorExpected(true))
 			} else if trigger != "http" {
-				err = telemetry.RecordWarningWithType(ctx, span, err, "forecast.run", telemetry.ErrorTypeCalculationFailure)
+				err = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.SpanForecastRun, telemetry.ErrorTypeCalculationFailure)
 			} else {
-				err = telemetry.RecordErrorWithType(ctx, span, err, "forecast.run", telemetry.ErrorTypeCalculationFailure)
+				err = telemetry.RecordErrorWithType(ctx, span, err, nwslconv.SpanForecastRun, telemetry.ErrorTypeCalculationFailure)
 			}
 		}
 		span.End()
@@ -100,7 +96,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	}
 	e.mu.Unlock()
 	if len(missing) == 0 {
-		outcome = "cache_hit"
+		outcome = nwslconv.ForecastOutcomeCacheHit
 		return results, nil
 	}
 
@@ -111,7 +107,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 	case e.slots <- struct{}{}:
 		defer func() { <-e.slots }()
 	default:
-		outcome = "overloaded"
+		outcome = nwslconv.ForecastOutcomeOverloaded
 		return nil, errForecastOverloaded
 	}
 
@@ -122,9 +118,9 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 		result, runErr := e.run(workCtx, request)
 		if runErr != nil {
 			if errors.Is(runErr, context.DeadlineExceeded) {
-				outcome = "timed_out"
+				outcome = nwslconv.ForecastOutcomeTimedOut
 			} else {
-				outcome = "failure"
+				outcome = nwslconv.ForecastOutcomeFailure
 			}
 			return nil, runErr
 		}
@@ -146,10 +142,7 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 }
 
 func forecastRunAttributes(tasks []forecastTask) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.Int("nwsl.forecast.task_count", len(tasks)),
-		attribute.StringSlice("nwsl.forecast.model_ids", forecastModelIDs(tasks)),
-	}
+	attributes := []attribute.KeyValue{nwslconv.ForecastTaskCount(len(tasks)), nwslconv.ForecastModelIds(forecastModelIDs(tasks))}
 	if len(tasks) > 0 {
 		attributes = append(attributes, forecastSharedInputAttributes(tasks[0].request)...)
 	}
@@ -188,14 +181,5 @@ func forecastSharedInputAttributes(request simulation.Request) []attribute.KeyVa
 			completed++
 		}
 	}
-	return []attribute.KeyValue{
-		attribute.Int("nwsl.forecast.iteration_count", request.Iterations),
-		attribute.Int("nwsl.forecast.team_count", len(request.Teams)),
-		attribute.Int("nwsl.forecast.fixture_count", len(request.Games)),
-		attribute.Int("nwsl.forecast.completed_fixture_count", completed),
-		attribute.Int("nwsl.forecast.remaining_fixture_count", remaining),
-		attribute.Int("nwsl.forecast.fixed_assumption_count", len(request.Fixed)),
-		attribute.Int("nwsl.forecast.xg_observation_count", len(request.XGoals)),
-		attribute.Int("nwsl.forecast.playoff_place_count", request.PlayoffPlaces),
-	}
+	return []attribute.KeyValue{nwslconv.ForecastIterationCount(request.Iterations), nwslconv.ForecastTeamCount(len(request.Teams)), nwslconv.ForecastFixtureCount(len(request.Games)), nwslconv.ForecastCompletedFixtureCount(completed), nwslconv.ForecastRemainingFixtureCount(remaining), nwslconv.ForecastFixedAssumptionCount(len(request.Fixed)), nwslconv.ForecastXGObservationCount(len(request.XGoals)), nwslconv.ForecastPlayoffPlaceCount(request.PlayoffPlaces)}
 }

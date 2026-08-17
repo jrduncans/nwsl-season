@@ -12,11 +12,12 @@ catalog.
   alpha.
 - `templates/registry/markdown` generates domain-oriented checked-in reference
   pages under `docs/telemetry/catalog`.
-- `check-code-coverage.sh` fails when a literal application span, event, or
-  `nwsl.*` attribute emitted by Go is absent from the registry. Finite names
-  assembled from bounded code values are recorded explicitly in the registry.
+- `templates/registry/go` generates the checked-in `internal/telemetry/nwslconv`
+  package: signal names, attribute keys and helpers, and bounded enum values.
+- `check-code-coverage.sh` prohibits production code from bypassing the
+  generated package with raw application attributes, spans, or events.
 
 Run `make telemetry-check` and `make telemetry-check-generated` before
-committing a catalog change. See
+committing a registry or generated-code change. See
 [`docs/telemetry/README.md`](../docs/telemetry/README.md) for the developer
 workflow, generated catalog, and hand-written Honeycomb query cookbook.

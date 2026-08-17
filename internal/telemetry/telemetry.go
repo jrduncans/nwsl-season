@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -43,18 +44,17 @@ const (
 	// as timing attributes on its parent span instead.
 	SlowOperationThreshold = 25 * time.Millisecond
 
-	// Error types are deliberately broad and low-cardinality. Combine them
-	// with nwsl.error.code to answer both why an operation failed and where the
-	// failure was detected.
-	ErrorTypeCanceled           = "canceled"
-	ErrorTypeTimeout            = "timeout"
-	ErrorTypeInvalidArgument    = "invalid_argument"
-	ErrorTypeInvalidData        = "invalid_data"
-	ErrorTypeConflict           = "conflict"
-	ErrorTypeUpstreamFailure    = "upstream_failure"
-	ErrorTypeStorageFailure     = "storage_failure"
-	ErrorTypeCalculationFailure = "calculation_failure"
-	ErrorTypeOther              = "_OTHER"
+	// Error types are deliberately broad and low-cardinality. These aliases
+	// preserve the telemetry package API while Weaver owns the values.
+	ErrorTypeCanceled           = nwslconv.ErrorTypeCanceled
+	ErrorTypeTimeout            = nwslconv.ErrorTypeTimeout
+	ErrorTypeInvalidArgument    = nwslconv.ErrorTypeInvalidArgument
+	ErrorTypeInvalidData        = nwslconv.ErrorTypeInvalidData
+	ErrorTypeConflict           = nwslconv.ErrorTypeConflict
+	ErrorTypeUpstreamFailure    = nwslconv.ErrorTypeUpstreamFailure
+	ErrorTypeStorageFailure     = nwslconv.ErrorTypeStorageFailure
+	ErrorTypeCalculationFailure = nwslconv.ErrorTypeCalculationFailure
+	ErrorTypeOther              = nwslconv.ErrorTypeOther
 )
 
 type classifiedError struct {
@@ -259,7 +259,7 @@ func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error
 		attribute.String("exception.stacktrace", string(debug.Stack())),
 	}
 	if code != "" {
-		attributes = append(attributes, attribute.String("nwsl.error.code", code))
+		attributes = append(attributes, nwslconv.ErrorCode(code))
 	}
 	record.AddAttributes(attributes...)
 	Logger().Emit(ctx, record)
@@ -291,7 +291,7 @@ func markError(span oteltrace.Span, err error, code string) {
 	}
 	spanAttributes := []attribute.KeyValue{semconv.ErrorTypeKey.String(resolveErrorType(err, ""))}
 	if code != "" {
-		spanAttributes = append(spanAttributes, attribute.String("nwsl.error.code", code))
+		spanAttributes = append(spanAttributes, nwslconv.ErrorCode(code))
 	}
 	span.SetAttributes(spanAttributes...)
 	span.SetStatus(codes.Error, err.Error())

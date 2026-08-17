@@ -13,6 +13,7 @@ WEAVER ?= mise exec -- weaver
 TELEMETRY_REGISTRY := ./telemetry/registry
 TELEMETRY_TEMPLATES := ./telemetry/templates
 TELEMETRY_DOCS := ./docs/telemetry/catalog
+TELEMETRY_GO := ./internal/telemetry/nwslconv
 
 .PHONY: verify test fmt vet lint race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
@@ -44,13 +45,19 @@ telemetry-check: telemetry-check-code
 
 telemetry-generate:
 	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown $(TELEMETRY_DOCS)
+	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) go $(TELEMETRY_GO)
+	gofmt -w $(TELEMETRY_GO)/*.go
 
 telemetry-check-generated: telemetry-check
 	@set -eu; \
 	telemetry_generated_dir="$$(mktemp -d)"; \
 	trap 'rm -r "$$telemetry_generated_dir"' EXIT; \
-	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown "$$telemetry_generated_dir"; \
-	diff -ru "$(TELEMETRY_DOCS)" "$$telemetry_generated_dir"
+	mkdir -p "$$telemetry_generated_dir/docs" "$$telemetry_generated_dir/go"; \
+	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown "$$telemetry_generated_dir/docs"; \
+	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) go "$$telemetry_generated_dir/go"; \
+	gofmt -w "$$telemetry_generated_dir/go"/*.go; \
+	diff -ru "$(TELEMETRY_DOCS)" "$$telemetry_generated_dir/docs"; \
+	diff -ru "$(TELEMETRY_GO)" "$$telemetry_generated_dir/go"
 
 backtest:
 	go run $(BACKTEST_PACKAGE)

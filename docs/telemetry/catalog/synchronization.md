@@ -36,17 +36,17 @@ Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounde
 | `nwsl.sync.games_unchanged` | int | Recommended | development | — | Number of game rows unchanged during the synchronization run. |
 | `nwsl.sync.games_updated` | int | Recommended | development | — | Number of game rows updated during the synchronization run. |
 | `nwsl.sync.mode` | string | Recommended | development | `["full","targeted"]` | Whether one source operation is authoritative or targeted. |
-| `nwsl.sync.operation.outcome` | string | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of one source operation. |
-| `nwsl.sync.outcome` | string | Recommended | development | `["complete","conflict","failure"]` | The low-cardinality terminal outcome of the compatibility synchronization run. |
+| `nwsl.sync.operation.outcome` | enum | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of one source operation. |
+| `nwsl.sync.outcome` | enum | Recommended | development | `["complete","conflict","failure"]` | The low-cardinality terminal outcome of the compatibility synchronization run. |
 | `nwsl.sync.partial_failure` | boolean | Recommended | development | — | Whether source work succeeded but one or more optional downstream components failed. |
-| `nwsl.sync.qualification.outcome` | string | Recommended | development | `["complete","current","failure","not_run"]` | The low-cardinality outcome of the downstream qualification component. |
+| `nwsl.sync.qualification.outcome` | enum | Recommended | development | `["complete","current","failure","not_run","not_configured"]` | The low-cardinality outcome of the downstream qualification component. |
 | `nwsl.sync.qualification.refresh_reason` | string | Recommended | development | `["snapshot_current","snapshot_missing","forced","compute_budget_retry","not_evaluated"]` | The bounded qualification refresh or no-op reason. |
 | `nwsl.sync.qualification.refresh_required` | boolean | Recommended | development | — | Whether the qualification refresher determined that work was required. |
 | `nwsl.sync.qualification.rules_version` | string | Recommended | development | `["2026-regular-season-v1"]` | Stable version of the qualification rules used by the derived batch. |
 | `nwsl.sync.qualification.snapshot_checked` | boolean | Recommended | development | — | Whether the qualification refresher checked for a current persisted snapshot. |
 | `nwsl.sync.qualification.snapshot_found` | boolean | Recommended | development | — | Whether a matching qualification snapshot was found. |
 | `nwsl.sync.qualification_recalculated` | boolean | Recommended | development | — | Whether qualification was recalculated during the parent operation. |
-| `nwsl.sync.recalculate.outcome` | string | Recommended | development | `["complete","current","partial_failure","failure"]` | The low-cardinality terminal outcome of cache-only recalculation. |
+| `nwsl.sync.recalculate.outcome` | enum | Recommended | development | `["complete","current","partial_failure","failure"]` | The low-cardinality terminal outcome of cache-only recalculation. |
 | `nwsl.sync.recalculate.reason` | string | Recommended | development | `["scheduler_preflight","manual","unspecified"]` | The bounded reason for a cache-only derived recalculation. |
 | `nwsl.sync.requested_rows` | int | Recommended | development | — | Number of source identities requested by one source operation. |
 | `nwsl.sync.resource` | string | Recommended | development | `["teams","games","game_xg"]` | The bounded ASA resource owned by one source operation. |
@@ -56,7 +56,7 @@ Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounde
 | `nwsl.sync.rows_unchanged` | int | Recommended | development | — | Number of source rows unchanged by one source operation. |
 | `nwsl.sync.rows_updated` | int | Recommended | development | — | Number of source rows updated by one source operation. |
 | `nwsl.sync.scenario.definition_version` | string | Recommended | development | `["next-slate-v3"]` | Stable version of the scenario definition used by the derived batch. |
-| `nwsl.sync.scenario.outcome` | string | Recommended | development | `["complete","current","failure","not_run","qualification_failed"]` | The low-cardinality outcome of the downstream scenario component. |
+| `nwsl.sync.scenario.outcome` | enum | Recommended | development | `["complete","current","failure","not_run","not_configured","qualification_failed"]` | The low-cardinality outcome of the downstream scenario component. |
 | `nwsl.sync.scenario.refresh_reason` | string | Recommended | development | `["snapshot_current","snapshot_missing","forced","compute_budget_retry","qualification_failed"]` | The bounded scenario refresh or no-op reason. |
 | `nwsl.sync.scenario.refresh_required` | boolean | Recommended | development | — | Whether the scenario refresher determined that work was required. |
 | `nwsl.sync.scenario.rules_version` | string | Recommended | development | `["2026-regular-season-v1"]` | Stable version of the competition rules used by the scenario batch. |
@@ -81,13 +81,13 @@ Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounde
 | `nwsl.sync.teams_unchanged` | int | Recommended | development | — | Number of team rows unchanged during the synchronization run. |
 | `nwsl.sync.teams_updated` | int | Recommended | development | — | Number of team rows updated during the synchronization run. |
 | `nwsl.sync.trigger` | string | Recommended | development | `["scheduler","startup","cli","backfill","maintenance","venue_history","unspecified"]` | The low-cardinality caller that initiated synchronization or recalculation. |
-| `nwsl.sync.update.decision` | string | Recommended | development | `["updated","not_updated"]` | The bounded aggregate persistence decision for one source operation. |
+| `nwsl.sync.update.decision` | enum | Recommended | development | `["updated","not_updated"]` | The bounded aggregate persistence decision for one source operation. |
 | `nwsl.sync.update.reason` | string | Recommended | development | `["source_data_changed","source_data_unchanged"]` | The bounded reason for the aggregate source persistence decision. |
-| `nwsl.sync.venue_history.outcome` | string | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of historical venue refresh. |
+| `nwsl.sync.venue_history.outcome` | enum | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of historical venue refresh. |
 | `nwsl.sync.venue_history_refreshed_season_count` | int | Recommended | development | — | Number of historical venue seasons successfully refreshed. |
 | `nwsl.sync.venue_history_requested_season_count` | int | Recommended | development | — | Number of historical seasons requested for forecast venue history. |
 | `nwsl.sync.xg.available_games` | int | Recommended | development | — | Number of games observed with available expected-goals data. |
-| `nwsl.sync.xg.outcome` | string | Recommended | development | `["complete","failure","not_run"]` | The low-cardinality outcome of expected-goals synchronization. |
+| `nwsl.sync.xg.outcome` | enum | Recommended | development | `["complete","failure","not_run"]` | The low-cardinality outcome of expected-goals synchronization. |
 | `nwsl.sync.xg.unavailable_games` | int | Recommended | development | — | Number of games explicitly observed without expected-goals data. |
 
 
@@ -101,10 +101,10 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 
 | Attribute | Type | Requirement | Stability | Examples | Description |
 | --- | --- | --- | --- | --- | --- |
-| `nwsl.sync.decision` | string | Recommended | development | `["updated","not_updated"]` | The bounded per-value source persistence decision. |
+| `nwsl.sync.decision` | enum | Recommended | development | `["updated","not_updated"]` | The bounded per-value source persistence decision. |
 | `nwsl.sync.kickoff_age_seconds` | int | Recommended | development | — | Seconds between the observed game kickoff and the source observation time. |
 | `nwsl.sync.kickoff_utc` | string | Recommended | development | `["2026-08-15T18:30:00Z"]` | The high-cardinality RFC 3339 kickoff time of the observed game. |
-| `nwsl.sync.new.availability` | string | Recommended | development | `["available","unavailable"]` | Incoming expected-goals availability after a source observation. |
+| `nwsl.sync.new.availability` | enum | Recommended | development | `["available","unavailable"]` | Incoming expected-goals availability after a source observation. |
 | `nwsl.sync.new.away_score` | int | Recommended | development | — | Incoming away score after a source change when present. |
 | `nwsl.sync.new.away_score_present` | boolean | Recommended | development | — | Whether the incoming fixture has an away score after a source change. |
 | `nwsl.sync.new.away_team_id` | string | Recommended | development | `["team-456"]` | Incoming high-cardinality away-team identifier after a source change. |
@@ -128,7 +128,7 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 | `nwsl.sync.new.matchday_present` | boolean | Recommended | development | — | Whether the incoming fixture has a matchday after a source change. |
 | `nwsl.sync.new.status` | string | Recommended | development | `["FullTime"]` | Incoming fixture status after an accepted source change. |
 | `nwsl.sync.observation_finished_at` | string | Recommended | development | `["2026-08-15T20:30:00Z"]` | The high-cardinality RFC 3339 completion time of the source observation. |
-| `nwsl.sync.old.availability` | string | Recommended | development | `["missing","available","unavailable"]` | Cached expected-goals availability before a source observation. |
+| `nwsl.sync.old.availability` | enum | Recommended | development | `["missing","available","unavailable"]` | Cached expected-goals availability before a source observation. |
 | `nwsl.sync.old.away_score` | int | Recommended | development | — | Cached away score before a source change when present. |
 | `nwsl.sync.old.away_score_present` | boolean | Recommended | development | — | Whether the cached fixture had an away score before a source change. |
 | `nwsl.sync.old.away_team_id` | string | Recommended | development | `["team-456"]` | Cached high-cardinality away-team identifier before a source change. |
@@ -195,7 +195,7 @@ A point-in-time explanation of an individual fixture acceptance, rejection, or n
 | `nwsl.asa.game.id` | string | Recommended | development | The high-cardinality ASA game identifier described by a freshness event. |
 | `nwsl.asa.game.last_updated_utc` | string | Recommended | development | The high-cardinality RFC 3339 source-version timestamp on an incoming ASA game. |
 | `nwsl.cache.game.last_updated_utc` | string | Recommended | development | The high-cardinality RFC 3339 source timestamp stored for a cached game. |
-| `nwsl.sync.decision` | string | Required | development | The bounded per-value source persistence decision. |
+| `nwsl.sync.decision` | enum | Required | development | The bounded per-value source persistence decision. |
 | `nwsl.sync.reason` | string | Required | development | The bounded reason for a per-value source persistence decision. |
 | `nwsl.sync.rejection_kind` | string | Recommended | development | The bounded category of source rejection. |
 | `nwsl.sync.rejection_reason` | string | Recommended | development | The bounded reason an incoming source value was rejected. |
@@ -222,11 +222,11 @@ A point-in-time comparison of cached and incoming expected-goals values for one 
 | `nwsl.asa.game.id` | string | Required | development | The high-cardinality ASA game identifier described by a freshness event. |
 | `nwsl.sync.kickoff_age_seconds` | int | Recommended | development | Seconds between the observed game kickoff and the source observation time. |
 | `nwsl.sync.kickoff_utc` | string | Recommended | development | The high-cardinality RFC 3339 kickoff time of the observed game. |
-| `nwsl.sync.new.availability` | string | Recommended | development | Incoming expected-goals availability after a source observation. |
+| `nwsl.sync.new.availability` | enum | Recommended | development | Incoming expected-goals availability after a source observation. |
 | `nwsl.sync.new.away_xg` | double | Recommended | development | Incoming away-team expected goals after a source change when present. |
 | `nwsl.sync.new.home_xg` | double | Recommended | development | Incoming home-team expected goals after a source change when present. |
 | `nwsl.sync.observation_finished_at` | string | Recommended | development | The high-cardinality RFC 3339 completion time of the source observation. |
-| `nwsl.sync.old.availability` | string | Recommended | development | Cached expected-goals availability before a source observation. |
+| `nwsl.sync.old.availability` | enum | Recommended | development | Cached expected-goals availability before a source observation. |
 | `nwsl.sync.old.away_xg` | double | Recommended | development | Cached away-team expected goals before a source change when present. |
 | `nwsl.sync.old.home_xg` | double | Recommended | development | Cached home-team expected goals before a source change when present. |
 | `nwsl.sync.rejection_kind` | string | Recommended | development | The bounded category of source rejection. |
@@ -258,15 +258,15 @@ One cache-only qualification and scenario recalculation with no ASA requests.
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
 | `nwsl.sync.forced` | boolean | Recommended | development | Whether the caller explicitly requested a full refresh or recalculation. |
 | `nwsl.sync.partial_failure` | boolean | Recommended | development | Whether source work succeeded but one or more optional downstream components failed. |
-| `nwsl.sync.qualification.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream qualification component. |
+| `nwsl.sync.qualification.outcome` | enum | Recommended | development | The low-cardinality outcome of the downstream qualification component. |
 | `nwsl.sync.qualification.refresh_reason` | string | Recommended | development | The bounded qualification refresh or no-op reason. |
 | `nwsl.sync.qualification.refresh_required` | boolean | Recommended | development | Whether the qualification refresher determined that work was required. |
 | `nwsl.sync.qualification.snapshot_checked` | boolean | Recommended | development | Whether the qualification refresher checked for a current persisted snapshot. |
 | `nwsl.sync.qualification.snapshot_found` | boolean | Recommended | development | Whether a matching qualification snapshot was found. |
 | `nwsl.sync.qualification_recalculated` | boolean | Recommended | development | Whether qualification was recalculated during the parent operation. |
-| `nwsl.sync.recalculate.outcome` | string | Required | development | The low-cardinality terminal outcome of cache-only recalculation. |
+| `nwsl.sync.recalculate.outcome` | enum | Required | development | The low-cardinality terminal outcome of cache-only recalculation. |
 | `nwsl.sync.recalculate.reason` | string | Recommended | development | The bounded reason for a cache-only derived recalculation. |
-| `nwsl.sync.scenario.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream scenario component. |
+| `nwsl.sync.scenario.outcome` | enum | Recommended | development | The low-cardinality outcome of the downstream scenario component. |
 | `nwsl.sync.scenario.refresh_reason` | string | Recommended | development | The bounded scenario refresh or no-op reason. |
 | `nwsl.sync.scenario.refresh_required` | boolean | Recommended | development | Whether the scenario refresher determined that work was required. |
 | `nwsl.sync.scenario.snapshot_checked` | boolean | Recommended | development | Whether the scenario refresher checked for a current persisted snapshot. |
@@ -293,14 +293,14 @@ One compatibility synchronization sequence for a selected season and stage.
 | `nwsl.sync.expected_fixture_count` | int | Recommended | development | Expected complete fixture inventory size for the selected competition scope. |
 | `nwsl.sync.forced` | boolean | Recommended | development | Whether the caller explicitly requested a full refresh or recalculation. |
 | `nwsl.sync.games_seen` | int | Recommended | development | Number of game rows observed during the synchronization run. |
-| `nwsl.sync.outcome` | string | Required | development | The low-cardinality terminal outcome of the compatibility synchronization run. |
+| `nwsl.sync.outcome` | enum | Required | development | The low-cardinality terminal outcome of the compatibility synchronization run. |
 | `nwsl.sync.partial_failure` | boolean | Recommended | development | Whether source work succeeded but one or more optional downstream components failed. |
-| `nwsl.sync.qualification.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream qualification component. |
-| `nwsl.sync.scenario.outcome` | string | Recommended | development | The low-cardinality outcome of the downstream scenario component. |
+| `nwsl.sync.qualification.outcome` | enum | Recommended | development | The low-cardinality outcome of the downstream qualification component. |
+| `nwsl.sync.scenario.outcome` | enum | Recommended | development | The low-cardinality outcome of the downstream scenario component. |
 | `nwsl.sync.skipped` | boolean | Recommended | development | Whether synchronization was skipped because another lease holder was active. |
 | `nwsl.sync.teams_seen` | int | Recommended | development | Number of team rows observed during the synchronization run. |
 | `nwsl.sync.trigger` | string | Required | development | The low-cardinality caller that initiated synchronization or recalculation. |
-| `nwsl.sync.xg.outcome` | string | Recommended | development | The low-cardinality outcome of expected-goals synchronization. |
+| `nwsl.sync.xg.outcome` | enum | Recommended | development | The low-cardinality outcome of expected-goals synchronization. |
 
 
 ### `sync.source_operation`
@@ -319,7 +319,7 @@ One ASA resource request and its corresponding cache mutation.
 | `nwsl.stage` | string | Recommended | development | The competition stage associated with an operation. |
 | `nwsl.sync.downstream_inputs_changed` | boolean | Recommended | development | Whether one source operation changed inputs consumed by derived calculations. |
 | `nwsl.sync.mode` | string | Required | development | Whether one source operation is authoritative or targeted. |
-| `nwsl.sync.operation.outcome` | string | Required | development | The low-cardinality terminal outcome of one source operation. |
+| `nwsl.sync.operation.outcome` | enum | Required | development | The low-cardinality terminal outcome of one source operation. |
 | `nwsl.sync.requested_rows` | int | Recommended | development | Number of source identities requested by one source operation. |
 | `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
 | `nwsl.sync.returned_rows` | int | Recommended | development | Number of source rows returned by one source operation. |
@@ -335,7 +335,7 @@ One ASA resource request and its corresponding cache mutation.
 | `nwsl.sync.source_value_changed_count` | int | Recommended | development | Number of normalized source values changed. |
 | `nwsl.sync.source_value_initialized_count` | int | Recommended | development | Number of previously missing normalized source values initialized. |
 | `nwsl.sync.trigger` | string | Required | development | The low-cardinality caller that initiated synchronization or recalculation. |
-| `nwsl.sync.update.decision` | string | Recommended | development | The bounded aggregate persistence decision for one source operation. |
+| `nwsl.sync.update.decision` | enum | Recommended | development | The bounded aggregate persistence decision for one source operation. |
 | `nwsl.sync.update.reason` | string | Recommended | development | The bounded reason for the aggregate source persistence decision. |
 
 
@@ -353,7 +353,7 @@ One bounded attempt to ensure historical venue summaries required by forecasts.
 | `error.type` | enum | Conditional: Present when historical venue refresh failed. | stable | Describes a class of error the operation ended with. |
 | `nwsl.season` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
-| `nwsl.sync.venue_history.outcome` | string | Required | development | The low-cardinality terminal outcome of historical venue refresh. |
+| `nwsl.sync.venue_history.outcome` | enum | Required | development | The low-cardinality terminal outcome of historical venue refresh. |
 | `nwsl.sync.venue_history_refreshed_season_count` | int | Recommended | development | Number of historical venue seasons successfully refreshed. |
 | `nwsl.sync.venue_history_requested_season_count` | int | Recommended | development | Number of historical seasons requested for forecast venue history. |
 

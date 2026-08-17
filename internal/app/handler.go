@@ -25,6 +25,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/strength"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -809,17 +810,12 @@ func (a *application) loadSeasonData(parent context.Context, season string, stag
 	if len(stages) != 0 {
 		stage = stages[0]
 	}
-	ctx, span := telemetry.Tracer().Start(parent, "cache.season.load",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.cache.name", "season"),
-			attribute.String("nwsl.season", season),
-			attribute.String("nwsl.stage", stage),
-		),
+	ctx, span := telemetry.Tracer().Start(parent, nwslconv.SpanCacheSeasonLoad, trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(nwslconv.CacheName("season"), nwslconv.Season(season), nwslconv.Stage(stage)),
 	)
 	defer func() {
 		if err != nil {
-			err = telemetry.RecordWarningWithType(ctx, span, err, "cache.season.load", telemetry.ErrorTypeStorageFailure)
+			err = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.SpanCacheSeasonLoad, telemetry.ErrorTypeStorageFailure)
 		}
 		span.End()
 	}()
@@ -854,19 +850,9 @@ func seasonDataAttributes(data cache.SeasonData, season, stage string) []attribu
 			xgUnavailable++
 		}
 	}
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.season", season),
-		attribute.String("nwsl.stage", stage),
-		attribute.String("nwsl.cache.fixture_snapshot_id", data.FixtureSnapshotID),
-		attribute.Int("nwsl.season.team_count", len(data.Teams)),
-		attribute.Int("nwsl.season.fixture_count", len(data.Games)),
-		attribute.Int("nwsl.season.completed_fixture_count", completed),
-		attribute.Int("nwsl.season.remaining_fixture_count", remaining),
-		attribute.Int("nwsl.season.xg_available_count", xgAvailable),
-		attribute.Int("nwsl.season.xg_unavailable_count", xgUnavailable),
-	}
+	attributes := []attribute.KeyValue{nwslconv.Season(season), nwslconv.Stage(stage), nwslconv.CacheFixtureSnapshotID(data.FixtureSnapshotID), nwslconv.SeasonTeamCount(len(data.Teams)), nwslconv.SeasonFixtureCount(len(data.Games)), nwslconv.SeasonCompletedFixtureCount(completed), nwslconv.SeasonRemainingFixtureCount(remaining), nwslconv.SeasonXGAvailableCount(xgAvailable), nwslconv.SeasonXGUnavailableCount(xgUnavailable)}
 	if data.LastSuccess != nil {
-		attributes = append(attributes, attribute.Float64("nwsl.cache.last_success_age_seconds", time.Since(data.LastSuccess.FinishedAt).Seconds()))
+		attributes = append(attributes, nwslconv.CacheLastSuccessAgeSeconds(time.Since(data.LastSuccess.FinishedAt).Seconds()))
 	}
 	return attributes
 }
