@@ -8,7 +8,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
-	"go.opentelemetry.io/otel/attribute"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -21,28 +21,20 @@ type venueSummaryStore interface {
 // timeout so one slow upstream response does not consume the next season's
 // budget.
 func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage string, count int, timeout time.Duration) (err error) {
-	ctx, span := telemetry.Tracer().Start(ctx, "sync.venue_history",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.season", currentSeason),
-			attribute.String("nwsl.stage", stage),
-			attribute.Int("nwsl.sync.venue_history_requested_season_count", count),
-		),
+	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncVenueHistory, trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(nwslconv.Season(currentSeason), nwslconv.Stage(stage), nwslconv.SyncVenueHistoryRequestedSeasonCount(count)),
 	)
 	refreshed := 0
 	recordVenueHistoryException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, "sync.venue_history", errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanSyncVenueHistory, errorType)
 	}
 	defer func() {
-		outcome := "complete"
+		outcome := nwslconv.SyncVenueHistoryOutcomeComplete
 		if err != nil {
-			outcome = "failure"
+			outcome = nwslconv.SyncVenueHistoryOutcomeFailure
 			telemetry.MarkError(span, err)
 		}
-		span.SetAttributes(
-			attribute.Int("nwsl.sync.venue_history_refreshed_season_count", refreshed),
-			attribute.String("nwsl.sync.venue_history.outcome", outcome),
-		)
+		span.SetAttributes(nwslconv.SyncVenueHistoryRefreshedSeasonCount(refreshed), nwslconv.SyncVenueHistoryOutcome(outcome))
 		span.End()
 	}()
 	store, ok := s.Store.(venueSummaryStore)

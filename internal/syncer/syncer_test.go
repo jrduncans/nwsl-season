@@ -168,6 +168,9 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 	if got := telemetryAttributes(span)["error.type"].AsString(); got != telemetry.ErrorTypeUpstreamFailure {
 		t.Errorf("sync.run error.type = %q, want %q", got, telemetry.ErrorTypeUpstreamFailure)
 	}
+	if got := telemetryAttributes(span)["nwsl.sync.outcome"].AsString(); got != "failure" {
+		t.Errorf("sync.run outcome = %q, want failure", got)
+	}
 
 	if _, err := (Service{}).Run(context.Background(), RunOptions{Season: "2024", Stage: "Regular Season"}); err == nil {
 		t.Fatal("Run() error = nil, want configuration failure")

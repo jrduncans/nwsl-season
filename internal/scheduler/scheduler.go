@@ -14,6 +14,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -143,13 +144,13 @@ func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
-	ctx, span := telemetry.Tracer().Start(context.Background(), "scheduler.tick", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(attribute.String("nwsl.season", s.config.Season), attribute.String("nwsl.stage", s.config.Stage)))
+	ctx, span := telemetry.Tracer().Start(context.Background(), nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.Season(s.config.Season), nwslconv.Stage(s.config.Stage)))
 	defer span.End()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
 	snapshot, err := s.store.PlanningSnapshot(planningCtx)
 	planningCancel()
 	if err != nil {
-		span.SetAttributes(attribute.String("nwsl.scheduler.action", "read_planning_snapshot"), attribute.String("nwsl.scheduler.outcome", "failure"))
+		span.SetAttributes(nwslconv.SchedulerAction("read_planning_snapshot"), nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeFailure))
 		_ = telemetry.RecordWarningWithType(ctx, span, err, "scheduler.planning_snapshot", telemetry.ErrorTypeStorageFailure)
 		return
 	}
@@ -157,94 +158,78 @@ func (s *Scheduler) check() {
 	// syncer.Service.Run's derived-data refresh. Recheck an already published
 	// current inventory before any maintenance work: a slow or failed archived
 	// request must not indefinitely block a missing clinching batch.
-	preflightCalculation := "not_needed"
+	preflightCalculation := nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded
 	if currentInventoryAvailable(snapshot, s.config.Season, s.config.Stage) {
 		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "preflight")
 	}
-	span.SetAttributes(attribute.String("nwsl.scheduler.clinching_preflight_outcome", preflightCalculation))
+	span.SetAttributes(nwslconv.SchedulerClinchingPreflightOutcome(preflightCalculation))
 	now := s.now().UTC()
 	jobs := Plan(snapshot, s.config, now)
 	availableJobs := Plan(snapshot, unlimitedRequestBudget(s.config), now)
-	span.SetAttributes(attribute.Int("nwsl.scheduler.job_count", len(jobs)), attribute.Int("nwsl.scheduler.request_budget", requestBudget(s.config)))
+	span.SetAttributes(nwslconv.SchedulerJobCount(len(jobs)), nwslconv.SchedulerRequestBudget(requestBudget(s.config)))
 	if len(jobs) == 0 {
-		span.AddEvent("scheduler.decision", trace.WithAttributes(
-			attribute.String("nwsl.scheduler.decision", "not_check"),
-			attribute.String("nwsl.scheduler.reason", "no_source_request_due"),
-		))
+		span.AddEvent(nwslconv.EventSchedulerDecision, trace.WithAttributes(nwslconv.SchedulerDecision(nwslconv.SchedulerDecisionNotCheck), nwslconv.SchedulerReason("no_source_request_due")))
 		outcome := preflightCalculation
-		if outcome == "not_needed" {
+		if outcome == nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded {
 			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "no_source_request_due")
 		}
-		span.SetAttributes(attribute.String("nwsl.scheduler.action", "recalculate"), attribute.Int("nwsl.scheduler.request_count", 0), attribute.String("nwsl.scheduler.outcome", outcome))
+		span.SetAttributes(nwslconv.SchedulerAction("recalculate"), nwslconv.SchedulerRequestCount(0), nwslconv.SchedulerOutcome(outcome))
 		return
 	}
 	for _, job := range jobs {
-		decisionAttributes := []attribute.KeyValue{
-			attribute.String("nwsl.scheduler.decision", "check"),
-			attribute.String("nwsl.scheduler.reason", job.Reason),
-			attribute.String("nwsl.scheduler.job_kind", string(job.Kind)),
-			attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage),
-			attribute.Int("nwsl.scheduler.requested_rows", len(job.Operation.Requested)),
-		}
+		decisionAttributes := []attribute.KeyValue{nwslconv.SchedulerDecision(nwslconv.SchedulerDecisionCheck), nwslconv.SchedulerReason(job.Reason), nwslconv.SchedulerJobKind(string(job.Kind)), nwslconv.SchedulerJobScope(job.Operation.Season + "/" + job.Operation.Stage), nwslconv.SchedulerRequestedRows(len(job.Operation.Requested))}
 		if job.Selection.Policy != "" {
 			decisionAttributes = append(decisionAttributes, selectionAttributes(job.Selection)...)
 		}
-		span.AddEvent("scheduler.decision", trace.WithAttributes(decisionAttributes...))
+		span.AddEvent(nwslconv.EventSchedulerDecision, trace.WithAttributes(decisionAttributes...))
 	}
 	if len(availableJobs) > len(jobs) {
-		span.AddEvent("scheduler.decision", trace.WithAttributes(
-			attribute.String("nwsl.scheduler.decision", "not_check"),
-			attribute.String("nwsl.scheduler.reason", "source_request_budget_exhausted"),
-			attribute.Int("nwsl.scheduler.deferred_job_count", len(availableJobs)-len(jobs)),
-		))
+		span.AddEvent(nwslconv.EventSchedulerDecision, trace.WithAttributes(nwslconv.SchedulerDecision(nwslconv.SchedulerDecisionNotCheck), nwslconv.SchedulerReason("source_request_budget_exhausted"), nwslconv.SchedulerDeferredJobCount(len(availableJobs)-len(jobs))))
 	}
 	requests := 0
-	tickOutcome := "complete"
+	tickOutcome := nwslconv.SchedulerOutcomeComplete
 jobsLoop:
 	for _, job := range jobs {
 		select {
 		case <-s.stop:
-			tickOutcome = "stopped"
+			tickOutcome = nwslconv.SchedulerOutcomeStopped
 			break jobsLoop
 		default:
 		}
 		requestCtx, requestCancel := context.WithTimeout(ctx, s.config.Timeout)
-		jobCtx, jobSpan := telemetry.Tracer().Start(requestCtx, "scheduler.job", trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(jobAttributes(job, syncer.OperationResult{}, "planned", requests)...))
+		jobCtx, jobSpan := telemetry.Tracer().Start(requestCtx, nwslconv.SpanSchedulerJob, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(jobAttributes(job, syncer.OperationResult{}, nwslconv.SchedulerJobOutcomePlanned, requests)...))
 		outcome, result, attempted, jobErr := s.executeJob(jobCtx, job)
 		if attempted {
 			requests++
 		}
 		jobSpan.SetAttributes(jobAttributes(job, result, outcome, requests)...)
 		if strings.HasPrefix(outcome, "deferred") {
-			jobSpan.AddEvent("scheduler.decision", trace.WithAttributes(
-				attribute.String("nwsl.scheduler.decision", "not_check"),
-				attribute.String("nwsl.scheduler.reason", outcome),
-			))
+			jobSpan.AddEvent(nwslconv.EventSchedulerDecision, trace.WithAttributes(nwslconv.SchedulerDecision(nwslconv.SchedulerDecisionNotCheck), nwslconv.SchedulerReason(outcome)))
 		}
 		if jobErr != nil {
 			telemetry.MarkError(jobSpan, jobErr)
 		}
 		jobSpan.End()
 		requestCancel()
-		if outcome == "failure" {
-			tickOutcome = "failure"
+		if outcome == nwslconv.SchedulerJobOutcomeFailure {
+			tickOutcome = nwslconv.SchedulerOutcomeFailure
 			break
 		}
 		if strings.HasPrefix(outcome, "deferred") {
-			tickOutcome = "deferred"
+			tickOutcome = nwslconv.SchedulerOutcomeDeferred
 		}
 		if job.Class == JobHot && result.Games != nil && result.FixtureInputsChanged && job.Operation.Season == s.config.Season && job.Operation.Stage == s.config.Stage {
 			derivedOutcome := s.recalculateCachedClinching(ctx, span, job.Operation.Season, job.Operation.Stage, "game_inputs_changed")
-			if derivedOutcome == "failure" || derivedOutcome == "partial_failure" {
-				tickOutcome = "partial_failure"
+			if derivedOutcome == nwslconv.SchedulerClinchingPreflightOutcomeFailure || derivedOutcome == nwslconv.SchedulerClinchingPreflightOutcomePartialFailure {
+				tickOutcome = nwslconv.SchedulerOutcomePartialFailure
 			}
 		}
 		if job.Class == JobCold && (result.FixtureInputsChanged || result.XGInputsChanged) && historicalEvidenceScope(job.Operation.Season, job.Operation.Stage) {
-			span.SetAttributes(attribute.Bool("nwsl.scheduler.evaluation_evidence_dirty", true))
+			span.SetAttributes(nwslconv.SchedulerEvaluationEvidenceDirty(true))
 			s.logger.Info("historical correction changed evaluation evidence", "season", job.Operation.Season, "stage", job.Operation.Stage, "resource", job.Kind)
 		}
 	}
-	span.SetAttributes(attribute.Int("nwsl.scheduler.request_count", requests), attribute.String("nwsl.scheduler.outcome", tickOutcome))
+	span.SetAttributes(nwslconv.SchedulerRequestCount(requests), nwslconv.SchedulerOutcome(tickOutcome))
 }
 
 func currentInventoryAvailable(snapshot cache.PlanningSnapshot, season, stage string) bool {
@@ -266,10 +251,10 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 		acquired, err := s.store.TryAcquireSyncLease(parent, coldSweepLeaseKey, holder, now.Add(s.config.Timeout))
 		if err != nil {
 			s.logger.Error("acquire cold sweep lease", "job", job.Kind, "error", err)
-			return "failure", syncer.OperationResult{}, false, err
+			return nwslconv.SchedulerJobOutcomeFailure, syncer.OperationResult{}, false, err
 		}
 		if !acquired {
-			return "deferred_global_lease", syncer.OperationResult{}, false, nil
+			return nwslconv.SchedulerJobOutcomeDeferredGlobalLease, syncer.OperationResult{}, false, nil
 		}
 		defer func() {
 			releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -281,10 +266,10 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	acquired, err := s.store.TryAcquireSyncLease(parent, key, holder, now.Add(s.config.Timeout))
 	if err != nil {
 		s.logger.Error("acquire source job lease", "job", job.Kind, "error", err)
-		return "failure", syncer.OperationResult{}, false, err
+		return nwslconv.SchedulerJobOutcomeFailure, syncer.OperationResult{}, false, err
 	}
 	if !acquired {
-		return "deferred_scope_lease", syncer.OperationResult{}, false, nil
+		return nwslconv.SchedulerJobOutcomeDeferredScopeLease, syncer.OperationResult{}, false, nil
 	}
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -295,9 +280,9 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	result, err := s.runner.Execute(parent, job.Operation)
 	if err != nil {
 		s.logger.Error("source job failed", "job", job.Kind, "season", job.Operation.Season, "stage", job.Operation.Stage, "error", err)
-		return "failure", result, true, err
+		return nwslconv.SchedulerJobOutcomeFailure, result, true, err
 	}
-	return "complete", result, true, nil
+	return nwslconv.SchedulerJobOutcomeComplete, result, true, nil
 }
 
 // SweepDueArchived repeatedly takes fresh snapshots and executes only the one
@@ -356,22 +341,22 @@ func historicalEvidenceScope(season, stage string) bool {
 func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trace.Span, season, stage, reason string) string {
 	runner, ok := s.runner.(calculationRunner)
 	if !ok {
-		return "current"
+		return nwslconv.SchedulerClinchingPreflightOutcomeCurrent
 	}
 	ctx, cancel := context.WithTimeout(parent, s.config.Timeout)
 	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: season, Stage: stage, Trigger: "scheduler", Reason: reason})
 	cancel()
 	if err != nil {
 		telemetry.MarkError(span, err)
-		return "failure"
+		return nwslconv.SchedulerClinchingPreflightOutcomeFailure
 	}
 	if run.QualificationError != "" || run.ScenarioError != "" {
-		return "partial_failure"
+		return nwslconv.SchedulerClinchingPreflightOutcomePartialFailure
 	}
 	if run.QualificationRecalculated || run.ScenarioRecalculated {
-		return "complete"
+		return nwslconv.SchedulerClinchingPreflightOutcomeComplete
 	}
-	return "current"
+	return nwslconv.SchedulerClinchingPreflightOutcomeCurrent
 }
 
 func jobLeaseKey(job Job) string {
@@ -401,14 +386,9 @@ func jobAttributes(job Job, result syncer.OperationResult, outcome string, reque
 		returned = result.XG.Audit.ReturnedRows
 		material = result.XGInputsChanged
 	}
-	attributes := []attribute.KeyValue{attribute.String("nwsl.scheduler.job_kind", string(job.Kind)), attribute.String("nwsl.scheduler.job_class", string(job.Class)), attribute.String("nwsl.scheduler.job_outcome", outcome), attribute.String("nwsl.scheduler.job_reason", job.Reason), attribute.String("nwsl.scheduler.job_scope", job.Operation.Season+"/"+job.Operation.Stage), attribute.Int("nwsl.scheduler.job_requested_rows", len(job.Operation.Requested)), attribute.Int("nwsl.scheduler.job_returned_rows", returned), attribute.Bool("nwsl.scheduler.job_material", material), attribute.Int("nwsl.scheduler.request_count", requests)}
+	attributes := []attribute.KeyValue{nwslconv.SchedulerJobKind(string(job.Kind)), nwslconv.SchedulerJobClass(string(job.Class)), nwslconv.SchedulerJobOutcome(outcome), nwslconv.SchedulerJobReason(job.Reason), nwslconv.SchedulerJobScope(job.Operation.Season + "/" + job.Operation.Stage), nwslconv.SchedulerJobRequestedRows(len(job.Operation.Requested)), nwslconv.SchedulerJobReturnedRows(returned), nwslconv.SchedulerJobMaterial(material), nwslconv.SchedulerRequestCount(requests)}
 	if result.Games != nil {
-		attributes = append(attributes,
-			attribute.Bool("nwsl.scheduler.source_value_changed", result.GameFreshness.ValueChanged > 0),
-			attribute.Int("nwsl.scheduler.source_value_changed_count", result.GameFreshness.ValueChanged),
-			attribute.Int("nwsl.scheduler.source_value_initialized_count", result.GameFreshness.ValueInitialized),
-			attribute.Int("nwsl.scheduler.source_metadata_changed_count", result.GameFreshness.MetadataChanged),
-		)
+		attributes = append(attributes, nwslconv.SchedulerSourceValueChanged(result.GameFreshness.ValueChanged > 0), nwslconv.SchedulerSourceValueChangedCount(result.GameFreshness.ValueChanged), nwslconv.SchedulerSourceValueInitializedCount(result.GameFreshness.ValueInitialized), nwslconv.SchedulerSourceMetadataChangedCount(result.GameFreshness.MetadataChanged))
 	}
 	if result.XG != nil {
 		var changed, initialized, metadata, missing int
@@ -426,13 +406,7 @@ func jobAttributes(job Job, result syncer.OperationResult, outcome string, reque
 				missing++
 			}
 		}
-		attributes = append(attributes,
-			attribute.Bool("nwsl.scheduler.source_value_changed", changed > 0),
-			attribute.Int("nwsl.scheduler.source_value_changed_count", changed),
-			attribute.Int("nwsl.scheduler.source_value_initialized_count", initialized),
-			attribute.Int("nwsl.scheduler.source_metadata_changed_count", metadata),
-			attribute.Int("nwsl.scheduler.source_value_missing_count", missing),
-		)
+		attributes = append(attributes, nwslconv.SchedulerSourceValueChanged(changed > 0), nwslconv.SchedulerSourceValueChangedCount(changed), nwslconv.SchedulerSourceValueInitializedCount(initialized), nwslconv.SchedulerSourceMetadataChangedCount(metadata), nwslconv.SchedulerSourceValueMissingCount(missing))
 	}
 	if job.Selection.Policy != "" {
 		attributes = append(attributes, selectionAttributes(job.Selection)...)
@@ -441,32 +415,18 @@ func jobAttributes(job Job, result syncer.OperationResult, outcome string, reque
 }
 
 func selectionAttributes(selection selectionMetadata) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.scheduler.selection_policy", selection.Policy),
-		attribute.Int("nwsl.scheduler.candidate_count", selection.CandidateCount),
-		attribute.Int("nwsl.scheduler.eligible_count", selection.EligibleCount),
-		attribute.Int("nwsl.scheduler.expired_count", selection.ExpiredCount),
-		attribute.Int("nwsl.scheduler.invalid_kickoff_count", selection.InvalidKickoffCount),
-		attribute.Int("nwsl.scheduler.missing_xg_candidate_count", selection.MissingCandidateCount),
-		attribute.Int("nwsl.scheduler.missing_xg_eligible_count", selection.MissingEligibleCount),
-		attribute.Int("nwsl.scheduler.available_xg_candidate_count", selection.AvailableCandidateCount),
-		attribute.Int("nwsl.scheduler.available_xg_eligible_count", selection.AvailableEligibleCount),
-		attribute.Int("nwsl.scheduler.missing_xg_poll_interval_seconds", int(selection.MissingPollInterval/time.Second)),
-		attribute.Int("nwsl.scheduler.missing_xg_watch_window_seconds", int(selection.MissingWatchWindow/time.Second)),
-		attribute.Int("nwsl.scheduler.xg_correction_interval_seconds", int(selection.AvailablePollInterval/time.Second)),
-		attribute.Int("nwsl.scheduler.xg_correction_watch_window_seconds", int(selection.AvailableWatchWindow/time.Second)),
-	}
+	attributes := []attribute.KeyValue{nwslconv.SchedulerSelectionPolicy(selection.Policy), nwslconv.SchedulerCandidateCount(selection.CandidateCount), nwslconv.SchedulerEligibleCount(selection.EligibleCount), nwslconv.SchedulerExpiredCount(selection.ExpiredCount), nwslconv.SchedulerInvalidKickoffCount(selection.InvalidKickoffCount), nwslconv.SchedulerMissingXGCandidateCount(selection.MissingCandidateCount), nwslconv.SchedulerMissingXGEligibleCount(selection.MissingEligibleCount), nwslconv.SchedulerAvailableXGCandidateCount(selection.AvailableCandidateCount), nwslconv.SchedulerAvailableXGEligibleCount(selection.AvailableEligibleCount), nwslconv.SchedulerMissingXGPollIntervalSeconds(int(selection.MissingPollInterval / time.Second)), nwslconv.SchedulerMissingXGWatchWindowSeconds(int(selection.MissingWatchWindow / time.Second)), nwslconv.SchedulerXGCorrectionIntervalSeconds(int(selection.AvailablePollInterval / time.Second)), nwslconv.SchedulerXGCorrectionWatchWindowSeconds(int(selection.AvailableWatchWindow / time.Second))}
 	if selection.PollInterval > 0 {
-		attributes = append(attributes, attribute.Int("nwsl.scheduler.poll_interval_seconds", int(selection.PollInterval/time.Second)))
+		attributes = append(attributes, nwslconv.SchedulerPollIntervalSeconds(int(selection.PollInterval/time.Second)))
 	}
 	if selection.WatchWindow > 0 {
-		attributes = append(attributes, attribute.Int("nwsl.scheduler.watch_window_seconds", int(selection.WatchWindow/time.Second)))
+		attributes = append(attributes, nwslconv.SchedulerWatchWindowSeconds(int(selection.WatchWindow/time.Second)))
 	}
 	if !selection.OldestKickoff.IsZero() {
-		attributes = append(attributes, attribute.String("nwsl.scheduler.oldest_kickoff_utc", selection.OldestKickoff.UTC().Format(time.RFC3339)))
+		attributes = append(attributes, nwslconv.SchedulerOldestKickoffUTC(selection.OldestKickoff.UTC().Format(time.RFC3339)))
 	}
 	if !selection.NewestKickoff.IsZero() {
-		attributes = append(attributes, attribute.String("nwsl.scheduler.newest_kickoff_utc", selection.NewestKickoff.UTC().Format(time.RFC3339)))
+		attributes = append(attributes, nwslconv.SchedulerNewestKickoffUTC(selection.NewestKickoff.UTC().Format(time.RFC3339)))
 	}
 	return attributes
 }

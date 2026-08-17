@@ -101,10 +101,15 @@ groups:
         brief: Number of requested model results calculated instead of served from cache.
         examples: [1]
       - id: nwsl.forecast.outcome
-        type: string
+        type:
+          members:
+            - {id: computed, value: computed, stability: development, brief: Forecasts were computed.}
+            - {id: cache_hit, value: cache_hit, stability: development, brief: Every forecast was served from cache.}
+            - {id: overloaded, value: overloaded, stability: development, brief: The forecast concurrency limit was reached.}
+            - {id: timed_out, value: timed_out, stability: development, brief: Forecast computation exceeded its deadline.}
+            - {id: failure, value: failure, stability: development, brief: Forecast computation failed.}
         stability: development
         brief: The low-cardinality terminal outcome of a forecast executor run.
-        examples: ["computed", "cache_hit", "overloaded", "timed_out", "failure"]
       - id: nwsl.forecast.iteration_count
         type: int
         stability: development
@@ -161,10 +166,12 @@ groups:
         brief: Number of concurrent workers used by a forecast cache-warming operation.
         examples: [2]
       - id: nwsl.forecast.precache.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Forecast cache warming completed.}
+            - {id: failure, value: failure, stability: development, brief: Forecast cache warming failed.}
         stability: development
         brief: The low-cardinality terminal outcome of forecast cache warming.
-        examples: ["complete", "failure"]
 
   - id: span.nwsl.cache.season.load
     type: span

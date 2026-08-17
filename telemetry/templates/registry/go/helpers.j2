@@ -1,0 +1,13 @@
+{% macro smart_title_case(text) -%}
+{%- for index in range(0, text | length) -%}
+{%- if index == 0 or text[index - 1] in [".", "_"] -%}
+{{ text[index] | upper }}
+{%- elif text[index] not in [".", "_"] -%}
+{{ text[index] }}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+{% macro go_name(text) -%}
+{{ smart_title_case(text | replace("nwsl.", "") | replace("_", ".") | acronym) }}
+{%- endmacro %}

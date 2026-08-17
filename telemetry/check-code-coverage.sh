@@ -7,62 +7,41 @@ repository_root=$(
   cd -- "$(dirname -- "$0")/.."
   pwd
 )
-inventory_dir=$(mktemp -d)
-trap 'rm -r "$inventory_dir"' EXIT
 
 cd "$repository_root"
 
-rg --glob '*.go' --glob '!**/*_test.go' --no-filename --only-matching \
-  --replace '$1' \
-  'attribute\.(?:String|Int|Int64|Bool|Float64|StringSlice)\("(nwsl\.[^"]+)"' \
-  cmd internal \
-  | sed '/\.$/d' \
-  | sort -u >"$inventory_dir/code-attributes"
+production_globs="--glob=*.go --glob=!**/*_test.go --glob=!internal/telemetry/nwslconv/**"
 
-rg --glob '*.yaml' --no-filename --only-matching \
-  --replace '$1' \
-  '^[[:space:]]+- (?:id|ref): (nwsl\.[^[:space:]]+)$' \
-  telemetry/registry \
-  | sort -u >"$inventory_dir/registry-attributes"
-
-comm -23 "$inventory_dir/code-attributes" "$inventory_dir/registry-attributes" \
-  >"$inventory_dir/missing-attributes"
-
-{
-  rg --glob '*.go' --glob '!**/*_test.go' --no-filename --only-matching \
-    --replace '$1' \
-    'telemetry\.Tracer\(\)\.Start\([^"\n]*"([a-z][a-z0-9_.]+)"' \
-    cmd internal
-  rg --glob '*.go' --glob '!**/*_test.go' --no-filename --only-matching \
-    --replace '$1' \
-    'RecordCompleted(?:Warning)?Span\([^"\n]*"([a-z][a-z0-9_.]+)"' \
-    cmd internal
-  rg --glob '*.go' --glob '!**/*_test.go' --no-filename --only-matching \
-    --replace '$1' \
-    'AddEvent\("([a-z][a-z0-9_.]+)"' \
-    cmd internal
-} | sort -u >"$inventory_dir/code-signals"
-
-rg --glob '*.yaml' --no-filename --only-matching \
-  --replace '$1' \
-  '^[[:space:]]+name: ((?:cache|forecast|qualification|scenario|scheduler|sync)\.[^[:space:]]+)$' \
-  telemetry/registry \
-  | sort -u >"$inventory_dir/registry-signals"
-
-comm -23 "$inventory_dir/code-signals" "$inventory_dir/registry-signals" \
-  >"$inventory_dir/missing-signals"
-
-if [ -s "$inventory_dir/missing-attributes" ] || [ -s "$inventory_dir/missing-signals" ]; then
-  if [ -s "$inventory_dir/missing-attributes" ]; then
-    echo "telemetry attributes emitted by Go but missing from the Weaver registry:"
-    sed 's/^/  /' "$inventory_dir/missing-attributes"
-  fi
-  if [ -s "$inventory_dir/missing-signals" ]; then
-    echo "telemetry spans or events emitted by Go but missing from the Weaver registry:"
-    sed 's/^/  /' "$inventory_dir/missing-signals"
-  fi
-  echo "update telemetry/registry and regenerate docs/telemetry/catalog"
+# shellcheck disable=SC2086 # The glob arguments intentionally expand as words.
+if matches=$(rg $production_globs \
+  'attribute\.(String|Int|Int64|Bool|Float64|StringSlice|Key)\("nwsl\.' \
+  cmd internal); then
+  echo "raw nwsl.* attribute constructors are prohibited outside the generated package:"
+  printf '%s\n' "$matches"
   exit 1
 fi
 
-echo "Go telemetry literals are covered by the Weaver registry"
+# Domain packages may retain attribute.KeyValue as a transport type, but all
+# constructors belong in nwslconv. telemetry.go is the sole exception for
+# standard OTel resource and exception attributes.
+# shellcheck disable=SC2086 # The glob arguments intentionally expand as words.
+if matches=$(rg $production_globs --glob=!internal/telemetry/telemetry.go \
+  'attribute\.(String|Int|Int64|Bool|Float64|StringSlice|Key)\(' \
+  cmd internal); then
+  echo "OpenTelemetry attribute constructors outside telemetry plumbing and generated conventions are prohibited:"
+  printf '%s\n' "$matches"
+  exit 1
+fi
+
+# Signal names are generated alongside attributes. Keep production call sites
+# on those constants so renames cannot drift from the registry.
+# shellcheck disable=SC2086 # The glob arguments intentionally expand as words.
+if matches=$(rg $production_globs \
+  '"(cache\.season\.load|forecast\.(run|precache)|qualification\.(refresh|status_proof|no_help_batch)|scenario\.(refresh|generate_team)|scheduler\.(tick|job|decision)|sync\.(run|recalculate|source_operation|venue_history|asa_response|game_freshness|xg_freshness))"' \
+  cmd internal); then
+  echo "raw application span or event names are prohibited outside the generated package:"
+  printf '%s\n' "$matches"
+  exit 1
+fi
+
+echo "production Go instrumentation uses generated telemetry conventions"

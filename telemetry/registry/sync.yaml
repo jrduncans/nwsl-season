@@ -19,10 +19,13 @@ groups:
         stability: development
         brief: Expected complete fixture inventory size for the selected competition scope.
       - id: nwsl.sync.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Compatibility synchronization completed.}
+            - {id: conflict, value: conflict, stability: development, brief: Another lease holder prevented synchronization.}
+            - {id: failure, value: failure, stability: development, brief: Compatibility synchronization failed.}
         stability: development
         brief: The low-cardinality terminal outcome of the compatibility synchronization run.
-        examples: ["complete", "conflict", "failure"]
       - id: nwsl.sync.skipped
         type: boolean
         stability: development
@@ -68,10 +71,13 @@ groups:
         stability: development
         brief: Number of stale game rows removed by an authoritative refresh.
       - id: nwsl.sync.xg.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Expected-goals synchronization completed.}
+            - {id: failure, value: failure, stability: development, brief: Expected-goals synchronization failed.}
+            - {id: not_run, value: not_run, stability: development, brief: Expected-goals synchronization did not run.}
         stability: development
         brief: The low-cardinality outcome of expected-goals synchronization.
-        examples: ["complete", "failure", "not_run"]
       - id: nwsl.sync.xg.available_games
         type: int
         stability: development
@@ -81,25 +87,40 @@ groups:
         stability: development
         brief: Number of games explicitly observed without expected-goals data.
       - id: nwsl.sync.qualification.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Qualification was recalculated.}
+            - {id: current, value: current, stability: development, brief: Qualification was already current.}
+            - {id: failure, value: failure, stability: development, brief: Qualification recalculation failed.}
+            - {id: not_run, value: not_run, stability: development, brief: Qualification did not run.}
+            - {id: not_configured, value: not_configured, stability: development, brief: Qualification is not configured for the scope.}
         stability: development
         brief: The low-cardinality outcome of the downstream qualification component.
-        examples: ["complete", "current", "failure", "not_run"]
       - id: nwsl.sync.scenario.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Scenarios were recalculated.}
+            - {id: current, value: current, stability: development, brief: Scenarios were already current.}
+            - {id: failure, value: failure, stability: development, brief: Scenario recalculation failed.}
+            - {id: not_run, value: not_run, stability: development, brief: Scenario recalculation did not run.}
+            - {id: not_configured, value: not_configured, stability: development, brief: Scenarios are not configured for the scope.}
+            - {id: qualification_failed, value: qualification_failed, stability: development, brief: Qualification failure prevented scenario work.}
         stability: development
         brief: The low-cardinality outcome of the downstream scenario component.
-        examples: ["complete", "current", "failure", "not_run", "qualification_failed"]
       - id: nwsl.sync.recalculate.reason
         type: string
         stability: development
         brief: The bounded reason for a cache-only derived recalculation.
         examples: ["scheduler_preflight", "manual", "unspecified"]
       - id: nwsl.sync.recalculate.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Cache-only recalculation completed.}
+            - {id: current, value: current, stability: development, brief: Derived data was already current.}
+            - {id: partial_failure, value: partial_failure, stability: development, brief: One derived-data component failed.}
+            - {id: failure, value: failure, stability: development, brief: Cache-only recalculation failed.}
         stability: development
         brief: The low-cardinality terminal outcome of cache-only recalculation.
-        examples: ["complete", "current", "partial_failure", "failure"]
       - id: nwsl.sync.qualification_recalculated
         type: boolean
         stability: development
@@ -180,10 +201,12 @@ groups:
         stability: development
         brief: Number of source rows returned by one source operation.
       - id: nwsl.sync.operation.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: The source operation completed.}
+            - {id: failure, value: failure, stability: development, brief: The source operation failed.}
         stability: development
         brief: The low-cardinality terminal outcome of one source operation.
-        examples: ["complete", "failure"]
       - id: nwsl.sync.rows_inserted
         type: int
         stability: development
@@ -205,10 +228,12 @@ groups:
         stability: development
         brief: Whether one source operation changed inputs consumed by derived calculations.
       - id: nwsl.sync.update.decision
-        type: string
+        type:
+          members:
+            - {id: updated, value: updated, stability: development, brief: Source persistence changed durable data.}
+            - {id: not_updated, value: not_updated, stability: development, brief: Source persistence left durable data unchanged.}
         stability: development
         brief: The bounded aggregate persistence decision for one source operation.
-        examples: ["updated", "not_updated"]
       - id: nwsl.sync.update.reason
         type: string
         stability: development
@@ -267,10 +292,12 @@ groups:
         stability: development
         brief: Number of historical venue seasons successfully refreshed.
       - id: nwsl.sync.venue_history.outcome
-        type: string
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Historical venue refresh completed.}
+            - {id: failure, value: failure, stability: development, brief: Historical venue refresh failed.}
         stability: development
         brief: The low-cardinality terminal outcome of historical venue refresh.
-        examples: ["complete", "failure"]
       - id: nwsl.asa.returned_rows
         type: int
         stability: development
@@ -293,10 +320,12 @@ groups:
     note: These attributes belong to point-in-time diagnostic span events and may be high-cardinality. Use the aggregate synchronization and scheduler fields for routine grouping.
     attributes:
       - id: nwsl.sync.decision
-        type: string
+        type:
+          members:
+            - {id: updated, value: updated, stability: development, brief: The source value was updated.}
+            - {id: not_updated, value: not_updated, stability: development, brief: The source value was not updated.}
         stability: development
         brief: The bounded per-value source persistence decision.
-        examples: ["updated", "not_updated"]
       - id: nwsl.sync.reason
         type: string
         stability: development
@@ -452,15 +481,20 @@ groups:
         stability: development
         brief: Whether the incoming fixture is marked as a knockout game.
       - id: nwsl.sync.old.availability
-        type: string
+        type:
+          members:
+            - {id: missing, value: missing, stability: development, brief: No cached expected-goals observation exists.}
+            - {id: available, value: available, stability: development, brief: Cached expected-goals values are available.}
+            - {id: unavailable, value: unavailable, stability: development, brief: Expected-goals data was observed as unavailable.}
         stability: development
         brief: Cached expected-goals availability before a source observation.
-        examples: ["missing", "available", "unavailable"]
       - id: nwsl.sync.new.availability
-        type: string
+        type:
+          members:
+            - {id: available, value: available, stability: development, brief: Incoming expected-goals values are available.}
+            - {id: unavailable, value: unavailable, stability: development, brief: Incoming expected-goals data is unavailable.}
         stability: development
         brief: Incoming expected-goals availability after a source observation.
-        examples: ["available", "unavailable"]
       - id: nwsl.sync.old.home_xg
         type: double
         stability: development

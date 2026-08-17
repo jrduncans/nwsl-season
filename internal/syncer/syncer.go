@@ -15,6 +15,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -112,28 +113,17 @@ type RecalculateOptions struct {
 
 // Run fetches one complete ASA season/stage and atomically stores it.
 func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun, err error) {
-	ctx, span := telemetry.Tracer().Start(ctx, "sync.run",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.season", options.Season),
-			attribute.String("nwsl.stage", options.Stage),
-			attribute.Bool("nwsl.sync.forced", options.Force),
-			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
-			attribute.Int("nwsl.sync.expected_fixture_count", expectedFixtureCount(options)),
-		),
+	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncRun, trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(nwslconv.Season(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncExpectedFixtureCount(expectedFixtureCount(options))),
 	)
 	recordRunException := func(cause error, errorType string) error {
-		return telemetry.RecordErrorWithType(ctx, span, cause, "sync.run", errorType)
+		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.SpanSyncRun, errorType)
 	}
 	defer func() {
-		span.SetAttributes(syncRunAttributes(run)...)
+		span.SetAttributes(syncRunAttributes(run, err)...)
 		if err != nil {
 			if errors.Is(err, cache.ErrSyncInProgress) {
-				span.SetAttributes(
-					attribute.Bool("nwsl.error.expected", true),
-					attribute.Bool("nwsl.sync.skipped", true),
-					attribute.String("nwsl.sync.outcome", "conflict"),
-				)
+				span.SetAttributes(nwslconv.ErrorExpected(true), nwslconv.SyncSkipped(true))
 			} else {
 				telemetry.MarkError(span, err)
 			}
@@ -232,18 +222,11 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 // Recalculate reruns derived clinching calculations from the last successful
 // fixture snapshot without performing a data or xG sync.
 func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (run cache.SyncRun, err error) {
-	ctx, span := telemetry.Tracer().Start(ctx, "sync.recalculate",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("nwsl.season", options.Season),
-			attribute.String("nwsl.stage", options.Stage),
-			attribute.Bool("nwsl.sync.forced", options.Force),
-			attribute.String("nwsl.sync.trigger", syncTrigger(options.Trigger)),
-			attribute.String("nwsl.sync.recalculate.reason", recalculateReason(options.Reason)),
-		),
+	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncRecalculate, trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(nwslconv.Season(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncRecalculateReason(recalculateReason(options.Reason))),
 	)
 	recordRecalculationException := func(cause error, errorType string) error {
-		return telemetry.RecordErrorWithType(ctx, span, cause, "sync.recalculate", errorType)
+		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.SpanSyncRecalculate, errorType)
 	}
 	defer func() {
 		span.SetAttributes(recalculateRunAttributes(run, err)...)
@@ -286,36 +269,21 @@ func recalculateReason(value string) string {
 }
 
 func recalculateRunAttributes(run cache.SyncRun, err error) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.sync.recalculate.outcome", recalculateOutcome(run, err)),
-		attribute.Bool("nwsl.sync.partial_failure", run.QualificationError != "" || run.ScenarioError != ""),
-		attribute.Bool("nwsl.sync.qualification_recalculated", run.QualificationRecalculated),
-		attribute.Bool("nwsl.sync.qualification.refresh_required", run.QualificationRefreshRequired),
-		attribute.String("nwsl.sync.qualification.refresh_reason", refreshReason(run.QualificationRefreshReason, run.QualificationRecalculated, run.QualificationError, err)),
-		attribute.Bool("nwsl.sync.qualification.snapshot_checked", run.QualificationSnapshotChecked),
-		attribute.Bool("nwsl.sync.qualification.snapshot_found", run.QualificationSnapshotFound),
-		attribute.Bool("nwsl.sync.scenario_recalculated", run.ScenarioRecalculated),
-		attribute.Bool("nwsl.sync.scenario.refresh_required", run.ScenarioRefreshRequired),
-		attribute.String("nwsl.sync.scenario.refresh_reason", refreshReason(run.ScenarioRefreshReason, run.ScenarioRecalculated, run.ScenarioError, err)),
-		attribute.Bool("nwsl.sync.scenario.snapshot_checked", run.ScenarioSnapshotChecked),
-		attribute.Bool("nwsl.sync.scenario.snapshot_found", run.ScenarioSnapshotFound),
-		attribute.String("nwsl.sync.qualification.outcome", recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err, run.QualificationRefreshReason)),
-		attribute.String("nwsl.sync.scenario.outcome", recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err, run.ScenarioRefreshReason)),
-	}
+	attributes := []attribute.KeyValue{nwslconv.SyncRecalculateOutcome(recalculateOutcome(run, err)), nwslconv.SyncPartialFailure(run.QualificationError != "" || run.ScenarioError != ""), nwslconv.SyncQualificationRecalculated(run.QualificationRecalculated), nwslconv.SyncQualificationRefreshRequired(run.QualificationRefreshRequired), nwslconv.SyncQualificationRefreshReason(refreshReason(run.QualificationRefreshReason, run.QualificationRecalculated, run.QualificationError, err)), nwslconv.SyncQualificationSnapshotChecked(run.QualificationSnapshotChecked), nwslconv.SyncQualificationSnapshotFound(run.QualificationSnapshotFound), nwslconv.SyncScenarioRecalculated(run.ScenarioRecalculated), nwslconv.SyncScenarioRefreshRequired(run.ScenarioRefreshRequired), nwslconv.SyncScenarioRefreshReason(refreshReason(run.ScenarioRefreshReason, run.ScenarioRecalculated, run.ScenarioError, err)), nwslconv.SyncScenarioSnapshotChecked(run.ScenarioSnapshotChecked), nwslconv.SyncScenarioSnapshotFound(run.ScenarioSnapshotFound), nwslconv.SyncQualificationOutcome(recalculateComponentOutcome(run.QualificationRecalculated, run.QualificationError, err, run.QualificationRefreshReason)), nwslconv.SyncScenarioOutcome(recalculateComponentOutcome(run.ScenarioRecalculated, run.ScenarioError, err, run.ScenarioRefreshReason))}
 	if run.QualificationRulesVersion != "" {
-		attributes = append(attributes, attribute.String("nwsl.sync.qualification.rules_version", run.QualificationRulesVersion))
+		attributes = append(attributes, nwslconv.SyncQualificationRulesVersion(run.QualificationRulesVersion))
 	}
 	if run.ScenarioRulesVersion != "" {
-		attributes = append(attributes, attribute.String("nwsl.sync.scenario.rules_version", run.ScenarioRulesVersion))
+		attributes = append(attributes, nwslconv.SyncScenarioRulesVersion(run.ScenarioRulesVersion))
 	}
 	if run.ScenarioDefinitionVersion != "" {
-		attributes = append(attributes, attribute.String("nwsl.sync.scenario.definition_version", run.ScenarioDefinitionVersion))
+		attributes = append(attributes, nwslconv.SyncScenarioDefinitionVersion(run.ScenarioDefinitionVersion))
 	}
 	if run.ID > 0 {
-		attributes = append(attributes, attribute.Int64("nwsl.sync.source_run_id", run.ID))
+		attributes = append(attributes, nwslconv.SyncSourceRunID(int(run.ID)))
 	}
 	if run.FixtureSnapshotID != "" {
-		attributes = append(attributes, attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID))
+		attributes = append(attributes, nwslconv.CacheFixtureSnapshotID(run.FixtureSnapshotID))
 	}
 	return attributes
 }
@@ -329,18 +297,18 @@ func recalculateInputAttributes(s Service, teams []cache.Team, games []cache.Gam
 	if scenarioBudget <= 0 {
 		scenarioBudget = 30 * time.Second
 	}
+	// Keep the component-specific names used by qualification.refresh and
+	// scenario.refresh so no-op recalculations remain directly comparable
+	// with historical work-performing traces.
 	return []attribute.KeyValue{
-		// Keep the component-specific names used by qualification.refresh and
-		// scenario.refresh so no-op recalculations remain directly comparable
-		// with historical work-performing traces.
-		attribute.Int("nwsl.qualification.team_count", len(teams)),
-		attribute.Int("nwsl.qualification.fixture_count", len(games)),
-		attribute.Int64("nwsl.qualification.budget_ms", qualificationBudget.Milliseconds()),
-		attribute.Bool("nwsl.qualification.forced", force),
-		attribute.Int("nwsl.scenario.team_count", len(teams)),
-		attribute.Int("nwsl.scenario.fixture_count", len(games)),
-		attribute.Int64("nwsl.scenario.budget_ms", scenarioBudget.Milliseconds()),
-		attribute.Bool("nwsl.scenario.forced", force),
+		nwslconv.QualificationTeamCount(len(teams)),
+		nwslconv.QualificationFixtureCount(len(games)),
+		nwslconv.QualificationBudgetMs(int(qualificationBudget.Milliseconds())),
+		nwslconv.QualificationForced(force),
+		nwslconv.ScenarioTeamCount(len(teams)),
+		nwslconv.ScenarioFixtureCount(len(games)),
+		nwslconv.ScenarioBudgetMs(int(scenarioBudget.Milliseconds())),
+		nwslconv.ScenarioForced(force),
 	}
 }
 
@@ -359,31 +327,34 @@ func refreshReason(reason string, recalculated bool, componentErr string, runErr
 
 func recalculateOutcome(run cache.SyncRun, err error) string {
 	if err != nil {
-		return "failure"
+		return nwslconv.SyncRecalculateOutcomeFailure
 	}
 	if run.QualificationError != "" || run.ScenarioError != "" {
-		return "partial_failure"
+		return nwslconv.SyncRecalculateOutcomePartialFailure
 	}
 	if run.QualificationRecalculated || run.ScenarioRecalculated {
-		return "complete"
+		return nwslconv.SyncRecalculateOutcomeComplete
 	}
-	return "current"
+	return nwslconv.SyncRecalculateOutcomeCurrent
 }
 
 func recalculateComponentOutcome(recalculated bool, failure string, runErr error, reason string) string {
 	if runErr != nil {
-		return "not_run"
+		return nwslconv.SyncQualificationOutcomeNotRun
 	}
 	if failure != "" {
-		return "failure"
+		return nwslconv.SyncQualificationOutcomeFailure
 	}
-	if reason == "not_configured" || reason == "qualification_failed" {
-		return reason
+	if reason == "not_configured" {
+		return nwslconv.SyncQualificationOutcomeNotConfigured
+	}
+	if reason == "qualification_failed" {
+		return nwslconv.SyncScenarioOutcomeQualificationFailed
 	}
 	if recalculated {
-		return "complete"
+		return nwslconv.SyncQualificationOutcomeComplete
 	}
-	return "current"
+	return nwslconv.SyncQualificationOutcomeCurrent
 }
 
 func (s Service) pruneHistory(run cache.SyncRun) cache.SyncRun {
@@ -462,41 +433,28 @@ func syncTrigger(value string) string {
 	return value
 }
 
-func syncRunAttributes(run cache.SyncRun) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{
-		attribute.String("nwsl.sync.outcome", run.Outcome),
-		attribute.Int("nwsl.sync.teams_seen", run.TeamsUpserted),
-		attribute.Int("nwsl.sync.games_seen", run.GamesSeen),
-		attribute.Int("nwsl.sync.teams_inserted", run.TeamsInserted),
-		attribute.Int("nwsl.sync.teams_updated", run.TeamsUpdated),
-		attribute.Int("nwsl.sync.teams_unchanged", run.TeamsUnchanged),
-		attribute.Int("nwsl.sync.games_inserted", run.GamesInserted),
-		attribute.Int("nwsl.sync.games_updated", run.GamesUpdated),
-		attribute.Int("nwsl.sync.games_unchanged", run.GamesUnchanged),
-		attribute.Int("nwsl.sync.games_deleted", run.GamesDeleted),
-		attribute.String("nwsl.cache.fixture_snapshot_id", run.FixtureSnapshotID),
-		attribute.Bool("nwsl.sync.partial_failure", run.XGError != "" || run.QualificationError != "" || run.ScenarioError != ""),
-		attribute.String("nwsl.sync.xg.outcome", syncComponentOutcome(run.XGRun != nil, run.XGError)),
-		attribute.String("nwsl.sync.qualification.outcome", syncComponentOutcome(run.QualificationRecalculated, run.QualificationError)),
-		attribute.String("nwsl.sync.scenario.outcome", syncComponentOutcome(run.ScenarioRecalculated, run.ScenarioError)),
+func syncRunAttributes(run cache.SyncRun, runErr error) []attribute.KeyValue {
+	outcome := nwslconv.SyncOutcomeComplete
+	if errors.Is(runErr, cache.ErrSyncInProgress) {
+		outcome = nwslconv.SyncOutcomeConflict
+	} else if runErr != nil {
+		outcome = nwslconv.SyncOutcomeFailure
 	}
+	attributes := []attribute.KeyValue{nwslconv.SyncOutcome(outcome), nwslconv.SyncTeamsSeen(run.TeamsUpserted), nwslconv.SyncGamesSeen(run.GamesSeen), nwslconv.SyncTeamsInserted(run.TeamsInserted), nwslconv.SyncTeamsUpdated(run.TeamsUpdated), nwslconv.SyncTeamsUnchanged(run.TeamsUnchanged), nwslconv.SyncGamesInserted(run.GamesInserted), nwslconv.SyncGamesUpdated(run.GamesUpdated), nwslconv.SyncGamesUnchanged(run.GamesUnchanged), nwslconv.SyncGamesDeleted(run.GamesDeleted), nwslconv.CacheFixtureSnapshotID(run.FixtureSnapshotID), nwslconv.SyncPartialFailure(run.XGError != "" || run.QualificationError != "" || run.ScenarioError != ""), nwslconv.SyncXGOutcome(syncComponentOutcome(run.XGRun != nil, run.XGError)), nwslconv.SyncQualificationOutcome(syncComponentOutcome(run.QualificationRecalculated, run.QualificationError)), nwslconv.SyncScenarioOutcome(syncComponentOutcome(run.ScenarioRecalculated, run.ScenarioError))}
 	if run.XGRun != nil {
-		attributes = append(attributes,
-			attribute.Int64("nwsl.sync.xg.available_games", run.XGRun.AvailableGames),
-			attribute.Int64("nwsl.sync.xg.unavailable_games", run.XGRun.UnavailableGames),
-		)
+		attributes = append(attributes, nwslconv.SyncXGAvailableGames(int(run.XGRun.AvailableGames)), nwslconv.SyncXGUnavailableGames(int(run.XGRun.UnavailableGames)))
 	}
 	return attributes
 }
 
 func syncComponentOutcome(completed bool, failure string) string {
 	if failure != "" {
-		return "failure"
+		return nwslconv.SyncXGOutcomeFailure
 	}
 	if completed {
-		return "complete"
+		return nwslconv.SyncXGOutcomeComplete
 	}
-	return "not_run"
+	return nwslconv.SyncXGOutcomeNotRun
 }
 
 func leaseKey(options RunOptions) string {

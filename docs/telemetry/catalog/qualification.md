@@ -42,7 +42,7 @@ Team and achievement identifiers are high-cardinality drill-down fields. Outcome
 | `nwsl.qualification.no_help_batch.slow_count` | int | Recommended | development | — | Number of no-help batches exceeding the slow-operation threshold. |
 | `nwsl.qualification.no_help_batch.slowest_team_id` | string | Recommended | development | `["team-123"]` | The high-cardinality team identifier associated with the slowest no-help batch. |
 | `nwsl.qualification.no_help_batch_count` | int | Recommended | development | — | Number of per-team no-help path batches evaluated. |
-| `nwsl.qualification.outcome` | string | Recommended | development | `["recalculated","current","failure"]` | The low-cardinality terminal outcome of the qualification refresh. |
+| `nwsl.qualification.outcome` | enum | Recommended | development | `["recalculated","current","failure"]` | The low-cardinality terminal outcome of the qualification refresh. |
 | `nwsl.qualification.prune_count` | int | Recommended | development | — | Number of search branches pruned by an individual proof. |
 | `nwsl.qualification.recalculated` | boolean | Recommended | development | — | Whether a new qualification batch was calculated. |
 | `nwsl.qualification.reduced_fixture_count` | int | Recommended | development | — | Number of fixtures retained in an individual reduced proof problem. |
@@ -65,7 +65,7 @@ Team and achievement identifiers are high-cardinality drill-down fields. Outcome
 | `nwsl.qualification.result.status.clinched_count` | int | Recommended | development | — | Number of persisted qualification results with clinched status. |
 | `nwsl.qualification.result.status.not_clinched_count` | int | Recommended | development | — | Number of persisted qualification results with not-clinched status. |
 | `nwsl.qualification.result.status.unresolved_count` | int | Recommended | development | — | Number of persisted qualification results with unresolved status. |
-| `nwsl.qualification.status` | string | Recommended | development | `["clinched","not_clinched","unresolved"]` | The low-cardinality result of an individual qualification proof. |
+| `nwsl.qualification.status` | enum | Recommended | development | `["clinched","not_clinched","unresolved"]` | The low-cardinality result of an individual qualification proof. |
 | `nwsl.qualification.status_check_count` | int | Recommended | development | — | Number of team and achievement qualification statuses checked in the batch. |
 | `nwsl.qualification.status_proof.connected_component_count.max` | int | Recommended | development | — | Maximum connected-component count across all status proofs in the batch. |
 | `nwsl.qualification.status_proof.duration_max_ms` | double | Recommended | development | — | Maximum wall-clock milliseconds spent in one individual status proof. |
@@ -138,7 +138,7 @@ One persisted qualification batch refresh for a fixture snapshot.
 | `nwsl.qualification.no_help_batch.duration_max_ms` | double | Recommended | development | Maximum wall-clock milliseconds spent in one no-help path batch. |
 | `nwsl.qualification.no_help_batch.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in no-help path batches. |
 | `nwsl.qualification.no_help_batch.slow_count` | int | Recommended | development | Number of no-help batches exceeding the slow-operation threshold. |
-| `nwsl.qualification.outcome` | string | Required | development | The low-cardinality terminal outcome of the qualification refresh. |
+| `nwsl.qualification.outcome` | enum | Required | development | The low-cardinality terminal outcome of the qualification refresh. |
 | `nwsl.qualification.recalculated` | boolean | Recommended | development | Whether a new qualification batch was calculated. |
 | `nwsl.qualification.refresh_reason` | string | Recommended | development | The low-cardinality reason a new qualification batch was required. |
 | `nwsl.qualification.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the qualification input. |
@@ -176,7 +176,7 @@ Successful spans are emitted only when the proof exceeds the slow-operation thre
 | `nwsl.qualification.reduced_fixture_count` | int | Recommended | development | Number of fixtures retained in an individual reduced proof problem. |
 | `nwsl.qualification.reduced_team_count` | int | Recommended | development | Number of teams retained in an individual reduced proof problem. |
 | `nwsl.qualification.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the qualification input. |
-| `nwsl.qualification.status` | string | Recommended | development | The low-cardinality result of an individual qualification proof. |
+| `nwsl.qualification.status` | enum | Recommended | development | The low-cardinality result of an individual qualification proof. |
 | `nwsl.qualification.subset_probe_count` | int | Recommended | development | Number of opponent subsets probed by an individual proof. |
 | `nwsl.qualification.team_id` | string | Required | development | The high-cardinality ASA identifier of the team being evaluated. |
 | `nwsl.qualification.top_k` | int | Recommended | development | The highest qualifying table position for the achievement. |

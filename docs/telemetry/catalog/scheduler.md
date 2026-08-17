@@ -28,19 +28,19 @@ Job kinds, classes, decisions, outcomes, reasons, and selection policies are bou
 | `nwsl.scheduler.available_xg_candidate_count` | int | Recommended | development | — | Number of candidate fixtures with available expected-goals data. |
 | `nwsl.scheduler.available_xg_eligible_count` | int | Recommended | development | — | Number of fixtures with available expected-goals data eligible for correction polling. |
 | `nwsl.scheduler.candidate_count` | int | Recommended | development | — | Number of identities considered by a targeted selection policy. |
-| `nwsl.scheduler.clinching_preflight_outcome` | string | Recommended | development | `["current","complete","partial_failure","not_run"]` | The low-cardinality outcome of the cache-only clinching preflight. |
-| `nwsl.scheduler.decision` | string | Recommended | development | `["check","not_check"]` | The low-cardinality check or no-check decision recorded by a scheduler decision event. |
+| `nwsl.scheduler.clinching_preflight_outcome` | enum | Recommended | development | `["not_needed","current","complete","partial_failure","failure"]` | The low-cardinality outcome of the cache-only clinching preflight. |
+| `nwsl.scheduler.decision` | enum | Recommended | development | `["check","not_check"]` | The low-cardinality check or no-check decision recorded by a scheduler decision event. |
 | `nwsl.scheduler.deferred_job_count` | int | Recommended | development | — | Number of due source jobs deferred after the request budget was exhausted. |
 | `nwsl.scheduler.eligible_count` | int | Recommended | development | — | Number of targeted identities eligible at the observation time. |
 | `nwsl.scheduler.evaluation_evidence_dirty` | boolean | Recommended | development | — | Whether cold source changes require regeneration of checked-in model evaluation evidence. |
 | `nwsl.scheduler.expired_count` | int | Recommended | development | — | Number of targeted identities outside their polling watch window. |
-| `nwsl.scheduler.forecast_warm.outcome` | string | Recommended | development | `["complete","failure","not_run"]` | The low-cardinality result of warming forecasts after material source work. |
+| `nwsl.scheduler.forecast_warm.outcome` | enum | Recommended | development | `["complete","failed","not_run","not_needed"]` | The low-cardinality result of warming forecasts after material source work. |
 | `nwsl.scheduler.invalid_kickoff_count` | int | Recommended | development | — | Number of targeted identities excluded because their kickoff time was invalid. |
 | `nwsl.scheduler.job_class` | string | Recommended | development | `["hot","cold"]` | Whether a scheduler job belongs to the hot current scope or cold archived maintenance. |
 | `nwsl.scheduler.job_count` | int | Recommended | development | — | Number of source jobs selected for the scheduler tick. |
 | `nwsl.scheduler.job_kind` | string | Recommended | development | `["full_games","full_xg","checked_games","checked_xg"]` | The bounded resource and request shape of a scheduler job. |
 | `nwsl.scheduler.job_material` | boolean | Recommended | development | — | Whether one scheduler job changed downstream source inputs. |
-| `nwsl.scheduler.job_outcome` | string | Recommended | development | `["complete","failure","deferred_global_lease","deferred_scope_lease"]` | The low-cardinality terminal outcome of one scheduler job. |
+| `nwsl.scheduler.job_outcome` | enum | Recommended | development | `["planned","complete","failure","deferred_global_lease","deferred_scope_lease"]` | The low-cardinality terminal outcome of one scheduler job. |
 | `nwsl.scheduler.job_reason` | string | Recommended | development | `["kickoff_window_result_poll","kickoff_window_xg_poll","weekly_inventory_audit","archived_correction_sweep"]` | The bounded planner reason that produced one scheduler job. |
 | `nwsl.scheduler.job_requested_rows` | int | Recommended | development | — | Number of source identities requested by one scheduler job. |
 | `nwsl.scheduler.job_returned_rows` | int | Recommended | development | — | Number of source rows returned by one scheduler job. |
@@ -51,7 +51,7 @@ Job kinds, classes, decisions, outcomes, reasons, and selection policies are bou
 | `nwsl.scheduler.missing_xg_watch_window_seconds` | int | Recommended | development | — | Watch-window duration in seconds for missing expected-goals data. |
 | `nwsl.scheduler.newest_kickoff_utc` | string | Recommended | development | `["2026-08-16T02:00:00Z"]` | The high-cardinality RFC 3339 kickoff time of the newest selected identity. |
 | `nwsl.scheduler.oldest_kickoff_utc` | string | Recommended | development | `["2026-08-15T18:30:00Z"]` | The high-cardinality RFC 3339 kickoff time of the oldest selected identity. |
-| `nwsl.scheduler.outcome` | string | Recommended | development | `["complete","failure","partial_failure","no_work"]` | The low-cardinality terminal outcome of a scheduler tick. |
+| `nwsl.scheduler.outcome` | enum | Recommended | development | `["complete","current","failure","partial_failure","stopped","deferred"]` | The low-cardinality terminal outcome of a scheduler tick. |
 | `nwsl.scheduler.poll_interval_seconds` | int | Recommended | development | — | Polling interval in seconds for the active targeted selection policy. |
 | `nwsl.scheduler.reason` | string | Recommended | development | `["no_source_request_due","source_request_budget_exhausted","kickoff_window_result_poll"]` | The low-cardinality reason recorded by a scheduler decision event. |
 | `nwsl.scheduler.request_budget` | int | Recommended | development | — | Maximum source requests permitted during the scheduler tick. |
@@ -85,7 +85,7 @@ A point-in-time explanation of why the scheduler selected or skipped source work
 
 | Attribute | Type | Requirement | Stability | Description |
 | --- | --- | --- | --- | --- |
-| `nwsl.scheduler.decision` | string | Required | development | The low-cardinality check or no-check decision recorded by a scheduler decision event. |
+| `nwsl.scheduler.decision` | enum | Required | development | The low-cardinality check or no-check decision recorded by a scheduler decision event. |
 | `nwsl.scheduler.deferred_job_count` | int | Recommended | development | Number of due source jobs deferred after the request budget was exhausted. |
 | `nwsl.scheduler.job_kind` | string | Recommended | development | The bounded resource and request shape of a scheduler job. |
 | `nwsl.scheduler.job_scope` | string | Recommended | development | The season and stage scope of one scheduler job. |
@@ -108,12 +108,12 @@ One planned scheduler source job and its material-change result.
 | `nwsl.scheduler.candidate_count` | int | Recommended | development | Number of identities considered by a targeted selection policy. |
 | `nwsl.scheduler.eligible_count` | int | Recommended | development | Number of targeted identities eligible at the observation time. |
 | `nwsl.scheduler.expired_count` | int | Recommended | development | Number of targeted identities outside their polling watch window. |
-| `nwsl.scheduler.forecast_warm.outcome` | string | Recommended | development | The low-cardinality result of warming forecasts after material source work. |
+| `nwsl.scheduler.forecast_warm.outcome` | enum | Recommended | development | The low-cardinality result of warming forecasts after material source work. |
 | `nwsl.scheduler.invalid_kickoff_count` | int | Recommended | development | Number of targeted identities excluded because their kickoff time was invalid. |
 | `nwsl.scheduler.job_class` | string | Required | development | Whether a scheduler job belongs to the hot current scope or cold archived maintenance. |
 | `nwsl.scheduler.job_kind` | string | Required | development | The bounded resource and request shape of a scheduler job. |
 | `nwsl.scheduler.job_material` | boolean | Recommended | development | Whether one scheduler job changed downstream source inputs. |
-| `nwsl.scheduler.job_outcome` | string | Required | development | The low-cardinality terminal outcome of one scheduler job. |
+| `nwsl.scheduler.job_outcome` | enum | Required | development | The low-cardinality terminal outcome of one scheduler job. |
 | `nwsl.scheduler.job_reason` | string | Recommended | development | The bounded planner reason that produced one scheduler job. |
 | `nwsl.scheduler.job_requested_rows` | int | Recommended | development | Number of source identities requested by one scheduler job. |
 | `nwsl.scheduler.job_returned_rows` | int | Recommended | development | Number of source rows returned by one scheduler job. |
@@ -140,11 +140,11 @@ One scheduler planning and execution cycle.
 | --- | --- | --- | --- | --- |
 | `error.type` | enum | Conditional: Present when the scheduler tick failed. | stable | Describes a class of error the operation ended with. |
 | `nwsl.scheduler.action` | string | Recommended | development | The low-cardinality top-level action selected for a scheduler tick. |
-| `nwsl.scheduler.clinching_preflight_outcome` | string | Recommended | development | The low-cardinality outcome of the cache-only clinching preflight. |
+| `nwsl.scheduler.clinching_preflight_outcome` | enum | Recommended | development | The low-cardinality outcome of the cache-only clinching preflight. |
 | `nwsl.scheduler.deferred_job_count` | int | Recommended | development | Number of due source jobs deferred after the request budget was exhausted. |
 | `nwsl.scheduler.evaluation_evidence_dirty` | boolean | Recommended | development | Whether cold source changes require regeneration of checked-in model evaluation evidence. |
 | `nwsl.scheduler.job_count` | int | Recommended | development | Number of source jobs selected for the scheduler tick. |
-| `nwsl.scheduler.outcome` | string | Required | development | The low-cardinality terminal outcome of a scheduler tick. |
+| `nwsl.scheduler.outcome` | enum | Required | development | The low-cardinality terminal outcome of a scheduler tick. |
 | `nwsl.scheduler.request_budget` | int | Recommended | development | Maximum source requests permitted during the scheduler tick. |
 | `nwsl.scheduler.request_count` | int | Recommended | development | Number of source requests attempted during the scheduler tick or job. |
 | `nwsl.season` | string | Required | development | The competition season associated with an operation. |

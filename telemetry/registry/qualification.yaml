@@ -52,10 +52,13 @@ groups:
         stability: development
         brief: Whether a new qualification batch was calculated.
       - id: nwsl.qualification.outcome
-        type: string
+        type:
+          members:
+            - {id: recalculated, value: recalculated, stability: development, brief: A new qualification batch was calculated.}
+            - {id: current, value: current, stability: development, brief: The persisted qualification batch was current.}
+            - {id: failure, value: failure, stability: development, brief: Qualification refresh failed.}
         stability: development
         brief: The low-cardinality terminal outcome of the qualification refresh.
-        examples: ["recalculated", "current", "failure"]
       - id: nwsl.qualification.refresh_reason
         type: string
         stability: development
@@ -77,10 +80,13 @@ groups:
         brief: The highest qualifying table position for the achievement.
         examples: [1, 4, 8]
       - id: nwsl.qualification.status
-        type: string
+        type:
+          members:
+            - {id: clinched, value: clinched, stability: development, brief: The achievement is mathematically guaranteed.}
+            - {id: not_clinched, value: not_clinched, stability: development, brief: A blocking completion exists.}
+            - {id: unresolved, value: unresolved, stability: development, brief: Available data or compute could not decide the proof.}
         stability: development
         brief: The low-cardinality result of an individual qualification proof.
-        examples: ["clinched", "not_clinched", "unresolved"]
       - id: nwsl.qualification.method
         type: string
         stability: development
