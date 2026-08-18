@@ -22,7 +22,7 @@ type venueSummaryStore interface {
 // budget.
 func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage string, count int, timeout time.Duration) (err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncVenueHistory, trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(nwslconv.Season(currentSeason), nwslconv.Stage(stage), nwslconv.SyncVenueHistoryRequestedSeasonCount(count)),
+		trace.WithAttributes(nwslconv.SeasonName(currentSeason), nwslconv.Stage(stage), nwslconv.SyncVenueHistoryRequestedSeasonCount(count)),
 	)
 	refreshed := 0
 	recordVenueHistoryException := func(cause error, errorType string) error {

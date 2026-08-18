@@ -35,7 +35,7 @@ groups:
     display_name: NWSL Season Context Attributes
     brief: Shared application context used across operational spans.
     attributes:
-      - id: nwsl.season
+      - id: nwsl.season.name
         type: string
         stability: development
         brief: The competition season associated with an operation.

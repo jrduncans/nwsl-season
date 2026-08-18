@@ -147,7 +147,7 @@ One scheduler planning and execution cycle.
 | `nwsl.scheduler.outcome` | enum | Required | development | The low-cardinality terminal outcome of a scheduler tick. |
 | `nwsl.scheduler.request_budget` | int | Recommended | development | Maximum source requests permitted during the scheduler tick. |
 | `nwsl.scheduler.request_count` | int | Recommended | development | Number of source requests attempted during the scheduler tick or job. |
-| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
 
 

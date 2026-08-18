@@ -57,9 +57,9 @@ The span also copies the resulting snapshot dimensions to its enclosing request 
 | `nwsl.cache.fixture_snapshot_id` | string | Recommended | development | The high-cardinality immutable identifier of the published fixture snapshot. |
 | `nwsl.cache.last_success_age_seconds` | double | Recommended | development | Seconds elapsed since the latest successful source synchronization for the loaded scope. |
 | `nwsl.cache.name` | string | Required | development | The low-cardinality logical cache being accessed. |
-| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.season.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the loaded season snapshot. |
 | `nwsl.season.fixture_count` | int | Recommended | development | Number of fixtures in the loaded season snapshot. |
+| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.season.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the loaded season snapshot. |
 | `nwsl.season.team_count` | int | Recommended | development | Number of teams in the loaded season snapshot. |
 | `nwsl.season.xg_available_count` | int | Recommended | development | Number of cached fixtures with available expected-goals observations. |

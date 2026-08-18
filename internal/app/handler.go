@@ -811,7 +811,7 @@ func (a *application) loadSeasonData(parent context.Context, season string, stag
 		stage = stages[0]
 	}
 	ctx, span := telemetry.Tracer().Start(parent, nwslconv.SpanCacheSeasonLoad, trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(nwslconv.CacheName("season"), nwslconv.Season(season), nwslconv.Stage(stage)),
+		trace.WithAttributes(nwslconv.CacheName("season"), nwslconv.SeasonName(season), nwslconv.Stage(stage)),
 	)
 	defer func() {
 		if err != nil {
@@ -850,7 +850,7 @@ func seasonDataAttributes(data cache.SeasonData, season, stage string) []attribu
 			xgUnavailable++
 		}
 	}
-	attributes := []attribute.KeyValue{nwslconv.Season(season), nwslconv.Stage(stage), nwslconv.CacheFixtureSnapshotID(data.FixtureSnapshotID), nwslconv.SeasonTeamCount(len(data.Teams)), nwslconv.SeasonFixtureCount(len(data.Games)), nwslconv.SeasonCompletedFixtureCount(completed), nwslconv.SeasonRemainingFixtureCount(remaining), nwslconv.SeasonXGAvailableCount(xgAvailable), nwslconv.SeasonXGUnavailableCount(xgUnavailable)}
+	attributes := []attribute.KeyValue{nwslconv.SeasonName(season), nwslconv.Stage(stage), nwslconv.CacheFixtureSnapshotID(data.FixtureSnapshotID), nwslconv.SeasonTeamCount(len(data.Teams)), nwslconv.SeasonFixtureCount(len(data.Games)), nwslconv.SeasonCompletedFixtureCount(completed), nwslconv.SeasonRemainingFixtureCount(remaining), nwslconv.SeasonXGAvailableCount(xgAvailable), nwslconv.SeasonXGUnavailableCount(xgUnavailable)}
 	if data.LastSuccess != nil {
 		attributes = append(attributes, nwslconv.CacheLastSuccessAgeSeconds(time.Since(data.LastSuccess.FinishedAt).Seconds()))
 	}

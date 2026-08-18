@@ -114,7 +114,7 @@ type RecalculateOptions struct {
 // Run fetches one complete ASA season/stage and atomically stores it.
 func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun, err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncRun, trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(nwslconv.Season(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncExpectedFixtureCount(expectedFixtureCount(options))),
+		trace.WithAttributes(nwslconv.SeasonName(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncExpectedFixtureCount(expectedFixtureCount(options))),
 	)
 	recordRunException := func(cause error, errorType string) error {
 		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.SpanSyncRun, errorType)
@@ -223,7 +223,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 // fixture snapshot without performing a data or xG sync.
 func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (run cache.SyncRun, err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanSyncRecalculate, trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(nwslconv.Season(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncRecalculateReason(recalculateReason(options.Reason))),
+		trace.WithAttributes(nwslconv.SeasonName(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncRecalculateReason(recalculateReason(options.Reason))),
 	)
 	recordRecalculationException := func(cause error, errorType string) error {
 		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.SpanSyncRecalculate, errorType)

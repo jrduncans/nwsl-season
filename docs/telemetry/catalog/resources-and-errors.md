@@ -21,7 +21,7 @@ Shared application context used across operational spans.
 
 | Attribute | Type | Requirement | Stability | Examples | Description |
 | --- | --- | --- | --- | --- | --- |
-| `nwsl.season` | string | Recommended | development | `["2026"]` | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Recommended | development | `["2026"]` | The competition season associated with an operation. |
 | `nwsl.stage` | string | Recommended | development | `["Regular Season","Playoffs"]` | The competition stage associated with an operation. |
 
 

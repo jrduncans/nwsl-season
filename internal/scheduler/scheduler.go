@@ -144,7 +144,7 @@ func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
-	ctx, span := telemetry.Tracer().Start(context.Background(), nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.Season(s.config.Season), nwslconv.Stage(s.config.Stage)))
+	ctx, span := telemetry.Tracer().Start(context.Background(), nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
 	defer span.End()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
 	snapshot, err := s.store.PlanningSnapshot(planningCtx)

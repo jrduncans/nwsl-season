@@ -577,7 +577,7 @@ groups:
     stability: development
     brief: One compatibility synchronization sequence for a selected season and stage.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required
@@ -606,7 +606,7 @@ groups:
     stability: development
     brief: One cache-only qualification and scenario recalculation with no ASA requests.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required
@@ -641,7 +641,7 @@ groups:
     stability: development
     brief: One ASA resource request and its corresponding cache mutation.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
       - ref: nwsl.stage
       - ref: nwsl.sync.resource
         requirement_level: required
@@ -678,7 +678,7 @@ groups:
     stability: development
     brief: One bounded attempt to ensure historical venue summaries required by forecasts.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required

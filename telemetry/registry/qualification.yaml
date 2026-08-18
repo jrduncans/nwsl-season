@@ -275,7 +275,7 @@ groups:
     stability: development
     brief: One persisted qualification batch refresh for a fixture snapshot.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required
