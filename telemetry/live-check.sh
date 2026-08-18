@@ -111,11 +111,26 @@ if [ "$ready" != true ]; then
 	exit 1
 fi
 
+case "$(uname -s)" in
+Linux)
+	set -- --network host
+	collector_receiver_endpoint="127.0.0.1:$collector_port"
+	weaver_endpoint="127.0.0.1:$weaver_port"
+	;;
+*)
+	set -- \
+		--add-host host.docker.internal:host-gateway \
+		--publish "127.0.0.1:$collector_port:4318"
+	collector_receiver_endpoint="0.0.0.0:4318"
+	weaver_endpoint="host.docker.internal:$weaver_port"
+	;;
+esac
+
 docker run --rm --detach \
 	--name "$collector_name" \
-	--add-host host.docker.internal:host-gateway \
-	--publish "127.0.0.1:$collector_port:4318" \
-	--env "WEAVER_OTLP_ENDPOINT=host.docker.internal:$weaver_port" \
+	"$@" \
+	--env "COLLECTOR_OTLP_HTTP_ENDPOINT=$collector_receiver_endpoint" \
+	--env "WEAVER_OTLP_ENDPOINT=$weaver_endpoint" \
 	--volume "$repository_dir/telemetry/live-check-collector.yaml:/etc/otelcol/config.yaml:ro" \
 	"$collector_image" \
 	--config /etc/otelcol/config.yaml \

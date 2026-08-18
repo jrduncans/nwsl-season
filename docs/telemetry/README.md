@@ -68,6 +68,12 @@ runtime check using the same values, can prevent it from starting:
 | `14318` | Collector OTLP/HTTP receiver | `WEAVER_LIVE_CHECK_HTTP_PORT` |
 | `14320` | Weaver health and stop endpoint | `WEAVER_LIVE_CHECK_ADMIN_PORT` |
 
+On Linux, the Collector uses Docker host networking so it can reach Weaver's
+loopback-only gRPC listener. On Docker Desktop, the script publishes the
+Collector receiver on loopback and reaches Weaver through
+`host.docker.internal`. The three host-side ports and their overrides are the
+same in both modes.
+
 All three values must be distinct integers from 1 through 65535. The script
 rejects invalid or duplicate values before starting either process. If a valid
 port is already occupied, Weaver or Docker will fail during startup and the

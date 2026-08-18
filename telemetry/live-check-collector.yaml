@@ -2,7 +2,7 @@ receivers:
   otlp:
     protocols:
       http:
-        endpoint: 0.0.0.0:4318
+        endpoint: ${env:COLLECTOR_OTLP_HTTP_ENDPOINT}
 
 exporters:
   otlp_grpc/live_check:
