@@ -217,7 +217,7 @@ groups:
     stability: development
     brief: One scheduler planning and execution cycle.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required

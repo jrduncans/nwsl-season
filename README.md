@@ -175,7 +175,9 @@ forecast, qualification, scenario, scheduler, and synchronization telemetry. Its
 [Honeycomb query cookbook](docs/telemetry/honeycomb-query-cookbook.md) provides
 focused investigation recipes. CI regenerates both artifact sets in a temporary
 directory, fails on drift, and prevents production code from bypassing the
-generated conventions.
+generated conventions. It also runs a deterministic Weaver Live Check against
+signals exported by a fake-ASA sync and local-SQLite page request through a
+development-only Collector bridge.
 
 Local development remains silent and does not make telemetry network calls
 until an exporter is configured. Metrics are optional; traces and their

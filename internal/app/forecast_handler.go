@@ -45,7 +45,7 @@ func (a *Application) PrecacheForecastsWithTrigger(ctx context.Context, trigger 
 
 func (a *application) precacheForecasts(ctx context.Context, trigger string) (err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanForecastPrecache, trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(nwslconv.ForecastPreload(true), nwslconv.ForecastTrigger(trigger), nwslconv.Season(a.options.CurrentSeason), nwslconv.Stage(a.options.Stage)),
+		trace.WithAttributes(nwslconv.ForecastPreload(true), nwslconv.ForecastTrigger(trigger), nwslconv.SeasonName(a.options.CurrentSeason), nwslconv.Stage(a.options.Stage)),
 	)
 	modelCount := 0
 	failedModels := 0

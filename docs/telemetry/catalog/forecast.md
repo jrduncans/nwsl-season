@@ -68,7 +68,7 @@ One proactive attempt to warm the process-local forecast result cache.
 | `nwsl.forecast.precache.worker_count` | int | Recommended | development | Number of concurrent workers used by a forecast cache-warming operation. |
 | `nwsl.forecast.preload` | boolean | Required | development | Whether forecast work is proactive cache warming rather than an interactive request. |
 | `nwsl.forecast.trigger` | string | Required | development | The low-cardinality caller that initiated forecast work. |
-| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
 
 

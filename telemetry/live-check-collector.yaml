@@ -1,0 +1,27 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: ${env:COLLECTOR_OTLP_HTTP_ENDPOINT}
+
+exporters:
+  otlp_grpc/live_check:
+    endpoint: ${env:WEAVER_OTLP_ENDPOINT}
+    compression: none
+    tls:
+      insecure: true
+
+service:
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp_grpc/live_check]
+    metrics:
+      receivers: [otlp]
+      exporters: [otlp_grpc/live_check]
+    logs:
+      receivers: [otlp]
+      exporters: [otlp_grpc/live_check]

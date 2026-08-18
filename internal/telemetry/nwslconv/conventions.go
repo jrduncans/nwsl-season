@@ -219,9 +219,9 @@ const (
 	SchedulerWatchWindowSecondsKey                           = attribute.Key("nwsl.scheduler.watch_window_seconds")
 	SchedulerXGCorrectionIntervalSecondsKey                  = attribute.Key("nwsl.scheduler.xg_correction_interval_seconds")
 	SchedulerXGCorrectionWatchWindowSecondsKey               = attribute.Key("nwsl.scheduler.xg_correction_watch_window_seconds")
-	SeasonKey                                                = attribute.Key("nwsl.season")
 	SeasonCompletedFixtureCountKey                           = attribute.Key("nwsl.season.completed_fixture_count")
 	SeasonFixtureCountKey                                    = attribute.Key("nwsl.season.fixture_count")
+	SeasonNameKey                                            = attribute.Key("nwsl.season.name")
 	SeasonRemainingFixtureCountKey                           = attribute.Key("nwsl.season.remaining_fixture_count")
 	SeasonTeamCountKey                                       = attribute.Key("nwsl.season.team_count")
 	SeasonXGAvailableCountKey                                = attribute.Key("nwsl.season.xg_available_count")
@@ -1316,11 +1316,6 @@ func SchedulerXGCorrectionWatchWindowSeconds(value int) attribute.KeyValue {
 	return SchedulerXGCorrectionWatchWindowSecondsKey.Int(value)
 }
 
-// Season returns an attribute value for nwsl.season.
-func Season(value string) attribute.KeyValue {
-	return SeasonKey.String(value)
-}
-
 // SeasonCompletedFixtureCount returns an attribute value for nwsl.season.completed_fixture_count.
 func SeasonCompletedFixtureCount(value int) attribute.KeyValue {
 	return SeasonCompletedFixtureCountKey.Int(value)
@@ -1329,6 +1324,11 @@ func SeasonCompletedFixtureCount(value int) attribute.KeyValue {
 // SeasonFixtureCount returns an attribute value for nwsl.season.fixture_count.
 func SeasonFixtureCount(value int) attribute.KeyValue {
 	return SeasonFixtureCountKey.Int(value)
+}
+
+// SeasonName returns an attribute value for nwsl.season.name.
+func SeasonName(value string) attribute.KeyValue {
+	return SeasonNameKey.String(value)
 }
 
 // SeasonRemainingFixtureCount returns an attribute value for nwsl.season.remaining_fixture_count.

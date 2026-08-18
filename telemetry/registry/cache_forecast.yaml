@@ -183,7 +183,7 @@ groups:
     attributes:
       - ref: nwsl.cache.name
         requirement_level: required
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required
@@ -236,7 +236,7 @@ groups:
     stability: development
     brief: One proactive attempt to warm the process-local forecast result cache.
     attributes:
-      - ref: nwsl.season
+      - ref: nwsl.season.name
         requirement_level: required
       - ref: nwsl.stage
         requirement_level: required

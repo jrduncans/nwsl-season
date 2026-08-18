@@ -247,7 +247,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 func operationAttributes(operation Operation) []attribute.KeyValue {
 	attributes := []attribute.KeyValue{nwslconv.SyncResource(string(operation.Resource)), nwslconv.SyncMode(string(operation.Mode)), nwslconv.SyncTrigger(string(operation.Trigger)), nwslconv.SyncRequestedRows(len(operation.Requested))}
 	if operation.Season != "" {
-		attributes = append(attributes, nwslconv.Season(operation.Season))
+		attributes = append(attributes, nwslconv.SeasonName(operation.Season))
 	}
 	if operation.Stage != "" {
 		attributes = append(attributes, nwslconv.Stage(operation.Stage))

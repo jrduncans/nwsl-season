@@ -85,7 +85,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	result.Required = true
 	result.Reason = refreshReason
 	ctx, span := telemetry.Tracer().Start(ctx, nwslconv.SpanScenarioRefresh, trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(nwslconv.Season(sync.Season), nwslconv.Stage(sync.Stage), nwslconv.CacheFixtureSnapshotID(sync.FixtureSnapshotID), nwslconv.ScenarioTeamCount(len(teams)), nwslconv.ScenarioFixtureCount(len(games)), nwslconv.ScenarioBudgetMs(int(budget.Milliseconds())), nwslconv.ScenarioForced(force), nwslconv.ScenarioRefreshReason(refreshReason)),
+		trace.WithAttributes(nwslconv.SeasonName(sync.Season), nwslconv.Stage(sync.Stage), nwslconv.CacheFixtureSnapshotID(sync.FixtureSnapshotID), nwslconv.ScenarioTeamCount(len(teams)), nwslconv.ScenarioFixtureCount(len(games)), nwslconv.ScenarioBudgetMs(int(budget.Milliseconds())), nwslconv.ScenarioForced(force), nwslconv.ScenarioRefreshReason(refreshReason)),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
 		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanScenarioRefresh, errorType)

@@ -254,7 +254,7 @@ One cache-only qualification and scenario recalculation with no ASA requests.
 | --- | --- | --- | --- | --- |
 | `error.type` | enum | Conditional: Present when cache-only recalculation failed. | stable | Describes a class of error the operation ended with. |
 | `nwsl.cache.fixture_snapshot_id` | string | Recommended | development | The high-cardinality immutable identifier of the published fixture snapshot. |
-| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
 | `nwsl.sync.forced` | boolean | Recommended | development | Whether the caller explicitly requested a full refresh or recalculation. |
 | `nwsl.sync.partial_failure` | boolean | Recommended | development | Whether source work succeeded but one or more optional downstream components failed. |
@@ -288,7 +288,7 @@ One compatibility synchronization sequence for a selected season and stage.
 | --- | --- | --- | --- | --- |
 | `error.type` | enum | Conditional: Present when the synchronization run failed. | stable | Describes a class of error the operation ended with. |
 | `nwsl.cache.fixture_snapshot_id` | string | Recommended | development | The high-cardinality immutable identifier of the published fixture snapshot. |
-| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
 | `nwsl.sync.expected_fixture_count` | int | Recommended | development | Expected complete fixture inventory size for the selected competition scope. |
 | `nwsl.sync.forced` | boolean | Recommended | development | Whether the caller explicitly requested a full refresh or recalculation. |
@@ -315,7 +315,7 @@ One ASA resource request and its corresponding cache mutation.
 | Attribute | Type | Requirement | Stability | Description |
 | --- | --- | --- | --- | --- |
 | `error.type` | enum | Conditional: Present when the source operation failed. | stable | Describes a class of error the operation ended with. |
-| `nwsl.season` | string | Recommended | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Recommended | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Recommended | development | The competition stage associated with an operation. |
 | `nwsl.sync.downstream_inputs_changed` | boolean | Recommended | development | Whether one source operation changed inputs consumed by derived calculations. |
 | `nwsl.sync.mode` | string | Required | development | Whether one source operation is authoritative or targeted. |
@@ -351,7 +351,7 @@ One bounded attempt to ensure historical venue summaries required by forecasts.
 | Attribute | Type | Requirement | Stability | Description |
 | --- | --- | --- | --- | --- |
 | `error.type` | enum | Conditional: Present when historical venue refresh failed. | stable | Describes a class of error the operation ended with. |
-| `nwsl.season` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
 | `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
 | `nwsl.sync.venue_history.outcome` | enum | Required | development | The low-cardinality terminal outcome of historical venue refresh. |
 | `nwsl.sync.venue_history_refreshed_season_count` | int | Recommended | development | Number of historical venue seasons successfully refreshed. |
