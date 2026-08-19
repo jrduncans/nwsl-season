@@ -50,6 +50,40 @@ Dimensions describing Forecast Lab requests, calculations, and cache warming.
 ## Signals
 
 
+### `nwsl.forecast.precache.exception`
+
+- Convention: `event.nwsl.forecast.precache.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for failed forecast cache warming.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
+### `nwsl.forecast.run.exception`
+
+- Convention: `event.nwsl.forecast.run.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for a failed Forecast Lab calculation.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `forecast.precache`
 
 - Convention: `span.nwsl.forecast.precache`

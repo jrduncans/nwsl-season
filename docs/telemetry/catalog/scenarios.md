@@ -78,6 +78,40 @@ Team and slate identifiers are high-cardinality drill-down fields. Outcome, stat
 ## Signals
 
 
+### `nwsl.scenario.generate_team.exception`
+
+- Convention: `event.nwsl.scenario.generate_team.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for failed scenario generation for one team.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
+### `nwsl.scenario.refresh.exception`
+
+- Convention: `event.nwsl.scenario.refresh.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for failed scenario refresh or calculation.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `scenario.generate_team`
 
 - Convention: `span.nwsl.scenario.generate_team`

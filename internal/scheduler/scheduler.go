@@ -151,7 +151,7 @@ func (s *Scheduler) check() {
 	planningCancel()
 	if err != nil {
 		span.SetAttributes(nwslconv.SchedulerAction("read_planning_snapshot"), nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeFailure))
-		_ = telemetry.RecordWarningWithType(ctx, span, err, "scheduler.planning_snapshot", telemetry.ErrorTypeStorageFailure)
+		_ = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.ErrorCodeSchedulerPlanningSnapshot, telemetry.ErrorTypeStorageFailure)
 		return
 	}
 	// Source jobs use the split-operation API, so they do not invoke

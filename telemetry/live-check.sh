@@ -174,8 +174,9 @@ fi
 weaver_pid=""
 
 if ! grep -Eq '"span"[[:space:]]*:[[:space:]]*[1-9][0-9]*' "$state_dir/report.json" ||
-	! grep -Eq '"metric"[[:space:]]*:[[:space:]]*[1-9][0-9]*' "$state_dir/report.json"; then
-	echo "Weaver did not report both trace and metric samples" >&2
+	! grep -Eq '"metric"[[:space:]]*:[[:space:]]*[1-9][0-9]*' "$state_dir/report.json" ||
+	! grep -Eq '"log"[[:space:]]*:[[:space:]]*[1-9][0-9]*' "$state_dir/report.json"; then
+	echo "Weaver did not report trace, metric, and log samples" >&2
 	exit 1
 fi
 

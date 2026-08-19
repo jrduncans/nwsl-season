@@ -42,7 +42,7 @@ message is intentionally kept off the span because it may be high-cardinality or
 | `exception.message` | string | Conditional: Present on correlated exception logs and may contain sensitive information. | stable | `["fetch ASA games: upstream request failed"]` | The exception message. |
 | `exception.stacktrace` | string | Conditional: Present on correlated exception logs. | stable | `"Exception in thread \"main\" java.lang.RuntimeException: Test exception\\n at com.example.GenerateTrace.methodB(GenerateTrace.java:13)\\n at com.example.GenerateTrace.methodA(GenerateTrace.java:9)\\n at com.example.GenerateTrace.main(GenerateTrace.java:5)\n"` | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
 | `exception.type` | string | Conditional: Present on correlated exception logs. | stable | `["timeout","storage_failure","calculation_failure"]` | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
-| `nwsl.error.code` | string | Recommended | development | `["sync.fetch_asa","scheduler.planning_snapshot","forecast.run"]` | A stable identifier for the operation that detected an error. |
+| `nwsl.error.code` | enum | Recommended | development | `["cache.season.load","forecast.precache","forecast.run","qualification.no_help_batch","qualification.refresh","qualification.status_proof","scenario.generate_team","scenario.refresh","scheduler.planning_snapshot","sync.recalculate","sync.run","sync.venue_history"]` | The bounded stable identifier for the operation that detected an error. |
 | `nwsl.error.expected` | boolean | Recommended | development | `[true]` | Whether the failed outcome is an expected operational result rather than an unexpected defect. |
 
 
@@ -62,6 +62,26 @@ Resource attributes that identify an NWSL Season process and deployment.
 | `telemetry.sdk.version` | string | Required | stable | `["1.45.0"]` | The version string of the telemetry SDK. |
 
 
+
+
+
+## Signals
+
+
+### `exception`
+
+- Convention: `event.nwsl.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log emitted without an operation-specific error code.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
 
 
 

@@ -19,6 +19,21 @@ const (
 {% endfor %}
 )
 
+// ExceptionEventName returns the generated exception event name associated
+// with an error code. Unknown and uncoded failures use the generic event.
+func ExceptionEventName(code string) string {
+	switch code {
+{% for signal in ctx.signals %}
+{% if signal.type == "event" and signal.name is startingwith("nwsl.") and signal.name is endingwith(".exception") %}
+	case ErrorCode{{ helpers.go_name(signal.name | replace("nwsl.", "") | replace(".exception", "")) }}:
+		return Event{{ helpers.go_name(signal.name) }}
+{% endif %}
+{% endfor %}
+	default:
+		return EventException
+	}
+}
+
 const (
 {% for attr in ctx.attributes %}
 	{{ helpers.go_name(attr.name) }}Key = attribute.Key("{{ attr.name }}")

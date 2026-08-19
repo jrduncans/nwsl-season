@@ -26,7 +26,7 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 	)
 	refreshed := 0
 	recordVenueHistoryException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanSyncVenueHistory, errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.ErrorCodeSyncVenueHistory, errorType)
 	}
 	defer func() {
 		outcome := nwslconv.SyncVenueHistoryOutcomeComplete

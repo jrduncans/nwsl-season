@@ -3,6 +3,7 @@ package telemetrycontract_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,7 +18,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const liveCheckEnv = "NWSL_TELEMETRY_LIVE_CHECK"
@@ -126,6 +129,21 @@ func TestRuntimeTelemetryMatchesRegistry(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("fixtures response status = %d, want %d", response.StatusCode, http.StatusOK)
 	}
+
+	// Exercise the correlated exception-log contract as well as the successful
+	// application path. The span uses the same generated conventions as the
+	// production cache loader, while the production error helper supplies the
+	// event name, severity, exception fields, trace context, and error code.
+	errorCtx, errorSpan := telemetry.Tracer().Start(context.Background(), nwslconv.SpanCacheSeasonLoad,
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			nwslconv.CacheName("season"),
+			nwslconv.SeasonName("2024"),
+			nwslconv.Stage("Regular Season"),
+		),
+	)
+	_ = telemetry.RecordWarningWithType(errorCtx, errorSpan, errors.New("synthetic live-check cache failure"), nwslconv.ErrorCodeCacheSeasonLoad, telemetry.ErrorTypeStorageFailure)
+	errorSpan.End()
 }
 
 func newFakeASAServer(t *testing.T) *httptest.Server {

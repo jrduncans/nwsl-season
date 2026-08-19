@@ -33,15 +33,20 @@ if matches=$(rg $production_globs --glob=!internal/telemetry/telemetry.go \
   exit 1
 fi
 
-# Signal names are generated alongside attributes. Keep production call sites
-# on those constants so renames cannot drift from the registry.
+# Keep tracer creation behind the application's telemetry package so the AST
+# contract below can recognize every application-created span.
 # shellcheck disable=SC2086 # The glob arguments intentionally expand as words.
-if matches=$(rg $production_globs \
-  '"(cache\.season\.load|forecast\.(run|precache)|qualification\.(refresh|status_proof|no_help_batch)|scenario\.(refresh|generate_team)|scheduler\.(tick|job|decision)|sync\.(run|recalculate|source_operation|venue_history|asa_response|game_freshness|xg_freshness))"' \
-  cmd internal); then
-  echo "raw application span or event names are prohibited outside the generated package:"
+if matches=$(rg $production_globs --glob=!internal/telemetry/telemetry.go \
+  '"go\.opentelemetry\.io/otel"' cmd internal); then
+  echo "direct OpenTelemetry tracer access is prohibited outside telemetry plumbing:"
   printf '%s\n' "$matches"
   exit 1
 fi
+
+# Parse production call sites so multiline calls, new domains, and new signal
+# names cannot bypass the registry by falling outside a hand-maintained regex.
+go test ./internal/telemetrycontract \
+  -run '^TestProductionTelemetryUsesGeneratedConventions$' \
+  -count=1
 
 echo "production Go instrumentation uses generated telemetry conventions"

@@ -208,6 +208,57 @@ A point-in-time explanation of an individual fixture acceptance, rejection, or n
 | `nwsl.sync.update_kind` | string | Recommended | development | The bounded category of normalized source change. |
 
 
+### `nwsl.sync.recalculate.exception`
+
+- Convention: `event.nwsl.sync.recalculate.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for failed cache-only recalculation.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
+### `nwsl.sync.run.exception`
+
+- Convention: `event.nwsl.sync.run.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for a failed synchronization run.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
+### `nwsl.sync.venue_history.exception`
+
+- Convention: `event.nwsl.sync.venue_history.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for failed historical venue refresh.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `sync.xg_freshness`
 
 - Convention: `event.nwsl.sync.xg_freshness`

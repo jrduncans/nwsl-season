@@ -4,7 +4,7 @@ templates:
     application_mode: single
     file_name: README.md
   - pattern: domain.md.j2
-    filter: '.groups | map(select(.id == "registry.nwsl.resource" or .id == "registry.nwsl.context" or .id == "registry.nwsl.error"))'
+    filter: '.groups | map(select(.id == "registry.nwsl.resource" or .id == "registry.nwsl.context" or .id == "registry.nwsl.error" or .id == "event.nwsl.exception"))'
     application_mode: single
     file_name: resources-and-errors.md
   - pattern: domain.md.j2
@@ -12,19 +12,19 @@ templates:
     application_mode: single
     file_name: http.md
   - pattern: domain.md.j2
-    filter: '.groups | map(select(.id == "registry.nwsl.cache" or (.id | startswith("span.nwsl.cache."))))'
+    filter: '.groups | map(select(.id == "registry.nwsl.cache" or (.id | startswith("span.nwsl.cache.")) or (.id | startswith("event.nwsl.cache."))))'
     application_mode: single
     file_name: cache.md
   - pattern: domain.md.j2
-    filter: '.groups | map(select(.id == "registry.nwsl.forecast" or (.id | startswith("span.nwsl.forecast."))))'
+    filter: '.groups | map(select(.id == "registry.nwsl.forecast" or (.id | startswith("span.nwsl.forecast.")) or (.id | startswith("event.nwsl.forecast."))))'
     application_mode: single
     file_name: forecast.md
   - pattern: domain.md.j2
-    filter: '.groups | map(select((.id | startswith("registry.nwsl.qualification")) or (.id | startswith("span.nwsl.qualification."))))'
+    filter: '.groups | map(select((.id | startswith("registry.nwsl.qualification")) or (.id | startswith("span.nwsl.qualification.")) or (.id | startswith("event.nwsl.qualification."))))'
     application_mode: single
     file_name: qualification.md
   - pattern: domain.md.j2
-    filter: '.groups | map(select((.id | startswith("registry.nwsl.scenario")) or (.id | startswith("span.nwsl.scenario."))))'
+    filter: '.groups | map(select((.id | startswith("registry.nwsl.scenario")) or (.id | startswith("span.nwsl.scenario.")) or (.id | startswith("event.nwsl.scenario."))))'
     application_mode: single
     file_name: scenarios.md
   - pattern: domain.md.j2

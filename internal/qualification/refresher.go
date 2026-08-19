@@ -207,7 +207,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}
 	parentSpan := trace.SpanFromContext(ctx)
 	recordDecisionException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, parentSpan, cause, nwslconv.SpanQualificationRefresh, errorType)
+		return telemetry.RecordWarningWithType(ctx, parentSpan, cause, nwslconv.ErrorCodeQualificationRefresh, errorType)
 	}
 	if r.Store == nil {
 		return result, recordDecisionException(fmt.Errorf("qualification store is required"), telemetry.ErrorTypeInvalidArgument)
@@ -251,7 +251,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 		trace.WithAttributes(nwslconv.SeasonName(syncRun.Season), nwslconv.Stage(syncRun.Stage), nwslconv.CacheFixtureSnapshotID(syncRun.FixtureSnapshotID), nwslconv.QualificationTeamCount(len(teams)), nwslconv.QualificationFixtureCount(len(games)), nwslconv.QualificationBudgetMs(int(budget.Milliseconds())), nwslconv.QualificationForced(force), nwslconv.QualificationRefreshReason(refreshReason)),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanQualificationRefresh, errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.ErrorCodeQualificationRefresh, errorType)
 	}
 	defer func() {
 		span.SetAttributes(nwslconv.QualificationRecalculated(result.Recalculated), nwslconv.QualificationOutcome(calculationOutcome(result.Recalculated, err)))
@@ -310,7 +310,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	calculation := calculationTelemetry{}
 	span := trace.SpanFromContext(ctx)
 	recordCalculationException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanQualificationRefresh, errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.ErrorCodeQualificationRefresh, errorType)
 	}
 	span.SetAttributes(nwslconv.QualificationInputTeamCount(len(teams)), nwslconv.QualificationInputFixtureCount(len(games)), nwslconv.QualificationCompletedFixtureCount(completedFixtures(games)), nwslconv.QualificationRemainingFixtureCount(remainingFixtures(games)), nwslconv.QualificationAchievementIds(achievementIDs(r.Rules.Achievements)))
 	defer func() {
@@ -385,7 +385,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 			calculation.recordStatusProof(duration, row.Team.ID, a)
 			if evaluateErr != nil {
 				evaluateErr = telemetry.ClassifyError(evaluateErr, telemetry.ErrorTypeCalculationFailure)
-				telemetry.RecordCompletedWarningSpan(ctx, nwslconv.SpanQualificationStatusProof, probeStarted, finished, proofAttributes, evaluateErr, nwslconv.SpanQualificationStatusProof)
+				telemetry.RecordCompletedWarningSpan(ctx, nwslconv.SpanQualificationStatusProof, probeStarted, finished, proofAttributes, evaluateErr, nwslconv.ErrorCodeQualificationStatusProof)
 				return nil, evaluateErr
 			}
 			calculation.recordStatusProofDiagnostics(value)
@@ -455,7 +455,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		calculation.recordNoHelpBatch(duration, row.Team.ID)
 		if evaluateErr != nil {
 			evaluateErr = telemetry.ClassifyError(evaluateErr, telemetry.ErrorTypeCalculationFailure)
-			telemetry.RecordCompletedWarningSpan(ctx, nwslconv.SpanQualificationNoHelpBatch, probeStarted, finished, noHelpAttributes, evaluateErr, nwslconv.SpanQualificationNoHelpBatch)
+			telemetry.RecordCompletedWarningSpan(ctx, nwslconv.SpanQualificationNoHelpBatch, probeStarted, finished, noHelpAttributes, evaluateErr, nwslconv.ErrorCodeQualificationNoHelpBatch)
 			return nil, evaluateErr
 		}
 		if duration >= telemetry.SlowOperationThreshold {

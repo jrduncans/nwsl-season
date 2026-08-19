@@ -7,24 +7,37 @@ package nwslconv
 import "go.opentelemetry.io/otel/attribute"
 
 const (
-	SpanCacheSeasonLoad          = "cache.season.load"
-	SpanForecastPrecache         = "forecast.precache"
-	SpanForecastRun              = "forecast.run"
-	SpanQualificationNoHelpBatch = "qualification.no_help_batch"
-	SpanQualificationRefresh     = "qualification.refresh"
-	SpanQualificationStatusProof = "qualification.status_proof"
-	SpanScenarioGenerateTeam     = "scenario.generate_team"
-	SpanScenarioRefresh          = "scenario.refresh"
-	EventSchedulerDecision       = "scheduler.decision"
-	SpanSchedulerJob             = "scheduler.job"
-	SpanSchedulerTick            = "scheduler.tick"
-	EventSyncASAResponse         = "sync.asa_response"
-	EventSyncGameFreshness       = "sync.game_freshness"
-	SpanSyncRecalculate          = "sync.recalculate"
-	SpanSyncRun                  = "sync.run"
-	SpanSyncSourceOperation      = "sync.source_operation"
-	SpanSyncVenueHistory         = "sync.venue_history"
-	EventSyncXGFreshness         = "sync.xg_freshness"
+	SpanCacheSeasonLoad                     = "cache.season.load"
+	EventException                          = "exception"
+	SpanForecastPrecache                    = "forecast.precache"
+	SpanForecastRun                         = "forecast.run"
+	EventCacheSeasonLoadException           = "nwsl.cache.season.load.exception"
+	EventForecastPrecacheException          = "nwsl.forecast.precache.exception"
+	EventForecastRunException               = "nwsl.forecast.run.exception"
+	EventQualificationNoHelpBatchException  = "nwsl.qualification.no_help_batch.exception"
+	EventQualificationRefreshException      = "nwsl.qualification.refresh.exception"
+	EventQualificationStatusProofException  = "nwsl.qualification.status_proof.exception"
+	EventScenarioGenerateTeamException      = "nwsl.scenario.generate_team.exception"
+	EventScenarioRefreshException           = "nwsl.scenario.refresh.exception"
+	EventSchedulerPlanningSnapshotException = "nwsl.scheduler.planning_snapshot.exception"
+	EventSyncRecalculateException           = "nwsl.sync.recalculate.exception"
+	EventSyncRunException                   = "nwsl.sync.run.exception"
+	EventSyncVenueHistoryException          = "nwsl.sync.venue_history.exception"
+	SpanQualificationNoHelpBatch            = "qualification.no_help_batch"
+	SpanQualificationRefresh                = "qualification.refresh"
+	SpanQualificationStatusProof            = "qualification.status_proof"
+	SpanScenarioGenerateTeam                = "scenario.generate_team"
+	SpanScenarioRefresh                     = "scenario.refresh"
+	EventSchedulerDecision                  = "scheduler.decision"
+	SpanSchedulerJob                        = "scheduler.job"
+	SpanSchedulerTick                       = "scheduler.tick"
+	EventSyncASAResponse                    = "sync.asa_response"
+	EventSyncGameFreshness                  = "sync.game_freshness"
+	SpanSyncRecalculate                     = "sync.recalculate"
+	SpanSyncRun                             = "sync.run"
+	SpanSyncSourceOperation                 = "sync.source_operation"
+	SpanSyncVenueHistory                    = "sync.venue_history"
+	EventSyncXGFreshness                    = "sync.xg_freshness"
 )
 
 const (
@@ -38,6 +51,39 @@ const (
 	ErrorTypeCalculationFailure = "calculation_failure"
 	ErrorTypeOther              = "_OTHER"
 )
+
+// ExceptionEventName returns the generated exception event name associated
+// with an error code. Unknown and uncoded failures use the generic event.
+func ExceptionEventName(code string) string {
+	switch code {
+	case ErrorCodeCacheSeasonLoad:
+		return EventCacheSeasonLoadException
+	case ErrorCodeForecastPrecache:
+		return EventForecastPrecacheException
+	case ErrorCodeForecastRun:
+		return EventForecastRunException
+	case ErrorCodeQualificationNoHelpBatch:
+		return EventQualificationNoHelpBatchException
+	case ErrorCodeQualificationRefresh:
+		return EventQualificationRefreshException
+	case ErrorCodeQualificationStatusProof:
+		return EventQualificationStatusProofException
+	case ErrorCodeScenarioGenerateTeam:
+		return EventScenarioGenerateTeamException
+	case ErrorCodeScenarioRefresh:
+		return EventScenarioRefreshException
+	case ErrorCodeSchedulerPlanningSnapshot:
+		return EventSchedulerPlanningSnapshotException
+	case ErrorCodeSyncRecalculate:
+		return EventSyncRecalculateException
+	case ErrorCodeSyncRun:
+		return EventSyncRunException
+	case ErrorCodeSyncVenueHistory:
+		return EventSyncVenueHistoryException
+	default:
+		return EventException
+	}
+}
 
 const (
 	ASAGameIDKey                                             = attribute.Key("nwsl.asa.game.id")
@@ -386,6 +432,21 @@ func CacheName(value string) attribute.KeyValue {
 func ErrorCode(value string) attribute.KeyValue {
 	return ErrorCodeKey.String(value)
 }
+
+const (
+	ErrorCodeCacheSeasonLoad           = "cache.season.load"
+	ErrorCodeForecastPrecache          = "forecast.precache"
+	ErrorCodeForecastRun               = "forecast.run"
+	ErrorCodeQualificationNoHelpBatch  = "qualification.no_help_batch"
+	ErrorCodeQualificationRefresh      = "qualification.refresh"
+	ErrorCodeQualificationStatusProof  = "qualification.status_proof"
+	ErrorCodeScenarioGenerateTeam      = "scenario.generate_team"
+	ErrorCodeScenarioRefresh           = "scenario.refresh"
+	ErrorCodeSchedulerPlanningSnapshot = "scheduler.planning_snapshot"
+	ErrorCodeSyncRecalculate           = "sync.recalculate"
+	ErrorCodeSyncRun                   = "sync.run"
+	ErrorCodeSyncVenueHistory          = "sync.venue_history"
+)
 
 // ErrorExpected returns an attribute value for nwsl.error.expected.
 func ErrorExpected(value bool) attribute.KeyValue {

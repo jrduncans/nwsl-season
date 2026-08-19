@@ -26,12 +26,16 @@ make telemetry-live-check
 ```
 
 `telemetry-check-code` verifies that production instrumentation uses the
-generated package instead of raw application attribute or signal names.
+generated package instead of raw application attribute, signal, or error-code
+names. Its AST-level source contract covers multiline calls and future
+telemetry domains rather than relying on a list of current signal names.
 `telemetry-check` runs that enforcement check, validates the registry with
 Weaver's future-facing rules, and applies the project's custom Rego policies.
 Those policies require examples and cardinality guidance for free-form
 `nwsl.*` string dimensions. Enum member lists serve as the complete examples
-and bounded-cardinality guidance for enum attributes.
+and bounded-cardinality guidance for enum attributes. They also require every
+bounded `nwsl.error.code` value to have a matching operation-specific exception
+event, and reject orphaned exception events.
 `telemetry-generate` refreshes the checked-in Markdown reference and the Go
 conventions package under `internal/telemetry/nwslconv`; it validates the
 registry before writing either artifact.
@@ -41,8 +45,9 @@ generated artifact differs from the checked-in result.
 OpenTelemetry Collector in Docker, then drives a deterministic fake-ASA sync
 and local-SQLite page request through the application's real OTLP/HTTP
 exporters. The Collector bridges those signals to Weaver's OTLP/gRPC listener,
-and the target fails on contract violations or when Weaver receives no trace
-or metric samples. It does not need Honeycomb credentials or contact ASA.
+and the target fails on contract violations or when Weaver receives no trace,
+metric, or correlated exception-log samples. It does not need Honeycomb
+credentials or contact ASA.
 
 ## Schema review
 
