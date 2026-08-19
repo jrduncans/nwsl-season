@@ -30,8 +30,8 @@ Dimensions describing Forecast Lab requests, calculations, and cache warming.
 | `nwsl.forecast.fixture_count` | int | Recommended | development | `[240]` | Number of fixtures supplied to the forecast calculation. |
 | `nwsl.forecast.iteration_count` | int | Recommended | development | `[50000]` | Number of simulated seasons requested for each model. |
 | `nwsl.forecast.model_count` | int | Recommended | development | `[4]` | Number of forecast models considered by a cache-warming operation. |
-| `nwsl.forecast.model_id` | string | Recommended | development | `["xg-poisson-home-two-seasons-v1"]` | The stable identifier of the primary forecast model selected by an HTTP request. |
-| `nwsl.forecast.model_ids` | string[] | Recommended | development | `[["results-poisson-home-two-seasons-v1","xg-poisson-home-two-seasons-v1"]]` | Stable identifiers of all forecast models calculated by an operation. |
+| `nwsl.forecast.model_id` | string | Recommended | development | `["xg-poisson-home-two-seasons-v1"]` | The low-cardinality stable identifier of the primary forecast model selected by an HTTP request. |
+| `nwsl.forecast.model_ids` | string[] | Recommended | development | `[["results-poisson-home-two-seasons-v1","xg-poisson-home-two-seasons-v1"]]` | Low-cardinality stable identifiers of all forecast models calculated by an operation. |
 | `nwsl.forecast.outcome` | enum | Recommended | development | `["computed","cache_hit","overloaded","timed_out","failure"]` | The low-cardinality terminal outcome of a forecast executor run. |
 | `nwsl.forecast.playoff_place_count` | int | Recommended | development | `[8]` | Number of league places that qualify for the playoffs in the simulated competition. |
 | `nwsl.forecast.precache.outcome` | enum | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of forecast cache warming. |
@@ -68,8 +68,8 @@ One proactive attempt to warm the process-local forecast result cache.
 | `nwsl.forecast.precache.worker_count` | int | Recommended | development | Number of concurrent workers used by a forecast cache-warming operation. |
 | `nwsl.forecast.preload` | boolean | Required | development | Whether forecast work is proactive cache warming rather than an interactive request. |
 | `nwsl.forecast.trigger` | string | Required | development | The low-cardinality caller that initiated forecast work. |
-| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
-| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The low-cardinality competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The low-cardinality competition stage associated with an operation. |
 
 
 ### `forecast.run`
@@ -91,7 +91,7 @@ One bounded Forecast Lab executor request for one or more models.
 | `nwsl.forecast.fixed_assumption_count` | int | Recommended | development | Number of visitor-selected fixture outcomes fixed in the forecast scenario. |
 | `nwsl.forecast.fixture_count` | int | Recommended | development | Number of fixtures supplied to the forecast calculation. |
 | `nwsl.forecast.iteration_count` | int | Recommended | development | Number of simulated seasons requested for each model. |
-| `nwsl.forecast.model_ids` | string[] | Required | development | Stable identifiers of all forecast models calculated by an operation. |
+| `nwsl.forecast.model_ids` | string[] | Required | development | Low-cardinality stable identifiers of all forecast models calculated by an operation. |
 | `nwsl.forecast.outcome` | enum | Required | development | The low-cardinality terminal outcome of a forecast executor run. |
 | `nwsl.forecast.playoff_place_count` | int | Recommended | development | Number of league places that qualify for the playoffs in the simulated competition. |
 | `nwsl.forecast.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures simulated by the forecast calculation. |

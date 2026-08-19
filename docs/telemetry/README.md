@@ -27,10 +27,14 @@ make telemetry-live-check
 
 `telemetry-check-code` verifies that production instrumentation uses the
 generated package instead of raw application attribute or signal names.
-`telemetry-check` runs that enforcement check and validates the registry with
-Weaver's future-facing rules.
+`telemetry-check` runs that enforcement check, validates the registry with
+Weaver's future-facing rules, and applies the project's custom Rego policies.
+Those policies require examples and cardinality guidance for free-form
+`nwsl.*` string dimensions. Enum member lists serve as the complete examples
+and bounded-cardinality guidance for enum attributes.
 `telemetry-generate` refreshes the checked-in Markdown reference and the Go
-conventions package under `internal/telemetry/nwslconv`.
+conventions package under `internal/telemetry/nwslconv`; it validates the
+registry before writing either artifact.
 `telemetry-check-generated` is the CI drift check and fails when either
 generated artifact differs from the checked-in result.
 `telemetry-live-check` starts Weaver and a pinned, development-only
@@ -39,6 +43,64 @@ and local-SQLite page request through the application's real OTLP/HTTP
 exporters. The Collector bridges those signals to Weaver's OTLP/gRPC listener,
 and the target fails on contract violations or when Weaver receives no trace
 or metric samples. It does not need Honeycomb credentials or contact ASA.
+
+## Schema review
+
+Pull requests that change `telemetry/registry/**` run Weaver's registry diff
+against the pull request's exact base revision. CI adds the rendered Markdown
+to the job summary and uploads `diff.md` as the `telemetry-schema-diff`
+artifact. Review that report alongside the registry and generated-artifact
+diffs before merging.
+
+Generate the same report locally against the current `main` registry with:
+
+```sh
+TELEMETRY_BASELINE_REGISTRY='https://github.com/jrduncans/nwsl-season.git@main[telemetry/registry]' \
+make telemetry-diff
+```
+
+The report is written to `work/telemetry-schema-diff/diff.md` by default. Set
+`TELEMETRY_DIFF_OUTPUT` to use another output directory. The pinned Weaver
+version's diff is a review aid and does not describe every field-level or span
+change, so it does not replace `make telemetry-check-generated`, review of the
+source diff, or `make telemetry-live-check`.
+
+## Querying the registry with coding agents
+
+`make telemetry-mcp` starts Weaver's registry MCP server over stdio. It is a
+long-running MCP process rather than an interactive terminal command. Register
+it in a coding agent's MCP configuration with the repository root as its
+working directory:
+
+| Setting | Value |
+| --- | --- |
+| Command | `make` |
+| Arguments | `--silent`, `telemetry-mcp` |
+| Working directory | This repository's root directory |
+
+The server exposes registry search, namespace browsing, signal and attribute
+lookup, and sample validation. Keeping the command behind the Make target
+ensures agents query the Weaver version and registry pinned by this repository.
+
+## Synthetic examples stay local
+
+Weaver's `registry emit` command creates synthetic signals from catalog
+examples. Send those signals only to a local development receiver; they are not
+application observations and should never be exported to Honeycomb.
+
+With a development OTLP/gRPC receiver listening on loopback port 4317, use:
+
+```sh
+make telemetry-emit-local
+```
+
+The target validates the registry, fixes the receiver to
+`http://127.0.0.1:4317`, and unsets the general and signal-specific OTLP
+endpoint variables that would otherwise override Weaver's `--endpoint` flag.
+It also removes inherited OTLP headers so synthetic traffic cannot carry a
+shared backend credential. Do not replace this target with a raw
+`registry emit` invocation in an environment configured for Honeycomb or
+another shared collector.
 
 The Make targets invoke Weaver through Mise, which installs and runs the
 version declared in [`mise.toml`](../../mise.toml). Do not install or version

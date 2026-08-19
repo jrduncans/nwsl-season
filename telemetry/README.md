@@ -16,6 +16,8 @@ catalog.
   package: signal names, attribute keys and helpers, and bounded enum values.
 - `check-code-coverage.sh` prohibits production code from bypassing the
   generated package with raw application attributes, spans, or events.
+- `policies/` contains project-specific Rego governance for examples and
+  cardinality guidance on application string dimensions.
 - `live-check.sh` and `live-check-collector.yaml` run deterministic application
   telemetry through a development-only OTLP/HTTP-to-OTLP/gRPC bridge and grade
   it against the registry with Weaver Live Check.
@@ -24,5 +26,6 @@ Run `make telemetry-check`, `make telemetry-check-generated`, and
 `make telemetry-live-check` before
 committing a registry or generated-code change. See
 [`docs/telemetry/README.md`](../docs/telemetry/README.md) for the developer
-workflow, runtime-check port overrides, Collector image update procedure,
-generated catalog, and hand-written Honeycomb query cookbook.
+workflow, pull-request schema diffs, local registry MCP server, safe synthetic
+example emission, runtime-check port overrides, Collector image update
+procedure, generated catalog, and hand-written Honeycomb query cookbook.

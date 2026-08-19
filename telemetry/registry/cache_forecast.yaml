@@ -73,12 +73,12 @@ groups:
       - id: nwsl.forecast.model_id
         type: string
         stability: development
-        brief: The stable identifier of the primary forecast model selected by an HTTP request.
+        brief: The low-cardinality stable identifier of the primary forecast model selected by an HTTP request.
         examples: ["xg-poisson-home-two-seasons-v1"]
       - id: nwsl.forecast.model_ids
         type: string[]
         stability: development
-        brief: Stable identifiers of all forecast models calculated by an operation.
+        brief: Low-cardinality stable identifiers of all forecast models calculated by an operation.
         examples: [["results-poisson-home-two-seasons-v1", "xg-poisson-home-two-seasons-v1"]]
       - id: nwsl.forecast.comparison_requested
         type: boolean

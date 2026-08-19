@@ -75,6 +75,13 @@ for focused diagnosis.
   `error.type` values and a specific `nwsl.error.code`. Preserve the existing
   severity semantics: terminal failures are `ERROR`, absorbed/retryable or
   partial failures are `WARN`, and expected cancellation is `DEBUG`.
+- For telemetry registry changes, run `make telemetry-check-generated` and
+  `make telemetry-live-check`. Keep free-form `nwsl.*` string dimensions
+  compliant with the custom example and cardinality policies, and review the
+  pull request's Weaver Markdown schema diff alongside the source diff.
+- Run Weaver's synthetic registry examples only through
+  `make telemetry-emit-local`, with a development receiver on loopback. Never
+  send catalog examples to Honeycomb or another shared telemetry backend.
 - Never commit secrets. `config.env` is intentionally ignored; use
   `config.env.example` for documented configuration shape. Do not put API keys,
   tokens, or real telemetry configuration in source, tests, or documentation.
