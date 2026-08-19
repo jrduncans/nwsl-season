@@ -815,7 +815,7 @@ func (a *application) loadSeasonData(parent context.Context, season string, stag
 	)
 	defer func() {
 		if err != nil {
-			err = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.SpanCacheSeasonLoad, telemetry.ErrorTypeStorageFailure)
+			err = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.ErrorCodeCacheSeasonLoad, telemetry.ErrorTypeStorageFailure)
 		}
 		span.End()
 	}()

@@ -15,9 +15,12 @@ catalog.
 - `templates/registry/go` generates the checked-in `internal/telemetry/nwslconv`
   package: signal names, attribute keys and helpers, and bounded enum values.
 - `check-code-coverage.sh` prohibits production code from bypassing the
-  generated package with raw application attributes, spans, or events.
+  generated package with raw application attributes, spans, events, or error
+  codes. Its AST-level contract test covers multiline calls and future domains
+  without relying on a list of today's signal names.
 - `policies/` contains project-specific Rego governance for examples and
-  cardinality guidance on application string dimensions.
+  cardinality guidance on application string dimensions, plus the one-to-one
+  mapping between error codes and correlated exception events.
 - `live-check.sh` and `live-check-collector.yaml` run deterministic application
   telemetry through a development-only OTLP/HTTP-to-OTLP/gRPC bridge and grade
   it against the registry with Weaver Live Check.

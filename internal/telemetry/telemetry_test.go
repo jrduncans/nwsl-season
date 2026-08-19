@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -213,7 +214,7 @@ func TestRecordErrorWithCode(t *testing.T) {
 	})
 
 	ctx, span := traceProvider.Tracer("test").Start(context.Background(), "test.operation")
-	RecordErrorWithCode(ctx, span, errors.New("test failure"), "test.operation")
+	RecordErrorWithCode(ctx, span, errors.New("test failure"), nwslconv.ErrorCodeCacheSeasonLoad)
 	span.End()
 
 	spans := traceExporter.GetSpans()
@@ -227,8 +228,8 @@ func TestRecordErrorWithCode(t *testing.T) {
 	if _, found := attributes["error"]; found {
 		t.Error("non-standard error attribute was recorded")
 	}
-	if got := attributes["nwsl.error.code"].AsString(); got != "test.operation" {
-		t.Errorf("nwsl.error.code = %q, want test.operation", got)
+	if got := attributes["nwsl.error.code"].AsString(); got != nwslconv.ErrorCodeCacheSeasonLoad {
+		t.Errorf("nwsl.error.code = %q, want %q", got, nwslconv.ErrorCodeCacheSeasonLoad)
 	}
 	if got := attributes["error.type"].AsString(); got != ErrorTypeOther {
 		t.Errorf("error.type = %q, want %q", got, ErrorTypeOther)
@@ -243,8 +244,8 @@ func TestRecordErrorWithCode(t *testing.T) {
 		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
 	}
 	record := logExporter.records[0]
-	if got := record.EventName(); got != "nwsl.test.operation.exception" {
-		t.Errorf("event name = %q, want nwsl.test.operation.exception", got)
+	if got := record.EventName(); got != nwslconv.EventCacheSeasonLoadException {
+		t.Errorf("event name = %q, want %q", got, nwslconv.EventCacheSeasonLoadException)
 	}
 	if got := record.Severity(); got != otellog.SeverityError {
 		t.Errorf("severity = %v, want ERROR", got)
@@ -269,9 +270,35 @@ func TestRecordErrorWithCode(t *testing.T) {
 	if got := logAttributes["exception.stacktrace"]; got == "" {
 		t.Error("exception.stacktrace is empty")
 	}
-	if got := logAttributes["nwsl.error.code"]; got != "test.operation" {
-		t.Errorf("nwsl.error.code = %q, want test.operation", got)
+	if got := logAttributes["nwsl.error.code"]; got != nwslconv.ErrorCodeCacheSeasonLoad {
+		t.Errorf("nwsl.error.code = %q, want %q", got, nwslconv.ErrorCodeCacheSeasonLoad)
 	}
+}
+
+func TestRecordErrorWithUnknownCodeUsesGenericEvent(t *testing.T) {
+	logExporter := &inMemoryLogExporter{}
+	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
+	previousLogProvider := global.GetLoggerProvider()
+	global.SetLoggerProvider(logProvider)
+	t.Cleanup(func() {
+		global.SetLoggerProvider(previousLogProvider)
+		_ = logProvider.Shutdown(context.Background())
+	})
+
+	RecordErrorWithCode(context.Background(), oteltrace.SpanFromContext(context.Background()), errors.New("test failure"), "uncataloged.operation")
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
+	}
+	record := logExporter.records[0]
+	if got := record.EventName(); got != nwslconv.EventException {
+		t.Errorf("event name = %q, want %q", got, nwslconv.EventException)
+	}
+	record.WalkAttributes(func(value attribute.KeyValue) bool {
+		if value.Key == nwslconv.ErrorCodeKey {
+			t.Errorf("unexpected nwsl.error.code = %q", value.Value.AsString())
+		}
+		return true
+	})
 }
 
 func TestExceptionSeverityReflectsDisposition(t *testing.T) {

@@ -117,7 +117,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 		trace.WithAttributes(nwslconv.SeasonName(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncExpectedFixtureCount(expectedFixtureCount(options))),
 	)
 	recordRunException := func(cause error, errorType string) error {
-		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.SpanSyncRun, errorType)
+		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.ErrorCodeSyncRun, errorType)
 	}
 	defer func() {
 		span.SetAttributes(syncRunAttributes(run, err)...)
@@ -226,7 +226,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 		trace.WithAttributes(nwslconv.SeasonName(options.Season), nwslconv.Stage(options.Stage), nwslconv.SyncForced(options.Force), nwslconv.SyncTrigger(syncTrigger(options.Trigger)), nwslconv.SyncRecalculateReason(recalculateReason(options.Reason))),
 	)
 	recordRecalculationException := func(cause error, errorType string) error {
-		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.SpanSyncRecalculate, errorType)
+		return telemetry.RecordErrorWithType(ctx, span, cause, nwslconv.ErrorCodeSyncRecalculate, errorType)
 	}
 	defer func() {
 		span.SetAttributes(recalculateRunAttributes(run, err)...)

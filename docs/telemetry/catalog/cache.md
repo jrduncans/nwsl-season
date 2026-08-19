@@ -39,6 +39,23 @@ Dimensions describing the cached season snapshot used by a request or calculatio
 ## Signals
 
 
+### `nwsl.cache.season.load.exception`
+
+- Convention: `event.nwsl.cache.season.load.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for a failed local season-snapshot read.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `cache.season.load`
 
 - Convention: `span.nwsl.cache.season.load`

@@ -148,7 +148,8 @@ Error spans and exception logs use the same low-cardinality `error.type`
 classification: `canceled`, `timeout`, `invalid_argument`, `invalid_data`,
 `conflict`, `upstream_failure`, `storage_failure`, `calculation_failure`, or
 `_OTHER`. The separate `nwsl.error.code` attribute identifies the operation
-that detected the failure, such as `sync.fetch_asa`; together they describe
+that detected the failure, such as `sync.run` or
+`scheduler.planning_snapshot`; together they describe
 why and where a failure occurred. Error wrapping preserves this classification,
 and cancellation or timeout takes precedence over the broader operation class.
 

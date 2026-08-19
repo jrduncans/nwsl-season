@@ -19,10 +19,22 @@ groups:
           more informative than `_OTHER`.
         examples: ["canceled", "timeout", "invalid_data", "upstream_failure", "_OTHER"]
       - id: nwsl.error.code
-        type: string
+        type:
+          members:
+            - {id: cache_season_load, value: cache.season.load, stability: development, brief: Loading a season snapshot from the local cache failed.}
+            - {id: forecast_precache, value: forecast.precache, stability: development, brief: Proactive forecast cache warming failed.}
+            - {id: forecast_run, value: forecast.run, stability: development, brief: A Forecast Lab calculation failed.}
+            - {id: qualification_no_help_batch, value: qualification.no_help_batch, stability: development, brief: A no-help qualification proof batch failed.}
+            - {id: qualification_refresh, value: qualification.refresh, stability: development, brief: Qualification refresh or calculation failed.}
+            - {id: qualification_status_proof, value: qualification.status_proof, stability: development, brief: An individual qualification status proof failed.}
+            - {id: scenario_generate_team, value: scenario.generate_team, stability: development, brief: Scenario generation for one team failed.}
+            - {id: scenario_refresh, value: scenario.refresh, stability: development, brief: Scenario refresh or calculation failed.}
+            - {id: scheduler_planning_snapshot, value: scheduler.planning_snapshot, stability: development, brief: Reading the scheduler planning snapshot failed.}
+            - {id: sync_recalculate, value: sync.recalculate, stability: development, brief: Cache-only derived-data recalculation failed.}
+            - {id: sync_run, value: sync.run, stability: development, brief: A synchronization run failed.}
+            - {id: sync_venue_history, value: sync.venue_history, stability: development, brief: Historical venue refresh failed.}
         stability: development
-        brief: A stable identifier for the operation that detected an error.
-        examples: ["sync.fetch_asa", "scheduler.planning_snapshot", "forecast.run"]
+        brief: The bounded stable identifier for the operation that detected an error.
       - id: nwsl.error.expected
         type: boolean
         stability: development
@@ -39,3 +51,196 @@ groups:
       - ref: exception.stacktrace
         requirement_level:
           conditionally_required: Present on correlated exception logs.
+
+  - id: event.nwsl.exception
+    type: event
+    name: exception
+    stability: development
+    brief: A correlated exception log emitted without an operation-specific error code.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+
+  - id: event.nwsl.cache.season.load.exception
+    type: event
+    name: nwsl.cache.season.load.exception
+    stability: development
+    brief: A correlated exception log for a failed local season-snapshot read.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.forecast.precache.exception
+    type: event
+    name: nwsl.forecast.precache.exception
+    stability: development
+    brief: A correlated exception log for failed forecast cache warming.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.forecast.run.exception
+    type: event
+    name: nwsl.forecast.run.exception
+    stability: development
+    brief: A correlated exception log for a failed Forecast Lab calculation.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.qualification.no_help_batch.exception
+    type: event
+    name: nwsl.qualification.no_help_batch.exception
+    stability: development
+    brief: A correlated exception log for a failed no-help qualification proof batch.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.qualification.refresh.exception
+    type: event
+    name: nwsl.qualification.refresh.exception
+    stability: development
+    brief: A correlated exception log for failed qualification refresh or calculation.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.qualification.status_proof.exception
+    type: event
+    name: nwsl.qualification.status_proof.exception
+    stability: development
+    brief: A correlated exception log for a failed individual qualification proof.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.scenario.generate_team.exception
+    type: event
+    name: nwsl.scenario.generate_team.exception
+    stability: development
+    brief: A correlated exception log for failed scenario generation for one team.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.scenario.refresh.exception
+    type: event
+    name: nwsl.scenario.refresh.exception
+    stability: development
+    brief: A correlated exception log for failed scenario refresh or calculation.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.scheduler.planning_snapshot.exception
+    type: event
+    name: nwsl.scheduler.planning_snapshot.exception
+    stability: development
+    brief: A correlated exception log for a failed scheduler planning-snapshot read.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.sync.recalculate.exception
+    type: event
+    name: nwsl.sync.recalculate.exception
+    stability: development
+    brief: A correlated exception log for failed cache-only recalculation.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.sync.run.exception
+    type: event
+    name: nwsl.sync.run.exception
+    stability: development
+    brief: A correlated exception log for a failed synchronization run.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.sync.venue_history.exception
+    type: event
+    name: nwsl.sync.venue_history.exception
+    stability: development
+    brief: A correlated exception log for failed historical venue refresh.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required

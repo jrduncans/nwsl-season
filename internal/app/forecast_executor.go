@@ -75,9 +75,9 @@ func (e *forecastExecutor) results(ctx context.Context, tasks []forecastTask) (r
 			if errors.Is(err, errForecastOverloaded) {
 				span.SetAttributes(nwslconv.ErrorExpected(true))
 			} else if trigger != "http" {
-				err = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.SpanForecastRun, telemetry.ErrorTypeCalculationFailure)
+				err = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.ErrorCodeForecastRun, telemetry.ErrorTypeCalculationFailure)
 			} else {
-				err = telemetry.RecordErrorWithType(ctx, span, err, nwslconv.SpanForecastRun, telemetry.ErrorTypeCalculationFailure)
+				err = telemetry.RecordErrorWithType(ctx, span, err, nwslconv.ErrorCodeForecastRun, telemetry.ErrorTypeCalculationFailure)
 			}
 		}
 		span.End()

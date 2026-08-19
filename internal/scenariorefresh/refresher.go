@@ -52,7 +52,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	}
 	parentSpan := trace.SpanFromContext(ctx)
 	recordDecisionException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, parentSpan, cause, nwslconv.SpanScenarioRefresh, errorType)
+		return telemetry.RecordWarningWithType(ctx, parentSpan, cause, nwslconv.ErrorCodeScenarioRefresh, errorType)
 	}
 	if r.Store == nil {
 		return result, recordDecisionException(fmt.Errorf("scenario store is required"), telemetry.ErrorTypeInvalidArgument)
@@ -88,7 +88,7 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 		trace.WithAttributes(nwslconv.SeasonName(sync.Season), nwslconv.Stage(sync.Stage), nwslconv.CacheFixtureSnapshotID(sync.FixtureSnapshotID), nwslconv.ScenarioTeamCount(len(teams)), nwslconv.ScenarioFixtureCount(len(games)), nwslconv.ScenarioBudgetMs(int(budget.Milliseconds())), nwslconv.ScenarioForced(force), nwslconv.ScenarioRefreshReason(refreshReason)),
 	)
 	recordRefreshException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanScenarioRefresh, errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.ErrorCodeScenarioRefresh, errorType)
 	}
 	defer func() {
 		span.SetAttributes(nwslconv.ScenarioRecalculated(result.Recalculated), nwslconv.ScenarioOutcome(scenarioCalculationOutcome(result.Recalculated, err)))
@@ -249,7 +249,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 	calculation := calculationTelemetry{}
 	span := trace.SpanFromContext(ctx)
 	recordCalculationException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanScenarioRefresh, errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.ErrorCodeScenarioRefresh, errorType)
 	}
 	span.SetAttributes(nwslconv.ScenarioInputTeamCount(len(teams)), nwslconv.ScenarioInputFixtureCount(len(games)), nwslconv.ScenarioCompletedFixtureCount(scenarioCompletedFixtures(games)), nwslconv.ScenarioRemainingFixtureCount(scenarioRemainingFixtures(games)), nwslconv.ScenarioAchievementIds(scenarioAchievementIDs(r.Rules.Achievements)))
 	defer func() {
@@ -351,7 +351,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		calculation.recordTeamSearch(duration, t.Team.ID, teamResults)
 		if generateErr != nil {
 			generateErr = telemetry.ClassifyError(generateErr, telemetry.ErrorTypeCalculationFailure)
-			telemetry.RecordCompletedWarningSpan(ctx, nwslconv.SpanScenarioGenerateTeam, probeStarted, finished, searchAttributes, generateErr, nwslconv.SpanScenarioGenerateTeam)
+			telemetry.RecordCompletedWarningSpan(ctx, nwslconv.SpanScenarioGenerateTeam, probeStarted, finished, searchAttributes, generateErr, nwslconv.ErrorCodeScenarioGenerateTeam)
 			return calculated{}, generateErr
 		}
 		if duration >= telemetry.SlowOperationThreshold {

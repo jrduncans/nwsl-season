@@ -51,7 +51,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	failedModels := 0
 	workerCount := 0
 	recordPrecacheException := func(cause error, errorType string) error {
-		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.SpanForecastPrecache, errorType)
+		return telemetry.RecordWarningWithType(ctx, span, cause, nwslconv.ErrorCodeForecastPrecache, errorType)
 	}
 	defer func() {
 		outcome := nwslconv.ForecastPrecacheOutcomeComplete

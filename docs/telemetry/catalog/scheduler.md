@@ -93,6 +93,23 @@ A point-in-time explanation of why the scheduler selected or skipped source work
 | `nwsl.scheduler.requested_rows` | int | Recommended | development | Number of source identities selected in a scheduler decision event. |
 
 
+### `nwsl.scheduler.planning_snapshot.exception`
+
+- Convention: `event.nwsl.scheduler.planning_snapshot.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for a failed scheduler planning-snapshot read.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `scheduler.job`
 
 - Convention: `span.nwsl.scheduler.job`

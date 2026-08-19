@@ -28,7 +28,7 @@ templates:
         signals: (
           .groups
           | map(select((.type == "span" or .type == "event") and .name != null))
-          | map(select(.name | test("^(cache|forecast|qualification|scenario|scheduler|sync)\\.")))
+          | map(select(.id | startswith("span.nwsl.") or startswith("event.nwsl.")))
           | sort_by(.name)
         )
       }
