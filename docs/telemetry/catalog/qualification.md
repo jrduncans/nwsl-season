@@ -148,8 +148,8 @@ One persisted qualification batch refresh for a fixture snapshot.
 | `nwsl.qualification.status_proof.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in individual status proofs. |
 | `nwsl.qualification.status_proof.slow_count` | int | Recommended | development | Number of individual status proofs exceeding the slow-operation threshold. |
 | `nwsl.qualification.team_count` | int | Recommended | development | Number of teams supplied to the qualification refresh. |
-| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
-| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The low-cardinality competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The low-cardinality competition stage associated with an operation. |
 
 
 ### `qualification.status_proof`

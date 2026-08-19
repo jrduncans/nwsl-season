@@ -11,11 +11,13 @@ GOLANGCI_LINT ?= mise exec -- golangci-lint
 GOVULNCHECK ?= mise exec -- govulncheck
 WEAVER ?= mise exec -- weaver
 TELEMETRY_REGISTRY := ./telemetry/registry
+TELEMETRY_POLICIES := ./telemetry/policies
 TELEMETRY_TEMPLATES := ./telemetry/templates
 TELEMETRY_DOCS := ./docs/telemetry/catalog
 TELEMETRY_GO := ./internal/telemetry/nwslconv
+TELEMETRY_DIFF_OUTPUT ?= ./work/telemetry-schema-diff
 
-.PHONY: verify test fmt vet lint race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated telemetry-live-check backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+.PHONY: verify test fmt vet lint race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated telemetry-diff telemetry-mcp telemetry-emit-local telemetry-live-check backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
 verify: fmt lint vet test
 
@@ -41,9 +43,9 @@ telemetry-check-code:
 	sh ./telemetry/check-code-coverage.sh
 
 telemetry-check: telemetry-check-code
-	$(WEAVER) --future registry check -r $(TELEMETRY_REGISTRY)
+	$(WEAVER) --future registry check -r $(TELEMETRY_REGISTRY) --policy $(TELEMETRY_POLICIES)
 
-telemetry-generate:
+telemetry-generate: telemetry-check
 	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown $(TELEMETRY_DOCS)
 	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) go $(TELEMETRY_GO)
 	gofmt -w $(TELEMETRY_GO)/*.go
@@ -58,6 +60,29 @@ telemetry-check-generated: telemetry-check
 	gofmt -w "$$telemetry_generated_dir/go"/*.go; \
 	diff -ru "$(TELEMETRY_DOCS)" "$$telemetry_generated_dir/docs"; \
 	diff -ru "$(TELEMETRY_GO)" "$$telemetry_generated_dir/go"
+
+telemetry-diff: telemetry-check
+	@test -n "$(TELEMETRY_BASELINE_REGISTRY)" || { \
+		echo "TELEMETRY_BASELINE_REGISTRY must point to the baseline registry" >&2; \
+		exit 2; \
+	}
+	$(WEAVER) --future registry diff -r $(TELEMETRY_REGISTRY) --baseline-registry $(TELEMETRY_BASELINE_REGISTRY) --format markdown --output $(TELEMETRY_DIFF_OUTPUT)
+
+telemetry-mcp:
+	@exec $(WEAVER) --future registry mcp -r $(TELEMETRY_REGISTRY)
+
+# Weaver's standard OTLP endpoint variables override --endpoint. Unset all of
+# them so this target cannot accidentally send synthetic examples to Honeycomb.
+telemetry-emit-local: telemetry-check
+	env -u OTEL_EXPORTER_OTLP_ENDPOINT \
+		-u OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
+		-u OTEL_EXPORTER_OTLP_METRICS_ENDPOINT \
+		-u OTEL_EXPORTER_OTLP_LOGS_ENDPOINT \
+		-u OTEL_EXPORTER_OTLP_HEADERS \
+		-u OTEL_EXPORTER_OTLP_TRACES_HEADERS \
+		-u OTEL_EXPORTER_OTLP_METRICS_HEADERS \
+		-u OTEL_EXPORTER_OTLP_LOGS_HEADERS \
+		$(WEAVER) --future registry emit -r $(TELEMETRY_REGISTRY) --endpoint http://127.0.0.1:4317
 
 telemetry-live-check:
 	sh ./telemetry/live-check.sh

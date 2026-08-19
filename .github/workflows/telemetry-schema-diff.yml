@@ -1,0 +1,36 @@
+name: Telemetry Schema Diff
+
+on:
+  pull_request:
+    paths:
+      - "telemetry/registry/**"
+
+permissions:
+  contents: read
+
+jobs:
+  telemetry-schema-diff:
+    name: Render telemetry schema diff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v7
+      - name: Check out baseline registry
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: work/telemetry-baseline
+      - uses: jdx/mise-action@v4
+      - name: Generate Markdown schema diff
+        run: >-
+          make telemetry-diff
+          TELEMETRY_BASELINE_REGISTRY=./work/telemetry-baseline/telemetry/registry
+          TELEMETRY_DIFF_OUTPUT=./work/telemetry-schema-diff
+      - name: Add schema diff to job summary
+        run: cat ./work/telemetry-schema-diff/diff.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload schema diff
+        uses: actions/upload-artifact@v7
+        with:
+          name: telemetry-schema-diff
+          path: ./work/telemetry-schema-diff/diff.md
+          if-no-files-found: error

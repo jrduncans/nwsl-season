@@ -59,12 +59,12 @@ The span also copies the resulting snapshot dimensions to its enclosing request 
 | `nwsl.cache.name` | string | Required | development | The low-cardinality logical cache being accessed. |
 | `nwsl.season.completed_fixture_count` | int | Recommended | development | Number of completed fixtures in the loaded season snapshot. |
 | `nwsl.season.fixture_count` | int | Recommended | development | Number of fixtures in the loaded season snapshot. |
-| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The low-cardinality competition season associated with an operation. |
 | `nwsl.season.remaining_fixture_count` | int | Recommended | development | Number of remaining fixtures in the loaded season snapshot. |
 | `nwsl.season.team_count` | int | Recommended | development | Number of teams in the loaded season snapshot. |
 | `nwsl.season.xg_available_count` | int | Recommended | development | Number of cached fixtures with available expected-goals observations. |
 | `nwsl.season.xg_unavailable_count` | int | Recommended | development | Number of cached fixtures explicitly observed without expected-goals data. |
-| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.stage` | string | Required | development | The low-cardinality competition stage associated with an operation. |
 
 
 

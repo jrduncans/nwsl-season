@@ -38,10 +38,10 @@ groups:
       - id: nwsl.season.name
         type: string
         stability: development
-        brief: The competition season associated with an operation.
+        brief: The low-cardinality competition season associated with an operation.
         examples: ["2026"]
       - id: nwsl.stage
         type: string
         stability: development
-        brief: The competition stage associated with an operation.
+        brief: The low-cardinality competition stage associated with an operation.
         examples: ["Regular Season", "Playoffs"]

@@ -147,8 +147,8 @@ One persisted next-slate scenario batch refresh for a fixture snapshot.
 | `nwsl.scenario.team_search.duration_total_ms` | double | Recommended | development | Total wall-clock milliseconds spent in per-team scenario searches. |
 | `nwsl.scenario.team_search.slow_count` | int | Recommended | development | Number of per-team scenario searches exceeding the slow-operation threshold. |
 | `nwsl.scenario.team_search_count` | int | Recommended | development | Number of per-team scenario searches performed in the batch. |
-| `nwsl.season.name` | string | Required | development | The competition season associated with an operation. |
-| `nwsl.stage` | string | Required | development | The competition stage associated with an operation. |
+| `nwsl.season.name` | string | Required | development | The low-cardinality competition season associated with an operation. |
+| `nwsl.stage` | string | Required | development | The low-cardinality competition stage associated with an operation. |
 
 
 
