@@ -13,13 +13,13 @@ func TestCatalogDefaultMatchesModelEvaluationV1(t *testing.T) {
 	if defaults != 1 {
 		t.Fatalf("default models = %d, want 1", defaults)
 	}
-	if got := Default().Model.Info().ID; got != xgPoissonHomeTwoSeasonsID {
-		t.Fatalf("default model = %q, want %s", got, xgPoissonHomeTwoSeasonsID)
+	if got := Default().Model.Info().ID; got != xgPoissonScheduleLoadID {
+		t.Fatalf("default model = %q, want %s", got, xgPoissonScheduleLoadID)
 	}
 }
 
 func TestEvaluationCatalogAddsEvaluationOnlyCandidates(t *testing.T) {
-	evaluationOnly := map[string]bool{straightLinePaceID: true, xgPoissonScheduleLoadID: true}
+	evaluationOnly := map[string]bool{straightLinePaceID: true}
 	for _, entry := range Catalog() {
 		if evaluationOnly[entry.Model.Info().ID] {
 			t.Fatal("Forecast Lab catalog includes an evaluation-only candidate")
