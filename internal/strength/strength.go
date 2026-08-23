@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/scheduleload"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
@@ -39,6 +40,9 @@ type Fixture struct {
 	Home                     bool
 	OpponentPPG              float64
 	VenueAdjustedOpponentPPG float64
+	ScheduleAdjustedPPG      float64
+	TeamCongestion           float64
+	OpponentCongestion       float64
 	Available                bool
 }
 
@@ -53,6 +57,7 @@ type Row struct {
 	AwayOpponentPPG          float64
 	RawOpponentPPG           float64
 	VenueAdjustedOpponentPPG float64
+	ScheduleAdjustedPPG      float64
 	DeltaFromBaseline        float64
 	ScheduleLabel            string
 	UnavailableReason        UnavailableReason
@@ -106,6 +111,21 @@ func Calculate(teams []standings.Team, games []standings.Game) Result {
 // CalculateWithVenueSample pools prior-season and current-season venue points
 // while retaining current-season opponent records.
 func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, venue VenueSample) Result {
+	return calculate(teams, games, venue, nil)
+}
+
+// CalculateWithVenueSampleAndScheduleLoad makes the load-adjusted measure the
+// primary schedule comparison. It uses the same recovery and accumulated-load
+// penalties as the selected forecast model.
+func CalculateWithVenueSampleAndScheduleLoad(teams []standings.Team, games []standings.Game, venue VenueSample) (Result, error) {
+	loads, err := scheduleload.Calculate(games)
+	if err != nil {
+		return Result{}, err
+	}
+	return calculate(teams, games, venue, loads), nil
+}
+
+func calculate(teams []standings.Team, games []standings.Game, venue VenueSample, loads map[string]scheduleload.Fixture) Result {
 	teamByID := make(map[string]standings.Team, len(teams))
 	for _, team := range teams {
 		teamByID[team.ID] = team
@@ -146,7 +166,7 @@ func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, ve
 	rows := make([]Row, 0, len(teams))
 	for _, team := range teams {
 		row := Row{Team: team, Available: true}
-		var rawSum, homeSum, awaySum, adjustedSum float64
+		var rawSum, homeSum, awaySum, venueAdjustedSum, scheduleAdjustedSum float64
 		for _, game := range games {
 			if game.Status != RemainingStatus {
 				continue
@@ -185,18 +205,22 @@ func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, ve
 			} else {
 				adjustedPPG += result.VenueGap / 2
 			}
+			teamCongestion, opponentCongestion := fixtureCongestion(loads[game.ID], homeFixture)
+			scheduleAdjustedPPG := adjustedPPG * math.Exp(teamCongestion-opponentCongestion)
 			row.Fixtures = append(row.Fixtures, Fixture{
 				ID: game.ID, Opponent: opponentTeam, Home: homeFixture,
-				OpponentPPG: opponentPPG, VenueAdjustedOpponentPPG: adjustedPPG, Available: true,
+				OpponentPPG: opponentPPG, VenueAdjustedOpponentPPG: adjustedPPG,
+				ScheduleAdjustedPPG: scheduleAdjustedPPG, TeamCongestion: teamCongestion,
+				OpponentCongestion: opponentCongestion, Available: true,
 			})
 			rawSum += opponentPPG
 			if homeFixture {
 				homeSum += opponentPPG
-				adjustedSum += adjustedPPG
 			} else {
 				awaySum += opponentPPG
-				adjustedSum += adjustedPPG
 			}
+			venueAdjustedSum += adjustedPPG
+			scheduleAdjustedSum += scheduleAdjustedPPG
 		}
 		if row.RemainingFixtures == 0 {
 			row.Available = false
@@ -205,7 +229,8 @@ func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, ve
 			row.HomeOpponentPPG = average(homeSum, row.RemainingHome)
 			row.AwayOpponentPPG = average(awaySum, row.RemainingAway)
 			row.RawOpponentPPG = rawSum / float64(row.RemainingFixtures)
-			row.VenueAdjustedOpponentPPG = adjustedSum / float64(row.RemainingFixtures)
+			row.VenueAdjustedOpponentPPG = venueAdjustedSum / float64(row.RemainingFixtures)
+			row.ScheduleAdjustedPPG = scheduleAdjustedSum / float64(row.RemainingFixtures)
 			result.AvailableRows++
 		}
 		if row.RemainingFixtures > 0 {
@@ -220,14 +245,14 @@ func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, ve
 			if !row.Available {
 				continue
 			}
-			result.Baseline += row.VenueAdjustedOpponentPPG
+			result.Baseline += row.ScheduleAdjustedPPG
 		}
 		result.Baseline /= float64(result.AvailableRows)
 		for index := range rows {
 			if !rows[index].Available {
 				continue
 			}
-			rows[index].DeltaFromBaseline = rows[index].VenueAdjustedOpponentPPG - result.Baseline
+			rows[index].DeltaFromBaseline = rows[index].ScheduleAdjustedPPG - result.Baseline
 			rows[index].ScheduleLabel = LabelForDelta(rows[index].DeltaFromBaseline)
 		}
 	}
@@ -235,6 +260,9 @@ func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, ve
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].Available != rows[j].Available {
 			return rows[i].Available
+		}
+		if rows[i].ScheduleAdjustedPPG != rows[j].ScheduleAdjustedPPG {
+			return rows[i].ScheduleAdjustedPPG > rows[j].ScheduleAdjustedPPG
 		}
 		if rows[i].VenueAdjustedOpponentPPG != rows[j].VenueAdjustedOpponentPPG {
 			return rows[i].VenueAdjustedOpponentPPG > rows[j].VenueAdjustedOpponentPPG
@@ -249,6 +277,13 @@ func CalculateWithVenueSample(teams []standings.Team, games []standings.Game, ve
 	})
 	result.Rows = rows
 	return result
+}
+
+func fixtureCongestion(load scheduleload.Fixture, home bool) (float64, float64) {
+	if home {
+		return scheduleload.Congestion(load.Home), scheduleload.Congestion(load.Away)
+	}
+	return scheduleload.Congestion(load.Away), scheduleload.Congestion(load.Home)
 }
 
 // LabelForDelta maps a signed difference from the league baseline to a plain

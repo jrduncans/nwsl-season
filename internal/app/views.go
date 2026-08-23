@@ -132,11 +132,13 @@ type strengthView struct {
 	ComparableRows         int
 	Baseline               string
 	RawBaseline            string
+	VenueBaseline          string
 	HasBaseline            bool
 	HasRawBaseline         bool
 	HasIndividualEstimates bool
 	BaselinePosition       string
 	RawBaselinePosition    string
+	VenueBaselinePosition  string
 	HomePPG                string
 	AwayPPG                string
 	VenueGap               string
@@ -156,6 +158,7 @@ type strengthRowView struct {
 	AwayOpponentPPG          string
 	RawOpponentPPG           string
 	VenueAdjustedOpponentPPG string
+	ScheduleAdjustedPPG      string
 	DeltaFromBaseline        string
 	ScheduleLabel            string
 	SchedulePosition         string
@@ -164,6 +167,7 @@ type strengthRowView struct {
 	ScheduleOpacity          string
 	PlotPosition             string
 	RawPlotPosition          string
+	VenuePlotPosition        string
 	Fixtures                 []strengthFixtureView
 	Available                bool
 	NoRemainingFixtures      bool
@@ -175,6 +179,8 @@ type strengthFixtureView struct {
 	Venue                    string
 	OpponentPPG              string
 	VenueAdjustedOpponentPPG string
+	ScheduleAdjustedPPG      string
+	LoadAdjustment           string
 	Available                bool
 }
 
@@ -431,6 +437,7 @@ func strengthViewFrom(result strength.Result) strengthView {
 			}
 			view.RawOpponentPPG = fmt.Sprintf("%.2f", row.RawOpponentPPG)
 			view.VenueAdjustedOpponentPPG = fmt.Sprintf("%.2f", row.VenueAdjustedOpponentPPG)
+			view.ScheduleAdjustedPPG = fmt.Sprintf("%.2f", row.ScheduleAdjustedPPG)
 			if hasBaseline {
 				view.DeltaFromBaseline = scheduleDeltaText(row.DeltaFromBaseline)
 			} else {
@@ -438,7 +445,7 @@ func strengthViewFrom(result strength.Result) strengthView {
 			}
 		} else {
 			view.HomeOpponentPPG, view.AwayOpponentPPG = "—", "—"
-			view.RawOpponentPPG, view.VenueAdjustedOpponentPPG = "—", "—"
+			view.RawOpponentPPG, view.VenueAdjustedOpponentPPG, view.ScheduleAdjustedPPG = "—", "—", "—"
 			view.DeltaFromBaseline, view.ScheduleLabel = "—", "Unavailable"
 		}
 		for _, fixture := range row.Fixtures {
@@ -452,26 +459,30 @@ func strengthViewFrom(result strength.Result) strengthView {
 			if fixture.Available {
 				fixtureView.OpponentPPG = fmt.Sprintf("%.2f", fixture.OpponentPPG)
 				fixtureView.VenueAdjustedOpponentPPG = fmt.Sprintf("%.2f", fixture.VenueAdjustedOpponentPPG)
+				fixtureView.ScheduleAdjustedPPG = fmt.Sprintf("%.2f", fixture.ScheduleAdjustedPPG)
+				fixtureView.LoadAdjustment = relativeLoadText(fixture.TeamCongestion, fixture.OpponentCongestion)
 			} else {
 				fixtureView.OpponentPPG = "—"
 				fixtureView.VenueAdjustedOpponentPPG = "—"
+				fixtureView.ScheduleAdjustedPPG = "—"
+				fixtureView.LoadAdjustment = "—"
 			}
 			view.Fixtures = append(view.Fixtures, fixtureView)
 		}
 		rows = append(rows, view)
 	}
-	var adjustedMin, adjustedMax, rawMin, rawMax float64
-	var adjustedSum, rawSum float64
+	var adjustedMin, adjustedMax, rawMin, rawMax, venueMin, venueMax float64
+	var rawSum, venueSum float64
 	availableCount := 0
 	for _, row := range result.Rows {
 		if !row.Available {
 			continue
 		}
-		if availableCount == 0 || row.VenueAdjustedOpponentPPG < adjustedMin {
-			adjustedMin = row.VenueAdjustedOpponentPPG
+		if availableCount == 0 || row.ScheduleAdjustedPPG < adjustedMin {
+			adjustedMin = row.ScheduleAdjustedPPG
 		}
-		if availableCount == 0 || row.VenueAdjustedOpponentPPG > adjustedMax {
-			adjustedMax = row.VenueAdjustedOpponentPPG
+		if availableCount == 0 || row.ScheduleAdjustedPPG > adjustedMax {
+			adjustedMax = row.ScheduleAdjustedPPG
 		}
 		if availableCount == 0 || row.RawOpponentPPG < rawMin {
 			rawMin = row.RawOpponentPPG
@@ -479,16 +490,23 @@ func strengthViewFrom(result strength.Result) strengthView {
 		if availableCount == 0 || row.RawOpponentPPG > rawMax {
 			rawMax = row.RawOpponentPPG
 		}
-		adjustedSum += row.VenueAdjustedOpponentPPG
+		if availableCount == 0 || row.VenueAdjustedOpponentPPG < venueMin {
+			venueMin = row.VenueAdjustedOpponentPPG
+		}
+		if availableCount == 0 || row.VenueAdjustedOpponentPPG > venueMax {
+			venueMax = row.VenueAdjustedOpponentPPG
+		}
 		rawSum += row.RawOpponentPPG
+		venueSum += row.VenueAdjustedOpponentPPG
 		availableCount++
 	}
 	for index := range rows {
 		if !rows[index].Available {
 			continue
 		}
-		rows[index].PlotPosition = plotPosition(result.Rows[index].VenueAdjustedOpponentPPG, adjustedMin, adjustedMax)
+		rows[index].PlotPosition = plotPosition(result.Rows[index].ScheduleAdjustedPPG, adjustedMin, adjustedMax)
 		rows[index].RawPlotPosition = plotPosition(result.Rows[index].RawOpponentPPG, rawMin, rawMax)
+		rows[index].VenuePlotPosition = plotPosition(result.Rows[index].VenueAdjustedOpponentPPG, venueMin, venueMax)
 	}
 	maxDelta := 0.0
 	for _, row := range result.Rows {
@@ -534,6 +552,8 @@ func strengthViewFrom(result strength.Result) strengthView {
 		view.HasRawBaseline = true
 		view.RawBaseline = fmt.Sprintf("%.2f", rawSum/float64(availableCount))
 		view.RawBaselinePosition = plotPosition(rawSum/float64(availableCount), rawMin, rawMax)
+		view.VenueBaseline = fmt.Sprintf("%.2f", venueSum/float64(availableCount))
+		view.VenueBaselinePosition = plotPosition(venueSum/float64(availableCount), venueMin, venueMax)
 	}
 	for index := range rows {
 		if !hasBaseline {
@@ -549,6 +569,17 @@ func strengthViewFrom(result strength.Result) strengthView {
 		view.Easiest = rows[index]
 	}
 	return view
+}
+
+func relativeLoadText(teamCongestion, opponentCongestion float64) string {
+	change := (math.Exp(teamCongestion-opponentCongestion) - 1) * 100
+	if math.Abs(change) < 0.05 {
+		return "No relative load effect"
+	}
+	if change > 0 {
+		return fmt.Sprintf("Team more loaded (%+.1f%%)", change)
+	}
+	return fmt.Sprintf("Opponent more loaded (%+.1f%%)", change)
 }
 
 func plotPosition(value, minimum, maximum float64) string {

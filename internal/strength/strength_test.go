@@ -3,9 +3,34 @@ package strength
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
+
+func TestCalculateWithScheduleLoadAdjustsRelativeDifficulty(t *testing.T) {
+	start := time.Date(2026, 6, 1, 20, 0, 0, 0, time.UTC)
+	teams := []standings.Team{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}}
+	games := []standings.Game{
+		datedGame("b", "d", standings.CompletedStatus, 1, 1, start.Add(-20*24*time.Hour)),
+		datedGame("a", "c", standings.CompletedStatus, 1, 1, start),
+		datedGame("d", "a", standings.CompletedStatus, 1, 1, start.Add(4*24*time.Hour)),
+		{ID: "target", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "b", Kickoff: start.Add(8 * 24 * time.Hour)},
+	}
+
+	result, err := CalculateWithVenueSampleAndScheduleLoad(teams, games, VenueSample{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := byID(result.Rows)
+	const congestion = 0.115
+	assertFloat(t, rows["a"].VenueAdjustedOpponentPPG, 1)
+	assertFloat(t, rows["a"].ScheduleAdjustedPPG, math.Exp(congestion))
+	assertFloat(t, rows["b"].VenueAdjustedOpponentPPG, 1)
+	assertFloat(t, rows["b"].ScheduleAdjustedPPG, math.Exp(-congestion))
+	assertFloat(t, rows["a"].Fixtures[0].TeamCongestion, congestion)
+	assertFloat(t, rows["a"].Fixtures[0].OpponentCongestion, 0)
+}
 
 func TestCalculateRawAndVenueAdjustedStrength(t *testing.T) {
 	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}, {ID: "c", Name: "Charlie"}}
@@ -157,6 +182,13 @@ func TestCalculateIgnoresUnknownAndNonRemainingGames(t *testing.T) {
 
 func game(home, away, status string, homeScore, awayScore int) standings.Game {
 	return standings.Game{HomeTeamID: home, AwayTeamID: away, Status: status, HomeScore: intPtr(homeScore), AwayScore: intPtr(awayScore)}
+}
+
+func datedGame(home, away, status string, homeScore, awayScore int, kickoff time.Time) standings.Game {
+	value := game(home, away, status, homeScore, awayScore)
+	value.ID = home + "-" + away + "-" + kickoff.Format(time.RFC3339)
+	value.Kickoff = kickoff
+	return value
 }
 
 func intPtr(value int) *int { return &value }

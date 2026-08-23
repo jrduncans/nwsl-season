@@ -186,6 +186,14 @@ unsupported fixtures do not contribute. The constants were strongly shrunk
 and frozen using development seasons before the model was evaluated once on
 the held-out final-test seasons.
 
+The standings indicator and Schedule difficulty page reuse this exact load
+calculation. Their descriptive strength measure starts from venue-adjusted
+opponent PPG and multiplies each fixture by
+`exp(team_congestion - opponent_congestion)`. Thus the schedule becomes harder
+when the evaluated team is more loaded, easier when its opponent is more
+loaded, and unchanged when their load is equal. The venue-only and raw PPG
+measures remain visible as comparisons.
+
 ### Current pace
 
 Current pace uses the same home-goal, away-goal, and 20-match priors to
