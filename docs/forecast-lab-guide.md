@@ -37,13 +37,12 @@ flowchart TD
     G --> H["Render the forecast and an optional model comparison"]
 ```
 
-The default model is currently **xG Poisson**
-(`xg-poisson-home-two-seasons-v1`). Its current-team strengths use only this
-season, while its league home/away rates pool this season with the two previous
-regular seasons. That venue window was selected after the checked-in
-walk-forward experiments showed a small log-loss improvement over season-only
-rates, with no meaningful advantage for pooling all history; see
-[Model evaluation v1](model-evaluation-v1.md).
+The default model is currently **xG Poisson (schedule load)**
+(`xg-poisson-schedule-load-v1`). It starts from the established xG Poisson
+forecast, then adjusts the two teams' relative rates for exact recovery time
+and accumulated fixture load. The frozen adjustment passed the checked-in
+development and final-test protocol; see [Model evaluation
+v1](model-evaluation-v1.md).
 
 ## What Forecast Lab needs before it can run
 
@@ -89,8 +88,9 @@ ID, so a shared URL always says which model produced its outlook.
 | Results Poisson | `results-poisson-home-two-seasons-v1` | Scores | Current-season team attack and goals-conceded rates use league venue rates pooled with the two previous seasons. |
 | xG Poisson | `xg-poisson-home-two-seasons-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
 | xG Poisson (recent form) | `xg-poisson-recent-form-v1` | Available ASA team-model xG and kickoff dates | An experimental alternative: each team's xG attack and defence discount older current-season matches exponentially, while the two-season league home-field baseline stays unchanged. |
+| xG Poisson (schedule load) | `xg-poisson-schedule-load-v1` | Available ASA team-model xG, fixture kickoffs, and the two previous regular seasons | The selected xG Poisson model adjusts relative team strength for short recovery and a third match within nine elapsed days. |
 
-All four models turn a fixture into independent home and away Poisson score
+All five models turn a fixture into independent home and away Poisson score
 distributions. Their scoring rates are bounded between `0.20` and `4.50` goals
 per side, which keeps sparse early-season data from producing implausibly
 extreme scorelines.
@@ -137,9 +137,9 @@ matches. It does not fall back to results.
 
 ### xG Poisson (recent form)
 
-`xg-poisson-recent-form-v1` is a comparison model rather than the recommended
-default. It uses the same Poisson construction and league home/away rates as
-the default xG Poisson model, but replaces each team's unweighted xG totals
+`xg-poisson-recent-form-v1` is a comparison model rather than the default. It
+uses the same Poisson construction and league home/away rates as
+the baseline xG Poisson model, but replaces each team's unweighted xG totals
 with an exponentially weighted total. For a completed match `d` days before
 the most recently completed match in the cached season:
 
@@ -156,8 +156,35 @@ half-life is a deliberately fixed experimental constant, not a user control.
 The checked-in historical evaluation found that it did not meet the
 precommitted replacement rule: its final-test match log loss was slightly
 worse than the default and the paired interval crossed zero. It remains an
-available comparison model; `xg-poisson-home-two-seasons-v1` remains the
-recommended default.
+available comparison model.
+
+### xG Poisson (schedule load)
+
+`xg-poisson-schedule-load-v1` is the selected default. It first calculates the
+unclamped home and away rates from `xg-poisson-home-two-seasons-v1`. For each
+team, recovery pressure is zero with at least six elapsed days since its prior
+fixture, rises linearly between six and five days, and saturates at one with
+five days or less. A separate accumulated-load flag is set when the current
+fixture is the team's third or later appearance and its second-prior kickoff
+was no more than nine elapsed days earlier.
+
+For recovery pressure `r` and accumulated-load indicator `L`, the congestion
+value is:
+
+```text
+congestion = 0.04 * r + 0.075 * L
+adjustment = (away_congestion - home_congestion) / 2
+
+lambda_home = clamp(base_home * exp(adjustment), 0.20, 4.50)
+lambda_away = clamp(base_away * exp(-adjustment), 0.20, 4.50)
+```
+
+This symmetric form preserves the two base rates' geometric mean: equal load
+cancels, while the more congested team becomes relatively weaker. FullTime and
+PreMatch fixtures with valid UTC kickoffs establish the schedule; abandoned or
+unsupported fixtures do not contribute. The constants were strongly shrunk
+and frozen using development seasons before the model was evaluated once on
+the held-out final-test seasons.
 
 ### Current pace
 
@@ -291,9 +318,10 @@ assumption-removal links.
 
 The random seed is the first eight bytes of a SHA-256 hash over the model ID,
 sorted team IDs, sorted cached fixture IDs/statuses/scores, sorted fixed
-outcomes, and model-specific fitted input. Only xG Poisson adds xG values to
-that last component. Display names, refresh times, raw payloads, and unused xG
-rows do not affect the seed.
+outcomes, and model-specific fitted input. The xG models add their xG values;
+date-sensitive models also add the relevant canonical kickoff schedule.
+Display names, refresh times, raw payloads, and unused xG rows do not affect the
+seed.
 
 A URL preserves model choices and assumptions, **not** a historical source
 snapshot. It always uses the latest successful cache. When a fixture later
@@ -320,10 +348,12 @@ probabilities never replace those badges or conditions.
 ## Where to look in the code
 
 - [`internal/forecast/catalog.go`](../internal/forecast/catalog.go) defines the
-  three-model catalog and its current default.
+  five-model catalog and its current default.
 - [`internal/forecast/current_pace.go`](../internal/forecast/current_pace.go),
   [`results_poisson.go`](../internal/forecast/results_poisson.go), and
-  [`xg_poisson.go`](../internal/forecast/xg_poisson.go) fit the score models.
+  [`xg_poisson.go`](../internal/forecast/xg_poisson.go) fit the base score
+  models. [`xg_poisson_schedule_load.go`](../internal/forecast/xg_poisson_schedule_load.go)
+  adds the selected schedule adjustment.
 - [`internal/simulation/simulation.go`](../internal/simulation/simulation.go)
   prepares complete seasons, conditionally samples fixed outcomes, handles
   unresolved ties, and aggregates results.

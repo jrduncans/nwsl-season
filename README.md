@@ -18,7 +18,8 @@ from the cached fixtures when a season page or CLI report is requested.
 - Remaining schedule difficulty with raw and home/away-adjusted comparisons.
 - Qualification proofs for the Shield, top-four seed, and playoff places.
 - Actionable clinching and elimination scenarios for the next slate.
-- Forecast Lab with Current Pace, Results Poisson, and xG Poisson models.
+- Forecast Lab with Current Pace, Results Poisson, and xG Poisson models,
+  including the selected recovery-time and accumulated-load adjustment.
 - Shareable forecast URLs with fixed match outcomes and optional model comparison.
 - Health and cache-status endpoints for operators.
 

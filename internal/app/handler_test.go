@@ -478,7 +478,7 @@ func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"How close were the forecasts?", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "Model evaluation"} {
+	for _, value := range []string{"How close were the forecasts?", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Model evaluation"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -1070,7 +1070,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast lab", "xG Poisson", "xg-poisson-home-two-seasons-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Top 4", "Playoffs", "Shield", "Finish distribution", "Middle 80%", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
+	for _, text := range []string{"Forecast lab", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Top 4", "Playoffs", "Shield", "Finish distribution", "Middle 80%", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -1224,6 +1224,22 @@ func TestForecastAcceptsRecentFormModel(t *testing.T) {
 	}
 }
 
+func TestForecastAcceptsScheduleLoadComparison(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-schedule-load-v1&c=xg-poisson-home-two-seasons-v1", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, text := range []string{"xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Model comparison", "xG Poisson (schedule load) vs xG Poisson"} {
+		if !strings.Contains(response.Body.String(), text) {
+			t.Errorf("body does not contain %q", text)
+		}
+	}
+}
+
 func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 	data := testSeasonData()
 	data.XGoals = []cache.GameXG{{
@@ -1239,6 +1255,7 @@ func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 		{path: "/seasons/2026/regular-season/forecast?v=2&m=results-poisson-v1", want: false},
 		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-v1", want: true},
 		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-recent-form-v1", want: true},
+		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-schedule-load-v1", want: true},
 	} {
 		response := httptest.NewRecorder()
 		NewHandlerWithOptions(fakeStore{season: data}, options).ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
@@ -1300,11 +1317,13 @@ func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 }
 
 func TestForecastResultKeyChangesWithKickoff(t *testing.T) {
-	data := cache.SeasonData{Games: []cache.Game{{ASAID: "completed", KickoffUTC: "2026-05-01 20:00:00 UTC"}}}
-	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-recent-form-v1", 50000, 8)
-	data.Games[0].KickoffUTC = "2026-05-02 20:00:00 UTC"
-	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-recent-form-v1", 50000, 8); second == first {
-		t.Fatal("forecast result key did not change with fixture kickoff")
+	for _, modelID := range []string{"xg-poisson-recent-form-v1", "xg-poisson-schedule-load-v1"} {
+		data := cache.SeasonData{Games: []cache.Game{{ASAID: "completed", KickoffUTC: "2026-05-01 20:00:00 UTC"}}}
+		first := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+		data.Games[0].KickoffUTC = "2026-05-02 20:00:00 UTC"
+		if second := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); second == first {
+			t.Errorf("%s result key did not change with fixture kickoff", modelID)
+		}
 	}
 }
 

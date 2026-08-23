@@ -9,19 +9,18 @@ func Catalog() []CatalogEntry {
 	return []CatalogEntry{
 		{Model: NewCurrentPaceV1()},
 		{Model: NewResultsPoissonHomeTwoSeasonsV1()},
-		{Model: NewXGPoissonHomeTwoSeasonsV1(), Default: true},
+		{Model: NewXGPoissonHomeTwoSeasonsV1()},
 		{Model: NewXGPoissonRecentFormV1()},
+		{Model: NewXGPoissonScheduleLoadV1(), Default: true},
 	}
 }
 
-// EvaluationCatalog adds models used by the standard historical evaluation.
-// They are not offered as user-facing Forecast Lab choices.
+// EvaluationCatalog prepends historical-evaluation-only reference models to
+// the user-facing Forecast Lab catalog.
 func EvaluationCatalog() []CatalogEntry {
-	entries := append([]CatalogEntry{
+	return append([]CatalogEntry{
 		{Model: NewStraightLinePaceV1()},
 	}, Catalog()...)
-	entries = append(entries, CatalogEntry{Model: NewXGPoissonScheduleLoadV1()})
-	return entries
 }
 func Lookup(id string) (CatalogEntry, bool) {
 	for _, entry := range Catalog() {
