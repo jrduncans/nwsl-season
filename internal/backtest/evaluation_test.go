@@ -129,6 +129,63 @@ func TestEvaluateReportsInvalidSeasonWithoutRunningIt(t *testing.T) {
 	}
 }
 
+func TestEvaluateScoresSelectedDevelopmentSeasonAndRetainsUnscoredHistory(t *testing.T) {
+	prior := tinySeason()
+	prior.ID = "2024"
+	for index := range prior.Games {
+		oldID := prior.Games[index].ID
+		prior.Games[index].ID = "prior-" + oldID
+		prior.Games[index].Kickoff = prior.Games[index].Kickoff.AddDate(-1, 0, 0)
+		value := prior.XGoals[oldID]
+		delete(prior.XGoals, oldID)
+		value.GameID = prior.Games[index].ID
+		prior.XGoals[prior.Games[index].ID] = value
+	}
+	current := tinySeason()
+	current.Window = DevelopmentWindow
+	model := &historySpyModel{t: t}
+	report, err := Evaluate(context.Background(), []Season{prior, current}, Config{
+		Models: []forecast.Model{model, forecast.NewCurrentPaceV1()}, IncumbentModelID: model.Info().ID,
+		ScoreSeasons: map[string]bool{current.ID: true}, ComparisonWindow: DevelopmentWindow,
+		Iterations: 10, BootstrapResamples: 10, GeneratedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !model.historySeen || model.fits == 0 {
+		t.Fatalf("spy fits = %d, history seen = %t", model.fits, model.historySeen)
+	}
+	metrics := report.Models[0].Windows
+	if got := metrics[DevelopmentWindow].Metrics.MatchLogLoss.Count; got != 6 {
+		t.Fatalf("development match count = %d, want 6", got)
+	}
+	if got := metrics[HeldoutWindow].Metrics.MatchLogLoss.Count; got != 0 {
+		t.Fatalf("held-out match count = %d, want 0", got)
+	}
+	if len(report.Comparisons) != 1 || report.Comparisons[0].Candidate != "current-pace-v1" || report.Comparisons[0].Metrics["match_log_loss"].Blocks != 3 {
+		t.Fatalf("development comparisons = %+v", report.Comparisons)
+	}
+	if report.Status != "incomplete" || report.Selection.CoverageGate || !strings.Contains(report.Selection.Reason, "Selection was not run") {
+		t.Fatalf("diagnostic report status = %q, selection = %+v", report.Status, report.Selection)
+	}
+	markdown := Markdown(report)
+	if strings.Contains(markdown, "### Final-test results") || !strings.Contains(markdown, "Final-test results: **not scored**") {
+		t.Fatalf("diagnostic Markdown misrepresents unscored final test:\n%s", markdown)
+	}
+}
+
+func TestEvaluateRejectsFilteredHeldoutScoring(t *testing.T) {
+	season := tinySeason()
+	_, err := Evaluate(context.Background(), []Season{season}, Config{
+		Models: []forecast.Model{forecast.NewResultsPoissonV1()}, IncumbentModelID: "results-poisson-v1",
+		ScoreSeasons: map[string]bool{season.ID: true}, ComparisonWindow: HeldoutWindow,
+		Iterations: 10, BootstrapResamples: 10, GeneratedAt: time.Now(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "restricted to the \"development\" window") {
+		t.Fatalf("filtered held-out scoring error = %v", err)
+	}
+}
+
 func TestHistoricalPlayoffPlaces(t *testing.T) {
 	for season, want := range map[string]int{"2016": 4, "2019": 4, "2021": 6, "2023": 6, "2024": 8, "2025": 8} {
 		got, ok := HistoricalPlayoffPlaces(season)
@@ -209,4 +266,30 @@ func historicalGame(id, kickoff, home, away string, homeScore, awayScore int) Ga
 	parsed, _ := time.Parse(time.RFC3339, kickoff)
 	h, a := homeScore, awayScore
 	return Game{Game: standings.Game{ID: id, Status: standings.CompletedStatus, HomeTeamID: home, AwayTeamID: away, HomeScore: &h, AwayScore: &a}, Kickoff: parsed}
+}
+
+type historySpyModel struct {
+	t           *testing.T
+	fits        int
+	historySeen bool
+}
+
+func (m *historySpyModel) Info() forecast.Info {
+	return forecast.Info{ID: "history-spy", Name: "History spy"}
+}
+
+func (m *historySpyModel) Fit(input forecast.FitInput) (forecast.Predictor, error) {
+	m.t.Helper()
+	m.fits++
+	for _, game := range input.Games {
+		if strings.HasPrefix(game.ID, "prior-") {
+			m.t.Fatal("unscored held-out season was evaluated as a target")
+		}
+	}
+	for _, game := range input.HistoricalGames {
+		if strings.HasPrefix(game.ID, "2024/prior-") {
+			m.historySeen = true
+		}
+	}
+	return forecast.NewResultsPoissonV1().Fit(input)
 }

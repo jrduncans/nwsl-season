@@ -14,13 +14,14 @@ func Catalog() []CatalogEntry {
 	}
 }
 
-// EvaluationCatalog adds a deliberately simple reference model to the models
-// available in Forecast Lab. It is useful for interpreting evaluation results,
-// but is intentionally not offered as a user-facing forecast choice.
+// EvaluationCatalog adds models used by the standard historical evaluation.
+// They are not offered as user-facing Forecast Lab choices.
 func EvaluationCatalog() []CatalogEntry {
-	return append([]CatalogEntry{
+	entries := append([]CatalogEntry{
 		{Model: NewStraightLinePaceV1()},
 	}, Catalog()...)
+	entries = append(entries, CatalogEntry{Model: NewXGPoissonScheduleLoadV1()})
+	return entries
 }
 func Lookup(id string) (CatalogEntry, bool) {
 	for _, entry := range Catalog() {

@@ -67,6 +67,8 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	seasonList := flags.String("seasons", defaultSeasons, "comma-separated seasons")
 	development := flags.String("development", defaultDevelopmentSeasons, "development seasons used to design and tune candidate model versions")
 	heldout := flags.String("held-out", defaultHeldoutSeasons, "final-test seasons held out from model design")
+	scoreSeasonsValue := flags.String("score-seasons", "", "diagnostic-only comma-separated target seasons to score while retaining all requested seasons as chronological history")
+	comparisonWindow := flags.String("comparison-window", "", "diagnostic paired-comparison window; filtered runs require development")
 	iterations := flags.Int("iterations", 20000, "season simulations per daily cutoff")
 	resamples := flags.Int("bootstrap-resamples", 10000, "paired bootstrap resamples")
 	seed := flags.Int64("bootstrap-seed", 20251109, "paired bootstrap seed")
@@ -100,6 +102,16 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	heldoutSet, err := csvSet(*heldout)
 	if err != nil {
 		return fmt.Errorf("held-out: %w", err)
+	}
+	var scoreSeasons map[string]bool
+	if *scoreSeasonsValue != "" {
+		scoreSeasons, err = csvSet(*scoreSeasonsValue)
+		if err != nil {
+			return fmt.Errorf("score-seasons: %w", err)
+		}
+	}
+	if len(scoreSeasons) > 0 && *comparisonWindow != backtest.DevelopmentWindow {
+		return fmt.Errorf("filtered diagnostic scoring requires -comparison-window %s", backtest.DevelopmentWindow)
 	}
 	for id := range developmentSet {
 		if heldoutSet[id] {
@@ -139,13 +151,16 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 		}
 		seasons = append(seasons, season)
 	}
-	models := []forecast.Model{}
-	for _, entry := range forecast.EvaluationCatalog() {
+	catalog := forecast.EvaluationCatalog()
+	models := make([]forecast.Model, 0, len(catalog))
+	for _, entry := range catalog {
 		models = append(models, entry.Model)
 	}
 	report, err := backtest.Evaluate(ctx, seasons, backtest.Config{
 		Models: models, IncumbentModelID: *incumbent, Iterations: *iterations,
 		ReferenceModelIDs:  map[string]bool{"straight-line-pace-v1": true},
+		ScoreSeasons:       scoreSeasons,
+		ComparisonWindow:   *comparisonWindow,
 		BootstrapResamples: *resamples, BootstrapSeed: *seed, GeneratedAt: generatedAt, GitCommit: gitCommit(),
 	})
 	if err != nil {

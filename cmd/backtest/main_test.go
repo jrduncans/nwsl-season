@@ -86,6 +86,16 @@ func TestRunFailsClosedWithoutHistoricalData(t *testing.T) {
 	}
 }
 
+func TestRunRejectsFilteredHeldoutScoringBeforeOpeningCache(t *testing.T) {
+	err := run(context.Background(), []string{
+		"-db", filepath.Join(t.TempDir(), "must-not-open.sqlite"),
+		"-score-seasons", "2025", "-comparison-window", "held_out",
+	}, "", &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "requires -comparison-window development") {
+		t.Fatalf("filtered held-out scoring error = %v", err)
+	}
+}
+
 func TestCSVSetRejectsDuplicatesAndEmptyValues(t *testing.T) {
 	if _, err := csvSet("2024,2024"); err == nil {
 		t.Fatal("expected duplicate error")
