@@ -7,8 +7,8 @@
   <section class="schedule-summary" aria-labelledby="schedule-overview-title">
     <div class="section-heading"><div><h2 id="schedule-overview-title">Schedule overview</h2></div></div>
     <div class="schedule-callouts">
-      <article class="schedule-callout"><p class="eyebrow">Toughest remaining schedule</p><h3>{{template "teamName" .Strength.Toughest.Team}}</h3><p><strong>{{.Strength.Toughest.VenueAdjustedOpponentPPG}}</strong> Home/Away-adjusted opponent PPG <span class="schedule-delta">({{.Strength.Toughest.DeltaFromBaseline}} vs {{.Strength.Baseline}} baseline)</span></p><p class="note">{{.Strength.Toughest.RemainingFixtures}} remaining · {{.Strength.Toughest.RemainingHome}} home · {{.Strength.Toughest.RemainingAway}} away</p></article>
-      <article class="schedule-callout"><p class="eyebrow">Easiest remaining schedule</p><h3>{{template "teamName" .Strength.Easiest.Team}}</h3><p><strong>{{.Strength.Easiest.VenueAdjustedOpponentPPG}}</strong> Home/Away-adjusted opponent PPG <span class="schedule-delta">({{.Strength.Easiest.DeltaFromBaseline}} vs {{.Strength.Baseline}} baseline)</span></p><p class="note">{{.Strength.Easiest.RemainingFixtures}} remaining · {{.Strength.Easiest.RemainingHome}} home · {{.Strength.Easiest.RemainingAway}} away</p></article>
+      <article class="schedule-callout"><p class="eyebrow">Toughest remaining schedule</p><h3>{{template "teamName" .Strength.Toughest.Team}}</h3><p><strong>{{.Strength.Toughest.ScheduleAdjustedPPG}}</strong> Venue- and load-adjusted opponent PPG <span class="schedule-delta">({{.Strength.Toughest.DeltaFromBaseline}} vs {{.Strength.Baseline}} baseline)</span></p><p class="note">{{.Strength.Toughest.RemainingFixtures}} remaining · {{.Strength.Toughest.RemainingHome}} home · {{.Strength.Toughest.RemainingAway}} away</p></article>
+      <article class="schedule-callout"><p class="eyebrow">Easiest remaining schedule</p><h3>{{template "teamName" .Strength.Easiest.Team}}</h3><p><strong>{{.Strength.Easiest.ScheduleAdjustedPPG}}</strong> Venue- and load-adjusted opponent PPG <span class="schedule-delta">({{.Strength.Easiest.DeltaFromBaseline}} vs {{.Strength.Baseline}} baseline)</span></p><p class="note">{{.Strength.Easiest.RemainingFixtures}} remaining · {{.Strength.Easiest.RemainingHome}} home · {{.Strength.Easiest.RemainingAway}} away</p></article>
     </div>
   </section>
 {{end}}
@@ -16,17 +16,29 @@
 {{if eq .Strength.RemainingMatches 0}}
   <p class="note">No remaining regular-season fixtures are present in the cache.</p>
 {{else}}
-  <p class="note" id="schedule-definition">Remaining schedule difficulty is the average points per game (PPG) of a team’s remaining opponents, adjusted for home and away matches. For each fixture, we start with the opponent’s current PPG. Each remaining fixture is adjusted separately: in a home match, the opponent is playing away, so we subtract half the difference between the league’s average home and away PPG from the opponent’s value. In an away match, the opponent is playing at home, so we add half that difference. Higher values mean a harder remaining schedule.</p>
-  <p class="note">The adjustment uses {{.Strength.CompletedMatches}} completed regular-season matches from this season and up to the two previous seasons: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
+  <p class="note" id="schedule-definition">Remaining schedule difficulty starts with each opponent’s current points per game (PPG), adjusts for whether that opponent will play at home or away, and then adjusts for the two teams’ relative fixture load entering that match. Short recovery raises pressure between six and five elapsed days and saturates at five days; a third or later match within nine elapsed days adds accumulated load. A team’s schedule gets harder when it is more loaded than its opponent, easier when its opponent is more loaded, and no load adjustment when both are equally loaded. Higher values mean a harder remaining schedule.</p>
+  <p class="note">For each fixture, the venue-adjusted opponent PPG is multiplied by <code>exp(team congestion − opponent congestion)</code>. Congestion is <code>0.04 × recovery pressure + 0.075</code> for a third-or-later match within nine days. These are the same strongly shrunk effects used by the selected Forecast Lab model. The venue adjustment uses {{.Strength.CompletedMatches}} completed regular-season matches from this season and up to the two previous seasons: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
   {{if .Strength.HasBaseline}}
     <section aria-labelledby="adjusted-title">
-      <div class="section-heading"><div><h2 id="adjusted-title">Home/Away-adjusted comparison</h2><p class="note">Sorted hardest to easiest. The vertical marker is the league baseline of {{.Strength.Baseline}} Home/Away-adjusted opponent PPG.</p></div></div>
+      <div class="section-heading"><div><h2 id="adjusted-title">Venue- and load-adjusted comparison</h2><p class="note">Sorted hardest to easiest. The vertical marker is the league baseline of {{.Strength.Baseline}} adjusted opponent PPG.</p></div></div>
       <div class="schedule-plot" aria-describedby="schedule-definition">
         <div class="schedule-axis"><span>Easier</span><span class="schedule-axis-baseline" style="left: {{.Strength.BaselinePosition}}%;">League baseline</span><span>Harder</span></div>
         {{range .Strength.Rows}}{{if .Available}}
-          <div class="schedule-plot-row"><div class="schedule-plot-team">{{template "teamName" .Team}}</div><div class="schedule-track" aria-hidden="true"><span class="schedule-baseline" style="left: {{$.Strength.BaselinePosition}}%;"></span><span class="schedule-dot" style="left: {{.PlotPosition}}%;"></span></div><div class="schedule-plot-value"><strong>{{.VenueAdjustedOpponentPPG}}</strong><span>{{.DeltaFromBaseline}} · {{.ScheduleLabel}}</span></div></div>
+          <div class="schedule-plot-row"><div class="schedule-plot-team">{{template "teamName" .Team}}</div><div class="schedule-track" aria-hidden="true"><span class="schedule-baseline" style="left: {{$.Strength.BaselinePosition}}%;"></span><span class="schedule-dot" style="left: {{.PlotPosition}}%;"></span></div><div class="schedule-plot-value"><strong>{{.ScheduleAdjustedPPG}}</strong><span>{{.DeltaFromBaseline}} · {{.ScheduleLabel}}</span></div></div>
         {{end}}{{end}}
       </div>
+    </section>
+
+    <section aria-labelledby="venue-title">
+      <details class="comparison-disclosure"><summary id="venue-title">Compare venue-only opponent PPG</summary>
+        <p class="note">This removes the relative fixture-load adjustment but retains the home/away adjustment. Its available-row average is {{.Strength.VenueBaseline}}.</p>
+        <div class="schedule-plot" aria-label="Venue-only opponent PPG comparison">
+          <div class="schedule-axis"><span>Lower</span><span class="schedule-axis-baseline" style="left: {{.Strength.VenueBaselinePosition}}%;">Venue-only average</span><span>Higher</span></div>
+          {{range .Strength.Rows}}{{if .Available}}
+            <div class="schedule-plot-row"><div class="schedule-plot-team">{{template "teamName" .Team}}</div><div class="schedule-track" aria-hidden="true"><span class="schedule-baseline" style="left: {{$.Strength.VenueBaselinePosition}}%;"></span><span class="schedule-dot schedule-dot-raw" style="left: {{.VenuePlotPosition}}%;"></span></div><div class="schedule-plot-value"><strong>{{.VenueAdjustedOpponentPPG}}</strong><span>venue-only opponent PPG</span></div></div>
+          {{end}}{{end}}
+        </div>
+      </details>
     </section>
 
     <section aria-labelledby="raw-title">
@@ -51,7 +63,7 @@
       <p class="note">Expand a team to see every remaining opponent, home/away designation, contribution, and the values behind its average.</p>
       <div class="schedule-details">
       {{range .Strength.Rows}}
-        <details class="team-schedule-detail"><summary><span class="schedule-detail-team">{{template "teamName" .Team}}</span>{{if .Available}}{{if $.Strength.HasBaseline}}<span>{{.ScheduleLabel}} · {{.VenueAdjustedOpponentPPG}} Home/Away-adjusted PPG · {{.DeltaFromBaseline}} vs baseline</span>{{else}}<span>{{.VenueAdjustedOpponentPPG}} Home/Away-adjusted PPG · comparison unavailable</span>{{end}}{{else}}<span>Unavailable</span>{{end}}</summary>
+        <details class="team-schedule-detail"><summary><span class="schedule-detail-team">{{template "teamName" .Team}}</span>{{if .Available}}{{if $.Strength.HasBaseline}}<span>{{.ScheduleLabel}} · {{.ScheduleAdjustedPPG}} venue- and load-adjusted PPG · {{.DeltaFromBaseline}} vs baseline</span>{{else}}<span>{{.ScheduleAdjustedPPG}} venue- and load-adjusted PPG · comparison unavailable</span>{{end}}{{else}}<span>Unavailable</span>{{end}}</summary>
           {{if .Available}}
             <p class="note">{{.RemainingFixtures}} remaining matches: {{.RemainingHome}} home and {{.RemainingAway}} away. Home opponent PPG: {{.HomeOpponentPPG}}; away opponent PPG: {{.AwayOpponentPPG}}.</p>
           {{else if .NoRemainingFixtures}}
@@ -59,7 +71,7 @@
           {{else}}
             <p class="data-warning">At least one opponent lacks completed-match history, so this team’s aggregate estimate is unavailable.</p>
           {{end}}
-          <div class="table-scroll"><table class="fixture-detail"><caption>Remaining fixtures for {{.Team.Name}}</caption><thead><tr><th scope="col">Opponent</th><th scope="col">Home/Away</th><th scope="col">Raw opponent PPG</th><th scope="col">Adjusted contribution</th></tr></thead><tbody>{{range .Fixtures}}<tr><th scope="row">{{template "teamName" .Opponent}}</th><td>{{.Venue}}</td><td>{{.OpponentPPG}}</td><td>{{.VenueAdjustedOpponentPPG}}</td></tr>{{end}}</tbody></table></div>
+          <div class="table-scroll"><table class="fixture-detail"><caption>Remaining fixtures for {{.Team.Name}}</caption><thead><tr><th scope="col">Opponent</th><th scope="col">Home/Away</th><th scope="col">Raw opponent PPG</th><th scope="col">Venue adjusted</th><th scope="col">Relative load</th><th scope="col">Final difficulty</th></tr></thead><tbody>{{range .Fixtures}}<tr><th scope="row">{{template "teamName" .Opponent}}</th><td>{{.Venue}}</td><td>{{.OpponentPPG}}</td><td>{{.VenueAdjustedOpponentPPG}}</td><td>{{.LoadAdjustment}}</td><td>{{.ScheduleAdjustedPPG}}</td></tr>{{end}}</tbody></table></div>
         </details>
       {{end}}
       </div>

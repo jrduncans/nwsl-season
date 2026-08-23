@@ -907,7 +907,7 @@ func TestSeasonKeepsScheduleIndicatorWhenScheduleIsComplete(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `title="Remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
+	if !strings.Contains(response.Body.String(), `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
 		t.Fatal("complete schedule did not render unavailable schedule indicators")
 	}
 	if strings.Contains(response.Body.String(), "<h1>Remaining schedule difficulty</h1>") {
@@ -924,13 +924,13 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Home/Away-adjusted comparison", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Adjusted contribution", "Home", "Away", "Alpha &amp; Co"} {
+	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Venue- and load-adjusted comparison", "Compare venue-only opponent PPG", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha &amp; Co"} {
 		if !strings.Contains(response.Body.String(), text) {
 			t.Errorf("body does not contain %q", text)
 		}
 	}
 	body := response.Body.String()
-	for _, text := range []string{"average points per game (PPG) of a team’s remaining opponents", "Each remaining fixture is adjusted separately", "the opponent is playing away", "league’s average home and away PPG", "shown for comparison"} {
+	for _, text := range []string{"adjusts for the two teams’ relative fixture load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects", "shown for comparison"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain schedule explanation %q", text)
 		}
@@ -967,9 +967,9 @@ func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
 	data := cache.SeasonData{
 		Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: "bravo", Name: "Bravo"}, {ID: "charlie", Name: "Charlie"}},
 		Games: []cache.Game{
-			{ASAID: "done", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Valid: true}},
-			{ASAID: "alpha-charlie", Status: "PreMatch", HomeTeamID: "alpha", AwayTeamID: "charlie"},
-			{ASAID: "bravo-charlie", Status: "PreMatch", HomeTeamID: "bravo", AwayTeamID: "charlie"},
+			{ASAID: "done", KickoffUTC: "2026-05-01 20:00:00 UTC", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Valid: true}},
+			{ASAID: "alpha-charlie", KickoffUTC: "2026-05-08 20:00:00 UTC", Status: "PreMatch", HomeTeamID: "alpha", AwayTeamID: "charlie"},
+			{ASAID: "bravo-charlie", KickoffUTC: "2026-05-09 20:00:00 UTC", Status: "PreMatch", HomeTeamID: "bravo", AwayTeamID: "charlie"},
 		},
 	}
 	response := httptest.NewRecorder()
@@ -989,9 +989,9 @@ func TestScheduleDifficultyRendersMissingVenueSplitAndNoFixturesAccurately(t *te
 	data := cache.SeasonData{
 		Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: "bravo", Name: "Bravo"}, {ID: "charlie", Name: "Charlie"}, {ID: "delta", Name: "Delta"}},
 		Games: []cache.Game{
-			{ASAID: "alpha-bravo", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: 2, Valid: true}, AwayScore: sql.NullInt64{Int64: 0, Valid: true}},
-			{ASAID: "charlie-delta", Status: standings.CompletedStatus, HomeTeamID: "charlie", AwayTeamID: "delta", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Int64: 1, Valid: true}},
-			{ASAID: "future", Status: "PreMatch", HomeTeamID: "charlie", AwayTeamID: "delta"},
+			{ASAID: "alpha-bravo", KickoffUTC: "2026-05-01 20:00:00 UTC", Status: standings.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: 2, Valid: true}, AwayScore: sql.NullInt64{Int64: 0, Valid: true}},
+			{ASAID: "charlie-delta", KickoffUTC: "2026-05-02 20:00:00 UTC", Status: standings.CompletedStatus, HomeTeamID: "charlie", AwayTeamID: "delta", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Int64: 1, Valid: true}},
+			{ASAID: "future", KickoffUTC: "2026-05-10 20:00:00 UTC", Status: "PreMatch", HomeTeamID: "charlie", AwayTeamID: "delta"},
 		},
 	}
 	response := httptest.NewRecorder()

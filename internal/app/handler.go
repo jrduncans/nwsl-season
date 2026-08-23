@@ -661,7 +661,10 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	domainGames := standingsGames(data.Games)
 	if scope.scheduleDifficultyAvailable() {
 		venue := forecastVenueSample(data)
-		scheduleStrength := strength.CalculateWithVenueSample(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
+		scheduleStrength, scheduleErr := strength.CalculateWithVenueSampleAndScheduleLoad(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
+		if scheduleErr != nil {
+			return seasonPage{}, fmt.Errorf("calculate schedule difficulty: %w", scheduleErr)
+		}
 		scheduleView = strengthViewFrom(scheduleStrength)
 	}
 	if scope.standingsAvailable() {

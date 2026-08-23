@@ -8,22 +8,18 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/scheduleload"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 const (
 	xgPoissonScheduleLoadID = "xg-poisson-schedule-load-v1"
 
-	recoveryStart = 6 * 24 * time.Hour
-	recoveryFull  = 5 * 24 * time.Hour
-	loadWindow    = 9 * 24 * time.Hour
-
-	// Development seasons supported effects around 0.16 and 0.30 on the
-	// relative log-strength scale. The frozen candidate keeps one quarter of
-	// each exploratory estimate because development match results were noisy
-	// and heterogeneous by season.
-	recoveryLogShift        = 0.04
-	accumulatedLoadLogShift = 0.075
+	recoveryStart           = scheduleload.RecoveryStart
+	recoveryFull            = scheduleload.RecoveryFull
+	loadWindow              = scheduleload.LoadWindow
+	recoveryLogShift        = scheduleload.RecoveryLogShift
+	accumulatedLoadLogShift = scheduleload.AccumulatedLoadLogShift
 )
 
 // NewXGPoissonScheduleLoadV1 adjusts the established xG Poisson rates for a
@@ -101,78 +97,26 @@ func (p scheduleLoadXGPredictor) Distribution(game standings.Game) (Distribution
 }
 
 func congestion(load teamScheduleLoad) float64 {
-	value := recoveryLogShift * load.recovery
-	if load.third {
-		value += accumulatedLoadLogShift
-	}
-	return value
-}
-
-type scheduledAppearance struct {
-	gameID  string
-	kickoff time.Time
-	home    bool
+	return scheduleload.Congestion(scheduleload.Team{Recovery: load.recovery, ThirdWithinNine: load.third})
 }
 
 func scheduleLoads(games []standings.Game) (map[string]fixtureScheduleLoad, error) {
-	byTeam := map[string][]scheduledAppearance{}
-	seen := make(map[string]struct{}, len(games))
-	for _, game := range games {
-		if _, exists := seen[game.ID]; exists {
-			return nil, fmt.Errorf("duplicate fixture %q in schedule-load context", game.ID)
-		}
-		seen[game.ID] = struct{}{}
-		if game.Status != standings.CompletedStatus && game.Status != fixtures.PreMatchStatus {
-			continue
-		}
-		if game.Kickoff.IsZero() {
-			return nil, fmt.Errorf("fixture %q has no kickoff for schedule-load context", game.ID)
-		}
-		byTeam[game.HomeTeamID] = append(byTeam[game.HomeTeamID], scheduledAppearance{gameID: game.ID, kickoff: game.Kickoff, home: true})
-		byTeam[game.AwayTeamID] = append(byTeam[game.AwayTeamID], scheduledAppearance{gameID: game.ID, kickoff: game.Kickoff})
+	values, err := scheduleload.Calculate(games)
+	if err != nil {
+		return nil, err
 	}
-	loads := make(map[string]fixtureScheduleLoad, len(games))
-	for teamID, appearances := range byTeam {
-		sort.Slice(appearances, func(i, j int) bool {
-			if appearances[i].kickoff.Equal(appearances[j].kickoff) {
-				return appearances[i].gameID < appearances[j].gameID
-			}
-			return appearances[i].kickoff.Before(appearances[j].kickoff)
-		})
-		for index := 1; index < len(appearances); index++ {
-			if appearances[index].kickoff.Equal(appearances[index-1].kickoff) {
-				return nil, fmt.Errorf("team %q has multiple fixtures at %s", teamID, appearances[index].kickoff.UTC().Format(time.RFC3339Nano))
-			}
-		}
-		for index, appearance := range appearances {
-			var load teamScheduleLoad
-			if index > 0 {
-				load.recovery = recoveryPressure(appearance.kickoff.Sub(appearances[index-1].kickoff))
-			}
-			if index > 1 {
-				span := appearance.kickoff.Sub(appearances[index-2].kickoff)
-				load.third = span >= 0 && span <= loadWindow
-			}
-			fixture := loads[appearance.gameID]
-			if appearance.home {
-				fixture.home = load
-			} else {
-				fixture.away = load
-			}
-			loads[appearance.gameID] = fixture
+	loads := make(map[string]fixtureScheduleLoad, len(values))
+	for id, value := range values {
+		loads[id] = fixtureScheduleLoad{
+			home: teamScheduleLoad{recovery: value.Home.Recovery, third: value.Home.ThirdWithinNine},
+			away: teamScheduleLoad{recovery: value.Away.Recovery, third: value.Away.ThirdWithinNine},
 		}
 	}
 	return loads, nil
 }
 
 func recoveryPressure(rest time.Duration) float64 {
-	if rest >= recoveryStart {
-		return 0
-	}
-	if rest <= recoveryFull {
-		return 1
-	}
-	return float64(recoveryStart-rest) / float64(recoveryStart-recoveryFull)
+	return scheduleload.RecoveryPressure(rest)
 }
 
 func appendScheduleLoadMaterial(base []byte, games []standings.Game) []byte {
