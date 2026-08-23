@@ -45,6 +45,7 @@ func fixtureOutlooksFor(data cache.SeasonData, model forecast.Model) map[string]
 			continue
 		}
 		outlooks[game.ID] = fixtureOutlookView{
+			ModelName:   model.Info().Name,
 			HomeWin:     outcomes.HomeWin,
 			Draw:        outcomes.Draw,
 			AwayWin:     outcomes.AwayWin,

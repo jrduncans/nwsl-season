@@ -263,6 +263,7 @@ type fixtureView struct {
 // the fixtures page. Its shares remain numeric so the same values drive the
 // displayed percentages and the proportional bar.
 type fixtureOutlookView struct {
+	ModelName                          string
 	HomeWin, Draw, AwayWin             float64
 	HomeWinText, DrawText, AwayWinText string
 }

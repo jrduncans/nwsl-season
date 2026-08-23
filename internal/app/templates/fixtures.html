@@ -11,7 +11,7 @@
   <button class="fixture-view-button" type="button" data-fixture-view-button="results" aria-pressed="true">Results</button>
   <button class="fixture-view-button" type="button" data-fixture-view-button="upcoming" aria-pressed="false">Upcoming</button>
 </div>
-{{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include an xG Poisson outlook for each result.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
+{{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include a match outlook for each result. Outlooks use expected goals, venue, recovery time, and recent fixture load.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
 
 <section data-fixture-view="results">
 {{range .ResultFixtureGroups}}
@@ -30,8 +30,8 @@
 </section>
 {{template "foot" .}}{{end}}
 
-{{define "fixtureOutlook"}}<div class="fixture-outlook" role="group" aria-label="xG Poisson outlook: {{.HomeTeam.Name}} has a {{.Outlook.HomeWinText}} chance of winning, the draw chance is {{.Outlook.DrawText}}, and {{.AwayTeam.Name}} has a {{.Outlook.AwayWinText}} chance of winning.">
-  <span class="fixture-outlook-model">xG Poisson outlook</span>
+{{define "fixtureOutlook"}}<div class="fixture-outlook" role="group" aria-label="Match outlook: {{.HomeTeam.Name}} has a {{.Outlook.HomeWinText}} chance of winning, the draw chance is {{.Outlook.DrawText}}, and {{.AwayTeam.Name}} has a {{.Outlook.AwayWinText}} chance of winning.">
+  <span class="fixture-outlook-model" title="Selected Forecast Lab model: {{.Outlook.ModelName}}">Match outlook</span>
   <div class="fixture-outcome-labels" aria-hidden="true"><span class="fixture-outcome-home">Home win <strong>{{.Outlook.HomeWinText}}</strong></span><span class="fixture-outcome-draw">Draw <strong>{{.Outlook.DrawText}}</strong></span><span class="fixture-outcome-away">Away win <strong>{{.Outlook.AwayWinText}}</strong></span></div>
   <div class="fixture-outcome-bar" aria-hidden="true"><span class="fixture-outcome-segment fixture-outcome-home" style="--fixture-outcome-share: {{.Outlook.HomeWin}}"></span><span class="fixture-outcome-segment fixture-outcome-draw" style="--fixture-outcome-share: {{.Outlook.Draw}}"></span><span class="fixture-outcome-segment fixture-outcome-away" style="--fixture-outcome-share: {{.Outlook.AwayWin}}"></span></div>
 </div>{{end}}
