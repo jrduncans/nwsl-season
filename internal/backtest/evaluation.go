@@ -63,6 +63,8 @@ type Config struct {
 	Models             []forecast.Model
 	IncumbentModelID   string
 	ReferenceModelIDs  map[string]bool
+	ScoreSeasons       map[string]bool
+	ComparisonWindow   string
 	Iterations         int
 	BootstrapResamples int
 	BootstrapSeed      int64
@@ -105,10 +107,20 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 		Status: "complete", IncumbentModel: cfg.IncumbentModelID,
 		SelectedModel: cfg.IncumbentModelID, GeneratedAt: cfg.GeneratedAt.UTC(), GitCommit: cfg.GitCommit,
 		Iterations: cfg.Iterations, BootstrapResamples: cfg.BootstrapResamples,
+		ComparisonWindow: cfg.ComparisonWindow,
 		Limitations: []string{
 			"Historical ASA xG contains currently published or corrected values, not a reconstruction of when each value was first available.",
+			"Historical kickoffs use the currently cached or corrected schedule, not an as-of reconstruction; a retrospective reschedule can reveal schedule knowledge that was unavailable at the cutoff.",
 			"Daily UTC cutoffs prevent games on the same date from training one another.",
 		},
+	}
+	if len(cfg.ScoreSeasons) > 0 {
+		report.Status = "incomplete"
+		report.Limitations = append(report.Limitations, "Diagnostic scoring filter: only explicitly selected target seasons were scored; unscored seasons remained available solely as chronological forecast history.")
+		for seasonID := range cfg.ScoreSeasons {
+			report.ScoredSeasons = append(report.ScoredSeasons, seasonID)
+		}
+		sort.Strings(report.ScoredSeasons)
 	}
 	for id := range cfg.ReferenceModelIDs {
 		report.ReferenceModels = append(report.ReferenceModels, id)
@@ -120,8 +132,12 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 	}
 
 	validHeldoutCoverage, heldoutSeasons := true, 0
+	foundScoreSeasons := map[string]bool{}
 	preparedSeasons := make([]Season, 0, len(seasons))
 	for _, season := range seasons {
+		if cfg.ScoreSeasons[season.ID] {
+			foundScoreSeasons[season.ID] = true
+		}
 		audit, prepared, err := auditSeason(season)
 		report.Seasons = append(report.Seasons, audit)
 		if err != nil {
@@ -139,12 +155,28 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 		}
 		preparedSeasons = append(preparedSeasons, prepared)
 	}
+	for seasonID := range cfg.ScoreSeasons {
+		if !foundScoreSeasons[seasonID] {
+			return Report{}, fmt.Errorf("score season %s is not configured for evaluation", seasonID)
+		}
+	}
 	for _, season := range preparedSeasons {
+		if cfg.ScoreSeasons[season.ID] && season.Window != cfg.ComparisonWindow {
+			return Report{}, fmt.Errorf("score season %s belongs to %q, not comparison window %q", season.ID, season.Window, cfg.ComparisonWindow)
+		}
+	}
+	for _, season := range preparedSeasons {
+		if len(cfg.ScoreSeasons) > 0 && !cfg.ScoreSeasons[season.ID] {
+			continue
+		}
 		if err := evaluateSeason(ctx, season, preparedSeasons, cfg, models); err != nil {
 			return Report{}, fmt.Errorf("evaluate season %s: %w", season.ID, err)
 		}
 	}
 	if heldoutSeasons == 0 {
+		validHeldoutCoverage = false
+	}
+	if len(cfg.ScoreSeasons) > 0 {
 		validHeldoutCoverage = false
 	}
 	if !validHeldoutCoverage {
@@ -165,7 +197,11 @@ func Evaluate(ctx context.Context, seasons []Season, cfg Config) (Report, error)
 	}
 
 	report.Comparisons = comparisons(cfg, models)
-	report.Selection = selectModel(report, validHeldoutCoverage)
+	if len(cfg.ScoreSeasons) > 0 {
+		report.Selection = diagnosticSelection(report)
+	} else {
+		report.Selection = selectModel(report, validHeldoutCoverage)
+	}
 	report.SelectedModel = report.Selection.SelectedModel
 	return report, nil
 }
@@ -185,10 +221,23 @@ func validateConfig(cfg Config) error {
 	if !incumbent {
 		return fmt.Errorf("incumbent model %q is not configured", cfg.IncumbentModelID)
 	}
+	if (len(cfg.ScoreSeasons) > 0) != (cfg.ComparisonWindow != "") {
+		return fmt.Errorf("score seasons and comparison window must be configured together for a diagnostic run")
+	}
+	if len(cfg.ScoreSeasons) > 0 && cfg.ComparisonWindow != DevelopmentWindow {
+		return fmt.Errorf("filtered diagnostic scoring is restricted to the %q window", DevelopmentWindow)
+	}
 	if cfg.GeneratedAt.IsZero() {
 		return fmt.Errorf("generation time is required")
 	}
 	return nil
+}
+
+func diagnosticSelection(report Report) Selection {
+	return Selection{
+		SelectedModel: report.IncumbentModel,
+		Reason:        "Selection was not run: development-only diagnostics cannot replace the final-test model recommendation.",
+	}
 }
 
 func auditSeason(season Season) (SeasonAudit, Season, error) {

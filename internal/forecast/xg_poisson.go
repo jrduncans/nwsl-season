@@ -126,17 +126,25 @@ func fitXGPoisson(input FitInput, leagueGames []standings.Game, leagueXG map[str
 }
 func (p xgPredictor) SeedMaterial() []byte { return append([]byte(nil), p.material...) }
 func (p xgPredictor) Distribution(game standings.Game) (Distribution, error) {
+	homeRate, awayRate, err := p.rates(game)
+	if err != nil {
+		return nil, err
+	}
+	return poissonDistribution{homeRate: clamp(homeRate), awayRate: clamp(awayRate)}, nil
+}
+
+func (p xgPredictor) rates(game standings.Game) (homeRate, awayRate float64, err error) {
 	if game.Status != "PreMatch" {
-		return nil, fmt.Errorf("fixture %q is not remaining", game.ID)
+		return 0, 0, fmt.Errorf("fixture %q is not remaining", game.ID)
 	}
 	h, hok := p.teams[game.HomeTeamID]
 	a, aok := p.teams[game.AwayTeamID]
 	if !hok || !aok {
-		return nil, fmt.Errorf("fixture %q references an unknown team", game.ID)
+		return 0, 0, fmt.Errorf("fixture %q references an unknown team", game.ID)
 	}
 	ha, hd := xgStrengths(h, p.leagueRate)
 	aa, ad := xgStrengths(a, p.leagueRate)
-	return poissonDistribution{homeRate: clamp(p.homeRate * ha * ad), awayRate: clamp(p.awayRate * aa * hd)}, nil
+	return p.homeRate * ha * ad, p.awayRate * aa * hd, nil
 }
 func xgStrengths(t xgTotals, league float64) (float64, float64) {
 	return ((t.forGoals + teamPriorGames*league) / (float64(t.played) + teamPriorGames)) / league, ((t.against + teamPriorGames*league) / (float64(t.played) + teamPriorGames)) / league

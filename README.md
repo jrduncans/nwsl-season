@@ -321,6 +321,33 @@ have been synced into the same cache:
 go run ./cmd/backtest
 ```
 
+Candidate development can score only explicitly selected target seasons while
+retaining every requested season as cutoff-safe chronological history. This is
+important for models whose league baseline uses earlier seasons: removing the
+held-out seasons entirely would also remove legitimate historical inputs from
+later development forecasts. Development diagnostics must use external output
+paths and remain incomplete evidence:
+
+```sh
+NWSL_CONFIG_FILE=/dev/null go run ./cmd/backtest \
+  -db data/nwsl-season.sqlite \
+  -score-seasons 2017,2019,2022,2024 \
+  -comparison-window development \
+  -allow-incomplete \
+  -json /tmp/model-development.json \
+  -markdown /tmp/model-development.md
+```
+
+Unselected seasons are audited and may supply only information that existed
+before a scored cutoff; they do not generate model metrics. A filtered run
+is restricted to the development window, cannot replace the checked-in
+evaluation evidence, and cannot make a final-test claim. Experimental candidates
+remain outside the user-facing Forecast Lab catalog; a frozen candidate enters
+the standard evaluator only after its final-test run is explicitly authorized.
+Historical kickoff times come from the currently cached schedule rather than an
+as-of schedule reconstruction, so a retrospective reschedule remains a
+limitation for schedule-dependent candidates.
+
 The runner audits each season, uses daily UTC cutoffs (so same-day results cannot
 train one another), simulates each remaining season, calculates proper scoring
 rules and calibration, and applies the precommitted paired-bootstrap selection

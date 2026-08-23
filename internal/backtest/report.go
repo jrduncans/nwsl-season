@@ -19,6 +19,8 @@ type Report struct {
 	Iterations          int           `json:"iterations"`
 	BootstrapResamples  int           `json:"bootstrap_resamples"`
 	ReferenceModels     []string      `json:"reference_models,omitempty"`
+	ScoredSeasons       []string      `json:"scored_seasons,omitempty"`
+	ComparisonWindow    string        `json:"comparison_window,omitempty"`
 	Seasons             []SeasonAudit `json:"seasons"`
 	Models              []ModelResult `json:"models"`
 	Comparisons         []Comparison  `json:"comparisons"`
@@ -129,6 +131,9 @@ func Markdown(report Report) string {
 	fmt.Fprintln(&out)
 	fmt.Fprintln(&out, "## Evaluation protocol")
 	fmt.Fprintln(&out)
+	if len(report.ScoredSeasons) > 0 {
+		fmt.Fprintf(&out, "Diagnostic scoring filter: only %s generated model scores; all other audited seasons were chronological forecast history only.\n\n", strings.Join(report.ScoredSeasons, ", "))
+	}
 	fmt.Fprintf(&out, "Development: %s. These seasons may guide new candidate model versions and their fixed constants.\n\n", windowSeasons(report, DevelopmentWindow))
 	fmt.Fprintf(&out, "Final test: %s. These seasons are held out from model design and alone determine the recommendation.\n\n", windowSeasons(report, HeldoutWindow))
 	fmt.Fprintln(&out, "Pooled results combine both windows for descriptive context only; they never determine the recommendation.")
@@ -139,10 +144,20 @@ func Markdown(report Report) string {
 	fmt.Fprintln(&out)
 	fmt.Fprintln(&out, "Lower is better for every metric.")
 	fmt.Fprintln(&out)
-	writeSummaryTable(&out, "Development results", report.Models, DevelopmentWindow)
-	writeSummaryTable(&out, "Final-test results", report.Models, HeldoutWindow)
-	writeSummaryTable(&out, "Pooled results (descriptive only)", report.Models, "all")
-	fmt.Fprintln(&out, "## Paired final-test comparisons")
+	if len(report.ScoredSeasons) > 0 {
+		writeSummaryTable(&out, "Scored development results", report.Models, DevelopmentWindow)
+		fmt.Fprintln(&out, "Final-test results: **not scored**. Pooled development/final-test results are omitted for this diagnostic run.")
+		fmt.Fprintln(&out)
+	} else {
+		writeSummaryTable(&out, "Development results", report.Models, DevelopmentWindow)
+		writeSummaryTable(&out, "Final-test results", report.Models, HeldoutWindow)
+		writeSummaryTable(&out, "Pooled results (descriptive only)", report.Models, "all")
+	}
+	comparisonLabel := "final-test"
+	if report.ComparisonWindow == DevelopmentWindow {
+		comparisonLabel = "development"
+	}
+	fmt.Fprintf(&out, "## Paired %s comparisons\n", comparisonLabel)
 	fmt.Fprintln(&out)
 	fmt.Fprintln(&out, "Differences are candidate minus incumbent; negative values favor the candidate.")
 	fmt.Fprintln(&out)
@@ -206,6 +221,10 @@ func windowSeasons(report Report, window string) string {
 
 func comparisons(cfg Config, models map[string]*modelAccumulator) []Comparison {
 	incumbent := models[cfg.IncumbentModelID]
+	window := cfg.ComparisonWindow
+	if window == "" {
+		window = HeldoutWindow
+	}
 	metricNames := []string{"match_log_loss", "playoff_brier", "shield_brier", "points_crps", "position_rps"}
 	results := []Comparison{}
 	for _, model := range cfg.Models {
@@ -214,12 +233,12 @@ func comparisons(cfg Config, models map[string]*modelAccumulator) []Comparison {
 			continue
 		}
 		candidate := models[candidateID]
-		keys := commonKeys(candidate.blocks[HeldoutWindow], incumbent.blocks[HeldoutWindow])
+		keys := commonKeys(candidate.blocks[window], incumbent.blocks[window])
 		comparison := Comparison{Candidate: candidateID, Incumbent: cfg.IncumbentModelID, Metrics: map[string]Interval{}}
 		for metricIndex, name := range metricNames {
 			differences := make([]float64, 0, len(keys))
 			for _, key := range keys {
-				differences = append(differences, metricValue(candidate.blocks[HeldoutWindow][key], metricIndex)-metricValue(incumbent.blocks[HeldoutWindow][key], metricIndex))
+				differences = append(differences, metricValue(candidate.blocks[window][key], metricIndex)-metricValue(incumbent.blocks[window][key], metricIndex))
 			}
 			low, high := PairedBootstrap(differences, cfg.BootstrapResamples, cfg.BootstrapSeed+int64(metricIndex))
 			comparison.Metrics[name] = Interval{PointEstimate: mean(differences), Low: low, High: high, Blocks: len(differences)}
