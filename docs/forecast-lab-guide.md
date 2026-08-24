@@ -280,10 +280,10 @@ of independent per-fixture percentages.
 | Shield | First-place share of the position distribution. |
 | Finish distribution | The 10th through 90th percentile finishing-position range and probability for every finishing place with non-zero probability. |
 
-The table is sorted by top-4 chance, then expected points, then a stable team
-name/ID order. The full finish distribution is available from each team row,
-so the range of plausible finishes remains visible without presenting an
-average finishing position as a literal outcome.
+The table is sorted by expected points, then playoff chance, then top-four
+chance, followed by a stable team name/ID order. The full finish distribution
+is available from each team row, so the range of plausible finishes remains
+visible without presenting an average finishing position as a literal outcome.
 
 ### Comparing models
 

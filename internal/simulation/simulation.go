@@ -140,19 +140,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 	for _, accumulator := range byID {
 		rows = append(rows, resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces))
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].TopFourProbability != rows[j].TopFourProbability {
-			return rows[i].TopFourProbability > rows[j].TopFourProbability
-		}
-		if rows[i].ExpectedPoints != rows[j].ExpectedPoints {
-			return rows[i].ExpectedPoints > rows[j].ExpectedPoints
-		}
-		left, right := standings.DisplayName(rows[i].Team), standings.DisplayName(rows[j].Team)
-		if left != right {
-			return left < right
-		}
-		return rows[i].Team.ID < rows[j].Team.ID
-	})
+	sortTeamResults(rows)
 	return Result{
 		Model:      request.Model.Info(),
 		Iterations: request.Iterations,
@@ -161,6 +149,25 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		Remaining:  len(prepared.remaining),
 		Teams:      rows,
 	}, nil
+}
+
+func sortTeamResults(rows []TeamResult) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].ExpectedPoints != rows[j].ExpectedPoints {
+			return rows[i].ExpectedPoints > rows[j].ExpectedPoints
+		}
+		if rows[i].PlayoffProbability != rows[j].PlayoffProbability {
+			return rows[i].PlayoffProbability > rows[j].PlayoffProbability
+		}
+		if rows[i].TopFourProbability != rows[j].TopFourProbability {
+			return rows[i].TopFourProbability > rows[j].TopFourProbability
+		}
+		left, right := standings.DisplayName(rows[i].Team), standings.DisplayName(rows[j].Team)
+		if left != right {
+			return left < right
+		}
+		return rows[i].Team.ID < rows[j].Team.ID
+	})
 }
 
 type preparedSeason struct {

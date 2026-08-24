@@ -93,6 +93,19 @@ func TestRunReportsTopFourProbability(t *testing.T) {
 	}
 }
 
+func TestRunSortsTeamsByExpectedPointsBeforeProbabilities(t *testing.T) {
+	rows := []TeamResult{
+		{Team: standings.Team{ID: "top-four", Name: "Top Four"}, ExpectedPoints: 41, PlayoffProbability: .95, TopFourProbability: .90},
+		{Team: standings.Team{ID: "points", Name: "Points"}, ExpectedPoints: 42, PlayoffProbability: .80, TopFourProbability: .20},
+	}
+
+	sortTeamResults(rows)
+
+	if got, want := rows[0].Team.ID, "points"; got != want {
+		t.Fatalf("first team = %q, want %q", got, want)
+	}
+}
+
 func TestRunIsDeterministicForSameSnapshot(t *testing.T) {
 	request := Request{
 		Teams: []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}},
