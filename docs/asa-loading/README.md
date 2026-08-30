@@ -61,6 +61,7 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [Phase 4 Historical seasons](phase-4/p4-historical-seasons.md) | Complete | Terra | Primary | Phase 3 |
 | [Phase 5 Archived correction sweeps](phase-5/p5-cold-correction-maintenance.md) | Complete | Terra | Primary; Sol for concurrency | Phase 4 |
 | [Phase 6 Basic factual playoffs](phase-6/p6-basic-playoffs.md) | Complete | Terra | Primary; Sol for schema/stage isolation | Phase 5 |
+| [Phase 7 Season archive and phase-aware presentation](phase-7/p7-season-archive-and-completed-presentation.md) | In progress | Sol with bounded Luna and Terra audits | Terra | Phase 6 |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
@@ -92,6 +93,12 @@ due-only maintenance, and historical correction reporting.
 Phase 6 is complete. The current Playoffs catalog scope now has explicit stage
 URLs, normalized knockout facts, and existing full/targeted scheduler jobs
 without inferring a bracket or playoff rules.
+
+Phase 7 is in progress. It adds a cache-only season catalog plus a
+page-preserving season selector on standings and results outside the global
+section navigation, records the official historical postseason cut lines, and
+makes upcoming, active, and completed season pages show only phase-relevant
+controls and labels.
 
 ## Packet template
 

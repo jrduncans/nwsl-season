@@ -13,8 +13,14 @@ from the cached fixtures when a season page or CLI report is requested.
 
 ## Features
 
+- Cache-only season catalog and page-preserving season selection on standings and results.
 - Season overview with results, upcoming fixtures, model-based match outlooks, standings, goals, and xG.
 - Per-game and total standings views for seasons with uneven schedules.
+- Phase-aware presentation: upcoming seasons emphasize the schedule, active
+  seasons retain the full explorer, and completed or historical seasons focus
+  on standings and results without empty remaining-schedule controls.
+- Verified historical playoff cut lines: top four for 2016–2019, top six for
+  2021–2023, and top eight for 2024–2025.
 - Remaining schedule difficulty with raw, venue-adjusted, and relative
   schedule-load-adjusted comparisons.
 - Qualification proofs for the Shield, top-four seed, and playoff places.
@@ -46,21 +52,24 @@ the matching Go release for local development. CI continues to read the Go
 version from `go.mod` through `actions/setup-go`.
 
 Visit <http://localhost:8080>. With the default configuration, the current
-season is available at <http://localhost:8080/seasons/2026> and Forecast Lab is
-available at <http://localhost:8080/seasons/2026/forecast>.
+season is available at
+<http://localhost:8080/seasons/2026/regular-season>, the season catalog is at
+<http://localhost:8080/seasons>, and Forecast Lab is available at
+<http://localhost:8080/seasons/2026/regular-season/forecast>.
 The historical forecast comparison is available at
-<http://localhost:8080/seasons/2026/model-evaluation>.
+<http://localhost:8080/seasons/2026/regular-season/model-evaluation>.
 
 Useful endpoints:
 
 - <http://localhost:8080/healthz> — process health check.
 - <http://localhost:8080/cache/status> — latest cache attempt and success.
-- `/seasons/:season` — season overview.
-- `/seasons/:season/fixtures` — results and remaining fixtures.
-- `/seasons/:season/schedule-difficulty` — remaining schedule comparison.
-- `/seasons/:season/clinching` — qualification and slate scenarios.
-- `/seasons/:season/forecast` — interactive forecast simulation.
-- `/seasons/:season/model-evaluation` — interactive historical forecast evaluation.
+- `/seasons` — current and historical season catalog and no-JavaScript fallback.
+- `/seasons/:season/:stage` — canonical season or factual stage overview.
+- `/seasons/:season/:stage/fixtures` — results and remaining fixtures.
+- `/seasons/:season/:stage/schedule-difficulty` — remaining schedule comparison.
+- `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
+- `/seasons/:season/:stage/forecast` — interactive forecast simulation.
+- `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
 
 ## Pitchfork development server
 

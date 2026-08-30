@@ -19,6 +19,9 @@ func TestLookup2026RegularSeason(t *testing.T) {
 	if *entry.Inventory != (InventoryExpectation{Teams: 16, GamesPerTeam: 30, Games: 240}) {
 		t.Fatalf("inventory = %+v", entry.Inventory)
 	}
+	if entry.PlayoffPlaces != 8 {
+		t.Fatalf("playoff places = %d, want 8", entry.PlayoffPlaces)
+	}
 	want := []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG, CapabilityScheduleDifficulty, CapabilityForecast, CapabilityQualification, CapabilityScenarios}
 	if len(entry.Capabilities) != len(want) {
 		t.Fatalf("capabilities = %v, want %v", entry.Capabilities, want)
@@ -65,6 +68,7 @@ func TestCatalogValidationRejectsAmbiguousPublicRouting(t *testing.T) {
 
 func TestHistoricalRegularSeasonCatalogIsSourceOnlyAndFactual(t *testing.T) {
 	wantSeasons := []string{"2025", "2024", "2023", "2022", "2021", "2019", "2018", "2017", "2016"}
+	wantPlayoffPlaces := map[string]int{"2016": 4, "2017": 4, "2018": 4, "2019": 4, "2021": 6, "2022": 6, "2023": 6, "2024": 8, "2025": 8}
 	entries := PublicEntries()
 	if len(entries) != len(wantSeasons)+2 {
 		t.Fatalf("public entries = %d, want %d", len(entries), len(wantSeasons)+2)
@@ -76,6 +80,9 @@ func TestHistoricalRegularSeasonCatalogIsSourceOnlyAndFactual(t *testing.T) {
 		}
 		if entry.Season != season || entry.Stage != "Regular Season" || !entry.Public || !entry.Primary || !entry.SourceAvailable || entry.Inventory != nil || entry.Rules != nil {
 			t.Fatalf("historical entry %s = %+v", season, entry)
+		}
+		if entry.PlayoffPlaces != wantPlayoffPlaces[season] {
+			t.Fatalf("%s playoff places = %d, want %d", season, entry.PlayoffPlaces, wantPlayoffPlaces[season])
 		}
 		wantCapabilities := []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG}
 		if len(entry.Capabilities) != len(wantCapabilities) {
@@ -176,8 +183,17 @@ func TestEntryValidationRejections(t *testing.T) {
 		{"only teams", func(e *Entry) { e.Inventory = &InventoryExpectation{Teams: 2} }, "together"},
 		{"odd inventory product", func(e *Entry) { e.Inventory = &InventoryExpectation{Teams: 3, GamesPerTeam: 1} }, "even"},
 		{"wrong games", func(e *Entry) { e.Inventory = &InventoryExpectation{Teams: 2, GamesPerTeam: 2, Games: 3} }, "disagrees"},
+		{"negative playoff places", func(e *Entry) { e.PlayoffPlaces = -1 }, "negative"},
+		{"playoff places non league", func(e *Entry) { e.Kind = StageKindKnockout; e.PlayoffPlaces = 1 }, "league-table"},
+		{"playoff places exceed teams", func(e *Entry) { e.Inventory = &InventoryExpectation{Teams: 2, GamesPerTeam: 2}; e.PlayoffPlaces = 3 }, "exceed"},
+		{"playoff places without standings", func(e *Entry) { e.PlayoffPlaces = 1 }, "standings"},
 		{"invalid rules", func(e *Entry) { e.Rules = &Rules{} }, "rules"},
 		{"rules mismatch", func(e *Entry) { r := regular2026.Copy(); r.Stage = "Other"; e.Rules = &r; e.Season = r.Season }, "match"},
+		{"playoff places disagree with rules", func(e *Entry) {
+			r := regular2026.Copy()
+			e.Season, e.Stage, e.Rules, e.PlayoffPlaces = r.Season, r.Stage, &r, 7
+			e.Capabilities = []Capability{CapabilityStandings}
+		}, "disagree"},
 		{"unknown capability", func(e *Entry) { e.Capabilities = []Capability{"other"} }, "unknown"},
 		{"duplicate capability", func(e *Entry) { e.Capabilities = []Capability{CapabilityFixtures, CapabilityFixtures} }, "duplicated"},
 		{"standings non league", func(e *Entry) { e.Kind = StageKindGroup; e.Capabilities = []Capability{CapabilityStandings} }, "league-table"},

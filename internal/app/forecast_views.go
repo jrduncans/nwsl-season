@@ -15,13 +15,14 @@ import (
 type forecastPage struct {
 	Title               string
 	Season              string
+	Stage               string
 	HomePath            string
 	StylesheetPath      string
 	ScriptPath          string
+	CatalogPage         bool
 	SeasonPath          string
 	Navigation          []navigationItem
 	SeasonSelector      []seasonSelectorItem
-	StageSelector       []seasonSelectorItem
 	ForecastPath        string
 	ModelEvaluationPath string
 	CanonicalPath       string

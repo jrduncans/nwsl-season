@@ -54,7 +54,7 @@ func TestStageRoutesRedirectLegacyAndRenderPlayoffFacts(t *testing.T) {
 	}
 	playoffs := httptest.NewRecorder()
 	handler.ServeHTTP(playoffs, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/fixtures", nil))
-	if playoffs.Code != http.StatusOK || !strings.Contains(playoffs.Body.String(), "Knockout game") || !strings.Contains(playoffs.Body.String(), "120 minutes") || strings.Contains(playoffs.Body.String(), "Clinching scenarios") {
+	if playoffs.Code != http.StatusOK || !strings.Contains(playoffs.Body.String(), "Knockout game") || !strings.Contains(playoffs.Body.String(), "120 minutes") || strings.Contains(playoffs.Body.String(), "Clinching scenarios") || strings.Contains(playoffs.Body.String(), "data-season-selector") {
 		t.Fatalf("playoffs=%d %s", playoffs.Code, playoffs.Body.String())
 	}
 	unknown := httptest.NewRecorder()
@@ -98,6 +98,59 @@ func TestHome(t *testing.T) {
 	}
 	if location := response.Header().Get("Location"); location != "seasons/2026/regular-season" {
 		t.Fatalf("location = %q, want current season", location)
+	}
+}
+
+func TestSeasonArchiveListsPublicSeasonsWithoutChangingGlobalNavigation(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewHandler(fakeStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		"<h1>Seasons</h1>",
+		"Current season",
+		"Historical season",
+		`class="brand" href="."`,
+		`href="seasons/2026/regular-season"`,
+		`href="seasons/2026/regular-season/fixtures"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("archive missing %q", want)
+		}
+	}
+	if current, historical := strings.Index(body, "<h2>2026</h2>"), strings.Index(body, "<h2>2025</h2>"); current < 0 || historical < 0 || current > historical {
+		t.Errorf("season order is not descending: 2026=%d 2025=%d", current, historical)
+	}
+	for _, forbidden := range []string{"<h2>2020</h2>", `href="seasons/2026/playoffs"`, `aria-label="Season sections"`, "Data fetch time unavailable"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("archive unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
+func TestSeasonArchiveUsesOptionalReadinessAndReportsReadFailure(t *testing.T) {
+	readiness := []cache.SeasonReadinessSnapshot{
+		{Scope: cache.SourceScope{Season: "2025", Stage: "Regular Season"}, Readiness: cache.SourceReadinessNotPublished},
+		{Scope: cache.SourceScope{Season: "2026", Stage: "Regular Season"}, Readiness: cache.SourceReadinessAvailable, Completeness: cache.InventoryCompletenessIncomplete},
+	}
+	response := httptest.NewRecorder()
+	NewHandler(seasonArchiveStore{readiness: readiness}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	for _, want := range []string{"Historical season · Not published", "Current season · Partial data"} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Errorf("archive missing readiness label %q", want)
+		}
+	}
+
+	failure := httptest.NewRecorder()
+	NewHandler(seasonArchiveStore{err: errors.New("readiness failed")}).ServeHTTP(failure, httptest.NewRequest(http.MethodGet, "/seasons", nil))
+	if failure.Code != http.StatusInternalServerError || !strings.Contains(failure.Body.String(), "load season archive readiness") {
+		t.Fatalf("readiness failure = %d %q", failure.Code, failure.Body.String())
 	}
 }
 
@@ -226,8 +279,12 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 	}
 }
 
-func TestHistoricalCatalogPagesRenderCachedFactsWithoutPublicSelector(t *testing.T) {
-	data := testSeasonData()
+func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
+	data := phaseTestData(standings.CompletedStatus, standings.CompletedStatus)
+	data.Teams = append(data.Teams,
+		standings.Team{ID: "charlie", Name: "Charlie FC"},
+		standings.Team{ID: "delta", Name: "Delta FC"},
+	)
 	handler := NewHandler(fakeStore{season: data})
 	for _, path := range []string{"/seasons/2019/regular-season", "/seasons/2019/regular-season/fixtures"} {
 		response := httptest.NewRecorder()
@@ -236,15 +293,33 @@ func TestHistoricalCatalogPagesRenderCachedFactsWithoutPublicSelector(t *testing
 			t.Fatalf("%s status = %d, want 200", path, response.Code)
 		}
 		body := response.Body.String()
-		for _, want := range []string{historicalFormatNotice} {
+		for _, want := range []string{`data-season-selector`, `class="season-selector"`, `<span>Season</span>`, `>2026</option>`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s missing %q", path, want)
 			}
 		}
-		if strings.HasSuffix(path, "/fixtures") && !strings.Contains(body, "2–1") {
-			t.Errorf("%s did not render cached result", path)
+		if strings.HasSuffix(path, "/fixtures") {
+			for _, want := range []string{"<h1>Results</h1>", "2–1"} {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s missing %q", path, want)
+				}
+			}
+			for _, forbidden := range []string{"Historical results and xG", `data-fixture-view-toggle`, `data-fixture-view="upcoming"`, ">Upcoming<"} {
+				if strings.Contains(body, forbidden) {
+					t.Errorf("%s unexpectedly rendered %q", path, forbidden)
+				}
+			}
+		} else {
+			for _, want := range []string{"Historical standings", `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, `data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s missing %q", path, want)
+				}
+			}
+			if strings.Contains(body, "competition format") || strings.Contains(body, "playoff line") {
+				t.Errorf("%s still renders the removed historical-format caveat", path)
+			}
 		}
-		for _, hidden := range []string{"Season selector", "Stage selector", "2026 Regular Season", "2025 Regular Season", "Playoffs"} {
+		for _, hidden := range []string{"All seasons", "Stage selector", "2026 Regular Season", "2025 Regular Season", "Playoffs"} {
 			if strings.Contains(body, hidden) {
 				t.Errorf("%s unexpectedly rendered %q", path, hidden)
 			}
@@ -262,14 +337,41 @@ func TestHistoricalCatalogEmptyCacheRendersLoadState(t *testing.T) {
 		name, notice string
 		store        Store
 	}{
-		{name: "unknown", notice: "has not been loaded yet", store: fakeStore{}},
+		{name: "unknown", notice: "isn&#39;t available in the explorer yet", store: fakeStore{}},
 		{name: "not published", notice: "has not published historical data", store: historicalReadinessStore{fakeStore: fakeStore{}, readiness: cache.SeasonReadinessSnapshot{Readiness: cache.SourceReadinessNotPublished}, found: true}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewHandler(test.store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2018/regular-season/fixtures", nil))
-			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.notice) {
+			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.notice) || !strings.Contains(response.Body.String(), "data-season-selector") || !strings.Contains(response.Body.String(), "Browse seasons") {
 				t.Fatalf("historical empty response = %d %q", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	for _, test := range []struct {
+		name, path, destination string
+	}{
+		{name: "standings", path: "/seasons/2026/regular-season", destination: `href="../2025/regular-season"`},
+		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: `href="../../2025/regular-season/fixtures"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+			}
+			body := response.Body.String()
+			for _, want := range []string{`data-season-switcher`, `class="season-selector"`, `<span>Season</span>`, `data-season-selector`, `value="2025"`, test.destination, `data-season-destination="2025" hidden`, `>2025</option>`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("body does not contain %q", want)
+				}
+			}
+			if strings.Contains(body, "All seasons") {
+				t.Error("page still presents the season catalog as a universal parent")
 			}
 		})
 	}
@@ -330,6 +432,16 @@ func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
 	handler.ServeHTTP(pageResponse, pageRequest)
 	if pageResponse.Code != http.StatusOK {
 		t.Fatalf("base-path season status = %d, want 200", pageResponse.Code)
+	}
+	if !strings.Contains(pageResponse.Body.String(), `data-season-selector`) || !strings.Contains(pageResponse.Body.String(), `value="2025"`) || !strings.Contains(pageResponse.Body.String(), `href="../2025/regular-season"`) {
+		t.Fatalf("base-path season did not retain relative season destinations: %s", pageResponse.Body.String())
+	}
+
+	archiveRequest := httptest.NewRequest(http.MethodGet, "/explorer/seasons", nil)
+	archiveResponse := httptest.NewRecorder()
+	handler.ServeHTTP(archiveResponse, archiveRequest)
+	if archiveResponse.Code != http.StatusOK || !strings.Contains(archiveResponse.Body.String(), `href="seasons/2026/regular-season"`) {
+		t.Fatalf("base-path archive = status %d, body %q", archiveResponse.Code, archiveResponse.Body.String())
 	}
 
 	staticRequest := httptest.NewRequest(http.MethodGet, "/explorer/static/site.css", nil)
@@ -428,7 +540,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"2026 season", "Alpha &amp; Co", "Bravo FC", "Forecast lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `class="github-link" href="https://github.com/jrduncans/nwsl-season"`, `aria-label="View the project source on GitHub"`, ">SD</th>", "Harder"} {
+	for _, text := range []string{"<span>Season</span>", ">2026</option>", "· Regular Season", "<h1>Standings</h1>", "Alpha &amp; Co", "Bravo FC", "Forecast lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `class="github-link" href="https://github.com/jrduncans/nwsl-season"`, `aria-label="View the project source on GitHub"`, ">SD</th>", "Harder"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("body does not contain %q", text)
 		}
@@ -478,10 +590,13 @@ func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"How close were the forecasts?", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Model evaluation"} {
+	for _, value := range []string{"2026 · Regular Season", "<h1>Forecast model evaluation</h1>", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Model evaluation"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
+	}
+	if strings.Contains(body, "data-season-selector") {
+		t.Error("model evaluation unexpectedly renders the factual-page season selector")
 	}
 }
 
@@ -899,7 +1014,7 @@ func TestPlotPositionLeavesVisualMarginAtTrackEdges(t *testing.T) {
 	}
 }
 
-func TestSeasonKeepsScheduleIndicatorWhenScheduleIsComplete(t *testing.T) {
+func TestUnknownSeasonPhaseKeepsActiveSeasonCapabilities(t *testing.T) {
 	data := testSeasonData()
 	data.Games = data.Games[:1]
 	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season", nil)
@@ -911,10 +1026,15 @@ func TestSeasonKeepsScheduleIndicatorWhenScheduleIsComplete(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
-		t.Fatal("complete schedule did not render unavailable schedule indicators")
+		t.Fatal("unknown incomplete season did not retain the ordinary schedule indicators")
 	}
-	if strings.Contains(response.Body.String(), "<h1>Remaining schedule difficulty</h1>") {
-		t.Fatal("main season page rendered schedule-difficulty detail")
+	if !strings.Contains(response.Body.String(), ">Schedule difficulty</a>") || !strings.Contains(response.Body.String(), ">Forecast lab</a>") || !strings.Contains(response.Body.String(), ">Clinching scenarios</a>") {
+		t.Fatal("unknown incomplete season did not retain the ordinary feature navigation")
+	}
+	fixturesResponse := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(2), Location: time.UTC}).ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/fixtures", nil))
+	if fixturesResponse.Code != http.StatusOK || !strings.Contains(fixturesResponse.Body.String(), "<h1>Results and fixtures</h1>") {
+		t.Fatalf("unknown incomplete fixtures = %d %q", fixturesResponse.Code, fixturesResponse.Body.String())
 	}
 }
 
@@ -1385,13 +1505,14 @@ func TestForecastPreservesReverseProxyBasePath(t *testing.T) {
 
 func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 	paths := []struct {
-		path, current string
+		path, current, heading string
+		seasonSelector         bool
 	}{
-		{"/seasons/2026/regular-season", "Standings"},
-		{"/seasons/2026/regular-season/fixtures", "Results &amp; fixtures"},
-		{"/seasons/2026/regular-season/schedule-difficulty", "Schedule difficulty"},
-		{"/seasons/2026/regular-season/clinching", "Clinching scenarios"},
-		{"/seasons/2026/regular-season/forecast", "Forecast lab"},
+		{"/seasons/2026/regular-season", "Standings", "Standings", true},
+		{"/seasons/2026/regular-season/fixtures", "Results &amp; fixtures", "Results and fixtures", true},
+		{"/seasons/2026/regular-season/schedule-difficulty", "Schedule difficulty", "Remaining schedule difficulty", false},
+		{"/seasons/2026/regular-season/clinching", "Clinching scenarios", "Clinching scenarios", false},
+		{"/seasons/2026/regular-season/forecast", "Forecast lab", "Forecast lab", false},
 	}
 	for _, test := range paths {
 		t.Run(test.current, func(t *testing.T) {
@@ -1401,6 +1522,16 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 			}
 			body := response.Body.String()
+			seasonContext := "2026 · Regular Season"
+			if test.seasonSelector {
+				seasonContext = "· Regular Season"
+			}
+			if !strings.Contains(body, seasonContext) || !strings.Contains(body, "<h1>"+test.heading+"</h1>") {
+				t.Errorf("page does not use the shared season/stage and functional-title hierarchy")
+			}
+			if got := strings.Contains(body, "data-season-selector"); got != test.seasonSelector {
+				t.Errorf("season selector presence = %t, want %t", got, test.seasonSelector)
+			}
 			if !strings.Contains(body, `<nav class="site-nav" aria-label="Season sections">`) {
 				t.Fatal("page does not render the shared season navigation")
 			}
@@ -1613,6 +1744,16 @@ type historicalReadinessStore struct {
 
 func (f historicalReadinessStore) SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error) {
 	return f.readiness, f.found, nil
+}
+
+type seasonArchiveStore struct {
+	fakeStore
+	readiness []cache.SeasonReadinessSnapshot
+	err       error
+}
+
+func (f seasonArchiveStore) SeasonReadinesses(context.Context) ([]cache.SeasonReadinessSnapshot, error) {
+	return f.readiness, f.err
 }
 
 func testSeasonData() cache.SeasonData {

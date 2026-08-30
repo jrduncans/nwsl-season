@@ -24,12 +24,14 @@ type seasonPage struct {
 	HomePath               string
 	StylesheetPath         string
 	ScriptPath             string
+	CatalogPage            bool
 	SeasonPath             string
 	FixturesPath           string
 	ScheduleDifficultyPath string
 	ForecastPath           string
 	ClinchingPath          string
 	CurrentPath            string
+	SeasonsPath            string
 	Navigation             []navigationItem
 	SeasonSelector         []seasonSelectorItem
 	StageSelector          []seasonSelectorItem
@@ -43,6 +45,15 @@ type seasonPage struct {
 	HasXG                  bool
 	HasScheduleDifficulty  bool
 	HasForecast            bool
+	HasResults             bool
+	HasUpcomingFixtures    bool
+	ShowFixtureViewToggle  bool
+	ShowUpcomingSeason     bool
+	FixturesHeading        string
+	StandingsCaption       string
+	StandingsXGCaption     string
+	StandingsMode          string
+	Phase                  seasonPhase
 	Standings              []tableRowView
 	Strength               strengthView
 	ResultFixtureGroups    []fixtureGroupView
@@ -50,6 +61,41 @@ type seasonPage struct {
 	FixtureTeams           []teamNameView
 	Remaining              int
 	HasFixtureOutlooks     bool
+}
+
+type seasonPhase string
+
+const (
+	seasonPhaseUnknown  seasonPhase = "unknown"
+	seasonPhaseUpcoming seasonPhase = "upcoming"
+	seasonPhaseActive   seasonPhase = "active"
+	seasonPhaseComplete seasonPhase = "complete"
+)
+
+type seasonPresentation struct {
+	Phase              seasonPhase
+	Historical         bool
+	FinalStandingsSafe bool
+	HasUpcoming        bool
+}
+
+type seasonsPage struct {
+	Title             string
+	HomePath          string
+	StylesheetPath    string
+	ScriptPath        string
+	Navigation        []navigationItem
+	Seasons           []seasonArchiveItem
+	CatalogPage       bool
+	Freshness         string
+	FreshnessFallback string
+}
+
+type seasonArchiveItem struct {
+	Season  string
+	Current bool
+	Status  string
+	Links   []navigationItem
 }
 
 type navigationItem struct {
@@ -61,6 +107,7 @@ type navigationItem struct {
 type seasonSelectorItem struct {
 	Label    string
 	Path     string
+	Value    string
 	Selected bool
 }
 
@@ -72,7 +119,21 @@ func seasonSelector(from, selectedSeason string) []seasonSelectorItem {
 			continue
 		}
 		items = append(items, seasonSelectorItem{
-			Label: entry.Label, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)), Selected: entry.Season == selectedSeason,
+			Label: entry.Label, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)), Value: entry.Season, Selected: entry.Season == selectedSeason,
+		})
+	}
+	return items
+}
+
+func seasonFeatureSelector(from, selectedSeason, featureSuffix string) []seasonSelectorItem {
+	entries := competition.PublicEntries()
+	items := make([]seasonSelectorItem, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.Primary {
+			continue
+		}
+		items = append(items, seasonSelectorItem{
+			Label: entry.Season, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)+featureSuffix), Value: entry.Season, Selected: entry.Season == selectedSeason,
 		})
 	}
 	return items
@@ -91,24 +152,40 @@ func stageSelector(from, season, selectedStage string) []seasonSelectorItem {
 }
 
 func seasonNavigation(from string, scope requestCompetition, current string, rules competition.Rules, verified bool) []navigationItem {
+	return seasonNavigationForPresentation(from, scope, current, rules, verified, seasonPresentation{Phase: seasonPhaseActive, HasUpcoming: true})
+}
+
+func seasonNavigationForPresentation(from string, scope requestCompetition, current string, rules competition.Rules, verified bool, presentation seasonPresentation) []navigationItem {
 	base := stageURL(scope.Season, scope.Entry.Slug)
 	items := []struct {
 		label string
 		path  string
 	}{}
 	if scope.standingsAvailable() {
-		items = append(items, struct{ label, path string }{"Standings", base})
+		label := "Standings"
+		if presentation.Phase == seasonPhaseUpcoming {
+			label = "Season overview"
+		} else if presentation.Phase == seasonPhaseComplete && presentation.FinalStandingsSafe {
+			label = "Final standings"
+		}
+		items = append(items, struct{ label, path string }{label, base})
 	}
 	if scope.fixturesAvailable() {
-		items = append(items, struct{ label, path string }{"Results & fixtures", base + "/fixtures"})
+		label := "Results & fixtures"
+		if presentation.Phase == seasonPhaseUpcoming {
+			label = "Schedule"
+		} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !presentation.HasUpcoming) {
+			label = "Results"
+		}
+		items = append(items, struct{ label, path string }{label, base + "/fixtures"})
 	}
-	if scope.scheduleDifficultyAvailable() {
+	if scope.scheduleDifficultyAvailable() && phaseSupportsRemainingFeatures(presentation.Phase) {
 		items = append(items, struct{ label, path string }{"Schedule difficulty", base + "/schedule-difficulty"})
 	}
-	if scope.clinchingAvailable(rules, verified) {
+	if scope.clinchingAvailable(rules, verified) && presentation.Phase != seasonPhaseUpcoming && presentation.Phase != seasonPhaseComplete {
 		items = append(items, struct{ label, path string }{"Clinching scenarios", base + "/clinching"})
 	}
-	if scope.forecastAvailable(rules, verified) {
+	if scope.forecastAvailable(rules, verified) && phaseSupportsRemainingFeatures(presentation.Phase) {
 		items = append(items, struct{ label, path string }{"Forecast lab", base + "/forecast"})
 	}
 	navigation := make([]navigationItem, 0, len(items))
@@ -118,6 +195,82 @@ func seasonNavigation(from string, scope requestCompetition, current string, rul
 		})
 	}
 	return navigation
+}
+
+func phaseSupportsRemainingFeatures(phase seasonPhase) bool {
+	return phase != seasonPhaseComplete
+}
+
+func classifySeasonPhase(data cache.SeasonData, inventory *competition.InventoryExpectation) seasonPresentation {
+	presentation := seasonPresentation{Phase: seasonPhaseUnknown}
+	if len(data.Games) == 0 {
+		return presentation
+	}
+
+	scheduled, terminal, abandoned, unknown := 0, 0, 0, 0
+	for _, game := range data.Games {
+		switch game.Status {
+		case fixtures.PreMatchStatus:
+			scheduled++
+		case fixtures.CompletedStatus:
+			if game.HomeScore.Valid && game.AwayScore.Valid {
+				terminal++
+			} else {
+				unknown++
+			}
+		case fixtures.AbandonedStatus:
+			terminal++
+			abandoned++
+		default:
+			unknown++
+		}
+	}
+	presentation.HasUpcoming = scheduled > 0
+	if unknown > 0 {
+		return presentation
+	}
+	if scheduled == len(data.Games) {
+		presentation.Phase = seasonPhaseUpcoming
+		return presentation
+	}
+	if scheduled > 0 && terminal > 0 {
+		presentation.Phase = seasonPhaseActive
+		return presentation
+	}
+	if scheduled == 0 && terminal == len(data.Games) && verifiedInventoryComplete(data, inventory) {
+		presentation.Phase = seasonPhaseComplete
+		presentation.FinalStandingsSafe = abandoned == 0
+	}
+	return presentation
+}
+
+func verifiedInventoryComplete(data cache.SeasonData, inventory *competition.InventoryExpectation) bool {
+	if inventory == nil {
+		return false
+	}
+	if inventory.Games > 0 && len(data.Games) != inventory.Games {
+		return false
+	}
+	if inventory.Teams > 0 && len(data.Teams) != inventory.Teams {
+		return false
+	}
+	if inventory.GamesPerTeam == 0 {
+		return true
+	}
+	appearances := make(map[string]int, len(data.Teams))
+	for _, game := range data.Games {
+		appearances[game.HomeTeamID]++
+		appearances[game.AwayTeamID]++
+	}
+	if len(appearances) != inventory.Teams {
+		return false
+	}
+	for _, team := range data.Teams {
+		if appearances[team.ID] != inventory.GamesPerTeam {
+			return false
+		}
+	}
+	return true
 }
 
 func stageURL(season, slug string) string {
@@ -280,6 +433,7 @@ type errorPage struct {
 	HomePath          string
 	StylesheetPath    string
 	ScriptPath        string
+	CatalogPage       bool
 	Navigation        []navigationItem
 	SeasonSelector    []seasonSelectorItem
 	StageSelector     []seasonSelectorItem
@@ -700,7 +854,7 @@ func fixtureGroupsByStatusWithOutlooksFor(data cache.SeasonData, location *time.
 		hasResult := false
 		hasUnfinished := false
 		for _, game := range group.Games {
-			if game.Completed {
+			if game.Completed || game.Status == fixtures.AbandonedStatus {
 				hasResult = true
 			} else {
 				hasUnfinished = true

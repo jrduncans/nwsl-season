@@ -104,6 +104,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	application := &application{store: store, options: options, pages: pages, forecasts: forecasts}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", application.root)
+	mux.HandleFunc("GET /seasons", application.seasons)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
 	mux.HandleFunc("GET /seasons/{season}", application.season)
@@ -142,6 +143,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	page, err := a.loadSeasonPage(r)
 	if err != nil {
 		a.renderError(w, r, err)
+		return
+	}
+	if page.Phase == seasonPhaseComplete {
+		a.renderUnavailableFeatureWithNavigation(w, r, scope, "Clinching scenarios", page.Navigation)
 		return
 	}
 	rules, _ = a.rulesForSeason(page.Season, page.Stage)
@@ -496,6 +501,71 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 	redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/"+entry.Slug, http.StatusSeeOther)
 }
 
+func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
+	readinessByScope := map[string]cache.SeasonReadinessSnapshot{}
+	if store, ok := a.store.(interface {
+		SeasonReadinesses(context.Context) ([]cache.SeasonReadinessSnapshot, error)
+	}); ok {
+		readinesses, err := store.SeasonReadinesses(r.Context())
+		if err != nil {
+			a.renderError(w, r, fmt.Errorf("load season archive readiness: %w", err))
+			return
+		}
+		for _, readiness := range readinesses {
+			readinessByScope[readiness.Scope.Season+"\x00"+readiness.Scope.Stage] = readiness
+		}
+	}
+
+	page := seasonsPage{
+		Title:          "Seasons",
+		HomePath:       relativeURL(r.URL.Path, "/"),
+		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
+		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
+		CatalogPage:    true,
+		Seasons:        seasonArchiveItems(r.URL.Path, a.options.CurrentSeason, readinessByScope),
+	}
+	a.render(w, "seasons", page)
+}
+
+func seasonArchiveItems(from, currentSeason string, readinessByScope map[string]cache.SeasonReadinessSnapshot) []seasonArchiveItem {
+	items := []seasonArchiveItem{}
+	for _, entry := range competition.PublicEntries() {
+		if !entry.Primary {
+			continue
+		}
+		item := seasonArchiveItem{Season: entry.Season, Current: entry.Season == currentSeason}
+		if item.Current {
+			item.Status = "Current season"
+		} else {
+			item.Status = "Historical season"
+		}
+		if readiness, ok := readinessByScope[entry.Season+"\x00"+entry.Stage]; ok {
+			switch readiness.Readiness {
+			case cache.SourceReadinessNotPublished:
+				item.Status += " · Not published"
+			case cache.SourceReadinessUnknown:
+				item.Status += " · Not loaded"
+			case cache.SourceReadinessAvailable:
+				if readiness.Completeness == cache.InventoryCompletenessIncomplete {
+					item.Status += " · Partial data"
+				}
+			}
+		}
+
+		base := stageURL(entry.Season, entry.Slug)
+		item.Links = append(item.Links, navigationItem{Label: "Standings", Path: relativeURL(from, base)})
+		if entry.Supports(competition.CapabilityFixtures) {
+			label := "Results"
+			if item.Current {
+				label = "Results & fixtures"
+			}
+			item.Links = append(item.Links, navigationItem{Label: label, Path: relativeURL(from, base+"/fixtures")})
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
 	if r.PathValue("stage") == "" {
 		a.redirectPrimaryStage(w, r)
@@ -588,6 +658,10 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 		a.renderError(w, r, err)
 		return
 	}
+	if page.Phase == seasonPhaseComplete {
+		a.renderUnavailableFeatureWithNavigation(w, r, scope, "Schedule difficulty", page.Navigation)
+		return
+	}
 	a.render(w, "schedule-difficulty", page)
 }
 
@@ -653,13 +727,16 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
 	}
+	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
+	presentation.Historical = historicalCatalogScope(scope)
 
 	var standingsView []tableRowView
 	var totalTable []standings.TableRow
 	var scheduleView strengthView
 	completedMatches, xgAvailable := 0, 0
 	domainGames := standingsGames(data.Games)
-	if scope.scheduleDifficultyAvailable() {
+	showScheduleDifficulty := scope.scheduleDifficultyAvailable() && phaseSupportsRemainingFeatures(presentation.Phase)
+	if showScheduleDifficulty {
 		venue := forecastVenueSample(data)
 		scheduleStrength, scheduleErr := strength.CalculateWithVenueSampleAndScheduleLoad(data.Teams, domainGames, strength.VenueSample{Matches: venue.Matches, HomePoints: venue.HomePoints, AwayPoints: venue.AwayPoints})
 		if scheduleErr != nil {
@@ -667,15 +744,13 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		scheduleView = strengthViewFrom(scheduleStrength)
 	}
-	if scope.standingsAvailable() {
+	showStandings := scope.standingsAvailable() && presentation.Phase != seasonPhaseUpcoming
+	if showStandings {
 		actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
 		totalTable = standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
-		playoffLine := 0
-		if rulesVerified && hasPlayoffAchievement(rules) {
-			playoffLine = playoffPlaces(rules)
-		}
+		playoffLine := scope.Entry.PlayoffPlaces
 		standingsView = tableViews(actualTable, playoffLine)
-		if scope.scheduleDifficultyAvailable() {
+		if showScheduleDifficulty {
 			standingsView = addScheduleIndicators(standingsView, scheduleView)
 		}
 		if scope.xgAvailable() {
@@ -683,10 +758,45 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 	}
 	var outlooks map[string]fixtureOutlookView
-	if outlooksFor != nil {
+	if outlooksFor != nil && phaseSupportsRemainingFeatures(presentation.Phase) {
 		outlooks = outlooksFor(data)
 	}
 	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatusWithOutlooksFor(data, a.options.Location, outlooks, scope.xgAvailable())
+	hasResults := len(resultFixtureGroups) > 0
+	hasUpcoming := len(upcomingFixtureGroups) > 0
+	presentation.HasUpcoming = hasUpcoming
+	retrospective := presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming)
+	standingsCaption := "Current standings"
+	standingsXGCaption := "xG standings, ordered by xPts"
+	standingsMode := "per-game"
+	if presentation.Phase == seasonPhaseComplete {
+		standingsMode = "total"
+		if presentation.FinalStandingsSafe {
+			standingsCaption = "Final standings"
+			standingsXGCaption = "Final xG standings, ordered by xPts"
+		} else {
+			standingsCaption = "Season standings"
+			standingsXGCaption = "Season xG standings, ordered by xPts"
+		}
+	} else if presentation.Historical {
+		standingsCaption = "Historical standings"
+		standingsXGCaption = "Historical xG standings, ordered by xPts"
+		if !hasUpcoming {
+			standingsMode = "total"
+		}
+	}
+	fixturesHeading := "Results and fixtures"
+	if presentation.Phase == seasonPhaseUpcoming {
+		fixturesHeading = "Schedule"
+	} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming) {
+		fixturesHeading = "Results"
+	}
+	var featureSeasonSelector []seasonSelectorItem
+	if scope.Entry.Primary {
+		if featureSuffix, ok := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug); ok {
+			featureSeasonSelector = seasonFeatureSelector(r.URL.Path, season, featureSuffix)
+		}
+	}
 	page := seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
@@ -694,12 +804,22 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		HomePath:               relativeURL(r.URL.Path, "/"),
 		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
-		HasStandings:           scope.standingsAvailable(),
+		SeasonsPath:            seasonArchiveURL(r.URL.Path),
+		HasStandings:           showStandings,
 		HasFixtures:            scope.fixturesAvailable(),
 		HasXG:                  scope.xgAvailable(),
-		HasScheduleDifficulty:  scope.scheduleDifficultyAvailable(),
-		HasForecast:            scope.forecastAvailable(rules, rulesVerified),
-		Standings:              addTotalPositions(standingsView, totalTable, playoffLineFor(rules, rulesVerified)),
+		HasScheduleDifficulty:  showScheduleDifficulty,
+		HasForecast:            scope.forecastAvailable(rules, rulesVerified) && phaseSupportsRemainingFeatures(presentation.Phase),
+		HasResults:             hasResults,
+		HasUpcomingFixtures:    hasUpcoming,
+		ShowFixtureViewToggle:  hasResults && hasUpcoming,
+		ShowUpcomingSeason:     presentation.Phase == seasonPhaseUpcoming,
+		FixturesHeading:        fixturesHeading,
+		StandingsCaption:       standingsCaption,
+		StandingsXGCaption:     standingsXGCaption,
+		StandingsMode:          standingsMode,
+		Phase:                  presentation.Phase,
+		Standings:              addTotalPositions(standingsView, totalTable, scope.Entry.PlayoffPlaces),
 		Strength:               scheduleView,
 		ResultFixtureGroups:    resultFixtureGroups,
 		UpcomingFixtureGroups:  upcomingFixtureGroups,
@@ -707,17 +827,17 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		ForecastPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		ClinchingPath:          relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/clinching"),
 		CurrentPath:            relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
-		SeasonSelector:         seasonSelector(r.URL.Path, season),
+		SeasonSelector:         featureSeasonSelector,
 		StageSelector:          stageSelector(r.URL.Path, season, scope.Stage),
 		SeasonPath:             relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
 		FixturesPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
-		HasFixtureOutlooks:     scope.forecastCapabilityAvailable() && len(outlooks) > 0,
+		HasFixtureOutlooks:     !retrospective && scope.forecastCapabilityAvailable() && len(outlooks) > 0,
 	}
 	if scope.xgAvailable() && completedMatches > 0 && xgAvailable < completedMatches {
 		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)
 	}
-	page.Navigation = seasonNavigation(r.URL.Path, scope, r.URL.Path, rules, rulesVerified)
+	page.Navigation = seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, rulesVerified, presentation)
 	for _, game := range data.Games {
 		if game.Status == remainingStatus {
 			page.Remaining++
@@ -726,19 +846,17 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
 	}
-	if scope.scheduleDifficultyAvailable() {
+	if showScheduleDifficulty {
 		page.ScheduleNote = scheduleDifficultyNote(data, scope.Entry.Inventory)
 	}
-	if historicalCatalogScope(scope) {
-		page.FormatNotice = historicalFormatNotice
-	} else if !scope.Cataloged {
+	if !scope.Cataloged {
 		page.FormatNotice = unknownFormatNotice
 	} else if !scope.standingsAvailable() {
 		page.FormatNotice = "Standings are unavailable for this scope."
 	}
 	if qualificationStore, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
-	}); ok && scope.qualificationAvailable() && rulesVerified && data.FixtureSnapshotID != "" && rules.Version != "" {
+	}); ok && scope.qualificationAvailable() && rulesVerified && presentation.Phase != seasonPhaseUpcoming && data.FixtureSnapshotID != "" && rules.Version != "" {
 		if snapshot, found, lookupErr := qualificationStore.QualificationForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
 			page.Standings = qualificationViews(page.Standings, snapshot.Statuses)
 		}
@@ -748,10 +866,19 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 }
 
 const unknownFormatNotice = "The competition format is not verified, so standings, forecasts, and clinching calculations are unavailable."
-const historicalFormatNotice = "Historical results are factual. Competition format, forecasting, and clinching calculations are not verified for this season."
 
 func historicalCatalogScope(scope requestCompetition) bool {
 	return scope.Cataloged && scope.Entry.Public && scope.Entry.Kind == competition.StageKindLeagueTable && scope.Entry.Rules == nil
+}
+
+func seasonFeatureSuffix(requestPath, stageSlug string) (string, bool) {
+	if strings.HasSuffix(requestPath, "/"+stageSlug+"/fixtures") {
+		return "/fixtures", true
+	}
+	if strings.HasSuffix(requestPath, "/"+stageSlug) {
+		return "", true
+	}
+	return "", false
 }
 
 func (a *application) playoffLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -767,11 +894,11 @@ func (a *application) playoffLoadPage(r *http.Request, scope requestCompetition)
 			notice = "ASA has not published playoff data yet."
 		}
 	}
-	return seasonPage{Title: scope.Season + " playoffs", Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonSelector: seasonSelector(r.URL.Path, scope.Season), StageSelector: stageSelector(r.URL.Path, scope.Season, scope.Stage), FormatNotice: notice}, nil
+	return seasonPage{Title: scope.Season + " playoffs", Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), StageSelector: stageSelector(r.URL.Path, scope.Season, scope.Stage), FixturesHeading: "Results and fixtures", StandingsMode: "per-game", FormatNotice: notice}, nil
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
-	notice := "Historical data has not been loaded yet. Run the historical backfill command to load this season."
+	notice := "This historical season isn't available in the explorer yet."
 	if store, ok := a.store.(interface {
 		SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error)
 	}); ok {
@@ -783,27 +910,24 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 			notice = "ASA has not published historical data for this season."
 		}
 	}
+	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
 	return seasonPage{
-		Title:          scope.Season + " NWSL season",
-		Season:         scope.Season,
-		Stage:          scope.Stage,
-		HomePath:       relativeURL(r.URL.Path, "/"),
-		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
-		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
-		SeasonPath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
-		FixturesPath:   relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"),
-		CurrentPath:    relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
-		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
-		StageSelector:  stageSelector(r.URL.Path, scope.Season, scope.Stage),
-		FormatNotice:   notice,
+		Title:           scope.Season + " NWSL season",
+		Season:          scope.Season,
+		Stage:           scope.Stage,
+		HomePath:        relativeURL(r.URL.Path, "/"),
+		StylesheetPath:  relativeURL(r.URL.Path, "/static/site.css"),
+		ScriptPath:      relativeURL(r.URL.Path, "/static/standings.js"),
+		SeasonPath:      relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
+		FixturesPath:    relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"),
+		CurrentPath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
+		SeasonsPath:     seasonArchiveURL(r.URL.Path),
+		SeasonSelector:  seasonFeatureSelector(r.URL.Path, scope.Season, featureSuffix),
+		StageSelector:   stageSelector(r.URL.Path, scope.Season, scope.Stage),
+		FormatNotice:    notice,
+		FixturesHeading: "Results",
+		StandingsMode:   "total",
 	}, nil
-}
-
-func playoffLineFor(rules competition.Rules, verified bool) int {
-	if verified && hasPlayoffAchievement(rules) {
-		return playoffPlaces(rules)
-	}
-	return 0
 }
 
 // loadSeasonData makes local-cache latency visible as a distinct operation and
@@ -991,12 +1115,16 @@ func (a *application) renderError(w http.ResponseWriter, r *http.Request, err er
 
 func (a *application) renderUnavailableFeature(w http.ResponseWriter, r *http.Request, scope requestCompetition, feature string) {
 	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
+	a.renderUnavailableFeatureWithNavigation(w, r, scope, feature, seasonNavigation(r.URL.Path, scope, "", rules, verified))
+}
+
+func (a *application) renderUnavailableFeatureWithNavigation(w http.ResponseWriter, r *http.Request, scope requestCompetition, feature string, navigation []navigationItem) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 	a.render(w, "error", errorPage{
 		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
 		HomePath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
-		Navigation:     seasonNavigation(r.URL.Path, scope, "", rules, verified),
+		Navigation:     navigation,
 		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
 		StageSelector:  stageSelector(r.URL.Path, scope.Season, scope.Stage),
 	})
@@ -1048,8 +1176,11 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 }
 
 func stripBasePath(requestPath string) (string, bool) {
-	if requestPath == "/" || strings.HasPrefix(requestPath, "/seasons/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
+	if requestPath == "/" || requestPath == "/seasons" || strings.HasPrefix(requestPath, "/seasons/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
 		return requestPath, true
+	}
+	if strings.HasSuffix(requestPath, "/seasons") {
+		return "/seasons", true
 	}
 	for _, suffix := range []string{"/seasons/", "/static/"} {
 		if index := strings.Index(requestPath, suffix); index > 0 {
@@ -1071,7 +1202,7 @@ func relativeURL(fromPath, targetPath string) string {
 	// A stage's canonical route has no trailing slash. From a nested page, a
 	// plain "." resolves to the stage directory instead, which does not match a
 	// route. Step up and name the stage explicitly in that one case.
-	if path.Dir(fromPath) == targetPath {
+	if targetPath != "/" && path.Dir(fromPath) == targetPath {
 		return "../" + path.Base(targetPath)
 	}
 	fromParts := urlPathParts(path.Dir(fromPath))
@@ -1089,6 +1220,10 @@ func relativeURL(fromPath, targetPath string) string {
 		return "."
 	}
 	return strings.Join(parts, "/")
+}
+
+func seasonArchiveURL(fromPath string) string {
+	return path.Join(relativeURL(fromPath, "/seasons"), "..", "seasons")
 }
 
 func redirectRelative(w http.ResponseWriter, location string, status int) {

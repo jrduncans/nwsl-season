@@ -1,6 +1,6 @@
 {{define "schedule-difficulty"}}{{template "head" .}}
 <div class="title-row">
-  <div><p class="eyebrow">{{.Stage}}</p><h1>Remaining schedule difficulty</h1></div>
+  <div>{{template "seasonContext" .}}<h1>Remaining schedule difficulty</h1></div>
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .Strength.HasCallouts}}
