@@ -1,6 +1,6 @@
 {{define "model-evaluation"}}{{template "head" .}}
 <header class="title-row">
-  <div><p class="eyebrow">Forecast quality</p><h1>How close were the forecasts?</h1></div>
+  <div>{{template "seasonContext" .}}<h1>Forecast model evaluation</h1></div>
 </header>
 <p class="evaluation-intro">This compares each forecast with the final regular-season table at different points in past seasons. Lower error is better. The default view uses final-test seasons that were held out while the models were designed.</p>
 

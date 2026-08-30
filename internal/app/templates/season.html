@@ -1,10 +1,11 @@
 {{define "season"}}{{template "head" .}}
 <div class="title-row">
-  <div><p class="eyebrow">{{.Stage}}</p><h1>{{.Season}} season</h1></div>
+  <div>{{template "seasonContext" .}}<h1>{{if .ShowUpcomingSeason}}Season overview{{else}}Standings{{end}}</h1></div>
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .XGWarning}}<p class="data-warning"><strong>Incomplete xG data:</strong> {{.XGWarning}}</p>{{end}}
 {{if .FormatNotice}}<p class="note">{{.FormatNotice}}{{if and (not .HasStandings) .HasFixtures}} <a href="{{.FixturesPath}}">View results and fixtures.</a>{{end}}</p>{{end}}
+{{if .ShowUpcomingSeason}}<section class="season-upcoming"><h2>Season schedule</h2><p>No results are available yet. <a href="{{.FixturesPath}}">View the published schedule</a>.</p></section>{{end}}
 {{if .HasStandings}}
 <section aria-label="Standings">
   {{template "currentTable" .}}

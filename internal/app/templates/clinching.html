@@ -15,7 +15,7 @@
 {{end}}
 
 {{define "clinching"}}{{template "head" .}}
-<div class="title-row"><div><p class="eyebrow">Deterministic qualification proofs</p><h1>Clinching scenarios</h1></div></div>
+<div class="title-row"><div>{{template "seasonContext" .}}<h1>Clinching scenarios</h1></div></div>
 {{if .State}}<p class="data-warning">{{.State}}</p>{{end}}
 {{if .AlreadyClinched}}<section data-clinching-filter-section><h2>Already clinched</h2>{{range .AlreadyClinched}}<article data-clinching-team-card data-clinching-team="{{.Team.ID}}"><h3>{{.Team.Name}} has already clinched {{.Achievement}}</h3></article>{{end}}</section>{{end}}
 {{if not .State}}

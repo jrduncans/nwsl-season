@@ -45,6 +45,7 @@ type Entry struct {
 	SourceAvailable bool
 	Inventory       *InventoryExpectation
 	Rules           *Rules
+	PlayoffPlaces   int
 	Capabilities    []Capability
 }
 
@@ -61,6 +62,7 @@ var catalog = append(append(historicalRegularSeasonEntries(), Entry{
 	SourceAvailable: true,
 	Inventory:       &InventoryExpectation{Teams: 16, GamesPerTeam: 30, Games: 240},
 	Rules:           &regular2026,
+	PlayoffPlaces:   8,
 	Capabilities: []Capability{
 		CapabilityFixtures,
 		CapabilityStandings,
@@ -117,10 +119,21 @@ func historicalRegularSeasonEntries() []Entry {
 			Public:          true,
 			Primary:         true,
 			SourceAvailable: true,
+			PlayoffPlaces:   historicalPlayoffPlaces[season],
 			Capabilities:    []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG},
 		})
 	}
 	return entries
+}
+
+// historicalPlayoffPlaces records the regular-season postseason cut line
+// documented by the NWSL: four places through 2019, six from 2021 through
+// 2023, and eight from 2024 onward. It deliberately does not imply verified
+// inventory, tiebreak, clinching, or playoff-bracket rules.
+var historicalPlayoffPlaces = map[string]int{
+	"2016": 4, "2017": 4, "2018": 4, "2019": 4,
+	"2021": 6, "2022": 6, "2023": 6,
+	"2024": 8, "2025": 8,
 }
 
 func (e Entry) Validate() error {
@@ -176,6 +189,17 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("entry rules season/stage does not match entry")
 		}
 	}
+	if e.PlayoffPlaces < 0 {
+		return fmt.Errorf("entry playoff places cannot be negative")
+	}
+	if e.PlayoffPlaces > 0 {
+		if e.Kind != StageKindLeagueTable {
+			return fmt.Errorf("entry playoff places require a league-table stage")
+		}
+		if e.Inventory != nil && e.Inventory.Teams > 0 && e.PlayoffPlaces > e.Inventory.Teams {
+			return fmt.Errorf("entry playoff places exceed inventory teams")
+		}
+	}
 	seen := make(map[Capability]bool, len(e.Capabilities))
 	known := map[Capability]bool{
 		CapabilityFixtures: true, CapabilityStandings: true, CapabilityXG: true,
@@ -202,6 +226,16 @@ func (e Entry) Validate() error {
 		}
 		if (capability == CapabilityQualification || capability == CapabilityScenarios) && e.Rules == nil {
 			return fmt.Errorf("entry capability %q requires verified rules", capability)
+		}
+	}
+	if e.PlayoffPlaces > 0 && !seen[CapabilityStandings] {
+		return fmt.Errorf("entry playoff places require standings capability")
+	}
+	if e.Rules != nil {
+		for _, achievement := range e.Rules.Achievements {
+			if achievement.ID == AchievementPlayoffs && e.PlayoffPlaces != achievement.TopK {
+				return fmt.Errorf("entry playoff places disagree with rules")
+			}
 		}
 	}
 	return nil

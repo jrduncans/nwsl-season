@@ -1,0 +1,13 @@
+{{define "seasons"}}{{template "head" .}}
+<header class="seasons-title">
+  <p class="eyebrow">NWSL Season Explorer</p>
+  <h1>Seasons</h1>
+  <p class="note">Browse the current season and factual regular-season history available in the local archive.</p>
+</header>
+<div class="season-archive" aria-label="Available seasons">
+  {{range .Seasons}}<article class="season-archive-card{{if .Current}} season-archive-card-current{{end}}">
+    <div><p class="eyebrow">{{.Status}}</p><h2>{{.Season}}</h2></div>
+    <nav aria-label="{{.Season}} season pages"><ul>{{range .Links}}<li><a href="{{.Path}}">{{.Label}}</a></li>{{end}}</ul></nav>
+  </article>{{end}}
+</div>
+{{template "foot" .}}{{end}}

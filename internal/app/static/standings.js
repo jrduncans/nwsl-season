@@ -1,4 +1,10 @@
 document.addEventListener("change", (event) => {
+  const season = event.target.closest("[data-season-selector]");
+  if (season && season.value) {
+    window.location.assign(season.value);
+    return;
+  }
+
   const form = event.target.closest("form[data-auto-submit]");
   if (!form || event.target.tagName !== "SELECT") return;
   form.requestSubmit();
