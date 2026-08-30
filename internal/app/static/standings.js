@@ -1,7 +1,10 @@
 document.addEventListener("change", (event) => {
   const season = event.target.closest("[data-season-selector]");
-  if (season && season.value) {
-    window.location.assign(season.value);
+  if (season) {
+    const switcher = season.closest("[data-season-switcher]");
+    const destinations = Array.from(switcher?.querySelectorAll("a[data-season-destination]") ?? []);
+    const destination = destinations.find((link) => link.dataset.seasonDestination === season.value);
+    if (destination) destination.click();
     return;
   }
 

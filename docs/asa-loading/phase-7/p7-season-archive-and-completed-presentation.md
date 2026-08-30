@@ -40,6 +40,10 @@ URLs from [Phase 6](../phase-6/p6-basic-playoffs.md).
   season selector, stage selector, archive link, or another row to the global
   `.site-header` navigation, and do not expose the selector on features without
   historical analogues.
+- Keep option values to cataloged season tokens and render the canonical
+  relative Standings or Results destinations as anchors. Client code activates
+  the anchor matching the selected token; it must not reinterpret a
+  DOM-provided option value as a navigation URL or HTML.
 - Keep `GET /seasons` as the cache-only catalog and no-JavaScript fallback, but
   do not promote it as a universal parent or breadcrumb from season features.
 - Use one heading hierarchy across season subpages: the compact eyebrow names
@@ -163,7 +167,8 @@ algorithms.
   standings table and clinching navigation.
 - Current active-season output and five shared section links remain unchanged.
 - Base-path behavior for `/seasons`, selector destinations, and canonical
-  season destinations, including preserving the results subsection.
+  season destinations, including preserving the results subsection and keeping
+  option values separate from navigation URLs.
 
 ## Verification
 

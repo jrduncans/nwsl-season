@@ -107,6 +107,7 @@ type navigationItem struct {
 type seasonSelectorItem struct {
 	Label    string
 	Path     string
+	Value    string
 	Selected bool
 }
 
@@ -118,7 +119,7 @@ func seasonSelector(from, selectedSeason string) []seasonSelectorItem {
 			continue
 		}
 		items = append(items, seasonSelectorItem{
-			Label: entry.Label, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)), Selected: entry.Season == selectedSeason,
+			Label: entry.Label, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)), Value: entry.Season, Selected: entry.Season == selectedSeason,
 		})
 	}
 	return items
@@ -132,7 +133,7 @@ func seasonFeatureSelector(from, selectedSeason, featureSuffix string) []seasonS
 			continue
 		}
 		items = append(items, seasonSelectorItem{
-			Label: entry.Season, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)+featureSuffix), Selected: entry.Season == selectedSeason,
+			Label: entry.Season, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)+featureSuffix), Value: entry.Season, Selected: entry.Season == selectedSeason,
 		})
 	}
 	return items

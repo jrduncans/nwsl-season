@@ -355,8 +355,8 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 	for _, test := range []struct {
 		name, path, destination string
 	}{
-		{name: "standings", path: "/seasons/2026/regular-season", destination: `value="../2025/regular-season"`},
-		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: `value="../../2025/regular-season/fixtures"`},
+		{name: "standings", path: "/seasons/2026/regular-season", destination: `href="../2025/regular-season"`},
+		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: `href="../../2025/regular-season/fixtures"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -365,7 +365,7 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 			}
 			body := response.Body.String()
-			for _, want := range []string{`class="season-selector"`, `<span>Season</span>`, `data-season-selector`, test.destination, `>2025</option>`} {
+			for _, want := range []string{`data-season-switcher`, `class="season-selector"`, `<span>Season</span>`, `data-season-selector`, `value="2025"`, test.destination, `data-season-destination="2025" hidden`, `>2025</option>`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("body does not contain %q", want)
 				}
@@ -433,7 +433,7 @@ func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
 	if pageResponse.Code != http.StatusOK {
 		t.Fatalf("base-path season status = %d, want 200", pageResponse.Code)
 	}
-	if !strings.Contains(pageResponse.Body.String(), `data-season-selector`) || !strings.Contains(pageResponse.Body.String(), `value="../2025/regular-season"`) {
+	if !strings.Contains(pageResponse.Body.String(), `data-season-selector`) || !strings.Contains(pageResponse.Body.String(), `value="2025"`) || !strings.Contains(pageResponse.Body.String(), `href="../2025/regular-season"`) {
 		t.Fatalf("base-path season did not retain relative season destinations: %s", pageResponse.Body.String())
 	}
 
