@@ -286,6 +286,8 @@ const (
 	SyncKickoffUTCKey                                        = attribute.Key("nwsl.sync.kickoff_utc")
 	SyncModeKey                                              = attribute.Key("nwsl.sync.mode")
 	SyncNewAvailabilityKey                                   = attribute.Key("nwsl.sync.new.availability")
+	SyncNewAwayPenaltiesKey                                  = attribute.Key("nwsl.sync.new.away_penalties")
+	SyncNewAwayPenaltiesPresentKey                           = attribute.Key("nwsl.sync.new.away_penalties_present")
 	SyncNewAwayScoreKey                                      = attribute.Key("nwsl.sync.new.away_score")
 	SyncNewAwayScorePresentKey                               = attribute.Key("nwsl.sync.new.away_score_present")
 	SyncNewAwayTeamIDKey                                     = attribute.Key("nwsl.sync.new.away_team_id")
@@ -295,6 +297,10 @@ const (
 	SyncNewAwayXpointsPresentKey                             = attribute.Key("nwsl.sync.new.away_xpoints_present")
 	SyncNewExpandedMinutesKey                                = attribute.Key("nwsl.sync.new.expanded_minutes")
 	SyncNewExpandedMinutesPresentKey                         = attribute.Key("nwsl.sync.new.expanded_minutes_present")
+	SyncNewExtraTimeKey                                      = attribute.Key("nwsl.sync.new.extra_time")
+	SyncNewExtraTimePresentKey                               = attribute.Key("nwsl.sync.new.extra_time_present")
+	SyncNewHomePenaltiesKey                                  = attribute.Key("nwsl.sync.new.home_penalties")
+	SyncNewHomePenaltiesPresentKey                           = attribute.Key("nwsl.sync.new.home_penalties_present")
 	SyncNewHomeScoreKey                                      = attribute.Key("nwsl.sync.new.home_score")
 	SyncNewHomeScorePresentKey                               = attribute.Key("nwsl.sync.new.home_score_present")
 	SyncNewHomeTeamIDKey                                     = attribute.Key("nwsl.sync.new.home_team_id")
@@ -307,9 +313,13 @@ const (
 	SyncNewLastCheckedAtKey                                  = attribute.Key("nwsl.sync.new.last_checked_at")
 	SyncNewMatchdayKey                                       = attribute.Key("nwsl.sync.new.matchday")
 	SyncNewMatchdayPresentKey                                = attribute.Key("nwsl.sync.new.matchday_present")
+	SyncNewPenaltiesKey                                      = attribute.Key("nwsl.sync.new.penalties")
+	SyncNewPenaltiesPresentKey                               = attribute.Key("nwsl.sync.new.penalties_present")
 	SyncNewStatusKey                                         = attribute.Key("nwsl.sync.new.status")
 	SyncObservationFinishedAtKey                             = attribute.Key("nwsl.sync.observation_finished_at")
 	SyncOldAvailabilityKey                                   = attribute.Key("nwsl.sync.old.availability")
+	SyncOldAwayPenaltiesKey                                  = attribute.Key("nwsl.sync.old.away_penalties")
+	SyncOldAwayPenaltiesPresentKey                           = attribute.Key("nwsl.sync.old.away_penalties_present")
 	SyncOldAwayScoreKey                                      = attribute.Key("nwsl.sync.old.away_score")
 	SyncOldAwayScorePresentKey                               = attribute.Key("nwsl.sync.old.away_score_present")
 	SyncOldAwayTeamIDKey                                     = attribute.Key("nwsl.sync.old.away_team_id")
@@ -319,6 +329,10 @@ const (
 	SyncOldAwayXpointsPresentKey                             = attribute.Key("nwsl.sync.old.away_xpoints_present")
 	SyncOldExpandedMinutesKey                                = attribute.Key("nwsl.sync.old.expanded_minutes")
 	SyncOldExpandedMinutesPresentKey                         = attribute.Key("nwsl.sync.old.expanded_minutes_present")
+	SyncOldExtraTimeKey                                      = attribute.Key("nwsl.sync.old.extra_time")
+	SyncOldExtraTimePresentKey                               = attribute.Key("nwsl.sync.old.extra_time_present")
+	SyncOldHomePenaltiesKey                                  = attribute.Key("nwsl.sync.old.home_penalties")
+	SyncOldHomePenaltiesPresentKey                           = attribute.Key("nwsl.sync.old.home_penalties_present")
 	SyncOldHomeScoreKey                                      = attribute.Key("nwsl.sync.old.home_score")
 	SyncOldHomeScorePresentKey                               = attribute.Key("nwsl.sync.old.home_score_present")
 	SyncOldHomeTeamIDKey                                     = attribute.Key("nwsl.sync.old.home_team_id")
@@ -331,6 +345,8 @@ const (
 	SyncOldLastCheckedAtKey                                  = attribute.Key("nwsl.sync.old.last_checked_at")
 	SyncOldMatchdayKey                                       = attribute.Key("nwsl.sync.old.matchday")
 	SyncOldMatchdayPresentKey                                = attribute.Key("nwsl.sync.old.matchday_present")
+	SyncOldPenaltiesKey                                      = attribute.Key("nwsl.sync.old.penalties")
+	SyncOldPenaltiesPresentKey                               = attribute.Key("nwsl.sync.old.penalties_present")
 	SyncOldStatusKey                                         = attribute.Key("nwsl.sync.old.status")
 	SyncOperationOutcomeKey                                  = attribute.Key("nwsl.sync.operation.outcome")
 	SyncOutcomeKey                                           = attribute.Key("nwsl.sync.outcome")
@@ -1492,6 +1508,16 @@ const (
 	SyncNewAvailabilityUnavailable = "unavailable"
 )
 
+// SyncNewAwayPenalties returns an attribute value for nwsl.sync.new.away_penalties.
+func SyncNewAwayPenalties(value int) attribute.KeyValue {
+	return SyncNewAwayPenaltiesKey.Int(value)
+}
+
+// SyncNewAwayPenaltiesPresent returns an attribute value for nwsl.sync.new.away_penalties_present.
+func SyncNewAwayPenaltiesPresent(value bool) attribute.KeyValue {
+	return SyncNewAwayPenaltiesPresentKey.Bool(value)
+}
+
 // SyncNewAwayScore returns an attribute value for nwsl.sync.new.away_score.
 func SyncNewAwayScore(value int) attribute.KeyValue {
 	return SyncNewAwayScoreKey.Int(value)
@@ -1535,6 +1561,26 @@ func SyncNewExpandedMinutes(value int) attribute.KeyValue {
 // SyncNewExpandedMinutesPresent returns an attribute value for nwsl.sync.new.expanded_minutes_present.
 func SyncNewExpandedMinutesPresent(value bool) attribute.KeyValue {
 	return SyncNewExpandedMinutesPresentKey.Bool(value)
+}
+
+// SyncNewExtraTime returns an attribute value for nwsl.sync.new.extra_time.
+func SyncNewExtraTime(value bool) attribute.KeyValue {
+	return SyncNewExtraTimeKey.Bool(value)
+}
+
+// SyncNewExtraTimePresent returns an attribute value for nwsl.sync.new.extra_time_present.
+func SyncNewExtraTimePresent(value bool) attribute.KeyValue {
+	return SyncNewExtraTimePresentKey.Bool(value)
+}
+
+// SyncNewHomePenalties returns an attribute value for nwsl.sync.new.home_penalties.
+func SyncNewHomePenalties(value int) attribute.KeyValue {
+	return SyncNewHomePenaltiesKey.Int(value)
+}
+
+// SyncNewHomePenaltiesPresent returns an attribute value for nwsl.sync.new.home_penalties_present.
+func SyncNewHomePenaltiesPresent(value bool) attribute.KeyValue {
+	return SyncNewHomePenaltiesPresentKey.Bool(value)
 }
 
 // SyncNewHomeScore returns an attribute value for nwsl.sync.new.home_score.
@@ -1597,6 +1643,16 @@ func SyncNewMatchdayPresent(value bool) attribute.KeyValue {
 	return SyncNewMatchdayPresentKey.Bool(value)
 }
 
+// SyncNewPenalties returns an attribute value for nwsl.sync.new.penalties.
+func SyncNewPenalties(value bool) attribute.KeyValue {
+	return SyncNewPenaltiesKey.Bool(value)
+}
+
+// SyncNewPenaltiesPresent returns an attribute value for nwsl.sync.new.penalties_present.
+func SyncNewPenaltiesPresent(value bool) attribute.KeyValue {
+	return SyncNewPenaltiesPresentKey.Bool(value)
+}
+
 // SyncNewStatus returns an attribute value for nwsl.sync.new.status.
 func SyncNewStatus(value string) attribute.KeyValue {
 	return SyncNewStatusKey.String(value)
@@ -1617,6 +1673,16 @@ const (
 	SyncOldAvailabilityAvailable   = "available"
 	SyncOldAvailabilityUnavailable = "unavailable"
 )
+
+// SyncOldAwayPenalties returns an attribute value for nwsl.sync.old.away_penalties.
+func SyncOldAwayPenalties(value int) attribute.KeyValue {
+	return SyncOldAwayPenaltiesKey.Int(value)
+}
+
+// SyncOldAwayPenaltiesPresent returns an attribute value for nwsl.sync.old.away_penalties_present.
+func SyncOldAwayPenaltiesPresent(value bool) attribute.KeyValue {
+	return SyncOldAwayPenaltiesPresentKey.Bool(value)
+}
 
 // SyncOldAwayScore returns an attribute value for nwsl.sync.old.away_score.
 func SyncOldAwayScore(value int) attribute.KeyValue {
@@ -1661,6 +1727,26 @@ func SyncOldExpandedMinutes(value int) attribute.KeyValue {
 // SyncOldExpandedMinutesPresent returns an attribute value for nwsl.sync.old.expanded_minutes_present.
 func SyncOldExpandedMinutesPresent(value bool) attribute.KeyValue {
 	return SyncOldExpandedMinutesPresentKey.Bool(value)
+}
+
+// SyncOldExtraTime returns an attribute value for nwsl.sync.old.extra_time.
+func SyncOldExtraTime(value bool) attribute.KeyValue {
+	return SyncOldExtraTimeKey.Bool(value)
+}
+
+// SyncOldExtraTimePresent returns an attribute value for nwsl.sync.old.extra_time_present.
+func SyncOldExtraTimePresent(value bool) attribute.KeyValue {
+	return SyncOldExtraTimePresentKey.Bool(value)
+}
+
+// SyncOldHomePenalties returns an attribute value for nwsl.sync.old.home_penalties.
+func SyncOldHomePenalties(value int) attribute.KeyValue {
+	return SyncOldHomePenaltiesKey.Int(value)
+}
+
+// SyncOldHomePenaltiesPresent returns an attribute value for nwsl.sync.old.home_penalties_present.
+func SyncOldHomePenaltiesPresent(value bool) attribute.KeyValue {
+	return SyncOldHomePenaltiesPresentKey.Bool(value)
 }
 
 // SyncOldHomeScore returns an attribute value for nwsl.sync.old.home_score.
@@ -1721,6 +1807,16 @@ func SyncOldMatchday(value int) attribute.KeyValue {
 // SyncOldMatchdayPresent returns an attribute value for nwsl.sync.old.matchday_present.
 func SyncOldMatchdayPresent(value bool) attribute.KeyValue {
 	return SyncOldMatchdayPresentKey.Bool(value)
+}
+
+// SyncOldPenalties returns an attribute value for nwsl.sync.old.penalties.
+func SyncOldPenalties(value bool) attribute.KeyValue {
+	return SyncOldPenaltiesKey.Bool(value)
+}
+
+// SyncOldPenaltiesPresent returns an attribute value for nwsl.sync.old.penalties_present.
+func SyncOldPenaltiesPresent(value bool) attribute.KeyValue {
+	return SyncOldPenaltiesPresentKey.Bool(value)
 }
 
 // SyncOldStatus returns an attribute value for nwsl.sync.old.status.

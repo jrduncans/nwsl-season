@@ -26,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 13
+const schemaVersion = 14
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -69,6 +69,10 @@ type Game struct {
 	Matchday        sql.NullInt64
 	ExpandedMinutes sql.NullInt64
 	KnockoutGame    bool
+	ExtraTime       sql.NullBool
+	Penalties       sql.NullBool
+	HomePenalties   sql.NullInt64
+	AwayPenalties   sql.NullInt64
 	LastUpdatedUTC  string
 	RawJSON         string
 }
@@ -688,6 +692,42 @@ func (c *DB) Migrate(ctx context.Context) error {
 		if err := recordMigration(ctx, tx, 13); err != nil {
 			return err
 		}
+		version = 13
+	}
+	if version < 14 {
+		gamesOK, err := tableHasColumns(ctx, tx, "games", "asa_game_id")
+		if err != nil {
+			return err
+		}
+		if gamesOK {
+			for _, change := range []struct{ column, statement string }{
+				{"extra_time", `ALTER TABLE games ADD COLUMN extra_time INTEGER CHECK (extra_time IN (0,1))`},
+				{"penalties", `ALTER TABLE games ADD COLUMN penalties INTEGER CHECK (penalties IN (0,1))`},
+				{"home_penalties", `ALTER TABLE games ADD COLUMN home_penalties INTEGER CHECK (home_penalties >= 0)`},
+				{"away_penalties", `ALTER TABLE games ADD COLUMN away_penalties INTEGER CHECK (away_penalties >= 0)`},
+			} {
+				exists, err := tableHasColumns(ctx, tx, "games", change.column)
+				if err != nil {
+					return err
+				}
+				if exists {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx, change.statement); err != nil {
+					return fmt.Errorf("apply migration 14: %w", err)
+				}
+			}
+			affected, err := backfillKnockoutGameSourceFields(ctx, tx)
+			if err != nil {
+				return fmt.Errorf("apply migration 14: %w", err)
+			}
+			if err := refreshFixtureSnapshotIDsForScopes(ctx, tx, affected); err != nil {
+				return fmt.Errorf("apply migration 14: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 14); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
@@ -743,6 +783,103 @@ func backfillPlayoffGameFields(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+// backfillKnockoutGameSourceFields restores lossless ASA knockout facts from
+// pre-v14 source payloads. A valid but incompatible source row is ambiguous:
+// abort the transaction rather than silently choosing a durable interpretation.
+func backfillKnockoutGameSourceFields(ctx context.Context, tx *sql.Tx) ([]fixtureScope, error) {
+	ok, err := tableHasColumns(ctx, tx, "games", "asa_game_id", "season", "stage", "raw_json", "extra_time", "penalties", "home_penalties", "away_penalties")
+	if err != nil || !ok {
+		return nil, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT asa_game_id, season, stage, raw_json, extra_time, penalties, home_penalties, away_penalties FROM games`)
+	if err != nil {
+		return nil, err
+	}
+	type sourceGame struct {
+		ExtraTime     *bool `json:"extra_time"`
+		Penalties     *bool `json:"penalties"`
+		HomePenalties *int  `json:"home_penalties"`
+		AwayPenalties *int  `json:"away_penalties"`
+	}
+	type update struct {
+		id                           string
+		extraTime, penalties         sql.NullBool
+		homePenalties, awayPenalties sql.NullInt64
+	}
+	updates := []update{}
+	affected := map[fixtureScope]struct{}{}
+	for rows.Next() {
+		var id string
+		var scope fixtureScope
+		var raw string
+		var oldExtraTime, oldPenalties sql.NullBool
+		var oldHomePenalties, oldAwayPenalties sql.NullInt64
+		if err := rows.Scan(&id, &scope.season, &scope.stage, &raw, &oldExtraTime, &oldPenalties, &oldHomePenalties, &oldAwayPenalties); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		var source sourceGame
+		if json.Unmarshal([]byte(raw), &source) != nil {
+			continue
+		}
+		// ASA's paired 0-0 scores with penalties false or absent mean no
+		// shootout. Preserve raw_json, but normalize only this sentinel to NULL.
+		if (source.Penalties == nil || !*source.Penalties) && source.HomePenalties != nil && source.AwayPenalties != nil && *source.HomePenalties == 0 && *source.AwayPenalties == 0 {
+			source.HomePenalties, source.AwayPenalties = nil, nil
+		}
+		value := update{id: id, extraTime: nullBool(source.ExtraTime), penalties: nullBool(source.Penalties), homePenalties: nullInt64(source.HomePenalties), awayPenalties: nullInt64(source.AwayPenalties)}
+		if err := validateKnockoutSourceFields(id, value.penalties, value.homePenalties, value.awayPenalties); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if oldExtraTime != value.extraTime || oldPenalties != value.penalties || oldHomePenalties != value.homePenalties || oldAwayPenalties != value.awayPenalties {
+			updates = append(updates, value)
+			affected[scope] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for _, value := range updates {
+		if _, err := tx.ExecContext(ctx, `UPDATE games SET extra_time=?, penalties=?, home_penalties=?, away_penalties=? WHERE asa_game_id=?`, nullableBool(value.extraTime), nullableBool(value.penalties), nullableInt(value.homePenalties), nullableInt(value.awayPenalties), value.id); err != nil {
+			return nil, err
+		}
+	}
+	scopes := make([]fixtureScope, 0, len(affected))
+	for scope := range affected {
+		scopes = append(scopes, scope)
+	}
+	sort.Slice(scopes, func(i, j int) bool {
+		if scopes[i].season != scopes[j].season {
+			return scopes[i].season < scopes[j].season
+		}
+		return scopes[i].stage < scopes[j].stage
+	})
+	return scopes, nil
+}
+
+func validateKnockoutSourceFields(id string, penalties sql.NullBool, homePenalties, awayPenalties sql.NullInt64) error {
+	if homePenalties.Valid != awayPenalties.Valid || (homePenalties.Valid && (homePenalties.Int64 < 0 || awayPenalties.Int64 < 0)) {
+		return fmt.Errorf("game %q has invalid penalty scores", id)
+	}
+	if penalties.Valid && penalties.Bool {
+		if !homePenalties.Valid {
+			return fmt.Errorf("game %q has penalties without both penalty scores", id)
+		}
+		return nil
+	}
+	if homePenalties.Valid {
+		return fmt.Errorf("game %q has penalty scores without penalties", id)
+	}
+	return nil
+}
+
+type fixtureScope struct{ season, stage string }
+
 // refreshFixtureSnapshotIDsForMigration moves pre-v13 fixture identities to
 // the v3 contract after normalized playoff fields have been backfilled. Only
 // each scope's current successful run is updated: older derived records stay
@@ -752,10 +889,9 @@ func refreshFixtureSnapshotIDsForMigration(ctx context.Context, tx *sql.Tx) erro
 	if err != nil {
 		return err
 	}
-	type scope struct{ season, stage string }
-	scopes := []scope{}
+	scopes := []fixtureScope{}
 	for rows.Next() {
-		var value scope
+		var value fixtureScope
 		if err := rows.Scan(&value.season, &value.stage); err != nil {
 			_ = rows.Close()
 			return err
@@ -769,6 +905,10 @@ func refreshFixtureSnapshotIDsForMigration(ctx context.Context, tx *sql.Tx) erro
 	if err := rows.Close(); err != nil {
 		return err
 	}
+	return refreshFixtureSnapshotIDsForScopes(ctx, tx, scopes)
+}
+
+func refreshFixtureSnapshotIDsForScopes(ctx context.Context, tx *sql.Tx, scopes []fixtureScope) error {
 	for _, scope := range scopes {
 		run, err := latestRun(ctx, tx, "success", scope.season, scope.stage)
 		if err != nil || run == nil {
@@ -781,7 +921,7 @@ func refreshFixtureSnapshotIDsForMigration(ctx context.Context, tx *sql.Tx) erro
 		if err != nil {
 			return err
 		}
-		games, err := seasonGames(ctx, tx, scope.season, scope.stage)
+		games, err := migrationSeasonGames(ctx, tx, scope.season, scope.stage)
 		if err != nil {
 			return err
 		}
@@ -794,6 +934,32 @@ func refreshFixtureSnapshotIDsForMigration(ctx context.Context, tx *sql.Tx) erro
 		}
 	}
 	return nil
+}
+
+// migrationSeasonGames keeps the v13 snapshot backfill compatible with a
+// legacy games table that has not yet received v14's nullable source columns.
+func migrationSeasonGames(ctx context.Context, tx *sql.Tx, season, stage string) ([]Game, error) {
+	hasKnockoutSourceFields, err := tableHasColumns(ctx, tx, "games", "extra_time", "penalties", "home_penalties", "away_penalties")
+	if err != nil {
+		return nil, err
+	}
+	if hasKnockoutSourceFields {
+		return seasonGames(ctx, tx, season, stage)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id, home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json FROM games WHERE season=? AND stage=? ORDER BY kickoff_utc, asa_game_id`, season, stage)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	games := []Game{}
+	for rows.Next() {
+		var game Game
+		if err := rows.Scan(&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status, &game.HomeTeamID, &game.AwayTeamID, &game.HomeScore, &game.AwayScore, &game.Matchday, &game.ExpandedMinutes, &game.KnockoutGame, &game.LastUpdatedUTC, &game.RawJSON); err != nil {
+			return nil, err
+		}
+		games = append(games, game)
+	}
+	return games, rows.Err()
 }
 
 func backfillGameResultChecks(ctx context.Context, tx *sql.Tx) error {
@@ -1091,21 +1257,24 @@ func writeTeam(ctx context.Context, tx *sql.Tx, team Team, now time.Time) (rowCh
 }
 
 func writeGame(ctx context.Context, tx *sql.Tx, game Game, now time.Time) (rowChange, error) {
+	if err := validateKnockoutSourceFields(game.ASAID, game.Penalties, game.HomePenalties, game.AwayPenalties); err != nil {
+		return 0, err
+	}
 	var existing Game
 	err := tx.QueryRowContext(ctx, `SELECT
 		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-		home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json
+		home_score, away_score, matchday, expanded_minutes, knockout_game, extra_time, penalties, home_penalties, away_penalties, last_updated_utc, raw_json
 		FROM games WHERE asa_game_id = ?`, game.ASAID).Scan(
 		&existing.ASAID, &existing.Season, &existing.Stage, &existing.KickoffUTC, &existing.Status,
 		&existing.HomeTeamID, &existing.AwayTeamID, &existing.HomeScore, &existing.AwayScore,
-		&existing.Matchday, &existing.ExpandedMinutes, &existing.KnockoutGame, &existing.LastUpdatedUTC, &existing.RawJSON)
+		&existing.Matchday, &existing.ExpandedMinutes, &existing.KnockoutGame, &existing.ExtraTime, &existing.Penalties, &existing.HomePenalties, &existing.AwayPenalties, &existing.LastUpdatedUTC, &existing.RawJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO games (
 			asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-			home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json, synced_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			home_score, away_score, matchday, expanded_minutes, knockout_game, extra_time, penalties, home_penalties, away_penalties, last_updated_utc, raw_json, synced_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			game.ASAID, game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
-			nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), nullableInt(game.ExpandedMinutes), game.KnockoutGame, game.LastUpdatedUTC, game.RawJSON, formatTime(now)); err != nil {
+			nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), nullableInt(game.ExpandedMinutes), game.KnockoutGame, nullableBool(game.ExtraTime), nullableBool(game.Penalties), nullableInt(game.HomePenalties), nullableInt(game.AwayPenalties), game.LastUpdatedUTC, game.RawJSON, formatTime(now)); err != nil {
 			return 0, fmt.Errorf("insert game %q: %w", game.ASAID, err)
 		}
 		return rowInserted, nil
@@ -1118,10 +1287,10 @@ func writeGame(ctx context.Context, tx *sql.Tx, game Game, now time.Time) (rowCh
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE games SET
 		season = ?, stage = ?, kickoff_utc = ?, status = ?, home_team_id = ?, away_team_id = ?,
-		home_score = ?, away_score = ?, matchday = ?, expanded_minutes = ?, knockout_game = ?, last_updated_utc = ?, raw_json = ?, synced_at = ?
+		home_score = ?, away_score = ?, matchday = ?, expanded_minutes = ?, knockout_game = ?, extra_time = ?, penalties = ?, home_penalties = ?, away_penalties = ?, last_updated_utc = ?, raw_json = ?, synced_at = ?
 		WHERE asa_game_id = ?`,
 		game.Season, game.Stage, game.KickoffUTC, game.Status, game.HomeTeamID, game.AwayTeamID,
-		nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), nullableInt(game.ExpandedMinutes), game.KnockoutGame, game.LastUpdatedUTC, game.RawJSON, formatTime(now), game.ASAID); err != nil {
+		nullableInt(game.HomeScore), nullableInt(game.AwayScore), nullableInt(game.Matchday), nullableInt(game.ExpandedMinutes), game.KnockoutGame, nullableBool(game.ExtraTime), nullableBool(game.Penalties), nullableInt(game.HomePenalties), nullableInt(game.AwayPenalties), game.LastUpdatedUTC, game.RawJSON, formatTime(now), game.ASAID); err != nil {
 		return 0, fmt.Errorf("update game %q: %w", game.ASAID, err)
 	}
 	return rowUpdated, nil
@@ -1132,7 +1301,7 @@ func equalGame(left, right Game) bool {
 		left.KickoffUTC == right.KickoffUTC && left.Status == right.Status &&
 		left.HomeTeamID == right.HomeTeamID && left.AwayTeamID == right.AwayTeamID &&
 		left.HomeScore == right.HomeScore && left.AwayScore == right.AwayScore &&
-		left.Matchday == right.Matchday && left.ExpandedMinutes == right.ExpandedMinutes && left.KnockoutGame == right.KnockoutGame && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
+		left.Matchday == right.Matchday && left.ExpandedMinutes == right.ExpandedMinutes && left.KnockoutGame == right.KnockoutGame && left.ExtraTime == right.ExtraTime && left.Penalties == right.Penalties && left.HomePenalties == right.HomePenalties && left.AwayPenalties == right.AwayPenalties && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
 }
 
 // RecordFailure records a failed refresh attempt without mutating cached data.
@@ -1719,7 +1888,7 @@ func (c *DB) seasonGames(ctx context.Context, season, stage string) ([]Game, err
 func seasonGames(ctx context.Context, dbq queryer, season, stage string) ([]Game, error) {
 	rows, err := dbq.QueryContext(ctx, `SELECT
 		asa_game_id, season, stage, kickoff_utc, status, home_team_id, away_team_id,
-		home_score, away_score, matchday, expanded_minutes, knockout_game, last_updated_utc, raw_json
+		home_score, away_score, matchday, expanded_minutes, knockout_game, extra_time, penalties, home_penalties, away_penalties, last_updated_utc, raw_json
 		FROM games
 		WHERE season = ? AND stage = ?
 		ORDER BY kickoff_utc, asa_game_id`, season, stage)
@@ -1734,7 +1903,7 @@ func seasonGames(ctx context.Context, dbq queryer, season, stage string) ([]Game
 		if err := rows.Scan(
 			&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status,
 			&game.HomeTeamID, &game.AwayTeamID, &game.HomeScore, &game.AwayScore,
-			&game.Matchday, &game.ExpandedMinutes, &game.KnockoutGame, &game.LastUpdatedUTC, &game.RawJSON,
+			&game.Matchday, &game.ExpandedMinutes, &game.KnockoutGame, &game.ExtraTime, &game.Penalties, &game.HomePenalties, &game.AwayPenalties, &game.LastUpdatedUTC, &game.RawJSON,
 		); err != nil {
 			return nil, fmt.Errorf("scan season game: %w", err)
 		}
@@ -1865,6 +2034,27 @@ func nullableInt(value sql.NullInt64) any {
 	return value.Int64
 }
 
+func nullableBool(value sql.NullBool) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Bool
+}
+
+func nullBool(value *bool) sql.NullBool {
+	if value == nil {
+		return sql.NullBool{}
+	}
+	return sql.NullBool{Bool: *value, Valid: true}
+}
+
+func nullInt64(value *int) sql.NullInt64 {
+	if value == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*value), Valid: true}
+}
+
 func nullableFloat(value sql.NullFloat64) any {
 	if !value.Valid {
 		return nil
@@ -1922,6 +2112,14 @@ func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
 			writeSnapshotString("0")
 		}
 	}
+	writeNullBool := func(v sql.NullBool) {
+		if v.Valid {
+			writeSnapshotString("1")
+			writeSnapshotString(strconv.FormatBool(v.Bool))
+		} else {
+			writeSnapshotString("0")
+		}
+	}
 	writeSnapshotString("fixture-snapshot-v3")
 	for _, id := range ids {
 		writeSnapshotString(id)
@@ -1937,6 +2135,13 @@ func FixtureSnapshotID(teams []Team, games []Game) (string, error) {
 		writeNull(g.Matchday)
 		writeNull(g.ExpandedMinutes)
 		writeSnapshotString(strconv.FormatBool(g.KnockoutGame))
+		if g.ExtraTime.Valid || g.Penalties.Valid || g.HomePenalties.Valid || g.AwayPenalties.Valid {
+			writeSnapshotString("knockout-source-v1")
+			writeNullBool(g.ExtraTime)
+			writeNullBool(g.Penalties)
+			writeNull(g.HomePenalties)
+			writeNull(g.AwayPenalties)
+		}
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

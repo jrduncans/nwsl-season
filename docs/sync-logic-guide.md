@@ -3,7 +3,9 @@
 Ordinary web requests read the local SQLite cache only. ASA requests are made
 by the background scheduler or an explicit `cmd/sync` maintenance command.
 The scheduler does not run the former season-wide concurrent `Service.Run`
-flow, and server startup does not refresh historical seasons.
+flow. Its immediate startup check also bootstraps missing public source-backed
+catalog scopes, while keeping current-season work ahead of that low-priority
+archive loading.
 
 The [ASA loading packet index](asa-loading/README.md) is the implementation
 plan and change history. This guide summarizes the delivered operational model.
@@ -16,9 +18,9 @@ plan and change history. This guide summarizes the delivered operational model.
 - **Derived data** is computed from cached fixtures: qualification and
   clinching scenarios. Recalculation reads the cache and does not contact ASA.
 - **Forecast inputs** include fixtures and xG from the current regular season
-  and the two preceding regular seasons. Historical seasons are loaded only by
-  the explicit historical-backfill command; page reads and server startup do
-  not make ASA requests to fill them.
+  and the two preceding regular seasons. Missing public source-backed catalog
+  scopes are loaded by the startup scheduler; page reads still never make ASA
+  requests to fill them.
 
 ## Scheduler: pure planning, then sequential execution
 
@@ -53,10 +55,29 @@ the planner orders jobs as follows:
 4. one batched targeted-xG request for due completed games in a scope; and
 5. weekly authoritative inventory audits for active or upcoming scopes.
 
+Missing public source-backed catalog scopes are included in the bootstrap
+inventory tier only until their first fixture inventory is observed. The
+configured current primary stage comes first, followed by current secondary
+stages in catalog order, historical primary stages newest first, then
+historical secondary stages in catalog order. Historical scopes use no format
+assumptions, so the planner sends no expected team or fixture counts for them.
+After inventory is available, initial xG loading proceeds independently; later
+corrections use the archived sweep. A material targeted result in an incomplete
+active bracket also makes its next full-games discovery due immediately; the
+following scheduler tick performs that one collection request.
+
 The default source-request budget is three operations per tick. Jobs beyond the
 budget stay due because planning does not mutate their cadence state. Selected
 operations execute sequentially; there is no concurrent teams/games/xG fetch
 or single-target reconciliation path.
+
+At server startup only, the scheduler drains an otherwise due public catalog
+bootstrap in additional normal-budget batches separated by five seconds. That
+includes missing fixture inventory and each scope's first full xG load; it does
+not accelerate routine result checks, correction work, or derived calculations.
+The drain stops on a source failure, lease deferral, cancellation, or when the
+next normally selected batch has no catalog bootstrap work. Normal five-minute
+cadence then resumes.
 
 ### Independent result and xG cadence
 
@@ -101,6 +122,12 @@ failed request does not advance a successful observation or replace a durable
 resource state. HTTP retries remain bounded by the per-operation request
 deadline.
 
+ASA occasionally uses paired `0-0` penalty scores with its penalties flag
+false or absent as a no-shootout sentinel. The source mapper preserves raw JSON
+but stores those two normalized scores as absent; it never infers a shootout or
+winner. Lone, negative, and nonzero scores without `penalties=true` remain
+rejected before a cache write.
+
 ## Leases and archived corrections
 
 Before executing a hot job, the scheduler acquires a SQLite lease for that
@@ -127,9 +154,13 @@ The maintenance modes are mutually exclusive:
 
 - `-recalculate` runs qualification and clinching calculations from cached
   fixtures without contacting ASA.
-- `-backfill-historical` loads supported historical regular seasons
-  sequentially through the compatibility sequence. It is the only historical
-  source-loading path.
+- `-backfill-historical` force-refreshes supported historical regular seasons
+  sequentially through the compatibility sequence. It remains useful for an
+  operator-requested complete refresh, but is no longer required to populate
+  missing historical catalog scopes because startup does that incrementally.
+- `-backfill-catalog` refreshes the teams catalog once, then every public
+  source-backed stage sequentially in the same bootstrap priority order. It
+  keeps non-configured stages source-only.
 - `-sweep-due-archived` repeatedly takes fresh snapshots and runs due cold
   work until complete, deferred by hot work or a lease, or failed.
 - `-prune-history-before` removes superseded operational history before the

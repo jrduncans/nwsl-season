@@ -55,6 +55,12 @@ func TestGamesDecodesResponse(t *testing.T) {
 	if games[1].Attendance != nil {
 		t.Fatalf("second attendance = %v, want nil", *games[1].Attendance)
 	}
+	if games[0].ExtraTime == nil || *games[0].ExtraTime || games[0].Penalties == nil || !*games[0].Penalties || games[0].HomePenalties == nil || *games[0].HomePenalties != 5 || games[0].AwayPenalties == nil || *games[0].AwayPenalties != 4 {
+		t.Fatalf("first knockout facts = %+v", games[0])
+	}
+	if games[1].ExtraTime != nil || games[1].Penalties != nil || games[1].HomePenalties != nil || games[1].AwayPenalties != nil {
+		t.Fatalf("second knockout facts = %+v, want all absent", games[1])
+	}
 }
 
 func TestGamesCreatesDownstreamHTTPSpan(t *testing.T) {

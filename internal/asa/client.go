@@ -91,6 +91,10 @@ type Game struct {
 	HomeManagerID   string `json:"home_manager_id"`
 	AwayManagerID   string `json:"away_manager_id"`
 	ExpandedMinutes *int   `json:"expanded_minutes"`
+	ExtraTime       *bool  `json:"extra_time"`
+	Penalties       *bool  `json:"penalties"`
+	HomePenalties   *int   `json:"home_penalties"`
+	AwayPenalties   *int   `json:"away_penalties"`
 	SeasonName      string `json:"season_name"`
 	Matchday        *int   `json:"matchday"`
 	Attendance      *int   `json:"attendance"`

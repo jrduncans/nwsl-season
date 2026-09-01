@@ -480,6 +480,70 @@ groups:
         type: boolean
         stability: development
         brief: Whether the incoming fixture is marked as a knockout game.
+      - id: nwsl.sync.old.extra_time_present
+        type: boolean
+        stability: development
+        brief: Whether the cached fixture had an extra-time fact before a source change.
+      - id: nwsl.sync.new.extra_time_present
+        type: boolean
+        stability: development
+        brief: Whether the incoming fixture has an extra-time fact after a source change.
+      - id: nwsl.sync.old.extra_time
+        type: boolean
+        stability: development
+        brief: Cached extra-time fact before a source change when present.
+      - id: nwsl.sync.new.extra_time
+        type: boolean
+        stability: development
+        brief: Incoming extra-time fact after a source change when present.
+      - id: nwsl.sync.old.penalties_present
+        type: boolean
+        stability: development
+        brief: Whether the cached fixture had a penalties fact before a source change.
+      - id: nwsl.sync.new.penalties_present
+        type: boolean
+        stability: development
+        brief: Whether the incoming fixture has a penalties fact after a source change.
+      - id: nwsl.sync.old.penalties
+        type: boolean
+        stability: development
+        brief: Cached penalties fact before a source change when present.
+      - id: nwsl.sync.new.penalties
+        type: boolean
+        stability: development
+        brief: Incoming penalties fact after a source change when present.
+      - id: nwsl.sync.old.home_penalties_present
+        type: boolean
+        stability: development
+        brief: Whether cached home penalty scores were present before a source change.
+      - id: nwsl.sync.new.home_penalties_present
+        type: boolean
+        stability: development
+        brief: Whether incoming home penalty scores are present after a source change.
+      - id: nwsl.sync.old.home_penalties
+        type: int
+        stability: development
+        brief: Cached home penalty score before a source change when present.
+      - id: nwsl.sync.new.home_penalties
+        type: int
+        stability: development
+        brief: Incoming home penalty score after a source change when present.
+      - id: nwsl.sync.old.away_penalties_present
+        type: boolean
+        stability: development
+        brief: Whether cached away penalty scores were present before a source change.
+      - id: nwsl.sync.new.away_penalties_present
+        type: boolean
+        stability: development
+        brief: Whether incoming away penalty scores are present after a source change.
+      - id: nwsl.sync.old.away_penalties
+        type: int
+        stability: development
+        brief: Cached away penalty score before a source change when present.
+      - id: nwsl.sync.new.away_penalties
+        type: int
+        stability: development
+        brief: Incoming away penalty score after a source change when present.
       - id: nwsl.sync.old.availability
         type:
           members:

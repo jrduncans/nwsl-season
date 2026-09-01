@@ -113,8 +113,8 @@ func (c *DB) UpsertCheckedXG(ctx context.Context, season, stage string, requeste
 	badIDs := make(map[string]struct{})
 	for _, request := range requests {
 		var game Game
-		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,expanded_minutes,knockout_game,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, request.GameID).Scan(
-			&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status, &game.HomeTeamID, &game.AwayTeamID, &game.HomeScore, &game.AwayScore, &game.Matchday, &game.ExpandedMinutes, &game.KnockoutGame, &game.LastUpdatedUTC, &game.RawJSON)
+		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,expanded_minutes,knockout_game,extra_time,penalties,home_penalties,away_penalties,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, request.GameID).Scan(
+			&game.ASAID, &game.Season, &game.Stage, &game.KickoffUTC, &game.Status, &game.HomeTeamID, &game.AwayTeamID, &game.HomeScore, &game.AwayScore, &game.Matchday, &game.ExpandedMinutes, &game.KnockoutGame, &game.ExtraTime, &game.Penalties, &game.HomePenalties, &game.AwayPenalties, &game.LastUpdatedUTC, &game.RawJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			badIDs[request.GameID] = struct{}{}
 			continue

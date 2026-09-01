@@ -66,13 +66,13 @@ The xG model reads only validated, available ASA **team-model** xG for
 completed games. The page reports its coverage; a warning appears below 95%.
 Missing xG is deliberately not substituted with actual goals.
 
-At server startup, the cache checks for persisted venue summaries for the two
-previous regular seasons. Missing fixture or xG summaries trigger one ASA data
-refresh for each missing season. Those historical runs use the syncer's
-`SourceOnly` option: they persist teams, fixtures, xG, and the compact venue
-summary, but skip qualification and scenario calculations because forecasts
-consume only the historical home/away aggregate. Each successful fixture and
-xG write updates the summary transactionally, so later forecasts read two small
+At server startup, the scheduler begins bootstrapping missing public historical
+regular seasons. The two previous seasons needed by the venue-based models are
+encountered first among the historical inputs, after current-season work. Those
+historical runs persist teams, fixtures, xG, and compact venue summaries, but
+skip qualification and scenario calculations because forecasts consume only
+the historical home/away aggregate. Each successful fixture and xG write
+updates the summary transactionally, so later forecasts read two small
 aggregate rows rather than recalculating historical seasons on every request.
 See [How synchronization works](sync-logic-guide.md) for the complete refresh
 flow and terminology.

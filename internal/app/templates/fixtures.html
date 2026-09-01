@@ -5,7 +5,7 @@
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .FormatNotice}}<p class="note">{{.FormatNotice}}</p>{{end}}
 
-{{if .FixtureTeams}}<div class="fixture-filter"><label for="fixture-team">Show fixtures for</label><select id="fixture-team" data-fixture-team-filter><option value="">All teams</option>{{range .FixtureTeams}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div><p class="note fixture-filter-summary" data-fixture-filter-summary aria-live="polite">All teams shown.</p><noscript><p class="note">Team filtering requires JavaScript; all fixtures are shown.</p></noscript>{{end}}
+{{template "fixtureFilter" .}}
 
 {{if .ShowFixtureViewToggle}}<div class="fixture-view-toggle" data-fixture-view-toggle hidden role="group" aria-label="Fixture view">
   <button class="fixture-view-button" type="button" data-fixture-view-button="results" aria-pressed="true">Results</button>
@@ -13,10 +13,15 @@
 </div>{{end}}
 {{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include a match outlook for each result. Outlooks use expected goals, venue, recovery time, and recent fixture load.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
 
-{{if .HasResults}}<section{{if .ShowFixtureViewToggle}} data-fixture-view="results"{{end}}>
+{{template "fixtureLists" .}}
+{{template "foot" .}}{{end}}
+
+{{define "fixtureFilter"}}{{if .FixtureTeams}}<div class="fixture-filter"><label for="fixture-team">Show fixtures for</label><select id="fixture-team" data-fixture-team-filter><option value="">All teams</option>{{range .FixtureTeams}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div><p class="note fixture-filter-summary" data-fixture-filter-summary aria-live="polite">All teams shown.</p><noscript><p class="note">Team filtering requires JavaScript; all fixtures are shown.</p></noscript>{{end}}{{end}}
+
+{{define "fixtureLists"}}{{if .HasResults}}<section{{if .ShowFixtureViewToggle}} data-fixture-view="results"{{end}}>
 {{range .ResultFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status{{if not .InProgress}} hidden{{end}}>{{if .InProgress}}In progress{{end}}</span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}{{if .KnockoutGame}} · Knockout game{{end}}{{if .ExpandedMinutes}} · {{.ExpandedMinutes}}{{end}}</span>{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>{{end}}
@@ -24,11 +29,12 @@
 {{if .HasUpcomingFixtures}}<section{{if .ShowFixtureViewToggle}} data-fixture-view="upcoming"{{end}}>
 {{range .UpcomingFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status hidden></span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}{{if .KnockoutGame}} · Knockout game{{end}}{{if .ExpandedMinutes}} · {{.ExpandedMinutes}}{{end}}</span>{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
-</section>{{end}}
-{{template "foot" .}}{{end}}
+</section>{{end}}{{end}}
+
+{{define "fixtureMetadata"}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}{{if .KnockoutGame}}<span class="fixture-meta-tag">Knockout game</span>{{end}}{{if .ExtraTime}}<span class="fixture-meta-tag">{{.ExtraTime}}</span>{{end}}{{if .Shootout}}<span class="fixture-meta-tag">{{.Shootout}}</span>{{end}}{{if .ExpandedMinutes}}<span class="fixture-meta-tag">{{.ExpandedMinutes}}</span>{{end}}</span>{{end}}
 
 {{define "fixtureOutlook"}}<div class="fixture-outlook" role="group" aria-label="Match outlook: {{.HomeTeam.Name}} has a {{.Outlook.HomeWinText}} chance of winning, the draw chance is {{.Outlook.DrawText}}, and {{.AwayTeam.Name}} has a {{.Outlook.AwayWinText}} chance of winning.">
   <span class="fixture-outlook-model" title="Selected Forecast Lab model: {{.Outlook.ModelName}}">Match outlook</span>

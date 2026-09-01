@@ -74,7 +74,13 @@ func Plan(snapshot cache.PlanningSnapshot, config Config, now time.Time) []Job {
 	now = now.UTC()
 	scopes := planningScopes(snapshot, config)
 	league, playoffs := splitStageScopes(scopes)
-	priorities := append(hotPriorities(league, config, now), hotPriorities(playoffs, config, now)...)
+	// An unpublished catalog scope is more valuable than routine polling: it is
+	// how a newly active stage becomes visible to the rest of the application.
+	// Keep that bootstrap order independent of the normal league/playoff hot
+	// cadence below.
+	priorities := [][]Job{planMissingInventory(scopes, config, now), planAcceleratedBracketDiscovery(scopes, config, now)}
+	priorities = append(priorities, hotPriorities(league, config, now)[1:]...)
+	priorities = append(priorities, hotPriorities(playoffs, config, now)[1:]...)
 	jobs := []Job{}
 	for _, priority := range priorities {
 		jobs = append(jobs, priority...)
@@ -182,12 +188,23 @@ func planningScopes(snapshot cache.PlanningSnapshot, config Config) []cache.Plan
 	out := []cache.PlanningScopeSnapshot{}
 	for _, scope := range snapshot.Scopes {
 		id := scope.Readiness.Scope
-		if id.Lifecycle == cache.SourceScopeCompleted {
-			continue
-		}
 		entry, cataloged := competition.Lookup(id.Season, id.Stage)
-		currentCatalogStage := id.Season == config.Season && id.Lifecycle == cache.SourceScopeActive && cataloged && entry.SourceAvailable
-		if (id.Season == config.Season && id.Stage == config.Stage) || currentCatalogStage || id.Lifecycle == cache.SourceScopeUpcoming && id.Stage == "Regular Season" {
+		historicalBootstrap := false
+		if id.Lifecycle == cache.SourceScopeCompleted {
+			// Completed catalog seasons are normally maintained by the cold
+			// correction sweep. Admit them only until their first fixture
+			// inventory and independent initial xG load are available so the
+			// server can bootstrap the historical archive without a command.
+			if !cataloged || !entry.Public || !entry.SourceAvailable {
+				continue
+			}
+			if scope.Readiness.Readiness == cache.SourceReadinessAvailable && scope.XGFull != nil {
+				continue
+			}
+			historicalBootstrap = true
+		}
+		currentCatalogStage := id.Season == config.Season && id.Lifecycle == cache.SourceScopeActive && cataloged && entry.Public && entry.SourceAvailable
+		if (id.Season == config.Season && id.Stage == config.Stage) || currentCatalogStage || historicalBootstrap || id.Lifecycle == cache.SourceScopeUpcoming && id.Stage == "Regular Season" {
 			out = append(out, scope)
 		}
 	}
@@ -209,14 +226,89 @@ func planningScopes(snapshot cache.PlanningSnapshot, config Config) []cache.Plan
 }
 
 func planMissingInventory(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) []Job {
-	jobs := []Job{}
+	missing := make([]cache.PlanningScopeSnapshot, 0, len(scopes))
 	for _, scope := range scopes {
 		if scope.Readiness.Readiness == cache.SourceReadinessAvailable || !fullDue(scope.GamesFull, now) {
 			continue
 		}
+		missing = append(missing, scope)
+	}
+	sort.SliceStable(missing, func(i, j int) bool {
+		return missingInventoryLess(missing[i], missing[j], config)
+	})
+	jobs := make([]Job, 0, len(missing))
+	for _, scope := range missing {
 		jobs = append(jobs, fullGamesJob(scope, config, "missing_or_not_published_inventory"))
 	}
 	return jobs
+}
+
+// planAcceleratedBracketDiscovery is a distinct hot priority so a targeted
+// result that made a live bracket incomplete cannot be crowded out by routine
+// result or xG polls on the next scheduler tick. Missing inventories retain
+// the higher bootstrap priority above it.
+func planAcceleratedBracketDiscovery(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) []Job {
+	jobs := []Job{}
+	for _, scope := range scopes {
+		id := scope.Readiness.Scope
+		entry, found := competition.Lookup(id.Season, id.Stage)
+		if !found || !entry.Public || !entry.SourceAvailable || id.Lifecycle != cache.SourceScopeActive || entry.Kind != competition.StageKindKnockout || entry.BracketFormat == nil || len(entry.BracketFormat.Slots) == 0 || len(scope.Games) >= len(entry.BracketFormat.Slots) || !fullDue(scope.GamesFull, now) {
+			continue
+		}
+		// Unpublished scope work was already selected by the missing-inventory
+		// priority. This priority is only the targeted-result wake-up for an
+		// otherwise published, incomplete bracket.
+		if scope.Readiness.Readiness != cache.SourceReadinessAvailable {
+			continue
+		}
+		jobs = append(jobs, fullGamesJob(scope, config, "targeted_bracket_discovery"))
+	}
+	return jobs
+}
+
+// missingInventoryLess implements the catalog bootstrap contract.  Once a
+// scope is available, normal hot/cold cadence resumes and this order no
+// longer applies.
+func missingInventoryLess(a, b cache.PlanningScopeSnapshot, config Config) bool {
+	aID, bID := a.Readiness.Scope, b.Readiness.Scope
+	aPriority, aCatalogOrder := missingInventoryPriority(aID, config)
+	bPriority, bCatalogOrder := missingInventoryPriority(bID, config)
+	if aPriority != bPriority {
+		return aPriority < bPriority
+	}
+	if aID.Season != bID.Season {
+		return aID.Season > bID.Season
+	}
+	if aCatalogOrder != bCatalogOrder {
+		return aCatalogOrder < bCatalogOrder
+	}
+	return aID.Stage < bID.Stage
+}
+
+func missingInventoryPriority(id cache.SourceScope, config Config) (int, int) {
+	if id.Season == config.Season && id.Stage == config.Stage {
+		return 0, 0
+	}
+	entry, ok := competition.Lookup(id.Season, id.Stage)
+	if id.Season == config.Season {
+		if ok && entry.Primary {
+			return 0, 1
+		}
+		return 1, catalogStageOrder(id.Season, id.Stage)
+	}
+	if ok && entry.Primary {
+		return 2, catalogStageOrder(id.Season, id.Stage)
+	}
+	return 3, catalogStageOrder(id.Season, id.Stage)
+}
+
+func catalogStageOrder(season, stage string) int {
+	for index, entry := range competition.PublicEntries() {
+		if entry.Season == season && entry.Stage == stage {
+			return index
+		}
+	}
+	return len(competition.PublicEntries())
 }
 
 func planWeeklyInventory(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) []Job {

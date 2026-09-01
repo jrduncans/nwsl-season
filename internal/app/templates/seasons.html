@@ -2,12 +2,12 @@
 <header class="seasons-title">
   <p class="eyebrow">NWSL Season Explorer</p>
   <h1>Seasons</h1>
-  <p class="note">Browse the current season and factual regular-season history available in the local archive.</p>
+  <p class="note">Browse public seasons and factual competition stages available in the local archive.</p>
 </header>
 <div class="season-archive" aria-label="Available seasons">
   {{range .Seasons}}<article class="season-archive-card{{if .Current}} season-archive-card-current{{end}}">
     <div><p class="eyebrow">{{.Status}}</p><h2>{{.Season}}</h2></div>
-    <nav aria-label="{{.Season}} season pages"><ul>{{range .Links}}<li><a href="{{.Path}}">{{.Label}}</a></li>{{end}}</ul></nav>
+    {{$season := .Season}}<div class="season-archive-stages">{{range .Stages}}<section class="season-archive-stage"><h3>{{.Label}}</h3><p class="eyebrow">{{.Status}}</p>{{if .Links}}<nav aria-label="{{$season}} {{.Label}} pages"><ul>{{range .Links}}<li><a href="{{.Path}}">{{.Label}}</a></li>{{end}}</ul></nav>{{end}}</section>{{end}}</div>
   </article>{{end}}
 </div>
 {{template "foot" .}}{{end}}

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -117,6 +118,41 @@ func TestPlanBootstrapUsesOneFullInventoryThenOneFullXG(t *testing.T) {
 	}
 }
 
+func TestPlanBootstrapsMissingCompletedCatalogSeason(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	historical := planningScope("2025", "Regular Season", cache.SourceReadinessUnknown, nil)
+	historical.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{historical}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Season != "2025" || jobs[0].Operation.Expectation != nil {
+		t.Fatalf("historical bootstrap jobs = %+v", jobs)
+	}
+}
+
+func TestPlanDoesNotReloadAvailableCompletedCatalogSeasonAsBootstrap(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	historical := planningScope("2025", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.CompletedStatus, now.Add(-time.Hour))})
+	historical.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	historical.GamesFull.LastFullSuccessAt = timePointer(now.Add(-31 * 24 * time.Hour))
+	historical.GamesFull.NextFullDueAt = timePointer(now.Add(24 * time.Hour))
+	historical.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: timePointer(now.Add(-31 * 24 * time.Hour)), NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
+
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{historical}}, testPlannerConfig(), now)
+	if len(jobs) != 0 {
+		t.Fatalf("available historical bootstrap jobs = %+v", jobs)
+	}
+}
+
+func TestPlanBootstrapsInitialXGForAvailableCompletedCatalogSeason(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	historical := historicalCatalogXGBootstrapScope("2025")
+
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{historical}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullXG || jobs[0].Operation.Season != "2025" || jobs[0].Operation.Stage != "Playoffs" {
+		t.Fatalf("historical xG bootstrap jobs = %+v", jobs)
+	}
+}
+
 func TestPlanIncludesActiveCurrentPlayoffsAfterRegularScope(t *testing.T) {
 	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessNotPublished, nil)
@@ -127,15 +163,65 @@ func TestPlanIncludesActiveCurrentPlayoffsAfterRegularScope(t *testing.T) {
 	}
 }
 
-func TestPlanPrioritizesRegularChecksBeforePlayoffDiscovery(t *testing.T) {
+func TestPlanPrioritizesMissingCatalogDiscoveryBeforeRoutineChecks(t *testing.T) {
 	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("regular", fixtures.PreMatchStatus, now.Add(-time.Hour))})
 	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: timePointer(now)}}
 	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season"}
 	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil)
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{playoffs, regular}}, Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}, now)
-	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || jobs[0].Operation.Stage != "Regular Season" {
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Stage != "Playoffs" || jobs[0].Reason != "missing_or_not_published_inventory" {
 		t.Fatalf("jobs=%+v", jobs)
+	}
+}
+
+func TestPlanSelectsAcceleratedBracketDiscoveryBeforeRoutinePollAtSaturatedBudget(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("regular", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: timePointer(now)}}
+	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season"}
+	playoffGame := plannedGame("playoff", fixtures.PreMatchStatus, now.Add(time.Hour))
+	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessAvailable, []cache.Game{playoffGame})
+	playoffs.GamesFull.NextFullDueAt = timePointer(now)
+	playoffs.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Playoffs"}
+
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}, Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}, now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Stage != "Playoffs" || jobs[0].Reason != "targeted_bracket_discovery" {
+		t.Fatalf("saturated next-tick jobs = %+v", jobs)
+	}
+}
+
+func TestPlanOrdersMissingCatalogInventoryTiers(t *testing.T) {
+	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	scopes := []cache.PlanningScopeSnapshot{
+		planningScope("2025", "Playoffs", cache.SourceReadinessNotPublished, nil),
+		planningScope("2024", "Regular Season", cache.SourceReadinessUnknown, nil),
+		planningScope("2025", "Regular Season", cache.SourceReadinessUnknown, nil),
+		planningScope("2026", "NWSL Challenge Cup Final", cache.SourceReadinessNotPublished, nil),
+		planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil),
+		planningScope("2026", "Regular Season", cache.SourceReadinessNotPublished, nil),
+	}
+	for index := range scopes {
+		if scopes[index].Readiness.Scope.Season != "2026" {
+			scopes[index].Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+		}
+	}
+	jobs := Plan(cache.PlanningSnapshot{Scopes: scopes}, Config{Season: "2026", Stage: "Regular Season", SourceRequestBudget: 6}, now)
+	want := []struct{ season, stage string }{
+		{"2026", "Regular Season"},
+		{"2026", "Playoffs"},
+		{"2026", "NWSL Challenge Cup Final"},
+		{"2025", "Regular Season"},
+		{"2024", "Regular Season"},
+		{"2025", "Playoffs"},
+	}
+	if len(jobs) != len(want) {
+		t.Fatalf("jobs=%+v", jobs)
+	}
+	for index, expected := range want {
+		if jobs[index].Operation.Season != expected.season || jobs[index].Operation.Stage != expected.stage {
+			t.Fatalf("job %d = %s %s, want %s %s", index, jobs[index].Operation.Season, jobs[index].Operation.Stage, expected.season, expected.stage)
+		}
 	}
 }
 
@@ -160,6 +246,8 @@ func TestPlanColdSweepsCompletedScopesOneAtATimeAndChainsGamesThenXG(t *testing.
 	archive.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
 	lastGames := now.Add(-31 * 24 * time.Hour)
 	archive.GamesFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGames, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: &lastGames}
+	lastXGBeforeGames := lastGames.Add(-time.Hour)
+	archive.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: &lastXGBeforeGames}
 	config := testPlannerConfig()
 	config.ColdSweepInterval = 30 * 24 * time.Hour
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{archive}}, config, now)
@@ -352,6 +440,143 @@ func TestSchedulerExecutesPlannedJobsSequentially(t *testing.T) {
 	}
 }
 
+func TestSchedulerStartupUsesStartupSourceTrigger(t *testing.T) {
+	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2025", "Regular Season", cache.SourceReadinessUnknown, nil)
+	scope.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
+	runner := &operationRunner{}
+	config := testPlannerConfig()
+	config.Season = "2026"
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	s.checkWithTrigger(cache.SourceTriggerStartup)
+	if len(runner.operations) != 1 || runner.operations[0].Season != "2025" || runner.operations[0].Trigger != cache.SourceTriggerStartup {
+		t.Fatalf("startup operations = %+v", runner.operations)
+	}
+}
+
+func TestSchedulerStartupDrainsCatalogBootstrapInBudgetedBatches(t *testing.T) {
+	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	current := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("current", fixtures.PreMatchStatus, now.Add(time.Hour))})
+	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(time.Hour))}
+	first := []cache.PlanningScopeSnapshot{current, historicalCatalogBootstrapScope("2025"), historicalCatalogBootstrapScope("2024"), historicalCatalogBootstrapScope("2023")}
+	second := []cache.PlanningScopeSnapshot{current, historicalCatalogXGBootstrapScope("2022"), historicalCatalogXGBootstrapScope("2021")}
+	store := &sequencePlanningStore{snapshots: []cache.PlanningSnapshot{
+		{Scopes: first},  // first source batch
+		{Scopes: second}, // decide that a second source batch is due
+		{Scopes: second}, // second source batch
+		{Scopes: []cache.PlanningScopeSnapshot{current}}, // end the drain
+	}}
+	runner := &startupDrainRunner{}
+	config := testPlannerConfig()
+	config.Season = "2026"
+	config.StartupBootstrapInterval = time.Millisecond
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	runner.afterExecute = func() {
+		if len(runner.operations) == 5 {
+			s.Stop()
+		}
+	}
+	s.Start()
+	s.Wait()
+
+	want := []struct {
+		season   string
+		resource syncer.OperationResource
+	}{
+		{"2025", syncer.OperationGames},
+		{"2024", syncer.OperationGames},
+		{"2023", syncer.OperationGames},
+		{"2022", syncer.OperationGameXG},
+		{"2021", syncer.OperationGameXG},
+	}
+	got := make([]struct {
+		season   string
+		resource syncer.OperationResource
+	}, 0, len(runner.operations))
+	for _, operation := range runner.operations {
+		if operation.Trigger != cache.SourceTriggerStartup || operation.Mode != syncer.OperationFull {
+			t.Fatalf("operation = %+v", operation)
+		}
+		got = append(got, struct {
+			season   string
+			resource syncer.OperationResource
+		}{operation.Season, operation.Resource})
+	}
+	if !reflect.DeepEqual(got, want) || runner.overlapped || store.acquired != len(want) || store.released != len(want) || runner.recalculations != 1 {
+		t.Fatalf("operations=%v overlap=%t leases=%d/%d recalculations=%d", got, runner.overlapped, store.acquired, store.released, runner.recalculations)
+	}
+}
+
+func TestSchedulerStartupFailureDoesNotRapidlyRetryCatalogBootstrap(t *testing.T) {
+	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{historicalCatalogBootstrapScope("2025")}}}
+	runner := &startupDrainRunner{err: errors.New("ASA unavailable")}
+	config := testPlannerConfig()
+	config.Season = "2026"
+	config.StartupBootstrapInterval = time.Millisecond
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	runner.afterExecute = s.Stop
+	s.Start()
+	s.Wait()
+	if len(runner.operations) != 1 || store.acquired != 1 || store.released != 1 {
+		t.Fatalf("failed startup operations=%+v leases=%d/%d", runner.operations, store.acquired, store.released)
+	}
+}
+
+func TestSchedulerStartupDeferralAndNonCatalogJobsDoNotDrain(t *testing.T) {
+	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	deferred := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{historicalCatalogBootstrapScope("2025")}}, acquireResults: []bool{false}}
+	s, err := New(deferred, &startupDrainRunner{}, Config{Season: "2026", Stage: "Regular Season", CheckInterval: time.Minute, CompletionGrace: time.Hour, Timeout: time.Second}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	if s.checkWithTrigger(cache.SourceTriggerStartup) {
+		t.Fatal("deferred startup batch requested a rapid retry")
+	}
+
+	nonCatalog := planningScope("2033", "Invented", cache.SourceReadinessNotPublished, nil)
+	nonCatalogScheduler, err := New(&planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{nonCatalog}}}, &startupDrainRunner{}, Config{Season: "2033", Stage: "Invented", CheckInterval: time.Minute, CompletionGrace: time.Hour, Timeout: time.Second}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonCatalogScheduler.now = func() time.Time { return now }
+	if nonCatalogScheduler.startupCatalogBootstrapDue() {
+		t.Fatal("non-catalog startup job started a bootstrap drain")
+	}
+}
+
+func TestCatalogBootstrapJobIncludesOnlyCatalogInventoryAndInitialXG(t *testing.T) {
+	for name, test := range map[string]struct {
+		job  Job
+		want bool
+	}{
+		"catalog inventory": {job: Job{Kind: JobFullGames, Reason: "missing_or_not_published_inventory", Operation: syncer.Operation{Season: "2025", Stage: "Playoffs"}}, want: true},
+		"catalog xg":        {job: Job{Kind: JobFullXG, Reason: "initial_authoritative_xg", Operation: syncer.Operation{Season: "2025", Stage: "Playoffs"}}, want: true},
+		"routine inventory": {job: Job{Kind: JobFullGames, Reason: "weekly_inventory_audit", Operation: syncer.Operation{Season: "2025", Stage: "Playoffs"}}, want: false},
+		"non catalog":       {job: Job{Kind: JobFullGames, Reason: "missing_or_not_published_inventory", Operation: syncer.Operation{Season: "2033", Stage: "Invented"}}, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := catalogBootstrapJob(test.job); got != test.want {
+				t.Fatalf("catalogBootstrapJob(%+v) = %t, want %t", test.job, got, test.want)
+			}
+		})
+	}
+}
+
 func TestSchedulerStopPreventsStartingAnotherPlannedJob(t *testing.T) {
 	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
 	current := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
@@ -379,6 +604,21 @@ func planningScope(season, stage string, readiness cache.SourceReadiness, games 
 	}
 	return scope
 }
+
+func historicalCatalogBootstrapScope(season string) cache.PlanningScopeSnapshot {
+	scope := planningScope(season, "Playoffs", cache.SourceReadinessNotPublished, nil)
+	scope.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	return scope
+}
+
+func historicalCatalogXGBootstrapScope(season string) cache.PlanningScopeSnapshot {
+	game := plannedGame("one", fixtures.CompletedStatus, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	game.HomeScore, game.AwayScore = score(1), score(0)
+	scope := planningScope(season, "Playoffs", cache.SourceReadinessAvailable, []cache.Game{game})
+	scope.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
+	return scope
+}
+
 func plannedGame(id, status string, kickoff time.Time) cache.Game {
 	return cache.Game{ASAID: id, Season: "2033", Stage: "Regular Season", KickoffUTC: kickoff.Format(time.RFC3339), Status: status, HomeTeamID: "home", AwayTeamID: "away"}
 }
@@ -439,6 +679,36 @@ func (s *planningStore) ReleaseSyncLease(_ context.Context, key, _ string) error
 type operationRunner struct {
 	operations   []syncer.Operation
 	afterExecute func()
+}
+
+type startupDrainRunner struct {
+	operations     []syncer.Operation
+	recalculations int
+	inFlight       bool
+	overlapped     bool
+	err            error
+	afterExecute   func()
+}
+
+func (r *startupDrainRunner) Execute(_ context.Context, op syncer.Operation) (syncer.OperationResult, error) {
+	if r.inFlight {
+		r.overlapped = true
+	}
+	r.inFlight = true
+	defer func() { r.inFlight = false }()
+	r.operations = append(r.operations, op)
+	if r.afterExecute != nil {
+		r.afterExecute()
+	}
+	if r.err != nil {
+		return syncer.OperationResult{Operation: op}, r.err
+	}
+	return syncer.OperationResult{Operation: op, Games: &cache.GameRefreshResult{}}, nil
+}
+
+func (r *startupDrainRunner) Recalculate(context.Context, syncer.RecalculateOptions) (cache.SyncRun, error) {
+	r.recalculations++
+	return cache.SyncRun{}, nil
 }
 
 type historicalCorrectionRunner struct {

@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/competition"
 )
 
 func checkMetadata(hour int) TargetedRefreshMetadata {
@@ -14,6 +17,185 @@ func checkMetadata(hour int) TargetedRefreshMetadata {
 func checkRequest(id string, hour int) CheckedGameRequest {
 	due := time.Date(2030, 1, 1, hour, 2, 0, 0, time.UTC)
 	return CheckedGameRequest{ASAID: id, NextDueAt: &due}
+}
+
+func TestUpsertCheckedGamesAcceleratesIncompleteActiveBracketDiscovery(t *testing.T) {
+	db, ctx := inventoryDB(t)
+	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	game := inventoryGame("playoff", "PreMatch", 0, 0)
+	game.Season, game.Stage = "2026", "Playoffs"
+	game.KnockoutGame = true
+	if _, err := db.ReplaceGameInventory(ctx, "2026", "Playoffs", []Game{game}, nil, inventoryMetadata()); err != nil {
+		t.Fatal(err)
+	}
+	updated := game
+	updated.Status = "FullTime"
+	updated.HomeScore, updated.AwayScore = sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Valid: true}
+	updated.LastUpdatedUTC = "2026-08-02T12:00:00Z"
+	metadata := TargetedRefreshMetadata{Trigger: SourceTriggerScheduler, StartedAt: time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC), FinishedAt: time.Date(2026, 8, 2, 12, 1, 0, 0, time.UTC)}
+	result, err := db.UpsertCheckedGames(ctx, "2026", "Playoffs", []CheckedGameRequest{{ASAID: game.ASAID}}, []Game{updated}, metadata)
+	if err != nil || !result.FullGamesDiscoveryAccelerated {
+		t.Fatalf("targeted bracket result = %+v, %v", result, err)
+	}
+	state, found, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2026", "Playoffs")
+	if err != nil || !found || state.NextFullDueAt == nil || !state.NextFullDueAt.Equal(metadata.FinishedAt) {
+		t.Fatalf("accelerated full state = %+v, %t, %v", state, found, err)
+	}
+
+	unchanged := updated
+	metadata.FinishedAt = metadata.FinishedAt.Add(time.Hour)
+	result, err = db.UpsertCheckedGames(ctx, "2026", "Playoffs", []CheckedGameRequest{{ASAID: game.ASAID}}, []Game{unchanged}, metadata)
+	if err != nil || result.FullGamesDiscoveryAccelerated {
+		t.Fatalf("unchanged targeted bracket result = %+v, %v", result, err)
+	}
+	stateAfter, _, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2026", "Playoffs")
+	if err != nil || !stateAfter.NextFullDueAt.Equal(*state.NextFullDueAt) {
+		t.Fatalf("unchanged targeted moved full state = %+v, %v", stateAfter, err)
+	}
+}
+
+func TestIncompleteActiveBracketDiscoveryEligibility(t *testing.T) {
+	entry, found := competition.Lookup("2026", "Playoffs")
+	if !found {
+		t.Fatal("missing playoff catalog entry")
+	}
+	active := SourceScope{Season: "2026", Stage: "Playoffs", Lifecycle: SourceScopeActive}
+	nonBracket, found := competition.Lookup("2026", "Regular Season")
+	if !found {
+		t.Fatal("missing regular catalog entry")
+	}
+	noFiniteSlots := entry
+	noFiniteSlots.BracketFormat = &competition.BracketFormat{}
+	for name, tc := range map[string]struct {
+		entry    competition.Entry
+		scope    SourceScope
+		games    int
+		material bool
+		want     bool
+	}{
+		"positive":                   {entry, active, 1, true, true},
+		"complete inventory":         {entry, active, len(entry.BracketFormat.Slots), true, false},
+		"completed bracket":          {entry, SourceScope{Lifecycle: SourceScopeCompleted}, 1, true, false},
+		"non bracket":                {nonBracket, active, 1, true, false},
+		"no finite slot count":       {noFiniteSlots, active, 1, true, false},
+		"nonmaterial targeted check": {entry, active, 1, false, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := incompleteActiveBracketDiscovery(tc.entry, tc.scope, tc.games, tc.material); got != tc.want {
+				t.Fatalf("eligible = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIncompleteBracketDiscoveryDoesNotMoveFullDueForIneligiblePersistedScopes(t *testing.T) {
+	for name, tc := range map[string]struct {
+		season, stage string
+		gameCount     int
+		completed     bool
+	}{
+		"complete inventory": {season: "2026", stage: "Playoffs", gameCount: 7},
+		"completed bracket":  {season: "2025", stage: "Playoffs", gameCount: 1, completed: true},
+		"non bracket":        {season: "2026", stage: "Regular Season", gameCount: 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			db, ctx := inventoryDB(t)
+			if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+				t.Fatal(err)
+			}
+			game := inventoryGame("ineligible-"+strings.ReplaceAll(name, " ", "-"), "PreMatch", 0, 0)
+			game.Season, game.Stage = tc.season, tc.stage
+			if tc.stage == "Playoffs" {
+				game.KnockoutGame = true
+			}
+			if _, err := db.ReplaceGameInventory(ctx, tc.season, tc.stage, []Game{game}, nil, inventoryMetadata()); err != nil {
+				t.Fatal(err)
+			}
+			if tc.completed {
+				if _, err := db.db.ExecContext(ctx, `UPDATE source_scopes SET lifecycle=? WHERE season=? AND stage=?`, SourceScopeCompleted, tc.season, tc.stage); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, found, err := db.SourceResourceScopeState(ctx, SourceResourceGames, tc.season, tc.stage)
+			if err != nil || !found {
+				t.Fatalf("full state before = %+v, %t, %v", before, found, err)
+			}
+			tx, err := db.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			accelerated, err := accelerateIncompleteBracketDiscovery(ctx, tx, tc.season, tc.stage, tc.gameCount, SourceRefreshAudit{DownstreamInputsChanged: true, FinishedAt: time.Date(2026, 8, 2, 12, 1, 0, 0, time.UTC)})
+			if err != nil {
+				_ = tx.Rollback()
+				t.Fatal(err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			after, _, err := db.SourceResourceScopeState(ctx, SourceResourceGames, tc.season, tc.stage)
+			if accelerated || err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatalf("accelerated/state = %t / before=%+v after=%+v err=%v", accelerated, before, after, err)
+			}
+		})
+	}
+}
+
+func TestTargetedXGDoesNotAccelerateBracketDiscovery(t *testing.T) {
+	db, ctx := inventoryDB(t)
+	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	game := inventoryGame("playoff-xg", "FullTime", 1, 0)
+	game.Season, game.Stage, game.KnockoutGame = "2026", "Playoffs", true
+	if _, err := db.ReplaceGameInventory(ctx, "2026", "Playoffs", []Game{game}, nil, inventoryMetadata()); err != nil {
+		t.Fatal(err)
+	}
+	before, found, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2026", "Playoffs")
+	if err != nil || !found || before.NextFullDueAt == nil {
+		t.Fatalf("full state before xG = %+v, %t, %v", before, found, err)
+	}
+	if _, err := db.UpsertCheckedXG(ctx, "2026", "Playoffs", []CheckedXGRequest{{GameID: game.ASAID}}, []GameXG{xgValue(game.ASAID)}, TargetedRefreshMetadata{Trigger: SourceTriggerScheduler, StartedAt: time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC), FinishedAt: time.Date(2026, 8, 2, 12, 1, 0, 0, time.UTC)}); err != nil {
+		t.Fatal(err)
+	}
+	after, _, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2026", "Playoffs")
+	if err != nil || !after.NextFullDueAt.Equal(*before.NextFullDueAt) {
+		t.Fatalf("xG changed bracket discovery state = %+v, %v", after, err)
+	}
+}
+
+func TestUpsertCheckedGamesAccelerationRollsBackWithCatalogedBracket(t *testing.T) {
+	db, ctx := inventoryDB(t)
+	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	game := inventoryGame("rollback-playoff", "PreMatch", 0, 0)
+	game.Season, game.Stage, game.KnockoutGame = "2026", "Playoffs", true
+	if _, err := db.ReplaceGameInventory(ctx, "2026", "Playoffs", []Game{game}, nil, inventoryMetadata()); err != nil {
+		t.Fatal(err)
+	}
+	before, _, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2026", "Playoffs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.ExecContext(ctx, `CREATE TRIGGER reject_targeted_bracket_audit BEFORE INSERT ON source_refresh_audits WHEN NEW.mode = 'targeted' BEGIN SELECT RAISE(ABORT, 'forced targeted audit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	updated := game
+	updated.Status, updated.HomeScore, updated.AwayScore, updated.LastUpdatedUTC = "FullTime", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Valid: true}, "2026-08-02T12:00:00Z"
+	metadata := TargetedRefreshMetadata{Trigger: SourceTriggerScheduler, StartedAt: time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC), FinishedAt: time.Date(2026, 8, 2, 12, 1, 0, 0, time.UTC)}
+	if _, err := db.UpsertCheckedGames(ctx, "2026", "Playoffs", []CheckedGameRequest{{ASAID: game.ASAID}}, []Game{updated}, metadata); err == nil {
+		t.Fatal("targeted operation unexpectedly succeeded")
+	}
+	after, _, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2026", "Playoffs")
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("rollback changed full state: before=%+v after=%+v err=%v", before, after, err)
+	}
+	games, err := db.seasonGames(ctx, "2026", "Playoffs")
+	if err != nil || len(games) != 1 || games[0].Status != "PreMatch" {
+		t.Fatalf("rollback changed game inventory: %+v, %v", games, err)
+	}
 }
 
 func TestUpsertCheckedGamesOmissionStateAuditAndLineage(t *testing.T) {
@@ -682,7 +864,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12", "DROP INDEX game_result_checks_due_idx", "DROP TABLE game_result_checks", "DELETE FROM schema_migrations WHERE version=11"} {
+	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12", "DROP INDEX game_result_checks_due_idx", "DROP TABLE game_result_checks", "DELETE FROM schema_migrations WHERE version=11"} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
 		}
@@ -709,7 +891,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 13 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 14 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	var index int

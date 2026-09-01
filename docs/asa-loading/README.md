@@ -61,7 +61,15 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [Phase 4 Historical seasons](phase-4/p4-historical-seasons.md) | Complete | Terra | Primary | Phase 3 |
 | [Phase 5 Archived correction sweeps](phase-5/p5-cold-correction-maintenance.md) | Complete | Terra | Primary; Sol for concurrency | Phase 4 |
 | [Phase 6 Basic factual playoffs](phase-6/p6-basic-playoffs.md) | Complete | Terra | Primary; Sol for schema/stage isolation | Phase 5 |
-| [Phase 7 Season archive and phase-aware presentation](phase-7/p7-season-archive-and-completed-presentation.md) | In progress | Sol with bounded Luna and Terra audits | Terra | Phase 6 |
+| [Phase 7 Season archive and phase-aware presentation](phase-7/p7-season-archive-and-completed-presentation.md) | Complete | Sol with bounded Luna and Terra audits | Terra | Phase 6 |
+| [P8-01 Competition catalog](phase-8/p8-01-competition-catalog.md) | Complete | Luna | Terra | Phase 7 |
+| [P8-02 Knockout source persistence](phase-8/p8-02-knockout-source-persistence.md) | Complete | Terra | Sol | P8-01 |
+| [P8-03 Catalog loading and playoff discovery](phase-8/p8-03-catalog-loading-and-playoff-discovery.md) | Complete | Terra | Sol | P8-02 |
+| [P8-04 Archive and factual competition pages](phase-8/p8-04-archive-and-factual-competition-pages.md) | Complete | Luna | Terra | P8-03 |
+| [P8-05a Pure bracket domain](phase-8/p8-05a-pure-bracket-domain.md) | Complete | Terra | Sol | P8-04 |
+| [P8-05b Bracket HTTP and responsive UI](phase-8/p8-05b-bracket-http-and-responsive-ui.md) | Complete | Luna | Terra | P8-05a |
+| [P8-06 Integration rehearsal and final gate](phase-8/p8-06-integration-rehearsal-and-final-gate.md) | Complete | Terra | Sol | P8-05b |
+| [P8-07 Startup catalog bootstrap drain](phase-8/p8-07-startup-bootstrap-drain.md) | Review | Terra | Sol | P8-06 |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission
@@ -94,11 +102,19 @@ Phase 6 is complete. The current Playoffs catalog scope now has explicit stage
 URLs, normalized knockout facts, and existing full/targeted scheduler jobs
 without inferring a bracket or playoff rules.
 
-Phase 7 is in progress. It adds a cache-only season catalog plus a
+Phase 7 is complete. It adds a cache-only season catalog plus a
 page-preserving season selector on standings and results outside the global
 section navigation, records the official historical postseason cut lines, and
 makes upcoming, active, and completed season pages show only phase-relevant
 controls and labels.
+
+Phase 8 is in progress. P8-01 through P8-06 provide the complete public
+competition catalog, immutable versioned bracket formats, schema-14 knockout
+facts, ordered catalog bootstrap and maintenance backfill, factual archive and
+group-stage pages, and source-backed responsive brackets. Its isolated live
+backfill, publication/correction rehearsal, responsive browser acceptance, and
+final integrity review all passed. P8-07 shortens the healthy but visibly slow
+startup catalog backlog while retaining its bounded, sequential source policy.
 
 ## Packet template
 
