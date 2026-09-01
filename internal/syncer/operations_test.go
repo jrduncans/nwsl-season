@@ -8,11 +8,81 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
+	"github.com/jrduncans/nwsl-season/internal/bracket"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+func TestPlayoffPublicationRehearsalPersistsBracketTransitions(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	if _, err := db.EnsureSourceScopes(ctx, "2025", "Playoffs", time.Date(2025, 11, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	teams := make([]asa.Team, 8)
+	for i, id := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		teams[i] = asa.Team{TeamID: id, TeamName: id}
+	}
+	game := func(id, home, away, kickoff string, homeScore, awayScore *int) asa.Game {
+		return asa.Game{GameID: id, SeasonName: "2025", DateTimeUTC: kickoff, Status: "FullTime", HomeTeamID: home, AwayTeamID: away, HomeScore: homeScore, AwayScore: awayScore, KnockoutGame: true, LastUpdatedUTC: "2025-11-24 01:00:00 UTC", RawJSON: `{}`}
+	}
+	q2Pending := game("q2", "a", "b", "2025-11-08 01:00:00 UTC", nil, nil)
+	q2Pending.Status = "PreMatch"
+	q2Result := game("q2", "a", "b", "2025-11-08 01:00:00 UTC", ptr(2), ptr(0))
+	qf := []asa.Game{q2Pending, game("q3", "c", "d", "2025-11-08 17:00:00 UTC", ptr(1), ptr(0)), game("q1", "e", "f", "2025-11-09 17:30:00 UTC", ptr(1), ptr(0)), game("q4", "g", "h", "2025-11-09 20:00:00 UTC", ptr(1), ptr(0))}
+	completedQF := append([]asa.Game{}, qf...)
+	completedQF[0] = q2Result
+	semi := append(append([]asa.Game{}, completedQF...), game("s2", "c", "g", "2025-11-15 17:00:00 UTC", ptr(2), ptr(0)), game("s1", "e", "a", "2025-11-16 20:00:00 UTC", ptr(1), ptr(1)))
+	semi[5].Penalties, semi[5].HomePenalties, semi[5].AwayPenalties = boolPtr(true), ptr(3), ptr(1)
+	all := append(append([]asa.Game{}, semi...), game("final", "c", "e", "2025-11-23 01:00:00 UTC", ptr(0), ptr(1)))
+	client := &operationASA{teams: teams, games: map[string][]asa.Game{"": {}, "q2": {q2Result}, "q2,q3,q1,q4": qf, "q2,q3,q1,q4,s2,s1,final": all}, xg: map[string][]asa.GameXGoals{"final": {{GameID: "final", HomeTeamID: "c", AwayTeamID: "e", HomeTeamXGoals: 1.1, AwayTeamXGoals: 1.4}}}}
+	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2025, 11, 1, 0, 0, 0, 0, time.UTC))}
+	format, _ := competition.Lookup("2025", "Playoffs")
+	run := func(op Operation) bracket.View {
+		op.Trigger = cache.SourceTriggerScheduler
+		if _, err := service.Execute(ctx, op); err != nil {
+			t.Fatal(err)
+		}
+		data, err := db.Season(ctx, "2025", "Playoffs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bracket.Build(*format.BracketFormat, data.Games)
+	}
+	if view := run(Operation{Resource: OperationGames, Mode: OperationFull, Season: "2025", Stage: "Playoffs"}); view.State != bracket.StateEmpty {
+		t.Fatalf("empty=%+v", view)
+	}
+	client.games[""] = qf
+	if view := run(Operation{Resource: OperationGames, Mode: OperationFull, Season: "2025", Stage: "Playoffs"}); view.State != bracket.StatePartial {
+		t.Fatalf("partial=%+v", view)
+	}
+	if result, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2025", Stage: "Playoffs", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "q2"}}}); err != nil || result.FullGamesDiscoveryAccelerated != true {
+		t.Fatalf("targeted acceleration=%+v,%v", result, err)
+	}
+	client.games[""] = all
+	if view := run(Operation{Resource: OperationGames, Mode: OperationFull, Season: "2025", Stage: "Playoffs"}); view.State != bracket.StateReady || len(view.SourceGames) != 7 {
+		t.Fatalf("ready=%+v", view)
+	}
+	if _, err := service.Execute(ctx, Operation{Resource: OperationGameXG, Mode: OperationTargeted, Season: "2025", Stage: "Playoffs", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "final"}}}); err != nil {
+		t.Fatal(err)
+	}
+	xg, err := db.GameXGStates(ctx, "2025", "Playoffs")
+	if err != nil || len(xg) != 1 || xg[0].GameID != "final" || !xg[0].HomeXG.Valid || xg[0].HomeXG.Float64 != 1.1 {
+		t.Fatalf("independent xG=%+v,%v", xg, err)
+	}
+	corrected := game("final", "c", "e", "2025-11-23 01:00:00 UTC", ptr(1), ptr(1))
+	corrected.Penalties, corrected.HomePenalties, corrected.AwayPenalties = boolPtr(true), ptr(4), ptr(2)
+	corrected.LastUpdatedUTC = "2025-11-25 01:00:00 UTC"
+	client.games["final"] = []asa.Game{corrected}
+	if view := run(Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2025", Stage: "Playoffs", Requested: []OperationGameRequest{{GameID: "final"}}}); view.State != bracket.StateReady || view.Rounds[2].Slots[0].Winner.TeamID != "c" {
+		t.Fatalf("corrected bracket=%+v", view)
+	}
+}
+
+func boolPtr(value bool) *bool { return &value }
 
 func TestExecuteTargetedOperationsUseOneSortedRequestAndPreserveOmissions(t *testing.T) {
 	ctx := context.Background()
@@ -86,6 +156,10 @@ func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
 	seedOperationScope(t, ctx, db, "one")
 	incoming := testGame("one", "FullTime", ptr(1), ptr(0))
 	incoming.HomeScore = ptr(2)
+	extraTime, penalties := false, true
+	homePenalties, awayPenalties := 5, 4
+	incoming.ExtraTime, incoming.Penalties = &extraTime, &penalties
+	incoming.HomePenalties, incoming.AwayPenalties = &homePenalties, &awayPenalties
 	incoming.LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
 	client := &operationASA{games: map[string][]asa.Game{"one": {incoming}}}
 
@@ -112,6 +186,7 @@ func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
 				continue
 			}
 			values := map[string]string{}
+			booleans := map[string]bool{}
 			valueChanged := false
 			intValues := map[string]int64{}
 			for _, value := range event.Attributes {
@@ -119,15 +194,19 @@ func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
 					valueChanged = value.Value.AsBool()
 					continue
 				}
+				if string(value.Key) == "nwsl.sync.new.extra_time_present" || string(value.Key) == "nwsl.sync.new.extra_time" || string(value.Key) == "nwsl.sync.new.penalties_present" || string(value.Key) == "nwsl.sync.new.penalties" || string(value.Key) == "nwsl.sync.new.home_penalties_present" || string(value.Key) == "nwsl.sync.new.away_penalties_present" {
+					booleans[string(value.Key)] = value.Value.AsBool()
+					continue
+				}
 				switch string(value.Key) {
-				case "nwsl.sync.old.home_score", "nwsl.sync.new.home_score":
+				case "nwsl.sync.old.home_score", "nwsl.sync.new.home_score", "nwsl.sync.new.home_penalties", "nwsl.sync.new.away_penalties":
 					intValues[string(value.Key)] = value.Value.AsInt64()
 					continue
 				}
 				values[string(value.Key)] = value.Value.AsString()
 			}
-			if values["nwsl.cache.game.last_updated_utc"] != "2024-11-07 15:57:43 UTC" || values["nwsl.asa.game.last_updated_utc"] != incoming.LastUpdatedUTC || values["nwsl.sync.decision"] != "updated" || values["nwsl.sync.reason"] != "asa_last_updated_newer" || values["nwsl.sync.update_kind"] != "value_changed" || values["nwsl.sync.old.status"] != "FullTime" || values["nwsl.sync.new.status"] != "FullTime" || !valueChanged || intValues["nwsl.sync.old.home_score"] != 1 || intValues["nwsl.sync.new.home_score"] != 2 {
-				t.Fatalf("freshness event = %#v ints=%#v value_changed=%t", values, intValues, valueChanged)
+			if values["nwsl.cache.game.last_updated_utc"] != "2024-11-07 15:57:43 UTC" || values["nwsl.asa.game.last_updated_utc"] != incoming.LastUpdatedUTC || values["nwsl.sync.decision"] != "updated" || values["nwsl.sync.reason"] != "asa_last_updated_newer" || values["nwsl.sync.update_kind"] != "value_changed" || values["nwsl.sync.old.status"] != "FullTime" || values["nwsl.sync.new.status"] != "FullTime" || !valueChanged || intValues["nwsl.sync.old.home_score"] != 1 || intValues["nwsl.sync.new.home_score"] != 2 || !booleans["nwsl.sync.new.extra_time_present"] || booleans["nwsl.sync.new.extra_time"] || !booleans["nwsl.sync.new.penalties_present"] || !booleans["nwsl.sync.new.penalties"] || !booleans["nwsl.sync.new.home_penalties_present"] || !booleans["nwsl.sync.new.away_penalties_present"] || intValues["nwsl.sync.new.home_penalties"] != 5 || intValues["nwsl.sync.new.away_penalties"] != 4 {
+				t.Fatalf("freshness event = %#v bools=%#v ints=%#v value_changed=%t", values, booleans, intValues, valueChanged)
 			}
 			return
 		}

@@ -16,10 +16,11 @@ import (
 // GameRefreshResult is the complete committed result of an authoritative game
 // inventory observation.
 type GameRefreshResult struct {
-	Audit   SourceRefreshAudit
-	SyncRun *SyncRun
-	Teams   []Team
-	Games   []Game
+	Audit                         SourceRefreshAudit
+	SyncRun                       *SyncRun
+	Teams                         []Team
+	Games                         []Game
+	FullGamesDiscoveryAccelerated bool
 	// PreviousGames is the cached inventory immediately before this source
 	// observation. It lets callers explain an update decision against the
 	// exact source version that was already live, without another read.
@@ -240,6 +241,9 @@ func validateGameRow(season, stage string, game Game) error {
 	}
 	if game.ExpandedMinutes.Valid && game.ExpandedMinutes.Int64 < 0 {
 		return fmt.Errorf("game %q has invalid expanded minutes", game.ASAID)
+	}
+	if err := validateKnockoutSourceFields(game.ASAID, game.Penalties, game.HomePenalties, game.AwayPenalties); err != nil {
+		return err
 	}
 	if entry, ok := competition.Lookup(season, stage); ok && entry.Kind == competition.StageKindKnockout && !game.KnockoutGame {
 		return fmt.Errorf("game %q is missing knockout classification", game.ASAID)

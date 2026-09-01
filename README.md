@@ -14,13 +14,17 @@ from the cached fixtures when a season page or CLI report is requested.
 ## Features
 
 - Cache-only season catalog and page-preserving season selection on standings and results.
+- Public regular seasons, playoffs, Challenge Cup group/knockout stages, and
+  2024-2026 Challenge Cup finals, grouped by season with per-stage readiness.
+- Verified source-backed knockout brackets with empty and partial `TBD` slots,
+  extra-time and shootout facts, xG, and chronological fixture fallbacks.
 - Season overview with results, upcoming fixtures, model-based match outlooks, standings, goals, and xG.
 - Per-game and total standings views for seasons with uneven schedules.
 - Phase-aware presentation: upcoming seasons emphasize the schedule, active
   seasons retain the full explorer, and completed or historical seasons focus
   on standings and results without empty remaining-schedule controls.
-- Verified historical playoff cut lines: top four for 2016–2019, top six for
-  2021–2023, and top eight for 2024–2025.
+- Verified playoff cut lines: top four for 2016–2019, top six for 2021–2023,
+  and top eight for 2024–2026.
 - Remaining schedule difficulty with raw, venue-adjusted, and relative
   schedule-load-adjusted comparisons.
 - Qualification proofs for the Shield, top-four seed, and playoff places.
@@ -32,10 +36,15 @@ from the cached fixtures when a season page or CLI report is requested.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240
 fixtures, and eight playoff places. A refresh rejects an incomplete or uneven
-known fixture inventory, preserving the prior complete cache. For an overdue
-fixture, the scheduler also checks ASA's game-specific endpoint so a result can
-arrive before the season collection catches up. Qualification indicators are
-suppressed when the cached fixture inventory is incomplete.
+known fixture inventory, preserving the prior complete cache. On startup, the
+scheduler also begins loading any missing public source-backed catalog stages;
+current-season work takes priority and the historical requests are bounded and
+sequential. During that one-time startup bootstrap, follow-on batches wait five
+seconds rather than the normal refresh interval, so an incomplete archive does
+not linger in the UI. For an overdue fixture, the scheduler also checks ASA's
+game-specific endpoint so a result can arrive before the season collection
+catches up. Qualification indicators are suppressed when the cached fixture
+inventory is incomplete.
 
 ## Quick start
 
@@ -64,7 +73,8 @@ Useful endpoints:
 - <http://localhost:8080/healthz> — process health check.
 - <http://localhost:8080/cache/status> — latest cache attempt and success.
 - `/seasons` — current and historical season catalog and no-JavaScript fallback.
-- `/seasons/:season/:stage` — canonical season or factual stage overview.
+- `/seasons/:season/:stage` — canonical season or factual stage overview;
+  bracket-capable stage roots render the verified bracket.
 - `/seasons/:season/:stage/fixtures` — results and remaining fixtures.
 - `/seasons/:season/:stage/schedule-difficulty` — remaining schedule comparison.
 - `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
@@ -296,7 +306,9 @@ go run ./cmd/standings -season 2026
 go run ./cmd/standings -season 2026 -order total
 ```
 
-Load and evaluate all required historical seasons with one explicit command:
+The server automatically bootstraps missing historical catalog seasons in the
+background. To force-refresh and evaluate all required historical seasons with
+one explicit command:
 
 ```sh
 make model-evaluation

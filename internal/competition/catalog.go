@@ -38,6 +38,7 @@ type Entry struct {
 	Season          string
 	Stage           string
 	Label           string
+	ShortLabel      string
 	Slug            string
 	Kind            StageKind
 	Public          bool
@@ -47,6 +48,7 @@ type Entry struct {
 	Rules           *Rules
 	PlayoffPlaces   int
 	Capabilities    []Capability
+	BracketFormat   *BracketFormat
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -55,6 +57,7 @@ var catalog = append(append(historicalRegularSeasonEntries(), Entry{
 	Season:          "2026",
 	Stage:           "Regular Season",
 	Label:           "2026 Regular Season",
+	ShortLabel:      "Regular Season",
 	Slug:            "regular-season",
 	Kind:            StageKindLeagueTable,
 	Public:          true,
@@ -72,11 +75,51 @@ var catalog = append(append(historicalRegularSeasonEntries(), Entry{
 		CapabilityQualification,
 		CapabilityScenarios,
 	},
-}), Entry{
-	Season: "2026", Stage: "Playoffs", Label: "2026 Playoffs", Slug: "playoffs",
-	Kind: StageKindKnockout, Public: true, SourceAvailable: true,
-	Capabilities: []Capability{CapabilityFixtures, CapabilityXG},
-})
+}), publicKnockoutEntries()...)
+
+func publicKnockoutEntries() []Entry {
+	entries := make([]Entry, 0, 25)
+	for _, season := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {
+		entry := Entry{
+			Season: season, Stage: "Playoffs", Label: season + " Playoffs", ShortLabel: "Playoffs", Slug: "playoffs",
+			Kind: StageKindKnockout, Public: true, SourceAvailable: true,
+			Capabilities: []Capability{CapabilityFixtures, CapabilityXG, CapabilityBracket}, BracketFormat: playoffBracket(season),
+		}
+		switch season {
+		case "2016", "2017", "2018", "2019":
+			entry.Inventory = &InventoryExpectation{Games: 3}
+		case "2021", "2022", "2023":
+			entry.Inventory = &InventoryExpectation{Games: 5}
+		case "2024", "2025":
+			entry.Inventory = &InventoryExpectation{Games: 7}
+		}
+		entries = append(entries, entry)
+	}
+	for _, season := range []string{"2020", "2021", "2022", "2023"} {
+		games := map[string]int{"2020": 16, "2021": 20, "2022": 36, "2023": 36}[season]
+		entries = append(entries, Entry{
+			Season: season, Stage: "NWSL Challenge Cup Group Stage", Label: season + " NWSL Challenge Cup Group Stage", ShortLabel: "Challenge Cup Group Stage", Slug: "challenge-cup-group-stage",
+			Kind: StageKindGroup, Public: true, Primary: season == "2020", SourceAvailable: true,
+			Inventory: &InventoryExpectation{Games: games}, Capabilities: []Capability{CapabilityFixtures, CapabilityXG},
+		})
+	}
+	for _, season := range []string{"2020", "2021", "2022", "2023"} {
+		games := map[string]int{"2020": 7, "2021": 1, "2022": 3, "2023": 3}[season]
+		entries = append(entries, Entry{
+			Season: season, Stage: "NWSL Challenge Cup Knockout Round", Label: season + " NWSL Challenge Cup Knockout Round", ShortLabel: "Challenge Cup Knockout", Slug: "challenge-cup-knockout-round",
+			Kind: StageKindKnockout, Public: true, SourceAvailable: true,
+			Inventory: &InventoryExpectation{Games: games}, Capabilities: []Capability{CapabilityFixtures, CapabilityXG, CapabilityBracket}, BracketFormat: challengeCupKnockoutBracket(season),
+		})
+	}
+	for _, season := range []string{"2024", "2025", "2026"} {
+		entries = append(entries, Entry{
+			Season: season, Stage: "NWSL Challenge Cup Final", Label: season + " NWSL Challenge Cup Final", ShortLabel: "Challenge Cup Final", Slug: "challenge-cup-final",
+			Kind: StageKindKnockout, Public: true, SourceAvailable: true,
+			Inventory: &InventoryExpectation{Games: 1}, Capabilities: []Capability{CapabilityFixtures, CapabilityXG, CapabilityBracket}, BracketFormat: singleFinalBracket(),
+		})
+	}
+	return entries
+}
 
 func init() {
 	if err := validateCatalog(catalog); err != nil {
@@ -114,6 +157,7 @@ func historicalRegularSeasonEntries() []Entry {
 			Season:          season,
 			Stage:           "Regular Season",
 			Label:           season + " Regular Season",
+			ShortLabel:      "Regular Season",
 			Slug:            "regular-season",
 			Kind:            StageKindLeagueTable,
 			Public:          true,
@@ -138,9 +182,10 @@ var historicalPlayoffPlaces = map[string]int{
 
 func (e Entry) Validate() error {
 	for name, value := range map[string]string{
-		"season": e.Season,
-		"stage":  e.Stage,
-		"label":  e.Label,
+		"season":      e.Season,
+		"stage":       e.Stage,
+		"label":       e.Label,
+		"short label": e.ShortLabel,
 	} {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("entry %s is blank", name)
@@ -228,6 +273,19 @@ func (e Entry) Validate() error {
 			return fmt.Errorf("entry capability %q requires verified rules", capability)
 		}
 	}
+	if e.BracketFormat != nil {
+		if e.Kind != StageKindKnockout {
+			return fmt.Errorf("bracket format requires a knockout stage")
+		}
+		if !seen[CapabilityBracket] {
+			return fmt.Errorf("bracket format requires bracket capability")
+		}
+		if err := e.BracketFormat.Validate(); err != nil {
+			return fmt.Errorf("entry bracket format is invalid: %w", err)
+		}
+	} else if seen[CapabilityBracket] {
+		return fmt.Errorf("bracket capability requires a bracket format")
+	}
 	if e.PlayoffPlaces > 0 && !seen[CapabilityStandings] {
 		return fmt.Errorf("entry playoff places require standings capability")
 	}
@@ -250,6 +308,10 @@ func (e Entry) Copy() Entry {
 	if e.Rules != nil {
 		rules := e.Rules.Copy()
 		clone.Rules = &rules
+	}
+	if e.BracketFormat != nil {
+		format := e.BracketFormat.Copy()
+		clone.BracketFormat = &format
 	}
 	clone.Capabilities = append([]Capability(nil), e.Capabilities...)
 	return clone
@@ -305,7 +367,7 @@ func PublicEntriesForSeason(season string) []Entry {
 		if entries[i].Primary != entries[j].Primary {
 			return entries[i].Primary
 		}
-		return entries[i].Label < entries[j].Label
+		return stageFamilyRank(entries[i]) < stageFamilyRank(entries[j])
 	})
 	return entries
 }
@@ -347,6 +409,27 @@ func sortEntries(entries []Entry) {
 		if entries[i].Primary != entries[j].Primary {
 			return entries[i].Primary
 		}
+		left, right := stageFamilyRank(entries[i]), stageFamilyRank(entries[j])
+		if left != right {
+			return left < right
+		}
 		return entries[i].Label < entries[j].Label
 	})
+}
+
+func stageFamilyRank(entry Entry) int {
+	switch entry.Slug {
+	case "regular-season":
+		return 0
+	case "playoffs":
+		return 1
+	case "challenge-cup-group-stage":
+		return 2
+	case "challenge-cup-knockout-round":
+		return 3
+	case "challenge-cup-final":
+		return 4
+	default:
+		return 5
+	}
 }

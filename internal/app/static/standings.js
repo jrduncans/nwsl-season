@@ -8,6 +8,15 @@ document.addEventListener("change", (event) => {
     return;
   }
 
+  const stage = event.target.closest("[data-stage-selector]");
+  if (stage) {
+    const switcher = stage.closest("[data-stage-switcher]");
+    const destinations = Array.from(switcher?.querySelectorAll("a[data-stage-destination]") ?? []);
+    const destination = destinations.find((link) => link.dataset.stageDestination === stage.value);
+    if (destination) destination.click();
+    return;
+  }
+
   const form = event.target.closest("form[data-auto-submit]");
   if (!form || event.target.tagName !== "SELECT") return;
   form.requestSubmit();

@@ -39,6 +39,7 @@ type Config struct {
 	ExpectedTeams            int
 	GamesPerTeam             int
 	CheckInterval            time.Duration
+	StartupBootstrapInterval time.Duration
 	CompletionGrace          time.Duration
 	Timeout                  time.Duration
 	SourceRequestBudget      int
@@ -64,6 +65,8 @@ type Scheduler struct {
 }
 
 const coldSweepLeaseKey = "cold-sweep"
+
+const defaultStartupBootstrapInterval = 5 * time.Second
 
 type SweepEntry struct {
 	Job      Job
@@ -108,7 +111,7 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 	for _, field := range []struct {
 		name  string
 		value time.Duration
-	}{{"result correction interval", config.ResultCorrectionInterval}, {"missing xG interval", config.MissingXGInterval}, {"xG correction interval", config.XGCorrectionInterval}, {"game correction window", config.GameCorrectionWindow}, {"missing xG window", config.MissingXGWindow}, {"xG correction window", config.XGCorrectionWindow}, {"inventory interval", config.InventoryInterval}, {"cold sweep interval", config.ColdSweepInterval}} {
+	}{{"startup bootstrap interval", config.StartupBootstrapInterval}, {"result correction interval", config.ResultCorrectionInterval}, {"missing xG interval", config.MissingXGInterval}, {"xG correction interval", config.XGCorrectionInterval}, {"game correction window", config.GameCorrectionWindow}, {"missing xG window", config.MissingXGWindow}, {"xG correction window", config.XGCorrectionWindow}, {"inventory interval", config.InventoryInterval}, {"cold sweep interval", config.ColdSweepInterval}} {
 		if field.value < 0 {
 			return nil, fmt.Errorf("scheduler %s must not be negative", field.name)
 		}
@@ -122,7 +125,17 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 func (s *Scheduler) Start() {
 	go func() {
 		defer close(s.done)
-		s.check()
+		startupComplete := s.checkWithTrigger(cache.SourceTriggerStartup)
+		for startupComplete && s.startupCatalogBootstrapDue() {
+			if !s.waitForStartupBootstrapBatch() {
+				return
+			}
+			// The first startup tick performs the normal current-scope
+			// preflight. Follow-on catalog batches need only source work; doing
+			// the same cache-only calculation every five seconds would not make
+			// the archive more available.
+			startupComplete = s.checkWithPreflight(cache.SourceTriggerStartup, false)
+		}
 		ticker := time.NewTicker(s.config.CheckInterval)
 		defer ticker.Stop()
 		for {
@@ -135,7 +148,7 @@ func (s *Scheduler) Start() {
 					return
 				default:
 				}
-				s.check()
+				s.checkWithTrigger(cache.SourceTriggerScheduler)
 			}
 		}
 	}()
@@ -144,6 +157,18 @@ func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
 func (s *Scheduler) Wait() { <-s.done }
 
 func (s *Scheduler) check() {
+	s.checkWithTrigger(cache.SourceTriggerScheduler)
+}
+
+func (s *Scheduler) checkWithTrigger(trigger cache.SourceRefreshTrigger) bool {
+	return s.checkWithPreflight(trigger, true)
+}
+
+// checkWithPreflight runs one ordinary, bounded scheduler batch. It reports
+// whether source execution completed cleanly enough for startup to consider a
+// follow-on catalog batch; failure, deferral, and cancellation retain the
+// normal scheduler cadence rather than creating a rapid retry loop.
+func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPreflight bool) bool {
 	ctx, span := telemetry.Tracer().Start(context.Background(), nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
 	defer span.End()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
@@ -152,14 +177,14 @@ func (s *Scheduler) check() {
 	if err != nil {
 		span.SetAttributes(nwslconv.SchedulerAction("read_planning_snapshot"), nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeFailure))
 		_ = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.ErrorCodeSchedulerPlanningSnapshot, telemetry.ErrorTypeStorageFailure)
-		return
+		return false
 	}
 	// Source jobs use the split-operation API, so they do not invoke
 	// syncer.Service.Run's derived-data refresh. Recheck an already published
 	// current inventory before any maintenance work: a slow or failed archived
 	// request must not indefinitely block a missing clinching batch.
 	preflightCalculation := nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded
-	if currentInventoryAvailable(snapshot, s.config.Season, s.config.Stage) {
+	if runPreflight && currentInventoryAvailable(snapshot, s.config.Season, s.config.Stage) {
 		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "preflight")
 	}
 	span.SetAttributes(nwslconv.SchedulerClinchingPreflightOutcome(preflightCalculation))
@@ -174,9 +199,11 @@ func (s *Scheduler) check() {
 			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "no_source_request_due")
 		}
 		span.SetAttributes(nwslconv.SchedulerAction("recalculate"), nwslconv.SchedulerRequestCount(0), nwslconv.SchedulerOutcome(outcome))
-		return
+		return true
 	}
-	for _, job := range jobs {
+	for i := range jobs {
+		jobs[i].Operation.Trigger = trigger
+		job := jobs[i]
 		decisionAttributes := []attribute.KeyValue{nwslconv.SchedulerDecision(nwslconv.SchedulerDecisionCheck), nwslconv.SchedulerReason(job.Reason), nwslconv.SchedulerJobKind(string(job.Kind)), nwslconv.SchedulerJobScope(job.Operation.Season + "/" + job.Operation.Stage), nwslconv.SchedulerRequestedRows(len(job.Operation.Requested))}
 		if job.Selection.Policy != "" {
 			decisionAttributes = append(decisionAttributes, selectionAttributes(job.Selection)...)
@@ -230,6 +257,52 @@ jobsLoop:
 		}
 	}
 	span.SetAttributes(nwslconv.SchedulerRequestCount(requests), nwslconv.SchedulerOutcome(tickOutcome))
+	return tickOutcome != nwslconv.SchedulerOutcomeFailure && tickOutcome != nwslconv.SchedulerOutcomeDeferred && tickOutcome != nwslconv.SchedulerOutcomeStopped
+}
+
+func (s *Scheduler) startupCatalogBootstrapDue() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), s.config.Timeout)
+	defer cancel()
+	snapshot, err := s.store.PlanningSnapshot(ctx)
+	if err != nil {
+		s.logger.Warn("read startup catalog bootstrap snapshot", "error", err)
+		return false
+	}
+	for _, job := range Plan(snapshot, s.config, s.now().UTC()) {
+		if catalogBootstrapJob(job) {
+			return true
+		}
+	}
+	return false
+}
+
+func catalogBootstrapJob(job Job) bool {
+	switch {
+	case job.Kind == JobFullGames && job.Reason == "missing_or_not_published_inventory":
+	case job.Kind == JobFullXG && job.Reason == "initial_authoritative_xg":
+	default:
+		return false
+	}
+	entry, found := competition.Lookup(job.Operation.Season, job.Operation.Stage)
+	return found && entry.Public && entry.SourceAvailable
+}
+
+func (s *Scheduler) waitForStartupBootstrapBatch() bool {
+	timer := time.NewTimer(startupBootstrapInterval(s.config))
+	defer timer.Stop()
+	select {
+	case <-s.stop:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func startupBootstrapInterval(config Config) time.Duration {
+	if config.StartupBootstrapInterval > 0 {
+		return config.StartupBootstrapInterval
+	}
+	return defaultStartupBootstrapInterval
 }
 
 func currentInventoryAvailable(snapshot cache.PlanningSnapshot, season, stage string) bool {

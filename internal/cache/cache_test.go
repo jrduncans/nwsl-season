@@ -4,10 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
@@ -55,7 +59,7 @@ func TestOpenConfiguresEverySQLiteConnection(t *testing.T) {
 	}
 }
 
-func TestMigrationThirteenAddsOnlyPlayoffGameColumns(t *testing.T) {
+func TestMigrationFourteenAddsOnlyKnockoutSourceColumns(t *testing.T) {
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -63,7 +67,7 @@ func TestMigrationThirteenAddsOnlyPlayoffGameColumns(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 13 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 14 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	columns := map[string]struct{}{}
@@ -88,6 +92,11 @@ func TestMigrationThirteenAddsOnlyPlayoffGameColumns(t *testing.T) {
 	if _, ok := columns["knockout_game"]; !ok {
 		t.Fatal("knockout_game missing")
 	}
+	for _, column := range []string{"extra_time", "penalties", "home_penalties", "away_penalties"} {
+		if _, ok := columns[column]; !ok {
+			t.Fatalf("%s missing", column)
+		}
+	}
 }
 
 func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *testing.T) {
@@ -107,7 +116,7 @@ func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *test
 	if _, err := db.db.ExecContext(ctx, `UPDATE games SET raw_json='{"expanded_minutes":120,"knockout_game":true}' WHERE asa_game_id='playoff'`); err != nil {
 		t.Fatal(err)
 	}
-	for _, statement := range []string{`ALTER TABLE games DROP COLUMN expanded_minutes`, `ALTER TABLE games DROP COLUMN knockout_game`, `DELETE FROM schema_migrations WHERE version=13`} {
+	for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=14`, `ALTER TABLE games DROP COLUMN expanded_minutes`, `ALTER TABLE games DROP COLUMN knockout_game`, `DELETE FROM schema_migrations WHERE version=13`} {
 		if _, err := db.db.ExecContext(ctx, statement); err != nil {
 			t.Fatal(err)
 		}
@@ -161,6 +170,344 @@ func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *test
 	}
 	if _, err := db.db.ExecContext(ctx, `UPDATE games SET knockout_game=2 WHERE asa_game_id='playoff'`); err == nil {
 		t.Fatal("knockout check accepted 2")
+	}
+}
+
+func TestMigrationFourteenBackfillsKnockoutSourceFactsAndRejectsAmbiguity(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/cache.sqlite"
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	teams := []Team{{ASAID: "alpha", Name: "Alpha"}, {ASAID: "bravo", Name: "Bravo"}}
+	games := []Game{}
+	for i, id := range []string{"missing", "false", "extra", "direct", "full", "malformed"} {
+		game := cachedGame(id, "2041", "Example", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+		game.KickoffUTC = time.Date(2041, 1, i+1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
+		games = append(games, game)
+	}
+	run, err := db.ReplaceSeason(ctx, "2041", "Example", teams, games, time.Date(2041, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.EnsureSourceScopes(ctx, "2041", "Example", time.Date(2041, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err := db.ReplaceGameInventory(ctx, "2041", "Example", games, nil, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2041, 1, 2, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2041, 1, 2, 0, 1, 0, 0, time.UTC)})
+	if err != nil || inventory.SyncRun == nil {
+		t.Fatalf("inventory=%+v,%v", inventory, err)
+	}
+	run = *inventory.SyncRun
+	xgValues := make([]GameXG, 0, len(games))
+	for _, game := range games {
+		xgValues = append(xgValues, GameXG{GameID: game.ASAID, Availability: XGAvailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, HomeXG: sql.NullFloat64{Float64: 1.2, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0.8, Valid: true}, RawJSON: `{}`})
+	}
+	if _, err := db.ReplaceStageXG(ctx, "2041", "Example", xgValues, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2041, 1, 2, 0, 2, 0, 0, time.UTC), FinishedAt: time.Date(2041, 1, 2, 0, 3, 0, 0, time.UTC)}); err != nil {
+		t.Fatal(err)
+	}
+	qualification, err := db.ReplaceQualification(ctx, QualificationRun{FixtureSnapshotID: run.FixtureSnapshotID, SourceSyncRunID: run.ID, Season: "2041", Stage: "Example", RulesVersion: "test-v1", ExpectedStatuses: 1, WrittenStatuses: 1}, []QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.Clinched, Method: clinching.ProofCheapBound, StrictlyAhead: clinching.CountEvidence{Kind: "upper_bound"}, AtLeastLevel: clinching.CountEvidence{Kind: "upper_bound"}, BlockingWitness: []clinching.WitnessGame{}, FrontierWitness: []clinching.WitnessGame{}, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpNotApplicable, FixtureIDs: []string{}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp := time.Date(2041, 1, 2, 0, 4, 0, 0, time.UTC)
+	slate := scenarios.Slate{ID: "migration", DefinitionVersion: scenarios.DefinitionVersion, State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 1, StartsAtUTC: stamp, LatestKickoffUTC: stamp, CutoffUTC: stamp, FixtureIDs: []string{"missing"}}
+	result := ScenarioResult{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "missing", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}, RepresentedAssignments: 1, ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}}, Necessary: []scenarios.FixtureCondition{}, ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}, TotalAssignments: 3, CertifiedAssignments: 1}}
+	if _, err := db.ReplaceScenario(ctx, ScenarioRun{FixtureSnapshotID: run.FixtureSnapshotID, QualificationRunID: qualification.Run.ID, SourceSyncRunID: run.ID, Season: "2041", Stage: "Example", RulesVersion: "test-v1", DefinitionVersion: scenarios.DefinitionVersion, Slate: slate, ExpectedResults: 1, WrittenResults: 1}, []ScenarioResult{result}); err != nil {
+		t.Fatal(err)
+	}
+	beforeXG, err := db.GameXGStates(ctx, "2041", "Example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeGameAudits, err := db.SourceRefreshAudits(ctx, SourceResourceGames, "2041", "Example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeGameState, foundState, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2041", "Example")
+	if err != nil || !foundState {
+		t.Fatalf("game state=%+v,%t,%v", beforeGameState, foundState, err)
+	}
+	beforeReadiness, foundReadiness, err := db.SeasonReadiness(ctx, "2041", "Example")
+	if err != nil || !foundReadiness {
+		t.Fatalf("readiness=%+v,%t,%v", beforeReadiness, foundReadiness, err)
+	}
+	beforeVenue, err := db.VenueSummaries(ctx, []string{"2041"}, "Example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeSnapshot := run.FixtureSnapshotID
+	raw := map[string]string{
+		"missing":   `{"home_penalties":0,"away_penalties":0}`,
+		"false":     `{"extra_time":false,"penalties":false,"home_penalties":0,"away_penalties":0}`,
+		"extra":     `{"extra_time":true}`,
+		"direct":    `{"penalties":true,"home_penalties":4,"away_penalties":3}`,
+		"full":      `{"extra_time":true,"penalties":true,"home_penalties":5,"away_penalties":4}`,
+		"malformed": `{`,
+	}
+	for id, value := range raw {
+		if _, err := db.db.ExecContext(ctx, `UPDATE games SET raw_json=? WHERE asa_game_id=?`, value, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=14`} {
+		if _, err := db.db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	loaded, err := db.seasonGames(ctx, "2041", "Example")
+	if err != nil || len(loaded) != len(games) {
+		t.Fatalf("loaded=%+v,%v", loaded, err)
+	}
+	byID := map[string]Game{}
+	for _, game := range loaded {
+		byID[game.ASAID] = game
+	}
+	if byID["missing"].ExtraTime.Valid || byID["missing"].Penalties.Valid || byID["missing"].HomePenalties.Valid || byID["missing"].AwayPenalties.Valid || byID["malformed"].ExtraTime.Valid || byID["malformed"].Penalties.Valid {
+		t.Fatalf("missing/malformed fields = %+v / %+v", byID["missing"], byID["malformed"])
+	}
+	if value := byID["false"]; !value.ExtraTime.Valid || value.ExtraTime.Bool || !value.Penalties.Valid || value.Penalties.Bool || value.HomePenalties.Valid || value.AwayPenalties.Valid {
+		t.Fatalf("false fields = %+v", value)
+	}
+	if value := byID["extra"]; !value.ExtraTime.Valid || !value.ExtraTime.Bool || value.Penalties.Valid {
+		t.Fatalf("extra fields = %+v", value)
+	}
+	if value := byID["direct"]; value.ExtraTime.Valid || !value.Penalties.Valid || !value.Penalties.Bool || !value.HomePenalties.Valid || value.HomePenalties.Int64 != 4 || !value.AwayPenalties.Valid || value.AwayPenalties.Int64 != 3 {
+		t.Fatalf("direct fields = %+v", value)
+	}
+	if value := byID["full"]; !value.ExtraTime.Valid || !value.ExtraTime.Bool || !value.Penalties.Valid || !value.Penalties.Bool || !value.HomePenalties.Valid || value.HomePenalties.Int64 != 5 || !value.AwayPenalties.Valid || value.AwayPenalties.Int64 != 4 {
+		t.Fatalf("full fields = %+v", value)
+	}
+	for id, want := range raw {
+		var got string
+		if err := db.db.QueryRowContext(ctx, `SELECT raw_json FROM games WHERE asa_game_id=?`, id).Scan(&got); err != nil || got != want {
+			t.Fatalf("raw_json for %s = %q, %v; want %q", id, got, err, want)
+		}
+	}
+	current, err := db.LastSuccess(ctx, "2041", "Example")
+	if err != nil || current == nil || current.FixtureSnapshotID == beforeSnapshot {
+		t.Fatalf("current=%+v before=%q err=%v", current, beforeSnapshot, err)
+	}
+	afterXG, xgErr := db.GameXGStates(ctx, "2041", "Example")
+	afterGameAudits, auditsErr := db.SourceRefreshAudits(ctx, SourceResourceGames, "2041", "Example")
+	afterGameState, stateFound, stateErr := db.SourceResourceScopeState(ctx, SourceResourceGames, "2041", "Example")
+	afterReadiness, readinessFound, readinessErr := db.SeasonReadiness(ctx, "2041", "Example")
+	afterVenue, venueErr := db.VenueSummaries(ctx, []string{"2041"}, "Example")
+	if xgErr != nil || auditsErr != nil || stateErr != nil || readinessErr != nil || venueErr != nil || !stateFound || !readinessFound || !reflect.DeepEqual(beforeXG, afterXG) || !reflect.DeepEqual(beforeGameAudits, afterGameAudits) || !reflect.DeepEqual(beforeGameState, afterGameState) || !reflect.DeepEqual(beforeReadiness, afterReadiness) || !reflect.DeepEqual(beforeVenue, afterVenue) {
+		t.Fatalf("migration preservation xg=%v audits=%v state=%v readiness=%v venue=%v", xgErr, auditsErr, stateErr, readinessErr, venueErr)
+	}
+	if _, found, err := db.QualificationForSnapshot(ctx, beforeSnapshot, "test-v1"); err != nil || !found {
+		t.Fatalf("qualification preservation found=%t err=%v", found, err)
+	}
+	if _, found, err := db.ScenarioForSnapshot(ctx, beforeSnapshot, "test-v1", scenarios.DefinitionVersion); err != nil || !found {
+		t.Fatalf("scenario preservation found=%t err=%v", found, err)
+	}
+	if err := db.db.QueryRowContext(ctx, `PRAGMA foreign_key_check`).Scan(new(string)); err != sql.ErrNoRows {
+		t.Fatalf("foreign key check after migration: %v", err)
+	}
+
+	for _, raw := range []string{
+		`{"penalties":true}`,
+		`{"penalties":true,"home_penalties":1}`,
+		`{"penalties":true,"away_penalties":1}`,
+		`{"penalties":false,"home_penalties":1,"away_penalties":0}`,
+		`{"home_penalties":1,"away_penalties":0}`,
+		`{"penalties":true,"home_penalties":-1,"away_penalties":0}`,
+		`{"penalties":true,"home_penalties":0,"away_penalties":-1}`,
+	} {
+		invalidPath := t.TempDir() + "/cache.sqlite"
+		invalidDB, err := Open(ctx, invalidPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		game := cachedGame("invalid", "2042", "Example", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+		if _, err := invalidDB.ReplaceSeason(ctx, "2042", "Example", teams, []Game{game}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := invalidDB.db.ExecContext(ctx, `UPDATE games SET raw_json=? WHERE asa_game_id='invalid'`, raw); err != nil {
+			t.Fatal(err)
+		}
+		for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=14`} {
+			if _, err := invalidDB.db.ExecContext(ctx, statement); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := invalidDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if reopened, err := Open(ctx, invalidPath); err == nil {
+			_ = reopened.Close()
+			t.Fatalf("invalid raw %s migrated", raw)
+		}
+		rawDB, err := sql.Open("sqlite", sqliteDSN(invalidPath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var version int
+		if err := rawDB.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 13 {
+			_ = rawDB.Close()
+			t.Fatalf("invalid raw %s version=%d err=%v, want v13", raw, version, err)
+		}
+		for _, column := range []string{"extra_time", "penalties", "home_penalties", "away_penalties"} {
+			var present int
+			if err := rawDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('games') WHERE name=?`, column).Scan(&present); err != nil || present != 0 {
+				_ = rawDB.Close()
+				t.Fatalf("invalid raw %s left column %s: present=%d err=%v", raw, column, present, err)
+			}
+		}
+		var storedRaw string
+		if err := rawDB.QueryRowContext(ctx, `SELECT raw_json FROM games WHERE asa_game_id='invalid'`).Scan(&storedRaw); err != nil || storedRaw != raw {
+			_ = rawDB.Close()
+			t.Fatalf("invalid raw row changed: got=%q err=%v want=%q", storedRaw, err, raw)
+		}
+		if _, err := rawDB.ExecContext(ctx, `UPDATE games SET raw_json='{"penalties":true,"home_penalties":1,"away_penalties":0}' WHERE asa_game_id='invalid'`); err != nil {
+			_ = rawDB.Close()
+			t.Fatal(err)
+		}
+		if err := rawDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+		corrected, err := Open(ctx, invalidPath)
+		if err != nil {
+			t.Fatalf("corrected retry for %s failed: %v", raw, err)
+		}
+		if err := corrected.db.QueryRowContext(ctx, `PRAGMA foreign_key_check`).Scan(new(string)); err != sql.ErrNoRows {
+			_ = corrected.Close()
+			t.Fatalf("foreign key check after corrected retry: %v", err)
+		}
+		if err := corrected.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMigrationFourteenIsIdempotentWithExistingColumns(t *testing.T) {
+	ctx := context.Background()
+	for _, retained := range [][]string{
+		{"extra_time", "penalties"},
+		{"extra_time", "penalties", "home_penalties", "away_penalties"},
+	} {
+		t.Run(fmt.Sprintf("retained_%d", len(retained)), func(t *testing.T) {
+			path := t.TempDir() + "/cache.sqlite"
+			db, err := Open(ctx, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			teams := []Team{{ASAID: "alpha", Name: "Alpha"}, {ASAID: "bravo", Name: "Bravo"}}
+			game := cachedGame("one", "2044", "Example", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+			if _, err := db.ReplaceSeason(ctx, "2044", "Example", teams, []Game{game}, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.db.ExecContext(ctx, `UPDATE games SET raw_json='{"extra_time":false,"penalties":true,"home_penalties":2,"away_penalties":1}' WHERE asa_game_id='one'`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=14`); err != nil {
+				t.Fatal(err)
+			}
+			for _, column := range []string{"away_penalties", "home_penalties", "penalties", "extra_time"} {
+				keep := false
+				for _, value := range retained {
+					keep = keep || value == column
+				}
+				if !keep {
+					if _, err := db.db.ExecContext(ctx, `ALTER TABLE games DROP COLUMN `+column); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			db, err = Open(ctx, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			loaded, err := db.seasonGames(ctx, "2044", "Example")
+			if err != nil || len(loaded) != 1 || !loaded[0].ExtraTime.Valid || loaded[0].ExtraTime.Bool || !loaded[0].Penalties.Valid || !loaded[0].Penalties.Bool || loaded[0].HomePenalties.Int64 != 2 || loaded[0].AwayPenalties.Int64 != 1 {
+				t.Fatalf("idempotent migration=%+v,%v", loaded, err)
+			}
+		})
+	}
+}
+
+func TestReplaceSeasonRejectsInvalidKnockoutFactsWithoutMutation(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	teams := []Team{{ASAID: "alpha", Name: "Alpha"}, {ASAID: "bravo", Name: "Bravo"}}
+	base := cachedGame("one", "2043", "Example", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 0, Valid: true})
+	if _, err := db.ReplaceSeason(ctx, "2043", "Example", teams, []Game{base}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := db.Season(ctx, "2043", "Example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []Game{
+		func() Game {
+			value := base
+			value.ASAID = "two"
+			value.KickoffUTC = "2043-01-02T00:00:00Z"
+			value.Penalties = sql.NullBool{Bool: true, Valid: true}
+			return value
+		}(),
+		func() Game {
+			value := base
+			value.ASAID = "two"
+			value.KickoffUTC = "2043-01-02T00:00:00Z"
+			value.HomePenalties = sql.NullInt64{Int64: 1, Valid: true}
+			value.AwayPenalties = sql.NullInt64{Int64: 0, Valid: true}
+			return value
+		}(),
+		func() Game {
+			value := base
+			value.ASAID = "two"
+			value.KickoffUTC = "2043-01-02T00:00:00Z"
+			value.Penalties = sql.NullBool{Bool: false, Valid: true}
+			value.HomePenalties = sql.NullInt64{Int64: 1, Valid: true}
+			value.AwayPenalties = sql.NullInt64{Int64: 0, Valid: true}
+			return value
+		}(),
+		func() Game {
+			value := base
+			value.ASAID = "two"
+			value.KickoffUTC = "2043-01-02T00:00:00Z"
+			value.Penalties = sql.NullBool{Bool: true, Valid: true}
+			value.HomePenalties = sql.NullInt64{Int64: 1, Valid: true}
+			return value
+		}(),
+		func() Game {
+			value := base
+			value.ASAID = "two"
+			value.KickoffUTC = "2043-01-02T00:00:00Z"
+			value.Penalties = sql.NullBool{Bool: true, Valid: true}
+			value.HomePenalties = sql.NullInt64{Int64: -1, Valid: true}
+			value.AwayPenalties = sql.NullInt64{Int64: 0, Valid: true}
+			return value
+		}(),
+	} {
+		changed := base
+		changed.HomeScore = sql.NullInt64{Int64: 2, Valid: true}
+		changed.LastUpdatedUTC = "2043-01-01T13:00:00Z"
+		if _, err := db.ReplaceSeason(ctx, "2043", "Example", teams, []Game{changed, invalid}, time.Now()); err == nil {
+			t.Fatalf("invalid knockout facts accepted: %+v", invalid)
+		}
+		after, err := db.Season(ctx, "2043", "Example")
+		if err != nil || !reflect.DeepEqual(before, after) {
+			t.Fatalf("invalid write changed cache: before=%+v after=%+v err=%v", before, after, err)
+		}
 	}
 }
 

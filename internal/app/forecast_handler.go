@@ -248,7 +248,12 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	if len(results) == 2 {
 		comparison = &results[1]
 	}
-	a.render(w, "forecast", a.forecastPage(r, data, season, rules, state, result, comparison, teamID))
+	page, err := a.forecastPage(r, data, season, rules, state, result, comparison, teamID)
+	if err != nil {
+		a.renderError(w, r, err)
+		return
+	}
+	a.render(w, "forecast", page)
 }
 
 // forecastResultKey identifies a deterministic simulation result. Fixture
@@ -322,16 +327,21 @@ func (a *application) forecastData(r *http.Request) (data cache.SeasonData, seas
 	return data, season, rules, nil
 }
 
-func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, rules competition.Rules, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) forecastPage {
+func (a *application) forecastPage(r *http.Request, data cache.SeasonData, season string, rules competition.Rules, state forecaststate.State, result simulation.Result, comparison *simulation.Result, teamID string) (forecastPage, error) {
 	scope := a.requestScope(r)
 	_, verified := a.rulesForSeason(season, scope.Stage)
 	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
 	base := forecastURL(r.URL.Path, season, scope.Entry.Slug, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
 	canonical := forecastURL(r.URL.Path, season, scope.Entry.Slug, state, "")
+	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, season, scope.Stage, season, scope.Entry.Slug, "/forecast")
+	if err != nil {
+		return forecastPage{}, err
+	}
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
-		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		SeasonSelector: seasonChoices, StageSelector: stageChoices,
 		Navigation: seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, verified, presentation), ModelEvaluationPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
@@ -379,7 +389,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	page.Assumptions = forecastAssumptions(data, state, func(gameID string) string {
 		return forecastURL(r.URL.Path, season, scope.Entry.Slug, state.Without(gameID), "")
 	}, a.options.Location)
-	return page
+	return page, nil
 }
 
 func forecastXGoals(data cache.SeasonData) map[string]forecast.ExpectedGoals {

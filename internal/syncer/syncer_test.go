@@ -942,6 +942,64 @@ func testGame(id, status string, homeScore, awayScore *int) asa.Game {
 	}
 }
 
+func TestMapGamesPreservesKnockoutFactsAndRejectsIncompatiblePairs(t *testing.T) {
+	extraTime, penalties := false, true
+	homePenalties, awayPenalties := 5, 4
+	game := testGame("knockout", "FullTime", ptr(1), ptr(1))
+	game.ExtraTime, game.Penalties = &extraTime, &penalties
+	game.HomePenalties, game.AwayPenalties = &homePenalties, &awayPenalties
+	mapped, err := mapGames(RunOptions{Season: "2024", Stage: "Regular Season"}, []asa.Game{game})
+	if err != nil || len(mapped) != 1 || !mapped[0].ExtraTime.Valid || mapped[0].ExtraTime.Bool || !mapped[0].Penalties.Valid || !mapped[0].Penalties.Bool || !mapped[0].HomePenalties.Valid || mapped[0].HomePenalties.Int64 != 5 || !mapped[0].AwayPenalties.Valid || mapped[0].AwayPenalties.Int64 != 4 {
+		t.Fatalf("mapped=%+v,%v", mapped, err)
+	}
+	zero := 0
+	for _, sentinel := range []asa.Game{
+		func() asa.Game {
+			value := game
+			value.Penalties, value.HomePenalties, value.AwayPenalties = nil, &zero, &zero
+			return value
+		}(),
+		func() asa.Game {
+			value := game
+			no := false
+			value.Penalties, value.HomePenalties, value.AwayPenalties = &no, &zero, &zero
+			return value
+		}(),
+	} {
+		mapped, err := mapGames(RunOptions{Season: "2024", Stage: "Regular Season"}, []asa.Game{sentinel})
+		if err != nil || len(mapped) != 1 || mapped[0].HomePenalties.Valid || mapped[0].AwayPenalties.Valid || mapped[0].RawJSON != sentinel.RawJSON {
+			t.Fatalf("sentinel normalization = %+v, %v", mapped, err)
+		}
+	}
+	for _, invalid := range []asa.Game{
+		func() asa.Game { value := game; value.HomePenalties, value.AwayPenalties = nil, nil; return value }(),
+		func() asa.Game { value := game; falseValue := false; value.Penalties = &falseValue; return value }(),
+		func() asa.Game { value := game; value.AwayPenalties = nil; return value }(),
+		func() asa.Game { value := game; negative := -1; value.HomePenalties = &negative; return value }(),
+		func() asa.Game {
+			value := game
+			no := false
+			value.Penalties, value.HomePenalties, value.AwayPenalties = &no, &zero, ptr(1)
+			return value
+		}(),
+		func() asa.Game {
+			value := game
+			value.Penalties, value.HomePenalties, value.AwayPenalties = nil, &zero, ptr(1)
+			return value
+		}(),
+		func() asa.Game {
+			value := game
+			no := false
+			value.Penalties, value.HomePenalties, value.AwayPenalties = &no, &zero, nil
+			return value
+		}(),
+	} {
+		if _, err := mapGames(RunOptions{Season: "2024", Stage: "Regular Season"}, []asa.Game{invalid}); err == nil {
+			t.Fatalf("invalid mapped game accepted: %+v", invalid)
+		}
+	}
+}
+
 func ptr(value int) *int {
 	return &value
 }

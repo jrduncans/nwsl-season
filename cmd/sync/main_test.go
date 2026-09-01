@@ -5,13 +5,16 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"io"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
@@ -66,6 +69,117 @@ func TestRunHistoricalBackfillStopsOnXGFailureWithoutRequireFlag(t *testing.T) {
 	}, &output)
 	if err == nil || !strings.Contains(err.Error(), "2025 Regular Season: xG refresh") || calls != 1 || output.Len() != 0 {
 		t.Fatalf("xG error/calls/output = %v / %d / %q", err, calls, output.String())
+	}
+}
+
+func TestCatalogBackfillOrdersCurrentThenHistoricalPrimaryThenSecondary(t *testing.T) {
+	entries := catalogBackfillEntries("2026", "Regular Season")
+	if len(entries) == 0 || entries[0].Season != "2026" || entries[0].Stage != "Regular Season" {
+		t.Fatalf("configured primary is not first: %+v", entries)
+	}
+	firstHistoricalSecondary := -1
+	for index, entry := range entries {
+		if entry.Season != "2026" && !entry.Primary {
+			firstHistoricalSecondary = index
+			break
+		}
+		if firstHistoricalSecondary < 0 && entry.Season != "2026" && entry.Primary && index > 0 && entries[index-1].Season < entry.Season {
+			t.Fatalf("historical primaries are not newest first: %+v", entries)
+		}
+	}
+	if firstHistoricalSecondary < 0 {
+		t.Fatal("catalog has no historical secondary stages")
+	}
+	for _, entry := range entries[:firstHistoricalSecondary] {
+		if entry.Season != "2026" && !entry.Primary {
+			t.Fatalf("historical secondary arrived before primary tier: %+v", entries)
+		}
+	}
+	expected := make([]competition.Entry, 0)
+	publicOrder := map[string]int{}
+	for index, entry := range competition.PublicEntries() {
+		publicOrder[entry.Season+"\x00"+entry.Stage] = index
+		if entry.SourceAvailable {
+			expected = append(expected, entry)
+		}
+	}
+	sort.SliceStable(expected, func(i, j int) bool {
+		priority := func(entry competition.Entry) int {
+			if entry.Season == "2026" && entry.Stage == "Regular Season" {
+				return 0
+			}
+			if entry.Season == "2026" {
+				return 1
+			}
+			if entry.Primary {
+				return 2
+			}
+			return 3
+		}
+		left, right := priority(expected[i]), priority(expected[j])
+		if left != right {
+			return left < right
+		}
+		if expected[i].Season != expected[j].Season {
+			return expected[i].Season > expected[j].Season
+		}
+		return publicOrder[expected[i].Season+"\x00"+expected[i].Stage] < publicOrder[expected[j].Season+"\x00"+expected[j].Stage]
+	})
+	if len(entries) != len(expected) {
+		t.Fatalf("catalog entries = %d, want every %d public source entry", len(entries), len(expected))
+	}
+	for index, entry := range expected {
+		if entries[index].Season != entry.Season || entries[index].Stage != entry.Stage {
+			t.Fatalf("catalog entry %d = %s %s, want %s %s", index, entries[index].Season, entries[index].Stage, entry.Season, entry.Stage)
+		}
+	}
+}
+
+func TestRunCatalogBackfillKeepsConfiguredScopeDerivedAndOthersSourceOnly(t *testing.T) {
+	entries := catalogBackfillEntries("2026", "Regular Season")[:3]
+	var calls []syncer.RunOptions
+	var output bytes.Buffer
+	teams := 0
+	if err := runCatalogBackfill(entries, "2026", "Regular Season", time.Second, func(context.Context) error {
+		teams++
+		return nil
+	}, func(_ context.Context, options syncer.RunOptions) (cache.SyncRun, error) {
+		calls = append(calls, options)
+		return cache.SyncRun{}, nil
+	}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if teams != 1 || len(calls) != len(entries) || calls[0].SourceOnly || calls[0].Force {
+		t.Fatalf("configured catalog call = %+v", calls)
+	}
+	for index, call := range calls[1:] {
+		if !call.SourceOnly || call.Force || call.Trigger != "backfill" || call.Season != entries[index+1].Season || call.Stage != entries[index+1].Stage {
+			t.Fatalf("catalog call %d = %+v", index+1, call)
+		}
+	}
+}
+
+func TestRunCatalogBackfillStopsAfterFirstFailure(t *testing.T) {
+	entries := catalogBackfillEntries("2026", "Regular Season")[:3]
+	teams, calls := 0, 0
+	err := runCatalogBackfill(entries, "2026", "Regular Season", time.Second, func(context.Context) error {
+		teams++
+		return nil
+	}, func(context.Context, syncer.RunOptions) (cache.SyncRun, error) {
+		calls++
+		if calls == 2 {
+			return cache.SyncRun{}, errors.New("fixture request failed")
+		}
+		return cache.SyncRun{}, nil
+	}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), entries[1].Season+" "+entries[1].Stage) || teams != 1 || calls != 2 {
+		t.Fatalf("catalog failure/teams/calls = %v / %d / %d", err, teams, calls)
+	}
+}
+
+func TestIncompatibleMaintenanceModes(t *testing.T) {
+	if incompatibleMaintenanceModes(false, false, false, false, false) || incompatibleMaintenanceModes(false, false, true, false, false) || !incompatibleMaintenanceModes(false, true, true, false, false) || !incompatibleMaintenanceModes(true, false, true, false, true) {
+		t.Fatal("maintenance mode incompatibility did not count catalog backfill")
 	}
 }
 

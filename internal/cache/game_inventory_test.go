@@ -110,6 +110,72 @@ func TestPlayoffGameFieldsAreValidatedAndMaterial(t *testing.T) {
 	}
 }
 
+func TestKnockoutSourceFactsRoundTripAndRejectInvalidPairs(t *testing.T) {
+	db, ctx := inventoryDB(t)
+	game := inventoryGame("knockout", "FullTime", 1, 0)
+	game.ExtraTime = sql.NullBool{Bool: false, Valid: true}
+	game.Penalties = sql.NullBool{Bool: true, Valid: true}
+	game.HomePenalties = sql.NullInt64{Int64: 5, Valid: true}
+	game.AwayPenalties = sql.NullInt64{Int64: 4, Valid: true}
+	first, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata())
+	if err != nil || !first.Audit.DownstreamInputsChanged {
+		t.Fatalf("first=%+v,%v", first, err)
+	}
+	unchangedFull, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata())
+	if err != nil || unchangedFull.Audit.RowsUnchanged != 1 || unchangedFull.Audit.RowsUpdated != 0 || unchangedFull.Audit.DownstreamInputsChanged {
+		t.Fatalf("unchanged full=%+v,%v", unchangedFull, err)
+	}
+	unchangedTargeted, err := db.UpsertCheckedGames(ctx, "2030", "Example", []CheckedGameRequest{checkRequest("knockout", 3)}, []Game{game}, checkMetadata(3))
+	if err != nil || unchangedTargeted.Audit.RowsUnchanged != 1 || unchangedTargeted.Audit.RowsUpdated != 0 || unchangedTargeted.Audit.DownstreamInputsChanged {
+		t.Fatalf("unchanged targeted=%+v,%v", unchangedTargeted, err)
+	}
+	changed := game
+	changed.ExtraTime = sql.NullBool{}
+	changed.HomePenalties = sql.NullInt64{Int64: 6, Valid: true}
+	changed.LastUpdatedUTC = "2030-01-01T12:00:00Z"
+	second, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{changed}, nil, inventoryMetadata())
+	if err != nil || second.Audit.RowsUpdated != 1 || !second.Audit.DownstreamInputsChanged || second.SyncRun.FixtureSnapshotID == first.SyncRun.FixtureSnapshotID {
+		t.Fatalf("changed=%+v,%v", second, err)
+	}
+	loaded, err := db.seasonGames(ctx, "2030", "Example")
+	if err != nil || len(loaded) != 1 || loaded[0].ExtraTime.Valid || !loaded[0].Penalties.Valid || !loaded[0].Penalties.Bool || !loaded[0].HomePenalties.Valid || loaded[0].HomePenalties.Int64 != 6 || !loaded[0].AwayPenalties.Valid || loaded[0].AwayPenalties.Int64 != 4 {
+		t.Fatalf("loaded=%+v,%v", loaded, err)
+	}
+	targeted := changed
+	targeted.HomePenalties = sql.NullInt64{Int64: 7, Valid: true}
+	targeted.LastUpdatedUTC = "2030-01-01T13:00:00Z"
+	checked, err := db.UpsertCheckedGames(ctx, "2030", "Example", []CheckedGameRequest{checkRequest("knockout", 4)}, []Game{targeted}, checkMetadata(4))
+	if err != nil || checked.Audit.RowsUpdated != 1 || !checked.Audit.DownstreamInputsChanged || len(checked.Games) != 1 || checked.Games[0].HomePenalties.Int64 != 7 {
+		t.Fatalf("checked=%+v,%v", checked, err)
+	}
+	for _, invalid := range []Game{
+		func() Game {
+			value := game
+			value.Penalties = sql.NullBool{Bool: true, Valid: true}
+			value.HomePenalties = sql.NullInt64{}
+			value.AwayPenalties = sql.NullInt64{}
+			return value
+		}(),
+		func() Game { value := game; value.Penalties = sql.NullBool{Bool: false, Valid: true}; return value }(),
+		func() Game {
+			value := game
+			value.HomePenalties = sql.NullInt64{Int64: 1, Valid: true}
+			value.AwayPenalties = sql.NullInt64{}
+			return value
+		}(),
+		func() Game {
+			value := game
+			value.HomePenalties = sql.NullInt64{Int64: -1, Valid: true}
+			value.AwayPenalties = sql.NullInt64{Int64: 0, Valid: true}
+			return value
+		}(),
+	} {
+		if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{invalid}, nil, inventoryMetadata()); err == nil {
+			t.Fatalf("invalid knockout facts accepted: %+v", invalid)
+		}
+	}
+}
+
 func TestReplaceGameInventoryLineagePreferenceAndMateriality(t *testing.T) {
 	db, ctx := inventoryDB(t)
 	first := inventoryGame("one", "PreMatch", 0, 0)

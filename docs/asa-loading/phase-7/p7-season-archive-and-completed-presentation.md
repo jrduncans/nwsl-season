@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: In progress
+- Status: Complete
 - Intended implementation model: Sol with bounded Luna and Terra audits
 - Required review: Terra
 - Depends on: Phase 6

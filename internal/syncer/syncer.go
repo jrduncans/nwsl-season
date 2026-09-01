@@ -516,6 +516,13 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 		if lastUpdatedUTC == "" {
 			lastUpdatedUTC = game.DateTimeUTC
 		}
+		homePenalties, awayPenalties := game.HomePenalties, game.AwayPenalties
+		// ASA sometimes emits a 0-0 pair as an absent shootout while penalties
+		// is false or omitted. Retain the raw source document, but normalize only
+		// that documented sentinel so it cannot imply a shootout or a winner.
+		if (game.Penalties == nil || !*game.Penalties) && homePenalties != nil && awayPenalties != nil && *homePenalties == 0 && *awayPenalties == 0 {
+			homePenalties, awayPenalties = nil, nil
+		}
 
 		cacheGames = append(cacheGames, cache.Game{
 			ASAID:           game.GameID,
@@ -530,9 +537,18 @@ func mapGames(options RunOptions, games []asa.Game) ([]cache.Game, error) {
 			Matchday:        nullInt(game.Matchday),
 			ExpandedMinutes: nullInt(game.ExpandedMinutes),
 			KnockoutGame:    game.KnockoutGame,
+			ExtraTime:       nullBool(game.ExtraTime),
+			Penalties:       nullBool(game.Penalties),
+			HomePenalties:   nullInt(homePenalties),
+			AwayPenalties:   nullInt(awayPenalties),
 			LastUpdatedUTC:  lastUpdatedUTC,
 			RawJSON:         raw,
 		})
+	}
+	for _, game := range cacheGames {
+		if err := validateKnockoutSourceFields(game); err != nil {
+			return nil, err
+		}
 	}
 	return cacheGames, nil
 }
@@ -580,4 +596,27 @@ func nullInt(value *int) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: int64(*value), Valid: true}
+}
+
+func nullBool(value *bool) sql.NullBool {
+	if value == nil {
+		return sql.NullBool{}
+	}
+	return sql.NullBool{Bool: *value, Valid: true}
+}
+
+func validateKnockoutSourceFields(game cache.Game) error {
+	if game.HomePenalties.Valid != game.AwayPenalties.Valid || (game.HomePenalties.Valid && (game.HomePenalties.Int64 < 0 || game.AwayPenalties.Int64 < 0)) {
+		return fmt.Errorf("validate ASA game %q: invalid penalty scores", game.ASAID)
+	}
+	if game.Penalties.Valid && game.Penalties.Bool {
+		if !game.HomePenalties.Valid {
+			return fmt.Errorf("validate ASA game %q: penalties requires both penalty scores", game.ASAID)
+		}
+		return nil
+	}
+	if game.HomePenalties.Valid {
+		return fmt.Errorf("validate ASA game %q: penalty scores require penalties", game.ASAID)
+	}
+	return nil
 }

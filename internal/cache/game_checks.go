@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/competition"
 )
 
 type TargetedRefreshMetadata struct {
@@ -106,7 +108,7 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 	old := map[string]Game{}
 	for _, r := range requests {
 		var g Game
-		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,expanded_minutes,knockout_game,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, r.ASAID).Scan(&g.ASAID, &g.Season, &g.Stage, &g.KickoffUTC, &g.Status, &g.HomeTeamID, &g.AwayTeamID, &g.HomeScore, &g.AwayScore, &g.Matchday, &g.ExpandedMinutes, &g.KnockoutGame, &g.LastUpdatedUTC, &g.RawJSON)
+		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,expanded_minutes,knockout_game,extra_time,penalties,home_penalties,away_penalties,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, r.ASAID).Scan(&g.ASAID, &g.Season, &g.Stage, &g.KickoffUTC, &g.Status, &g.HomeTeamID, &g.AwayTeamID, &g.HomeScore, &g.AwayScore, &g.Matchday, &g.ExpandedMinutes, &g.KnockoutGame, &g.ExtraTime, &g.Penalties, &g.HomePenalties, &g.AwayPenalties, &g.LastUpdatedUTC, &g.RawJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			return GameRefreshResult{}, fmt.Errorf("requested game %q is not cached", r.ASAID)
 		}
@@ -183,6 +185,10 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 		return GameRefreshResult{}, err
 	}
 	audit.DownstreamInputsChanged = beforeSnapshot != snapshot
+	discoveryAccelerated, err := accelerateIncompleteBracketDiscovery(ctx, tx, season, stage, len(post), audit)
+	if err != nil {
+		return GameRefreshResult{}, err
+	}
 	if audit.DownstreamInputsChanged {
 		if err := updateSplitVenueFixtureSummary(ctx, tx, season, stage, audit.FinishedAt, coverage); err != nil {
 			return GameRefreshResult{}, err
@@ -198,7 +204,40 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 	if err := tx.Commit(); err != nil {
 		return GameRefreshResult{}, fmt.Errorf("commit targeted game refresh: %w", err)
 	}
-	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before)}, nil
+	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before), FullGamesDiscoveryAccelerated: discoveryAccelerated}, nil
+}
+
+// accelerateIncompleteBracketDiscovery makes the next scheduler plan revisit
+// a live, partially discovered bracket after a targeted result changed the
+// fixture snapshot.  It is deliberately part of the targeted write
+// transaction: a committed result cannot be separated from its discovery
+// wake-up, and an aborted result cannot spur an unnecessary ASA request.
+func accelerateIncompleteBracketDiscovery(ctx context.Context, tx *sql.Tx, season, stage string, gameCount int, audit SourceRefreshAudit) (bool, error) {
+	if !audit.DownstreamInputsChanged {
+		return false, nil
+	}
+	scope, found, err := sourceScope(ctx, tx, season, stage)
+	if err != nil {
+		return false, err
+	}
+	entry, entryFound := competition.Lookup(season, stage)
+	if !found || !entryFound || !incompleteActiveBracketDiscovery(entry, scope, gameCount, audit.DownstreamInputsChanged) {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO source_resource_scope_state (
+		resource, season, stage, last_full_success_at, next_full_due_at, updated_at
+	) VALUES (?, ?, ?, NULL, ?, ?)
+	ON CONFLICT(resource, season, stage) DO UPDATE SET
+		next_full_due_at = excluded.next_full_due_at,
+		updated_at = excluded.updated_at`,
+		SourceResourceGames, season, stage, formatTime(audit.FinishedAt), formatTime(audit.FinishedAt)); err != nil {
+		return false, fmt.Errorf("accelerate bracket game discovery: %w", err)
+	}
+	return true, nil
+}
+
+func incompleteActiveBracketDiscovery(entry competition.Entry, scope SourceScope, gameCount int, material bool) bool {
+	return material && entry.Public && entry.SourceAvailable && entry.Kind == competition.StageKindKnockout && entry.BracketFormat != nil && len(entry.BracketFormat.Slots) > 0 && gameCount < len(entry.BracketFormat.Slots) && scope.Lifecycle == SourceScopeActive
 }
 func prepareCheckedGames(season, stage string, requested []CheckedGameRequest, returned []Game, metadata TargetedRefreshMetadata) ([]CheckedGameRequest, SourceRefreshAudit, error) {
 	if invalidTrimmed(season) || invalidTrimmed(stage) {
@@ -303,5 +342,5 @@ func upsertGameResultCheck(ctx context.Context, tx *sql.Tx, id string, finished 
 	return err
 }
 func equalFixtureGame(a, b Game) bool {
-	return a.ASAID == b.ASAID && a.Status == b.Status && a.HomeTeamID == b.HomeTeamID && a.AwayTeamID == b.AwayTeamID && a.HomeScore == b.HomeScore && a.AwayScore == b.AwayScore && a.KickoffUTC == b.KickoffUTC && a.Matchday == b.Matchday && a.ExpandedMinutes == b.ExpandedMinutes && a.KnockoutGame == b.KnockoutGame
+	return a.ASAID == b.ASAID && a.Status == b.Status && a.HomeTeamID == b.HomeTeamID && a.AwayTeamID == b.AwayTeamID && a.HomeScore == b.HomeScore && a.AwayScore == b.AwayScore && a.KickoffUTC == b.KickoffUTC && a.Matchday == b.Matchday && a.ExpandedMinutes == b.ExpandedMinutes && a.KnockoutGame == b.KnockoutGame && a.ExtraTime == b.ExtraTime && a.Penalties == b.Penalties && a.HomePenalties == b.HomePenalties && a.AwayPenalties == b.AwayPenalties
 }

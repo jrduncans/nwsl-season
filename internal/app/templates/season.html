@@ -1,6 +1,6 @@
 {{define "season"}}{{template "head" .}}
 <div class="title-row">
-  <div>{{template "seasonContext" .}}<h1>{{if .ShowUpcomingSeason}}Season overview{{else}}Standings{{end}}</h1></div>
+  <div>{{template "seasonContext" .}}<h1>{{if .ShowUpcomingSeason}}Season overview{{else if .HasStandings}}Standings{{else}}{{.Stage}}{{end}}</h1></div>
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .XGWarning}}<p class="data-warning"><strong>Incomplete xG data:</strong> {{.XGWarning}}</p>{{end}}

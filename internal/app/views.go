@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/bracket"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -63,6 +64,32 @@ type seasonPage struct {
 	HasFixtureOutlooks     bool
 }
 
+type bracketPage struct {
+	seasonPage
+	State       bracket.State
+	Rounds      []bracketRoundView
+	Diagnostics []string
+}
+
+type bracketRoundView struct {
+	Label string
+	Slots []bracketSlotView
+}
+
+type bracketSlotView struct {
+	SeedPair   string
+	Home       teamNameView
+	Away       teamNameView
+	Winner     string
+	AdvancesTo string
+	Game       *bracketGameView
+}
+
+type bracketGameView struct {
+	ID, Score, XG, Kickoff, Status, Outcome string
+	ExtraTime, Shootout                     string
+}
+
 type seasonPhase string
 
 const (
@@ -95,7 +122,13 @@ type seasonArchiveItem struct {
 	Season  string
 	Current bool
 	Status  string
-	Links   []navigationItem
+	Stages  []seasonArchiveStageItem
+}
+
+type seasonArchiveStageItem struct {
+	Label  string
+	Status string
+	Links  []navigationItem
 }
 
 type navigationItem struct {
@@ -125,28 +158,48 @@ func seasonSelector(from, selectedSeason string) []seasonSelectorItem {
 	return items
 }
 
-func seasonFeatureSelector(from, selectedSeason, featureSuffix string) []seasonSelectorItem {
-	entries := competition.PublicEntries()
-	items := make([]seasonSelectorItem, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.Primary {
-			continue
-		}
-		items = append(items, seasonSelectorItem{
-			Label: entry.Season, Path: relativeURL(from, stageURL(entry.Season, entry.Slug)+featureSuffix), Value: entry.Season, Selected: entry.Season == selectedSeason,
-		})
-	}
-	return items
+func stageSelector(from, season, selectedStage string) []seasonSelectorItem {
+	return stageSelectorForEntries(from, season, selectedStage, competition.PublicEntriesForSeason(season))
 }
 
-func stageSelector(from, season, selectedStage string) []seasonSelectorItem {
-	entries := competition.PublicEntriesForSeason(season)
+func stageSelectorForEntries(from, season, selectedStage string, entries []competition.Entry) []seasonSelectorItem {
 	if len(entries) < 2 {
 		return nil
 	}
 	items := make([]seasonSelectorItem, 0, len(entries))
 	for _, entry := range entries {
-		items = append(items, seasonSelectorItem{Label: entry.Label, Path: relativeURL(from, stageURL(season, entry.Slug)), Selected: entry.Stage == selectedStage})
+		items = append(items, seasonSelectorItem{Label: entry.ShortLabel, Path: relativeURL(from, stageURL(season, entry.Slug)), Value: entry.Slug, Selected: entry.Stage == selectedStage})
+	}
+	return items
+}
+
+// seasonStageSelector keeps the selected competition where that competition
+// is cataloged, and falls back to each season's primary stage otherwise.
+func seasonStageSelector(from, selectedSeason, selectedSlug, suffix string) []seasonSelectorItem {
+	return seasonStageSelectorWhen(from, selectedSeason, selectedSlug, suffix, func(competition.Entry) bool { return true })
+}
+
+func seasonStageSelectorWhen(from, selectedSeason, selectedSlug, suffix string, visible func(competition.Entry) bool) []seasonSelectorItem {
+	items := make([]seasonSelectorItem, 0)
+	seen := map[string]bool{}
+	for _, entry := range competition.PublicEntries() {
+		if seen[entry.Season] {
+			continue
+		}
+		candidate, ok := competition.PrimaryEntry(entry.Season)
+		if !ok {
+			continue
+		}
+		for _, stage := range competition.PublicEntriesForSeason(entry.Season) {
+			if stage.Slug == selectedSlug && visible(stage) {
+				candidate = stage
+				break
+			}
+		}
+		seen[entry.Season] = true
+		items = append(items, seasonSelectorItem{
+			Label: candidate.Season, Path: relativeURL(from, stageURL(candidate.Season, candidate.Slug)+suffix), Value: candidate.Season, Selected: candidate.Season == selectedSeason,
+		})
 	}
 	return items
 }
@@ -408,6 +461,8 @@ type fixtureView struct {
 	Remaining       bool
 	Status          string
 	ExpandedMinutes string
+	ExtraTime       string
+	Shootout        string
 	KnockoutGame    bool
 	Outlook         *fixtureOutlookView
 }
@@ -798,7 +853,14 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		kickoff, _ := fixtures.ParseKickoff(game.KickoffUTC)
 		localKickoff := kickoff.In(location)
 		label := localKickoff.Format("Monday, January 2")
-		if game.Matchday.Valid {
+		factualStage := game.KnockoutGame || (game.Stage != "" && game.Stage != "Regular Season")
+		if factualStage && game.Stage != "NWSL Challenge Cup Group Stage" {
+			if game.Status == standings.CompletedStatus {
+				label = "Results"
+			} else {
+				label = "Schedule"
+			}
+		} else if !factualStage && game.Matchday.Valid {
 			label = fmt.Sprintf("Matchday %d", game.Matchday.Int64)
 		}
 		index, ok := groupIndex[label]
@@ -820,6 +882,12 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		if game.KnockoutGame && game.ExpandedMinutes.Valid {
 			view.ExpandedMinutes = fmt.Sprintf("%d minutes", game.ExpandedMinutes.Int64)
 		}
+		if game.ExtraTime.Valid && game.ExtraTime.Bool {
+			view.ExtraTime = "After extra time"
+		}
+		if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
+			view.Shootout = fmt.Sprintf("Shootout %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
+		}
 		if outlook, ok := outlooks[game.ASAID]; ok && view.Remaining {
 			view.Outlook = &outlook
 		}
@@ -834,6 +902,91 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		groups[index].Games = append(groups[index].Games, view)
 	}
 	return groups
+}
+
+func bracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData) bracketPage {
+	view := bracket.Build(format, data.Games)
+	teams := make(map[string]teamNameView, len(data.Teams))
+	for _, team := range data.Teams {
+		teams[team.ID] = teamName(team)
+	}
+	xgoals := make(map[string]cache.GameXG, len(data.XGoals))
+	for _, value := range data.XGoals {
+		if value.Availability == cache.XGAvailable {
+			xgoals[value.GameID] = value
+		}
+	}
+	result := bracketPage{seasonPage: page, State: view.State}
+	for _, diagnostic := range view.Diagnostics {
+		result.Diagnostics = append(result.Diagnostics, diagnostic.Message)
+	}
+	connections := make(map[string]string, len(format.Connections))
+	rounds := make(map[string]string, len(format.Rounds))
+	for _, round := range format.Rounds {
+		rounds[round.ID] = round.Label
+	}
+	for _, connection := range format.Connections {
+		destination := ""
+		for _, slot := range format.Slots {
+			if slot.ID == connection.DestinationSlotID {
+				destination = rounds[slot.RoundID]
+				break
+			}
+		}
+		for _, source := range connection.SourceSlotIDs {
+			connections[source] = destination
+		}
+	}
+	for _, round := range view.Rounds {
+		row := bracketRoundView{Label: round.Label}
+		for _, slot := range round.Slots {
+			item := bracketSlotView{Home: bracketEntrant(slot.Home.TeamID, teams), Away: bracketEntrant(slot.Away.TeamID, teams), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
+			if slot.SeedPair != nil {
+				item.SeedPair = fmt.Sprintf("Seeds %d and %d", slot.SeedPair[0], slot.SeedPair[1])
+			}
+			if slot.Game != nil {
+				game := bracketGameViewFor(*slot.Game, xgoals)
+				item.Game = &game
+			}
+			row.Slots = append(row.Slots, item)
+		}
+		result.Rounds = append(result.Rounds, row)
+	}
+	return result
+}
+
+func bracketEntrantName(id string, teams map[string]teamNameView) string {
+	if id == bracket.TBD || id == "" {
+		return bracket.TBD
+	}
+	if team, ok := teams[id]; ok {
+		return team.Name
+	}
+	return id
+}
+
+func bracketEntrant(id string, teams map[string]teamNameView) teamNameView {
+	return teamNameView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL}
+}
+
+func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracketGameView {
+	view := bracketGameView{ID: game.ASAID, Status: game.Status}
+	if kickoff, err := fixtures.ParseKickoff(game.KickoffUTC); err == nil {
+		view.Kickoff = kickoff.UTC().Format(time.RFC3339)
+	}
+	if game.HomeScore.Valid && game.AwayScore.Valid {
+		view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
+	}
+	if xg, ok := xgoals[game.ASAID]; ok && xg.HomeXG.Valid && xg.AwayXG.Valid {
+		view.XG = fmt.Sprintf("xG %.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+	}
+	if game.ExtraTime.Valid && game.ExtraTime.Bool {
+		view.ExtraTime = "After extra time"
+	}
+	if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
+		view.Shootout = fmt.Sprintf("Shootout %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
+	}
+	return view
 }
 
 // fixtureGroupsByStatus separates the fixtures-page views without splitting a

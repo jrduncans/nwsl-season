@@ -1,0 +1,19 @@
+{{define "bracket"}}{{template "head" .}}
+<div class="title-row"><div>{{template "seasonContext" .}}<h1>{{.Stage}}</h1></div></div>
+{{if eq .State "format_mismatch"}}<p class="data-warning"><strong>Bracket format mismatch:</strong> Cached source games do not fit the verified bracket. <a href="{{.FixturesPath}}">View factual fixtures</a>.</p>{{else if eq .State "unresolved"}}<p class="note">The bracket has unresolved source facts; later advancement remains TBD.</p>{{else if eq .State "partial"}}<p class="note">Partial bracket data. Unknown entrants are shown as TBD.</p>{{else if eq .State "empty"}}<p class="note">No bracket fixtures are cached yet. The verified competition shape is shown below.</p>{{end}}
+<section class="bracket" data-bracket-state="{{.State}}" aria-label="{{.Stage}} bracket">
+  {{range .Rounds}}<section class="bracket-round"><h2>{{.Label}}</h2><div class="bracket-round-slots">{{range .Slots}}<article class="bracket-slot">
+    {{if .SeedPair}}<p class="bracket-seeds">{{.SeedPair}}</p>{{end}}
+    {{if .Game}}<p class="bracket-kickoff"><time{{if .Game.Kickoff}} datetime="{{.Game.Kickoff}}" data-local-time="{{.Game.Kickoff}}"{{end}}>{{if .Game.Kickoff}}{{.Game.Kickoff}}{{else}}Date TBD{{end}}</time></p>{{end}}
+    <div class="bracket-match">
+      <span class="bracket-match-team">{{template "teamName" .Home}}</span>
+      <strong class="fixture-result">{{if .Game}}{{if .Game.Score}}<span>{{.Game.Score}}</span>{{else}}<span>vs</span>{{end}}{{if .Game.XG}}<span class="fixture-xg">{{.Game.XG}}</span>{{end}}{{else}}<span>vs</span>{{end}}</strong>
+      <span class="bracket-match-team">{{template "teamName" .Away}}</span>
+    </div>
+    {{if .Winner}}<p class="bracket-winner">Winner: {{.Winner}}</p>{{end}}
+    {{if .Game}}{{if or .Game.ExtraTime .Game.Shootout}}<p class="bracket-facts">{{if .Game.ExtraTime}}<span class="bracket-meta-tag">{{.Game.ExtraTime}}</span>{{end}}{{if .Game.Shootout}}<span class="bracket-meta-tag">{{.Game.Shootout}}</span>{{end}}</p>{{end}}{{end}}
+    {{if .AdvancesTo}}<p class="bracket-advances">Advances to {{.AdvancesTo}}</p>{{end}}
+  </article>{{end}}</div></section>{{end}}
+</section>
+{{if .Diagnostics}}<ul class="bracket-diagnostics">{{range .Diagnostics}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{template "foot" .}}{{end}}

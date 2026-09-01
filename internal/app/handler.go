@@ -530,40 +530,101 @@ func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
 func seasonArchiveItems(from, currentSeason string, readinessByScope map[string]cache.SeasonReadinessSnapshot) []seasonArchiveItem {
 	items := []seasonArchiveItem{}
 	for _, entry := range competition.PublicEntries() {
-		if !entry.Primary {
-			continue
+		// PublicEntries is already sorted by season and competition family. Keep
+		// one archive card per season while retaining that stage order inside it.
+		itemIndex := -1
+		for i := range items {
+			if items[i].Season == entry.Season {
+				itemIndex = i
+				break
+			}
 		}
-		item := seasonArchiveItem{Season: entry.Season, Current: entry.Season == currentSeason}
+		if itemIndex < 0 {
+			items = append(items, seasonArchiveItem{Season: entry.Season, Current: entry.Season == currentSeason})
+			itemIndex = len(items) - 1
+		}
+		item := &items[itemIndex]
 		if item.Current {
 			item.Status = "Current season"
 		} else {
 			item.Status = "Historical season"
 		}
+		stageStatus := "Not loaded"
 		if readiness, ok := readinessByScope[entry.Season+"\x00"+entry.Stage]; ok {
 			switch readiness.Readiness {
 			case cache.SourceReadinessNotPublished:
-				item.Status += " · Not published"
+				stageStatus = "Not published"
 			case cache.SourceReadinessUnknown:
-				item.Status += " · Not loaded"
+				stageStatus = "Not loaded"
 			case cache.SourceReadinessAvailable:
 				if readiness.Completeness == cache.InventoryCompletenessIncomplete {
-					item.Status += " · Partial data"
+					stageStatus = "Partial data"
+				} else {
+					stageStatus = "Loaded"
 				}
 			}
 		}
+		item.Stages = append(item.Stages, seasonArchiveStageItem{Label: entry.ShortLabel, Status: stageStatus})
 
+		stage := &item.Stages[len(item.Stages)-1]
+		if !competitionStageVisible(entry, readinessByScope) {
+			continue
+		}
 		base := stageURL(entry.Season, entry.Slug)
-		item.Links = append(item.Links, navigationItem{Label: "Standings", Path: relativeURL(from, base)})
+		rootLabel := "Competition overview"
+		if entry.Supports(competition.CapabilityStandings) {
+			rootLabel = "Standings"
+		}
+		stage.Links = append(stage.Links, navigationItem{Label: rootLabel, Path: relativeURL(from, base)})
 		if entry.Supports(competition.CapabilityFixtures) {
 			label := "Results"
-			if item.Current {
+			if item.Current && entry.Primary {
 				label = "Results & fixtures"
 			}
-			item.Links = append(item.Links, navigationItem{Label: label, Path: relativeURL(from, base+"/fixtures")})
+			stage.Links = append(stage.Links, navigationItem{Label: label, Path: relativeURL(from, base+"/fixtures")})
 		}
-		items = append(items, item)
 	}
 	return items
+}
+
+// competitionStageVisible keeps a future knockout stage out of the archive
+// until the local cache contains an actual matchup. A bare fixture row whose
+// participants are still TBD is not enough to publish a bracket. A nil
+// readiness map is the compatibility fallback for Store implementations that
+// do not expose persisted readiness.
+func competitionStageVisible(entry competition.Entry, readinessByScope map[string]cache.SeasonReadinessSnapshot) bool {
+	if entry.Kind != competition.StageKindKnockout || readinessByScope == nil {
+		return true
+	}
+	readiness := readinessByScope[entry.Season+"\x00"+entry.Stage]
+	return readiness.ObservedGames > 0 && readiness.ObservedTeams >= 2
+}
+
+func (a *application) competitionSelectors(ctx context.Context, from, season, selectedStage, selectedSeason, selectedSlug, suffix string) ([]seasonSelectorItem, []seasonSelectorItem, error) {
+	entries := competition.PublicEntriesForSeason(season)
+	store, ok := a.store.(interface {
+		SeasonReadinesses(context.Context) ([]cache.SeasonReadinessSnapshot, error)
+	})
+	if !ok {
+		return seasonStageSelector(from, selectedSeason, selectedSlug, suffix), stageSelectorForEntries(from, season, selectedStage, entries), nil
+	}
+	readinesses, err := store.SeasonReadinesses(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load competition readiness: %w", err)
+	}
+	readinessByScope := make(map[string]cache.SeasonReadinessSnapshot, len(readinesses))
+	for _, readiness := range readinesses {
+		readinessByScope[readiness.Scope.Season+"\x00"+readiness.Scope.Stage] = readiness
+	}
+	visible := make([]competition.Entry, 0, len(entries))
+	for _, entry := range entries {
+		if competitionStageVisible(entry, readinessByScope) {
+			visible = append(visible, entry)
+		}
+	}
+	return seasonStageSelectorWhen(from, selectedSeason, selectedSlug, suffix, func(entry competition.Entry) bool {
+		return competitionStageVisible(entry, readinessByScope)
+	}), stageSelectorForEntries(from, season, selectedStage, visible), nil
 }
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
@@ -586,7 +647,18 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	if scope.Entry.Kind == competition.StageKindKnockout {
+	if scope.Entry.Supports(competition.CapabilityBracket) && scope.Entry.BracketFormat != nil {
+		data, dataErr := a.loadSeasonData(r.Context(), scope.Season, scope.Stage)
+		if dataErr != nil {
+			a.renderError(w, r, dataErr)
+			return
+		}
+		if knockoutMatchupAvailable(data.Games) {
+			a.render(w, "bracket", bracketPageFor(page, *scope.Entry.BracketFormat, data))
+			return
+		}
+	}
+	if scope.Entry.Kind != competition.StageKindLeagueTable {
 		a.render(w, "fixtures", page)
 		return
 	}
@@ -718,12 +790,12 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if err != nil {
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
 	}
-	if len(data.Games) == 0 {
+	if len(data.Games) == 0 || (scope.Entry.Kind == competition.StageKindKnockout && !knockoutMatchupAvailable(data.Games)) {
 		if historicalCatalogScope(scope) {
 			return a.historicalLoadPage(r, scope)
 		}
-		if scope.Cataloged && scope.Entry.Kind == competition.StageKindKnockout {
-			return a.playoffLoadPage(r, scope)
+		if scope.Cataloged && scope.Entry.Kind != competition.StageKindLeagueTable {
+			return a.factualLoadPage(r, scope)
 		}
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
 	}
@@ -791,11 +863,10 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming) {
 		fixturesHeading = "Results"
 	}
-	var featureSeasonSelector []seasonSelectorItem
-	if scope.Entry.Primary {
-		if featureSuffix, ok := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug); ok {
-			featureSeasonSelector = seasonFeatureSelector(r.URL.Path, season, featureSuffix)
-		}
+	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
+	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, season, scope.Stage, season, scope.Entry.Slug, featureSuffix)
+	if err != nil {
+		return seasonPage{}, err
 	}
 	page := seasonPage{
 		Title:                  season + " NWSL season",
@@ -827,8 +898,8 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		ForecastPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		ClinchingPath:          relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/clinching"),
 		CurrentPath:            relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
-		SeasonSelector:         featureSeasonSelector,
-		StageSelector:          stageSelector(r.URL.Path, season, scope.Stage),
+		SeasonSelector:         seasonChoices,
+		StageSelector:          stageChoices,
 		SeasonPath:             relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
 		FixturesPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
@@ -851,8 +922,6 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 	if !scope.Cataloged {
 		page.FormatNotice = unknownFormatNotice
-	} else if !scope.standingsAvailable() {
-		page.FormatNotice = "Standings are unavailable for this scope."
 	}
 	if qualificationStore, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
@@ -863,6 +932,18 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 
 	return page, nil
+}
+
+// knockoutMatchupAvailable reports whether an upcoming knockout stage has at
+// least one concrete pairing. ASA can publish placeholder game rows before it
+// names either participant; those must not turn into an all-TBD bracket.
+func knockoutMatchupAvailable(games []cache.Game) bool {
+	for _, game := range games {
+		if game.HomeTeamID != "" && game.AwayTeamID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 const unknownFormatNotice = "The competition format is not verified, so standings, forecasts, and clinching calculations are unavailable."
@@ -881,8 +962,8 @@ func seasonFeatureSuffix(requestPath, stageSlug string) (string, bool) {
 	return "", false
 }
 
-func (a *application) playoffLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
-	notice := "Playoff fixtures have not been loaded yet."
+func (a *application) factualLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
+	notice := scope.Entry.ShortLabel + " fixtures have not been loaded yet."
 	if store, ok := a.store.(interface {
 		SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error)
 	}); ok {
@@ -891,10 +972,14 @@ func (a *application) playoffLoadPage(r *http.Request, scope requestCompetition)
 			return seasonPage{}, fmt.Errorf("load playoff readiness: %w", err)
 		}
 		if found && readiness.Readiness == cache.SourceReadinessNotPublished {
-			notice = "ASA has not published playoff data yet."
+			notice = "ASA has not published " + strings.ToLower(scope.Entry.ShortLabel) + " data yet."
 		}
 	}
-	return seasonPage{Title: scope.Season + " playoffs", Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), StageSelector: stageSelector(r.URL.Path, scope.Season, scope.Stage), FixturesHeading: "Results and fixtures", StandingsMode: "per-game", FormatNotice: notice}, nil
+	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, scope.Season, scope.Stage, scope.Season, scope.Entry.Slug, "")
+	if err != nil {
+		return seasonPage{}, err
+	}
+	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Results and fixtures", StandingsMode: "per-game", FormatNotice: notice}, nil
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -911,6 +996,10 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 		}
 	}
 	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
+	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, scope.Season, scope.Stage, scope.Season, scope.Entry.Slug, featureSuffix)
+	if err != nil {
+		return seasonPage{}, err
+	}
 	return seasonPage{
 		Title:           scope.Season + " NWSL season",
 		Season:          scope.Season,
@@ -922,8 +1011,8 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 		FixturesPath:    relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"),
 		CurrentPath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
 		SeasonsPath:     seasonArchiveURL(r.URL.Path),
-		SeasonSelector:  seasonFeatureSelector(r.URL.Path, scope.Season, featureSuffix),
-		StageSelector:   stageSelector(r.URL.Path, scope.Season, scope.Stage),
+		SeasonSelector:  seasonChoices,
+		StageSelector:   stageChoices,
 		FormatNotice:    notice,
 		FixturesHeading: "Results",
 		StandingsMode:   "total",

@@ -187,8 +187,10 @@ func sourceScopeSeeds(configuredSeason, configuredStage string, currentYear int)
 			byIdentity[key] = seed
 		}
 	}
-	for _, entry := range competition.SourceEntries() {
-		add(sourceScopeSeed{season: entry.Season, stage: entry.Stage, registration: SourceScopeCatalog})
+	for _, entry := range competition.PublicEntries() {
+		if entry.SourceAvailable {
+			add(sourceScopeSeed{season: entry.Season, stage: entry.Stage, registration: SourceScopeCatalog})
+		}
 	}
 	add(sourceScopeSeed{season: configuredSeason, stage: configuredStage, registration: SourceScopeConfigured})
 	add(sourceScopeSeed{season: strconv.Itoa(currentYear), stage: "Regular Season", registration: SourceScopeProvisional})

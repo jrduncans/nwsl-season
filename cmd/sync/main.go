@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
@@ -51,16 +52,11 @@ func run() (exitCode int) {
 	force := flag.Bool("force", false, "force all clinching calculations after synchronizing source data")
 	requireXG := flag.Bool("require-xg", false, "exit nonzero when fixtures sync but xG refresh fails")
 	backfillHistorical := flag.Bool("backfill-historical", false, "sequentially refresh every supported historical regular season")
+	backfillCatalog := flag.Bool("backfill-catalog", false, "sequentially refresh every public ASA-backed catalog stage")
 	sweepDueArchived := flag.Bool("sweep-due-archived", false, "sequentially refresh currently due archived correction resources")
 	pruneHistoryBefore := flag.String("prune-history-before", "", "delete superseded run history finished before this RFC 3339 timestamp, then exit")
 	flag.Parse()
-	maintenanceModes := 0
-	for _, enabled := range []bool{*recalculate, *backfillHistorical, *sweepDueArchived, *pruneHistoryBefore != ""} {
-		if enabled {
-			maintenanceModes++
-		}
-	}
-	if maintenanceModes > 1 {
+	if incompatibleMaintenanceModes(*recalculate, *backfillHistorical, *backfillCatalog, *sweepDueArchived, *pruneHistoryBefore != "") {
 		fmt.Fprintln(os.Stderr, "sync: maintenance modes are mutually exclusive")
 		return 1
 	}
@@ -157,6 +153,16 @@ func run() (exitCode int) {
 		}
 		return 0
 	}
+	if *backfillCatalog {
+		if err := runCatalogBackfill(catalogBackfillEntries(cfg.SyncSeason, cfg.SyncStage), cfg.SyncSeason, cfg.SyncStage, cfg.SyncTimeout, func(ctx context.Context) error {
+			_, err := service.Execute(ctx, syncer.Operation{Resource: syncer.OperationTeams, Mode: syncer.OperationFull, Trigger: cache.SourceTriggerBackfill})
+			return err
+		}, service.Run, os.Stdout); err != nil {
+			logger.Error("backfill ASA catalog", "error", err)
+			return 1
+		}
+		return 0
+	}
 	if *sweepDueArchived {
 		maintenance, err := scheduler.New(db, service, scheduler.Config{
 			Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: expectedTeams, GamesPerTeam: gamesPerTeam,
@@ -228,6 +234,16 @@ func run() (exitCode int) {
 	return 0
 }
 
+func incompatibleMaintenanceModes(modes ...bool) bool {
+	count := 0
+	for _, enabled := range modes {
+		if enabled {
+			count++
+		}
+	}
+	return count > 1
+}
+
 func historicalBackfillEntries(configuredSeason string) []competition.Entry {
 	entries := make([]competition.Entry, 0)
 	for _, entry := range competition.PublicEntries() {
@@ -237,6 +253,85 @@ func historicalBackfillEntries(configuredSeason string) []competition.Entry {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+// catalogBackfillEntries is intentionally not PublicEntries order.  Initial
+// discovery needs every season's primary inventory before historical
+// secondary stages, while the configured current primary remains first.
+func catalogBackfillEntries(configuredSeason, configuredStage string) []competition.Entry {
+	entries := make([]competition.Entry, 0)
+	for _, entry := range competition.PublicEntries() {
+		if entry.SourceAvailable {
+			entries = append(entries, entry)
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := catalogBackfillPriority(entries[i], configuredSeason, configuredStage), catalogBackfillPriority(entries[j], configuredSeason, configuredStage)
+		if a != b {
+			return a < b
+		}
+		if entries[i].Season != entries[j].Season {
+			return entries[i].Season > entries[j].Season
+		}
+		return catalogOrder(entries[i]) < catalogOrder(entries[j])
+	})
+	return entries
+}
+
+func catalogBackfillPriority(entry competition.Entry, configuredSeason, configuredStage string) int {
+	if entry.Season == configuredSeason && entry.Stage == configuredStage {
+		return 0
+	}
+	if entry.Season == configuredSeason {
+		return 1
+	}
+	if entry.Primary {
+		return 2
+	}
+	return 3
+}
+
+func catalogOrder(entry competition.Entry) int {
+	for index, candidate := range competition.PublicEntries() {
+		if candidate.Season == entry.Season && candidate.Stage == entry.Stage {
+			return index
+		}
+	}
+	return len(competition.PublicEntries())
+}
+
+func runCatalogBackfill(entries []competition.Entry, configuredSeason, configuredStage string, timeout time.Duration, loadTeams func(context.Context) error, run func(context.Context, syncer.RunOptions) (cache.SyncRun, error), output io.Writer) error {
+	teamsCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	err := loadTeams(teamsCtx)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("team catalog: %w", err)
+	}
+	for _, entry := range entries {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		result, err := run(ctx, syncer.RunOptions{
+			Season: entry.Season, Stage: entry.Stage, Trigger: "backfill", SourceOnly: entry.Season != configuredSeason || entry.Stage != configuredStage,
+		})
+		cancel()
+		if err != nil {
+			return fmt.Errorf("%s %s: %w", entry.Season, entry.Stage, err)
+		}
+		if result.XGError != "" {
+			return fmt.Errorf("%s %s: xG refresh: %s", entry.Season, entry.Stage, result.XGError)
+		}
+		if _, err := fmt.Fprintf(output, "Backfilled %s %s: %d games", entry.Season, entry.Stage, result.GamesUpserted); err != nil {
+			return fmt.Errorf("write backfill status: %w", err)
+		}
+		if result.XGRun != nil {
+			if _, err := fmt.Fprintf(output, ", %d available xG and %d unavailable xG", result.XGRun.AvailableGames, result.XGRun.UnavailableGames); err != nil {
+				return fmt.Errorf("write backfill xG status: %w", err)
+			}
+		}
+		if _, err := fmt.Fprintln(output, "."); err != nil {
+			return fmt.Errorf("write backfill completion: %w", err)
+		}
+	}
+	return nil
 }
 
 func runHistoricalBackfill(entries []competition.Entry, timeout time.Duration, run func(context.Context, syncer.RunOptions) (cache.SyncRun, error), output io.Writer) error {

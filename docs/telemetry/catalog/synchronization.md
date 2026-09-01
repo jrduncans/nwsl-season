@@ -105,6 +105,8 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 | `nwsl.sync.kickoff_age_seconds` | int | Recommended | development | — | Seconds between the observed game kickoff and the source observation time. |
 | `nwsl.sync.kickoff_utc` | string | Recommended | development | `["2026-08-15T18:30:00Z"]` | The high-cardinality RFC 3339 kickoff time of the observed game. |
 | `nwsl.sync.new.availability` | enum | Recommended | development | `["available","unavailable"]` | Incoming expected-goals availability after a source observation. |
+| `nwsl.sync.new.away_penalties` | int | Recommended | development | — | Incoming away penalty score after a source change when present. |
+| `nwsl.sync.new.away_penalties_present` | boolean | Recommended | development | — | Whether incoming away penalty scores are present after a source change. |
 | `nwsl.sync.new.away_score` | int | Recommended | development | — | Incoming away score after a source change when present. |
 | `nwsl.sync.new.away_score_present` | boolean | Recommended | development | — | Whether the incoming fixture has an away score after a source change. |
 | `nwsl.sync.new.away_team_id` | string | Recommended | development | `["team-456"]` | Incoming high-cardinality away-team identifier after a source change. |
@@ -114,6 +116,10 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 | `nwsl.sync.new.away_xpoints_present` | boolean | Recommended | development | — | Whether incoming away-team expected points are present. |
 | `nwsl.sync.new.expanded_minutes` | int | Recommended | development | — | Incoming expanded minutes after a source change when present. |
 | `nwsl.sync.new.expanded_minutes_present` | boolean | Recommended | development | — | Whether incoming expanded minutes are present after a source change. |
+| `nwsl.sync.new.extra_time` | boolean | Recommended | development | — | Incoming extra-time fact after a source change when present. |
+| `nwsl.sync.new.extra_time_present` | boolean | Recommended | development | — | Whether the incoming fixture has an extra-time fact after a source change. |
+| `nwsl.sync.new.home_penalties` | int | Recommended | development | — | Incoming home penalty score after a source change when present. |
+| `nwsl.sync.new.home_penalties_present` | boolean | Recommended | development | — | Whether incoming home penalty scores are present after a source change. |
 | `nwsl.sync.new.home_score` | int | Recommended | development | — | Incoming home score after a source change when present. |
 | `nwsl.sync.new.home_score_present` | boolean | Recommended | development | — | Whether the incoming fixture has a home score after a source change. |
 | `nwsl.sync.new.home_team_id` | string | Recommended | development | `["team-123"]` | Incoming high-cardinality home-team identifier after a source change. |
@@ -126,9 +132,13 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 | `nwsl.sync.new.last_checked_at` | string | Recommended | development | `["2026-08-15T20:30:00Z"]` | High-cardinality RFC 3339 time the incoming expected-goals value was checked. |
 | `nwsl.sync.new.matchday` | int | Recommended | development | — | Incoming matchday after a source change when present. |
 | `nwsl.sync.new.matchday_present` | boolean | Recommended | development | — | Whether the incoming fixture has a matchday after a source change. |
+| `nwsl.sync.new.penalties` | boolean | Recommended | development | — | Incoming penalties fact after a source change when present. |
+| `nwsl.sync.new.penalties_present` | boolean | Recommended | development | — | Whether the incoming fixture has a penalties fact after a source change. |
 | `nwsl.sync.new.status` | string | Recommended | development | `["FullTime"]` | Incoming fixture status after an accepted source change. |
 | `nwsl.sync.observation_finished_at` | string | Recommended | development | `["2026-08-15T20:30:00Z"]` | The high-cardinality RFC 3339 completion time of the source observation. |
 | `nwsl.sync.old.availability` | enum | Recommended | development | `["missing","available","unavailable"]` | Cached expected-goals availability before a source observation. |
+| `nwsl.sync.old.away_penalties` | int | Recommended | development | — | Cached away penalty score before a source change when present. |
+| `nwsl.sync.old.away_penalties_present` | boolean | Recommended | development | — | Whether cached away penalty scores were present before a source change. |
 | `nwsl.sync.old.away_score` | int | Recommended | development | — | Cached away score before a source change when present. |
 | `nwsl.sync.old.away_score_present` | boolean | Recommended | development | — | Whether the cached fixture had an away score before a source change. |
 | `nwsl.sync.old.away_team_id` | string | Recommended | development | `["team-456"]` | Cached high-cardinality away-team identifier before a source change. |
@@ -138,6 +148,10 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 | `nwsl.sync.old.away_xpoints_present` | boolean | Recommended | development | — | Whether cached away-team expected points were present. |
 | `nwsl.sync.old.expanded_minutes` | int | Recommended | development | — | Cached expanded minutes before a source change when present. |
 | `nwsl.sync.old.expanded_minutes_present` | boolean | Recommended | development | — | Whether cached expanded minutes were present before a source change. |
+| `nwsl.sync.old.extra_time` | boolean | Recommended | development | — | Cached extra-time fact before a source change when present. |
+| `nwsl.sync.old.extra_time_present` | boolean | Recommended | development | — | Whether the cached fixture had an extra-time fact before a source change. |
+| `nwsl.sync.old.home_penalties` | int | Recommended | development | — | Cached home penalty score before a source change when present. |
+| `nwsl.sync.old.home_penalties_present` | boolean | Recommended | development | — | Whether cached home penalty scores were present before a source change. |
 | `nwsl.sync.old.home_score` | int | Recommended | development | — | Cached home score before a source change when present. |
 | `nwsl.sync.old.home_score_present` | boolean | Recommended | development | — | Whether the cached fixture had a home score before a source change. |
 | `nwsl.sync.old.home_team_id` | string | Recommended | development | `["team-123"]` | Cached high-cardinality home-team identifier before a source change. |
@@ -150,6 +164,8 @@ These attributes belong to point-in-time diagnostic span events and may be high-
 | `nwsl.sync.old.last_checked_at` | string | Recommended | development | `["2026-08-15T18:30:00Z"]` | High-cardinality RFC 3339 time the cached expected-goals value was last checked. |
 | `nwsl.sync.old.matchday` | int | Recommended | development | — | Cached matchday before a source change when present. |
 | `nwsl.sync.old.matchday_present` | boolean | Recommended | development | — | Whether the cached fixture had a matchday before a source change. |
+| `nwsl.sync.old.penalties` | boolean | Recommended | development | — | Cached penalties fact before a source change when present. |
+| `nwsl.sync.old.penalties_present` | boolean | Recommended | development | — | Whether the cached fixture had a penalties fact before a source change. |
 | `nwsl.sync.old.status` | string | Recommended | development | `["PreMatch"]` | Cached fixture status before an accepted source change. |
 | `nwsl.sync.reason` | string | Recommended | development | `["new_game","source_data_unchanged","incoming_terminal_result"]` | The bounded reason for a per-value source persistence decision. |
 | `nwsl.sync.rejection_kind` | string | Recommended | development | `["stale","terminal_regression","policy"]` | The bounded category of source rejection. |

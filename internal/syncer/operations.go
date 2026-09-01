@@ -74,6 +74,10 @@ type OperationResult struct {
 	GameFreshness        GameFreshnessSummary
 	FixtureInputsChanged bool
 	XGInputsChanged      bool
+	// FullGamesDiscoveryAccelerated reports the cache-committed wake-up for an
+	// incomplete active bracket; it never causes another request in this
+	// operation.
+	FullGamesDiscoveryAccelerated bool
 }
 
 // GameFreshnessSummary counts normalized fixture changes separately from
@@ -205,6 +209,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		}
 		result.Games = &gameResult
 		result.FixtureInputsChanged = gameResult.Audit.DownstreamInputsChanged
+		result.FullGamesDiscoveryAccelerated = gameResult.FullGamesDiscoveryAccelerated
 		result.GameFreshness = recordGameFreshnessEvents(trace.SpanFromContext(ctx), operation, mapped, gameResult.PreviousGames)
 		return result, nil
 
@@ -395,7 +400,7 @@ func recordXGFreshnessEvents(span trace.Span, operation Operation, freshness []c
 }
 
 func gameValueAttributes(old *cache.Game, incoming cache.Game) []attribute.KeyValue {
-	attributes := []attribute.KeyValue{nwslconv.SyncOldStatus(old.Status), nwslconv.SyncNewStatus(incoming.Status), nwslconv.SyncOldKickoffUTC(old.KickoffUTC), nwslconv.SyncNewKickoffUTC(incoming.KickoffUTC), nwslconv.SyncOldHomeTeamID(old.HomeTeamID), nwslconv.SyncNewHomeTeamID(incoming.HomeTeamID), nwslconv.SyncOldAwayTeamID(old.AwayTeamID), nwslconv.SyncNewAwayTeamID(incoming.AwayTeamID), nwslconv.SyncOldHomeScorePresent(old.HomeScore.Valid), nwslconv.SyncNewHomeScorePresent(incoming.HomeScore.Valid), nwslconv.SyncOldAwayScorePresent(old.AwayScore.Valid), nwslconv.SyncNewAwayScorePresent(incoming.AwayScore.Valid), nwslconv.SyncOldMatchdayPresent(old.Matchday.Valid), nwslconv.SyncNewMatchdayPresent(incoming.Matchday.Valid), nwslconv.SyncOldExpandedMinutesPresent(old.ExpandedMinutes.Valid), nwslconv.SyncNewExpandedMinutesPresent(incoming.ExpandedMinutes.Valid), nwslconv.SyncOldKnockoutGame(old.KnockoutGame), nwslconv.SyncNewKnockoutGame(incoming.KnockoutGame)}
+	attributes := []attribute.KeyValue{nwslconv.SyncOldStatus(old.Status), nwslconv.SyncNewStatus(incoming.Status), nwslconv.SyncOldKickoffUTC(old.KickoffUTC), nwslconv.SyncNewKickoffUTC(incoming.KickoffUTC), nwslconv.SyncOldHomeTeamID(old.HomeTeamID), nwslconv.SyncNewHomeTeamID(incoming.HomeTeamID), nwslconv.SyncOldAwayTeamID(old.AwayTeamID), nwslconv.SyncNewAwayTeamID(incoming.AwayTeamID), nwslconv.SyncOldHomeScorePresent(old.HomeScore.Valid), nwslconv.SyncNewHomeScorePresent(incoming.HomeScore.Valid), nwslconv.SyncOldAwayScorePresent(old.AwayScore.Valid), nwslconv.SyncNewAwayScorePresent(incoming.AwayScore.Valid), nwslconv.SyncOldMatchdayPresent(old.Matchday.Valid), nwslconv.SyncNewMatchdayPresent(incoming.Matchday.Valid), nwslconv.SyncOldExpandedMinutesPresent(old.ExpandedMinutes.Valid), nwslconv.SyncNewExpandedMinutesPresent(incoming.ExpandedMinutes.Valid), nwslconv.SyncOldKnockoutGame(old.KnockoutGame), nwslconv.SyncNewKnockoutGame(incoming.KnockoutGame), nwslconv.SyncOldExtraTimePresent(old.ExtraTime.Valid), nwslconv.SyncNewExtraTimePresent(incoming.ExtraTime.Valid), nwslconv.SyncOldPenaltiesPresent(old.Penalties.Valid), nwslconv.SyncNewPenaltiesPresent(incoming.Penalties.Valid), nwslconv.SyncOldHomePenaltiesPresent(old.HomePenalties.Valid), nwslconv.SyncNewHomePenaltiesPresent(incoming.HomePenalties.Valid), nwslconv.SyncOldAwayPenaltiesPresent(old.AwayPenalties.Valid), nwslconv.SyncNewAwayPenaltiesPresent(incoming.AwayPenalties.Valid)}
 	if old.HomeScore.Valid {
 		attributes = append(attributes, nwslconv.SyncOldHomeScore(int(old.HomeScore.Int64)))
 	}
@@ -419,6 +424,30 @@ func gameValueAttributes(old *cache.Game, incoming cache.Game) []attribute.KeyVa
 	}
 	if incoming.ExpandedMinutes.Valid {
 		attributes = append(attributes, nwslconv.SyncNewExpandedMinutes(int(incoming.ExpandedMinutes.Int64)))
+	}
+	if old.ExtraTime.Valid {
+		attributes = append(attributes, nwslconv.SyncOldExtraTime(old.ExtraTime.Bool))
+	}
+	if incoming.ExtraTime.Valid {
+		attributes = append(attributes, nwslconv.SyncNewExtraTime(incoming.ExtraTime.Bool))
+	}
+	if old.Penalties.Valid {
+		attributes = append(attributes, nwslconv.SyncOldPenalties(old.Penalties.Bool))
+	}
+	if incoming.Penalties.Valid {
+		attributes = append(attributes, nwslconv.SyncNewPenalties(incoming.Penalties.Bool))
+	}
+	if old.HomePenalties.Valid {
+		attributes = append(attributes, nwslconv.SyncOldHomePenalties(int(old.HomePenalties.Int64)))
+	}
+	if incoming.HomePenalties.Valid {
+		attributes = append(attributes, nwslconv.SyncNewHomePenalties(int(incoming.HomePenalties.Int64)))
+	}
+	if old.AwayPenalties.Valid {
+		attributes = append(attributes, nwslconv.SyncOldAwayPenalties(int(old.AwayPenalties.Int64)))
+	}
+	if incoming.AwayPenalties.Valid {
+		attributes = append(attributes, nwslconv.SyncNewAwayPenalties(int(incoming.AwayPenalties.Int64)))
 	}
 	return attributes
 }
@@ -517,11 +546,11 @@ func gameIsTerminal(game cache.Game) bool {
 }
 
 func sameGame(left, right cache.Game) bool {
-	return left.ASAID == right.ASAID && left.Season == right.Season && left.Stage == right.Stage && left.KickoffUTC == right.KickoffUTC && left.Status == right.Status && left.HomeTeamID == right.HomeTeamID && left.AwayTeamID == right.AwayTeamID && left.HomeScore == right.HomeScore && left.AwayScore == right.AwayScore && left.Matchday == right.Matchday && left.ExpandedMinutes == right.ExpandedMinutes && left.KnockoutGame == right.KnockoutGame && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
+	return left.ASAID == right.ASAID && left.Season == right.Season && left.Stage == right.Stage && left.KickoffUTC == right.KickoffUTC && left.Status == right.Status && left.HomeTeamID == right.HomeTeamID && left.AwayTeamID == right.AwayTeamID && left.HomeScore == right.HomeScore && left.AwayScore == right.AwayScore && left.Matchday == right.Matchday && left.ExpandedMinutes == right.ExpandedMinutes && left.KnockoutGame == right.KnockoutGame && left.ExtraTime == right.ExtraTime && left.Penalties == right.Penalties && left.HomePenalties == right.HomePenalties && left.AwayPenalties == right.AwayPenalties && left.LastUpdatedUTC == right.LastUpdatedUTC && left.RawJSON == right.RawJSON
 }
 
 func gameValueChanged(left, right cache.Game) bool {
-	return left.ASAID != right.ASAID || left.Season != right.Season || left.Stage != right.Stage || left.KickoffUTC != right.KickoffUTC || left.Status != right.Status || left.HomeTeamID != right.HomeTeamID || left.AwayTeamID != right.AwayTeamID || left.HomeScore != right.HomeScore || left.AwayScore != right.AwayScore || left.Matchday != right.Matchday || left.ExpandedMinutes != right.ExpandedMinutes || left.KnockoutGame != right.KnockoutGame
+	return left.ASAID != right.ASAID || left.Season != right.Season || left.Stage != right.Stage || left.KickoffUTC != right.KickoffUTC || left.Status != right.Status || left.HomeTeamID != right.HomeTeamID || left.AwayTeamID != right.AwayTeamID || left.HomeScore != right.HomeScore || left.AwayScore != right.AwayScore || left.Matchday != right.Matchday || left.ExpandedMinutes != right.ExpandedMinutes || left.KnockoutGame != right.KnockoutGame || left.ExtraTime != right.ExtraTime || left.Penalties != right.Penalties || left.HomePenalties != right.HomePenalties || left.AwayPenalties != right.AwayPenalties
 }
 
 func gameRejectionKind(reason string) string {

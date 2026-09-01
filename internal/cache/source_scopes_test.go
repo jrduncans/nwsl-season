@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/competition"
 )
 
 func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
@@ -16,8 +18,8 @@ func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
 	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if schemaVersion != 13 || version != schemaVersion {
-		t.Fatalf("schema version = %d, want 13", version)
+	if schemaVersion != 14 || version != schemaVersion {
+		t.Fatalf("schema version = %d, want 14", version)
 	}
 	_, err := db.db.ExecContext(ctx, `INSERT INTO source_scopes (
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at
@@ -94,22 +96,26 @@ func TestEnsureSourceScopesSeedsAndMergesAtFixedClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []SourceScope{
-		{Season: "2027", Stage: "Regular Season", Registration: SourceScopeProvisional, Lifecycle: SourceScopeUpcoming, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2026", Stage: "Playoffs", Registration: SourceScopeCatalog, Lifecycle: SourceScopeActive, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2026", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeActive, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2025", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2024", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2023", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2022", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2021", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2019", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2018", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2017", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
-		{Season: "2016", Stage: "Regular Season", Registration: SourceScopeCatalog, Lifecycle: SourceScopeCompleted, Discovery: SourceScopeUnknown, RegisteredAt: now.UTC(), UpdatedAt: now.UTC()},
+	byScope := make(map[string]SourceScope, len(scopes))
+	for _, scope := range scopes {
+		byScope[scope.Season+"\x00"+scope.Stage] = scope
 	}
-	if !reflect.DeepEqual(scopes, want) {
-		t.Fatalf("seeded scopes = %+v, want %+v", scopes, want)
+	for _, entry := range competition.SourceEntries() {
+		scope, ok := byScope[entry.Season+"\x00"+entry.Stage]
+		if !ok {
+			t.Fatalf("missing catalog source scope %s/%s", entry.Season, entry.Stage)
+		}
+		wantLifecycle := SourceScopeCompleted
+		if entry.Season == "2026" {
+			wantLifecycle = SourceScopeActive
+		}
+		if scope.Registration != SourceScopeCatalog || scope.Lifecycle != wantLifecycle || scope.Discovery != SourceScopeUnknown || !scope.RegisteredAt.Equal(now.UTC()) || !scope.UpdatedAt.Equal(now.UTC()) {
+			t.Fatalf("catalog scope %s/%s = %+v", entry.Season, entry.Stage, scope)
+		}
+	}
+	upcoming, ok := byScope["2027\x00Regular Season"]
+	if !ok || upcoming.Registration != SourceScopeProvisional || upcoming.Lifecycle != SourceScopeUpcoming {
+		t.Fatalf("upcoming scope = %+v, found=%t", upcoming, ok)
 	}
 }
 
@@ -120,8 +126,9 @@ func TestEnsureSourceScopesRetainsStaleConfiguredScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scopes) != 13 {
-		t.Fatalf("seeded scope count = %d, want 13", len(scopes))
+	wantCount := len(competition.SourceEntries()) + 2 // configured stale + next provisional regular season; current merges with catalog.
+	if len(scopes) != wantCount {
+		t.Fatalf("seeded scope count = %d, want %d", len(scopes), wantCount)
 	}
 	stale, found, err := db.SourceScope(ctx, "1999", "Invented")
 	if err != nil || !found {
