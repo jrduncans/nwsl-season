@@ -22,6 +22,15 @@ plan and change history. This guide summarizes the delivered operational model.
   scopes are loaded by the startup scheduler; page reads still never make ASA
   requests to fill them.
 
+## Historical regular-season cache reads
+
+`cache.DB.HistoricalRegularSeasons` reads every public, source-backed,
+fixture-capable Regular Season catalog entry from one read-only SQLite snapshot.
+It includes unloaded catalog years with nil readiness and empty fixture data, so
+absence remains visible to archive callers. This is cache-only behavior: it
+does not create source scopes, update audit state, or introduce any refresh
+work.
+
 ## Scheduler: pure planning, then sequential execution
 
 On startup and each `NWSL_SYNC_CHECK_INTERVAL` tick, the scheduler reads one

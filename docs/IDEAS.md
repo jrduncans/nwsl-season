@@ -354,6 +354,10 @@ historical franchise identity, while retaining the name shown in the season.
 
 ## Suggested delivery order
 
+Detailed implementation packets for the first scoring-by-season release are in
+[History implementation packets](history/README.md). They define the initial
+scope, dependencies, fixed decisions, tests, and handoffs for smaller models.
+
 ### First shippable view: scoring by season
 
 View 5 remains the smallest useful vertical slice. It needs no historical
