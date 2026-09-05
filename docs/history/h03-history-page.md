@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: **Draft; dependency blocked**.
+- Status: **Ready**.
 - Implementation: Terra. Review: Sol for HTTP integration and proxy paths.
 - Prerequisites: H01 and H02 accepted; their interfaces match these contracts.
 - Blocks: H04–H05.
