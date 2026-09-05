@@ -67,6 +67,8 @@ season is available at
 <http://localhost:8080/seasons/2026/regular-season/forecast>.
 The historical forecast comparison is available at
 <http://localhost:8080/seasons/2026/regular-season/model-evaluation>.
+Historical league scoring is available at
+<http://localhost:8080/history/scoring>.
 
 Useful endpoints:
 
@@ -80,6 +82,7 @@ Useful endpoints:
 - `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
 - `/seasons/:season/:stage/forecast` — interactive forecast simulation.
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
+- `/history/scoring` — cache-only regular-season scoring history and exact-value table.
 
 ## Pitchfork development server
 

@@ -116,6 +116,7 @@ type seasonsPage struct {
 	CatalogPage       bool
 	Freshness         string
 	FreshnessFallback string
+	HistoryPath       string
 }
 
 type seasonArchiveItem struct {

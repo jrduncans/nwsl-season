@@ -5,6 +5,25 @@ The History views are calculated only from the coherent SQLite snapshot read by
 records the delivered definitions for the first league-trends calculation and
 applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 
+## Scoring page
+
+`GET /history/scoring` is a cache-only History page. It reads the archive once
+through `cache.DB.HistoricalRegularSeasons`, summarizes it once with
+`history.SummarizeScoring`, and never refreshes a source or reads individual
+season pages. `GET /history` redirects to the canonical route. An optional
+`season=YYYY` selects detail without filtering the comparison population; every
+supported regular-season catalog year remains visible, including unloaded or
+excluded entries. With no explicit selection, the page prefers the newest
+plot-eligible completed season, then an eligible active season, then the newest
+season with scored matches.
+
+The page reports regular-season scope, the 20-match comparison threshold, the
+missing 2020 regular season, lifecycle, inventory context, and stable exclusion
+reasons. Unknown inventory is labeled as cached matches with unverified
+inventory, not as a complete archive. Exact values remain available in a native
+HTML table without JavaScript; displayed rates round to two decimals while the
+calculation retains full precision.
+
 ## Scoring by season
 
 `history.SummarizeScoring` accepts public, source-backed `Regular Season`

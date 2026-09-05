@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: **Draft; dependency blocked**.
+- Status: **Ready**.
 - Implementation: Luna. Review: Terra, including actual browser inspection.
 - Prerequisite: H03 accepted, including selection and proxy-route tests.
 - Blocks: H05; completes the first shippable view when accepted.
