@@ -1,0 +1,43 @@
+{{define "history"}}{{template "head" .}}
+<header class="history-title">
+  <p class="eyebrow">History · League trends</p>
+  <h1>Scoring by season</h1>
+  <p class="note">Regular seasons since 2016 in the available archive. Results are drawn from the local cache only.</p>
+</header>
+
+<section class="history-context" aria-labelledby="history-context-heading">
+  <h2 id="history-context-heading">League comparison</h2>
+  <p>{{.EligibleYears}}</p>
+  {{if .ExcludedSeasons}}<p class="history-exclusions-label">Excluded from comparison:</p><ul class="history-exclusions">{{range .ExcludedSeasons}}<li><strong>{{.Season}}</strong> — {{.Reason}}</li>{{end}}</ul>{{end}}
+  <p>A comparison needs at least 20 completed, valid matches. The NWSL did not hold a regular season in 2020. Historical inventories may be unverified, incomplete, or not yet loaded; cached observations do not claim that the entire archive has been loaded or verified.</p>
+</section>
+
+<form class="history-selector" method="get" action="{{.FormPath}}">
+  <label for="history-season">Selected season</label>
+  <select id="history-season" name="season">{{range .Years}}<option value="{{.Season}}"{{if .Selected}} selected{{end}}>{{.Season}}</option>{{end}}</select>
+  <button class="button" type="submit">Show season</button>
+</form>
+
+{{if .Selected}}<section class="history-selected" aria-labelledby="selected-season-heading">
+  <p class="eyebrow">Selected season</p>
+  <h2 id="selected-season-heading">{{.Selected.Season}}</h2>
+  <dl>
+    <div><dt>Played matches</dt><dd>{{.Selected.Played}}</dd></div>
+    <div><dt>Total goals</dt><dd>{{.Selected.TotalGoals}}</dd></div>
+    <div><dt>Goals per match</dt><dd>{{.Selected.GoalsPerMatch}}</dd></div>
+    <div><dt>Season status</dt><dd>{{.Selected.Status}}</dd></div>
+    <div><dt>Inventory</dt><dd>{{.Selected.Inventory}}</dd></div>
+    <div><dt>Comparison exclusions</dt><dd>{{if .Selected.Exclusions}}{{.Selected.Exclusions}}{{else}}None{{end}}</dd></div>
+  </dl>
+</section>{{else}}<p class="history-empty">No regular-season scoring data is available in this archive yet. Supported years remain listed below with their current status.</p>{{end}}
+
+<details class="history-data" open>
+  <summary>View data</summary>
+  <p class="note">Displayed rates are rounded to two decimals; calculations retain full precision.</p>
+  <div class="table-scroll"><table class="history-table">
+    <caption>Regular-season scoring data in the available archive</caption>
+    <thead><tr><th scope="col">Season</th><th scope="col">Played matches</th><th scope="col">Total goals</th><th scope="col">Goals per match</th><th scope="col">Status</th><th scope="col">Inventory</th><th scope="col">Comparison exclusions</th></tr></thead>
+    <tbody>{{range .Rows}}<tr{{if .Selected}} class="history-row-selected"{{end}}><th scope="row"><a href="{{.Path}}">{{.Season}}</a></th><td>{{.Played}}</td><td>{{.TotalGoals}}</td><td>{{.GoalsPerMatch}}</td><td>{{.Status}}</td><td>{{.Inventory}}</td><td>{{if .Exclusions}}{{.Exclusions}}{{else}}None{{end}}</td></tr>{{end}}</tbody>
+  </table></div>
+</details>
+{{template "foot" .}}{{end}}

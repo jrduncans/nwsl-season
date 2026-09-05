@@ -105,6 +105,8 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", application.root)
 	mux.HandleFunc("GET /seasons", application.seasons)
+	mux.HandleFunc("GET /history", application.history)
+	mux.HandleFunc("GET /history/scoring", application.historyScoring)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
 	mux.HandleFunc("GET /seasons/{season}", application.season)
@@ -522,6 +524,7 @@ func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
 		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
 		CatalogPage:    true,
+		HistoryPath:    relativeURL(r.URL.Path, "/history/scoring"),
 		Seasons:        seasonArchiveItems(r.URL.Path, a.options.CurrentSeason, readinessByScope),
 	}
 	a.render(w, "seasons", page)
@@ -1261,17 +1264,26 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "clinching") {
 		return "/" + strings.Join(parts, "/"), true
 	}
+	if len(parts) == 1 && parts[0] == "history" {
+		return "/history", true
+	}
+	if len(parts) == 2 && parts[0] == "history" && parts[1] == "scoring" {
+		return "/history/scoring", true
+	}
 	return requestPath, false
 }
 
 func stripBasePath(requestPath string) (string, bool) {
-	if requestPath == "/" || requestPath == "/seasons" || strings.HasPrefix(requestPath, "/seasons/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
+	if requestPath == "/" || requestPath == "/seasons" || strings.HasPrefix(requestPath, "/seasons/") || requestPath == "/history" || strings.HasPrefix(requestPath, "/history/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
 		return requestPath, true
 	}
 	if strings.HasSuffix(requestPath, "/seasons") {
 		return "/seasons", true
 	}
-	for _, suffix := range []string{"/seasons/", "/static/"} {
+	if strings.HasSuffix(requestPath, "/history") {
+		return "/history", true
+	}
+	for _, suffix := range []string{"/seasons/", "/history/", "/static/"} {
 		if index := strings.Index(requestPath, suffix); index > 0 {
 			return requestPath[index:], true
 		}

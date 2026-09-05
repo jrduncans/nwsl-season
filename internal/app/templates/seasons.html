@@ -3,6 +3,7 @@
   <p class="eyebrow">NWSL Season Explorer</p>
   <h1>Seasons</h1>
   <p class="note">Browse public seasons and factual competition stages available in the local archive.</p>
+  <p><a class="button button-secondary" href="{{.HistoryPath}}">Explore history</a></p>
 </header>
 <div class="season-archive" aria-label="Available seasons">
   {{range .Seasons}}<article class="season-archive-card{{if .Current}} season-archive-card-current{{end}}">
