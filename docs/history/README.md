@@ -16,8 +16,8 @@ franchise identity, rankings, or forecasts to ship H04.
 | Packet | Status | Suggested implementer | Review | Prerequisites |
 | --- | --- | --- | --- | --- |
 | [H01 Consistent archive read](h01-cache-read.md) | Complete | Terra | Sol | Existing cache/catalog helpers, verified during planning |
-| [H02 Pure scoring summaries](h02-scoring-summary.md) | Draft; dependency blocked | Luna | Terra | H01 accepted |
-| [H03 History HTTP and HTML](h03-history-page.md) | Draft; dependency blocked | Terra | Sol | H01–H02 accepted |
+| [H02 Pure scoring summaries](h02-scoring-summary.md) | Complete | Luna | Terra | H01 accepted |
+| [H03 History HTTP and HTML](h03-history-page.md) | Ready | Terra | Sol | H01–H02 accepted |
 | [H04 Accessible scoring chart](h04-scoring-chart.md) | Draft; dependency blocked | Luna | Terra | H03 accepted |
 | [H05 xG and scoring distribution](h05-xg-distribution.md) | Draft; dependency blocked | Luna | Terra | H04 accepted |
 

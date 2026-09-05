@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: **Draft; dependency blocked**.
+- Status: **Complete** (implementation and review accepted).
 - Implementation: Luna. Review: Terra, focused on denominators and eligibility.
 - Prerequisite: H01 accepted with its documented interface unchanged.
 - Blocks: H03–H05.
