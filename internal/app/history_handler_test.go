@@ -36,7 +36,7 @@ func TestHistoryScoringRendersOneArchiveReadAndNoSeasonReads(t *testing.T) {
 		"<h1>Scoring by season</h1>", "History · League trends", "Regular seasons since 2016 in the available archive",
 		"The NWSL did not hold a regular season in 2020", "20 completed, valid matches", "<caption>Regular-season scoring data in the available archive</caption>",
 		"<th scope=\"col\">Goals per match</th>", "<th scope=\"row\"><a href=\"scoring?season=2019\">2019</a></th>",
-		">60</td><td>3.00</td>", "Active through 20 matches", "Cached matches; inventory unverified", "<details class=\"history-data\" open>",
+		">60</td><td>3.00</td>", "Active through 20 matches", "Cached matches; inventory unverified", "<details class=\"history-data\">",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("history page missing %q", want)

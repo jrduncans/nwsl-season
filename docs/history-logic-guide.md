@@ -22,7 +22,19 @@ missing 2020 regular season, lifecycle, inventory context, and stable exclusion
 reasons. Unknown inventory is labeled as cached matches with unverified
 inventory, not as a complete archive. Exact values remain available in a native
 HTML table without JavaScript; displayed rates round to two decimals while the
-calculation retains full precision.
+calculation retains full precision. The primary scoring view is a server-rendered
+responsive SVG chart of goals per completed match by calendar season. Its plot
+uses actual year spacing, leaves 2020 as a labeled regular-season gap, and
+connects only consecutive eligible completed seasons. Verified inventory uses
+solid circles, unknown inventory hollow circles with dashed guide segments, and
+active seasons standalone diamonds. Point links select the year through the
+canonical relative URL; a native selector and collapsed exact-value table remain
+available without JavaScript, and selected detail stays below the chart on
+narrow screens. The 2020 axis gap is visibly annotated “No regular season”; on
+phone widths the SVG typography is enlarged for legibility, with separate rows
+for year and gap labels and the calendar-season title in the upper chart margin;
+its transparent point hit targets remain at least 24 CSS pixels without overlapping adjacent
+years.
 
 ## Scoring by season
 

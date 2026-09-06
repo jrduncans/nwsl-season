@@ -18,6 +18,43 @@
   <button class="button" type="submit">Show season</button>
 </form>
 
+<section class="history-chart-section" aria-labelledby="history-chart-heading">
+  <h2 id="history-chart-heading">Goals per completed match</h2>
+  <p class="history-chart-status">{{.Chart.Status}}</p>
+  {{if .Chart.HasData}}
+  <div class="history-chart-wrap">
+    <svg class="history-chart" viewBox="{{.Chart.ViewBox}}" role="group" aria-labelledby="{{.Chart.TitleID}} {{.Chart.DescriptionID}}">
+      <title id="{{.Chart.TitleID}}">{{.Chart.Title}}</title>
+      <desc id="{{.Chart.DescriptionID}}">{{.Chart.Description}}</desc>
+      <g class="history-chart-grid" aria-hidden="true">
+        {{range .Chart.Ticks}}<line x1="64" y1="{{.Y}}" x2="696" y2="{{.Y}}"></line>{{end}}
+      </g>
+      <g class="history-chart-axes" aria-hidden="true">
+        <line x1="64" y1="30" x2="64" y2="306"></line><line x1="64" y1="306" x2="696" y2="306"></line>
+        {{range .Chart.Ticks}}<text x="55" y="{{.Y}}" dy=".35em" text-anchor="end">{{.Label}}</text>{{end}}
+        {{range .Chart.Labels}}<text class="history-chart-year-label{{if .Optional}} history-chart-label-optional{{end}}" x="{{.X}}" y="320" text-anchor="middle">{{.Label}}</text>{{if .Note}}<text class="history-chart-gap-note" x="{{.X}}" y="348" text-anchor="middle">{{.Note}}</text>{{end}}{{end}}
+        <text class="history-chart-axis-title" x="18" y="168" transform="rotate(-90 18 168)" text-anchor="middle">Goals per completed match</text>
+        <text class="history-chart-axis-title" x="380" y="22" text-anchor="middle">Calendar season</text>
+      </g>
+      <g class="history-chart-segments" aria-hidden="true">
+        {{range .Chart.Segments}}<line class="{{if .Dashed}}history-chart-segment-unverified{{else}}history-chart-segment{{end}}" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"></line>{{end}}
+      </g>
+      <g class="history-chart-marks">
+        {{range .Chart.Marks}}<a class="history-chart-point-link" href="{{.Path}}" aria-label="{{.AccessibleName}}" tabindex="0">
+          <rect class="history-chart-hit" x="{{.HitX}}" y="{{.HitY}}" width="{{.HitSize}}" height="{{.HitSize}}" rx="4" aria-hidden="true"></rect>
+          {{if .Active}}<polygon class="history-chart-mark history-chart-mark-active{{if .Unknown}} history-chart-mark-active-unverified{{end}}{{if .Selected}} history-chart-mark-selected{{end}}" points="{{.DiamondPoints}}" aria-hidden="true"></polygon>{{else}}<circle class="history-chart-mark{{if .Unknown}} history-chart-mark-unverified{{end}}{{if .Selected}} history-chart-mark-selected{{end}}" cx="{{.X}}" cy="{{.Y}}" r="{{.Radius}}" aria-hidden="true"></circle>{{end}}
+        </a>{{end}}
+      </g>
+    </svg>
+  </div>
+  <div class="history-chart-key" aria-label="Chart key">
+    <span><i class="history-chart-key-circle"></i>Inventory verified</span>
+    <span><i class="history-chart-key-circle history-chart-key-circle-hollow"></i>Inventory unverified</span>
+    <span><i class="history-chart-key-diamond"></i>Active season</span>
+  </div>
+  {{else}}<p class="history-chart-empty">{{.Chart.EmptyState}} The selector and complete data table still include every supported year.</p>{{end}}
+</section>
+
 {{if .Selected}}<section class="history-selected" aria-labelledby="selected-season-heading">
   <p class="eyebrow">Selected season</p>
   <h2 id="selected-season-heading">{{.Selected.Season}}</h2>
@@ -31,7 +68,7 @@
   </dl>
 </section>{{else}}<p class="history-empty">No regular-season scoring data is available in this archive yet. Supported years remain listed below with their current status.</p>{{end}}
 
-<details class="history-data" open>
+<details class="history-data">
   <summary>View data</summary>
   <p class="note">Displayed rates are rounded to two decimals; calculations retain full precision.</p>
   <div class="table-scroll"><table class="history-table">
