@@ -2,7 +2,7 @@
 
 ## Control
 
-- Status: **Draft; dependency blocked**.
+- Status: **Ready**.
 - Implementation: Luna. Review: Terra for missing-data and chart semantics.
 - Prerequisite: H04 accepted and usable without this addition.
 - Blocks: none; later collections need a separate planning pass.
