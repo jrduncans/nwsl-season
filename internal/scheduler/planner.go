@@ -520,7 +520,11 @@ func updateKickoffBounds(oldest, newest, kickoff time.Time) (time.Time, time.Tim
 
 func resultCadence(game cache.Game, config Config) (time.Duration, time.Duration) {
 	if !terminalGame(game) {
-		return config.CheckInterval, resultCorrectionInterval(config)
+		// Keep unsettled fixtures on the hot result-poll cadence even when the
+		// source reports a material schedule or fixture change. A six-hour
+		// correction cadence here can skip the window in which ASA publishes the
+		// final result.
+		return config.CheckInterval, config.CheckInterval
 	}
 	return resultCorrectionInterval(config), resultCorrectionInterval(config)
 }
