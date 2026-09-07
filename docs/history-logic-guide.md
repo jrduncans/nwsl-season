@@ -13,9 +13,12 @@ through `cache.DB.HistoricalRegularSeasons`, summarizes it once with
 season pages. `GET /history` redirects to the canonical route. An optional
 `season=YYYY` selects detail without filtering the comparison population; every
 supported regular-season catalog year remains visible, including unloaded or
-excluded entries. With no explicit selection, the page prefers the newest
-plot-eligible completed season, then an eligible active season, then the newest
-season with scored matches.
+excluded entries. `metric=goals|xg` selects the chart metric; omitted metric is
+Goals, and generated URLs omit the default `goals` value. Metric selection is
+independent of season selection: with no explicit season, the page uses H03's
+newest plot-eligible completed season, then eligible active season, then newest
+season with scored matches even in xG mode. Blank, repeated, or other explicit
+metric values are invalid.
 
 The page reports regular-season scope, the 20-match comparison threshold, the
 missing 2020 regular season, lifecycle, inventory context, and stable exclusion
@@ -35,6 +38,28 @@ phone widths the SVG typography is enlarged for legibility, with separate rows
 for year and gap labels and the calendar-season title in the upper chart margin;
 its transparent point hit targets remain at least 24 CSS pixels without overlapping adjacent
 years.
+
+The metric choice is a two-option Goals / xG link group. xG chart points require
+both the H02 `PlotEligible` flag and a non-nil `XGPerMatch`; complete xG coverage
+is required for the displayed season average, while xPoints coverage remains an
+independent reported count and never gates either chart. The selected season
+remains selected when its xG is partial or unavailable, with coverage stated as
+`K of N completed matches` and no substitute season selected. A fully covered
+selected row reports goals/match, xG/match, and goals-minus-xG/match as
+descriptive values only. The xG view lists excluded years and shows an explicit
+empty state when no xG point qualifies; a normal Goals link preserves the
+selected year.
+
+The supporting data includes xG-covered/played and xPoints-covered/played
+counts, xG and goals-minus-xG averages, and a separate captioned goal-
+distribution table. Goal distributions use actual goals in the goals-eligible
+population in both metric views. Each season has a server-rendered 100% stacked
+bar with five bins in order: 0, 1, 2, 3, and 4+ goals. Segment widths use count
+divided by played matches; the visible table retains integer counts and
+one-decimal percentages. Zero-played rates and percentages are shown as
+unavailable, and displayed percentages may not sum to exactly 100% after
+rounding. The bar's accessible name includes each bin's count and percentage,
+so the presentation does not depend on color or hover.
 
 ## Scoring by season
 

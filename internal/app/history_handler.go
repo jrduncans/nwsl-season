@@ -47,47 +47,97 @@ func (a *application) historyScoring(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	selected, err := historySelection(r.URL, summaries)
+	selected, metric, err := historySelectionState(r.URL, summaries)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
-	a.render(w, "history", historyPageFor(r.URL.Path, summaries, selected))
+	a.render(w, "history", historyPageForMetric(r.URL.Path, summaries, selected, metric))
 }
 
 func historySelection(requestURL *url.URL, summaries []history.SeasonScoring) (string, error) {
+	selected, _, err := historySelectionState(requestURL, summaries)
+	return selected, err
+}
+
+type historyMetric string
+
+const (
+	historyMetricGoals historyMetric = "goals"
+	historyMetricXG    historyMetric = "xg"
+)
+
+func historySelectionState(requestURL *url.URL, summaries []history.SeasonScoring) (string, historyMetric, error) {
 	requested, present, err := historySeasonValues(requestURL.RawQuery)
 	if err != nil {
-		return "", err
+		return "", historyMetricGoals, err
+	}
+	metric, err := historyMetricValue(requestURL.RawQuery)
+	if err != nil {
+		return "", historyMetricGoals, err
 	}
 	if present {
 		if len(requested) != 1 || requested[0] == "" || !historySeasonPattern.MatchString(requested[0]) {
-			return "", fmt.Errorf("season must be one supported four-digit year")
+			return "", metric, fmt.Errorf("season must be one supported four-digit year")
 		}
 		for _, summary := range summaries {
 			if summary.Season == requested[0] {
-				return requested[0], nil
+				return requested[0], metric, nil
 			}
 		}
-		return "", fmt.Errorf("season %s is not in the regular-season catalog", requested[0])
+		return "", metric, fmt.Errorf("season %s is not in the regular-season catalog", requested[0])
 	}
 
 	for index := len(summaries) - 1; index >= 0; index-- {
 		if summaries[index].PlotEligible && summaries[index].Lifecycle == cache.SourceScopeCompleted {
-			return summaries[index].Season, nil
+			return summaries[index].Season, metric, nil
 		}
 	}
 	for index := len(summaries) - 1; index >= 0; index-- {
 		if summaries[index].PlotEligible && summaries[index].Lifecycle == cache.SourceScopeActive {
-			return summaries[index].Season, nil
+			return summaries[index].Season, metric, nil
 		}
 	}
 	for index := len(summaries) - 1; index >= 0; index-- {
 		if summaries[index].Played > 0 {
-			return summaries[index].Season, nil
+			return summaries[index].Season, metric, nil
 		}
 	}
-	return "", nil
+	return "", metric, nil
+}
+
+func historyMetricValue(rawQuery string) (historyMetric, error) {
+	values := []string{}
+	for _, part := range strings.Split(rawQuery, "&") {
+		key, value, hasValue := strings.Cut(part, "=")
+		decoded, err := url.QueryUnescape(key)
+		if err != nil || decoded != "metric" {
+			continue
+		}
+		if !hasValue {
+			values = append(values, "")
+			continue
+		}
+		decodedValue, err := url.QueryUnescape(value)
+		if err != nil {
+			return historyMetricGoals, fmt.Errorf("metric must be goals or xg")
+		}
+		values = append(values, decodedValue)
+	}
+	if len(values) == 0 {
+		return historyMetricGoals, nil
+	}
+	if len(values) != 1 {
+		return historyMetricGoals, fmt.Errorf("metric must be one of goals or xg")
+	}
+	switch historyMetric(values[0]) {
+	case historyMetricGoals:
+		return historyMetricGoals, nil
+	case historyMetricXG:
+		return historyMetricXG, nil
+	default:
+		return historyMetricGoals, fmt.Errorf("metric must be one of goals or xg")
+	}
 }
 
 // historySeasonValues decodes only the one recognized History state. Invalid
@@ -133,12 +183,17 @@ func (a *application) renderHistoryError(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-func historyURL(fromPath, season string) string {
+func historyURL(fromPath, season string, metric historyMetric) string {
 	target := &url.URL{Path: "/history/scoring"}
 	if season != "" {
 		query := url.Values{}
 		query.Set("season", season)
+		if metric == historyMetricXG {
+			query.Set("metric", string(metric))
+		}
 		target.RawQuery = query.Encode()
+	} else if metric == historyMetricXG {
+		target.RawQuery = url.Values{"metric": []string{string(metric)}}.Encode()
 	}
 	result := relativeURL(fromPath, target.Path)
 	if target.RawQuery != "" {

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"database/sql"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/history"
 )
 
@@ -176,6 +180,162 @@ func TestHistoryChartAccessibleHTTPMarkup(t *testing.T) {
 			t.Errorf("history response missing %q", want)
 		}
 	}
+}
+
+func TestHistoryMetricStateAndURLRoundTrip(t *testing.T) {
+	summaries := []history.SeasonScoring{
+		{Season: "2024", Lifecycle: cache.SourceScopeCompleted, PlotEligible: true, Played: 20},
+	}
+	for _, test := range []struct {
+		query      string
+		wantSeason string
+		wantMetric historyMetric
+		wantError  bool
+	}{
+		{query: "", wantSeason: "2024", wantMetric: historyMetricGoals},
+		{query: "metric=goals", wantSeason: "2024", wantMetric: historyMetricGoals},
+		{query: "metric=xg", wantSeason: "2024", wantMetric: historyMetricXG},
+		{query: "metric=", wantError: true},
+		{query: "metric=other", wantError: true},
+		{query: "metric=xg&metric=goals", wantError: true},
+	} {
+		season, metric, err := historySelectionState(historyTestURL(t, test.query), summaries)
+		if test.wantError {
+			if err == nil {
+				t.Errorf("query %q returned no error", test.query)
+			}
+			continue
+		}
+		if err != nil || season != test.wantSeason || metric != test.wantMetric {
+			t.Errorf("query %q = season %q metric %q err=%v, want %q/%q", test.query, season, metric, err, test.wantSeason, test.wantMetric)
+		}
+	}
+
+	page := historyPageForMetric("/history/scoring", summaries, "2024", historyMetricXG)
+	if page.FormPath != "scoring?metric=xg" {
+		t.Fatalf("xG form path = %q", page.FormPath)
+	}
+	if page.MetricLinks[0].Path != "scoring?season=2024" || page.MetricLinks[1].Path != "scoring?metric=xg&season=2024" {
+		t.Fatalf("metric links = %+v", page.MetricLinks)
+	}
+	if page.Rows[0].Path != "scoring?metric=xg&season=2024" {
+		t.Fatalf("xG row path = %q", page.Rows[0].Path)
+	}
+}
+
+func TestHistoryXGChartRequiresCompleteCoverageButKeepsGoalsPopulation(t *testing.T) {
+	zero := 0.0
+	full := 1.0
+	partial := history.SeasonScoring{Season: "2019", Lifecycle: cache.SourceScopeCompleted, PlotEligible: true, Played: 20, GoalsPerMatch: &full, XGCovered: 19}
+	completeZero := history.SeasonScoring{Season: "2021", Lifecycle: cache.SourceScopeCompleted, PlotEligible: true, Played: 20, GoalsPerMatch: &full, XGCovered: 20, XGPerMatch: &zero}
+	chart := historyChartForMetric("/history/scoring", []history.SeasonScoring{partial, completeZero}, "2019", historyMetricXG)
+	if len(chart.Marks) != 1 || chart.Marks[0].Season != "2021" || chart.Marks[0].Y != "306" {
+		t.Fatalf("xG chart marks = %+v, want only valid zero xG point", chart.Marks)
+	}
+	goalsChart := historyChartFor("/history/scoring", []history.SeasonScoring{partial}, "2019")
+	if len(goalsChart.Marks) != 1 || goalsChart.Marks[0].Season != "2019" {
+		t.Fatalf("goals chart marks = %+v, want partial-xG goals point", goalsChart.Marks)
+	}
+	partial.GoalBins = [5]int{1, 2, 3, 4, 10}
+	page := historyPageForMetric("/history/scoring", []history.SeasonScoring{partial}, "2019", historyMetricXG)
+	if len(page.Distributions) != 1 || page.Selected == nil || page.Selected.XGStatus != "xG available for 19 of 20 completed matches; a season average requires 20 of 20." {
+		t.Fatalf("partial xG page = %+v", page)
+	}
+}
+
+func TestHistoryDistributionUsesExactCountsAndAccessiblePercentages(t *testing.T) {
+	// Repeat the five-match H02 fixture pattern four times with unique IDs.
+	summary := historyDistributionSummary(t, "2024", [5]int{4, 4, 4, 4, 4})
+	page := historyPageForMetric("/history/scoring", []history.SeasonScoring{summary}, "2024", historyMetricGoals)
+	if len(page.Distributions) != 1 {
+		t.Fatalf("distributions = %+v", page.Distributions)
+	}
+	distribution := page.Distributions[0]
+	for _, segment := range distribution.Segments {
+		if segment.Percent != "20.0%" || segment.Width != "20" || !segment.HasWidth {
+			t.Errorf("segment = %+v, want exact 20%%", segment)
+		}
+	}
+	if !strings.Contains(distribution.AccessibleName, "0 goals: 4 matches (20.0%)") || !strings.Contains(distribution.AccessibleName, "4+ goals: 4 matches (20.0%)") {
+		t.Fatalf("distribution accessible name = %q", distribution.AccessibleName)
+	}
+
+	thirds := history.SeasonScoring{Season: "2025", Played: 3, PlotEligible: true, GoalBins: [5]int{1, 1, 1, 0, 0}}
+	thirdPage := historyPageForMetric("/history/scoring", []history.SeasonScoring{thirds}, "2025", historyMetricGoals)
+	for _, segment := range thirdPage.Distributions[0].Segments[:3] {
+		if segment.Percent != "33.3%" {
+			t.Errorf("third segment = %+v, want 33.3%%", segment)
+		}
+	}
+	if thirdPage.Distributions[0].Segments[3].HasWidth || thirdPage.Distributions[0].Segments[4].HasWidth {
+		t.Errorf("zero bins received visible widths: %+v", thirdPage.Distributions[0].Segments)
+	}
+}
+
+func TestHistoryDistributionCoversEmptyAndMiddleBins(t *testing.T) {
+	tests := []struct {
+		name string
+		bins [5]int
+	}{
+		{name: "only zero goals", bins: [5]int{20, 0, 0, 0, 0}},
+		{name: "only four plus goals", bins: [5]int{0, 0, 0, 0, 20}},
+		{name: "zeros in middle bins", bins: [5]int{4, 0, 4, 0, 12}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			summary := historyDistributionSummary(t, "2024", test.bins)
+			page := historyPageForMetric("/history/scoring", []history.SeasonScoring{summary}, "2024", historyMetricGoals)
+			segments := page.Distributions[0].Segments
+			for index, count := range test.bins {
+				if segments[index].Count != count {
+					t.Fatalf("bin %d count=%d, want %d", index, segments[index].Count, count)
+				}
+				if count == 0 && segments[index].HasWidth {
+					t.Errorf("zero bin %d has visible width: %+v", index, segments[index])
+				}
+			}
+		})
+	}
+}
+
+func historyDistributionSummary(t *testing.T, season string, wantBins [5]int) history.SeasonScoring {
+	t.Helper()
+	entry, ok := competition.Lookup(season, "Regular Season")
+	if !ok {
+		t.Fatalf("catalog lacks %s regular season", season)
+	}
+	games := make([]cache.Game, 0, 20)
+	for bin, count := range wantBins {
+		home, away := int64(bin/2), int64(bin-bin/2)
+		for occurrence := 0; occurrence < count; occurrence++ {
+			index := len(games)
+			games = append(games, cache.Game{
+				ASAID:      fmt.Sprintf("distribution-%s-%02d", season, index),
+				Season:     season,
+				Stage:      "Regular Season",
+				Status:     fixtures.CompletedStatus,
+				HomeTeamID: "alpha",
+				AwayTeamID: "bravo",
+				HomeScore:  sql.NullInt64{Int64: home, Valid: true},
+				AwayScore:  sql.NullInt64{Int64: away, Valid: true},
+			})
+		}
+	}
+	if len(games) != 20 {
+		t.Fatalf("fixture sample has %d games, want 20", len(games))
+	}
+	summary, err := history.SummarizeScoring([]cache.HistoricalSeason{{
+		Entry: entry,
+		Readiness: &cache.SeasonReadinessSnapshot{
+			Scope:     cache.SourceScope{Season: season, Stage: "Regular Season", Lifecycle: cache.SourceScopeCompleted, Discovery: cache.SourceScopeAvailable},
+			Readiness: cache.SourceReadinessAvailable, Completeness: cache.InventoryCompletenessComplete,
+		},
+		Data: cache.SeasonData{Games: games},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return summary[0]
 }
 
 func historyChartSummary(season string, rate float64, lifecycle cache.SourceScopeLifecycle, inventory cache.InventoryCompleteness, eligible bool) history.SeasonScoring {
