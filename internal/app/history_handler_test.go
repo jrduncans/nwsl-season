@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -41,6 +42,9 @@ func TestHistoryScoringRendersOneArchiveReadAndNoSeasonReads(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("history page missing %q", want)
 		}
+	}
+	if distribution, details := strings.Index(body, `<section class="history-distribution"`), strings.Index(body, `<details class="history-data">`); distribution < 0 || details < 0 || distribution > details {
+		t.Fatalf("distribution panel is not visible before supporting data details: distribution=%d details=%d", distribution, details)
 	}
 	if strings.Contains(body, "all-time") || strings.Contains(body, "fake chart") {
 		t.Fatal("history page made an unsupported claim or rendered a placeholder")
@@ -237,6 +241,101 @@ func TestHistoryRendersInvalidAndIncompleteHistoricalExclusions(t *testing.T) {
 	}
 }
 
+func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
+	archive := historyArchive(t, map[string]historyArchiveState{
+		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
+		"2021": {lifecycle: cache.SourceScopeCompleted, goals: 2, xgCovered: 20},
+	})
+	for index := range archive {
+		if archive[index].Entry.Season != "2021" {
+			continue
+		}
+		for xgIndex := range archive[index].Data.XGoals {
+			archive[index].Data.XGoals[xgIndex].HomeXG = sql.NullFloat64{Float64: 0, Valid: true}
+			archive[index].Data.XGoals[xgIndex].AwayXG = sql.NullFloat64{Float64: 0, Valid: true}
+		}
+	}
+	handler := NewHandler(&historyHTTPStore{archive: archive})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/history/scoring?metric=xg&season=2019", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("xG page status=%d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		`<h2 id="selected-season-heading">2019</h2>`, `Expected goals per match`, `xG available for 19 of 20 completed matches; a season average requires 20 of 20.`,
+		`<a class="history-metric-link history-metric-link-selected" href="scoring?metric=xg&amp;season=2019" aria-current="page">xG</a>`,
+		`href="scoring?season=2019">Goals</a>`, `<caption>Goal distribution counts and percentages for catalog seasons; bars show goals-eligible seasons</caption>`,
+		`<svg class="history-distribution-bar" viewBox="0 0 100 24" role="img"`, `<rect class="history-distribution-segment history-distribution-segment-3" x="0" y="0" width="100" height="24"></rect>`,
+		`aria-label="2019: 0 goals: 0 matches (0.0%), 1 goals: 0 matches (0.0%), 2 goals: 0 matches (0.0%), 3 goals: 20 matches (100.0%)`, `xG covered / played`, `xPoints covered / played`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("xG page missing %q", want)
+		}
+	}
+	if strings.Contains(body, `aria-label="2019: 1.50 expected goals`) {
+		t.Fatal("partial-xG selected season received an xG chart point")
+	}
+	if strings.Contains(body, `class="history-distribution-segment history-distribution-segment-3" style=`) {
+		t.Fatal("distribution bar still uses HTML span segments")
+	}
+	if !strings.Contains(body, `aria-label="2021: 0.00 expected goals per completed match`) {
+		t.Fatal("complete zero xG season did not receive a chart point")
+	}
+	formPath := attributeAfter(t, body, `<form class="history-selector"`, `action="`)
+	chartPath := attributeValue(t, body, `href="`, `"`, `aria-label="2021: 0.00 expected goals`)
+	distributionStart := strings.Index(body, `<section class="history-distribution"`)
+	if distributionStart < 0 {
+		t.Fatal("xG distribution panel missing")
+	}
+	distributionPath := attributeValue(t, body[distributionStart:], `href="`, `"`, ">2019</a>")
+	assertHistoryMetricRoundTrip(t, handler, formPath+"&season=2021", "2021")
+	assertHistoryMetricRoundTrip(t, handler, chartPath, "2021")
+	assertHistoryMetricRoundTrip(t, handler, distributionPath, "2019")
+
+	goals := httptest.NewRecorder()
+	handler.ServeHTTP(goals, httptest.NewRequest(http.MethodGet, "/nwsl-season/history/scoring?metric=goals&season=2019", nil))
+	if goals.Code != http.StatusOK || !strings.Contains(goals.Body.String(), `<h2 id="selected-season-heading">2019</h2>`) || !strings.Contains(goals.Body.String(), `Goals per match`) {
+		t.Fatalf("Goals round trip = %d %s", goals.Code, goals.Body.String())
+	}
+
+	for _, query := range []string{"metric=", "metric=foo", "metric=xg&metric=goals"} {
+		invalid := httptest.NewRecorder()
+		handler.ServeHTTP(invalid, httptest.NewRequest(http.MethodGet, "/history/scoring?"+query, nil))
+		if invalid.Code != http.StatusBadRequest {
+			t.Errorf("query %q status=%d, want 400", query, invalid.Code)
+		}
+	}
+
+	noXG := httptest.NewRecorder()
+	noXGArchive := historyArchive(t, map[string]historyArchiveState{"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3}})
+	NewHandler(&historyHTTPStore{archive: noXGArchive}).ServeHTTP(noXG, httptest.NewRequest(http.MethodGet, "/history/scoring?metric=xg&season=2019", nil))
+	if noXG.Code != http.StatusOK || strings.Contains(noXG.Body.String(), `<svg class="history-chart"`) || !strings.Contains(noXG.Body.String(), `View Goals`) || !strings.Contains(noXG.Body.String(), `href="scoring?season=2019"`) {
+		t.Fatalf("all-unavailable xG state = %d %s", noXG.Code, noXG.Body.String())
+	}
+}
+
+func assertHistoryMetricRoundTrip(t *testing.T, handler http.Handler, rawPath, season string) {
+	t.Helper()
+	rawPath = html.UnescapeString(rawPath)
+	base, err := url.Parse("https://example.test/nwsl-season/history/scoring")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := base.Parse(rawPath)
+	if err != nil {
+		t.Fatalf("resolve %q: %v", rawPath, err)
+	}
+	if resolved.Path != "/nwsl-season/history/scoring" {
+		t.Fatalf("path %q escaped proxy mount as %q", rawPath, resolved.Path)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, resolved.RequestURI(), nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `<h2 id="selected-season-heading">`+season+`</h2>`) || !strings.Contains(response.Body.String(), `Expected goals per match`) {
+		t.Fatalf("round trip %q = %d; want selected xG season %s", rawPath, response.Code, season)
+	}
+}
+
 type historyHTTPStore struct {
 	archive                                []cache.HistoricalSeason
 	err                                    error
@@ -262,6 +361,7 @@ type historyArchiveState struct {
 	lifecycle cache.SourceScopeLifecycle
 	inventory cache.InventoryCompleteness
 	goals     int64
+	xgCovered int
 }
 
 func historyArchive(t *testing.T, states map[string]historyArchiveState) []cache.HistoricalSeason {
@@ -276,10 +376,20 @@ func historyArchive(t *testing.T, states map[string]historyArchiveState) []cache
 		if inventory == "" {
 			inventory = cache.InventoryCompletenessUnknown
 		}
+		data := cache.SeasonData{Games: historyGames(season, 20, state.goals)}
+		for index, game := range data.Games {
+			if index >= state.xgCovered {
+				break
+			}
+			data.XGoals = append(data.XGoals, cache.GameXG{
+				GameID: game.ASAID, Availability: cache.XGAvailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID,
+				HomeXG: sql.NullFloat64{Float64: 1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0, Valid: true},
+			})
+		}
 		archive = append(archive, cache.HistoricalSeason{Entry: entry, Readiness: &cache.SeasonReadinessSnapshot{
 			Scope:     cache.SourceScope{Season: season, Stage: "Regular Season", Lifecycle: state.lifecycle, Discovery: cache.SourceScopeAvailable},
 			Readiness: cache.SourceReadinessAvailable, Completeness: inventory,
-		}, Data: cache.SeasonData{Games: historyGames(season, 20, state.goals)}})
+		}, Data: data})
 	}
 	return archive
 }
@@ -306,9 +416,18 @@ func assertHistoryCatalogRows(t *testing.T, body string) {
 	if got := strings.Count(body, `<option value="`); got != len(seasons) {
 		t.Fatalf("season selector options = %d, want %d supported catalog years", got, len(seasons))
 	}
-	if got := strings.Count(body, `<th scope="row"><a href="scoring?season=`); got != len(seasons) {
+	start := strings.Index(body, `<table class="history-table">`)
+	if start < 0 {
+		t.Fatalf("history summary table missing")
+	}
+	end := strings.Index(body[start:], `<table class="history-distribution-table">`)
+	if start < 0 || end < 0 {
+		t.Fatalf("history supporting tables missing")
+	}
+	if got := strings.Count(body[start:start+end], `<th scope="row"><a href="scoring?season=`); got != len(seasons) {
 		t.Fatalf("history table rows = %d, want %d supported catalog years", got, len(seasons))
 	}
+	tableBody := body[start : start+end]
 	lastRow := -1
 	for _, season := range seasons {
 		option := `<option value="` + season + `"`
@@ -316,12 +435,12 @@ func assertHistoryCatalogRows(t *testing.T, body string) {
 			t.Errorf("season selector entry %s count = %d, want 1", season, got)
 		}
 		row := `<th scope="row"><a href="scoring?season=` + season + `">` + season + `</a></th>`
-		index := strings.Index(body, row)
+		index := strings.Index(tableBody, row)
 		if index < 0 {
 			t.Errorf("history table omitted catalog year %s", season)
 			continue
 		}
-		if strings.Count(body, row) != 1 {
+		if strings.Count(tableBody, row) != 1 {
 			t.Errorf("history table row %s was rendered more than once", season)
 		}
 		if index <= lastRow {
