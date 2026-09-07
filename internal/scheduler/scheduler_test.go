@@ -104,6 +104,22 @@ func TestPlanAbandonedUsesTerminalCorrectionCadence(t *testing.T) {
 	}
 }
 
+func TestPlanKeepsNonterminalMaterialChangesOnCheckCadence(t *testing.T) {
+	now := time.Date(2033, 8, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("unsettled", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "unsettled", NextDueAt: timePointer(now)}}
+
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || len(jobs[0].Operation.Requested) != 1 {
+		t.Fatalf("nonterminal material-change job = %+v", jobs)
+	}
+	request := jobs[0].Operation.Requested[0]
+	if request.NextDueAfter != 5*time.Minute || request.MaterialNextDueAfter != 5*time.Minute {
+		t.Fatalf("nonterminal material-change cadence = %+v", request)
+	}
+}
+
 func TestPlanBootstrapUsesOneFullInventoryThenOneFullXG(t *testing.T) {
 	now := time.Date(2033, 8, 2, 0, 0, 0, 0, time.UTC)
 	missing := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
