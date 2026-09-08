@@ -13,34 +13,49 @@ through `cache.DB.HistoricalRegularSeasons`, summarizes it once with
 season pages. `GET /history` redirects to the canonical route. An optional
 `season=YYYY` selects detail without filtering the comparison population; every
 supported regular-season catalog year remains visible, including unloaded or
-excluded entries. `metric=goals|xg` selects the chart metric; omitted metric is
+excluded entries. `metric=goals|xg|compare` selects the chart metric; omitted metric is
 Goals, and generated URLs omit the default `goals` value. Metric selection is
 independent of season selection: with no explicit season, the page uses H03's
 newest plot-eligible completed season, then eligible active season, then newest
 season with scored matches even in xG mode. Blank, repeated, or other explicit
 metric values are invalid.
 
-The page reports regular-season scope, the 20-match comparison threshold, the
-missing 2020 regular season, lifecycle, inventory context, and stable exclusion
-reasons. Unknown inventory is labeled as cached matches with unverified
-inventory, not as a complete archive. Exact values remain available in a native
+The page leads with the chart and metric controls. Regular-season scope and
+relevant exclusion warnings remain visible, while the eligible-year list,
+20-match comparison threshold, and archive methodology live in an “About this
+data” disclosure. The missing 2020 regular season remains annotated on the chart.
+Season details prioritize goals per match, xG per match, and completed matches;
+data completeness is a separate disclosure. Complete xG coverage means coverage
+of recorded scored matches and never verifies fixture completeness. Rates and
+the goals-minus-xG difference are rounded independently from full precision,
+with a visible explanation beside the difference. Unknown inventory is labeled
+as cached matches with unverified inventory, not as a complete archive. Exact values remain available in a native
 HTML table without JavaScript; displayed rates round to two decimals while the
 calculation retains full precision. The primary scoring view is a server-rendered
 responsive SVG chart of goals per completed match by calendar season. Its plot
 uses actual year spacing, leaves 2020 as a labeled regular-season gap, and
 connects only consecutive eligible completed seasons. Verified inventory uses
 solid circles, unknown inventory hollow circles with dashed guide segments, and
-active seasons standalone diamonds. Point links select the year through the
+active seasons standalone diamonds. In Compare, the xG series uses blue, smaller
+markers with heavier outlines, preserving hollow versus filled inventory
+semantics; the active season also has a visible through-match-count note. Point links select the year through the
 canonical relative URL; a native selector and collapsed exact-value table remain
 available without JavaScript, and selected detail stays below the chart on
 narrow screens. The 2020 axis gap is visibly annotated “No regular season”; on
-phone widths the SVG typography is enlarged for legibility, with separate rows
-for year and gap labels and the calendar-season title in the upper chart margin;
-its transparent point hit targets remain at least 24 CSS pixels without overlapping adjacent
-years.
+phone widths the chart keeps a 600px minimum width within a keyboard-focusable
+horizontal scroll region, with a visible swipe hint and readable typography.
+Separate rows retain the year and gap labels;
+Its transparent point hit targets remain at least 24 CSS pixels. The chart
+uses the same vertical domain for Goals, xG, and Compare, normally 2.0–3.2,
+expanding to include valid eligible values outside that interval. The visible
+scale description and ticks explicitly identify this nonzero domain; no value
+is clipped to the usual scoring range.
 
-The metric choice is a two-option Goals / xG link group. xG chart points require
-both the H02 `PlotEligible` flag and a non-nil `XGPerMatch`; complete xG coverage
+The metric choice is a Goals / Expected goals (xG) / Compare link group.
+Compare overlays goals and xG on the same axes, retaining independently eligible
+series: partial xG coverage never removes a valid goals point. Point and season
+links preserve the chosen metric, and the native GET season form carries it as
+an explicit hidden field. The selected season does not filter the chart. xG chart points require both the H02 `PlotEligible` flag and a non-nil `XGPerMatch`; complete xG coverage
 is required for the displayed season average, while xPoints coverage remains an
 independent reported count and never gates either chart. The selected season
 remains selected when its xG is partial or unavailable, with coverage stated as
@@ -53,13 +68,17 @@ selected year.
 The supporting data includes xG-covered/played and xPoints-covered/played
 counts, xG and goals-minus-xG averages, and a separate captioned goal-
 distribution table. Goal distributions use actual goals in the goals-eligible
-population in both metric views. Each season has a server-rendered 100% stacked
+population in all three metric views. Each season has a server-rendered 100% stacked
 bar with five bins in order: 0, 1, 2, 3, and 4+ goals. Segment widths use count
 divided by played matches; the visible table retains integer counts and
 one-decimal percentages. Zero-played rates and percentages are shown as
 unavailable, and displayed percentages may not sum to exactly 100% after
-rounding. The bar's accessible name includes each bin's count and percentage,
-so the presentation does not depend on color or hover.
+rounding. The bar's accessible name includes each bin's count and percentage.
+Percentage guides show the common 0–100% scale, and each season has native
+expandable exact values accessible by keyboard and touch without JavaScript.
+The selected season is highlighted consistently in distributions and the data
+table. These are shares of matches by combined actual goals, also in xG and
+Compare mode; match totals provide the denominators.
 
 ## Scoring by season
 
@@ -107,3 +126,12 @@ The stable exclusion codes, in display-independent order, are
 `below_minimum_matches`. Partial xG is deliberately not a scoring-chart
 exclusion: goals data can still qualify, while a later xG view requires both a
 plot-eligible season and complete xG coverage.
+
+## UI verification
+
+The opt-in `TestHistoryPreview` loopback harness supports an `overview` scenario
+with ten synthetic seasons and all five goal bins, as well as partial, empty,
+and single-season cases. Set `NWSL_HISTORY_PREVIEW_NO_SCRIPT=1` to block page
+scripts using a preview-only Content Security Policy and verify native links,
+season forms, and disclosures. This does not change application CSP or access
+ASA. Run the harness with `NWSL_CONFIG_FILE=/dev/null`.

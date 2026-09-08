@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -27,6 +28,24 @@ func TestHistoryPreview(t *testing.T) {
 	archive := historyArchive(t, states)
 	selection := "2022"
 	switch os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") {
+	case "overview":
+		states = make(map[string]historyArchiveState)
+		for _, year := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {
+			states[year] = historyArchiveState{lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20}
+		}
+		states["2026"] = historyArchiveState{lifecycle: cache.SourceScopeActive, inventory: cache.InventoryCompletenessComplete, goals: 3, xgCovered: 20}
+		archive = historyArchive(t, states)
+		for i := range archive {
+			for j := range archive[i].Data.Games {
+				game := &archive[i].Data.Games[j]
+				// Include all five bins while varying each season deterministically.
+				total := int64((j + int(archive[i].Entry.Season[len(archive[i].Entry.Season)-1])) % 6)
+				game.HomeScore.Int64, game.AwayScore.Int64 = total/2, total-total/2
+				archive[i].Data.XGoals[j].HomeXG.Float64 = 1.2 + float64(j%3)*0.1
+				archive[i].Data.XGoals[j].AwayXG.Float64 = 1.1
+			}
+		}
+		selection = "2025"
 	case "empty":
 		archive = historyArchive(t, map[string]historyArchiveState{"2024": {lifecycle: cache.SourceScopeActive, goals: 1}})
 		archive[0].Data.Games = historyGames("2024", 19, 1)
@@ -36,7 +55,13 @@ func TestHistoryPreview(t *testing.T) {
 		selection = "2024"
 	}
 
-	server := httptest.NewServer(NewHandler(&historyHTTPStore{archive: archive}))
+	handler := NewHandler(&historyHTTPStore{archive: archive})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if os.Getenv("NWSL_HISTORY_PREVIEW_NO_SCRIPT") != "" {
+			w.Header().Set("Content-Security-Policy", "script-src 'none'")
+		}
+		handler.ServeHTTP(w, r)
+	}))
 	t.Cleanup(server.Close)
 	metric := os.Getenv("NWSL_HISTORY_PREVIEW_METRIC")
 	if metric == "" {

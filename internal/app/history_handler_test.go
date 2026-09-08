@@ -264,7 +264,7 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 	body := response.Body.String()
 	for _, want := range []string{
 		`<h2 id="selected-season-heading">2019</h2>`, `Expected goals per match`, `xG available for 19 of 20 completed matches; a season average requires 20 of 20.`,
-		`<a class="history-metric-link history-metric-link-selected" href="scoring?metric=xg&amp;season=2019" aria-current="page">xG</a>`,
+		`<a class="history-metric-link history-metric-link-selected" href="scoring?metric=xg&amp;season=2019" aria-current="page">Expected goals (xG)</a>`,
 		`href="scoring?season=2019">Goals</a>`, `<caption>Goal distribution counts and percentages for catalog seasons; bars show goals-eligible seasons</caption>`,
 		`<svg class="history-distribution-bar" viewBox="0 0 100 24" role="img"`, `<rect class="history-distribution-segment history-distribution-segment-3" x="0" y="0" width="100" height="24"></rect>`,
 		`aria-label="2019: 0 goals: 0 matches (0.0%), 1 goals: 0 matches (0.0%), 2 goals: 0 matches (0.0%), 3 goals: 20 matches (100.0%)`, `xG covered / played`, `xPoints covered / played`,
@@ -304,6 +304,28 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 		handler.ServeHTTP(invalid, httptest.NewRequest(http.MethodGet, "/history/scoring?"+query, nil))
 		if invalid.Code != http.StatusBadRequest {
 			t.Errorf("query %q status=%d, want 400", query, invalid.Code)
+		}
+	}
+
+	compare := httptest.NewRecorder()
+	handler.ServeHTTP(compare, httptest.NewRequest(http.MethodGet, "/history/scoring?metric=compare&season=2019", nil))
+	if compare.Code != http.StatusOK {
+		t.Fatalf("compare page status=%d body=%s", compare.Code, compare.Body.String())
+	}
+	compareBody := compare.Body.String()
+	if got := strings.Count(compareBody, `<svg class="history-chart`); got != 1 {
+		t.Fatalf("compare chart SVG count=%d, want one overlaid chart", got)
+	}
+	if got := strings.Count(compareBody, `history-chart-point-link`); got != 4 || strings.Count(compareBody, `history-chart-point-link-secondary`) != 1 {
+		t.Fatalf("compare chart point-link classes=%d (secondary=%d), want goals plus one complete-xG overlay", got, strings.Count(compareBody, `history-chart-point-link-secondary`))
+	}
+	for _, want := range []string{
+		`href="scoring?metric=compare&amp;season=2019" aria-current="page">Compare</a>`,
+		`Goals and expected goals per completed match by season`,
+		`name="metric" value="compare"`,
+	} {
+		if !strings.Contains(compareBody, want) {
+			t.Errorf("compare page missing %q", want)
 		}
 	}
 

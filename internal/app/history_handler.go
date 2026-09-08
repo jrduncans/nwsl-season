@@ -63,8 +63,9 @@ func historySelection(requestURL *url.URL, summaries []history.SeasonScoring) (s
 type historyMetric string
 
 const (
-	historyMetricGoals historyMetric = "goals"
-	historyMetricXG    historyMetric = "xg"
+	historyMetricGoals   historyMetric = "goals"
+	historyMetricXG      historyMetric = "xg"
+	historyMetricCompare historyMetric = "compare"
 )
 
 func historySelectionState(requestURL *url.URL, summaries []history.SeasonScoring) (string, historyMetric, error) {
@@ -120,7 +121,7 @@ func historyMetricValue(rawQuery string) (historyMetric, error) {
 		}
 		decodedValue, err := url.QueryUnescape(value)
 		if err != nil {
-			return historyMetricGoals, fmt.Errorf("metric must be goals or xg")
+			return historyMetricGoals, fmt.Errorf("metric must be goals, xg, or compare")
 		}
 		values = append(values, decodedValue)
 	}
@@ -128,15 +129,17 @@ func historyMetricValue(rawQuery string) (historyMetric, error) {
 		return historyMetricGoals, nil
 	}
 	if len(values) != 1 {
-		return historyMetricGoals, fmt.Errorf("metric must be one of goals or xg")
+		return historyMetricGoals, fmt.Errorf("metric must be one of goals, xg, or compare")
 	}
 	switch historyMetric(values[0]) {
 	case historyMetricGoals:
 		return historyMetricGoals, nil
 	case historyMetricXG:
 		return historyMetricXG, nil
+	case historyMetricCompare:
+		return historyMetricCompare, nil
 	default:
-		return historyMetricGoals, fmt.Errorf("metric must be one of goals or xg")
+		return historyMetricGoals, fmt.Errorf("metric must be one of goals, xg, or compare")
 	}
 }
 
@@ -188,11 +191,11 @@ func historyURL(fromPath, season string, metric historyMetric) string {
 	if season != "" {
 		query := url.Values{}
 		query.Set("season", season)
-		if metric == historyMetricXG {
+		if metric != historyMetricGoals {
 			query.Set("metric", string(metric))
 		}
 		target.RawQuery = query.Encode()
-	} else if metric == historyMetricXG {
+	} else if metric != historyMetricGoals {
 		target.RawQuery = url.Values{"metric": []string{string(metric)}}.Encode()
 	}
 	result := relativeURL(fromPath, target.Path)
