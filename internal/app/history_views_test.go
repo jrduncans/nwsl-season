@@ -195,6 +195,7 @@ func TestHistoryMetricStateAndURLRoundTrip(t *testing.T) {
 		{query: "", wantSeason: "2024", wantMetric: historyMetricGoals},
 		{query: "metric=goals", wantSeason: "2024", wantMetric: historyMetricGoals},
 		{query: "metric=xg", wantSeason: "2024", wantMetric: historyMetricXG},
+		{query: "metric=compare", wantSeason: "2024", wantMetric: historyMetricCompare},
 		{query: "metric=", wantError: true},
 		{query: "metric=other", wantError: true},
 		{query: "metric=xg&metric=goals", wantError: true},
@@ -215,11 +216,61 @@ func TestHistoryMetricStateAndURLRoundTrip(t *testing.T) {
 	if page.FormPath != "scoring?metric=xg" {
 		t.Fatalf("xG form path = %q", page.FormPath)
 	}
-	if page.MetricLinks[0].Path != "scoring?season=2024" || page.MetricLinks[1].Path != "scoring?metric=xg&season=2024" {
+	if len(page.MetricLinks) != 3 || page.MetricLinks[0].Path != "scoring?season=2024" || page.MetricLinks[1].Path != "scoring?metric=xg&season=2024" || page.MetricLinks[2].Path != "scoring?metric=compare&season=2024" {
 		t.Fatalf("metric links = %+v", page.MetricLinks)
 	}
 	if page.Rows[0].Path != "scoring?metric=xg&season=2024" {
 		t.Fatalf("xG row path = %q", page.Rows[0].Path)
+	}
+}
+
+func TestHistoryChartScaleIsSharedAndExpandsForEligibleExtrema(t *testing.T) {
+	defaultRange := []history.SeasonScoring{
+		historyChartSummaryWithXG("2019", 2.2, 2.8, true),
+	}
+	if low, high, step := historyChartScale(defaultRange); math.Abs(low-2) > 1e-9 || math.Abs(high-3.2) > 1e-9 || math.Abs(step-0.2) > 1e-9 {
+		t.Fatalf("default chart scale = (%v, %v, %v), want (2, 3.2, .2)", low, high, step)
+	}
+
+	extreme := []history.SeasonScoring{
+		historyChartSummaryWithXG("2018", 0, 4, true),
+		historyChartSummaryWithXG("2019", 4, 0, true),
+	}
+	low, high, step := historyChartScale(extreme)
+	if math.Abs(low) > 1e-9 || math.Abs(high-4.8) > 1e-9 || math.Abs(step-0.8) > 1e-9 {
+		t.Fatalf("expanded chart scale = (%v, %v, %v), want (0, 4.8, .8)", low, high, step)
+	}
+	goals := historyChartForMetric("/history/scoring", extreme, "", historyMetricGoals)
+	xg := historyChartForMetric("/history/scoring", extreme, "", historyMetricXG)
+	if !reflect.DeepEqual(goals.Ticks, xg.Ticks) {
+		t.Fatalf("goals and xG charts do not share scale: goals=%+v xG=%+v", goals.Ticks, xg.Ticks)
+	}
+	if len(goals.Marks) != 2 || len(xg.Marks) != 2 || goals.Marks[0].Y == goals.Marks[1].Y || xg.Marks[0].Y == xg.Marks[1].Y {
+		t.Fatalf("extreme values were clipped or collapsed: goals=%+v xG=%+v", goals.Marks, xg.Marks)
+	}
+}
+
+func TestHistoryComparePageUsesIndependentGoalsAndXGPopulations(t *testing.T) {
+	goals, xg := 1.5, 2.5
+	partialXG := history.SeasonScoring{Season: "2018", Lifecycle: cache.SourceScopeCompleted, PlotEligible: true, Played: 20, GoalsPerMatch: &goals, XGPerMatch: nil, XGCovered: 19}
+	completeXG := history.SeasonScoring{Season: "2019", Lifecycle: cache.SourceScopeCompleted, PlotEligible: true, Played: 20, GoalsPerMatch: &goals, XGPerMatch: &xg, XGCovered: 20}
+	page := historyPageForMetric("/history/scoring", []history.SeasonScoring{partialXG, completeXG}, "2018", historyMetricCompare)
+	if !page.Compare || page.Selected == nil || !page.Selected.Selected {
+		t.Fatalf("compare page selection state = compare=%v selected=%+v", page.Compare, page.Selected)
+	}
+	if len(page.Chart.Marks) != 2 || len(page.ComparisonChart.Marks) != 1 || page.ComparisonChart.Marks[0].Season != "2019" {
+		t.Fatalf("compare populations = goals=%+v xG=%+v", page.Chart.Marks, page.ComparisonChart.Marks)
+	}
+	for _, mark := range append(page.Chart.Marks, page.ComparisonChart.Marks...) {
+		if mark.Path != "scoring?metric=compare&season="+mark.Season {
+			t.Errorf("compare mark %s path=%q", mark.Season, mark.Path)
+		}
+	}
+	if len(page.MetricLinks) != 3 || page.MetricLinks[2].Label != "Compare" || !page.MetricLinks[2].Selected || page.MetricLinks[2].Path != "scoring?metric=compare&season=2018" {
+		t.Fatalf("compare metric links = %+v", page.MetricLinks)
+	}
+	if len(page.Distributions) != 2 || !page.Distributions[0].Selected || page.Distributions[1].Selected {
+		t.Fatalf("distribution selection = %+v", page.Distributions)
 	}
 }
 
@@ -340,6 +391,10 @@ func historyDistributionSummary(t *testing.T, season string, wantBins [5]int) hi
 
 func historyChartSummary(season string, rate float64, lifecycle cache.SourceScopeLifecycle, inventory cache.InventoryCompleteness, eligible bool) history.SeasonScoring {
 	return history.SeasonScoring{Season: season, GoalsPerMatch: &rate, Played: 20, Lifecycle: lifecycle, Inventory: inventory, PlotEligible: eligible}
+}
+
+func historyChartSummaryWithXG(season string, goals, xg float64, eligible bool) history.SeasonScoring {
+	return history.SeasonScoring{Season: season, GoalsPerMatch: &goals, XGPerMatch: &xg, Played: 20, PlotEligible: eligible}
 }
 
 func containsHistoryChartLabel(chart historyChartView, label string) bool {

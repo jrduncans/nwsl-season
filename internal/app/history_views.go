@@ -28,6 +28,8 @@ type historyPage struct {
 	Distributions                                         []historyDistributionView
 	HasDistributionBars                                   bool
 	Chart                                                 historyChartView
+	ComparisonChart                                       historyChartView
+	Compare                                               bool
 }
 
 type historyMetricView struct {
@@ -56,6 +58,7 @@ type historyExclusionView struct {
 type historyChartView struct {
 	ViewBox, TitleID, DescriptionID, Title, AxisTitle, Description, EmptyState, Status string
 	HasData                                                                            bool
+	ActiveStatus                                                                       string
 	Ticks                                                                              []historyChartTickView
 	Labels                                                                             []historyChartLabelView
 	Segments                                                                           []historyChartSegmentView
@@ -88,6 +91,7 @@ type historyDistributionView struct {
 	Season, Path, AccessibleName string
 	Total                        int
 	GoalsEligible                bool
+	Selected                     bool
 	Segments                     []historyDistributionSegmentView
 }
 
@@ -121,7 +125,7 @@ func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, se
 		FormPath:       historyURL(fromPath, "", metric),
 		CatalogPage:    true,
 		Metric:         metric,
-		MetricName:     map[historyMetric]string{historyMetricGoals: "Goals", historyMetricXG: "xG"}[metric],
+		MetricName:     map[historyMetric]string{historyMetricGoals: "Goals", historyMetricXG: "xG", historyMetricCompare: "Goals and xG"}[metric],
 		GoalsPath:      historyURL(fromPath, selectedSeason, historyMetricGoals),
 		Navigation: []navigationItem{
 			{Label: "Seasons", Path: relativeURL(fromPath, "/seasons")},
@@ -129,7 +133,8 @@ func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, se
 		},
 		MetricLinks: []historyMetricView{
 			{Label: "Goals", Path: historyURL(fromPath, selectedSeason, historyMetricGoals), Selected: metric == historyMetricGoals},
-			{Label: "xG", Path: historyURL(fromPath, selectedSeason, historyMetricXG), Selected: metric == historyMetricXG},
+			{Label: "Expected goals (xG)", Path: historyURL(fromPath, selectedSeason, historyMetricXG), Selected: metric == historyMetricXG},
+			{Label: "Compare", Path: historyURL(fromPath, selectedSeason, historyMetricCompare), Selected: metric == historyMetricCompare},
 		},
 		Years:                 make([]historyYearView, 0, len(summaries)),
 		Rows:                  make([]historyRowView, 0, len(summaries)),
@@ -142,13 +147,13 @@ func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, se
 		row := historyRow(summary, fromPath, selectedSeason, metric)
 		page.Rows = append(page.Rows, row)
 		page.Years = append(page.Years, historyYearView{Season: summary.Season, Path: row.Path, Selected: row.Selected})
-		if summary.PlotEligible && (metric == historyMetricGoals || summary.XGPerMatch != nil) {
+		if summary.PlotEligible && (metric != historyMetricXG || summary.XGPerMatch != nil) {
 			eligible = append(eligible, summary.Season)
 		}
 		if row.Exclusions != "" {
 			page.ExcludedSeasons = append(page.ExcludedSeasons, historyExclusionView{Season: row.Season, Reason: row.Exclusions})
 		}
-		if metric == historyMetricXG && (!summary.PlotEligible || summary.XGPerMatch == nil) {
+		if metric != historyMetricGoals && summary.PlotEligible && summary.XGPerMatch == nil {
 			page.MetricExcludedSeasons = append(page.MetricExcludedSeasons, historyExclusionView{Season: summary.Season, Reason: historyMetricExclusion(summary)})
 		}
 		distribution := historyDistribution(summary, fromPath, selectedSeason, metric)
@@ -175,6 +180,16 @@ func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, se
 		page.EligibleYears = "Currently eligible for " + label + ": " + strings.Join(eligible, ", ") + "."
 	}
 	page.Chart = historyChartForMetric(fromPath, summaries, selectedSeason, metric)
+	if metric == historyMetricCompare {
+		page.Compare = true
+		page.ComparisonChart = historyChartForMetric(fromPath, summaries, selectedSeason, historyMetricXG)
+		page.Chart.Title = "Goals and expected goals per completed match by season"
+		page.Chart.AxisTitle = "Goals and xG per match"
+		page.Chart.Description += " Expected goals are shown as a separate series on the same scale; only seasons with complete xG coverage appear in that series."
+		for i := range page.ComparisonChart.Marks {
+			page.ComparisonChart.Marks[i].Path = historyURL(fromPath, page.ComparisonChart.Marks[i].Season, metric)
+		}
+	}
 	return page
 }
 
@@ -222,7 +237,7 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 	}
 	eligible := make([]history.SeasonScoring, 0, len(summaries))
 	years := make([]int, 0, len(summaries))
-	maxRate := 0.0
+
 	for _, summary := range summaries {
 		season, err := strconv.Atoi(summary.Season)
 		if err == nil {
@@ -233,9 +248,6 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 			continue
 		}
 		eligible = append(eligible, summary)
-		if *rate > maxRate {
-			maxRate = *rate
-		}
 	}
 	if len(eligible) == 0 {
 		return chart
@@ -258,17 +270,18 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 	if maxYear == minYear {
 		maxYear = minYear + 1
 	}
-	yMax := math.Max(1, math.Ceil(maxRate))
+	yMin, yMax, yStep := historyChartScale(summaries)
 	plotHeight := historyChartPlotBottom - historyChartPlotTop
 	plotWidth := historyChartPlotRight - historyChartPlotLeft
 	seasonX := func(year int) float64 {
 		return historyChartPlotLeft + float64(year-minYear)/float64(maxYear-minYear)*plotWidth
 	}
 	seasonY := func(rate float64) float64 {
-		return historyChartPlotBottom - rate/yMax*plotHeight
+		return historyChartPlotBottom - (rate-yMin)/(yMax-yMin)*plotHeight
 	}
 
-	for tick := 0.0; tick <= yMax; tick++ {
+	for index := 0; index <= int(math.Round((yMax-yMin)/yStep)); index++ {
+		tick := math.Round((yMin+float64(index)*yStep)*1e9) / 1e9
 		y := seasonY(tick)
 		chart.Ticks = append(chart.Ticks, historyChartTickView{Y: formatChartNumber(y), Label: formatChartNumber(tick)})
 	}
@@ -301,6 +314,12 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 			formatChartNumber(x-historyChartDiamondSize) + "," + formatChartNumber(y),
 		}, " ")
 		chart.Marks = append(chart.Marks, mark)
+		if active {
+			if chart.ActiveStatus != "" {
+				chart.ActiveStatus += "; "
+			}
+			chart.ActiveStatus += fmt.Sprintf("%s: in progress through %d matches", summary.Season, summary.Played)
+		}
 	}
 
 	for index := 1; index < len(points); index++ {
@@ -315,7 +334,7 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 	}
 
 	chart.HasData = true
-	chart.Status = fmt.Sprintf("Plotted eligible seasons: %s. Values show %s per completed match; the chart does not infer a trend or conclusion.", chartSeasonList(eligible), rateName)
+	chart.Status = fmt.Sprintf("Both teams combined. Select a point to view a season. Shared Goals/xG scale: %s–%s per match.", formatChartNumber(yMin), formatChartNumber(yMax))
 	return chart
 }
 
@@ -348,12 +367,27 @@ func historyChartAccessibleName(summary history.SeasonScoring, metric historyMet
 	return name
 }
 
-func chartSeasonList(summaries []history.SeasonScoring) string {
-	seasons := make([]string, 0, len(summaries))
+// Both metric views use the same domain, including in comparison mode. Expand
+// the usual scoring range for unusual data rather than clipping valid points.
+func historyChartScale(summaries []history.SeasonScoring) (float64, float64, float64) {
+	low, high := 2.0, 3.2
 	for _, summary := range summaries {
-		seasons = append(seasons, summary.Season)
+		if !summary.PlotEligible {
+			continue
+		}
+		for _, rate := range []*float64{summary.GoalsPerMatch, summary.XGPerMatch} {
+			if rate == nil || !finiteChartNumber(*rate) || *rate < 0 {
+				continue
+			}
+			low = math.Min(low, math.Max(0, *rate-0.1))
+			high = math.Max(high, *rate+0.1)
+		}
 	}
-	return strings.Join(seasons, ", ")
+	step := 0.2
+	for (high-low)/step > 8 {
+		step *= 2
+	}
+	return math.Round(math.Floor(low/step)*step*1e9) / 1e9, math.Round(math.Ceil(high/step)*step*1e9) / 1e9, step
 }
 
 func finiteChartNumber(value float64) bool {
@@ -435,6 +469,7 @@ func historyDistribution(summary history.SeasonScoring, fromPath, selectedSeason
 	return historyDistributionView{
 		Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric),
 		AccessibleName: fmt.Sprintf("%s: %s; %d completed matches total", summary.Season, strings.Join(parts, ", "), summary.Played),
+		Selected:       summary.Season == selectedSeason,
 		Total:          summary.Played, GoalsEligible: summary.PlotEligible && summary.Played > 0, Segments: segments,
 	}
 }
