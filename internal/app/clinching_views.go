@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -9,15 +10,27 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 )
 
-func clauseSentence(c scenarios.Clause, teams map[string]string, games map[string]cache.Game) string {
-	parts := []string{}
-	for _, v := range c.Conditions {
-		parts = append(parts, conditionText(v, teams, games))
+func clauseViews(clauses []scenarios.Clause, teamID string, teams map[string]string, games map[string]cache.Game) []clinchingClauseView {
+	views := make([]clinchingClauseView, 0, len(clauses))
+	for _, clause := range clauses {
+		view := clinchingClauseView{Conditions: []string{}}
+		// Put the team's own matches first without changing the stored proof.
+		for _, ownMatches := range []bool{true, false} {
+			for _, condition := range clause.Conditions {
+				game := games[condition.GameID]
+				ownMatch := game.HomeTeamID == teamID || game.AwayTeamID == teamID
+				if ownMatch == ownMatches {
+					view.Conditions = append(view.Conditions, conditionText(condition, teams, games))
+				}
+			}
+		}
+		views = append(views, view)
 	}
-	if len(parts) == 0 {
-		return "With any results in the included slate."
+	sort.SliceStable(views, func(i, j int) bool { return len(views[i].Conditions) < len(views[j].Conditions) })
+	for i := range views {
+		views[i].Number = i + 1
 	}
-	return "With " + joinConditions(parts) + "."
+	return views
 }
 func joinConditions(v []string) string {
 	if len(v) == 0 {
@@ -39,10 +52,10 @@ func conditionText(c scenarios.FixtureCondition, teams map[string]string, games 
 		os[o] = true
 	}
 	if os[clinching.HomeWin] && os[clinching.Draw] && len(os) == 2 {
-		return home + " does not lose to " + away
+		return home + " wins or draws against " + away
 	}
 	if os[clinching.Draw] && os[clinching.AwayWin] && len(os) == 2 {
-		return home + " does not win against " + away
+		return away + " wins or draws against " + home
 	}
 	if os[clinching.HomeWin] && os[clinching.AwayWin] && len(os) == 2 {
 		return home + " and " + away + " do not draw"
