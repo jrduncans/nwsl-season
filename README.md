@@ -133,7 +133,7 @@ retry, watching, and proxy settings.
 | `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before an unfinished fixture is stale. |
 | `NWSL_SYNC_TIMEOUT` | `2m` | Maximum duration of one ASA refresh and cache transaction. |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum time for one qualification calculation batch. |
-| `NWSL_SCENARIO_BUDGET` | `2m` | Maximum time for one clinching-scenario discovery batch; it runs independently after fixture sync and qualification. |
+| `NWSL_SCENARIO_BUDGET` | `10m` | Maximum time for one clinching-scenario discovery batch; it runs independently after fixture sync and qualification. |
 | `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
 | `NWSL_FORECAST_CONCURRENCY` | `4` | Maximum concurrent uncached Forecast Lab requests. |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |

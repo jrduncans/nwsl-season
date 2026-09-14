@@ -28,7 +28,7 @@ const (
 	// Scenario discovery runs after the fixture sync and qualification proof in
 	// its own context. Give a busy late-season slate enough time to find
 	// certified conditions without extending either of those calculations.
-	defaultScenarioBudget      = 2 * time.Minute
+	defaultScenarioBudget      = 10 * time.Minute
 	defaultHistoryRetention    = 90 * 24 * time.Hour
 	defaultForecastConcurrency = 4
 	defaultForecastTimeout     = 15 * time.Second
