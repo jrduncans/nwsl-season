@@ -1,4 +1,4 @@
-:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --gold: #9b6500; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
+:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.5 system-ui, sans-serif; }
 a { color: var(--green); }
@@ -69,7 +69,8 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 .standings :is(th, td):nth-child(7), .standings :is(th, td):nth-child(9) { min-width: 5.25rem; }
 .standings :is(th, td):nth-child(8), .standings :is(th, td):nth-child(10) { min-width: 3.75rem; }
 .standings :is(th, td):nth-child(11) { min-width: 3.25rem; }
-.standings th:nth-child(2) .team-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.standings th:nth-child(2) .standings-team-cell { display: inline-flex; align-items: center; gap: .2rem; max-width: 100%; min-width: 0; }
+.standings th:nth-child(2) .team-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .standings th:nth-child(2) .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 caption { padding: .75rem; text-align: left; font-weight: 800; }
 th, td { padding: .55rem .6rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
@@ -79,6 +80,9 @@ th:nth-child(2) { text-align: left; }
 .playoff-line td, .playoff-line th { border-bottom: 3px solid var(--green); }
 .badge { padding: .15rem .35rem; border-radius: 1rem; color: var(--green); background: var(--green-soft); font-size: .7rem; }
 .qualification-badge { font-weight: 800; }
+.standings-status { display: inline-grid; flex: 0 0 auto; place-items: center; width: 1em; height: 1em; font-size: 1em; font-weight: 900; line-height: 1; }
+.elimination-status { color: var(--red); }
+.standings-status-key { display: inline-flex; align-items: center; gap: .2rem; margin: .55rem 0 0; color: var(--muted); font-size: .75rem; font-weight: 700; }
 .warning { color: var(--gold); }
 .fixtures { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .fixtures li { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(0, 1fr) 7rem minmax(0, 1fr) 6rem; align-items: center; gap: 1rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }

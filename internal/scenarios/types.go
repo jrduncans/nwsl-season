@@ -11,7 +11,9 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 )
 
-const DefinitionVersion = "next-slate-v3"
+// DefinitionVersion changes when scenario result semantics change so a prior
+// completed snapshot cannot preserve an obsolete conclusion.
+const DefinitionVersion = "next-slate-v4"
 
 const (
 	LimitationBudgetExhausted = "scenario computation budget exhausted"

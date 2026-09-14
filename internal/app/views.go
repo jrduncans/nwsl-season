@@ -48,6 +48,7 @@ type seasonPage struct {
 	HasForecast            bool
 	HasResults             bool
 	HasUpcomingFixtures    bool
+	HasEliminatedTeams     bool
 	ShowFixtureViewToggle  bool
 	ShowUpcomingSeason     bool
 	FixturesHeading        string
@@ -417,6 +418,8 @@ type tableRowView struct {
 	TotalPlayoffLine      bool
 	QualificationBadge    string
 	QualificationTitle    string
+	EliminationBadge      string
+	EliminationTitle      string
 	TieBreak              string
 	ScheduleAvailable     bool
 	ScheduleLabel         string

@@ -930,6 +930,14 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 			page.Standings = qualificationViews(page.Standings, snapshot.Statuses)
 		}
 	}
+	if scenarioStore, ok := a.store.(interface {
+		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
+	}); ok && scope.qualificationAvailable() && rulesVerified && presentation.Phase != seasonPhaseUpcoming && data.FixtureSnapshotID != "" && rules.Version != "" {
+		if snapshot, found, lookupErr := scenarioStore.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
+			page.Standings = eliminationViews(page.Standings, snapshot.Results)
+			page.HasEliminatedTeams = hasEliminatedTeams(snapshot.Results)
+		}
+	}
 
 	return page, nil
 }
@@ -1132,6 +1140,34 @@ func qualificationViews(rows []tableRowView, values []cache.QualificationStatus)
 	}
 	return rows
 }
+
+// eliminationViews annotates only the separately proved, points-only playoff
+// eliminations. A team that has merely not clinched is not necessarily out.
+func eliminationViews(rows []tableRowView, values []cache.ScenarioResult) []tableRowView {
+	eliminated := eliminatedTeams(values)
+	for i := range rows {
+		if eliminated[rows[i].TeamID] {
+			rows[i].EliminationBadge = "Eliminated"
+			rows[i].EliminationTitle = "Eliminated from playoff contention."
+		}
+	}
+	return rows
+}
+
+func hasEliminatedTeams(values []cache.ScenarioResult) bool {
+	return len(eliminatedTeams(values)) > 0
+}
+
+func eliminatedTeams(values []cache.ScenarioResult) map[string]bool {
+	eliminated := map[string]bool{}
+	for _, value := range values {
+		if value.Achievement == competition.AchievementPlayoffs && value.AlreadyEliminated {
+			eliminated[value.TeamID] = true
+		}
+	}
+	return eliminated
+}
+
 func labelAchievement(a competition.AchievementID) string {
 	switch a {
 	case competition.AchievementShield:

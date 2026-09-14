@@ -81,7 +81,10 @@ flowchart TD
 
 The result is tied to both the immutable fixture snapshot and the season-rule
 version. This prevents a badge or scenario from being mixed with results
-calculated from a different schedule or playoff format.
+calculated from a different schedule or playoff format. The standings table
+shows a green badge for proved clinches and a red × marker (with a standings
+key) only for a separately proved, points-only playoff elimination;
+`not_clinched` alone never produces an elimination indicator.
 
 ## Status proof: the mental model
 
@@ -288,6 +291,10 @@ Alongside positive clinching opportunities, the page can show that a team
 the target's best possible points ceiling: every still-unfixed target match is
 treated as a win. A condition is published only if, after the named slate
 outcomes, at least eight opponents already sit strictly above that ceiling.
+
+This same strict-points check is completed before any budget-limited scenario
+search, so an already-eliminated team remains identified even if earlier team
+searches consume the shared scenario budget.
 
 This makes the claim independent of all later fixtures and every tiebreak. It
 also means the feature intentionally withholds close cases in which a team
