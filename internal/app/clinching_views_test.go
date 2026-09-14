@@ -14,6 +14,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
+	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 func TestClinchingPageBoundsVisiblePathsAndPreservesAlternatives(t *testing.T) {
@@ -39,20 +40,19 @@ func TestClinchingPageBoundsVisiblePathsAndPreservesAlternatives(t *testing.T) {
 				t.Fatalf("status = %d", response.Code)
 			}
 			body := response.Body.String()
-			before, after, found := strings.Cut(body, `<details class="clinching-more">`)
-			if !found || strings.Count(before, `class="clinching-path-option"`) != 3 {
-				t.Fatal("expected three alternatives before a closed disclosure")
-			}
-			if !strings.Contains(after, "View 5 more alternatives") || strings.Count(after, `class="clinching-path-option"`) != 5 {
-				t.Fatal("alternatives were lost")
+			if strings.Count(body, `class="clinching-path-option"`) != 8 || strings.Contains(body, "View 5 more paths") {
+				t.Fatal("all paths should be visible without a second disclosure")
 			}
 			if strings.Count(body, `class="clinching-result-group"`) != 1 {
 				t.Fatal("shared own result should appear once")
 			}
-			if !strings.Contains(before, "Other paths may exist") || !strings.Contains(before, "All listed requirements must happen") {
-				t.Fatal("semantics or limitation missing")
+			if !strings.Contains(body, "Scenario search was incomplete.") {
+				t.Fatal("incomplete-search notice missing")
 			}
-			if strings.Contains(before, `id="clinching-matches"`) || !strings.Contains(after, `id="clinching-matches"`) {
+			if strings.Contains(body, "Choose a group matching") || strings.Contains(body, "Other paths may exist") {
+				t.Fatal("obsolete explanatory copy was rendered")
+			}
+			if strings.Index(body, `class="clinching-path-option"`) > strings.Index(body, `id="clinching-matches"`) {
 				t.Fatal("schedule must follow results")
 			}
 			if strings.Contains(body, "<script>alert(1)</script>") || !strings.Contains(body, "&lt;script&gt;alert(1)&lt;/script&gt;") {
@@ -71,6 +71,16 @@ func testScenarioCondition(id string, mask uint8) scenarios.FixtureCondition {
 	}
 	return scenarios.FixtureCondition{GameID: id, AllowedOutcomes: outcomes}
 }
+
+func TestConciseTeamNamePrefersShortName(t *testing.T) {
+	if got := conciseTeamName(standings.Team{ID: "sd", Name: "San Diego Wave FC", ShortName: "San Diego", Abbreviation: "SD"}); got != "San Diego" {
+		t.Fatalf("concise team name = %q", got)
+	}
+	if got := conciseTeamName(standings.Team{ID: "kc", Name: "Kansas City Current", Abbreviation: "KC"}); got != "KC" {
+		t.Fatalf("concise team name fallback = %q", got)
+	}
+}
+
 func testScenarioClause(conditions ...scenarios.FixtureCondition) scenarios.Clause {
 	return scenarios.Clause{Conditions: conditions}
 }
@@ -205,7 +215,15 @@ func assertScenarioEquivalent(t *testing.T, clauses []scenarios.Clause, groups [
 		}
 		got := false
 		for _, g := range groups {
-			got = got || ((testRequirementsMatch(g.Own, assignment, games) || (len(g.AlternativeOwn) > 0 && testRequirementsMatch(g.AlternativeOwn, assignment, games))) && testExpressionMatches(g.Help, assignment, games))
+			helpMatches := testExpressionMatches(g.Help, assignment, games)
+			flatMatches := false
+			for _, combination := range g.Help.Combinations() {
+				flatMatches = flatMatches || testRequirementsMatch(combination, assignment, games)
+			}
+			if flatMatches != helpMatches {
+				t.Fatalf("assignment %v: flattened=%t expression=%t; expression=%+v", assignment, flatMatches, helpMatches, g.Help)
+			}
+			got = got || ((testRequirementsMatch(g.Own, assignment, games) || (len(g.AlternativeOwn) > 0 && testRequirementsMatch(g.AlternativeOwn, assignment, games))) && flatMatches)
 		}
 		if got != want {
 			t.Fatalf("assignment %v: grouped=%t original=%t; groups=%+v", assignment, got, want, groups)

@@ -28,11 +28,20 @@ type scenarioExpression struct {
 	Alternatives []scenarioExpression
 }
 
-func (e scenarioExpression) VisibleAlternatives() []scenarioExpression {
-	return e.Alternatives[:min(3, len(e.Alternatives))]
-}
-func (e scenarioExpression) AdditionalAlternatives() []scenarioExpression {
-	return e.Alternatives[min(3, len(e.Alternatives)):]
+// Combinations expands the factored expression into complete, readable paths.
+// Factoring reduces work when finding the proof, but the display is clearer
+// when every line states all of the requirements joined by “+”.
+func (e scenarioExpression) Combinations() [][]scenarioRequirement {
+	if len(e.Alternatives) == 0 {
+		return [][]scenarioRequirement{slices.Clone(e.Conditions)}
+	}
+	combinations := [][]scenarioRequirement{}
+	for _, alternative := range e.Alternatives {
+		for _, combination := range alternative.Combinations() {
+			combinations = append(combinations, append(slices.Clone(e.Conditions), combination...))
+		}
+	}
+	return uniqueConjunctions(combinations)
 }
 
 type clinchingGroupView struct {

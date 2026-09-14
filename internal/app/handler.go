@@ -168,7 +168,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	teamLabels := map[string]string{}
 	teamViews := map[string]teamNameView{}
 	for _, t := range data.Teams {
-		teamLabels[t.ID] = standings.DisplayName(t)
+		teamLabels[t.ID] = conciseTeamName(t)
 		teamViews[t.ID] = teamName(t)
 	}
 	standingsPositions := map[string]int{}
@@ -233,7 +233,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if v.AlreadyEliminated || v.CanBeEliminated {
 			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroups(v.EliminationClauses, v.TeamID, teamLabels, games), Necessary: []string{}, AlreadyEliminated: v.AlreadyEliminated}
 			if v.BudgetLimited() && !v.AlreadyEliminated {
-				row.Limitation = "These paths guarantee elimination. Other paths may exist because the calculation is incomplete."
+				row.Limitation = "Scenario search was incomplete."
 			}
 			view.Elimination = append(view.Elimination, row)
 		}
@@ -261,7 +261,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if v.Limitation != "" {
-			row.Limitation = "These paths guarantee a clinch. Other paths may exist."
+			row.Limitation = "Scenario search was incomplete."
 		}
 		view.Actionable = append(view.Actionable, row)
 	}

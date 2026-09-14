@@ -1046,6 +1046,15 @@ func fixtureTeams(teams []standings.Team) []teamNameView {
 
 func displayName(team standings.Team) string { return standings.DisplayName(team) }
 
+func conciseTeamName(team standings.Team) string {
+	for _, value := range []string{team.ShortName, team.Abbreviation, team.Name, team.ID} {
+		if value != "" {
+			return value
+		}
+	}
+	return "Unknown team"
+}
+
 func teamName(team standings.Team) teamNameView {
 	return teamNameView{ID: team.ID, Name: displayName(team), LogoURL: clubLogoURL(team.ID)}
 }

@@ -296,19 +296,20 @@ share a heading only when their outside help is identical; for example,
 For unusual slates with more than four relevant own fixtures, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
 
-Within a group, identical shared requirements appear once, with explicit AND/OR
-alternatives underneath. When alternatives for two fixtures of the same team
-exactly equal a minimum points total, the page names both matches and that
-total. This rewrite checks all nine outcome combinations; it never infers an
-uncertified combination from a points total. Groups and simplified expressions
-preserve exactly the union of the stored certified clauses, including partial
-results. Repeated equivalent clauses and stronger clauses already covered by a weaker
-one need not be displayed repeatedly. The pairwise coverage pass is capped at
-256 clauses per group; larger partial batches retain their alternatives.
+Within a group, the page expands factored expressions into complete certified
+paths. Each path puts its requirements on one compact line, separated by `+`,
+and each path is an `OR` alternative to the others. When alternatives for two
+fixtures of the same team exactly equal a minimum points total, the page names
+both matches and that total. This rewrite checks all nine outcome combinations;
+it never infers an uncertified combination from a points total. Groups and
+simplified expressions preserve exactly the union of the stored certified
+clauses, including partial results. Repeated equivalent clauses and stronger
+clauses already covered by a weaker one need not be displayed repeatedly. The
+pairwise coverage pass is capped at 256 clauses per group; larger partial
+batches retain their alternatives.
 
-Each list initially shows up to three alternatives; the rest remain in a
-collapsed, keyboard-accessible scrolling region. Factoring depth is bounded
-for readability, with a flat list preserving any remaining alternatives.
+Every complete certified path remains visible in its group. Factoring stays
+bounded while finding the expression, but does not create nested display levels.
 Unlisted matches are unrestricted. The full included schedule remains collapsed
 below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination paths. Ordinary page requests
