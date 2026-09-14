@@ -1,4 +1,4 @@
-:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --gold: #9b6500; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
+:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.5 system-ui, sans-serif; }
 a { color: var(--green); }
@@ -69,7 +69,8 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 .standings :is(th, td):nth-child(7), .standings :is(th, td):nth-child(9) { min-width: 5.25rem; }
 .standings :is(th, td):nth-child(8), .standings :is(th, td):nth-child(10) { min-width: 3.75rem; }
 .standings :is(th, td):nth-child(11) { min-width: 3.25rem; }
-.standings th:nth-child(2) .team-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.standings th:nth-child(2) .standings-team-cell { display: inline-flex; align-items: center; gap: .2rem; max-width: 100%; min-width: 0; }
+.standings th:nth-child(2) .team-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .standings th:nth-child(2) .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 caption { padding: .75rem; text-align: left; font-weight: 800; }
 th, td { padding: .55rem .6rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
@@ -79,6 +80,9 @@ th:nth-child(2) { text-align: left; }
 .playoff-line td, .playoff-line th { border-bottom: 3px solid var(--green); }
 .badge { padding: .15rem .35rem; border-radius: 1rem; color: var(--green); background: var(--green-soft); font-size: .7rem; }
 .qualification-badge { font-weight: 800; }
+.standings-status { display: inline-grid; flex: 0 0 auto; place-items: center; width: 1em; height: 1em; font-size: 1em; font-weight: 900; line-height: 1; }
+.elimination-status { color: var(--red); }
+.standings-status-key { display: inline-flex; align-items: center; gap: .2rem; margin: .55rem 0 0; color: var(--muted); font-size: .75rem; font-weight: 700; }
 .warning { color: var(--gold); }
 .fixtures { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .fixtures li { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(0, 1fr) 7rem minmax(0, 1fr) 6rem; align-items: center; gap: 1rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
@@ -98,6 +102,16 @@ th:nth-child(2) { text-align: left; }
 .fixture-outcome-bar { display: flex; overflow: hidden; height: .5rem; border-radius: 999px; background: var(--line); }
 .fixture-outcome-segment { flex: var(--fixture-outcome-share) 1 0; min-width: 0; }.fixture-outcome-bar .fixture-outcome-home { background: var(--green); }.fixture-outcome-bar .fixture-outcome-draw { background: #aab4ae; }.fixture-outcome-bar .fixture-outcome-away { background: var(--green-deep); }
 .data-warning { padding: .8rem 1rem; border-left: 4px solid var(--gold); background: #fff6dc; }
+.clinching-opportunity + .clinching-opportunity { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.clinching-path-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; padding: 0; list-style: none; }
+.clinching-path-option { min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.clinching-path-option h4 { margin: 0 0 .65rem; color: var(--green); }
+.clinching-path-option ul { padding-left: 1.2rem; }
+.clinching-path-option li + li { margin-top: .5rem; }
+.clinching-more { margin: 1rem 0; }
+.clinching-more > summary { cursor: pointer; color: var(--green); font-weight: 700; padding: .5rem 0; }
+.clinching-more-scroll { max-height: 32rem; overflow-y: auto; padding: 0 .5rem; border: 1px solid var(--line); border-radius: .5rem; }
+.clinching-more > summary:focus-visible, .clinching-more-scroll:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 .clinching-statement { margin: 1rem 0; }
 .clinching-statement summary { cursor: pointer; font-size: 1.1rem; }
 .clinching-statement summary::-webkit-details-marker { display: none; }

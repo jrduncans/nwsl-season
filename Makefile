@@ -24,6 +24,10 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
+.PHONY: test-clinching
+test-clinching:
+	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp)'
+
 fmt:
 	$(GOLANGCI_LINT) fmt ./...
 

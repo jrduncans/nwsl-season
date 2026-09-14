@@ -780,13 +780,19 @@ func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
 func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
-	store := fullFakeStore{fakeStore: fakeStore{season: data}, qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.Clinched}}}}
+	store := fullFakeStore{
+		fakeStore:     fakeStore{season: data},
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.Clinched}}},
+		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Outcome: "complete"}, Results: []cache.ScenarioResult{
+			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, AlreadyEliminated: true}},
+		}},
+	}
 	response := httptest.NewRecorder()
 	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
-	for _, value := range []string{`class="badge qualification-badge"`, "✓ Shield", "Guaranteed achievements: Shield"} {
+	for _, value := range []string{`class="badge qualification-badge"`, "✓ Shield", "Guaranteed achievements: Shield", `class="standings-status elimination-status" role="img" aria-label="Eliminated from playoff contention." title="Eliminated from playoff contention."`, "×</span> Eliminated from playoffs"} {
 		if !strings.Contains(response.Body.String(), value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -872,7 +878,7 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included slate", "Possible clinching scenarios", "Playoff-elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "With Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; beats Bravo FC.", "With Bravo FC beats Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;.", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{"Included matches", "Possible clinching scenarios", "Playoff-elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; beats Bravo FC.", "Bravo FC beats Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;.", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -907,13 +913,13 @@ func TestClinchingNonCurrentCatalogSeasonUsesCatalogRulesVersion(t *testing.T) {
 	if got, want := store.qualificationRulesVersions, []string{"2026-regular-v2", "2026-regular-v2"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("qualification rules versions = %v, want %v", got, want)
 	}
-	if got, want := store.scenarioRulesVersions, []string{"2026-regular-v2"}; !reflect.DeepEqual(got, want) {
+	if got, want := store.scenarioRulesVersions, []string{"2026-regular-v2", "2026-regular-v2"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("scenario rules versions = %v, want %v", got, want)
 	}
-	if got, want := store.scenarioSnapshotIDs, []string{"snapshot-2026"}; !reflect.DeepEqual(got, want) {
+	if got, want := store.scenarioSnapshotIDs, []string{"snapshot-2026", "snapshot-2026"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("scenario snapshots = %v, want %v", got, want)
 	}
-	if got, want := store.scenarioDefinitionVersions, []string{scenarios.DefinitionVersion}; !reflect.DeepEqual(got, want) {
+	if got, want := store.scenarioDefinitionVersions, []string{scenarios.DefinitionVersion, scenarios.DefinitionVersion}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("scenario definition versions = %v, want %v", got, want)
 	}
 }
@@ -941,7 +947,7 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 			t.Errorf("body does not contain %q", value)
 		}
 	}
-	if strings.Contains(body, "Included slate") {
+	if strings.Contains(body, "Included matches") {
 		t.Error("body contains an irrelevant included slate")
 	}
 }
@@ -1021,7 +1027,7 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included slate", "Playoff-elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "With Bravo FC beats Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;."} {
+	for _, value := range []string{"Included matches", "Playoff-elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "Bravo FC beats Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}

@@ -81,7 +81,10 @@ flowchart TD
 
 The result is tied to both the immutable fixture snapshot and the season-rule
 version. This prevents a badge or scenario from being mixed with results
-calculated from a different schedule or playoff format.
+calculated from a different schedule or playoff format. The standings table
+shows a green badge for proved clinches and a red × marker (with a standings
+key) only for a separately proved, points-only playoff elimination;
+`not_clinched` alone never produces an elimination indicator.
 
 ## Status proof: the mental model
 
@@ -281,6 +284,21 @@ budget, the visible clauses remain valid but may not cover every theoretical
 path. The UI says so instead of implying that the displayed conditions are
 necessary.
 
+### Scenario presentation
+
+The page shows up to three confirmed paths per team and achievement, ordered
+by the fewest required matches. Each path lists all required results, with the
+team's own matches first. Any one path suffices; unlisted matches are unrestricted.
+All remaining paths are retained in a collapsed, keyboard-accessible scrolling
+region. This bounds the visible page without changing or discarding a proof.
+The full included schedule is collapsed below the results, with its date range
+above them. Incomplete-calculation notices remain visible for both clinching
+and elimination paths. Ordinary page requests still read only cached results.
+
+Use `make test-clinching` for focused presentation checks. These checks also run
+within `make test` and CI; visually verify desktop and 390px layouts, expansion,
+keyboard access, and team filtering when changing the presentation.
+
 ## Playoff-elimination scenarios
 
 Alongside positive clinching opportunities, the page can show that a team
@@ -288,6 +306,10 @@ Alongside positive clinching opportunities, the page can show that a team
 the target's best possible points ceiling: every still-unfixed target match is
 treated as a win. A condition is published only if, after the named slate
 outcomes, at least eight opponents already sit strictly above that ceiling.
+
+This same strict-points check is completed before any budget-limited scenario
+search, so an already-eliminated team remains identified even if earlier team
+searches consume the shared scenario budget.
 
 This makes the claim independent of all later fixtures and every tiebreak. It
 also means the feature intentionally withholds close cases in which a team

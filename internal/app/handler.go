@@ -192,7 +192,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			for _, status := range value.Statuses {
 				qualification[status.TeamID+"\x00"+string(status.Achievement)] = status
 				if status.Status == clinching.Clinched {
-					view.AlreadyClinched = append(view.AlreadyClinched, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID], Clauses: []string{}, Necessary: []string{}})
+					view.AlreadyClinched = append(view.AlreadyClinched, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID], Clauses: []clinchingClauseView{}, Necessary: []string{}})
 				}
 			}
 		}
@@ -231,9 +231,9 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		team := teamViews[v.TeamID]
 		achievement := achievementPhrase(v.Achievement)
 		if v.AlreadyEliminated || v.CanBeEliminated {
-			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Clauses: []string{}, Necessary: []string{}, AlreadyEliminated: v.AlreadyEliminated}
-			for _, c := range v.EliminationClauses {
-				row.Clauses = append(row.Clauses, clauseSentence(c, teamLabels, games))
+			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Clauses: clauseViews(v.EliminationClauses, v.TeamID, teamLabels, games), Necessary: []string{}, AlreadyEliminated: v.AlreadyEliminated}
+			if v.BudgetLimited() && !v.AlreadyEliminated {
+				row.Limitation = "These paths guarantee elimination. Other paths may exist because the calculation is incomplete."
 			}
 			view.Elimination = append(view.Elimination, row)
 		}
@@ -248,13 +248,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch && !noHelpGuaranteed {
 			continue
 		}
-		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Clauses: []string{}, Necessary: []string{}}
+		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Clauses: clauseViews(v.Clauses, v.TeamID, teamLabels, games), Necessary: []string{}}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
-		}
-		for _, c := range v.Clauses {
-			row.Clauses = append(row.Clauses, clauseSentence(c, teamLabels, games))
 		}
 		for _, n := range v.Necessary {
 			row.Necessary = append(row.Necessary, conditionText(n, teamLabels, games))
@@ -264,7 +261,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if v.Limitation != "" {
-			row.Limitation = "Some additional clinching paths may not be shown."
+			row.Limitation = "These paths guarantee a clinch. Other paths may exist."
 		}
 		view.Actionable = append(view.Actionable, row)
 	}
@@ -930,6 +927,14 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 			page.Standings = qualificationViews(page.Standings, snapshot.Statuses)
 		}
 	}
+	if scenarioStore, ok := a.store.(interface {
+		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
+	}); ok && scope.qualificationAvailable() && rulesVerified && presentation.Phase != seasonPhaseUpcoming && data.FixtureSnapshotID != "" && rules.Version != "" {
+		if snapshot, found, lookupErr := scenarioStore.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion); lookupErr == nil && found && snapshot.Run.Outcome == "complete" {
+			page.Standings = eliminationViews(page.Standings, snapshot.Results)
+			page.HasEliminatedTeams = hasEliminatedTeams(snapshot.Results)
+		}
+	}
 
 	return page, nil
 }
@@ -1132,6 +1137,34 @@ func qualificationViews(rows []tableRowView, values []cache.QualificationStatus)
 	}
 	return rows
 }
+
+// eliminationViews annotates only the separately proved, points-only playoff
+// eliminations. A team that has merely not clinched is not necessarily out.
+func eliminationViews(rows []tableRowView, values []cache.ScenarioResult) []tableRowView {
+	eliminated := eliminatedTeams(values)
+	for i := range rows {
+		if eliminated[rows[i].TeamID] {
+			rows[i].EliminationBadge = "Eliminated"
+			rows[i].EliminationTitle = "Eliminated from playoff contention."
+		}
+	}
+	return rows
+}
+
+func hasEliminatedTeams(values []cache.ScenarioResult) bool {
+	return len(eliminatedTeams(values)) > 0
+}
+
+func eliminatedTeams(values []cache.ScenarioResult) map[string]bool {
+	eliminated := map[string]bool{}
+	for _, value := range values {
+		if value.Achievement == competition.AchievementPlayoffs && value.AlreadyEliminated {
+			eliminated[value.TeamID] = true
+		}
+	}
+	return eliminated
+}
+
 func labelAchievement(a competition.AchievementID) string {
 	switch a {
 	case competition.AchievementShield:

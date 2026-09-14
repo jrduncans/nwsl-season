@@ -383,6 +383,35 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 	if s.err != nil {
 		return
 	}
+	// A points-only elimination is independent of the scenario search and must
+	// survive a shared scenario-budget expiry. Check it before consulting the
+	// context, which may already be exhausted after earlier teams were searched.
+	for memberIndex := range s.members {
+		bit := uint64(1) << uint(memberIndex)
+		if active&bit == 0 {
+			continue
+		}
+		member := &s.members[memberIndex]
+		if !member.trackElimination || !s.eliminationGuaranteed(member.achievement.TopK) {
+			continue
+		}
+		member.diag.SearchNodes++
+		if depth == 0 {
+			member.alreadyEliminated = true
+		} else {
+			clause := Clause{Conditions: fixedConditions(fixed, s.slate.FixtureIDs), ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}
+			clause.RepresentedAssignments = represented(clause.Conditions, len(s.slateGames))
+			member.eliminationClauses = append(member.eliminationClauses, clause)
+			if member.trackCoverage {
+				markCoverage(member.eliminated, clause.Conditions, s.slateGames)
+			}
+		}
+		member.diag.OpportunityPrunes++
+		active &^= bit
+	}
+	if active == 0 {
+		return
+	}
 	if err := s.ctx.Err(); err != nil {
 		s.err = err
 		return
@@ -395,20 +424,6 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 		}
 		member := &s.members[memberIndex]
 		member.diag.SearchNodes++
-		if member.trackElimination && s.eliminationGuaranteed(member.achievement.TopK) {
-			if depth == 0 {
-				member.alreadyEliminated = true
-			} else {
-				clause := Clause{Conditions: fixedConditions(fixed, s.slate.FixtureIDs), ProofMethods: []clinching.ProofMethod{clinching.ProofCheapBound}}
-				clause.RepresentedAssignments = represented(clause.Conditions, len(s.slateGames))
-				member.eliminationClauses = append(member.eliminationClauses, clause)
-				if member.trackCoverage {
-					markCoverage(member.eliminated, clause.Conditions, s.slateGames)
-				}
-			}
-			member.diag.OpportunityPrunes++
-			continue
-		}
 		if member.skipOpportunity {
 			remaining |= bit
 			continue

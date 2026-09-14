@@ -48,6 +48,7 @@ type seasonPage struct {
 	HasForecast            bool
 	HasResults             bool
 	HasUpcomingFixtures    bool
+	HasEliminatedTeams     bool
 	ShowFixtureViewToggle  bool
 	ShowUpcomingSeason     bool
 	FixturesHeading        string
@@ -417,6 +418,8 @@ type tableRowView struct {
 	TotalPlayoffLine      bool
 	QualificationBadge    string
 	QualificationTitle    string
+	EliminationBadge      string
+	EliminationTitle      string
 	TieBreak              string
 	ScheduleAvailable     bool
 	ScheduleLabel         string
@@ -516,12 +519,26 @@ type clinchingPage struct {
 type clinchingRowView struct {
 	Team                               teamNameView
 	Achievement, Limitation            string
-	Clauses, Necessary                 []string
+	Clauses                            []clinchingClauseView
+	Necessary                          []string
 	NoHelp                             string
 	NoHelpFixtures                     string
 	NoHelpFixtureCount                 int
 	AchievementRank, StandingsPosition int
 	AlreadyEliminated                  bool
+}
+
+type clinchingClauseView struct {
+	Number     int
+	Conditions []string
+}
+
+func (r clinchingRowView) VisibleClauses() []clinchingClauseView {
+	return r.Clauses[:min(3, len(r.Clauses))]
+}
+
+func (r clinchingRowView) AdditionalClauses() []clinchingClauseView {
+	return r.Clauses[min(3, len(r.Clauses)):]
 }
 
 type clinchingTeamView struct {
