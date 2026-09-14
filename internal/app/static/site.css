@@ -103,11 +103,17 @@ th:nth-child(2) { text-align: left; }
 .fixture-outcome-segment { flex: var(--fixture-outcome-share) 1 0; min-width: 0; }.fixture-outcome-bar .fixture-outcome-home { background: var(--green); }.fixture-outcome-bar .fixture-outcome-draw { background: #aab4ae; }.fixture-outcome-bar .fixture-outcome-away { background: var(--green-deep); }
 .data-warning { padding: .8rem 1rem; border-left: 4px solid var(--gold); background: #fff6dc; }
 .clinching-opportunity + .clinching-opportunity { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
-.clinching-path-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; padding: 0; list-style: none; }
-.clinching-path-option { min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
-.clinching-path-option h4 { margin: 0 0 .65rem; color: var(--green); }
-.clinching-path-option ul { padding-left: 1.2rem; }
-.clinching-path-option li + li { margin-top: .5rem; }
+.clinching-result-group { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.clinching-result-group > summary { cursor: pointer; color: var(--green); }
+.clinching-result-group > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
+.clinching-result-group h4 { display: inline; margin: 0; color: var(--green); font-size: 1.05rem; }
+.clinching-logic-label { font-weight: 700; margin: .75rem 0; }
+.clinching-requirements { padding-left: 1.3rem; }
+.clinching-requirements li + li { margin-top: .4rem; }
+.clinching-path-options { padding: 0; list-style: none; }
+.clinching-path-option { min-width: 0; padding: .2rem 0 .2rem 1rem; border-left: 3px solid var(--line); }
+.clinching-path-option + .clinching-path-option { margin-top: .75rem; }
+.clinching-or { color: var(--green); font-size: .8rem; font-weight: 800; }
 .clinching-more { margin: 1rem 0; }
 .clinching-more > summary { cursor: pointer; color: var(--green); font-weight: 700; padding: .5rem 0; }
 .clinching-more-scroll { max-height: 32rem; overflow-y: auto; padding: 0 .5rem; border: 1px solid var(--line); border-radius: .5rem; }

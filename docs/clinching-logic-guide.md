@@ -286,17 +286,36 @@ necessary.
 
 ### Scenario presentation
 
-The page shows up to three confirmed paths per team and achievement, ordered
-by the fewest required matches. Each path lists all required results, with the
-team's own matches first. Any one path suffices; unlisted matches are unrestricted.
-All remaining paths are retained in a collapsed, keyboard-accessible scrolling
-region. This bounds the visible page without changing or discarding a proof.
-The full included schedule is collapsed below the results, with its date range
-above them. Incomplete-calculation notices remain visible for both clinching
-and elimination paths. Ordinary page requests still read only cached results.
+The page groups confirmed scenarios by the team's own results, in kickoff
+order and from wins through draws to losses. Overlapping conditions such as
+“win” and “win or draw” are split so the draw group includes exactly the
+outside help certified for a draw. All own-result group headings stay visible,
+with their requirements in expandable sections. Two-match result orderings
+share a heading only when their outside help is identical; for example,
+“wins one match and loses the other” still names the two specific fixtures.
+For unusual slates with more than four relevant own fixtures, the page retains
+the original, potentially overlapping own-result groups to bound expansion.
+
+Within a group, identical shared requirements appear once, with explicit AND/OR
+alternatives underneath. When alternatives for two fixtures of the same team
+exactly equal a minimum points total, the page names both matches and that
+total. This rewrite checks all nine outcome combinations; it never infers an
+uncertified combination from a points total. Groups and simplified expressions
+preserve exactly the union of the stored certified clauses, including partial
+results. Repeated equivalent clauses and stronger clauses already covered by a weaker
+one need not be displayed repeatedly. The pairwise coverage pass is capped at
+256 clauses per group; larger partial batches retain their alternatives.
+
+Each list initially shows up to three alternatives; the rest remain in a
+collapsed, keyboard-accessible scrolling region. Factoring depth is bounded
+for readability, with a flat list preserving any remaining alternatives.
+Unlisted matches are unrestricted. The full included schedule remains collapsed
+below the results, with its date range above them. Incomplete-result notices
+remain visible for both clinching and elimination paths. Ordinary page requests
+read only cached results and do not rerun qualification or scenario discovery.
 
 Use `make test-clinching` for focused presentation checks. These checks also run
-within `make test` and CI; visually verify desktop and 390px layouts, expansion,
+within `make test` and CI, including exhaustive outcome-equivalence checks; visually verify desktop and 390px layouts, expansion,
 keyboard access, and team filtering when changing the presentation.
 
 ## Playoff-elimination scenarios

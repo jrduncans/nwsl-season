@@ -24,6 +24,7 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
+# Includes grouped presentation and exhaustive outcome-equivalence regressions.
 .PHONY: test-clinching
 test-clinching:
 	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp)'

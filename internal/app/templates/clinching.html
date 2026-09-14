@@ -14,25 +14,33 @@
   </details>
 {{end}}
 
-{{define "clinchingClause"}}
-  <li class="clinching-path-option">
-    <h4>Path {{.Number}}</h4>
-    {{if .Conditions}}<ul>{{range .Conditions}}<li>{{.}}.</li>{{end}}</ul>
-    {{else}}<p>Any results in the included matches.</p>{{end}}
-  </li>
+{{define "clinchingExpression"}}
+  {{if .Conditions}}<ul class="clinching-requirements">{{range .Conditions}}<li>{{.Text}}.</li>{{end}}</ul>{{end}}
+  {{if .Alternatives}}
+    <p class="clinching-logic-label">{{if .Conditions}}AND {{end}}one of these combinations:</p>
+    <ul class="clinching-path-options">{{range $index, $alternative := .VisibleAlternatives}}<li class="clinching-path-option">{{if $index}}<span class="clinching-or">OR</span>{{end}}{{template "clinchingExpression" .}}</li>{{end}}</ul>
+    {{if .AdditionalAlternatives}}
+      <details class="clinching-more">
+        <summary>View {{len .AdditionalAlternatives}} more alternative{{if ne (len .AdditionalAlternatives) 1}}s{{end}}</summary>
+        <div class="clinching-more-scroll" tabindex="0" role="region" aria-label="Additional combinations for the conditions above">
+          <ul class="clinching-path-options">{{range .AdditionalAlternatives}}<li class="clinching-path-option"><span class="clinching-or">OR</span>{{template "clinchingExpression" .}}</li>{{end}}</ul>
+        </div>
+      </details>
+    {{end}}
+  {{end}}
 {{end}}
 
 {{define "clinchingClauses"}}
-  {{if .Clauses}}
-    <p class="note">Any one path is enough. Every result in that path must happen; unlisted matches can finish with any result.</p>
+  {{if .Groups}}
+    <p class="note">Choose a group matching the team’s results. All listed requirements must happen; where alternatives are shown, any one is enough. Unlisted matches can finish with any result.</p>
     {{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}
-    <ul class="clinching-path-options">{{range .VisibleClauses}}{{template "clinchingClause" .}}{{end}}</ul>
-    {{if .AdditionalClauses}}
-      <details class="clinching-more">
-        <summary>View {{len .AdditionalClauses}} more confirmed path{{if ne (len .AdditionalClauses) 1}}s{{end}}</summary>
-        <div class="clinching-more-scroll" tabindex="0" role="region" aria-label="Additional confirmed paths for {{.Team.Name}} — {{.Achievement}}">
-          <ul class="clinching-path-options">{{range .AdditionalClauses}}{{template "clinchingClause" .}}{{end}}</ul>
-        </div>
+    {{range .Groups}}
+      <details class="clinching-result-group">
+        <summary><h4>{{.Heading}}</h4></summary>
+        {{if or .Help.Conditions .Help.Alternatives}}
+          <p class="clinching-logic-label">Other results needed:</p>
+          {{template "clinchingExpression" .Help}}
+        {{else}}<p>No other results needed.</p>{{end}}
       </details>
     {{end}}
   {{end}}

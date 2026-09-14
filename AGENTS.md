@@ -66,8 +66,10 @@ for focused diagnosis.
 - `docs/phases/` and completed work packets are design history unless they
   explicitly identify current behavior. Verify their historical claims against
   the current code.
-- Clinching presentation must keep the initial path list bounded and preserve
-  all confirmed alternatives and partial-result notices. Use `make test-clinching`
+- Clinching presentation must group own-team results, keep alternative lists
+  bounded, and preserve the exact union of confirmed outcomes and partial-result
+  notices. Verify logical rewrites with exhaustive outcome-equivalence tests.
+  Use `make test-clinching`
   for focused checks; the full `make test` also includes these regressions.
 - When behavior or required checks change, update the active guide, `AGENTS.md`,
   `Makefile`, and CI together.

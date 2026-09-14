@@ -878,7 +878,7 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Possible clinching scenarios", "Playoff-elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; beats Bravo FC.", "Bravo FC beats Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;.", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{"Included matches", "Possible clinching scenarios", "Playoff-elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; beats Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses to Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -1027,7 +1027,7 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Playoff-elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "Bravo FC beats Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;."} {
+	for _, value := range []string{"Included matches", "Playoff-elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses to Bravo FC"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
