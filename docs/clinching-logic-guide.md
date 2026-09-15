@@ -305,9 +305,24 @@ total. This rewrite checks all nine outcome combinations;
 it never infers an uncertified combination from a points total. Groups and
 simplified expressions preserve exactly the union of the stored certified
 clauses, including partial results. Repeated equivalent clauses and stronger
-clauses already covered by a weaker one need not be displayed repeatedly. The
-pairwise coverage pass is capped at 256 clauses per group; larger partial
-batches retain their alternatives.
+clauses already covered by a weaker one need not be displayed repeatedly.
+
+The page also subtracts partial overlap between outside-help paths before
+combining results into points totals. Paths with fewer fixture requirements
+take precedence, with a stable fixture-ID and outcome-mask ordering to break
+ties. Each later path keeps only outcomes not already represented. For example,
+if “SEA wins or draws at LA + UTA draws vs LA” is already shown, the additional
+path “SEA wins or draws at LA + UTA wins or draws vs LA + SEA wins or draws at
+DEN” narrows to require a UTA **win**. When two equal-length paths both include
+the same pair of draws, that pair remains in only one alternative. Subtraction
+can split a path into several alternatives; it never drops a unique outcome
+or adds an uncertified one. Points compaction preserves this disjoint union.
+
+The pairwise coverage pass is capped at 256 clauses per group. Overlap
+subtraction is capped at 256 paths, including intermediate expansion, and
+65,536 subtraction operations. Larger inputs or an expansion/work overflow
+retain the original certified alternatives, which can still overlap. These
+limits keep presentation work bounded on ordinary cache-only page requests.
 
 Every complete certified path remains visible in its group. Factoring stays
 bounded while finding the expression, but does not create nested display levels.
@@ -317,7 +332,8 @@ remain visible for both clinching and elimination paths. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
 
 Use `make test-clinching` for focused presentation checks. These checks also run
-within `make test` and CI, including exhaustive outcome-equivalence checks; visually verify desktop and 390px layouts, expansion,
+within `make test` and CI, including exhaustive outcome-equivalence and
+disjoint-alternative checks; visually verify desktop and 390px layouts, expansion,
 keyboard access, and team filtering when changing the presentation.
 
 ## Playoff-elimination scenarios

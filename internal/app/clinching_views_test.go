@@ -223,7 +223,7 @@ func TestClinchingGroupsPreserveAllOutcomes(t *testing.T) {
 			clauses = append(clauses, testScenarioClause(conditions...))
 		}
 		t.Run(fmt.Sprint(iteration), func(t *testing.T) {
-			assertScenarioEquivalent(t, clauses, clinchingGroups(clauses, "a", teams, games), games)
+			assertScenarioCoverage(t, clauses, clinchingGroups(clauses, "a", teams, games), games, true)
 		})
 	}
 }
@@ -269,6 +269,11 @@ func TestClinchingGroupsDoNotOverstatePointsRequirement(t *testing.T) {
 // disjunction, independently interpreting every fixture and points predicate.
 func assertScenarioEquivalent(t *testing.T, clauses []scenarios.Clause, groups []clinchingGroupView, games map[string]cache.Game) {
 	t.Helper()
+	assertScenarioCoverage(t, clauses, groups, games, false)
+}
+
+func assertScenarioCoverage(t *testing.T, clauses []scenarios.Clause, groups []clinchingGroupView, games map[string]cache.Game, disjoint bool) {
+	t.Helper()
 	ids := []string{}
 	for id := range games {
 		ids = append(ids, id)
@@ -302,8 +307,15 @@ func assertScenarioEquivalent(t *testing.T, clauses []scenarios.Clause, groups [
 		for _, g := range groups {
 			helpMatches := testExpressionMatches(g.Help, assignment, games)
 			flatMatches := false
+			matchingPaths := 0
 			for _, combination := range g.Help.Combinations() {
-				flatMatches = flatMatches || testRequirementsMatch(combination, assignment, games)
+				if testRequirementsMatch(combination, assignment, games) {
+					flatMatches = true
+					matchingPaths++
+				}
+			}
+			if disjoint && matchingPaths > 1 {
+				t.Fatalf("assignment %v matches %d alternatives; group=%+v", assignment, matchingPaths, g)
 			}
 			if flatMatches != helpMatches {
 				t.Fatalf("assignment %v: flattened=%t expression=%t; expression=%+v", assignment, flatMatches, helpMatches, g.Help)

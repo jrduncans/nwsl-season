@@ -324,7 +324,9 @@ func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, 
 		if len(words) > 0 {
 			heading = "If " + joinConditions(words)
 		}
-		help := removeCoveredRequirements(compactPoints(removeCoveredRequirements(uniqueConjunctions(g.help), games), games), games)
+		help := removeCoveredRequirements(uniqueConjunctions(g.help), games)
+		help = disjointRequirements(help)
+		help = removeCoveredRequirements(compactPoints(help, games), games)
 		for i, c := range help {
 			for j, r := range c {
 				help[i][j].Text = requirementText(r, "", teams, games)

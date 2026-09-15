@@ -24,10 +24,11 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
-# Includes grouped presentation and exhaustive outcome-equivalence regressions.
+# Includes grouped presentation, exhaustive outcome equivalence, and bounded
+# overlap subtraction with disjoint-alternative regressions.
 .PHONY: test-clinching
 test-clinching:
-	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp)'
+	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode)'
 
 fmt:
 	$(GOLANGCI_LINT) fmt ./...

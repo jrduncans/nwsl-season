@@ -68,7 +68,10 @@ for focused diagnosis.
   the current code.
 - Clinching presentation must group own-team results, keep alternative lists
   bounded, and preserve the exact union of confirmed outcomes and partial-result
-  notices. Verify logical rewrites with exhaustive outcome-equivalence tests.
+  notices. Subtract overlap between outside-help alternatives within the
+  presentation's expansion and work limits; retain the original certified union
+  when those limits are reached. Verify logical rewrites with exhaustive
+  outcome-equivalence and disjoint-alternative tests.
   Use `make test-clinching`
   for focused checks; the full `make test` also includes these regressions.
 - When behavior or required checks change, update the active guide, `AGENTS.md`,
