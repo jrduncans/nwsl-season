@@ -29,21 +29,21 @@ func conditionText(c scenarios.FixtureCondition, teams map[string]string, games 
 		os[o] = true
 	}
 	if os[clinching.HomeWin] && os[clinching.Draw] && len(os) == 2 {
-		return home + " wins or draws against " + away
+		return home + " wins or draws vs " + away
 	}
 	if os[clinching.Draw] && os[clinching.AwayWin] && len(os) == 2 {
-		return away + " wins or draws against " + home
+		return away + " wins or draws at " + home
 	}
 	if os[clinching.HomeWin] && os[clinching.AwayWin] && len(os) == 2 {
-		return home + " and " + away + " do not draw"
+		return home + " does not draw vs " + away
 	}
 	if os[clinching.HomeWin] {
-		return home + " beats " + away
+		return home + " wins vs " + away
 	}
 	if os[clinching.AwayWin] {
-		return away + " beats " + home
+		return away + " wins at " + home
 	}
-	return home + " draws with " + away
+	return home + " draws vs " + away
 }
 
 func noHelpText(path clinching.NoHelpPath, team, achievement string) string {

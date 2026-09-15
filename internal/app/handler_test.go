@@ -878,7 +878,7 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Possible clinching scenarios", "Playoff-elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; beats Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses to Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{"Included matches", "Clinching scenarios", "Elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -1027,7 +1027,7 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Playoff-elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses to Bravo FC"} {
+	for _, value := range []string{"Included matches", "Elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -1047,14 +1047,27 @@ func TestNoHelpTextUsesWinCountAndHidesUnresolvedReason(t *testing.T) {
 	}
 }
 
-func TestConditionTextRendersNoDrawAlternative(t *testing.T) {
-	got := conditionText(
-		scenarios.FixtureCondition{GameID: "game", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin, clinching.AwayWin}},
-		map[string]string{"home": "Home FC", "away": "Away FC"},
-		map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}},
-	)
-	if got != "Home FC and Away FC do not draw" {
-		t.Fatalf("condition text = %q", got)
+func TestConditionTextUsesResultAndVenue(t *testing.T) {
+	teams := map[string]string{"home": "Home FC", "away": "Away FC"}
+	games := map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}}
+	for _, test := range []struct {
+		name     string
+		outcomes []clinching.Outcome
+		want     string
+	}{
+		{name: "home win", outcomes: []clinching.Outcome{clinching.HomeWin}, want: "Home FC wins vs Away FC"},
+		{name: "away win", outcomes: []clinching.Outcome{clinching.AwayWin}, want: "Away FC wins at Home FC"},
+		{name: "draw", outcomes: []clinching.Outcome{clinching.Draw}, want: "Home FC draws vs Away FC"},
+		{name: "home does not lose", outcomes: []clinching.Outcome{clinching.HomeWin, clinching.Draw}, want: "Home FC wins or draws vs Away FC"},
+		{name: "away does not lose", outcomes: []clinching.Outcome{clinching.Draw, clinching.AwayWin}, want: "Away FC wins or draws at Home FC"},
+		{name: "no draw", outcomes: []clinching.Outcome{clinching.HomeWin, clinching.AwayWin}, want: "Home FC does not draw vs Away FC"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := conditionText(scenarios.FixtureCondition{GameID: "game", AllowedOutcomes: test.outcomes}, teams, games)
+			if got != test.want {
+				t.Fatalf("condition text = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

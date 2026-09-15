@@ -62,6 +62,29 @@ func TestClinchingPageBoundsVisiblePathsAndPreservesAlternatives(t *testing.T) {
 	}
 }
 
+func TestClinchingPageDoesNotCallTiebreakDependentPathsIncomplete(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	result := scenarios.Result{
+		TeamID:      "alpha",
+		Achievement: competition.AchievementPlayoffs,
+		TopK:        8,
+		State:       scenarios.OpportunityCanClinch,
+		CanClinch:   true,
+		Clauses:     []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{testScenarioCondition("future-1", 1)}}},
+		Limitation:  "additional paths may depend on score or unavailable tiebreak data; no outcome-only path is published",
+	}
+	store := fullFakeStore{fakeStore: fakeStore{season: data}, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{{Result: result}}}}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if strings.Contains(response.Body.String(), "Scenario search was incomplete.") {
+		t.Fatal("tiebreak-dependent paths must not be presented as an incomplete search")
+	}
+}
+
 func testScenarioCondition(id string, mask uint8) scenarios.FixtureCondition {
 	outcomes := []clinching.Outcome{}
 	for i, o := range []clinching.Outcome{clinching.HomeWin, clinching.Draw, clinching.AwayWin} {
@@ -88,8 +111,58 @@ func TestRequirementPartsUseClubTokens(t *testing.T) {
 		map[string]string{"home": "HOM", "away": "AWY"},
 		map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}},
 	)
-	if len(parts) != 3 || parts[0].Team == nil || parts[0].Team.Code != "HOM" || parts[0].Team.LogoURL != clubLogoURL("home") || parts[1].Text != "beats" || parts[2].Team == nil || parts[2].Team.Code != "AWY" {
+	if len(parts) != 3 || parts[0].Team == nil || parts[0].Team.Code != "HOM" || parts[0].Team.LogoURL != clubLogoURL("home") || parts[1].Text != "wins vs" || parts[2].Team == nil || parts[2].Team.Code != "AWY" {
 		t.Fatalf("club tokens = %#v", parts)
+	}
+}
+
+func TestRequirementTextUsesResultAndVenue(t *testing.T) {
+	teams := map[string]string{"home": "HOM", "away": "AWY"}
+	games := map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}}
+	for _, test := range []struct {
+		name, perspective, want string
+		mask                    uint8
+	}{
+		{name: "home win", perspective: "home", mask: 1, want: "HOM wins vs AWY"},
+		{name: "away win", perspective: "away", mask: 4, want: "AWY wins at HOM"},
+		{name: "home draw", perspective: "home", mask: 2, want: "HOM draws vs AWY"},
+		{name: "away draw", perspective: "away", mask: 2, want: "AWY draws at HOM"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := requirementText(scenarioRequirement{GameID: "game", Mask: test.mask}, test.perspective, teams, games)
+			if got != test.want {
+				t.Fatalf("requirement text = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestClinchingGroupHeadingsUseFullNames(t *testing.T) {
+	clauses := []scenarios.Clause{testScenarioClause(testScenarioCondition("game", 4))}
+	groups := clinchingGroupsWithHeadingTeams(
+		clauses,
+		"away",
+		map[string]string{"home": "NC", "away": "NJY"},
+		map[string]string{"home": "North Carolina Courage", "away": "NJ/NY Gotham FC"},
+		map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}},
+	)
+	if len(groups) != 1 || groups[0].Heading != "If NJ/NY Gotham FC wins at North Carolina Courage" {
+		t.Fatalf("heading = %#v", groups)
+	}
+}
+
+func TestPointRequirementPartsUseClubTokens(t *testing.T) {
+	parts := requirementParts(
+		scenarioRequirement{GameID: "first", SecondGameID: "second", TeamID: "sea", Points: 4},
+		"",
+		map[string]string{"sea": "SEA", "la": "LA", "den": "DEN"},
+		map[string]cache.Game{
+			"first":  {HomeTeamID: "la", AwayTeamID: "sea"},
+			"second": {HomeTeamID: "den", AwayTeamID: "sea"},
+		},
+	)
+	if len(parts) != 6 || parts[0].Team == nil || parts[0].Team.Code != "SEA" || parts[0].Team.LogoURL != clubLogoURL("sea") || parts[1].Text != "earns at least 4 points from these two matches:" || parts[2].Text != "at" || parts[3].Team == nil || parts[3].Team.Code != "LA" || parts[3].Team.LogoURL != clubLogoURL("la") || parts[4].Text != "and at" || parts[5].Team == nil || parts[5].Team.Code != "DEN" || parts[5].Team.LogoURL != clubLogoURL("den") {
+		t.Fatalf("point requirement parts = %#v", parts)
 	}
 }
 
@@ -109,7 +182,7 @@ func TestClinchingGroupsExposeDrawAndFactorSharedHelp(t *testing.T) {
 	}
 	original := fmt.Sprintf("%#v", clauses)
 	groups := clinchingGroups(clauses, "a", teams, games)
-	if len(groups) != 2 || groups[0].Heading != "If Alpha beats Bravo" || groups[1].Heading != "If Alpha draws with Bravo" {
+	if len(groups) != 2 || groups[0].Heading != "If Alpha wins at Bravo" || groups[1].Heading != "If Alpha draws at Bravo" {
 		t.Fatalf("own-result groups = %#v", groups)
 	}
 	// A draw must inherit the win-or-draw clause, but none of the win-only help.

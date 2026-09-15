@@ -90,24 +90,59 @@ func requirementText(r scenarioRequirement, perspective string, teams map[string
 	g := games[r.GameID]
 	if perspective != "" && len(outcomes) == 1 {
 		opponent, win := g.AwayTeamID, clinching.HomeWin
+		venue := "vs"
 		if g.AwayTeamID == perspective {
 			opponent, win = g.HomeTeamID, clinching.AwayWin
+			venue = "at"
 		}
-		verb := "loses to"
+		verb := "loses"
 		switch outcomes[0] {
 		case win:
-			verb = "beats"
+			verb = "wins"
 		case clinching.Draw:
-			verb = "draws with"
+			verb = "draws"
 		}
-		return teams[perspective] + " " + verb + " " + teams[opponent]
+		return teams[perspective] + " " + verb + " " + venue + " " + teams[opponent]
 	}
 	return conditionText(scenarios.FixtureCondition{GameID: r.GameID, AllowedOutcomes: outcomes}, teams, games)
 }
 
 func requirementParts(r scenarioRequirement, perspective string, teams map[string]string, games map[string]cache.Game) []scenarioRequirementPart {
 	if r.SecondGameID != "" {
-		return nil
+		unit := "points"
+		if r.Points == 1 {
+			unit = "point"
+		}
+		parts := []scenarioRequirementPart{
+			{Team: &scenarioTeamToken{Code: teams[r.TeamID], LogoURL: clubLogoURL(r.TeamID)}},
+			{Text: fmt.Sprintf("earns at least %d %s from these two matches:", r.Points, unit)},
+		}
+		fixtures := 0
+		for _, gameID := range []string{r.GameID, r.SecondGameID} {
+			game, ok := games[gameID]
+			if !ok {
+				continue
+			}
+			opponent, venue := "", ""
+			switch {
+			case game.HomeTeamID == r.TeamID:
+				opponent, venue = game.AwayTeamID, "vs"
+			case game.AwayTeamID == r.TeamID:
+				opponent, venue = game.HomeTeamID, "at"
+			}
+			if opponent == "" {
+				continue
+			}
+			if fixtures > 0 {
+				venue = "and " + venue
+			}
+			parts = append(parts,
+				scenarioRequirementPart{Text: venue},
+				scenarioRequirementPart{Team: &scenarioTeamToken{Code: teams[opponent], LogoURL: clubLogoURL(opponent)}},
+			)
+			fixtures++
+		}
+		return parts
 	}
 	outcomes := []clinching.Outcome{}
 	for i, outcome := range scenarioOutcomes {
@@ -122,34 +157,36 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 	text := func(value string) scenarioRequirementPart { return scenarioRequirementPart{Text: value} }
 	if perspective != "" && len(outcomes) == 1 {
 		opponent, win := g.AwayTeamID, clinching.HomeWin
+		venue := "vs"
 		if g.AwayTeamID == perspective {
 			opponent, win = g.HomeTeamID, clinching.AwayWin
+			venue = "at"
 		}
-		verb := "loses to"
+		verb := "loses"
 		switch outcomes[0] {
 		case win:
-			verb = "beats"
+			verb = "wins"
 		case clinching.Draw:
-			verb = "draws with"
+			verb = "draws"
 		}
-		return []scenarioRequirementPart{team(perspective), text(verb), team(opponent)}
+		return []scenarioRequirementPart{team(perspective), text(verb), text(venue), team(opponent)}
 	}
 	if slices.Contains(outcomes, clinching.HomeWin) && slices.Contains(outcomes, clinching.Draw) && len(outcomes) == 2 {
-		return []scenarioRequirementPart{team(g.HomeTeamID), text("wins or draws against"), team(g.AwayTeamID)}
+		return []scenarioRequirementPart{team(g.HomeTeamID), text("wins or draws vs"), team(g.AwayTeamID)}
 	}
 	if slices.Contains(outcomes, clinching.Draw) && slices.Contains(outcomes, clinching.AwayWin) && len(outcomes) == 2 {
-		return []scenarioRequirementPart{team(g.AwayTeamID), text("wins or draws against"), team(g.HomeTeamID)}
+		return []scenarioRequirementPart{team(g.AwayTeamID), text("wins or draws at"), team(g.HomeTeamID)}
 	}
 	if slices.Contains(outcomes, clinching.HomeWin) && slices.Contains(outcomes, clinching.AwayWin) && len(outcomes) == 2 {
-		return []scenarioRequirementPart{team(g.HomeTeamID), text("and"), team(g.AwayTeamID), text("do not draw")}
+		return []scenarioRequirementPart{team(g.HomeTeamID), text("does not draw vs"), team(g.AwayTeamID)}
 	}
 	if slices.Contains(outcomes, clinching.HomeWin) {
-		return []scenarioRequirementPart{team(g.HomeTeamID), text("beats"), team(g.AwayTeamID)}
+		return []scenarioRequirementPart{team(g.HomeTeamID), text("wins vs"), team(g.AwayTeamID)}
 	}
 	if slices.Contains(outcomes, clinching.AwayWin) {
-		return []scenarioRequirementPart{team(g.AwayTeamID), text("beats"), team(g.HomeTeamID)}
+		return []scenarioRequirementPart{team(g.AwayTeamID), text("wins at"), team(g.HomeTeamID)}
 	}
-	return []scenarioRequirementPart{team(g.HomeTeamID), text("draws with"), team(g.AwayTeamID)}
+	return []scenarioRequirementPart{team(g.HomeTeamID), text("draws vs"), team(g.AwayTeamID)}
 }
 
 func requirementKey(r scenarioRequirement) string {
@@ -181,6 +218,13 @@ func uniqueConjunctions(clauses [][]scenarioRequirement) [][]scenarioRequirement
 // For unusually large slates, retain the original overlapping groups instead of
 // expanding more than 3^4 profiles. Both representations preserve the same union.
 func clinchingGroups(clauses []scenarios.Clause, teamID string, teams map[string]string, games map[string]cache.Game) []clinchingGroupView {
+	return clinchingGroupsWithHeadingTeams(clauses, teamID, teams, teams, games)
+}
+
+// clinchingGroupsWithHeadingTeams keeps the compact, logo-accompanied labels
+// in outside-help paths while using full club names in the unadorned result
+// headings.
+func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, teams, headingTeams map[string]string, games map[string]cache.Game) []clinchingGroupView {
 	ownIDs := []string{}
 	raw := [][]scenarioRequirement{}
 	for _, clause := range clauses {
@@ -272,11 +316,11 @@ func clinchingGroups(clauses []scenarios.Clause, teamID string, teams map[string
 	for _, g := range groups {
 		words := []string{}
 		for i, r := range g.own {
-			g.own[i].Text = requirementText(r, teamID, teams, games)
+			g.own[i].Text = requirementText(r, teamID, headingTeams, games)
 			g.own[i].Parts = requirementParts(r, teamID, teams, games)
 			words = append(words, g.own[i].Text)
 		}
-		heading := "Regardless of " + teams[teamID] + "’s results"
+		heading := "Regardless of " + headingTeams[teamID] + "’s results"
 		if len(words) > 0 {
 			heading = "If " + joinConditions(words)
 		}
@@ -289,7 +333,7 @@ func clinchingGroups(clauses []scenarios.Clause, teamID string, teams map[string
 		}
 		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Help: orderScenarioExpression(factorRequirements(help, 0))})
 	}
-	return combineOwnPairs(views, teamID, teams, games)
+	return combineOwnPairs(views, teamID, headingTeams, games)
 }
 
 // Factor only identical predicates: A&B OR A&C becomes A AND (B OR C).
