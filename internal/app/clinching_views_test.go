@@ -72,12 +72,24 @@ func testScenarioCondition(id string, mask uint8) scenarios.FixtureCondition {
 	return scenarios.FixtureCondition{GameID: id, AllowedOutcomes: outcomes}
 }
 
-func TestConciseTeamNamePrefersShortName(t *testing.T) {
-	if got := conciseTeamName(standings.Team{ID: "sd", Name: "San Diego Wave FC", ShortName: "San Diego", Abbreviation: "SD"}); got != "San Diego" {
-		t.Fatalf("concise team name = %q", got)
+func TestScenarioTeamCodePrefersAbbreviation(t *testing.T) {
+	if got := scenarioTeamCode(standings.Team{ID: "sd", Name: "San Diego Wave FC", ShortName: "San Diego", Abbreviation: "SD"}); got != "SD" {
+		t.Fatalf("scenario team code = %q", got)
 	}
-	if got := conciseTeamName(standings.Team{ID: "kc", Name: "Kansas City Current", Abbreviation: "KC"}); got != "KC" {
-		t.Fatalf("concise team name fallback = %q", got)
+	if got := scenarioTeamCode(standings.Team{ID: "kc", Name: "Kansas City Current", ShortName: "Kansas City"}); got != "Kansas City" {
+		t.Fatalf("scenario team code fallback = %q", got)
+	}
+}
+
+func TestRequirementPartsUseClubTokens(t *testing.T) {
+	parts := requirementParts(
+		scenarioRequirement{GameID: "game", Mask: 1},
+		"",
+		map[string]string{"home": "HOM", "away": "AWY"},
+		map[string]cache.Game{"game": {HomeTeamID: "home", AwayTeamID: "away"}},
+	)
+	if len(parts) != 3 || parts[0].Team == nil || parts[0].Team.Code != "HOM" || parts[0].Team.LogoURL != clubLogoURL("home") || parts[1].Text != "beats" || parts[2].Team == nil || parts[2].Team.Code != "AWY" {
+		t.Fatalf("club tokens = %#v", parts)
 	}
 }
 

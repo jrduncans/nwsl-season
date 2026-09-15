@@ -1046,8 +1046,8 @@ func fixtureTeams(teams []standings.Team) []teamNameView {
 
 func displayName(team standings.Team) string { return standings.DisplayName(team) }
 
-func conciseTeamName(team standings.Team) string {
-	for _, value := range []string{team.ShortName, team.Abbreviation, team.Name, team.ID} {
+func scenarioTeamCode(team standings.Team) string {
+	for _, value := range []string{team.Abbreviation, team.ShortName, team.Name, team.ID} {
 		if value != "" {
 			return value
 		}

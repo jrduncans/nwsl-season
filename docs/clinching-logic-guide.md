@@ -298,9 +298,10 @@ the original, potentially overlapping own-result groups to bound expansion.
 
 Within a group, the page expands factored expressions into complete certified
 paths. Each path puts its requirements on one compact line, separated by `+`,
-and each path is an `OR` alternative to the others. When alternatives for two
-fixtures of the same team exactly equal a minimum points total, the page names
-both matches and that total. This rewrite checks all nine outcome combinations;
+with a club crest and two- or three-letter team code; each path is an `OR`
+alternative to the others. When alternatives for two fixtures of the same team
+exactly equal a minimum points total, the page names both matches and that
+total. This rewrite checks all nine outcome combinations;
 it never infers an uncertified combination from a points total. Groups and
 simplified expressions preserve exactly the union of the stored certified
 clauses, including partial results. Repeated equivalent clauses and stronger

@@ -168,7 +168,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	teamLabels := map[string]string{}
 	teamViews := map[string]teamNameView{}
 	for _, t := range data.Teams {
-		teamLabels[t.ID] = conciseTeamName(t)
+		teamLabels[t.ID] = scenarioTeamCode(t)
 		teamViews[t.ID] = teamName(t)
 	}
 	standingsPositions := map[string]int{}

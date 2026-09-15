@@ -14,7 +14,7 @@
   </details>
 {{end}}
 
-{{define "clinchingCombination"}}<div class="clinching-combination">{{range .}}<span>{{.Text}}</span>{{end}}</div>{{end}}
+{{define "clinchingCombination"}}<div class="clinching-combination">{{range .}}<span class="clinching-condition">{{if .Parts}}{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span>{{else}}<span>{{.Text}}</span>{{end}}{{end}}{{else}}<span>{{.Text}}</span>{{end}}</span>{{end}}</div>{{end}}
 
 {{define "clinchingExpression"}}
   {{if .Alternatives}}
