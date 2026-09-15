@@ -519,26 +519,13 @@ type clinchingPage struct {
 type clinchingRowView struct {
 	Team                               teamNameView
 	Achievement, Limitation            string
-	Clauses                            []clinchingClauseView
+	Groups                             []clinchingGroupView
 	Necessary                          []string
 	NoHelp                             string
 	NoHelpFixtures                     string
 	NoHelpFixtureCount                 int
 	AchievementRank, StandingsPosition int
 	AlreadyEliminated                  bool
-}
-
-type clinchingClauseView struct {
-	Number     int
-	Conditions []string
-}
-
-func (r clinchingRowView) VisibleClauses() []clinchingClauseView {
-	return r.Clauses[:min(3, len(r.Clauses))]
-}
-
-func (r clinchingRowView) AdditionalClauses() []clinchingClauseView {
-	return r.Clauses[min(3, len(r.Clauses)):]
 }
 
 type clinchingTeamView struct {
@@ -1058,6 +1045,15 @@ func fixtureTeams(teams []standings.Team) []teamNameView {
 }
 
 func displayName(team standings.Team) string { return standings.DisplayName(team) }
+
+func scenarioTeamCode(team standings.Team) string {
+	for _, value := range []string{team.Abbreviation, team.ShortName, team.Name, team.ID} {
+		if value != "" {
+			return value
+		}
+	}
+	return "Unknown team"
+}
 
 func teamName(team standings.Team) teamNameView {
 	return teamNameView{ID: team.ID, Name: displayName(team), LogoURL: clubLogoURL(team.ID)}

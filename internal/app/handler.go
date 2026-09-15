@@ -166,9 +166,11 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	teamLabels := map[string]string{}
+	teamNames := map[string]string{}
 	teamViews := map[string]teamNameView{}
 	for _, t := range data.Teams {
-		teamLabels[t.ID] = standings.DisplayName(t)
+		teamLabels[t.ID] = scenarioTeamCode(t)
+		teamNames[t.ID] = displayName(t)
 		teamViews[t.ID] = teamName(t)
 	}
 	standingsPositions := map[string]int{}
@@ -192,7 +194,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			for _, status := range value.Statuses {
 				qualification[status.TeamID+"\x00"+string(status.Achievement)] = status
 				if status.Status == clinching.Clinched {
-					view.AlreadyClinched = append(view.AlreadyClinched, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID], Clauses: []clinchingClauseView{}, Necessary: []string{}})
+					view.AlreadyClinched = append(view.AlreadyClinched, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID], Groups: []clinchingGroupView{}, Necessary: []string{}})
 				}
 			}
 		}
@@ -231,9 +233,9 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		team := teamViews[v.TeamID]
 		achievement := achievementPhrase(v.Achievement)
 		if v.AlreadyEliminated || v.CanBeEliminated {
-			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Clauses: clauseViews(v.EliminationClauses, v.TeamID, teamLabels, games), Necessary: []string{}, AlreadyEliminated: v.AlreadyEliminated}
+			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupsWithHeadingTeams(v.EliminationClauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}, AlreadyEliminated: v.AlreadyEliminated}
 			if v.BudgetLimited() && !v.AlreadyEliminated {
-				row.Limitation = "These paths guarantee elimination. Other paths may exist because the calculation is incomplete."
+				row.Limitation = "Scenario search was incomplete."
 			}
 			view.Elimination = append(view.Elimination, row)
 		}
@@ -248,7 +250,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch && !noHelpGuaranteed {
 			continue
 		}
-		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Clauses: clauseViews(v.Clauses, v.TeamID, teamLabels, games), Necessary: []string{}}
+		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Groups: clinchingGroupsWithHeadingTeams(v.Clauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
@@ -260,8 +262,8 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			view.NoHelp = append(view.NoHelp, row)
 			continue
 		}
-		if v.Limitation != "" {
-			row.Limitation = "These paths guarantee a clinch. Other paths may exist."
+		if v.BudgetLimited() {
+			row.Limitation = "Scenario search was incomplete."
 		}
 		view.Actionable = append(view.Actionable, row)
 	}

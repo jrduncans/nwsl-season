@@ -19,5 +19,5 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make vet
-      - name: Test all packages, including clinching presentation
+      - name: Test all packages, including clinching equivalence and overlap subtraction
         run: make test
