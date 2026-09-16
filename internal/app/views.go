@@ -117,6 +117,7 @@ type seasonsPage struct {
 	CatalogPage       bool
 	Freshness         string
 	FreshnessFallback string
+	HistoryPath       string
 }
 
 type seasonArchiveItem struct {
@@ -248,7 +249,7 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 			Label: item.label, Path: relativeURL(from, item.path), Current: current == item.path,
 		})
 	}
-	return navigation
+	return append(navigation, navigationItem{Label: "Explore", Path: relativeURL(from, "/explore"), Current: current == "/explore"})
 }
 
 func phaseSupportsRemainingFeatures(phase seasonPhase) bool {
