@@ -5,7 +5,54 @@ The History views are calculated only from the coherent SQLite snapshot read by
 records the delivered definitions for the first league-trends calculation and
 applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 
-## Scoring page
+## Explore workspace
+
+`GET /explore` reuses the same coherent archive read and scoring calculations.
+It presents Scoring trend, Goal distribution, and Season table as choices in
+one workspace. Each view heading states the regular-season scope.
+`view=trend|distribution|table` selects the initial surface.
+JavaScript switches surfaces and Goals/xG series in place, sorts numeric table
+columns from unrounded values, and restores those controls with Back/Forward.
+Chart.js 4.5.1 renders both charts, with chartjs-plugin-datalabels 2.2.0 for
+segment percentages. The pinned browser builds and MIT licenses are vendored
+under `internal/app/static/vendor`; see its README for provenance and updates.
+The browser makes no CDN requests. The chart payload retains unrounded values,
+null for unavailable xG, and exact match counts from the same archive snapshot.
+
+Hover/click/tap must intersect a dot or bar segment. A trend tooltip shows one
+series value, with a visible point highlight; axis years are not controls. Missing
+calendar years and unavailable xG break the line. Distribution legends do not
+filter or toggle bins. A segment tooltip shows goal count and match count; it
+adds the percentage only when the segment is too narrow for a visible label.
+Arrow keys inspect marks through Chart.js's active-element API and announce
+values, including zero-count bins; Escape, focus leaving the chart, or an outside
+tap clears inspection. The season table has shared-scale rate bars, signed gap
+badges, row shading, and a sticky season column and header on small screens. Each view shows an explicit
+empty state when no seasons are eligible.
+
+For chart changes, verify desktop and 390px layouts, hovering/tapping a dot
+versus empty space at the same year, per-segment tooltip content, keyboard
+inspection and dismissal, missing-year/xG gaps, table sorting, and direct view
+URLs plus Back/Forward. View changes must not fetch another document or remote
+assets. The Go Explore tests check the single snapshot read and chart payload's
+missing-value and count semantics.
+
+Explore uses the same navigation builder as the configured current season,
+including its capability and season-phase rules, with Explore marked active.
+The archive remains a no-script season-selector fallback, not a new header
+destination. Existing season features retain their navigation level. The old History routes below remain compatible for existing links.
+The workspace has no selected-season panel, inventory legend,
+2020 callout, or methodology sections. It uses the same plot eligibility and
+complete-xG requirements; the table includes only goals-eligible seasons and
+keeps unavailable xG explicit. Scope is recorded regular-season results,
+including an eligible in-progress year and its match count. Current-season
+team comparisons are not part of this slice.
+
+The specific scoring choices are provisional. Future analyses must fit broader
+groups with data/metric sub-controls rather than adding a top-level tab per
+metric. Decide those groups against the next concrete analysis.
+
+## Legacy scoring page
 
 `GET /history/scoring` is a cache-only History page. It reads the archive once
 through `cache.DB.HistoricalRegularSeasons`, summarizes it once with

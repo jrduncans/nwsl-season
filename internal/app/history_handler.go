@@ -47,6 +47,11 @@ func (a *application) historyScoring(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Path == "/explore" {
+		a.renderExplore(w, r, summaries, inputs)
+		return
+	}
+
 	selected, metric, err := historySelectionState(r.URL, summaries)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)

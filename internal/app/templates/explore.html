@@ -1,0 +1,45 @@
+{{define "explore"}}{{template "head" .}}
+<div class="explore" data-explore data-view="{{.View}}">
+<header><h1>Explore</h1></header>
+<nav class="explore-views" aria-label="Explore views">
+<a href="?view=trend" data-view-choice="trend">Scoring trend</a>
+<a href="?view=distribution" data-view-choice="distribution">Goal distribution</a>
+<a href="?view=table" data-view-choice="table">Season table</a>
+</nav>
+<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
+<div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option></select></label></div>
+{{if .Chart.HasData}}
+<div class="explore-legend"><span data-series="goals">● Goals</span><span data-series="xg">◆ Expected goals (xG)</span></div>
+<div class="explore-chart-wrap">
+<canvas data-chart="trend" tabindex="0" role="img" aria-label="Goals and expected goals per regular-season match, by season" aria-describedby="explore-chart-help"></canvas>
+</div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect points. Escape clears the tooltip.</p>
+{{if .Chart.ActiveStatus}}<p class="note">{{.Chart.ActiveStatus}}</p>{{end}}
+{{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
+{{if .MetricExcludedSeasons}}<p class="note">Some seasons have no complete xG average; their goals remain available.</p>{{end}}
+</section>
+<section data-panel="distribution"{{if ne .View "distribution"}} hidden{{end}} aria-labelledby="explore-distribution-title">
+<h2 id="explore-distribution-title">Share of regular-season matches by total goals</h2><p class="note">Both teams combined.</p>
+{{if .HasDistributionBars}}
+<div class="explore-legend explore-bin-legend" aria-label="Total goals"><span><i style="background:#44504a"></i>0 goals</span><span><i style="background:#526d61"></i>1 goal</span><span><i style="background:#136f4a"></i>2 goals</span><span><i style="background:#5b3f96"></i>3 goals</span><span><i style="background:#372858"></i>4+ goals</span></div>
+<div class="explore-chart-wrap explore-distribution-wrap">
+<canvas data-chart="distribution" tabindex="0" role="img" aria-label="Share of regular-season matches by total goals, by season" aria-describedby="explore-chart-help"></canvas>
+</div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect segments. Escape clears the tooltip.</p>
+{{end}}
+{{if not .HasDistributionBars}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
+</section>
+<section data-panel="table"{{if ne .View "table"}} hidden{{end}} aria-labelledby="explore-table-title">
+<h2 id="explore-table-title">Season scoring (regular-season)</h2>
+{{if .Records}}
+<div class="table-scroll" tabindex="0" role="region" aria-label="Regular-season scoring table"><table class="explore-table"><thead><tr><th scope="col"><button data-sort="0">Season</button></th><th scope="col"><button data-sort="1">Matches</button></th><th scope="col"><button data-sort="2">Goals/match</button></th><th scope="col"><button data-sort="3">xG/match</button></th><th scope="col"><button data-sort="4">Goals − xG/match</button></th></tr></thead>
+<tbody>{{range .Records}}<tr><th scope="row" data-value="{{.Season}}">{{.Season}}</th><td data-value="{{.Played}}">{{.Played}}</td><td class="explore-rate explore-rate-goals" data-value="{{if .Goals}}{{.Goals}}{{end}}"><span>{{.GoalsPerMatch}}</span></td><td class="explore-rate explore-rate-xg" data-value="{{if .XG}}{{.XG}}{{end}}"><span>{{.XGPerMatch}}</span></td><td class="explore-gap" data-value="{{if .Gap}}{{.Gap}}{{end}}"><span>{{.GoalsMinusXGPerMatch}}</span></td></tr>{{end}}</tbody></table></div>
+{{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
+</section>
+<p class="visually-hidden" id="explore-chart-help">Use arrow keys to move between data points, Home or End to jump, and Escape to clear the tooltip.</p>
+<output class="visually-hidden" data-chart-status aria-live="polite" aria-atomic="true"></output>
+<script type="application/json" id="explore-data">{{.ChartData}}</script>
+</div>
+<script src="{{.ChartLibraryPath}}" defer></script>
+<script src="{{.ChartLabelsPath}}" defer></script>
+{{template "foot" .}}{{end}}

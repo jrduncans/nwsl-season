@@ -90,7 +90,7 @@ func TestHistoryRouteAndProxyLinksResolveWithinMount(t *testing.T) {
 			if response.Code != http.StatusOK {
 				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
-			assertHistoryURLStaysMounted(t, archivePath, attributeValue(t, response.Body.String(), `href="`, `"`, "Explore history"))
+			assertHistoryURLStaysMounted(t, archivePath, attributeValue(t, response.Body.String(), `href="`, `"`, "Explore data"))
 		})
 	}
 

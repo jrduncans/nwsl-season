@@ -1,5 +1,11 @@
 # History implementation packets
 
+These packets and the redesign proposals in this directory are design history.
+The implemented `/explore` experience is documented in the
+[current calculation and UI guide](../history-logic-guide.md#explore-workspace).
+Future work should start there; the older navigation, tool catalog, and
+selected-season proposals are not the current product direction.
+
 This is the implementation handoff for the first delivery in
 [IDEAS.md](../IDEAS.md): **History → League trends → Scoring by season**.
 These are proposed contracts, not documentation of shipped behavior. Planning

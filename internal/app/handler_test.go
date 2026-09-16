@@ -1732,7 +1732,7 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 				t.Fatal("page does not close the shared season navigation")
 			}
 			navigation := body[:navEnd]
-			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast lab"} {
+			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast lab", "Explore"} {
 				if !strings.Contains(navigation, ">"+label+"</a>") {
 					t.Errorf("navigation does not contain %q", label)
 				}

@@ -107,6 +107,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /seasons", application.seasons)
 	mux.HandleFunc("GET /history", application.history)
 	mux.HandleFunc("GET /history/scoring", application.historyScoring)
+	mux.HandleFunc("GET /explore", application.historyScoring)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
 	mux.HandleFunc("GET /seasons/{season}", application.season)
@@ -523,7 +524,7 @@ func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
 		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
 		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
 		CatalogPage:    true,
-		HistoryPath:    relativeURL(r.URL.Path, "/history/scoring"),
+		HistoryPath:    relativeURL(r.URL.Path, "/explore"),
 		Seasons:        seasonArchiveItems(r.URL.Path, a.options.CurrentSeason, readinessByScope),
 	}
 	a.render(w, "seasons", page)
@@ -1299,8 +1300,8 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 3 && parts[0] == "seasons" && parts[1] != "" && (parts[2] == "fixtures" || parts[2] == "schedule-difficulty" || parts[2] == "forecast" || parts[2] == "clinching") {
 		return "/" + strings.Join(parts, "/"), true
 	}
-	if len(parts) == 1 && parts[0] == "history" {
-		return "/history", true
+	if len(parts) == 1 && (parts[0] == "history" || parts[0] == "explore") {
+		return "/" + parts[0], true
 	}
 	if len(parts) == 2 && parts[0] == "history" && parts[1] == "scoring" {
 		return "/history/scoring", true
@@ -1309,6 +1310,12 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 }
 
 func stripBasePath(requestPath string) (string, bool) {
+	if strings.HasSuffix(strings.TrimSuffix(requestPath, "/"), "/explore") {
+		if strings.HasSuffix(requestPath, "/") {
+			return "/explore/", true
+		}
+		return "/explore", true
+	}
 	if requestPath == "/" || requestPath == "/seasons" || strings.HasPrefix(requestPath, "/seasons/") || requestPath == "/history" || strings.HasPrefix(requestPath, "/history/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
 		return requestPath, true
 	}

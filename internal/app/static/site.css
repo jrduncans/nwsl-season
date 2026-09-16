@@ -345,3 +345,49 @@ th:nth-child(2) { text-align: left; }
 .bracket-advances { margin-top: .7rem; color: var(--green); font-weight: 700; }
 .bracket-diagnostics { color: var(--muted); }
 @media (max-width: 700px) { .bracket { display: block; overflow: visible; padding: 0; }.bracket-round + .bracket-round { margin-top: 1.5rem; }.bracket-slot::after { display: none; }.bracket-match { grid-template-columns: minmax(0, 1fr) 4.2rem minmax(0, 1fr); }.bracket-match-team .team-name { white-space: normal; } }
+
+/* Explore reuses scoring summaries while keeping one analysis on screen. */
+.explore header h1 { margin-bottom: .4rem; }
+.explore-views { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0 2rem; border-bottom: 1px solid var(--line); padding-bottom: .75rem; }
+.explore-views a { padding: .6rem .85rem; border-radius: .3rem; font-weight: 700; text-decoration: none; }
+.explore-views a[aria-current] { color: var(--ink); background: var(--green-soft); box-shadow: inset 0 -3px var(--green); }
+.explore [hidden] { display: none !important; }
+.explore-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.explore h2 { font-size: 1.3rem; margin: 0 0 .8rem; }
+.explore select { font: inherit; padding: .5rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--panel); }
+.explore-legend { display: flex; gap: 1.25rem; margin: .75rem 0; font-size: .9rem; }
+.explore-legend [data-series="goals"] { color: var(--green); }
+.explore-legend [data-series="xg"] { color: var(--hypo); }
+.explore-chart-wrap { position: relative; max-width: 58rem; height: 390px; margin-top: 1.25rem; }
+.explore-chart-wrap canvas { display: block; }
+.explore-keyboard-hint { display: none; color: var(--muted); font-size: .85rem; }
+.explore-chart-wrap:has(canvas:focus-visible) + .explore-keyboard-hint { display: block; }
+.explore button { font: inherit; cursor: pointer; }
+.explore button:focus-visible, .explore a:focus-visible, .explore canvas:focus-visible, .explore .table-scroll:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.explore-bin-legend { flex-wrap: wrap; gap: .6rem 1.25rem; margin: 1rem 0; }
+.explore-bin-legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.explore-bin-legend i { width: .8rem; height: .8rem; border-radius: .15rem; }
+.explore-table { --line: #dfe1e3; width: 100%; font-variant-numeric: tabular-nums; border-collapse: separate; border-spacing: 0; }
+.explore-table td, .explore-table th { text-align: right; white-space: nowrap; padding: .9rem 1.1rem; }
+.explore-table thead th { color: var(--muted); font-size: .85rem; background: var(--green-soft); border-bottom: 2px solid var(--line); }
+.explore-table th:first-child { text-align: left; }
+.explore-table tbody th { font-size: 1.05rem; font-weight: 750; border-left: 3px solid var(--line); }
+.explore-table tbody tr { background: #fff; }
+.explore-table tbody tr:nth-child(even) { background: #fafafa; }
+.explore-table tbody tr:hover { background: #eceeef; }
+.explore-table button { border: 0; background: none; color: inherit; font-weight: 700; padding: .5rem 0; }
+.explore-table [aria-sort="descending"] button::after { content: ' ↓'; }.explore-table [aria-sort="ascending"] button::after { content: ' ↑'; }
+.explore-rate { position: relative; min-width: 9rem; }
+.explore-rate::before { content: ''; position: absolute; bottom: .45rem; left: 1.1rem; width: calc((100% - 2.2rem) * var(--rate-width, 0)); height: 4px; border-radius: 2px; background: #86ada0; }
+.explore-rate-xg::before { background: #a99bc2; }
+.explore-rate span { position: relative; }
+.explore-gap span { display: inline-block; min-width: 4rem; padding: .15rem .5rem; border-radius: .25rem; }
+.explore-gap[data-direction="positive"] span { color: var(--green-deep); background: var(--green-soft); }
+.explore-gap[data-direction="negative"] span { color: var(--hypo); background: var(--hypo-soft); }
+@media(max-width:700px) {
+ .explore-chart-wrap { height: 320px; }
+ .explore-table td, .explore-table th { padding: .8rem .7rem; }
+ .explore-table thead th:first-child { position: sticky; left: 0; z-index: 2; }
+ .explore-table tbody th { position: sticky; left: 0; z-index: 1; background: inherit; }
+ .explore-rate::before { left: .7rem; width: calc((100% - 1.4rem) * var(--rate-width, 0)); }
+}
