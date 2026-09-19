@@ -32,6 +32,7 @@ type SeasonScoring struct {
 	GoalsPerMatch, XGPerMatch, GoalsMinusXGPerMatch              *float64
 	PlotEligible                                                 bool
 	Exclusions                                                   []string
+	Teams                                                        []TeamScoring
 }
 
 // SummarizeScoring calculates deterministic league-level scoring summaries
@@ -90,6 +91,9 @@ func validateInput(input cache.HistoricalSeason) error {
 			return fmt.Errorf("historical season %s has duplicate fixture ID %q", entry.Season, game.ASAID)
 		}
 		fixtureIDs[game.ASAID] = struct{}{}
+		if game.HomeTeamID == "" || game.AwayTeamID == "" || game.HomeTeamID == game.AwayTeamID {
+			return fmt.Errorf("historical season %s fixture %q has invalid team identities", entry.Season, game.ASAID)
+		}
 	}
 
 	xgIDs := make(map[string]struct{}, len(input.Data.XGoals))
@@ -123,6 +127,7 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 	}
 
 	var totalXG float64
+	teams := make(teamScoringTotals)
 	for _, game := range input.Data.Games {
 		summary.InventoryGames++
 		if game.Status != fixtures.CompletedStatus {
@@ -149,6 +154,7 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 		summary.TotalGoals += combined
 		summary.Played++
 		summary.GoalBins[goalBin(combined)]++
+		teams.addGoals(game)
 
 		if !input.Entry.Supports(competition.CapabilityXG) {
 			continue
@@ -164,6 +170,7 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 				return SeasonScoring{}, fmt.Errorf("historical season %s xG total is not finite", input.Entry.Season)
 			}
 			totalXG += pairTotal
+			teams.addXG(game, observation)
 		}
 		if validXPointsPair(observation) {
 			summary.XPointsCovered++
@@ -183,6 +190,7 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 
 	summary.Exclusions = scoringExclusions(summary)
 	summary.PlotEligible = len(summary.Exclusions) == 0
+	summary.Teams = teams.summaries()
 	return summary, nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 type explorePage struct {
 	historyPage
+	exploreTeamsView
 	View                              string
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
@@ -34,11 +35,16 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if view == "" {
 		view = "trend"
 	}
-	if view != "trend" && view != "distribution" && view != "table" {
-		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, or table"))
+	if view != "trend" && view != "distribution" && view != "table" && view != "teams" {
+		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, or teams"))
 		return
 	}
-	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), View: view}
+	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
+	if err != nil {
+		a.renderHistoryBadRequest(w, r, err)
+		return
+	}
+	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view}
 	page.Title = "Explore"
 	page.ScriptPath = relativeURL(r.URL.Path, "/static/explore.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
