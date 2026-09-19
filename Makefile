@@ -24,6 +24,12 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
+# Explore scoring, per-team coverage, table groups/sorting, and single-snapshot pages.
+.PHONY: test-explore
+test-explore:
+	go test ./internal/history
+	go test ./internal/app -run '^TestExplore'
+
 # Includes grouped presentation, exhaustive outcome equivalence, and bounded
 # overlap subtraction with disjoint-alternative regressions.
 .PHONY: test-clinching

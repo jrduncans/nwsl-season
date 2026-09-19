@@ -33,7 +33,8 @@ from the cached fixtures when a season page or CLI report is requested.
   including the selected recovery-time and accumulated-load adjustment.
 - Shareable forecast URLs with fixed match outcomes and optional model comparison.
 - Explore workspace with interactive regular-season scoring trends, goal distributions,
-  and a sortable season table.
+  a sortable season table, and within-season team comparisons of goals scored,
+  goals allowed, and goal differential against xG.
 - Health and cache-status endpoints for operators.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240
@@ -71,7 +72,8 @@ The historical forecast comparison is available at
 <http://localhost:8080/seasons/2026/regular-season/model-evaluation>.
 League scoring exploration is available at
 <http://localhost:8080/explore>, with scoring, goal-distribution, and table views
-in one workspace. The older `/history/scoring` route remains available.
+in one workspace. Team performance compares actual and expected scoring per
+match for a selected regular season. The older `/history/scoring` route remains available.
 
 Useful endpoints:
 
@@ -85,7 +87,7 @@ Useful endpoints:
 - `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
 - `/seasons/:season/:stage/forecast` — interactive forecast simulation.
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
-- `/explore` — interactive regular-season scoring charts and sortable season table.
+- `/explore` — league scoring charts, sortable season table, and team performance vs xG.
 - `/history/scoring` — legacy scoring page, retained for existing links.
 
 ## Pitchfork development server

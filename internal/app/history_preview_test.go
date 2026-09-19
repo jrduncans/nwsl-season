@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 // TestHistoryPreview is an opt-in loopback harness for the packet's browser
@@ -28,6 +30,42 @@ func TestHistoryPreview(t *testing.T) {
 	archive := historyArchive(t, states)
 	selection := "2022"
 	switch os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") {
+	case "teams":
+		archive = historyArchive(t, map[string]historyArchiveState{
+			"2024": {lifecycle: cache.SourceScopeUpcoming},
+			"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+			"2026": {lifecycle: cache.SourceScopeActive, goals: 3},
+		})
+		for i := range archive {
+			season := &archive[i]
+			if season.Entry.Season == "2024" {
+				season.Data.Games = nil
+				continue
+			}
+			season.Data.Teams = []standings.Team{
+				{ID: "kRQa8JOqKZ", Name: "Angel City FC"}, {ID: "315VnJ759x", Name: "Bay FC"},
+				{ID: "odMX2OJqYL", Name: "Boston Legacy FC"}, {ID: "KPqjw8PQ6v", Name: "Chicago Stars FC"},
+				{ID: "2lqRn34qr0", Name: "Denver Summit FC"}, {ID: "raMyrr25d2", Name: "Gotham FC"},
+				{ID: "4JMAk47qKg", Name: "Houston Dash"}, {ID: "4wM4rZdqjB", Name: "Kansas City Current"},
+				{ID: "zeQZeazqKw", Name: "North Carolina Courage"}, {ID: "XVqKeVKM01", Name: "Orlando Pride"},
+				{ID: "Pk5LeeNqOW", Name: "Portland Thorns FC"}, {ID: "eV5DR6YQKn", Name: "Racing Louisville FC"},
+				{ID: "7VqG1lYMvW", Name: "San Diego Wave FC"}, {ID: "7vQ7BBzqD1", Name: "Seattle Reign FC"},
+				{ID: "eV5D2w9QKn", Name: "Utah Royals FC"}, {ID: "aDQ0lzvQEv", Name: "Washington Spirit"},
+			}
+			season.Data.Games = historyGames(season.Entry.Season, 64, 3)
+			for j := range season.Data.Games {
+				game := &season.Data.Games[j]
+				game.HomeTeamID, game.AwayTeamID = season.Data.Teams[j%16].ID, season.Data.Teams[(j+5)%16].ID
+				game.HomeScore.Int64, game.AwayScore.Int64 = int64(j%4), int64((j/3)%3)
+				if season.Entry.Season == "2026" && j == 1 {
+					continue
+				}
+				season.Data.XGoals = append(season.Data.XGoals, cache.GameXG{
+					GameID: game.ASAID, Availability: cache.XGAvailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID,
+					HomeXG: sql.NullFloat64{Float64: .5 + float64(j%7)*.3, Valid: true}, AwayXG: sql.NullFloat64{Float64: .2 + float64(j%5)*.25, Valid: true},
+				})
+			}
+		}
 	case "overview":
 		states = make(map[string]historyArchiveState)
 		for _, year := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {
