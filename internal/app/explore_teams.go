@@ -27,6 +27,7 @@ type exploreTeamRecord struct {
 
 type exploreTeamSeason struct {
 	Season string              `json:"season"`
+	Active bool                `json:"active"`
 	Teams  []exploreTeamRecord `json:"teams"`
 }
 
@@ -97,7 +98,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	// silently substitutes another year's data.
 	for i := len(summaries) - 1; i >= 0; i-- {
 		summary := summaries[i]
-		season := exploreTeamSeason{Season: summary.Season}
+		season := exploreTeamSeason{Season: summary.Season, Active: summary.Lifecycle == cache.SourceScopeActive}
 		if summary.TeamComparisonEligible() {
 			for _, team := range summary.Teams {
 				row := exploreTeamRecord{ID: team.TeamID, Name: names[summary.Season][team.TeamID], LogoURL: clubLogoURL(team.TeamID), Played: team.Played, XGCovered: team.XGCovered}

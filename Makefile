@@ -24,7 +24,7 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
-# Explore scoring, per-team coverage, table groups/sorting, and single-snapshot pages.
+# Explore scoring, team history/records/coverage, sorting across all tables, and single-snapshot pages.
 .PHONY: test-explore
 test-explore:
 	go test ./internal/history
