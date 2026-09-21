@@ -30,12 +30,19 @@ func TestHistoryPreview(t *testing.T) {
 	archive := historyArchive(t, states)
 	selection := "2022"
 	switch os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") {
-	case "teams":
+	case "teams", "team-history":
 		archive = historyArchive(t, map[string]historyArchiveState{
 			"2024": {lifecycle: cache.SourceScopeUpcoming},
 			"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
 			"2026": {lifecycle: cache.SourceScopeActive, goals: 3},
 		})
+		if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "team-history" {
+			for _, year := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023"} {
+				archive = append(archive, historyArchive(t, map[string]historyArchiveState{
+					year: {lifecycle: cache.SourceScopeCompleted, goals: 3},
+				})...)
+			}
+		}
 		for i := range archive {
 			season := &archive[i]
 			if season.Entry.Season == "2024" {
@@ -57,7 +64,11 @@ func TestHistoryPreview(t *testing.T) {
 				game := &season.Data.Games[j]
 				game.HomeTeamID, game.AwayTeamID = season.Data.Teams[j%16].ID, season.Data.Teams[(j+5)%16].ID
 				game.HomeScore.Int64, game.AwayScore.Int64 = int64(j%4), int64((j/3)%3)
-				if season.Entry.Season == "2026" && j == 1 {
+				if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "team-history" {
+					year := int(season.Entry.Season[3] - '0')
+					game.HomeScore.Int64, game.AwayScore.Int64 = int64((j+year)%5), int64((j/3+year)%3)
+				}
+				if (season.Entry.Season == "2026" || season.Entry.Season == "2022") && j == 1 {
 					continue
 				}
 				season.Data.XGoals = append(season.Data.XGoals, cache.GameXG{

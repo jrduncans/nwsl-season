@@ -3,8 +3,13 @@
   if (!root) return;
   const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
   const teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
+  const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
+  const historySeries = root.querySelector('[data-history-series]');
+  const historyContext = root.querySelector('[data-history-context]');
   const teamSeason = root.querySelector('[data-team-season]');
   const teamMeasure = root.querySelector('[data-team-measure]');
+  const historyTeam = root.querySelector('[data-history-team]');
+  const historyMeasure = root.querySelector('[data-history-measure]');
   const metric = root.querySelector('[data-metric]');
   const status = root.querySelector('[data-chart-status]');
   const charts = {};
@@ -58,7 +63,7 @@
       for (let index = 0; index < chart.data.labels.length; index++) {
         chart.data.datasets.forEach((dataset, datasetIndex) => {
           const value = dataset.data[index];
-          if (chart.isDatasetVisible(datasetIndex) && value !== null) marks.push({datasetIndex, index});
+          if (chart.isDatasetVisible(datasetIndex) && value != null && (!dataset.keyboardOnce || index === 0)) marks.push({datasetIndex, index});
         });
       }
       if (!marks.length) return;
@@ -76,31 +81,48 @@
     });
     canvas.addEventListener('blur', () => { clearChart(chart); status.textContent = ''; });
   }
-  function createTrend(canvas) {
-    const first = Number(records[0].season), last = Number(records.at(-1).season);
+  function setTrendData(chart, rows) {
+    const first = Number(rows[0].season), last = Number(rows.at(-1).season);
     const years = Array.from({length: last - first + 1}, (_, i) => String(first + i));
-    const byYear = new Map(records.map(row => [row.season, row]));
+    const byYear = new Map(rows.map(row => [row.season, row]));
+    chart.data.labels = years;
+    chart.scoringRecords = byYear;
+    chart.data.datasets.forEach(series => { series.data = years.map(year => byYear.get(year)?.[series.key] ?? null); });
+  }
+  function trendDescription(chart, mark) {
+    if (chart.historyRows) { const inspection = historyInspection(chart, mark); return `${inspection.title}. ${inspection.lines.join('. ')}`; }
+    const year = chart.data.labels[mark.index], series = chart.data.datasets[mark.datasetIndex];
+    const row = chart.scoringRecords.get(year);
+    return `${year}${row.active ? ' (in progress)' : ''}, ${series.label}: ${fixed(series.data[mark.index])} per match, ${row.played} played`;
+  }
+  function createTrend(canvas, rows = records, plugins = []) {
     const options = commonOptions();
     options.scales = {
       x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
       y: {grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}},
     };
     options.plugins.tooltip.callbacks = {
-      title: items => items[0]?.label || '',
-      label: item => `${item.dataset.label}: ${item.parsed.y.toFixed(2)} per match`,
+      title: items => {
+        const item = items[0];
+        return item ? `${item.label}${item.chart.scoringRecords.get(item.label)?.active ? ' (in progress)' : ''}` : '';
+      },
+      label: item => `${item.dataset.label}: ${fixed(item.parsed.y)} per match`,
+      afterLabel: item => `${item.chart.scoringRecords.get(item.label).played} played`,
     };
     const chart = new Chart(canvas, {
-      type: 'line', options,
-      data: {labels: years, datasets: [
+      type: 'line', options, plugins,
+      data: {labels: [], datasets: [
         {label: 'Goals', key: 'goals', borderColor: goalsColor, backgroundColor: goalsColor, pointStyle: 'circle'},
         {label: 'xG', key: 'xg', borderColor: xgColor, backgroundColor: xgColor, pointStyle: 'rectRot'},
       ].map(series => ({
-        ...series, data: years.map(year => byYear.get(year)?.[series.key] ?? null),
+        ...series, data: [],
         spanGaps: false, borderWidth: 2.5, pointRadius: 5, pointHitRadius: 4,
         pointHoverRadius: 8, pointHoverBorderWidth: 2, pointHoverBorderColor: color('--panel'),
       }))},
     });
-    keyboardAccess(chart, mark => `${years[mark.index]}, ${chart.data.datasets[mark.datasetIndex].label}: ${chart.data.datasets[mark.datasetIndex].data[mark.index].toFixed(2)} per match`);
+    setTrendData(chart, rows);
+    chart.update('none');
+    keyboardAccess(chart, mark => trendDescription(chart, mark));
     return chart;
   }
   function createDistribution(canvas) {
@@ -295,6 +317,253 @@
     canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} and ${measure.expected} per team per match`);
     chart.resize(); chart.update('none');
   }
+  function sortedTeamHistory(rows, params) {
+    const links = [...root.querySelectorAll('[data-history-sort]')];
+    const column = links.some(link => link.dataset.historySort === params.get('history-sort')) ? params.get('history-sort') : 'season';
+    const order = params.get('history-order') === 'asc' ? 'asc' : 'desc';
+    root.querySelector('[name="history-sort"]').value = column;
+    root.querySelector('[name="history-order"]').value = order;
+    links.forEach(link => {
+      const key = link.dataset.historySort, selected = key === column;
+      link.parentElement.setAttribute('aria-sort', selected ? (order === 'asc' ? 'ascending' : 'descending') : 'none');
+      const selection = new URLSearchParams(params);
+      selection.set('view', 'team-history'); selection.set('team', historyTeam.value);
+      selection.set('history-sort', key); selection.set('history-order', selected && order === 'desc' ? 'asc' : 'desc');
+      link.href = `?${selection}`;
+    });
+    const metric = teamSortMetric(column);
+    return [...rows].sort((a, b) => {
+      const x = column === 'season' ? Number(a.season) : teamValue(a, metric.measure, metric.column);
+      const y = column === 'season' ? Number(b.season) : teamValue(b, metric.measure, metric.column);
+      if (x === null || y === null) {
+        if (x !== y) return (x === null) - (y === null);
+      } else if (x !== y) {
+        return (x - y) * (order === 'asc' ? 1 : -1);
+      }
+      return Number(b.season) - Number(a.season);
+    });
+  }
+  function contextHolderLines(bound, limit = Infinity) {
+    if (!bound) return ['Unavailable'];
+    const lines = bound.holders.slice(0, limit).map(holder => `${holder.name} · ${holder.season} · ${holder.played} played`);
+    if (bound.holders.length > limit) lines.push(`+${bound.holders.length - limit} tied; see League records and season ranges below`);
+    return lines;
+  }
+  function historyInspection(chart, mark, compact = false) {
+    const dataset = chart.data.datasets[mark.datasetIndex], year = chart.data.labels[mark.index];
+    const series = chart.contextSeries, row = chart.historyRows.find(row => row.season === year);
+    const season = series?.seasons.find(row => row.season === year);
+    const kind = dataset.contextKind;
+    if (kind?.startsWith('record-')) {
+      const side = kind.slice(7), bound = series[side];
+      const label = series.low.value === series.high.value ? 'high and low' : side;
+      return {title: `Record ${label} · ${series.label}`, lines: [
+        `${fixed(bound.value)} per match`, `Completed seasons since ${series.since}`,
+        ...contextHolderLines(bound, compact ? 4 : Infinity),
+      ]};
+    }
+    const lines = [];
+    if (!kind) lines.push(`${chart.historyName}: ${fixed(dataset.data[mark.index])} per match`, `${row.played} played`);
+    if (series) {
+      for (const side of ['high', 'low']) {
+        const bound = season?.[side];
+        lines.push(`Season ${side}: ${bound ? `${fixed(bound.value)} per match` : 'unavailable'}`);
+        if (bound) lines.push(...contextHolderLines(bound, compact ? 2 : Infinity));
+      }
+    }
+    return {title: `${year}${season?.active || row?.active ? ' (in progress)' : ''} · ${dataset.label}`, lines};
+  }
+  function wrapHistoryTooltip(chart, lines) {
+    const length = Math.max(24, Math.floor((chart.width - 40) / 7));
+    return lines.flatMap(line => {
+      const wrapped = [''];
+      for (const word of line.split(' ')) {
+        const last = wrapped.length - 1;
+        if (wrapped[last] && wrapped[last].length + word.length + 1 > length) wrapped.push(word);
+        else wrapped[last] += `${wrapped[last] ? ' ' : ''}${word}`;
+      }
+      return wrapped;
+    });
+  }
+  const historyContextPlugin = {
+    id: 'historyContext',
+    afterEvent(chart, args) {
+      if (args.replay || !chart.contextSeries || !['mousemove', 'click', 'touchstart', 'touchmove'].includes(args.event.type)) return;
+      const {x, y} = args.event, area = chart.chartArea;
+      if (x < area.left || x > area.right || y < area.top || y > area.bottom) return;
+      // Record lines can be inspected between year marks, as well as at dots.
+      // Dots retain the season's holders when a seasonal bound equals a record.
+      if (chart.getActiveElements().some(mark => !chart.data.datasets[mark.datasetIndex].contextKind?.startsWith('record-'))) return;
+      const targets = chart.data.datasets.flatMap((dataset, datasetIndex) => {
+        if (!dataset.contextKind?.startsWith('record-') || dataset.data[0] === null) return [];
+        const distance = Math.abs(chart.scales.y.getPixelForValue(dataset.data[0]) - y);
+        return distance <= 6 ? [{datasetIndex, distance}] : [];
+      }).sort((a, b) => a.distance - b.distance);
+      if (!targets.length) return;
+      const index = Math.max(0, Math.min(chart.data.labels.length - 1, Math.round(chart.scales.x.getValueForPixel(x))));
+      const active = [{datasetIndex: targets[0].datasetIndex, index}];
+      chart.setActiveElements(active);
+      chart.tooltip.setActiveElements(active, {x, y});
+      args.changed = true;
+    },
+    afterDatasetsDraw(chart) {
+      const series = chart.contextSeries;
+      if (!series?.low) return;
+      const {ctx, chartArea: area} = chart;
+      ctx.save(); ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right';
+      for (const side of ['high', 'low']) {
+        if (side === 'low' && series.low.value === series.high.value) continue;
+        const bound = series[side], label = series.low.value === series.high.value ? 'high/low' : side;
+        const text = `Record ${label} ${fixed(bound.value)}`;
+        const y = chart.scales.y.getPixelForValue(bound.value) - 7;
+        // Draw the full width even for a team with only one eligible season.
+        ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.5; ctx.setLineDash([2, 5]);
+        ctx.beginPath(); ctx.moveTo(area.left, y + 7); ctx.lineTo(area.right, y + 7); ctx.stroke();
+        ctx.fillStyle = color('--paper'); ctx.fillRect(area.right - ctx.measureText(text).width - 7, y - 12, ctx.measureText(text).width + 8, 16);
+        ctx.fillStyle = color('--muted'); ctx.fillText(text, area.right - 3, y);
+      }
+      ctx.restore();
+    },
+  };
+  function historyContextDatasets(chart, series) {
+    const seasons = new Map(series.seasons.map(row => [row.season, row]));
+    const neutral = color('--muted');
+    return ['low', 'high'].map(side => ({
+      label: `Season ${side}`, contextKind: `season-${side}`,
+      data: chart.data.labels.map(year => seasons.get(year)?.[side]?.value ?? null),
+      borderColor: neutral, backgroundColor: '#dce2df80', borderWidth: 1, borderDash: [2, 3],
+      pointBackgroundColor: neutral, pointRadius: 2.5, pointHitRadius: 6, pointHoverRadius: 5,
+      fill: side === 'high' ? 2 : false, spanGaps: false, order: 2,
+    })).concat(['low', 'high'].map(side => ({
+      label: `Record ${side}`, contextKind: `record-${side}`, keyboardOnce: true,
+      data: chart.data.labels.map(() => series[side]?.value ?? null),
+      borderColor: neutral, borderWidth: 0,
+      pointBackgroundColor: neutral, pointRadius: 0, pointHitRadius: 0, pointHoverRadius: 5, order: 1,
+    })));
+  }
+  function showHistoryChart(key, points, rows, measure, visible, context, domain) {
+    const canvas = root.querySelector(`[data-chart="${key}"]`);
+    const chart = charts[key] || (charts[key] = createTrend(canvas, points, [historyContextPlugin]));
+    chart.historyRows = rows; chart.historyName = rows[0].name; chart.contextSeries = context;
+    chart.data.datasets = chart.data.datasets.slice(0, 2);
+    setTrendData(chart, points);
+    chart.data.datasets[0].label = measure.actual;
+    chart.data.datasets[1].label = measure.expected;
+    chart.data.datasets.forEach((dataset, index) => {
+      dataset.hidden = !visible.includes(index === 0 ? 'goals' : 'xg');
+      chart.setDatasetVisibility(index, !dataset.hidden);
+    });
+    if (context) chart.data.datasets.push(...historyContextDatasets(chart, context));
+    chart.options.scales.y = {...chart.options.scales.y, beginAtZero: true, min: domain.min, max: domain.max, title: {display: true, text: 'Per match'}};
+    chart.options.plugins.tooltip.callbacks = {
+      title: items => items[0] ? wrapHistoryTooltip(chart, [historyInspection(chart, {datasetIndex: items[0].datasetIndex, index: items[0].dataIndex}, true).title]) : [],
+      label: item => wrapHistoryTooltip(chart, historyInspection(chart, {datasetIndex: item.datasetIndex, index: item.dataIndex}, true).lines),
+    };
+    canvas.setAttribute('aria-label', `${rows[0].name}: ${visible.map(key => key === 'goals' ? measure.actual : measure.expected).join(' and ')} per match, by regular season${context ? ', with league ranges and completed-season record holders' : ''}`);
+    chart.resize(); chart.update('none');
+  }
+  function showHistoryContextDetails(seriesList) {
+    const textElement = (tag, text) => { const element = document.createElement(tag); element.textContent = text; return element; };
+    const bounds = (parent, high, low, prefix) => {
+      const dl = document.createElement('dl');
+      for (const [side, bound] of [['high', high], ['low', low]]) {
+        dl.append(textElement('dt', `${prefix} ${side}`));
+        const dd = document.createElement('dd');
+        if (bound) {
+          dd.append(textElement('strong', `${fixed(bound.value)} per match`));
+          const list = document.createElement('ul');
+          contextHolderLines(bound).forEach(line => list.append(textElement('li', line))); dd.append(list);
+        } else dd.textContent = 'Unavailable';
+        dl.append(dd);
+      }
+      parent.append(dl);
+    };
+    root.querySelector('[data-history-context-values]').replaceChildren(...seriesList.map(series => {
+      const section = document.createElement('section'); section.className = 'explore-context-series';
+      section.append(textElement('h4', series.label));
+      const note = textElement('p', series.since ? `Completed-season records since ${series.since}` : 'No eligible completed-season records available.');
+      note.className = 'note'; section.append(note); bounds(section, series.high, series.low, 'Record');
+      series.seasons.filter(row => row.teams).forEach(row => {
+        section.append(textElement('h5', `${row.season}${row.active ? ' (in progress)' : ''}`));
+        bounds(section, row.high, row.low, 'Season');
+      });
+      return section;
+    }));
+  }
+
+  function showTeamHistory(params) {
+    historyTeam.value = params.get('team') || root.dataset.defaultHistoryTeam;
+    historyMeasure.value = Object.hasOwn(teamMeasures, params.get('measure')) ? params.get('measure') : 'difference';
+    const measure = teamMeasures[historyMeasure.value];
+    historySeries.value = ['goals', 'xg', 'both'].includes(params.get('series')) ? params.get('series') : 'both';
+    historyContext.checked = params.get('context') === 'on';
+    const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
+    const context = historyContextData[measure.index];
+    root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
+    root.querySelector('[data-history-context-details]').hidden = !historyContext.checked;
+    root.querySelector('[data-history-context-legend]').hidden = !historyContext.checked;
+    root.querySelector('[data-history-context-note]').hidden = !historyContext.checked;
+    showHistoryContextDetails(visible.map(key => context[key]));
+    const notes = visible.map(key => context[key].since ? `${context[key].label} records since ${context[key].since}` : `${context[key].label}: no completed-season records`);
+    if (visible.includes('xg') && context.xg.partial) notes.push('Some season xG ranges are unavailable because team coverage is incomplete');
+    root.querySelector('[data-history-context-note]').textContent = notes.join('. ') + '.';
+    const rows = teamSeasons.flatMap(season => {
+      const team = (season.teams || []).find(row => row.id === historyTeam.value);
+      return team ? [{...team, season: season.season, active: season.active}] : [];
+    });
+    root.querySelector('[data-team-history-empty]').hidden = rows.length > 0;
+    root.querySelector('[data-team-history-results]').hidden = rows.length === 0;
+    root.querySelector('[data-team-history-warning]').hidden = !rows.some(row => row.values[0].expected === null);
+    root.querySelector('[data-history-team-name]').replaceChildren(...(rows.length ? [teamName(rows[0])] : []));
+    root.querySelector('[data-history-actual-label]').textContent = measure.actual;
+    root.querySelector('[data-history-xg-label]').textContent = measure.expected;
+    root.querySelector('[data-team-history-rows]').replaceChildren(...sortedTeamHistory(rows, params).map(row => {
+      const tr = document.createElement('tr');
+      const values = [row.season, row.played];
+      [2, 0, 1].forEach(index => {
+        const value = row.values[index];
+        values.push(fixed(value.actual), value.expected === null ? 'Unavailable' : fixed(value.expected));
+      });
+      values.forEach((value, index) => {
+        const cell = document.createElement(index === 0 ? 'th' : 'td');
+        if (index === 0) cell.scope = 'row';
+        cell.textContent = value;
+        if (index === 0 && row.active) {
+          const note = document.createElement('span');
+          note.className = 'note'; note.textContent = '(in progress)';
+          cell.append(' ', note);
+        }
+        tr.append(cell);
+      });
+      return tr;
+    }));
+    root.querySelector('[data-team-history-plot]').hidden = rows.length === 0;
+    if (!rows.length) return;
+    const points = rows.toReversed().map(row => ({
+      season: row.season, active: row.active, played: row.played,
+      goals: row.values[measure.index].actual, xg: row.values[measure.index].expected,
+    }));
+    const split = historyContext.checked && visible.length === 2;
+    root.querySelector('[data-history-xg-panel]').hidden = !split;
+    root.querySelector('[data-history-panel-label]').hidden = !split;
+    root.querySelector('[data-history-panel-label]').textContent = measure.actual;
+    root.querySelector('[data-history-xg-panel-label]').textContent = measure.expected;
+    root.querySelector('[data-history-xg-empty]').hidden = !visible.includes('xg') || points.some(row => row.xg !== null);
+    const values = points.flatMap(row => visible.map(key => row[key])).filter(value => value !== null);
+    if (historyContext.checked) {
+      visible.forEach(key => {
+        const series = context[key];
+        values.push(...[series.low?.value, series.high?.value].filter(value => value != null));
+        series.seasons.filter(row => row.season >= points[0].season && row.season <= points.at(-1).season).forEach(row => {
+          values.push(...[row.low?.value, row.high?.value].filter(value => value != null));
+        });
+      });
+    }
+    const low = Math.min(0, ...values), high = Math.max(0, ...values), pad = (high - low) * .15 || .25;
+    const domain = {min: low < 0 ? low - pad : 0, max: high + pad};
+    showHistoryChart('team-history', points, rows, measure, split ? ['goals'] : visible, historyContext.checked ? context[visible[0]] : null, domain);
+    if (split) showHistoryChart('team-history-xg', points, rows, measure, ['xg'], context.xg, domain);
+  }
   function styleTable() {
     const cells = [...root.querySelectorAll('.explore-rate')];
     const maximum = Math.max(1, ...cells.map(cell => Number(cell.dataset.value)));
@@ -329,12 +598,19 @@
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || 'trend';
-    const view = ['trend', 'distribution', 'table', 'teams'].includes(requested) ? requested : 'trend';
+    const view = ['trend', 'distribution', 'table', 'teams', 'team-history'].includes(requested) ? requested : 'trend';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
-    root.querySelector('[data-league-views]').hidden = view === 'teams';
+    const teamView = view === 'teams' || view === 'team-history';
+    root.querySelector('[data-league-views]').hidden = teamView;
+    root.querySelector('[data-team-views]').hidden = !teamView;
+    root.querySelectorAll('[data-team-display]').forEach(link => {
+      const selected = view === 'teams' && link.dataset.teamDisplay === (params.get('display') === 'table' ? 'table' : 'chart');
+      if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+      link.href = teamLink({display: link.dataset.teamDisplay});
+    });
     root.querySelectorAll('[data-group-choice]').forEach(link => {
-      if (link.dataset.groupChoice === (view === 'teams' ? 'teams' : 'league')) link.setAttribute('aria-current', 'page');
+      if (link.dataset.groupChoice === (teamView ? 'teams' : 'league')) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
     root.querySelectorAll('[data-view-choice]').forEach(link => {
@@ -346,8 +622,14 @@
       series.hidden = metric.value !== 'compare' && series.dataset.series !== metric.value;
     });
     const canvas = root.querySelector(`[data-chart="${view}"]`);
-    if (canvas && view !== 'teams' && !charts[view]) charts[view] = view === 'trend' ? createTrend(canvas) : createDistribution(canvas);
+    if (canvas && !teamView && !charts[view]) charts[view] = view === 'trend' ? createTrend(canvas) : createDistribution(canvas);
     if (view === 'teams') showTeams(params);
+    if (view === 'team-history') showTeamHistory(params);
+    root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
+      const target = link.dataset.viewChoice || (link.dataset.groupChoice === 'teams' ? 'teams' : 'trend');
+      const selection = new URLSearchParams(params); selection.set('view', target);
+      link.href = `?${selection}`;
+    });
     if (view === 'trend' && charts.trend) {
       charts.trend.data.datasets.forEach((series, index) => charts.trend.setDatasetVisibility(index, metric.value === 'compare' || series.key === metric.value));
       charts.trend.update('none');
@@ -362,11 +644,17 @@
     applyURL();
   }
   root.addEventListener('click', event => {
+    const historyLink = event.target.closest('[data-history-sort]');
+    if (historyLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const params = new URL(historyLink.href).searchParams;
+      update({'history-sort': params.get('history-sort'), 'history-order': params.get('history-order')});
+    }
     const teamLink = event.target.closest('[data-team-display], [data-team-sort]');
     if (teamLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
       const params = new URL(teamLink.href).searchParams;
-      const changes = {display: params.get('display')};
+      const changes = {view: 'teams', display: params.get('display')};
       if (teamLink.hasAttribute('data-team-sort')) {
         changes['team-sort'] = params.get('team-sort'); changes['team-order'] = params.get('team-order');
       }
@@ -380,7 +668,7 @@
     if (sort) update({sort: sort.dataset.sort, order: sort.parentElement.getAttribute('aria-sort') === 'descending' ? 'asc' : 'desc'});
   });
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(); });
-  root.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
   metric.addEventListener('change', () => update({metric: metric.value}));
   root.querySelector('[data-team-controls]').addEventListener('submit', event => {
     event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value});
@@ -390,6 +678,13 @@
   root.addEventListener('error', event => {
     if (event.target.matches('.team-logo')) event.target.style.visibility = 'hidden';
   }, true);
+  root.querySelector('[data-team-history-controls]').addEventListener('submit', event => {
+    event.preventDefault(); update({team: historyTeam.value, measure: historyMeasure.value, series: historySeries.value, context: historyContext.checked ? 'on' : 'off'});
+  });
+  historySeries.addEventListener('change', () => update({series: historySeries.value}));
+  historyContext.addEventListener('change', () => update({context: historyContext.checked ? 'on' : 'off'}));
+  historyTeam.addEventListener('change', () => update({team: historyTeam.value}));
+  historyMeasure.addEventListener('change', () => update({measure: historyMeasure.value}));
   window.addEventListener('popstate', applyURL);
   styleTable();
   applyURL();

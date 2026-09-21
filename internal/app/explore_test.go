@@ -15,7 +15,7 @@ import (
 )
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=team-history&team=alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 				"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
@@ -109,6 +109,10 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-sort=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-order=bad", http.StatusBadRequest, ""},
+		{"/explore?view=team-history&team=unknown", http.StatusBadRequest, ""},
+		{"/explore?view=team-history&team=", http.StatusBadRequest, ""},
+		{"/explore?view=team-history&team=alpha&team=bravo", http.StatusBadRequest, ""},
+		{"/explore?view=team-history&measure=bad", http.StatusBadRequest, ""},
 		{"/explore/", http.StatusSeeOther, "../explore"},
 		{"/nwsl-season/explore/?view=table", http.StatusSeeOther, "../explore?view=table"},
 	} {

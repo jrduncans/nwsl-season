@@ -73,7 +73,10 @@ The historical forecast comparison is available at
 League scoring exploration is available at
 <http://localhost:8080/explore>, with scoring, goal-distribution, and table views
 in one workspace. Team performance compares actual and expected scoring per
-match for a selected regular season. The older `/history/scoring` route remains available.
+match for a selected regular season. Team history charts one team’s goals and xG
+scored, allowed, and differential per match across regular seasons, with a sortable
+season table. Optional league context shows seasonal ranges and completed-season
+records with inspectable holders. The older `/history/scoring` route remains available.
 
 Useful endpoints:
 
@@ -87,7 +90,7 @@ Useful endpoints:
 - `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
 - `/seasons/:season/:stage/forecast` — interactive forecast simulation.
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
-- `/explore` — league scoring charts, sortable season table, and team performance vs xG.
+- `/explore` — league scoring charts, sortable season table, team performance vs xG, and team history.
 - `/history/scoring` — legacy scoring page, retained for existing links.
 
 ## Pitchfork development server

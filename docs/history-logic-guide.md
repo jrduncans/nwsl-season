@@ -11,7 +11,7 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
 Each view heading states the regular-season scope.
-`view=trend|distribution|table|teams` selects the initial surface.
+`view=trend|distribution|table|teams|team-history` selects the initial surface.
 JavaScript switches surfaces and Goals/xG series in place, sorts numeric table
 columns from unrounded values, and restores those controls with Back/Forward.
 Chart.js 4.5.1 renders the charts, with chartjs-plugin-datalabels 2.2.0 for
@@ -21,7 +21,7 @@ Chart libraries load locally; team logos use the same ASA image host as the
 season pages. The chart payload retains unrounded values,
 null for unavailable xG, and exact match counts from the same archive snapshot.
 
-Hover/click/tap must intersect a dot or bar segment. A trend tooltip shows one
+Hover/click/tap must intersect a dot, bar segment, or team-history record line. A trend tooltip shows one
 series value, with a visible point highlight; axis years are not controls. Missing
 calendar years and unavailable xG break the line. Distribution legends do not
 filter or toggle bins. A segment tooltip shows goal count and match count; it
@@ -118,6 +118,85 @@ season. Verify desktop and 390px layouts, signed differential axes, touch/hover,
 keyboard inspection/dismissal, logos and alignment after resize, missing-data
 warnings, sorting in both directions, no-script sorting, season/measure/display
 URLs, Back/Forward, and switching analyses without fetching new data.
+
+### Team history
+
+Team performance also includes Team history (`view=team-history`). The `team`
+selector chooses an ASA team ID from eligible recorded results across the
+archive; it defaults to the first team by name, with ID breaking ties. The
+selector uses the newest eligible name for each ID, so a rename keeps its
+history. Distinct IDs remain separate even when names match; relocation or
+franchise lineage is not inferred. Blank, repeated, and unknown team IDs return
+400. `measure=for|against|difference` controls the chart, defaulting to goal
+differential and sharing the season comparison's validation.
+
+History reuses the eligible team-season rates and per-team xG coverage already
+calculated for Team performance. A single recorded result can appear with its
+played count. Goals and xG are per match; differential is scored minus allowed.
+A native table always shows all three pairs of measures, newest season first
+by default. Every column is sortable: `history-sort` accepts `season`, `played`,
+or `difference|for|against` suffixed with `-actual` or `-expected`.
+`history-order=asc|desc` selects direction. Sorting uses unrounded values,
+keeps unavailable xG last in both directions, and breaks metric ties by newest
+season first. Blank, invalid, or repeated sorting parameters return 400.
+Header links toggle direction, expose the active order with `aria-sort`, and
+work without JavaScript. Sort state is independent of the chart measure and
+other Explore tables, survives team and measure changes, and supports direct
+URLs and Back/Forward. The chart always retains chronological order.
+In-progress seasons are labeled in the table, tooltip, and keyboard announcement.
+The trend places seasons at calendar-year intervals and breaks lines for missing
+or excluded seasons and unavailable xG. Its scale includes zero and supports
+negative differentials. Point inspection includes the played count. Team and
+measure selections update locally with shareable URLs and Back/Forward; the
+GET form and full table remain usable without JavaScript. Empty archives have
+an explicit empty state, and missing xG produces a warning without hiding goals.
+
+`series=goals|xg|both` selects the history chart's series (both by default).
+`context=on|off` adds league context (off by default). Blank, invalid, or repeated
+values return 400. These controls preserve table sorting and work through direct
+URLs, Back/Forward, and the GET fallback. Without context, Both overlays the two
+series; with context, it shows two vertically aligned charts on the same scale.
+A single-series selection uses one chart. The scale includes the selected team's
+values, visible seasonal bounds, historical bounds, and zero.
+
+League context uses the same eligible team-season rates from the single archive
+snapshot, independently of the selected team. The shaded band spans each
+season's lowest and highest rates, including an eligible active season labeled
+in progress. Missing/excluded calendar years break the band. An xG season range
+requires complete xG for every team in that season's comparison; partial coverage
+withholds both bounds while leaving the selected team's own fully covered xG
+available. Zero is valid, signed differentials remain signed, and extrema and
+ties are compared before rounding. High/low refers to the numeric value, so a
+low goals-allowed rate is favorable.
+
+Dotted horizontal record lines use only eligible completed seasons. They span
+the chart even for a team with only one season. Record labels identify the
+available coverage start; they do not claim records outside the cached archive.
+Active results cannot replace these records. For xG, only fully covered season
+comparisons contribute. Missing xG context is explained visibly.
+
+Hover/tap on a seasonal bound or team point shows the season's high and low,
+holder names, year, rate, and played count. Hover/tap along a record line shows
+its historical holders. Coincident seasonal dots retain season inspection;
+record lines remain inspectable between dots. Keyboard arrows inspect all
+season points and each historical bound once, with full holder announcements.
+Escape, focus leaving a chart, and outside taps dismiss inspection. Tooltips
+wrap on small screens and bound long tie lists; the expandable “League records
+and season ranges” details list every tied holder and remain usable without
+JavaScript. Names and IDs are retained from the record's season, including
+historical names. No franchise mapping is inferred.
+
+`make test-explore` covers history identity, rates, eligibility, missing values,
+all history columns in both sort directions, record holders/ties and coverage,
+URL validation, fallback HTML,
+and the single cache snapshot. The `team-history`
+scenario in `TestHistoryPreview` supplies multiple years with calendar gaps,
+partial xG, and an active season. Verify desktop and 390px layouts, all three
+measures, team selection, point hover/tap and empty-space dismissal, keyboard
+inspection, table sorting (including missing xG), direct URLs, Back/Forward,
+no-script sorting/forms and full context details, record-line and seasonal-bound
+inspection, shared scales for Both, and switching between
+history, season comparison, and league analyses without fetching new data.
 
 ## Legacy scoring page
 
