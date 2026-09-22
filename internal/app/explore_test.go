@@ -93,6 +93,102 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 	}
 }
 
+func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2019": {lifecycle: cache.SourceScopeCompleted, inventory: cache.InventoryCompletenessIncomplete, goals: 0},
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+		"2026": {lifecycle: cache.SourceScopeActive, goals: 4},
+	})}
+	response := httptest.NewRecorder()
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=distribution", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	_, values, found := strings.Cut(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`)
+	values, _, _ = strings.Cut(values, `</details>`)
+	if !found || !strings.Contains(values, `<summary>Distribution values</summary>`) || !strings.Contains(values, `<table class="explore-table explore-distribution-table">`) || !strings.Contains(values, `<caption>Count (share of matches).</caption>`) {
+		t.Fatalf("server-rendered distribution values missing: %s", values)
+	}
+	for _, row := range []string{
+		`<tr data-matches="20"><th scope="row" data-value="2025">2025</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td><td data-value="0">0 (0.0%)</td></tr>`,
+		`<tr data-matches="20"><th scope="row" data-value="2026">2026</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td></tr>`,
+	} {
+		if !strings.Contains(values, row) {
+			t.Errorf("missing distribution row %q", row)
+		}
+	}
+	if strings.Contains(values, `data-value="2019"`) {
+		t.Error("ineligible season appears in distribution values")
+	}
+}
+
+func TestExploreDistributionSortUsesExactShareAndNativeLinks(t *testing.T) {
+	rows := []historyDistributionView{
+		{Season: "2023", Total: 4, GoalsEligible: true, Segments: []historyDistributionSegmentView{{Count: 1}}},
+		{Season: "2024", Total: 3, GoalsEligible: true, Segments: []historyDistributionSegmentView{{Count: 1}}},
+		{Season: "2025", Total: 1000, GoalsEligible: true, Segments: []historyDistributionSegmentView{{Count: 333}}},
+		{Season: "2026", Total: 3, GoalsEligible: false, Segments: []historyDistributionSegmentView{{Count: 3}}},
+	}
+	for _, tc := range []struct {
+		column, order string
+		want          []string
+	}{
+		{"bin-0", "desc", []string{"2024", "2025", "2023"}},
+		{"bin-0", "asc", []string{"2023", "2025", "2024"}},
+		{"matches", "desc", []string{"2025", "2023", "2024"}},
+		{"season", "desc", []string{"2025", "2024", "2023"}},
+	} {
+		t.Run(tc.column+"/"+tc.order, func(t *testing.T) {
+			page, err := exploreDistribution(url.Values{"distribution-sort": {tc.column}, "distribution-order": {tc.order}}, rows)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make([]string, 0, len(page.DistributionRows))
+			for _, row := range page.DistributionRows {
+				got = append(got, row.Season)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("sorted seasons = %v, want %v", got, tc.want)
+			}
+			if !page.DistributionExpanded {
+				t.Error("sorted direct URL should show the values table")
+			}
+			for _, column := range page.DistributionColumns {
+				if column.Key != tc.column {
+					continue
+				}
+				link, err := url.Parse(column.URL)
+				if err != nil || link.Query().Get("distribution-sort") != tc.column || link.Query().Get("distribution-order") == tc.order || link.Query().Get("view") != "distribution" {
+					t.Fatalf("sort link did not toggle order: %s", column.URL)
+				}
+			}
+		})
+	}
+}
+
+func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+		"2026": {lifecycle: cache.SourceScopeActive, goals: 4},
+	})}
+	response := httptest.NewRecorder()
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=distribution&distribution-sort=bin-3&distribution-order=asc", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	_, values, found := strings.Cut(response.Body.String(), `<details class="explore-context-details" data-distribution-values open>`)
+	values, _, _ = strings.Cut(values, `</details>`)
+	if !found || !strings.Contains(values, `data-distribution-sort="bin-3" aria-label="Sort by share of matches with 3 goals"`) ||
+		!strings.Contains(values, `aria-sort="ascending"><a href=`) {
+		t.Fatalf("sorted table is not open with sortable headers: %s", values)
+	}
+	newer := strings.Index(values, `data-value="2026"`)
+	older := strings.Index(values, `data-value="2025"`)
+	if newer < 0 || older < 0 || newer > older {
+		t.Fatalf("ascending 3-goal share did not place zero-share season first: %s", values)
+	}
+}
+
 func TestExploreRouteValidation(t *testing.T) {
 	handler := NewHandler(&historyHTTPStore{})
 	for _, tc := range []struct {
@@ -113,6 +209,10 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=team-history&team=", http.StatusBadRequest, ""},
 		{"/explore?view=team-history&team=alpha&team=bravo", http.StatusBadRequest, ""},
 		{"/explore?view=team-history&measure=bad", http.StatusBadRequest, ""},
+		{"/explore?distribution-sort=bad", http.StatusBadRequest, ""},
+		{"/explore?distribution-sort=", http.StatusBadRequest, ""},
+		{"/explore?distribution-sort=bin-0&distribution-sort=bin-1", http.StatusBadRequest, ""},
+		{"/explore?distribution-order=bad", http.StatusBadRequest, ""},
 		{"/explore/", http.StatusSeeOther, "../explore"},
 		{"/nwsl-season/explore/?view=table", http.StatusSeeOther, "../explore?view=table"},
 	} {

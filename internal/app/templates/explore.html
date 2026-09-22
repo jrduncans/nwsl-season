@@ -11,8 +11,8 @@
 <a href="?view=table" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>Season table</a>
 </nav>
 <nav class="explore-subviews" data-team-views aria-label="Team performance views"{{if and (ne .View "teams") (ne .View "team-history")}} hidden{{end}}>
-<a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Paired-dot chart</a>
-<a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Team table</a>
+<a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Comparison chart</a>
+<a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Comparison table</a>
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Team history</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
@@ -35,6 +35,15 @@
 <canvas data-chart="distribution" tabindex="0" role="img" aria-label="Share of regular-season matches by total goals, by season" aria-describedby="explore-chart-help"></canvas>
 </div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect segments. Escape clears the tooltip.</p>
+<details class="explore-context-details" data-distribution-values{{if .DistributionExpanded}} open{{end}}>
+<summary>Distribution values</summary>
+<p class="explore-table-scroll-hint">Scroll for more columns →</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Goal distribution values"><table class="explore-table explore-distribution-table">
+<caption>Count (share of matches).</caption>
+<thead><tr>{{range .DistributionColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-distribution-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
+<tbody data-distribution-rows>{{range .DistributionRows}}<tr data-matches="{{.Total}}"><th scope="row" data-value="{{.Season}}">{{.Season}}</th><td data-value="{{.Total}}">{{.Total}}</td>{{range .Segments}}<td data-value="{{.Count}}">{{.Count}} ({{.Percent}})</td>{{end}}</tr>{{end}}</tbody>
+</table></div>
+</details>
 {{end}}
 {{if not .HasDistributionBars}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
@@ -65,10 +74,13 @@
 <div class="explore-chart-wrap explore-team-chart" data-team-chart-wrap><canvas data-chart="teams" tabindex="0" role="img" aria-label="Team goals and expected goals per match" aria-describedby="explore-chart-help"></canvas><div class="explore-team-labels" data-team-labels aria-hidden="true"></div></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect teams. Escape clears the tooltip.</p>
 </div>
-<div class="table-scroll" data-team-table tabindex="0" role="region" aria-label="Team performance values"><table class="explore-table explore-team-table"><caption>Gap = actual − expected.</caption><thead>
+<div data-team-table>
+<p class="explore-table-scroll-hint">Scroll for more columns →</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Team performance values"><table class="explore-table explore-team-table"><caption>Gap = actual − expected.</caption><thead>
 <tr>{{range .TeamColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="3">Goal differential</th><th scope="colgroup" colspan="3">Goals scored</th><th scope="colgroup" colspan="3">Goals allowed</th></tr>
 <tr>{{range .TeamColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-rows>{{range .TeamRows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td><td><strong>{{.Gap}}</strong></td>{{end}}</tr>{{end}}</tbody></table></div>
+</div>
 </div>
 </section>
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
@@ -110,7 +122,7 @@
 <div class="table-scroll explore-team-history-table-wrap" tabindex="0" role="region" aria-label="Team scoring by season"><table class="explore-table explore-team-history-table"><caption>Regular-season values per match. Differential = scored − allowed.</caption><thead>
 <tr>{{range .HistoryColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="2">Goal differential</th><th scope="colgroup" colspan="2">Goals scored</th><th scope="colgroup" colspan="2">Goals allowed</th></tr>
 <tr>{{range .HistoryColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}</tr></thead>
-<tbody data-team-history-rows>{{range .TeamHistoryRows}}<tr><th scope="row">{{.Season}}{{if .Active}} <span class="note">(in progress)</span>{{end}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td>{{end}}</tr>{{end}}</tbody></table></div>
+<tbody data-team-history-rows>{{range .TeamHistoryRows}}<tr><th scope="row">{{.Season}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td>{{end}}</tr>{{end}}</tbody></table></div>
 </div>
 </section>
 <p class="visually-hidden" id="explore-chart-help">Use arrow keys to move between data points, Home or End to jump, and Escape to clear the tooltip.</p>
