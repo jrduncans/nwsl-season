@@ -10,6 +10,8 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 `GET /explore` reuses the same coherent archive read and scoring calculations.
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
+Team performance offers Comparison chart, Comparison table, and Team history
+as direct views. The chart shows one selected measure; the table shows all three.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-history` selects the initial surface.
 JavaScript switches surfaces and Goals/xG series in place, sorts numeric table
@@ -31,6 +33,12 @@ values, including zero-count bins; Escape, focus leaving the chart, or an outsid
 tap clears inspection. The season table has shared-scale rate bars, signed gap
 badges, row shading, and a sticky season column and header on small screens. Each view shows an explicit
 empty state when no seasons are eligible.
+Goal distribution also has a collapsed, server-rendered values table with
+eligible seasons, played-match totals, and all five bins as counts and
+one-decimal shares. It uses the Explore table styling and sortable headers.
+Bin columns sort by the exact share of matches, before display rounding;
+ties use newest season first. Sort links and the native disclosure work without
+JavaScript, and a direct sorted URL opens the disclosure.
 
 For chart changes, verify desktop and 390px layouts, hovering/tapping a dot
 versus empty space at the same year, per-segment tooltip content, keyboard
@@ -61,9 +69,10 @@ season, falling back to the newest catalog year when none qualify.
 differential on the chart. Goal differential is the default. Explicit unsupported years, malformed
 or repeated season values, and invalid or repeated measures return 400.
 Selections update locally and support direct URLs and Back/Forward.
-`display=chart|table` selects peer visualizations (chart by default), preserving
+`display=chart|table` selects comparison views (chart by default), preserving
 the season and chart measure. The measure picker appears only on the chart;
-the table always includes all three measures. `team-sort` accepts `name`,
+the table always includes all three measures. A small-screen cue identifies its
+horizontal scroll. `team-sort` accepts `name`,
 `played`, or a metric-qualified key such as `difference-gap`, `for-actual`, or
 `against-expected`. Each of `difference`, `for`, and `against` supports `actual`,
 `expected`, and `gap`. `team-order=asc|desc` controls ordering, defaulting to
@@ -143,7 +152,8 @@ Header links toggle direction, expose the active order with `aria-sort`, and
 work without JavaScript. Sort state is independent of the chart measure and
 other Explore tables, survives team and measure changes, and supports direct
 URLs and Back/Forward. The chart always retains chronological order.
-In-progress seasons are labeled in the table, tooltip, and keyboard announcement.
+The table keeps season labels compact; in-progress seasons are identified in
+the chart tooltip and keyboard announcement.
 The trend places seasons at calendar-year intervals and breaks lines for missing
 or excluded seasons and unavailable xG. Its scale includes zero and supports
 negative differentials. Point inspection includes the played count. Team and

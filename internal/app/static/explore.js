@@ -528,11 +528,6 @@
         const cell = document.createElement(index === 0 ? 'th' : 'td');
         if (index === 0) cell.scope = 'row';
         cell.textContent = value;
-        if (index === 0 && row.active) {
-          const note = document.createElement('span');
-          note.className = 'note'; note.textContent = '(in progress)';
-          cell.append(' ', note);
-        }
         tr.append(cell);
       });
       return tr;
@@ -595,6 +590,37 @@
       button.parentElement.setAttribute('aria-sort', selected ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
     });
   }
+  function sortDistributionTable(params) {
+    const body = root.querySelector('[data-distribution-rows]');
+    if (!body) return;
+    const links = [...root.querySelectorAll('[data-distribution-sort]')];
+    const keys = links.map(link => link.dataset.distributionSort);
+    const requested = params.get('distribution-sort');
+    const column = Math.max(0, keys.indexOf(requested));
+    const direction = params.get('distribution-order') === 'asc' ? 'asc' : 'desc';
+    const rows = [...body.rows];
+    rows.sort((a, b) => {
+      let comparison;
+      if (column < 2) {
+        comparison = Number(a.cells[column].dataset.value) - Number(b.cells[column].dataset.value);
+      } else {
+        comparison = Number(a.cells[column].dataset.value) * Number(b.dataset.matches)
+          - Number(b.cells[column].dataset.value) * Number(a.dataset.matches);
+      }
+      return comparison * (direction === 'asc' ? 1 : -1)
+        || Number(b.cells[0].dataset.value) - Number(a.cells[0].dataset.value);
+    });
+    body.append(...rows);
+    links.forEach((link, index) => {
+      const selected = index === column;
+      link.parentElement.setAttribute('aria-sort', selected ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
+      const selection = new URLSearchParams(params);
+      selection.set('view', 'distribution');
+      selection.set('distribution-sort', link.dataset.distributionSort);
+      selection.set('distribution-order', selected && direction === 'desc' ? 'asc' : 'desc');
+      link.href = `?${selection}`;
+    });
+  }
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || 'trend';
@@ -636,6 +662,7 @@
     }
     const column = Number(params.get('sort') || 0);
     sortTable(Number.isInteger(column) && column >= 0 && column <= 4 ? column : 0, params.get('order') === 'asc' ? 'asc' : 'desc');
+    sortDistributionTable(params);
   }
   function update(changes) {
     const url = new URL(location.href);
@@ -644,6 +671,12 @@
     applyURL();
   }
   root.addEventListener('click', event => {
+    const distributionLink = event.target.closest('[data-distribution-sort]');
+    if (distributionLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const params = new URL(distributionLink.href).searchParams;
+      update({view: 'distribution', 'distribution-sort': params.get('distribution-sort'), 'distribution-order': params.get('distribution-order')});
+    }
     const historyLink = event.target.closest('[data-history-sort]');
     if (historyLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();

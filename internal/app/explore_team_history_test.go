@@ -52,7 +52,7 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=team-history&team=alpha&measure=against", nil))
 	body := response.Body.String()
-	for _, fragment := range []string{`data-panel="team-history" aria-labelledby=`, `value="alpha" selected`, `2026 <span class="note">(in progress)</span>`, `<th scope="colgroup" colspan="2">Goals allowed</th>`, `<td>-1.00</td><td>1.00</td>`, `Some seasons have incomplete xG for this team`, `Show team history`} {
+	for _, fragment := range []string{`data-panel="team-history" aria-labelledby=`, `value="alpha" selected`, `<th scope="row">2026</th>`, `<th scope="colgroup" colspan="2">Goals allowed</th>`, `<td>-1.00</td><td>1.00</td>`, `Some seasons have incomplete xG for this team`, `Show team history`} {
 		if !strings.Contains(body, fragment) {
 			t.Errorf("missing %q", fragment)
 		}

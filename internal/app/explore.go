@@ -10,6 +10,7 @@ import (
 
 type explorePage struct {
 	historyPage
+	exploreDistributionView
 	exploreTeamsView
 	exploreTeamHistoryView
 	View                              string
@@ -46,6 +47,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view}
+	page.exploreDistributionView, err = exploreDistribution(r.URL.Query(), page.Distributions)
+	if err != nil {
+		a.renderHistoryBadRequest(w, r, err)
+		return
+	}
 	page.exploreTeamHistoryView, err = exploreTeamHistory(r.URL.Query(), teams.TeamSeasons)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)
