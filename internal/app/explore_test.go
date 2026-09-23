@@ -15,7 +15,7 @@ import (
 )
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=team-history&team=alpha"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=teams&display=scatter", "/nwsl-season/explore?view=team-history&team=alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 				"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
@@ -248,6 +248,7 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=teams&measure=for&measure=against", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=gap&display=chart", http.StatusBadRequest, ""},
+		{"/explore?view=teams&display=scatter&display=chart", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-sort=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-order=bad", http.StatusBadRequest, ""},
 		{"/explore?view=team-history&team=unknown", http.StatusBadRequest, ""},
@@ -363,6 +364,7 @@ func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
 	for _, tc := range []struct{ name, link, display string }{
 		{"paired-dot chart", page.TeamChartURL, "chart"},
 		{"gap chart", page.TeamGapURL, "gap"},
+		{"outlier plot", page.TeamScatterURL, "scatter"},
 		{"table", page.TeamTableURL, "table"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -375,6 +377,41 @@ func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
 				t.Fatalf("link did not preserve selection: %s", tc.link)
 			}
 		})
+	}
+}
+
+func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+		"2026": {lifecycle: cache.SourceScopeActive, goals: 3, xgCovered: 19},
+	})}
+	response := httptest.NewRecorder()
+	path := "/explore?view=teams&display=scatter&season=2025&measure=against"
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
+		t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		`data-team-display="scatter" aria-current="page"`,
+		`Actual vs expected by team (regular-season)</h2>`,
+		`<input type="hidden" name="display" value="scatter">`,
+		`<option value="2025" selected>2025</option>`,
+		`<option value="against" selected>Goals allowed</option>`,
+		`data-team-scatter-plot`,
+		`data-team-scatter-note`,
+		`data-team-scatter-legend`,
+		`data-team-scatter-missing`,
+		`data-team-scatter-empty`,
+		`data-team-scatter-chart-wrap`,
+		`data-chart="team-scatter"`,
+		`data-team-scatter-hint`,
+		`<div data-team-table>`,
+		`<table class="explore-table explore-team-table">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scatter direct URL missing %q", want)
+		}
 	}
 }
 

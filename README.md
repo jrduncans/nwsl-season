@@ -34,9 +34,9 @@ from the cached fixtures when a season page or CLI report is requested.
 - Shareable forecast URLs with fixed match outcomes and optional model comparison.
 - Explore workspace with interactive regular-season scoring trends, signed
   goals-minus-xG gaps, goal distributions, selected goal-bin trends, a sortable
-  season table, within-season team comparisons and signed gap rankings, and team
-  history with floating league ranges for goals scored, goals allowed, and goal
-  differential against xG.
+  season table, within-season team comparisons, signed gap rankings, an actual
+  versus expected team outlier plot, and team history with floating league ranges
+  for goals scored, goals allowed, and goal differential against xG.
 - Health and cache-status endpoints for operators.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240
@@ -75,10 +75,12 @@ The historical forecast comparison is available at
 League scoring exploration is available at
 <http://localhost:8080/explore>, with scoring, goal-distribution, and table views
 in one workspace. Team performance compares actual and expected scoring per
-match for a selected regular season. Team history charts one team’s goals and xG
-scored, allowed, and differential per match across regular seasons, with a sortable
-season table. Optional league context shows seasonal ranges and completed-season
-records with inspectable holders. The older `/history/scoring` route remains available.
+match for a selected regular season, including an outlier plot with expected
+rates on the horizontal axis and actual rates on the vertical axis. Team history
+charts one team’s goals and xG scored, allowed, and differential per match across
+regular seasons, with a sortable season table. Optional league context shows
+seasonal ranges and completed-season records with inspectable holders. The older
+`/history/scoring` route remains available.
 
 Useful endpoints:
 

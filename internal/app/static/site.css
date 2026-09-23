@@ -382,7 +382,9 @@ th:nth-child(2) { text-align: left; }
 .explore-gap-swatch { display: inline-block; width: .8rem; height: .8rem; border-radius: .12rem; }
 .explore-gap-positive { background: var(--green); }
 .explore-gap-negative { background: var(--hypo); }
+.explore-scatter-parity { display: inline-block; width: 1rem; border-top: 2px dashed var(--muted); }
 .explore-chart-wrap { position: relative; max-width: 58rem; height: 390px; margin-top: 1.25rem; }
+.explore-team-scatter-wrap { width: min(100%, 38rem); height: 38rem; }
 .explore-chart-wrap canvas { display: block; }
 .explore-keyboard-hint { display: none; color: var(--muted); font-size: .85rem; }
 .explore-chart-wrap:has(canvas:focus-visible) + .explore-keyboard-hint { display: block; }
@@ -415,6 +417,7 @@ th:nth-child(2) { text-align: left; }
  .explore-team-labels { width: 148px; }
  .explore-team-table tbody th { max-width: 10rem; white-space: normal; }
  .explore-chart-wrap { height: 320px; }
+ .explore-team-scatter-wrap { height: min(38rem, calc(100vw - 3.5rem)); }
  .explore-table td, .explore-table th { padding: .8rem .7rem; }
  .explore-table thead th:first-child { position: sticky; left: 0; z-index: 2; }
  :is(.explore-team-table, .explore-team-history-table) thead tr:nth-child(2) th:first-child { position: static; }
