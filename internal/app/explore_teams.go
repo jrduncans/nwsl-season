@@ -48,14 +48,14 @@ type exploreTeamColumn struct {
 }
 
 type exploreTeamsView struct {
-	TeamSeasons                      []exploreTeamSeason
-	TeamSeason, TeamMeasure          string
-	TeamActualLabel, TeamXGLabel     string
-	TeamDisplay, TeamSort, TeamOrder string
-	TeamChartURL, TeamTableURL       string
-	TeamMissingXG                    bool
-	TeamColumns                      []exploreTeamColumn
-	TeamRows                         []exploreTeamRow
+	TeamSeasons                            []exploreTeamSeason
+	TeamSeason, TeamMeasure                string
+	TeamActualLabel, TeamXGLabel           string
+	TeamDisplay, TeamSort, TeamOrder       string
+	TeamChartURL, TeamGapURL, TeamTableURL string
+	TeamMissingXG                          bool
+	TeamColumns                            []exploreTeamColumn
+	TeamRows                               []exploreTeamRow
 }
 
 func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) (exploreTeamsView, error) {
@@ -65,7 +65,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		value   *string
 		allowed []string
 	}{
-		{"display", &page.TeamDisplay, []string{"chart", "table"}},
+		{"display", &page.TeamDisplay, []string{"chart", "gap", "table"}},
 		{"team-sort", &page.TeamSort, []string{"name", "played", "actual", "expected", "gap", "difference-actual", "difference-expected", "difference-gap", "for-actual", "for-expected", "for-gap", "against-actual", "against-expected", "against-gap"}},
 		{"team-order", &page.TeamOrder, []string{"asc", "desc"}},
 	} {
@@ -147,6 +147,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	}
 	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}}
 	page.TeamChartURL = exploreTeamURL(selection, map[string]string{"display": "chart"})
+	page.TeamGapURL = exploreTeamURL(selection, map[string]string{"display": "gap"})
 	page.TeamTableURL = exploreTeamURL(selection, map[string]string{"display": "table"})
 	columns := []exploreTeamColumn{{Key: "name", Label: "Team", Description: "Team", Leading: true}, {Key: "played", Label: "Played", Description: "Played", Leading: true}}
 	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}} {

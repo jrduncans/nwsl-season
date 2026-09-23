@@ -10,8 +10,9 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 `GET /explore` reuses the same coherent archive read and scoring calculations.
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
-Team performance offers Comparison chart, Comparison table, and Team history
-as direct views. The chart shows one selected measure; the table shows all three.
+Team performance offers Comparison chart, Gap chart, Comparison table, and Team
+history as direct views. The charts show one selected measure; the table shows
+all three.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-history` selects the initial surface.
 JavaScript switches surfaces and Goals/xG/gap selections in place, sorts numeric table
@@ -82,8 +83,8 @@ season, falling back to the newest catalog year when none qualify.
 differential on the chart. Goal differential is the default. Explicit unsupported years, malformed
 or repeated season values, and invalid or repeated measures return 400.
 Selections update locally and support direct URLs and Back/Forward.
-`display=chart|table` selects comparison views (chart by default), preserving
-the season and chart measure. The measure picker appears only on the chart;
+`display=chart|gap|table` selects comparison views (paired-dot chart by default),
+preserving the season and chart measure. The measure picker appears on both charts;
 the table always includes all three measures. A small-screen cue identifies its
 horizontal scroll. `team-sort` accepts `name`,
 `played`, or a metric-qualified key such as `difference-gap`, `for-actual`, or
@@ -117,6 +118,14 @@ fall back to their ASA identity. No cross-season franchise mapping is implied.
 
 The paired-dot chart places actual and expected rates on one scale including
 zero, ordered by actual rate (ascending for goals allowed, descending otherwise).
+The Gap chart ranks teams by full-precision actual minus expected per match,
+with signed bars around zero. It orders positive gaps first for goals scored
+and goal differential, and negative gaps first for goals allowed. Green means
+above expected and purple means below expected; neither color implies the
+same performance judgment for every measure. Teams without complete xG appear
+last with no bar, an `xG incomplete` label, and a named note accessible from the chart.
+If every team lacks complete xG, the
+chart shows an explicit empty message. The paired-dot chart remains available.
 Goal differential is goals for minus goals against; xG differential is xG for
 minus xG against. Gap always means actual minus expected. Lower/negative gaps
 are favorable for goals allowed; higher/positive gaps are favorable for goals
@@ -136,10 +145,11 @@ round independently from full precision.
 Run `make test-explore` for calculation and HTTP regression checks (also included
 in `make test` and CI). For browser verification, the `teams` scenario in
 `TestHistoryPreview` supplies 16 synthetic teams, full/partial xG, and an empty
-season. Verify desktop and 390px layouts, signed differential axes, touch/hover,
-keyboard inspection/dismissal, logos and alignment after resize, missing-data
-warnings, sorting in both directions, no-script sorting, season/measure/display
-URLs, Back/Forward, and switching analyses without fetching new data.
+season. Verify desktop and 390px layouts, signed differential and gap axes,
+gap ranking for all three measures, touch/hover, keyboard inspection/dismissal,
+logos and alignment after resize, missing-data warnings and `xG incomplete` labels,
+sorting in both directions, no-script sorting, season/measure/display URLs,
+Back/Forward, and switching analyses without fetching new data.
 
 ### Team history
 

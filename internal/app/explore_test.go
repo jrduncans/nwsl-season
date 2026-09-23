@@ -15,7 +15,7 @@ import (
 )
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=team-history&team=alpha"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=team-history&team=alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 				"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
@@ -206,6 +206,7 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=teams&measure=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&measure=for&measure=against", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
+		{"/explore?view=teams&display=gap&display=chart", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-sort=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-order=bad", http.StatusBadRequest, ""},
 		{"/explore?view=team-history&team=unknown", http.StatusBadRequest, ""},
@@ -289,6 +290,47 @@ func TestExploreTeamViewsKeepSelectionAndWarnOnlyForMissingXG(t *testing.T) {
 				t.Fatalf("sort link lost selection: %s", column.URL)
 			}
 		}
+	}
+}
+
+func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
+	archive := historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+		"2026": {lifecycle: cache.SourceScopeActive, goals: 3, xgCovered: 19},
+	})
+	summaries, err := history.SummarizeScoring(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := url.Values{
+		"season":     {"2025"},
+		"measure":    {"against"},
+		"display":    {"gap"},
+		"team-sort":  {"for-expected"},
+		"team-order": {"asc"},
+	}
+	page, err := exploreTeams(query, summaries, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TeamDisplay != "gap" || page.TeamSeason != "2025" || page.TeamMeasure != "against" || page.TeamSort != "for-expected" || page.TeamOrder != "asc" {
+		t.Fatalf("gap view lost selection: %+v", page)
+	}
+	for _, tc := range []struct{ name, link, display string }{
+		{"paired-dot chart", page.TeamChartURL, "chart"},
+		{"gap chart", page.TeamGapURL, "gap"},
+		{"table", page.TeamTableURL, "table"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			link, err := url.Parse(tc.link)
+			if err != nil {
+				t.Fatal(err)
+			}
+			values := link.Query()
+			if values.Get("view") != "teams" || values.Get("display") != tc.display || values.Get("season") != "2025" || values.Get("measure") != "against" || values.Get("team-sort") != "for-expected" || values.Get("team-order") != "asc" {
+				t.Fatalf("link did not preserve selection: %s", tc.link)
+			}
+		})
 	}
 }
 

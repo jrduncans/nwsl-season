@@ -12,6 +12,7 @@
 </nav>
 <nav class="explore-subviews" data-team-views aria-label="Team performance views"{{if and (ne .View "teams") (ne .View "team-history")}} hidden{{end}}>
 <a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Comparison chart</a>
+<a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>Gap chart</a>
 <a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Comparison table</a>
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Team history</a>
 </nav>
@@ -58,7 +59,7 @@
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
-<div class="explore-heading"><h2 id="explore-teams-title">Actual vs expected (regular-season)</h2>
+<div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team (regular-season){{else}}Actual vs expected (regular-season){{end}}</h2>
 <form method="get" data-team-controls class="explore-team-controls">
 <input type="hidden" name="view" value="teams">
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
@@ -76,6 +77,14 @@
 <div class="explore-legend"><span class="explore-actual-key">● <span data-team-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key">◆ <span data-team-xg-label>{{.TeamXGLabel}}</span></span></div>
 <div class="explore-chart-wrap explore-team-chart" data-team-chart-wrap><canvas data-chart="teams" tabindex="0" role="img" aria-label="Team goals and expected goals per match" aria-describedby="explore-chart-help"></canvas><div class="explore-team-labels" data-team-labels aria-hidden="true"></div></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect teams. Escape clears the tooltip.</p>
+</div>
+<div data-team-gap-plot hidden>
+<div class="explore-legend explore-gap-legend" data-team-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above expected</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below expected</span></div>
+<p class="note" id="explore-team-gap-note" data-team-gap-note hidden>Bars show actual minus expected per match, sorted by gap.</p>
+<p class="note" data-team-gap-empty hidden>No teams have complete xG for this measure yet.</p>
+<p class="note" id="explore-team-gap-missing" data-team-gap-missing hidden></p>
+<div class="explore-chart-wrap explore-team-chart" data-team-gap-chart-wrap hidden><canvas data-chart="team-gap" tabindex="0" role="img" aria-label="Team actual minus expected per match" aria-describedby="explore-chart-help explore-team-gap-note explore-team-gap-missing"></canvas><div class="explore-team-labels" data-team-gap-labels aria-hidden="true"></div></div>
+<p class="explore-keyboard-hint" data-team-gap-hint hidden>Use arrow keys to inspect teams. Escape clears the tooltip.</p>
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>

@@ -25,6 +25,7 @@
   };
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
+  const gapExtent = values => Math.max(.1, ...values.map(value => Math.abs(value))) * 1.15;
   const percent = value => `${value.toFixed(1)}%`;
   // Use the same fit rule for visible labels and tooltip content.
   const hasSegmentLabel = (chart, value) => chart.chartArea && chart.chartArea.width * value / 100 >= 58;
@@ -46,7 +47,7 @@
     // The hidden bar dataset must not make the goals/xG line modes start at zero.
     const axis = {beginAtZero: false, grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}};
     if (gaps === null) return axis;
-    const extent = Math.max(.1, ...gaps.map(value => Math.abs(value))) * 1.15;
+    const extent = gapExtent(gaps);
     return {...axis, grace: 0, min: -extent, max: extent,
       grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
       // The symmetric limits are padding, not meaningful values to label.
@@ -236,14 +237,30 @@
     Object.entries(changes).forEach(([key, value]) => params.set(key, value));
     return `?${params}`;
   }
+  function teamYAxis(labels) {
+    return {offset: true, grid: {color: color('--line'), drawTicks: false}, border: {display: false}, ticks: {autoSkip: false, display: false}, afterFit: scale => {
+      scale.width = root.querySelector(labels).offsetWidth;
+    }};
+  }
+  function alignTeamLabels(chart, selector) {
+    root.querySelector(selector).childNodes.forEach((label, index) => {
+      label.style.top = `${chart.scales.y.getPixelForValue(index)}px`;
+    });
+  }
+  function teamGapXAxis(values) {
+    const extent = gapExtent(values);
+    return {min: -extent, max: extent, position: 'top',
+      grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
+      border: {display: false},
+      ticks: {includeBounds: false, maxTicksLimit: 7, callback: value => signed(value)},
+      title: {display: true, text: 'Actual − expected per match'}};
+  }
   function createTeams(canvas) {
     const options = commonOptions();
     options.indexAxis = 'y';
     options.scales = {
       x: {beginAtZero: true, position: 'top', grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 5}, title: {display: true, text: 'Per match'}},
-      y: {offset: true, grid: {color: color('--line'), drawTicks: false}, border: {display: false}, ticks: {autoSkip: false, display: false}, afterFit: scale => {
-        scale.width = root.querySelector('[data-team-labels]').offsetWidth;
-      }},
+      y: teamYAxis('[data-team-labels]'),
     };
     options.plugins.tooltip.callbacks = {
       title: items => items[0] ? items[0].chart.teamRows[items[0].dataIndex].name : '',
@@ -252,9 +269,7 @@
     const chart = new Chart(canvas, {
       type: 'line', options,
       plugins: [{id: 'teamConnectors', afterLayout(chart) {
-        root.querySelector('[data-team-labels]').childNodes.forEach((label, index) => {
-          label.style.top = `${chart.scales.y.getPixelForValue(index)}px`;
-        });
+        alignTeamLabels(chart, '[data-team-labels]');
       }, beforeDatasetsDraw(chart) {
         const actual = chart.getDatasetMeta(0).data, expected = chart.getDatasetMeta(1).data;
         const ctx = chart.ctx;
@@ -273,13 +288,48 @@
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
+  function createTeamGap(canvas) {
+    const options = commonOptions();
+    options.indexAxis = 'y';
+    options.scales = {x: teamGapXAxis([]), y: teamYAxis('[data-team-gap-labels]')};
+    options.plugins.tooltip.callbacks = {
+      title: items => items[0] ? items[0].chart.teamRows[items[0].dataIndex].name : '',
+      label: item => teamDescription(item.chart, item.dataIndex),
+    };
+    const chart = new Chart(canvas, {
+      type: 'bar', options,
+      plugins: [{id: 'teamGapLabels',
+        afterLayout(chart) { alignTeamLabels(chart, '[data-team-gap-labels]'); },
+        afterDatasetsDraw(chart) {
+          if (!chart.teamRows) return;
+          const ctx = chart.ctx, zero = chart.scales.x.getPixelForValue(0);
+          ctx.save(); ctx.fillStyle = color('--muted'); ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+          chart.teamRows.forEach((row, index) => {
+            const gap = teamValue(row, chart.teamMeasure, 'gap');
+            if (gap === null || Math.abs(gap) < .005) {
+              ctx.fillText(gap === null ? 'xG incomplete' : '0.00',
+                gap === null ? chart.chartArea.left + 8 : zero + 8, chart.scales.y.getPixelForValue(index));
+            }
+          });
+          ctx.restore();
+        },
+      }],
+      data: {labels: [], datasets: [{
+        label: 'Actual − expected', data: [], barThickness: 24, borderRadius: 2,
+        backgroundColor: context => context.raw > 0 ? goalsColor : context.raw < 0 ? xgColor : color('--muted'),
+        hoverBorderColor: color('--gold'), hoverBorderWidth: 2,
+      }]},
+    });
+    keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
+    return chart;
+  }
   function showTeams(params) {
     const season = teamSeasons.find(row => row.season === (params.get('season') || root.dataset.defaultTeamSeason));
     teamSeason.value = season?.season || '';
     teamMeasure.value = Object.hasOwn(teamMeasures, params.get('measure')) ? params.get('measure') : 'difference';
     const measure = teamMeasures[teamMeasure.value];
     const rows = season?.teams || [];
-    const display = params.get('display') === 'table' ? 'table' : 'chart';
+    const display = ['chart', 'gap', 'table'].includes(params.get('display')) ? params.get('display') : 'chart';
     const columns = [...root.querySelectorAll('[data-team-sort]')].map(link => link.dataset.teamSort);
     let requestedSort = params.get('team-sort');
     if (['actual', 'expected', 'gap'].includes(requestedSort)) requestedSort = `${teamMeasure.value}-${requestedSort}`;
@@ -293,8 +343,11 @@
     root.querySelector('[data-team-controls] [name="display"]').value = display;
     root.querySelector('[data-team-controls] [name="team-sort"]').value = column;
     root.querySelector('[data-team-controls] [name="team-order"]').value = order;
-    root.querySelector('[data-team-measure-control]').hidden = display !== 'chart';
+    root.querySelector('#explore-teams-title').textContent = display === 'gap'
+      ? 'Actual − expected by team (regular-season)' : 'Actual vs expected (regular-season)';
+    root.querySelector('[data-team-measure-control]').hidden = display === 'table';
     root.querySelector('[data-team-plot]').hidden = display !== 'chart';
+    root.querySelector('[data-team-gap-plot]').hidden = display !== 'gap';
     root.querySelector('[data-team-table]').hidden = display !== 'table';
     root.querySelector('[data-team-warning]').hidden = !rows.some(row => row.values[measure.index].expected === null);
     root.querySelectorAll('[data-team-actual-label]').forEach(label => { label.textContent = measure.actual; });
@@ -326,7 +379,37 @@
       });
       return tr;
     }));
-    if (!rows.length || display !== 'chart') return;
+    if (!rows.length) return;
+    if (display === 'gap') {
+      const gapRows = sortedTeams(rows, measure, 'gap', measure.index === 1 ? 'asc' : 'desc');
+      const gapValues = gapRows.map(row => teamValue(row, measure, 'gap'));
+      const gapEmpty = gapValues.every(value => value === null);
+      const missingNames = gapRows.filter((_, index) => gapValues[index] === null).map(row => row.name);
+      const missingNote = root.querySelector('[data-team-gap-missing]');
+      missingNote.hidden = gapEmpty || missingNames.length === 0;
+      missingNote.textContent = missingNames.length ? `Incomplete xG for ${missingNames.join(', ')}; these teams have no gap bar.` : '';
+      root.querySelector('[data-team-gap-empty]').hidden = !gapEmpty;
+      root.querySelector('[data-team-gap-legend]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-note]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-chart-wrap]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-hint]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-note]').textContent = measure.index === 1
+        ? 'Bars show goals allowed minus xG allowed per match, from most negative to most positive. Negative means fewer goals conceded than expected.'
+        : 'Bars show actual minus expected per match, from largest positive gap to largest negative gap.';
+      if (gapEmpty) return;
+      const canvas = root.querySelector('[data-chart="team-gap"]');
+      canvas.parentElement.style.height = `${gapRows.length * 48 + 70}px`;
+      root.querySelector('[data-team-gap-labels]').replaceChildren(...gapRows.map(teamName));
+      const chart = charts.teamGap || (charts.teamGap = createTeamGap(canvas));
+      chart.teamRows = gapRows; chart.teamMeasure = measure;
+      chart.data.labels = gapRows.map(row => row.name);
+      chart.data.datasets[0].data = gapValues;
+      chart.options.scales.x = teamGapXAxis(gapValues.filter(value => value !== null));
+      canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} minus ${measure.expected} per team per match, sorted by gap`);
+      chart.resize(); chart.update('none');
+      return;
+    }
+    if (display !== 'chart') return;
     const chartRows = sortedTeams(rows, measure, 'actual', measure.index === 1 ? 'asc' : 'desc');
     const canvas = root.querySelector('[data-chart="teams"]');
     canvas.parentElement.style.height = `${chartRows.length * 48 + 70}px`;
@@ -655,7 +738,8 @@
     root.querySelector('[data-league-views]').hidden = teamView;
     root.querySelector('[data-team-views]').hidden = !teamView;
     root.querySelectorAll('[data-team-display]').forEach(link => {
-      const selected = view === 'teams' && link.dataset.teamDisplay === (params.get('display') === 'table' ? 'table' : 'chart');
+      const selected = view === 'teams' && link.dataset.teamDisplay ===
+        (['chart', 'gap', 'table'].includes(params.get('display')) ? params.get('display') : 'chart');
       if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
       link.href = teamLink({display: link.dataset.teamDisplay});
     });
