@@ -22,8 +22,10 @@ type explorePage struct {
 type exploreChartRecord struct {
 	Season string   `json:"season"`
 	Played int      `json:"played"`
+	Active bool     `json:"active"`
 	Goals  *float64 `json:"goals"`
 	XG     *float64 `json:"xg"`
+	Gap    *float64 `json:"gap"`
 	Bins   [5]int   `json:"bins"`
 }
 
@@ -84,8 +86,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			Goals:          summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch,
 		})
 		page.ChartData = append(page.ChartData, exploreChartRecord{
-			Season: summary.Season, Played: summary.Played,
-			Goals: summary.GoalsPerMatch, XG: summary.XGPerMatch, Bins: summary.GoalBins,
+			Season: summary.Season, Played: summary.Played, Active: summary.Lifecycle == cache.SourceScopeActive,
+			Goals: summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch, Bins: summary.GoalBins,
 		})
 	}
 	a.render(w, "explore", page)

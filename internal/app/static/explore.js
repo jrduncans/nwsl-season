@@ -11,6 +11,7 @@
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = root.querySelector('[data-history-measure]');
   const metric = root.querySelector('[data-metric]');
+  const distributionBin = root.querySelector('[data-distribution-bin]');
   const status = root.querySelector('[data-chart-status]');
   const charts = {};
   const styles = getComputedStyle(root);
@@ -25,6 +26,7 @@
   };
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
+  const gapExtent = values => Math.max(.1, ...values.map(value => Math.abs(value))) * 1.15;
   const percent = value => `${value.toFixed(1)}%`;
   // Use the same fit rule for visible labels and tooltip content.
   const hasSegmentLabel = (chart, value) => chart.chartArea && chart.chartArea.width * value / 100 >= 58;
@@ -42,6 +44,17 @@
       },
     },
   });
+  function trendYAxis(gaps = null) {
+    // The hidden bar dataset must not make the goals/xG line modes start at zero.
+    const axis = {beginAtZero: false, grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}};
+    if (gaps === null) return axis;
+    const extent = gapExtent(gaps);
+    return {...axis, grace: 0, min: -extent, max: extent,
+      grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
+      // The symmetric limits are padding, not meaningful values to label.
+      ticks: {maxTicksLimit: 7, includeBounds: false, callback: value => signed(value)},
+      title: {display: true, text: 'Goals − xG per match'}};
+  }
   const clearChart = chart => {
     chart.setActiveElements([]);
     chart.tooltip.setActiveElements([], {x: 0, y: 0});
@@ -93,20 +106,21 @@
     if (chart.historyRows) { const inspection = historyInspection(chart, mark); return `${inspection.title}. ${inspection.lines.join('. ')}`; }
     const year = chart.data.labels[mark.index], series = chart.data.datasets[mark.datasetIndex];
     const row = chart.scoringRecords.get(year);
-    return `${year}${row.active ? ' (in progress)' : ''}, ${series.label}: ${fixed(series.data[mark.index])} per match, ${row.played} played`;
+    const value = series.key === 'gap' ? signed(series.data[mark.index]) : fixed(series.data[mark.index]);
+    return `${year}${row.active ? ' (in progress)' : ''}, ${series.label}: ${value} per match, ${row.played} played`;
   }
   function createTrend(canvas, rows = records, plugins = []) {
     const options = commonOptions();
     options.scales = {
       x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
-      y: {grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}},
+      y: trendYAxis(),
     };
     options.plugins.tooltip.callbacks = {
       title: items => {
         const item = items[0];
         return item ? `${item.label}${item.chart.scoringRecords.get(item.label)?.active ? ' (in progress)' : ''}` : '';
       },
-      label: item => `${item.dataset.label}: ${fixed(item.parsed.y)} per match`,
+      label: item => `${item.dataset.label}: ${item.dataset.key === 'gap' ? signed(item.parsed.y) : fixed(item.parsed.y)} per match`,
       afterLabel: item => `${item.chart.scoringRecords.get(item.label).played} played`,
     };
     const chart = new Chart(canvas, {
@@ -123,6 +137,18 @@
     setTrendData(chart, rows);
     chart.update('none');
     keyboardAccess(chart, mark => trendDescription(chart, mark));
+    return chart;
+  }
+  function createLeagueTrend(canvas) {
+    const chart = createTrend(canvas);
+    chart.data.datasets.push({
+      type: 'bar', label: 'Goals − xG', key: 'gap', hidden: true,
+      data: chart.data.labels.map(year => chart.scoringRecords.get(year)?.gap ?? null),
+      backgroundColor: context => context.raw > 0 ? goalsColor : context.raw < 0 ? xgColor : color('--muted'),
+      borderRadius: 2, maxBarThickness: 36, barPercentage: .7, categoryPercentage: .9, minBarLength: 3,
+      hoverBorderColor: color('--gold'), hoverBorderWidth: 2,
+    });
+    chart.update('none');
     return chart;
   }
   function createDistribution(canvas) {
@@ -159,6 +185,67 @@
       return `${row.season}, ${binLabels[mark.datasetIndex]}: ${row.bins[mark.datasetIndex]} of ${row.played} matches, ${percent(row.bins[mark.datasetIndex] / row.played * 100)}`;
     });
     return chart;
+  }
+  function binTrendYAxis() {
+    const largestShare = Math.max(...records.flatMap(row => row.bins.map(count => count / row.played * 100)));
+    const paddedMax = Math.min(100, largestShare * 1.05);
+    const step = paddedMax <= 40 ? 5 : paddedMax <= 60 ? 10 : 20;
+    const max = Math.max(step, Math.min(100, Math.ceil(paddedMax / step) * step));
+    return {min: 0, max, grid: {color: color('--line')}, border: {display: false},
+      ticks: {stepSize: step, autoSkip: false, callback: value => `${value}%`},
+      title: {display: true, text: 'Share of matches'}};
+  }
+  function createBinTrend(canvas) {
+    const first = Number(records[0].season), last = Number(records.at(-1).season);
+    const years = Array.from({length: last - first + 1}, (_, index) => String(first + index));
+    const byYear = new Map(records.map(row => [row.season, row]));
+    const options = commonOptions();
+    options.scales = {
+      x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
+      y: binTrendYAxis(),
+    };
+    options.plugins.tooltip.callbacks = {
+      title: items => {
+        const item = items[0];
+        if (!item) return '';
+        const row = item.chart.binRecords.get(item.label);
+        return `${item.label}${row.active ? ' (in progress)' : ''}`;
+      },
+      label: item => {
+        const chart = item.chart, row = chart.binRecords.get(item.label), bin = chart.binIndex;
+        return `${binLabels[bin]}: ${row.bins[bin]} of ${row.played} matches (${percent(item.parsed.y)})`;
+      },
+    };
+    const chart = new Chart(canvas, {type: 'line', options,
+      data: {labels: years, datasets: [{
+        label: '', data: years.map(() => null), spanGaps: false,
+        borderColor: binColors[0], backgroundColor: binColors[0],
+        pointBorderColor: binColors[0], pointBackgroundColor: binColors[0],
+        borderWidth: 2.5, pointRadius: 5, pointHitRadius: 4,
+        pointHoverRadius: 8, pointHoverBorderWidth: 2, pointHoverBorderColor: color('--panel'),
+      }]},
+    });
+    chart.binRecords = byYear;
+    keyboardAccess(chart, mark => {
+      const year = chart.data.labels[mark.index], row = chart.binRecords.get(year), bin = chart.binIndex;
+      return `${year}${row.active ? ' (in progress)' : ''}, ${binLabels[bin]}: ${row.bins[bin]} of ${row.played} matches, ${percent(row.bins[bin] / row.played * 100)}`;
+    });
+    return chart;
+  }
+  function showBinTrend(chart, bin) {
+    const shares = chart.data.labels.map(year => {
+      const row = chart.binRecords.get(year);
+      return row ? row.bins[bin] / row.played * 100 : null;
+    });
+    chart.binIndex = bin;
+    chart.data.datasets[0].label = binLabels[bin];
+    chart.data.datasets[0].data = shares;
+    chart.data.datasets[0].borderColor = binColors[bin];
+    chart.data.datasets[0].backgroundColor = binColors[bin];
+    chart.data.datasets[0].pointBorderColor = binColors[bin];
+    chart.data.datasets[0].pointBackgroundColor = binColors[bin];
+    chart.canvas.setAttribute('aria-label', `Share of regular-season matches with ${binLabels[bin]}, by season`);
+    chart.resize(); chart.update();
   }
   function teamDescription(chart, index) {
     const row = chart.teamRows[index], measure = chart.teamMeasure;
@@ -212,14 +299,30 @@
     Object.entries(changes).forEach(([key, value]) => params.set(key, value));
     return `?${params}`;
   }
+  function teamYAxis(labels) {
+    return {offset: true, grid: {color: color('--line'), drawTicks: false}, border: {display: false}, ticks: {autoSkip: false, display: false}, afterFit: scale => {
+      scale.width = root.querySelector(labels).offsetWidth;
+    }};
+  }
+  function alignTeamLabels(chart, selector) {
+    root.querySelector(selector).childNodes.forEach((label, index) => {
+      label.style.top = `${chart.scales.y.getPixelForValue(index)}px`;
+    });
+  }
+  function teamGapXAxis(values) {
+    const extent = gapExtent(values);
+    return {min: -extent, max: extent, position: 'top',
+      grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
+      border: {display: false},
+      ticks: {includeBounds: false, maxTicksLimit: 7, callback: value => signed(value)},
+      title: {display: true, text: 'Actual − expected per match'}};
+  }
   function createTeams(canvas) {
     const options = commonOptions();
     options.indexAxis = 'y';
     options.scales = {
       x: {beginAtZero: true, position: 'top', grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 5}, title: {display: true, text: 'Per match'}},
-      y: {offset: true, grid: {color: color('--line'), drawTicks: false}, border: {display: false}, ticks: {autoSkip: false, display: false}, afterFit: scale => {
-        scale.width = root.querySelector('[data-team-labels]').offsetWidth;
-      }},
+      y: teamYAxis('[data-team-labels]'),
     };
     options.plugins.tooltip.callbacks = {
       title: items => items[0] ? items[0].chart.teamRows[items[0].dataIndex].name : '',
@@ -228,9 +331,7 @@
     const chart = new Chart(canvas, {
       type: 'line', options,
       plugins: [{id: 'teamConnectors', afterLayout(chart) {
-        root.querySelector('[data-team-labels]').childNodes.forEach((label, index) => {
-          label.style.top = `${chart.scales.y.getPixelForValue(index)}px`;
-        });
+        alignTeamLabels(chart, '[data-team-labels]');
       }, beforeDatasetsDraw(chart) {
         const actual = chart.getDatasetMeta(0).data, expected = chart.getDatasetMeta(1).data;
         const ctx = chart.ctx;
@@ -249,13 +350,48 @@
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
+  function createTeamGap(canvas) {
+    const options = commonOptions();
+    options.indexAxis = 'y';
+    options.scales = {x: teamGapXAxis([]), y: teamYAxis('[data-team-gap-labels]')};
+    options.plugins.tooltip.callbacks = {
+      title: items => items[0] ? items[0].chart.teamRows[items[0].dataIndex].name : '',
+      label: item => teamDescription(item.chart, item.dataIndex),
+    };
+    const chart = new Chart(canvas, {
+      type: 'bar', options,
+      plugins: [{id: 'teamGapLabels',
+        afterLayout(chart) { alignTeamLabels(chart, '[data-team-gap-labels]'); },
+        afterDatasetsDraw(chart) {
+          if (!chart.teamRows) return;
+          const ctx = chart.ctx, zero = chart.scales.x.getPixelForValue(0);
+          ctx.save(); ctx.fillStyle = color('--muted'); ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+          chart.teamRows.forEach((row, index) => {
+            const gap = teamValue(row, chart.teamMeasure, 'gap');
+            if (gap === null || Math.abs(gap) < .005) {
+              ctx.fillText(gap === null ? 'xG incomplete' : '0.00',
+                gap === null ? chart.chartArea.left + 8 : zero + 8, chart.scales.y.getPixelForValue(index));
+            }
+          });
+          ctx.restore();
+        },
+      }],
+      data: {labels: [], datasets: [{
+        label: 'Actual − expected', data: [], barThickness: 24, borderRadius: 2,
+        backgroundColor: context => context.raw > 0 ? goalsColor : context.raw < 0 ? xgColor : color('--muted'),
+        hoverBorderColor: color('--gold'), hoverBorderWidth: 2,
+      }]},
+    });
+    keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
+    return chart;
+  }
   function showTeams(params) {
     const season = teamSeasons.find(row => row.season === (params.get('season') || root.dataset.defaultTeamSeason));
     teamSeason.value = season?.season || '';
     teamMeasure.value = Object.hasOwn(teamMeasures, params.get('measure')) ? params.get('measure') : 'difference';
     const measure = teamMeasures[teamMeasure.value];
     const rows = season?.teams || [];
-    const display = params.get('display') === 'table' ? 'table' : 'chart';
+    const display = ['chart', 'gap', 'table'].includes(params.get('display')) ? params.get('display') : 'chart';
     const columns = [...root.querySelectorAll('[data-team-sort]')].map(link => link.dataset.teamSort);
     let requestedSort = params.get('team-sort');
     if (['actual', 'expected', 'gap'].includes(requestedSort)) requestedSort = `${teamMeasure.value}-${requestedSort}`;
@@ -269,8 +405,11 @@
     root.querySelector('[data-team-controls] [name="display"]').value = display;
     root.querySelector('[data-team-controls] [name="team-sort"]').value = column;
     root.querySelector('[data-team-controls] [name="team-order"]').value = order;
-    root.querySelector('[data-team-measure-control]').hidden = display !== 'chart';
+    root.querySelector('#explore-teams-title').textContent = display === 'gap'
+      ? 'Actual − expected by team (regular-season)' : 'Actual vs expected (regular-season)';
+    root.querySelector('[data-team-measure-control]').hidden = display === 'table';
     root.querySelector('[data-team-plot]').hidden = display !== 'chart';
+    root.querySelector('[data-team-gap-plot]').hidden = display !== 'gap';
     root.querySelector('[data-team-table]').hidden = display !== 'table';
     root.querySelector('[data-team-warning]').hidden = !rows.some(row => row.values[measure.index].expected === null);
     root.querySelectorAll('[data-team-actual-label]').forEach(label => { label.textContent = measure.actual; });
@@ -302,7 +441,37 @@
       });
       return tr;
     }));
-    if (!rows.length || display !== 'chart') return;
+    if (!rows.length) return;
+    if (display === 'gap') {
+      const gapRows = sortedTeams(rows, measure, 'gap', measure.index === 1 ? 'asc' : 'desc');
+      const gapValues = gapRows.map(row => teamValue(row, measure, 'gap'));
+      const gapEmpty = gapValues.every(value => value === null);
+      const missingNames = gapRows.filter((_, index) => gapValues[index] === null).map(row => row.name);
+      const missingNote = root.querySelector('[data-team-gap-missing]');
+      missingNote.hidden = gapEmpty || missingNames.length === 0;
+      missingNote.textContent = missingNames.length ? `Incomplete xG for ${missingNames.join(', ')}; these teams have no gap bar.` : '';
+      root.querySelector('[data-team-gap-empty]').hidden = !gapEmpty;
+      root.querySelector('[data-team-gap-legend]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-note]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-chart-wrap]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-hint]').hidden = gapEmpty;
+      root.querySelector('[data-team-gap-note]').textContent = measure.index === 1
+        ? 'Bars show goals allowed minus xG allowed per match, from most negative to most positive. Negative means fewer goals conceded than expected.'
+        : 'Bars show actual minus expected per match, from largest positive gap to largest negative gap.';
+      if (gapEmpty) return;
+      const canvas = root.querySelector('[data-chart="team-gap"]');
+      canvas.parentElement.style.height = `${gapRows.length * 48 + 70}px`;
+      root.querySelector('[data-team-gap-labels]').replaceChildren(...gapRows.map(teamName));
+      const chart = charts.teamGap || (charts.teamGap = createTeamGap(canvas));
+      chart.teamRows = gapRows; chart.teamMeasure = measure;
+      chart.data.labels = gapRows.map(row => row.name);
+      chart.data.datasets[0].data = gapValues;
+      chart.options.scales.x = teamGapXAxis(gapValues.filter(value => value !== null));
+      canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} minus ${measure.expected} per team per match, sorted by gap`);
+      chart.resize(); chart.update('none');
+      return;
+    }
+    if (display !== 'chart') return;
     const chartRows = sortedTeams(rows, measure, 'actual', measure.index === 1 ? 'asc' : 'desc');
     const canvas = root.querySelector('[data-chart="teams"]');
     canvas.parentElement.style.height = `${chartRows.length * 48 + 70}px`;
@@ -428,13 +597,17 @@
   function historyContextDatasets(chart, series) {
     const seasons = new Map(series.seasons.map(row => [row.season, row]));
     const neutral = color('--muted');
-    return ['low', 'high'].map(side => ({
-      label: `Season ${side}`, contextKind: `season-${side}`,
-      data: chart.data.labels.map(year => seasons.get(year)?.[side]?.value ?? null),
-      borderColor: neutral, backgroundColor: '#dce2df80', borderWidth: 1, borderDash: [2, 3],
-      pointBackgroundColor: neutral, pointRadius: 2.5, pointHitRadius: 6, pointHoverRadius: 5,
-      fill: side === 'high' ? 2 : false, spanGaps: false, order: 2,
-    })).concat(['low', 'high'].map(side => ({
+    const seasonal = [{
+      type: 'bar', label: 'Season high–low range', contextKind: 'season-range',
+      data: chart.data.labels.map(year => {
+        const season = seasons.get(year);
+        return season?.low && season?.high ? [season.low.value, season.high.value] : null;
+      }),
+      backgroundColor: '#a6bab199', borderColor: neutral, borderWidth: 1,
+      borderSkipped: false, categoryPercentage: .75, barPercentage: .75,
+      maxBarThickness: 24, minBarLength: 2, order: 2,
+    }];
+    return seasonal.concat(['low', 'high'].map(side => ({
       label: `Record ${side}`, contextKind: `record-${side}`, keyboardOnce: true,
       data: chart.data.labels.map(() => series[side]?.value ?? null),
       borderColor: neutral, borderWidth: 0,
@@ -454,13 +627,15 @@
       chart.setDatasetVisibility(index, !dataset.hidden);
     });
     if (context) chart.data.datasets.push(...historyContextDatasets(chart, context));
+    // Mixed bars need half a category at each edge so the first/last bars stay full width.
+    chart.options.scales.x.offset = Boolean(context);
     chart.options.scales.y = {...chart.options.scales.y, beginAtZero: true, min: domain.min, max: domain.max, title: {display: true, text: 'Per match'}};
     chart.options.plugins.tooltip.callbacks = {
       title: items => items[0] ? wrapHistoryTooltip(chart, [historyInspection(chart, {datasetIndex: items[0].datasetIndex, index: items[0].dataIndex}, true).title]) : [],
       label: item => wrapHistoryTooltip(chart, historyInspection(chart, {datasetIndex: item.datasetIndex, index: item.dataIndex}, true).lines),
     };
-    canvas.setAttribute('aria-label', `${rows[0].name}: ${visible.map(key => key === 'goals' ? measure.actual : measure.expected).join(' and ')} per match, by regular season${context ? ', with league ranges and completed-season record holders' : ''}`);
-    chart.resize(); chart.update('none');
+    canvas.setAttribute('aria-label', `${rows[0].name}: ${visible.map(key => key === 'goals' ? measure.actual : measure.expected).join(' and ')} per match, by regular season${context ? ', with floating league ranges and completed-season record holders' : ''}`);
+    chart.resize(); chart.update();
   }
   function showHistoryContextDetails(seriesList) {
     const textElement = (tag, text) => { const element = document.createElement(tag); element.textContent = text; return element; };
@@ -497,12 +672,13 @@
     const measure = teamMeasures[historyMeasure.value];
     historySeries.value = ['goals', 'xg', 'both'].includes(params.get('series')) ? params.get('series') : 'both';
     historyContext.checked = params.get('context') === 'on';
+    const contextEnabled = historyContext.checked;
     const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
     const context = historyContextData[measure.index];
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
-    root.querySelector('[data-history-context-details]').hidden = !historyContext.checked;
-    root.querySelector('[data-history-context-legend]').hidden = !historyContext.checked;
-    root.querySelector('[data-history-context-note]').hidden = !historyContext.checked;
+    root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
+    root.querySelector('[data-history-context-legend]').hidden = !contextEnabled;
+    root.querySelector('[data-history-context-note]').hidden = !contextEnabled;
     showHistoryContextDetails(visible.map(key => context[key]));
     const notes = visible.map(key => context[key].since ? `${context[key].label} records since ${context[key].since}` : `${context[key].label}: no completed-season records`);
     if (visible.includes('xg') && context.xg.partial) notes.push('Some season xG ranges are unavailable because team coverage is incomplete');
@@ -538,14 +714,14 @@
       season: row.season, active: row.active, played: row.played,
       goals: row.values[measure.index].actual, xg: row.values[measure.index].expected,
     }));
-    const split = historyContext.checked && visible.length === 2;
+    const split = contextEnabled && visible.length === 2;
     root.querySelector('[data-history-xg-panel]').hidden = !split;
     root.querySelector('[data-history-panel-label]').hidden = !split;
     root.querySelector('[data-history-panel-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-panel-label]').textContent = measure.expected;
     root.querySelector('[data-history-xg-empty]').hidden = !visible.includes('xg') || points.some(row => row.xg !== null);
     const values = points.flatMap(row => visible.map(key => row[key])).filter(value => value !== null);
-    if (historyContext.checked) {
+    if (contextEnabled) {
       visible.forEach(key => {
         const series = context[key];
         values.push(...[series.low?.value, series.high?.value].filter(value => value != null));
@@ -556,7 +732,7 @@
     }
     const low = Math.min(0, ...values), high = Math.max(0, ...values), pad = (high - low) * .15 || .25;
     const domain = {min: low < 0 ? low - pad : 0, max: high + pad};
-    showHistoryChart('team-history', points, rows, measure, split ? ['goals'] : visible, historyContext.checked ? context[visible[0]] : null, domain);
+    showHistoryChart('team-history', points, rows, measure, split ? ['goals'] : visible, contextEnabled ? context[visible[0]] : null, domain);
     if (split) showHistoryChart('team-history-xg', points, rows, measure, ['xg'], context.xg, domain);
   }
   function styleTable() {
@@ -631,7 +807,8 @@
     root.querySelector('[data-league-views]').hidden = teamView;
     root.querySelector('[data-team-views]').hidden = !teamView;
     root.querySelectorAll('[data-team-display]').forEach(link => {
-      const selected = view === 'teams' && link.dataset.teamDisplay === (params.get('display') === 'table' ? 'table' : 'chart');
+      const selected = view === 'teams' && link.dataset.teamDisplay ===
+        (['chart', 'gap', 'table'].includes(params.get('display')) ? params.get('display') : 'chart');
       if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
       link.href = teamLink({display: link.dataset.teamDisplay});
     });
@@ -643,12 +820,33 @@
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
-    metric.value = ['goals', 'xg', 'compare'].includes(params.get('metric')) ? params.get('metric') : 'compare';
+    metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
+    root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
+      ? 'Goals − xG per match (regular-season)' : 'Goals and chances per match (regular-season)';
     root.querySelectorAll('[data-series]').forEach(series => {
-      series.hidden = metric.value !== 'compare' && series.dataset.series !== metric.value;
+      series.hidden = metric.value === 'gap' || (metric.value !== 'compare' && series.dataset.series !== metric.value);
     });
+    if (distributionBin) {
+      distributionBin.value = ['all', '0', '1', '2', '3', '4'].includes(params.get('distribution-bin'))
+        ? params.get('distribution-bin') : 'all';
+      root.querySelector('#explore-distribution-title').textContent = distributionBin.value === 'all'
+        ? 'Share of regular-season matches by total goals'
+        : `Share of regular-season matches with ${binLabels[Number(distributionBin.value)]}`;
+      root.querySelector('[data-distribution-stacked-panel]').hidden = distributionBin.value !== 'all';
+      root.querySelector('[data-distribution-trend-panel]').hidden = distributionBin.value === 'all';
+    }
     const canvas = root.querySelector(`[data-chart="${view}"]`);
-    if (canvas && !teamView && !charts[view]) charts[view] = view === 'trend' ? createTrend(canvas) : createDistribution(canvas);
+    if (view === 'trend' && canvas && !charts.trend) charts.trend = createLeagueTrend(canvas);
+    if (view === 'distribution' && distributionBin) {
+      if (distributionBin.value === 'all') {
+        if (!charts.distribution) charts.distribution = createDistribution(canvas);
+        charts.distribution.resize(); charts.distribution.update('none');
+      } else {
+        const trendCanvas = root.querySelector('[data-chart="bin-trend"]');
+        const chart = charts.binTrend || (charts.binTrend = createBinTrend(trendCanvas));
+        showBinTrend(chart, Number(distributionBin.value));
+      }
+    }
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
@@ -657,8 +855,27 @@
       link.href = `?${selection}`;
     });
     if (view === 'trend' && charts.trend) {
-      charts.trend.data.datasets.forEach((series, index) => charts.trend.setDatasetVisibility(index, metric.value === 'compare' || series.key === metric.value));
-      charts.trend.update('none');
+      const chart = charts.trend;
+      const gaps = chart.data.datasets[2].data.filter(value => value !== null);
+      const gapEmpty = metric.value === 'gap' && gaps.length === 0;
+      chart.data.datasets.forEach((series, index) => chart.setDatasetVisibility(index,
+        metric.value === 'compare' ? series.key !== 'gap' : series.key === metric.value));
+      // Reserve half a category at each edge so the first and last bars are not clipped.
+      chart.options.scales.x.offset = metric.value === 'gap';
+      chart.options.scales.y = trendYAxis(metric.value === 'gap' ? gaps : null);
+      chart.canvas.setAttribute('aria-label', {
+        compare: 'Goals and expected goals per regular-season match, by season',
+        goals: 'Goals per regular-season match, by season',
+        xg: 'Expected goals per regular-season match, by season',
+        gap: 'Goals minus expected goals per regular-season match, by season; positive bars are above xG and negative bars are below xG',
+      }[metric.value]);
+      root.querySelector('[data-trend-gap-legend]').hidden = metric.value !== 'gap' || gapEmpty;
+      root.querySelector('[data-trend-gap-note]').hidden = metric.value !== 'gap' || gapEmpty;
+      root.querySelector('[data-trend-gap-empty]').hidden = !gapEmpty;
+      root.querySelector('[data-trend-chart-wrap]').hidden = gapEmpty;
+      root.querySelector('[data-trend-keyboard-hint]').hidden = gapEmpty;
+      chart.resize();
+      chart.update('none');
     }
     const column = Number(params.get('sort') || 0);
     sortTable(Number.isInteger(column) && column >= 0 && column <= 4 ? column : 0, params.get('order') === 'asc' ? 'asc' : 'desc');
@@ -703,6 +920,12 @@
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
   metric.addEventListener('change', () => update({metric: metric.value}));
+  if (distributionBin) {
+    distributionBin.addEventListener('change', () => update({'distribution-bin': distributionBin.value}));
+    root.querySelector('[data-distribution-controls]').addEventListener('submit', event => {
+      event.preventDefault(); update({'distribution-bin': distributionBin.value});
+    });
+  }
   root.querySelector('[data-team-controls]').addEventListener('submit', event => {
     event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value});
   });

@@ -99,12 +99,12 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	if metrics[0].Goals.High.Value != 2 || len(metrics[0].Goals.High.Holders) != 2 || metrics[0].Goals.Seasons[2].High != nil {
 		t.Fatalf("record payload included excluded results or dropped ties: %+v", metrics[0].Goals)
 	}
-	for _, fragment := range []string{`value="xg" selected`, `data-history-context checked`, `data-history-context-details>`, `<h4>xG allowed</h4>`, `alpha · 2019 · 20 played`, `bravo · 2025 · 20 played`, `context=on`, `series=xg`} {
+	for _, fragment := range []string{`value="xg" selected`, `type="checkbox" name="context" value="on" data-history-context checked`, `data-history-context-details>`, `explore-context-bar`, `<h4>xG allowed</h4>`, `alpha · 2019 · 20 played`, `bravo · 2025 · 20 played`, `context=on`, `series=xg`} {
 		if !strings.Contains(body, fragment) {
 			t.Errorf("context fallback missing %q", fragment)
 		}
 	}
-	for _, query := range []string{"series=bad", "series=", "series=xg&series=goals", "context=", "context=true", "context=on&context=off"} {
+	for _, query := range []string{"series=bad", "series=", "series=xg&series=goals", "context=", "context=true", "context=bars", "context=on&context=off", "context=bars&context=on"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-history&"+query, nil))
 		if response.Code != http.StatusBadRequest {
@@ -112,7 +112,34 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 		}
 	}
 	page, err := exploreTeamHistory(url.Values{"series": {"goals"}, "measure": {"for"}}, nil)
-	if err != nil || len(page.HistoryContextDetails) != 1 || page.HistoryContextDetails[0].Label != "Goals scored" {
+	if err != nil || page.HistoryContext != "off" || len(page.HistoryContextDetails) != 1 || page.HistoryContextDetails[0].Label != "Goals scored" {
 		t.Fatalf("context selection disagrees with chart: %+v, %v", page, err)
+	}
+}
+
+func TestExploreContextFloatingBarsDirectURLAndSortLinks(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+	})}
+	handler := NewHandler(store)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-history&team=alpha&measure=for&series=both&context=on&history-sort=played", nil))
+	if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
+		t.Fatalf("status=%d reads=%d/%d", response.Code, store.archiveCalls, store.seasonCalls)
+	}
+	body := response.Body.String()
+	for _, fragment := range []string{`type="checkbox" name="context" value="on" data-history-context checked`, `data-history-context-details>`, `explore-context-bar`, `context=on`, `history-sort=played`} {
+		if !strings.Contains(body, fragment) {
+			t.Errorf("floating bars direct URL missing %q", fragment)
+		}
+	}
+	page, err := exploreTeamHistory(url.Values{"context": {"on"}}, nil)
+	if err != nil || page.HistoryContext != "on" {
+		t.Fatalf("floating-bars URL did not enable league context: %q, %v", page.HistoryContext, err)
+	}
+	off := httptest.NewRecorder()
+	handler.ServeHTTP(off, httptest.NewRequest(http.MethodGet, "/explore?view=team-history&team=alpha&context=off", nil))
+	if off.Code != http.StatusOK || !strings.Contains(off.Body.String(), `type="checkbox" name="context" value="on" data-history-context>`) || !strings.Contains(off.Body.String(), `data-history-context-details hidden`) {
+		t.Fatalf("context=off did not leave league context unchecked and hidden: status=%d", off.Code)
 	}
 }

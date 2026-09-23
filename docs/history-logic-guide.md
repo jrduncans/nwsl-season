@@ -10,22 +10,37 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 `GET /explore` reuses the same coherent archive read and scoring calculations.
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
-Team performance offers Comparison chart, Comparison table, and Team history
-as direct views. The chart shows one selected measure; the table shows all three.
+Team performance offers Comparison chart, Gap chart, Comparison table, and Team
+history as direct views. The charts show one selected measure; the table shows
+all three.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-history` selects the initial surface.
-JavaScript switches surfaces and Goals/xG series in place, sorts numeric table
-columns from unrounded values, and restores those controls with Back/Forward.
+JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
+in place, sorts numeric table columns from unrounded values, and restores those
+controls with Back/Forward.
 Chart.js 4.5.1 renders the charts, with chartjs-plugin-datalabels 2.2.0 for
 segment percentages. The pinned browser builds and MIT licenses are vendored
 under `internal/app/static/vendor`; see its README for provenance and updates.
 Chart libraries load locally; team logos use the same ASA image host as the
 season pages. The chart payload retains unrounded values,
-null for unavailable xG, and exact match counts from the same archive snapshot.
+null for unavailable xG and goals-minus-xG gaps, and exact match counts from the
+same archive snapshot. The payload identifies an eligible active season for
+tooltip and keyboard inspection.
 
-Hover/click/tap must intersect a dot, bar segment, or team-history record line. A trend tooltip shows one
-series value, with a visible point highlight; axis years are not controls. Missing
-calendar years and unavailable xG break the line. Distribution legends do not
+Scoring trend offers Goals, xG, Both, and Goals − xG under the same chart.
+Goals − xG uses zero-centered signed bars on a symmetric scale, with positive
+bars for goals above xG and negative bars for goals below xG. It uses the
+full-precision season gap already shown in the Season table. Seasons without
+complete xG have no bar; if none qualify, the chart shows an explicit empty
+message. Goals and xG line modes retain a scale fitted to their values; the
+hidden bar series does not force those nonnegative charts to start at zero.
+Missing calendar years remain gaps in all modes. The selected metric
+and view remain in the URL and restore through Back/Forward.
+
+Hover/click/tap must intersect a dot, signed bar, distribution segment, or
+team-history record line. A trend tooltip shows one series value, with a visible
+mark highlight; axis years are not controls. Missing calendar years and
+unavailable xG break the line. Distribution legends do not
 filter or toggle bins. A segment tooltip shows goal count and match count; it
 adds the percentage only when the segment is too narrow for a visible label.
 Arrow keys inspect marks through Chart.js's active-element API and announce
@@ -36,14 +51,26 @@ empty state when no seasons are eligible.
 Goal distribution also has a collapsed, server-rendered values table with
 eligible seasons, played-match totals, and all five bins as counts and
 one-decimal shares. It uses the Explore table styling and sortable headers.
+`distribution-bin=all|0|1|2|3|4` selects the stacked distribution or a line
+showing one goal total's share of played matches by season (`4` means four or
+more goals). The stacked chart remains the default. Both teams' goals count
+toward the match total. The line uses exact bin counts divided by exact played
+matches, retains zero-count seasons as zero points, and breaks at missing
+calendar years. All five selected bins use the same percentage axis, from
+zero to a rounded upper bound based on the largest share across every bin and
+season, with evenly spaced 5-, 10-, or 20-point ticks according to that bound.
+Tooltips and keyboard inspection
+state the selected bin, count, total played, and share; active seasons are
+marked in progress. The selector and chart mode restore through Back/Forward.
 Bin columns sort by the exact share of matches, before display rounding;
 ties use newest season first. Sort links and the native disclosure work without
 JavaScript, and a direct sorted URL opens the disclosure.
 
-For chart changes, verify desktop and 390px layouts, hovering/tapping a dot
-versus empty space at the same year, per-segment tooltip content, keyboard
-inspection and dismissal, missing-year/xG gaps, table sorting, and direct view
-URLs plus Back/Forward. View changes must not fetch another document or data;
+For chart changes, verify desktop and 390px layouts, hovering/tapping a dot or
+signed bar versus empty space at the same year, per-segment tooltip content,
+selected-bin counts and shares, zero-count points, keyboard inspection and
+dismissal, missing-year/xG gaps, table sorting, and direct view and bin URLs
+plus Back/Forward. View changes must not fetch another document or data;
 newly visible team logos may load. The Go Explore tests check the single snapshot read and chart payload's
 missing-value and count semantics.
 
@@ -69,8 +96,8 @@ season, falling back to the newest catalog year when none qualify.
 differential on the chart. Goal differential is the default. Explicit unsupported years, malformed
 or repeated season values, and invalid or repeated measures return 400.
 Selections update locally and support direct URLs and Back/Forward.
-`display=chart|table` selects comparison views (chart by default), preserving
-the season and chart measure. The measure picker appears only on the chart;
+`display=chart|gap|table` selects comparison views (paired-dot chart by default),
+preserving the season and chart measure. The measure picker appears on both charts;
 the table always includes all three measures. A small-screen cue identifies its
 horizontal scroll. `team-sort` accepts `name`,
 `played`, or a metric-qualified key such as `difference-gap`, `for-actual`, or
@@ -104,6 +131,14 @@ fall back to their ASA identity. No cross-season franchise mapping is implied.
 
 The paired-dot chart places actual and expected rates on one scale including
 zero, ordered by actual rate (ascending for goals allowed, descending otherwise).
+The Gap chart ranks teams by full-precision actual minus expected per match,
+with signed bars around zero. It orders positive gaps first for goals scored
+and goal differential, and negative gaps first for goals allowed. Green means
+above expected and purple means below expected; neither color implies the
+same performance judgment for every measure. Teams without complete xG appear
+last with no bar, an `xG incomplete` label, and a named note accessible from the chart.
+If every team lacks complete xG, the
+chart shows an explicit empty message. The paired-dot chart remains available.
 Goal differential is goals for minus goals against; xG differential is xG for
 minus xG against. Gap always means actual minus expected. Lower/negative gaps
 are favorable for goals allowed; higher/positive gaps are favorable for goals
@@ -123,10 +158,11 @@ round independently from full precision.
 Run `make test-explore` for calculation and HTTP regression checks (also included
 in `make test` and CI). For browser verification, the `teams` scenario in
 `TestHistoryPreview` supplies 16 synthetic teams, full/partial xG, and an empty
-season. Verify desktop and 390px layouts, signed differential axes, touch/hover,
-keyboard inspection/dismissal, logos and alignment after resize, missing-data
-warnings, sorting in both directions, no-script sorting, season/measure/display
-URLs, Back/Forward, and switching analyses without fetching new data.
+season. Verify desktop and 390px layouts, signed differential and gap axes,
+gap ranking for all three measures, touch/hover, keyboard inspection/dismissal,
+logos and alignment after resize, missing-data warnings and `xG incomplete` labels,
+sorting in both directions, no-script sorting, season/measure/display URLs,
+Back/Forward, and switching analyses without fetching new data.
 
 ### Team history
 
@@ -162,17 +198,20 @@ GET form and full table remain usable without JavaScript. Empty archives have
 an explicit empty state, and missing xG produces a warning without hiding goals.
 
 `series=goals|xg|both` selects the history chart's series (both by default).
-`context=on|off` adds league context (off by default). Blank, invalid, or repeated
-values return 400. These controls preserve table sorting and work through direct
-URLs, Back/Forward, and the GET fallback. Without context, Both overlays the two
-series; with context, it shows two vertically aligned charts on the same scale.
+`context=on|off` toggles league context (off by default). Blank, invalid, or
+repeated values return 400. These controls preserve table sorting and work
+through direct URLs, Back/Forward, and the GET fallback. Without context, Both
+overlays the two series; with context, it shows two vertically aligned charts
+on the same scale.
 A single-series selection uses one chart. The scale includes the selected team's
 values, visible seasonal bounds, historical bounds, and zero.
 
 League context uses the same eligible team-season rates from the single archive
-snapshot, independently of the selected team. The shaded band spans each
-season's lowest and highest rates, including an eligible active season labeled
-in progress. Missing/excluded calendar years break the band. An xG season range
+snapshot, independently of the selected team. Floating bars span each season's
+lowest and highest rates, including an eligible active season labeled in
+progress. Bars use the same year positions as team points, with full
+width at the first and last seasons; equal bounds remain inspectable as a thin
+mark. Missing/excluded calendar years leave no range. An xG season range
 requires complete xG for every team in that season's comparison; partial coverage
 withholds both bounds while leaving the selected team's own fully covered xG
 available. Zero is valid, signed differentials remain signed, and extrema and
@@ -185,11 +224,12 @@ available coverage start; they do not claim records outside the cached archive.
 Active results cannot replace these records. For xG, only fully covered season
 comparisons contribute. Missing xG context is explained visibly.
 
-Hover/tap on a seasonal bound or team point shows the season's high and low,
+Hover/tap on a floating bar or team point shows the season's high and low,
 holder names, year, rate, and played count. Hover/tap along a record line shows
-its historical holders. Coincident seasonal dots retain season inspection;
-record lines remain inspectable between dots. Keyboard arrows inspect all
-season points and each historical bound once, with full holder announcements.
+its historical holders. Coincident team points retain season inspection;
+record lines remain inspectable between dots. Keyboard arrows inspect team
+points, one range bar per season, and each historical bound once, with full
+holder announcements.
 Escape, focus leaving a chart, and outside taps dismiss inspection. Tooltips
 wrap on small screens and bound long tie lists; the expandable “League records
 and season ranges” details list every tied holder and remain usable without
@@ -204,7 +244,7 @@ scenario in `TestHistoryPreview` supplies multiple years with calendar gaps,
 partial xG, and an active season. Verify desktop and 390px layouts, all three
 measures, team selection, point hover/tap and empty-space dismissal, keyboard
 inspection, table sorting (including missing xG), direct URLs, Back/Forward,
-no-script sorting/forms and full context details, record-line and seasonal-bound
+no-script sorting/forms and full context details, record-line and floating-bar
 inspection, shared scales for Both, and switching between
 history, season comparison, and league analyses without fetching new data.
 

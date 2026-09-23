@@ -12,29 +12,42 @@
 </nav>
 <nav class="explore-subviews" data-team-views aria-label="Team performance views"{{if and (ne .View "teams") (ne .View "team-history")}} hidden{{end}}>
 <a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Comparison chart</a>
+<a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>Gap chart</a>
 <a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Comparison table</a>
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Team history</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
-<div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option></select></label></div>
+<div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label></div>
 {{if .Chart.HasData}}
 <div class="explore-legend"><span data-series="goals">● Goals</span><span data-series="xg">◆ Expected goals (xG)</span></div>
-<div class="explore-chart-wrap">
+<div class="explore-legend explore-gap-legend" data-trend-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above xG</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below xG</span></div>
+<p class="note" data-trend-gap-note hidden>Each bar shows league goals minus xG per played match. Zero means goals matched xG.</p>
+<p class="note" data-trend-gap-empty hidden>No seasons with complete xG are available for this comparison.</p>
+<div class="explore-chart-wrap" data-trend-chart-wrap>
 <canvas data-chart="trend" tabindex="0" role="img" aria-label="Goals and expected goals per regular-season match, by season" aria-describedby="explore-chart-help"></canvas>
 </div>
-<p class="explore-keyboard-hint">Use arrow keys to inspect points. Escape clears the tooltip.</p>
+<p class="explore-keyboard-hint" data-trend-keyboard-hint>Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
 {{if .Chart.ActiveStatus}}<p class="note">{{.Chart.ActiveStatus}}</p>{{end}}
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 {{if .MetricExcludedSeasons}}<p class="note">Some seasons have no complete xG average; their goals remain available.</p>{{end}}
 </section>
 <section data-panel="distribution"{{if ne .View "distribution"}} hidden{{end}} aria-labelledby="explore-distribution-title">
-<h2 id="explore-distribution-title">Share of regular-season matches by total goals</h2><p class="note">Both teams combined.</p>
+<div class="explore-heading"><h2 id="explore-distribution-title">Share of regular-season matches {{if eq .DistributionBin "all"}}by total goals{{else}}with {{if eq .DistributionBin "4"}}4+ goals{{else if eq .DistributionBin "1"}}1 goal{{else}}{{.DistributionBin}} goals{{end}}{{end}}</h2>
+{{if .HasDistributionBars}}<form method="get" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution"><label>Show <select name="distribution-bin" data-distribution-bin><option value="all"{{if eq .DistributionBin "all"}} selected{{end}}>All goal totals</option><option value="0"{{if eq .DistributionBin "0"}} selected{{end}}>0 goals</option><option value="1"{{if eq .DistributionBin "1"}} selected{{end}}>1 goal</option><option value="2"{{if eq .DistributionBin "2"}} selected{{end}}>2 goals</option><option value="3"{{if eq .DistributionBin "3"}} selected{{end}}>3 goals</option><option value="4"{{if eq .DistributionBin "4"}} selected{{end}}>4+ goals</option></select></label><noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{end}}</div>
+<p class="note">Both teams combined.</p>
 {{if .HasDistributionBars}}
+<div data-distribution-stacked-panel{{if ne .DistributionBin "all"}} hidden{{end}}>
 <div class="explore-legend explore-bin-legend" aria-label="Total goals"><span><i style="background:#44504a"></i>0 goals</span><span><i style="background:#526d61"></i>1 goal</span><span><i style="background:#136f4a"></i>2 goals</span><span><i style="background:#5b3f96"></i>3 goals</span><span><i style="background:#372858"></i>4+ goals</span></div>
 <div class="explore-chart-wrap explore-distribution-wrap">
 <canvas data-chart="distribution" tabindex="0" role="img" aria-label="Share of regular-season matches by total goals, by season" aria-describedby="explore-chart-help"></canvas>
 </div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect segments. Escape clears the tooltip.</p>
+</div>
+<div data-distribution-trend-panel{{if eq .DistributionBin "all"}} hidden{{end}}>
+<p class="note">Each point shows that goal total's share of played matches. Missing calendar years leave a gap.</p>
+<div class="explore-chart-wrap"><canvas data-chart="bin-trend" tabindex="0" role="img" aria-label="Share of regular-season matches with the selected goal total, by season" aria-describedby="explore-chart-help"></canvas></div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
+</div>
 <details class="explore-context-details" data-distribution-values{{if .DistributionExpanded}} open{{end}}>
 <summary>Distribution values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
@@ -55,7 +68,7 @@
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
-<div class="explore-heading"><h2 id="explore-teams-title">Actual vs expected (regular-season)</h2>
+<div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team (regular-season){{else}}Actual vs expected (regular-season){{end}}</h2>
 <form method="get" data-team-controls class="explore-team-controls">
 <input type="hidden" name="view" value="teams">
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
@@ -73,6 +86,14 @@
 <div class="explore-legend"><span class="explore-actual-key">● <span data-team-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key">◆ <span data-team-xg-label>{{.TeamXGLabel}}</span></span></div>
 <div class="explore-chart-wrap explore-team-chart" data-team-chart-wrap><canvas data-chart="teams" tabindex="0" role="img" aria-label="Team goals and expected goals per match" aria-describedby="explore-chart-help"></canvas><div class="explore-team-labels" data-team-labels aria-hidden="true"></div></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect teams. Escape clears the tooltip.</p>
+</div>
+<div data-team-gap-plot hidden>
+<div class="explore-legend explore-gap-legend" data-team-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above expected</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below expected</span></div>
+<p class="note" id="explore-team-gap-note" data-team-gap-note hidden>Bars show actual minus expected per match, sorted by gap.</p>
+<p class="note" data-team-gap-empty hidden>No teams have complete xG for this measure yet.</p>
+<p class="note" id="explore-team-gap-missing" data-team-gap-missing hidden></p>
+<div class="explore-chart-wrap explore-team-chart" data-team-gap-chart-wrap hidden><canvas data-chart="team-gap" tabindex="0" role="img" aria-label="Team actual minus expected per match" aria-describedby="explore-chart-help explore-team-gap-note explore-team-gap-missing"></canvas><div class="explore-team-labels" data-team-gap-labels aria-hidden="true"></div></div>
+<p class="explore-keyboard-hint" data-team-gap-hint hidden>Use arrow keys to inspect teams. Escape clears the tooltip.</p>
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
@@ -102,7 +123,7 @@
 <p class="explore-data-warning" data-team-history-warning{{if not .TeamHistoryMissingXG}} hidden{{end}}>Some seasons have incomplete xG for this team; their goals remain available.</p>
 <div data-team-history-plot hidden>
 <div class="explore-legend"><span class="explore-actual-key" data-history-key="goals">● <span data-history-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key" data-history-key="xg">◆ <span data-history-xg-label>{{.TeamXGLabel}}</span></span></div>
-<div class="explore-legend" data-history-context-legend hidden><span><i class="explore-context-band"></i>Season high–low range</span><span>⋯ Completed-season records</span></div>
+<div class="explore-legend" data-history-context-legend hidden><span><i class="explore-context-bar"></i>Season high–low range</span><span>⋯ Completed-season records</span></div>
 <p class="note" data-history-context-note hidden></p>
 <p class="note" data-history-xg-empty hidden>This team has no complete xG values in these seasons.</p>
 <h4 class="explore-context-heading" data-history-panel-label hidden></h4>
@@ -114,7 +135,7 @@
 <div class="explore-chart-wrap"><canvas data-chart="team-history-xg" tabindex="0" role="img" aria-label="Team expected goals per match with league context" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect points and record holders. Escape clears the tooltip.</p>
 </div>
-<details class="explore-context-details" data-history-context-details{{if ne .HistoryContext "on"}} hidden{{end}}>
+<details class="explore-context-details" data-history-context-details{{if eq .HistoryContext "off"}} hidden{{end}}>
 <summary>League records and season ranges</summary>
 <p class="note">Per match, from eligible recorded results. Historical records use completed seasons. xG ranges require complete xG for every team in the season comparison. Values are compared before rounding.</p>
 <div data-history-context-values>{{range .HistoryContextDetails}}{{template "exploreContextSeries" .}}{{end}}</div>

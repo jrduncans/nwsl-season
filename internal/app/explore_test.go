@@ -15,7 +15,7 @@ import (
 )
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=team-history&team=alpha"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=team-history&team=alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 				"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
@@ -27,7 +27,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 				t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, body)
 			}
-			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `src="static/explore.js"`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
+			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js"`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)
 				}
@@ -38,8 +38,11 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if !found || json.Unmarshal([]byte(data), &records) != nil || len(records) != 2 {
 				t.Fatalf("invalid chart payload: %s", data)
 			}
-			if records[0].Season != "2025" || records[0].XG != nil || records[0].Goals == nil || *records[0].Goals != 3 || records[1].XG == nil {
+			if records[0].Season != "2025" || records[0].XG != nil || records[0].Gap != nil || records[0].Active || records[0].Goals == nil || *records[0].Goals != 3 || records[1].XG == nil || records[1].Gap == nil || !records[1].Active {
 				t.Fatalf("chart payload changed missing-xG or goal semantics: %+v", records)
+			}
+			if *records[1].Gap != *records[1].Goals-*records[1].XG {
+				t.Fatalf("chart gap does not match goals minus xG: %+v", records[1])
 			}
 			for _, record := range records {
 				count := 0
@@ -166,6 +169,47 @@ func TestExploreDistributionSortUsesExactShareAndNativeLinks(t *testing.T) {
 	}
 }
 
+func TestExploreDistributionBinSelection(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+	})}
+	for _, bin := range []string{"all", "0", "1", "2", "3", "4"} {
+		t.Run(bin, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			path := "/explore?view=distribution&distribution-bin=" + bin
+			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), `<option value="`+bin+`" selected`) {
+				t.Errorf("selected bin %q is missing from the rendered control", bin)
+			}
+			if bin == "1" && !strings.Contains(response.Body.String(), "Share of regular-season matches with 1 goal</h2>") {
+				t.Error("one-goal chart heading is missing")
+			}
+			if !strings.Contains(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`) {
+				t.Error("selecting a bin alone opened the distribution values table")
+			}
+		})
+	}
+
+	rows := []historyDistributionView{{Season: "2025", Total: 20, GoalsEligible: true}}
+	defaultPage, err := exploreDistribution(nil, rows)
+	if err != nil || defaultPage.DistributionBin != "all" || defaultPage.DistributionExpanded {
+		t.Fatalf("default selection = %+v, error = %v", defaultPage, err)
+	}
+	page, err := exploreDistribution(url.Values{"distribution-bin": {"3"}}, rows)
+	if err != nil || page.DistributionBin != "3" || page.DistributionExpanded {
+		t.Fatalf("bin selection = %+v, error = %v", page, err)
+	}
+	for _, column := range page.DistributionColumns {
+		link, parseErr := url.Parse(column.URL)
+		if parseErr != nil || link.Query().Get("distribution-bin") != "3" {
+			t.Fatalf("sort link lost selected bin: %s", column.URL)
+		}
+	}
+}
+
 func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
@@ -203,6 +247,7 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=teams&measure=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&measure=for&measure=against", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
+		{"/explore?view=teams&display=gap&display=chart", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-sort=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-order=bad", http.StatusBadRequest, ""},
 		{"/explore?view=team-history&team=unknown", http.StatusBadRequest, ""},
@@ -213,6 +258,9 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?distribution-sort=", http.StatusBadRequest, ""},
 		{"/explore?distribution-sort=bin-0&distribution-sort=bin-1", http.StatusBadRequest, ""},
 		{"/explore?distribution-order=bad", http.StatusBadRequest, ""},
+		{"/explore?distribution-bin=", http.StatusBadRequest, ""},
+		{"/explore?distribution-bin=5", http.StatusBadRequest, ""},
+		{"/explore?distribution-bin=all&distribution-bin=1", http.StatusBadRequest, ""},
 		{"/explore/", http.StatusSeeOther, "../explore"},
 		{"/nwsl-season/explore/?view=table", http.StatusSeeOther, "../explore?view=table"},
 	} {
@@ -286,6 +334,47 @@ func TestExploreTeamViewsKeepSelectionAndWarnOnlyForMissingXG(t *testing.T) {
 				t.Fatalf("sort link lost selection: %s", column.URL)
 			}
 		}
+	}
+}
+
+func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
+	archive := historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+		"2026": {lifecycle: cache.SourceScopeActive, goals: 3, xgCovered: 19},
+	})
+	summaries, err := history.SummarizeScoring(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := url.Values{
+		"season":     {"2025"},
+		"measure":    {"against"},
+		"display":    {"gap"},
+		"team-sort":  {"for-expected"},
+		"team-order": {"asc"},
+	}
+	page, err := exploreTeams(query, summaries, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TeamDisplay != "gap" || page.TeamSeason != "2025" || page.TeamMeasure != "against" || page.TeamSort != "for-expected" || page.TeamOrder != "asc" {
+		t.Fatalf("gap view lost selection: %+v", page)
+	}
+	for _, tc := range []struct{ name, link, display string }{
+		{"paired-dot chart", page.TeamChartURL, "chart"},
+		{"gap chart", page.TeamGapURL, "gap"},
+		{"table", page.TeamTableURL, "table"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			link, err := url.Parse(tc.link)
+			if err != nil {
+				t.Fatal(err)
+			}
+			values := link.Query()
+			if values.Get("view") != "teams" || values.Get("display") != tc.display || values.Get("season") != "2025" || values.Get("measure") != "against" || values.Get("team-sort") != "for-expected" || values.Get("team-order") != "asc" {
+				t.Fatalf("link did not preserve selection: %s", tc.link)
+			}
+		})
 	}
 }
 
