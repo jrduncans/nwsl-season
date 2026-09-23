@@ -597,13 +597,17 @@
   function historyContextDatasets(chart, series) {
     const seasons = new Map(series.seasons.map(row => [row.season, row]));
     const neutral = color('--muted');
-    return ['low', 'high'].map(side => ({
-      label: `Season ${side}`, contextKind: `season-${side}`,
-      data: chart.data.labels.map(year => seasons.get(year)?.[side]?.value ?? null),
-      borderColor: neutral, backgroundColor: '#dce2df80', borderWidth: 1, borderDash: [2, 3],
-      pointBackgroundColor: neutral, pointRadius: 2.5, pointHitRadius: 6, pointHoverRadius: 5,
-      fill: side === 'high' ? 2 : false, spanGaps: false, order: 2,
-    })).concat(['low', 'high'].map(side => ({
+    const seasonal = [{
+      type: 'bar', label: 'Season high–low range', contextKind: 'season-range',
+      data: chart.data.labels.map(year => {
+        const season = seasons.get(year);
+        return season?.low && season?.high ? [season.low.value, season.high.value] : null;
+      }),
+      backgroundColor: '#a6bab199', borderColor: neutral, borderWidth: 1,
+      borderSkipped: false, categoryPercentage: .75, barPercentage: .75,
+      maxBarThickness: 24, minBarLength: 2, order: 2,
+    }];
+    return seasonal.concat(['low', 'high'].map(side => ({
       label: `Record ${side}`, contextKind: `record-${side}`, keyboardOnce: true,
       data: chart.data.labels.map(() => series[side]?.value ?? null),
       borderColor: neutral, borderWidth: 0,
@@ -623,13 +627,15 @@
       chart.setDatasetVisibility(index, !dataset.hidden);
     });
     if (context) chart.data.datasets.push(...historyContextDatasets(chart, context));
+    // Mixed bars need half a category at each edge so the first/last bars stay full width.
+    chart.options.scales.x.offset = Boolean(context);
     chart.options.scales.y = {...chart.options.scales.y, beginAtZero: true, min: domain.min, max: domain.max, title: {display: true, text: 'Per match'}};
     chart.options.plugins.tooltip.callbacks = {
       title: items => items[0] ? wrapHistoryTooltip(chart, [historyInspection(chart, {datasetIndex: items[0].datasetIndex, index: items[0].dataIndex}, true).title]) : [],
       label: item => wrapHistoryTooltip(chart, historyInspection(chart, {datasetIndex: item.datasetIndex, index: item.dataIndex}, true).lines),
     };
-    canvas.setAttribute('aria-label', `${rows[0].name}: ${visible.map(key => key === 'goals' ? measure.actual : measure.expected).join(' and ')} per match, by regular season${context ? ', with league ranges and completed-season record holders' : ''}`);
-    chart.resize(); chart.update('none');
+    canvas.setAttribute('aria-label', `${rows[0].name}: ${visible.map(key => key === 'goals' ? measure.actual : measure.expected).join(' and ')} per match, by regular season${context ? ', with floating league ranges and completed-season record holders' : ''}`);
+    chart.resize(); chart.update();
   }
   function showHistoryContextDetails(seriesList) {
     const textElement = (tag, text) => { const element = document.createElement(tag); element.textContent = text; return element; };
@@ -666,12 +672,13 @@
     const measure = teamMeasures[historyMeasure.value];
     historySeries.value = ['goals', 'xg', 'both'].includes(params.get('series')) ? params.get('series') : 'both';
     historyContext.checked = params.get('context') === 'on';
+    const contextEnabled = historyContext.checked;
     const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
     const context = historyContextData[measure.index];
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
-    root.querySelector('[data-history-context-details]').hidden = !historyContext.checked;
-    root.querySelector('[data-history-context-legend]').hidden = !historyContext.checked;
-    root.querySelector('[data-history-context-note]').hidden = !historyContext.checked;
+    root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
+    root.querySelector('[data-history-context-legend]').hidden = !contextEnabled;
+    root.querySelector('[data-history-context-note]').hidden = !contextEnabled;
     showHistoryContextDetails(visible.map(key => context[key]));
     const notes = visible.map(key => context[key].since ? `${context[key].label} records since ${context[key].since}` : `${context[key].label}: no completed-season records`);
     if (visible.includes('xg') && context.xg.partial) notes.push('Some season xG ranges are unavailable because team coverage is incomplete');
@@ -707,14 +714,14 @@
       season: row.season, active: row.active, played: row.played,
       goals: row.values[measure.index].actual, xg: row.values[measure.index].expected,
     }));
-    const split = historyContext.checked && visible.length === 2;
+    const split = contextEnabled && visible.length === 2;
     root.querySelector('[data-history-xg-panel]').hidden = !split;
     root.querySelector('[data-history-panel-label]').hidden = !split;
     root.querySelector('[data-history-panel-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-panel-label]').textContent = measure.expected;
     root.querySelector('[data-history-xg-empty]').hidden = !visible.includes('xg') || points.some(row => row.xg !== null);
     const values = points.flatMap(row => visible.map(key => row[key])).filter(value => value !== null);
-    if (historyContext.checked) {
+    if (contextEnabled) {
       visible.forEach(key => {
         const series = context[key];
         values.push(...[series.low?.value, series.high?.value].filter(value => value != null));
@@ -725,7 +732,7 @@
     }
     const low = Math.min(0, ...values), high = Math.max(0, ...values), pad = (high - low) * .15 || .25;
     const domain = {min: low < 0 ? low - pad : 0, max: high + pad};
-    showHistoryChart('team-history', points, rows, measure, split ? ['goals'] : visible, historyContext.checked ? context[visible[0]] : null, domain);
+    showHistoryChart('team-history', points, rows, measure, split ? ['goals'] : visible, contextEnabled ? context[visible[0]] : null, domain);
     if (split) showHistoryChart('team-history-xg', points, rows, measure, ['xg'], context.xg, domain);
   }
   function styleTable() {

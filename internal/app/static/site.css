@@ -422,7 +422,7 @@ th:nth-child(2) { text-align: left; }
  .explore-rate::before { left: .7rem; width: calc((100% - 1.4rem) * var(--rate-width, 0)); }
 }
 
-.explore-context-band { display: inline-block; width: 1.25rem; height: .65rem; background: #dce2df; margin-right: .3rem; }
+.explore-context-bar { display: inline-block; width: .65rem; height: 1rem; background: #a6bab1; border: 1px solid var(--muted); margin-right: .3rem; vertical-align: middle; }
 .explore-context-heading { margin: 1.5rem 0 0; }
 .explore-context-details { margin: 1.25rem 0; }
 .explore-context-details summary { cursor: pointer; font-weight: 700; }

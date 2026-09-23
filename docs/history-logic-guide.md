@@ -198,17 +198,20 @@ GET form and full table remain usable without JavaScript. Empty archives have
 an explicit empty state, and missing xG produces a warning without hiding goals.
 
 `series=goals|xg|both` selects the history chart's series (both by default).
-`context=on|off` adds league context (off by default). Blank, invalid, or repeated
-values return 400. These controls preserve table sorting and work through direct
-URLs, Back/Forward, and the GET fallback. Without context, Both overlays the two
-series; with context, it shows two vertically aligned charts on the same scale.
+`context=on|off` toggles league context (off by default). Blank, invalid, or
+repeated values return 400. These controls preserve table sorting and work
+through direct URLs, Back/Forward, and the GET fallback. Without context, Both
+overlays the two series; with context, it shows two vertically aligned charts
+on the same scale.
 A single-series selection uses one chart. The scale includes the selected team's
 values, visible seasonal bounds, historical bounds, and zero.
 
 League context uses the same eligible team-season rates from the single archive
-snapshot, independently of the selected team. The shaded band spans each
-season's lowest and highest rates, including an eligible active season labeled
-in progress. Missing/excluded calendar years break the band. An xG season range
+snapshot, independently of the selected team. Floating bars span each season's
+lowest and highest rates, including an eligible active season labeled in
+progress. Bars use the same year positions as team points, with full
+width at the first and last seasons; equal bounds remain inspectable as a thin
+mark. Missing/excluded calendar years leave no range. An xG season range
 requires complete xG for every team in that season's comparison; partial coverage
 withholds both bounds while leaving the selected team's own fully covered xG
 available. Zero is valid, signed differentials remain signed, and extrema and
@@ -221,11 +224,12 @@ available coverage start; they do not claim records outside the cached archive.
 Active results cannot replace these records. For xG, only fully covered season
 comparisons contribute. Missing xG context is explained visibly.
 
-Hover/tap on a seasonal bound or team point shows the season's high and low,
+Hover/tap on a floating bar or team point shows the season's high and low,
 holder names, year, rate, and played count. Hover/tap along a record line shows
-its historical holders. Coincident seasonal dots retain season inspection;
-record lines remain inspectable between dots. Keyboard arrows inspect all
-season points and each historical bound once, with full holder announcements.
+its historical holders. Coincident team points retain season inspection;
+record lines remain inspectable between dots. Keyboard arrows inspect team
+points, one range bar per season, and each historical bound once, with full
+holder announcements.
 Escape, focus leaving a chart, and outside taps dismiss inspection. Tooltips
 wrap on small screens and bound long tie lists; the expandable “League records
 and season ranges” details list every tied holder and remain usable without
@@ -240,7 +244,7 @@ scenario in `TestHistoryPreview` supplies multiple years with calendar gaps,
 partial xG, and an active season. Verify desktop and 390px layouts, all three
 measures, team selection, point hover/tap and empty-space dismissal, keyboard
 inspection, table sorting (including missing xG), direct URLs, Back/Forward,
-no-script sorting/forms and full context details, record-line and seasonal-bound
+no-script sorting/forms and full context details, record-line and floating-bar
 inspection, shared scales for Both, and switching between
 history, season comparison, and league analyses without fetching new data.
 

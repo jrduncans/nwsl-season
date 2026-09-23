@@ -123,7 +123,7 @@
 <p class="explore-data-warning" data-team-history-warning{{if not .TeamHistoryMissingXG}} hidden{{end}}>Some seasons have incomplete xG for this team; their goals remain available.</p>
 <div data-team-history-plot hidden>
 <div class="explore-legend"><span class="explore-actual-key" data-history-key="goals">● <span data-history-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key" data-history-key="xg">◆ <span data-history-xg-label>{{.TeamXGLabel}}</span></span></div>
-<div class="explore-legend" data-history-context-legend hidden><span><i class="explore-context-band"></i>Season high–low range</span><span>⋯ Completed-season records</span></div>
+<div class="explore-legend" data-history-context-legend hidden><span><i class="explore-context-bar"></i>Season high–low range</span><span>⋯ Completed-season records</span></div>
 <p class="note" data-history-context-note hidden></p>
 <p class="note" data-history-xg-empty hidden>This team has no complete xG values in these seasons.</p>
 <h4 class="explore-context-heading" data-history-panel-label hidden></h4>
@@ -135,7 +135,7 @@
 <div class="explore-chart-wrap"><canvas data-chart="team-history-xg" tabindex="0" role="img" aria-label="Team expected goals per match with league context" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect points and record holders. Escape clears the tooltip.</p>
 </div>
-<details class="explore-context-details" data-history-context-details{{if ne .HistoryContext "on"}} hidden{{end}}>
+<details class="explore-context-details" data-history-context-details{{if eq .HistoryContext "off"}} hidden{{end}}>
 <summary>League records and season ranges</summary>
 <p class="note">Per match, from eligible recorded results. Historical records use completed seasons. xG ranges require complete xG for every team in the season comparison. Values are compared before rounding.</p>
 <div data-history-context-values>{{range .HistoryContextDetails}}{{template "exploreContextSeries" .}}{{end}}</div>
