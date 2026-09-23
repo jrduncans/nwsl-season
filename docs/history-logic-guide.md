@@ -15,8 +15,9 @@ history as direct views. The charts show one selected measure; the table shows
 all three.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-history` selects the initial surface.
-JavaScript switches surfaces and Goals/xG/gap selections in place, sorts numeric table
-columns from unrounded values, and restores those controls with Back/Forward.
+JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
+in place, sorts numeric table columns from unrounded values, and restores those
+controls with Back/Forward.
 Chart.js 4.5.1 renders the charts, with chartjs-plugin-datalabels 2.2.0 for
 segment percentages. The pinned browser builds and MIT licenses are vendored
 under `internal/app/static/vendor`; see its README for provenance and updates.
@@ -50,14 +51,26 @@ empty state when no seasons are eligible.
 Goal distribution also has a collapsed, server-rendered values table with
 eligible seasons, played-match totals, and all five bins as counts and
 one-decimal shares. It uses the Explore table styling and sortable headers.
+`distribution-bin=all|0|1|2|3|4` selects the stacked distribution or a line
+showing one goal total's share of played matches by season (`4` means four or
+more goals). The stacked chart remains the default. Both teams' goals count
+toward the match total. The line uses exact bin counts divided by exact played
+matches, retains zero-count seasons as zero points, and breaks at missing
+calendar years. All five selected bins use the same percentage axis, from
+zero to a rounded upper bound based on the largest share across every bin and
+season, with evenly spaced 5-, 10-, or 20-point ticks according to that bound.
+Tooltips and keyboard inspection
+state the selected bin, count, total played, and share; active seasons are
+marked in progress. The selector and chart mode restore through Back/Forward.
 Bin columns sort by the exact share of matches, before display rounding;
 ties use newest season first. Sort links and the native disclosure work without
 JavaScript, and a direct sorted URL opens the disclosure.
 
 For chart changes, verify desktop and 390px layouts, hovering/tapping a dot or
-signed bar versus empty space at the same year, per-segment tooltip content, keyboard
-inspection and dismissal, missing-year/xG gaps, table sorting, and direct view
-URLs plus Back/Forward. View changes must not fetch another document or data;
+signed bar versus empty space at the same year, per-segment tooltip content,
+selected-bin counts and shares, zero-count points, keyboard inspection and
+dismissal, missing-year/xG gaps, table sorting, and direct view and bin URLs
+plus Back/Forward. View changes must not fetch another document or data;
 newly visible team logos may load. The Go Explore tests check the single snapshot read and chart payload's
 missing-value and count semantics.
 

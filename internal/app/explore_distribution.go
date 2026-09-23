@@ -11,11 +11,18 @@ type exploreDistributionView struct {
 	DistributionRows                    []historyDistributionView
 	DistributionColumns                 []exploreTeamColumn
 	DistributionSort, DistributionOrder string
+	DistributionBin                     string
 	DistributionExpanded                bool
 }
 
 func exploreDistribution(query url.Values, distributions []historyDistributionView) (exploreDistributionView, error) {
-	page := exploreDistributionView{DistributionSort: "season", DistributionOrder: "desc"}
+	page := exploreDistributionView{DistributionSort: "season", DistributionOrder: "desc", DistributionBin: "all"}
+	if values, present := query["distribution-bin"]; present {
+		if len(values) != 1 || !slices.Contains([]string{"all", "0", "1", "2", "3", "4"}, values[0]) {
+			return page, fmt.Errorf("invalid distribution-bin selection")
+		}
+		page.DistributionBin = values[0]
+	}
 	columns := []exploreTeamColumn{
 		{Key: "season", Label: "Season", Description: "season"},
 		{Key: "matches", Label: "Matches", Description: "matches played"},

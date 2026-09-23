@@ -32,13 +32,22 @@
 {{if .MetricExcludedSeasons}}<p class="note">Some seasons have no complete xG average; their goals remain available.</p>{{end}}
 </section>
 <section data-panel="distribution"{{if ne .View "distribution"}} hidden{{end}} aria-labelledby="explore-distribution-title">
-<h2 id="explore-distribution-title">Share of regular-season matches by total goals</h2><p class="note">Both teams combined.</p>
+<div class="explore-heading"><h2 id="explore-distribution-title">Share of regular-season matches {{if eq .DistributionBin "all"}}by total goals{{else}}with {{if eq .DistributionBin "4"}}4+ goals{{else if eq .DistributionBin "1"}}1 goal{{else}}{{.DistributionBin}} goals{{end}}{{end}}</h2>
+{{if .HasDistributionBars}}<form method="get" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution"><label>Show <select name="distribution-bin" data-distribution-bin><option value="all"{{if eq .DistributionBin "all"}} selected{{end}}>All goal totals</option><option value="0"{{if eq .DistributionBin "0"}} selected{{end}}>0 goals</option><option value="1"{{if eq .DistributionBin "1"}} selected{{end}}>1 goal</option><option value="2"{{if eq .DistributionBin "2"}} selected{{end}}>2 goals</option><option value="3"{{if eq .DistributionBin "3"}} selected{{end}}>3 goals</option><option value="4"{{if eq .DistributionBin "4"}} selected{{end}}>4+ goals</option></select></label><noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{end}}</div>
+<p class="note">Both teams combined.</p>
 {{if .HasDistributionBars}}
+<div data-distribution-stacked-panel{{if ne .DistributionBin "all"}} hidden{{end}}>
 <div class="explore-legend explore-bin-legend" aria-label="Total goals"><span><i style="background:#44504a"></i>0 goals</span><span><i style="background:#526d61"></i>1 goal</span><span><i style="background:#136f4a"></i>2 goals</span><span><i style="background:#5b3f96"></i>3 goals</span><span><i style="background:#372858"></i>4+ goals</span></div>
 <div class="explore-chart-wrap explore-distribution-wrap">
 <canvas data-chart="distribution" tabindex="0" role="img" aria-label="Share of regular-season matches by total goals, by season" aria-describedby="explore-chart-help"></canvas>
 </div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect segments. Escape clears the tooltip.</p>
+</div>
+<div data-distribution-trend-panel{{if eq .DistributionBin "all"}} hidden{{end}}>
+<p class="note">Each point shows that goal total's share of played matches. Missing calendar years leave a gap.</p>
+<div class="explore-chart-wrap"><canvas data-chart="bin-trend" tabindex="0" role="img" aria-label="Share of regular-season matches with the selected goal total, by season" aria-describedby="explore-chart-help"></canvas></div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
+</div>
 <details class="explore-context-details" data-distribution-values{{if .DistributionExpanded}} open{{end}}>
 <summary>Distribution values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>

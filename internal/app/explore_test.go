@@ -169,6 +169,47 @@ func TestExploreDistributionSortUsesExactShareAndNativeLinks(t *testing.T) {
 	}
 }
 
+func TestExploreDistributionBinSelection(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+	})}
+	for _, bin := range []string{"all", "0", "1", "2", "3", "4"} {
+		t.Run(bin, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			path := "/explore?view=distribution&distribution-bin=" + bin
+			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), `<option value="`+bin+`" selected`) {
+				t.Errorf("selected bin %q is missing from the rendered control", bin)
+			}
+			if bin == "1" && !strings.Contains(response.Body.String(), "Share of regular-season matches with 1 goal</h2>") {
+				t.Error("one-goal chart heading is missing")
+			}
+			if !strings.Contains(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`) {
+				t.Error("selecting a bin alone opened the distribution values table")
+			}
+		})
+	}
+
+	rows := []historyDistributionView{{Season: "2025", Total: 20, GoalsEligible: true}}
+	defaultPage, err := exploreDistribution(nil, rows)
+	if err != nil || defaultPage.DistributionBin != "all" || defaultPage.DistributionExpanded {
+		t.Fatalf("default selection = %+v, error = %v", defaultPage, err)
+	}
+	page, err := exploreDistribution(url.Values{"distribution-bin": {"3"}}, rows)
+	if err != nil || page.DistributionBin != "3" || page.DistributionExpanded {
+		t.Fatalf("bin selection = %+v, error = %v", page, err)
+	}
+	for _, column := range page.DistributionColumns {
+		link, parseErr := url.Parse(column.URL)
+		if parseErr != nil || link.Query().Get("distribution-bin") != "3" {
+			t.Fatalf("sort link lost selected bin: %s", column.URL)
+		}
+	}
+}
+
 func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
@@ -217,6 +258,9 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?distribution-sort=", http.StatusBadRequest, ""},
 		{"/explore?distribution-sort=bin-0&distribution-sort=bin-1", http.StatusBadRequest, ""},
 		{"/explore?distribution-order=bad", http.StatusBadRequest, ""},
+		{"/explore?distribution-bin=", http.StatusBadRequest, ""},
+		{"/explore?distribution-bin=5", http.StatusBadRequest, ""},
+		{"/explore?distribution-bin=all&distribution-bin=1", http.StatusBadRequest, ""},
 		{"/explore/", http.StatusSeeOther, "../explore"},
 		{"/nwsl-season/explore/?view=table", http.StatusSeeOther, "../explore?view=table"},
 	} {

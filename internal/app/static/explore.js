@@ -11,6 +11,7 @@
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = root.querySelector('[data-history-measure]');
   const metric = root.querySelector('[data-metric]');
+  const distributionBin = root.querySelector('[data-distribution-bin]');
   const status = root.querySelector('[data-chart-status]');
   const charts = {};
   const styles = getComputedStyle(root);
@@ -184,6 +185,67 @@
       return `${row.season}, ${binLabels[mark.datasetIndex]}: ${row.bins[mark.datasetIndex]} of ${row.played} matches, ${percent(row.bins[mark.datasetIndex] / row.played * 100)}`;
     });
     return chart;
+  }
+  function binTrendYAxis() {
+    const largestShare = Math.max(...records.flatMap(row => row.bins.map(count => count / row.played * 100)));
+    const paddedMax = Math.min(100, largestShare * 1.05);
+    const step = paddedMax <= 40 ? 5 : paddedMax <= 60 ? 10 : 20;
+    const max = Math.max(step, Math.min(100, Math.ceil(paddedMax / step) * step));
+    return {min: 0, max, grid: {color: color('--line')}, border: {display: false},
+      ticks: {stepSize: step, autoSkip: false, callback: value => `${value}%`},
+      title: {display: true, text: 'Share of matches'}};
+  }
+  function createBinTrend(canvas) {
+    const first = Number(records[0].season), last = Number(records.at(-1).season);
+    const years = Array.from({length: last - first + 1}, (_, index) => String(first + index));
+    const byYear = new Map(records.map(row => [row.season, row]));
+    const options = commonOptions();
+    options.scales = {
+      x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
+      y: binTrendYAxis(),
+    };
+    options.plugins.tooltip.callbacks = {
+      title: items => {
+        const item = items[0];
+        if (!item) return '';
+        const row = item.chart.binRecords.get(item.label);
+        return `${item.label}${row.active ? ' (in progress)' : ''}`;
+      },
+      label: item => {
+        const chart = item.chart, row = chart.binRecords.get(item.label), bin = chart.binIndex;
+        return `${binLabels[bin]}: ${row.bins[bin]} of ${row.played} matches (${percent(item.parsed.y)})`;
+      },
+    };
+    const chart = new Chart(canvas, {type: 'line', options,
+      data: {labels: years, datasets: [{
+        label: '', data: years.map(() => null), spanGaps: false,
+        borderColor: binColors[0], backgroundColor: binColors[0],
+        pointBorderColor: binColors[0], pointBackgroundColor: binColors[0],
+        borderWidth: 2.5, pointRadius: 5, pointHitRadius: 4,
+        pointHoverRadius: 8, pointHoverBorderWidth: 2, pointHoverBorderColor: color('--panel'),
+      }]},
+    });
+    chart.binRecords = byYear;
+    keyboardAccess(chart, mark => {
+      const year = chart.data.labels[mark.index], row = chart.binRecords.get(year), bin = chart.binIndex;
+      return `${year}${row.active ? ' (in progress)' : ''}, ${binLabels[bin]}: ${row.bins[bin]} of ${row.played} matches, ${percent(row.bins[bin] / row.played * 100)}`;
+    });
+    return chart;
+  }
+  function showBinTrend(chart, bin) {
+    const shares = chart.data.labels.map(year => {
+      const row = chart.binRecords.get(year);
+      return row ? row.bins[bin] / row.played * 100 : null;
+    });
+    chart.binIndex = bin;
+    chart.data.datasets[0].label = binLabels[bin];
+    chart.data.datasets[0].data = shares;
+    chart.data.datasets[0].borderColor = binColors[bin];
+    chart.data.datasets[0].backgroundColor = binColors[bin];
+    chart.data.datasets[0].pointBorderColor = binColors[bin];
+    chart.data.datasets[0].pointBackgroundColor = binColors[bin];
+    chart.canvas.setAttribute('aria-label', `Share of regular-season matches with ${binLabels[bin]}, by season`);
+    chart.resize(); chart.update();
   }
   function teamDescription(chart, index) {
     const row = chart.teamRows[index], measure = chart.teamMeasure;
@@ -757,8 +819,27 @@
     root.querySelectorAll('[data-series]').forEach(series => {
       series.hidden = metric.value === 'gap' || (metric.value !== 'compare' && series.dataset.series !== metric.value);
     });
+    if (distributionBin) {
+      distributionBin.value = ['all', '0', '1', '2', '3', '4'].includes(params.get('distribution-bin'))
+        ? params.get('distribution-bin') : 'all';
+      root.querySelector('#explore-distribution-title').textContent = distributionBin.value === 'all'
+        ? 'Share of regular-season matches by total goals'
+        : `Share of regular-season matches with ${binLabels[Number(distributionBin.value)]}`;
+      root.querySelector('[data-distribution-stacked-panel]').hidden = distributionBin.value !== 'all';
+      root.querySelector('[data-distribution-trend-panel]').hidden = distributionBin.value === 'all';
+    }
     const canvas = root.querySelector(`[data-chart="${view}"]`);
-    if (canvas && !teamView && !charts[view]) charts[view] = view === 'trend' ? createLeagueTrend(canvas) : createDistribution(canvas);
+    if (view === 'trend' && canvas && !charts.trend) charts.trend = createLeagueTrend(canvas);
+    if (view === 'distribution' && distributionBin) {
+      if (distributionBin.value === 'all') {
+        if (!charts.distribution) charts.distribution = createDistribution(canvas);
+        charts.distribution.resize(); charts.distribution.update('none');
+      } else {
+        const trendCanvas = root.querySelector('[data-chart="bin-trend"]');
+        const chart = charts.binTrend || (charts.binTrend = createBinTrend(trendCanvas));
+        showBinTrend(chart, Number(distributionBin.value));
+      }
+    }
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
@@ -832,6 +913,12 @@
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
   metric.addEventListener('change', () => update({metric: metric.value}));
+  if (distributionBin) {
+    distributionBin.addEventListener('change', () => update({'distribution-bin': distributionBin.value}));
+    root.querySelector('[data-distribution-controls]').addEventListener('submit', event => {
+      event.preventDefault(); update({'distribution-bin': distributionBin.value});
+    });
+  }
   root.querySelector('[data-team-controls]').addEventListener('submit', event => {
     event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value});
   });
