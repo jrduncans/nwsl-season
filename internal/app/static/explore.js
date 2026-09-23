@@ -42,6 +42,17 @@
       },
     },
   });
+  function trendYAxis(gaps = null) {
+    // The hidden bar dataset must not make the goals/xG line modes start at zero.
+    const axis = {beginAtZero: false, grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}};
+    if (gaps === null) return axis;
+    const extent = Math.max(.1, ...gaps.map(value => Math.abs(value))) * 1.15;
+    return {...axis, grace: 0, min: -extent, max: extent,
+      grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
+      // The symmetric limits are padding, not meaningful values to label.
+      ticks: {maxTicksLimit: 7, includeBounds: false, callback: value => signed(value)},
+      title: {display: true, text: 'Goals − xG per match'}};
+  }
   const clearChart = chart => {
     chart.setActiveElements([]);
     chart.tooltip.setActiveElements([], {x: 0, y: 0});
@@ -93,20 +104,21 @@
     if (chart.historyRows) { const inspection = historyInspection(chart, mark); return `${inspection.title}. ${inspection.lines.join('. ')}`; }
     const year = chart.data.labels[mark.index], series = chart.data.datasets[mark.datasetIndex];
     const row = chart.scoringRecords.get(year);
-    return `${year}${row.active ? ' (in progress)' : ''}, ${series.label}: ${fixed(series.data[mark.index])} per match, ${row.played} played`;
+    const value = series.key === 'gap' ? signed(series.data[mark.index]) : fixed(series.data[mark.index]);
+    return `${year}${row.active ? ' (in progress)' : ''}, ${series.label}: ${value} per match, ${row.played} played`;
   }
   function createTrend(canvas, rows = records, plugins = []) {
     const options = commonOptions();
     options.scales = {
       x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
-      y: {grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}},
+      y: trendYAxis(),
     };
     options.plugins.tooltip.callbacks = {
       title: items => {
         const item = items[0];
         return item ? `${item.label}${item.chart.scoringRecords.get(item.label)?.active ? ' (in progress)' : ''}` : '';
       },
-      label: item => `${item.dataset.label}: ${fixed(item.parsed.y)} per match`,
+      label: item => `${item.dataset.label}: ${item.dataset.key === 'gap' ? signed(item.parsed.y) : fixed(item.parsed.y)} per match`,
       afterLabel: item => `${item.chart.scoringRecords.get(item.label).played} played`,
     };
     const chart = new Chart(canvas, {
@@ -123,6 +135,18 @@
     setTrendData(chart, rows);
     chart.update('none');
     keyboardAccess(chart, mark => trendDescription(chart, mark));
+    return chart;
+  }
+  function createLeagueTrend(canvas) {
+    const chart = createTrend(canvas);
+    chart.data.datasets.push({
+      type: 'bar', label: 'Goals − xG', key: 'gap', hidden: true,
+      data: chart.data.labels.map(year => chart.scoringRecords.get(year)?.gap ?? null),
+      backgroundColor: context => context.raw > 0 ? goalsColor : context.raw < 0 ? xgColor : color('--muted'),
+      borderRadius: 2, maxBarThickness: 36, barPercentage: .7, categoryPercentage: .9, minBarLength: 3,
+      hoverBorderColor: color('--gold'), hoverBorderWidth: 2,
+    });
+    chart.update('none');
     return chart;
   }
   function createDistribution(canvas) {
@@ -643,12 +667,14 @@
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
-    metric.value = ['goals', 'xg', 'compare'].includes(params.get('metric')) ? params.get('metric') : 'compare';
+    metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
+    root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
+      ? 'Goals − xG per match (regular-season)' : 'Goals and chances per match (regular-season)';
     root.querySelectorAll('[data-series]').forEach(series => {
-      series.hidden = metric.value !== 'compare' && series.dataset.series !== metric.value;
+      series.hidden = metric.value === 'gap' || (metric.value !== 'compare' && series.dataset.series !== metric.value);
     });
     const canvas = root.querySelector(`[data-chart="${view}"]`);
-    if (canvas && !teamView && !charts[view]) charts[view] = view === 'trend' ? createTrend(canvas) : createDistribution(canvas);
+    if (canvas && !teamView && !charts[view]) charts[view] = view === 'trend' ? createLeagueTrend(canvas) : createDistribution(canvas);
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
@@ -657,8 +683,27 @@
       link.href = `?${selection}`;
     });
     if (view === 'trend' && charts.trend) {
-      charts.trend.data.datasets.forEach((series, index) => charts.trend.setDatasetVisibility(index, metric.value === 'compare' || series.key === metric.value));
-      charts.trend.update('none');
+      const chart = charts.trend;
+      const gaps = chart.data.datasets[2].data.filter(value => value !== null);
+      const gapEmpty = metric.value === 'gap' && gaps.length === 0;
+      chart.data.datasets.forEach((series, index) => chart.setDatasetVisibility(index,
+        metric.value === 'compare' ? series.key !== 'gap' : series.key === metric.value));
+      // Reserve half a category at each edge so the first and last bars are not clipped.
+      chart.options.scales.x.offset = metric.value === 'gap';
+      chart.options.scales.y = trendYAxis(metric.value === 'gap' ? gaps : null);
+      chart.canvas.setAttribute('aria-label', {
+        compare: 'Goals and expected goals per regular-season match, by season',
+        goals: 'Goals per regular-season match, by season',
+        xg: 'Expected goals per regular-season match, by season',
+        gap: 'Goals minus expected goals per regular-season match, by season; positive bars are above xG and negative bars are below xG',
+      }[metric.value]);
+      root.querySelector('[data-trend-gap-legend]').hidden = metric.value !== 'gap' || gapEmpty;
+      root.querySelector('[data-trend-gap-note]').hidden = metric.value !== 'gap' || gapEmpty;
+      root.querySelector('[data-trend-gap-empty]').hidden = !gapEmpty;
+      root.querySelector('[data-trend-chart-wrap]').hidden = gapEmpty;
+      root.querySelector('[data-trend-keyboard-hint]').hidden = gapEmpty;
+      chart.resize();
+      chart.update('none');
     }
     const column = Number(params.get('sort') || 0);
     sortTable(Number.isInteger(column) && column >= 0 && column <= 4 ? column : 0, params.get('order') === 'asc' ? 'asc' : 'desc');

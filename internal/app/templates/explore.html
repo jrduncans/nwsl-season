@@ -16,13 +16,16 @@
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Team history</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
-<div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option></select></label></div>
+<div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label></div>
 {{if .Chart.HasData}}
 <div class="explore-legend"><span data-series="goals">● Goals</span><span data-series="xg">◆ Expected goals (xG)</span></div>
-<div class="explore-chart-wrap">
+<div class="explore-legend explore-gap-legend" data-trend-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above xG</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below xG</span></div>
+<p class="note" data-trend-gap-note hidden>Each bar shows league goals minus xG per played match. Zero means goals matched xG.</p>
+<p class="note" data-trend-gap-empty hidden>No seasons with complete xG are available for this comparison.</p>
+<div class="explore-chart-wrap" data-trend-chart-wrap>
 <canvas data-chart="trend" tabindex="0" role="img" aria-label="Goals and expected goals per regular-season match, by season" aria-describedby="explore-chart-help"></canvas>
 </div>
-<p class="explore-keyboard-hint">Use arrow keys to inspect points. Escape clears the tooltip.</p>
+<p class="explore-keyboard-hint" data-trend-keyboard-hint>Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
 {{if .Chart.ActiveStatus}}<p class="note">{{.Chart.ActiveStatus}}</p>{{end}}
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 {{if .MetricExcludedSeasons}}<p class="note">Some seasons have no complete xG average; their goals remain available.</p>{{end}}

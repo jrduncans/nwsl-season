@@ -32,9 +32,10 @@ from the cached fixtures when a season page or CLI report is requested.
 - Forecast Lab with Current Pace, Results Poisson, and xG Poisson models,
   including the selected recovery-time and accumulated-load adjustment.
 - Shareable forecast URLs with fixed match outcomes and optional model comparison.
-- Explore workspace with interactive regular-season scoring trends, goal distributions,
-  a sortable season table, and within-season team comparisons of goals scored,
-  goals allowed, and goal differential against xG.
+- Explore workspace with interactive regular-season scoring trends, signed
+  goals-minus-xG gaps, goal distributions, a sortable season table, and
+  within-season team comparisons of goals scored, goals allowed, and goal
+  differential against xG.
 - Health and cache-status endpoints for operators.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240

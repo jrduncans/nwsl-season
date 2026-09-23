@@ -15,7 +15,7 @@ import (
 )
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=team-history&team=alpha"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=team-history&team=alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 				"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
@@ -27,7 +27,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 				t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, body)
 			}
-			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `src="static/explore.js"`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
+			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js"`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)
 				}
@@ -38,8 +38,11 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if !found || json.Unmarshal([]byte(data), &records) != nil || len(records) != 2 {
 				t.Fatalf("invalid chart payload: %s", data)
 			}
-			if records[0].Season != "2025" || records[0].XG != nil || records[0].Goals == nil || *records[0].Goals != 3 || records[1].XG == nil {
+			if records[0].Season != "2025" || records[0].XG != nil || records[0].Gap != nil || records[0].Active || records[0].Goals == nil || *records[0].Goals != 3 || records[1].XG == nil || records[1].Gap == nil || !records[1].Active {
 				t.Fatalf("chart payload changed missing-xG or goal semantics: %+v", records)
+			}
+			if *records[1].Gap != *records[1].Goals-*records[1].XG {
+				t.Fatalf("chart gap does not match goals minus xG: %+v", records[1])
 			}
 			for _, record := range records {
 				count := 0

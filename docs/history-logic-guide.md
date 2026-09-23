@@ -14,18 +14,31 @@ Team performance offers Comparison chart, Comparison table, and Team history
 as direct views. The chart shows one selected measure; the table shows all three.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-history` selects the initial surface.
-JavaScript switches surfaces and Goals/xG series in place, sorts numeric table
+JavaScript switches surfaces and Goals/xG/gap selections in place, sorts numeric table
 columns from unrounded values, and restores those controls with Back/Forward.
 Chart.js 4.5.1 renders the charts, with chartjs-plugin-datalabels 2.2.0 for
 segment percentages. The pinned browser builds and MIT licenses are vendored
 under `internal/app/static/vendor`; see its README for provenance and updates.
 Chart libraries load locally; team logos use the same ASA image host as the
 season pages. The chart payload retains unrounded values,
-null for unavailable xG, and exact match counts from the same archive snapshot.
+null for unavailable xG and goals-minus-xG gaps, and exact match counts from the
+same archive snapshot. The payload identifies an eligible active season for
+tooltip and keyboard inspection.
 
-Hover/click/tap must intersect a dot, bar segment, or team-history record line. A trend tooltip shows one
-series value, with a visible point highlight; axis years are not controls. Missing
-calendar years and unavailable xG break the line. Distribution legends do not
+Scoring trend offers Goals, xG, Both, and Goals − xG under the same chart.
+Goals − xG uses zero-centered signed bars on a symmetric scale, with positive
+bars for goals above xG and negative bars for goals below xG. It uses the
+full-precision season gap already shown in the Season table. Seasons without
+complete xG have no bar; if none qualify, the chart shows an explicit empty
+message. Goals and xG line modes retain a scale fitted to their values; the
+hidden bar series does not force those nonnegative charts to start at zero.
+Missing calendar years remain gaps in all modes. The selected metric
+and view remain in the URL and restore through Back/Forward.
+
+Hover/click/tap must intersect a dot, signed bar, distribution segment, or
+team-history record line. A trend tooltip shows one series value, with a visible
+mark highlight; axis years are not controls. Missing calendar years and
+unavailable xG break the line. Distribution legends do not
 filter or toggle bins. A segment tooltip shows goal count and match count; it
 adds the percentage only when the segment is too narrow for a visible label.
 Arrow keys inspect marks through Chart.js's active-element API and announce
@@ -40,8 +53,8 @@ Bin columns sort by the exact share of matches, before display rounding;
 ties use newest season first. Sort links and the native disclosure work without
 JavaScript, and a direct sorted URL opens the disclosure.
 
-For chart changes, verify desktop and 390px layouts, hovering/tapping a dot
-versus empty space at the same year, per-segment tooltip content, keyboard
+For chart changes, verify desktop and 390px layouts, hovering/tapping a dot or
+signed bar versus empty space at the same year, per-segment tooltip content, keyboard
 inspection and dismissal, missing-year/xG gaps, table sorting, and direct view
 URLs plus Back/Forward. View changes must not fetch another document or data;
 newly visible team logos may load. The Go Explore tests check the single snapshot read and chart payload's

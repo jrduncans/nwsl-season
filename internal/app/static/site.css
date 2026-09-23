@@ -378,6 +378,10 @@ th:nth-child(2) { text-align: left; }
 .explore-legend { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: .75rem 0; font-size: .9rem; }
 .explore-legend [data-series="goals"] { color: var(--green); }
 .explore-legend [data-series="xg"] { color: var(--hypo); }
+.explore-gap-legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.explore-gap-swatch { display: inline-block; width: .8rem; height: .8rem; border-radius: .12rem; }
+.explore-gap-positive { background: var(--green); }
+.explore-gap-negative { background: var(--hypo); }
 .explore-chart-wrap { position: relative; max-width: 58rem; height: 390px; margin-top: 1.25rem; }
 .explore-chart-wrap canvas { display: block; }
 .explore-keyboard-hint { display: none; color: var(--muted); font-size: .85rem; }
