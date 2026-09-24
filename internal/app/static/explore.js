@@ -8,6 +8,7 @@
   const historyContext = root.querySelector('[data-history-context]');
   const teamSeason = root.querySelector('[data-team-season]');
   const teamMeasure = root.querySelector('[data-team-measure]');
+  const teamUnits = root.querySelector('[data-team-units]');
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = root.querySelector('[data-history-measure]');
   const metric = root.querySelector('[data-metric]');
@@ -23,11 +24,14 @@
     for: {index: 0, actual: 'Goals', expected: 'xG'},
     against: {index: 1, actual: 'Goals allowed', expected: 'xG allowed'},
     difference: {index: 2, actual: 'Goal differential', expected: 'xG differential'},
+    points: {index: 3, actual: 'Points', expected: 'xPts'},
   };
+  const tableMeasures = [teamMeasures.difference, teamMeasures.for, teamMeasures.against, teamMeasures.points];
   const scatterMeaning = {
     for: 'Above: more goals scored than xG; below: fewer.',
     against: 'Above: more goals conceded than xG allowed; below: fewer.',
     difference: 'Above: higher goal differential than xG differential; below: lower.',
+    points: 'Above: more points earned than xPts; below: fewer.',
   };
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
@@ -254,11 +258,13 @@
   }
   function teamDescription(chart, index) {
     const row = chart.teamRows[index], measure = chart.teamMeasure;
-    const value = row.values[measure.index];
+    const units = chart.teamUnits || 'per-match';
+    const value = teamMetric(row, measure, units);
+    const suffix = units === 'total' ? ' total' : ' per match';
     return [
-      `${measure.actual}: ${fixed(value.actual)} per match`,
-      `${measure.expected}: ${value.expected === null ? 'unavailable' : `${fixed(value.expected)} per match`}`,
-      `Gap: ${value.expected === null ? 'unavailable' : `${signed(value.actual - value.expected)} per match`}`,
+      `${measure.actual}: ${units === 'total' ? value.actual : fixed(value.actual)}${suffix}`,
+      `${measure.expected}: ${value.expected === null ? 'unavailable' : `${fixed(value.expected)}${suffix}`}`,
+      `Gap: ${value.expected === null ? 'unavailable' : `${signed(value.actual - value.expected)}${suffix}`}`,
       `${row.played} played`,
     ];
   }
@@ -274,22 +280,25 @@
     name.textContent = row.name; label.append(name);
     return label;
   }
-  function teamValue(row, measure, column) {
-    const value = row.values[measure.index];
+  function teamMetric(row, measure, units = 'per-match') {
+    return (units === 'total' ? row.totals : row.values)[measure.index];
+  }
+  function teamValue(row, measure, column, units = 'per-match') {
+    const value = teamMetric(row, measure, units);
     if (column === 'name') return row.name;
     if (column === 'played') return row.played;
     if (column === 'gap') return value.expected === null ? null : value.actual - value.expected;
     return value[column];
   }
   function teamSortMetric(key) {
-    for (const name of ['difference', 'for', 'against']) {
+    for (const name of ['difference', 'for', 'against', 'points']) {
       if (key.startsWith(`${name}-`)) return {measure: teamMeasures[name], column: key.slice(name.length + 1)};
     }
     return {measure: teamMeasures.difference, column: key};
   }
-  function sortedTeams(rows, measure, column, order) {
+  function sortedTeams(rows, measure, column, order, units = 'per-match') {
     return [...rows].sort((a, b) => {
-      const x = teamValue(a, measure, column), y = teamValue(b, measure, column);
+      const x = teamValue(a, measure, column, units), y = teamValue(b, measure, column, units);
       if (x === null || y === null) {
         if (x !== y) return (x === null) - (y === null);
       } else if (x !== y) {
@@ -314,13 +323,13 @@
       label.style.top = `${chart.scales.y.getPixelForValue(index)}px`;
     });
   }
-  function teamGapXAxis(values) {
+  function teamGapXAxis(values, units = 'per-match') {
     const extent = gapExtent(values);
     return {min: -extent, max: extent, position: 'top',
       grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
       border: {display: false},
       ticks: {includeBounds: false, maxTicksLimit: 7, callback: value => signed(value)},
-      title: {display: true, text: 'Actual − expected per match'}};
+      title: {display: true, text: units === 'total' ? 'Total actual − expected' : 'Actual − expected per match'}};
   }
   function createTeams(canvas) {
     const options = commonOptions();
@@ -372,9 +381,9 @@
           const ctx = chart.ctx, zero = chart.scales.x.getPixelForValue(0);
           ctx.save(); ctx.fillStyle = color('--muted'); ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'middle';
           chart.teamRows.forEach((row, index) => {
-            const gap = teamValue(row, chart.teamMeasure, 'gap');
+            const gap = teamValue(row, chart.teamMeasure, 'gap', chart.teamUnits);
             if (gap === null || Math.abs(gap) < .005) {
-              ctx.fillText(gap === null ? 'xG incomplete' : '0.00',
+              ctx.fillText(gap === null ? (chart.teamMeasure.index === 3 ? 'xPts incomplete' : 'xG incomplete') : '0.00',
                 gap === null ? chart.chartArea.left + 8 : zero + 8, chart.scales.y.getPixelForValue(index));
             }
           });
@@ -390,8 +399,11 @@
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
-  function scatterDomain(rows, measure) {
-    const values = rows.flatMap(row => [row.values[measure.index].actual, row.values[measure.index].expected]);
+  function scatterDomain(rows, measure, units) {
+    const values = rows.flatMap(row => {
+      const metric = teamMetric(row, measure, units);
+      return [metric.actual, metric.expected];
+    });
     const low = Math.min(...values), high = Math.max(...values);
     const padding = Math.max((high - low) * .12, high === low ? Math.max(Math.abs(high) * .15, .15) : .06);
     return {min: measure.index === 2 ? low - padding : Math.max(0, low - padding), max: high + padding};
@@ -436,6 +448,9 @@
     const season = teamSeasons.find(row => row.season === (params.get('season') || root.dataset.defaultTeamSeason));
     teamSeason.value = season?.season || '';
     teamMeasure.value = Object.hasOwn(teamMeasures, params.get('measure')) ? params.get('measure') : 'difference';
+    teamUnits.value = params.get('units') === 'total' ? 'total' : 'per-match';
+    const units = teamUnits.value;
+    const unitLabel = units === 'total' ? 'in total' : 'per match';
     const measure = teamMeasures[teamMeasure.value];
     const rows = season?.teams || [];
     const display = ['chart', 'gap', 'scatter', 'table'].includes(params.get('display')) ? params.get('display') : 'chart';
@@ -456,11 +471,24 @@
       ? 'Actual − expected by team (regular-season)'
       : display === 'scatter' ? 'Actual vs expected by team (regular-season)' : 'Actual vs expected (regular-season)';
     root.querySelector('[data-team-measure-control]').hidden = display === 'table';
+    root.querySelector('[data-team-units-note]').textContent =
+      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. Points compare earned points with ASA xPts from those matches.`;
+    root.querySelector('[data-team-table-caption]').textContent =
+      `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
     root.querySelector('[data-team-plot]').hidden = display !== 'chart';
     root.querySelector('[data-team-gap-plot]').hidden = display !== 'gap';
     root.querySelector('[data-team-scatter-plot]').hidden = display !== 'scatter';
     root.querySelector('[data-team-table]').hidden = display !== 'table';
-    root.querySelector('[data-team-warning]').hidden = !rows.some(row => row.values[measure.index].expected === null);
+    const missingXG = rows.some(row => row.values[0].expected === null);
+    const missingXPoints = rows.some(row => row.values[3].expected === null);
+    const warningTypes = display === 'table'
+      ? [missingXG && 'xG', missingXPoints && 'xPts'].filter(Boolean)
+      : [measure.index === 3 ? missingXPoints && 'xPts' : missingXG && 'xG'].filter(Boolean);
+    const warning = root.querySelector('[data-team-warning]');
+    warning.hidden = warningTypes.length === 0;
+    warning.textContent = warningTypes.length === 0 ? '' : warningTypes.length === 2
+      ? 'Some match xG and xPts data is missing. Affected comparisons are unavailable.'
+      : `Some match ${warningTypes[0]} data is missing. Affected teams have no ${warningTypes[0]} comparison yet.`;
     root.querySelectorAll('[data-team-actual-label]').forEach(label => { label.textContent = measure.actual; });
     root.querySelectorAll('[data-team-xg-label]').forEach(label => { label.textContent = measure.expected; });
     root.querySelector('[data-team-empty]').hidden = rows.length > 0;
@@ -473,12 +501,12 @@
     });
     const body = root.querySelector('[data-team-rows]');
     const tableSort = teamSortMetric(column);
-    body.replaceChildren(...sortedTeams(rows, tableSort.measure, tableSort.column, order).map(row => {
+    body.replaceChildren(...sortedTeams(rows, tableSort.measure, tableSort.column, order, units).map(row => {
       const tr = document.createElement('tr');
       const values = [row.name, row.played];
-      [2, 0, 1].forEach(index => {
-        const value = row.values[index];
-        values.push(fixed(value.actual), value.expected === null ? 'Unavailable' : fixed(value.expected),
+      tableMeasures.forEach(metric => {
+        const value = teamMetric(row, metric, units);
+        values.push(units === 'total' ? String(value.actual) : fixed(value.actual), value.expected === null ? 'Unavailable' : fixed(value.expected),
           value.expected === null ? 'Unavailable' : signed(value.actual - value.expected));
       });
       values.forEach((value, index) => {
@@ -492,31 +520,32 @@
     }));
     if (!rows.length) return;
     if (display === 'gap') {
-      const gapRows = sortedTeams(rows, measure, 'gap', measure.index === 1 ? 'asc' : 'desc');
-      const gapValues = gapRows.map(row => teamValue(row, measure, 'gap'));
+      const gapRows = sortedTeams(rows, measure, 'gap', measure.index === 1 ? 'asc' : 'desc', units);
+      const gapValues = gapRows.map(row => teamValue(row, measure, 'gap', units));
       const gapEmpty = gapValues.every(value => value === null);
       const missingNames = gapRows.filter((_, index) => gapValues[index] === null).map(row => row.name);
       const missingNote = root.querySelector('[data-team-gap-missing]');
       missingNote.hidden = gapEmpty || missingNames.length === 0;
-      missingNote.textContent = missingNames.length ? `Incomplete xG for ${missingNames.join(', ')}; these teams have no gap bar.` : '';
+      missingNote.textContent = missingNames.length ? `Incomplete ${measure.expected} for ${missingNames.join(', ')}; these teams have no gap bar.` : '';
+      root.querySelector('[data-team-gap-empty]').textContent = `No teams have complete ${measure.expected} for this measure yet.`;
       root.querySelector('[data-team-gap-empty]').hidden = !gapEmpty;
       root.querySelector('[data-team-gap-legend]').hidden = gapEmpty;
       root.querySelector('[data-team-gap-note]').hidden = gapEmpty;
       root.querySelector('[data-team-gap-chart-wrap]').hidden = gapEmpty;
       root.querySelector('[data-team-gap-hint]').hidden = gapEmpty;
       root.querySelector('[data-team-gap-note]').textContent = measure.index === 1
-        ? 'Bars show goals allowed minus xG allowed per match, from most negative to most positive. Negative means fewer goals conceded than expected.'
-        : 'Bars show actual minus expected per match, from largest positive gap to largest negative gap.';
+        ? `Bars show goals allowed minus xG allowed ${unitLabel}, from most negative to most positive. Negative means fewer goals conceded than expected.`
+        : `Bars show ${measure.actual.toLowerCase()} minus ${measure.expected} ${unitLabel}, from largest positive gap to largest negative gap.`;
       if (gapEmpty) return;
       const canvas = root.querySelector('[data-chart="team-gap"]');
       canvas.parentElement.style.height = `${gapRows.length * 48 + 70}px`;
       root.querySelector('[data-team-gap-labels]').replaceChildren(...gapRows.map(teamName));
       const chart = charts.teamGap || (charts.teamGap = createTeamGap(canvas));
-      chart.teamRows = gapRows; chart.teamMeasure = measure;
+      chart.teamRows = gapRows; chart.teamMeasure = measure; chart.teamUnits = units;
       chart.data.labels = gapRows.map(row => row.name);
       chart.data.datasets[0].data = gapValues;
-      chart.options.scales.x = teamGapXAxis(gapValues.filter(value => value !== null));
-      canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} minus ${measure.expected} per team per match, sorted by gap`);
+      chart.options.scales.x = teamGapXAxis(gapValues.filter(value => value !== null), units);
+      canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} minus ${measure.expected} ${unitLabel} per team, sorted by gap`);
       chart.resize(); chart.update('none');
       return;
     }
@@ -524,13 +553,14 @@
       root.querySelector('[data-team-scatter-note]').textContent =
         `One dot per team. Dashed line: actual matches expected. ${scatterMeaning[teamMeasure.value]} ` +
         'Farther from the line means a larger gap.';
-      const scatterRows = sortedTeams(rows, measure, 'expected', 'asc')
+      const scatterRows = sortedTeams(rows, measure, 'expected', 'asc', units)
         .filter(row => row.values[measure.index].expected !== null);
       const missingNames = rows.filter(row => row.values[measure.index].expected === null).map(row => row.name);
       const scatterEmpty = scatterRows.length === 0;
       const missingNote = root.querySelector('[data-team-scatter-missing]');
       missingNote.hidden = scatterEmpty || missingNames.length === 0;
-      missingNote.textContent = missingNames.length ? `Incomplete xG for ${missingNames.join(', ')}; these teams have no point.` : '';
+      missingNote.textContent = missingNames.length ? `Incomplete ${measure.expected} for ${missingNames.join(', ')}; these teams have no point.` : '';
+      root.querySelector('[data-team-scatter-empty]').textContent = `No teams have complete ${measure.expected} for this measure yet.`;
       root.querySelector('[data-team-scatter-empty]').hidden = !scatterEmpty;
       root.querySelector('[data-team-scatter-legend]').hidden = scatterEmpty;
       root.querySelector('[data-team-scatter-note]').hidden = scatterEmpty;
@@ -539,37 +569,38 @@
       if (scatterEmpty) return;
       const canvas = root.querySelector('[data-chart="team-scatter"]');
       const chart = charts.teamScatter || (charts.teamScatter = createTeamScatter(canvas));
-      const domain = scatterDomain(scatterRows, measure);
-      chart.teamRows = scatterRows; chart.teamMeasure = measure;
+      const domain = scatterDomain(scatterRows, measure, units);
+      chart.teamRows = scatterRows; chart.teamMeasure = measure; chart.teamUnits = units;
       chart.data.labels = scatterRows.map(row => row.name);
       chart.data.datasets[0].data = scatterRows.map(row => ({
-        x: row.values[measure.index].expected, y: row.values[measure.index].actual,
+        x: teamMetric(row, measure, units).expected, y: teamMetric(row, measure, units).actual,
       }));
       chart.data.datasets[0].backgroundColor = scatterRows.map(row => {
-        const gap = teamValue(row, measure, 'gap');
+        const gap = teamValue(row, measure, 'gap', units);
         return gap > .005 ? goalsColor : gap < -.005 ? xgColor : color('--muted');
       });
       chart.options.scales.x.min = chart.options.scales.y.min = domain.min;
       chart.options.scales.x.max = chart.options.scales.y.max = domain.max;
-      chart.options.scales.x.title.text = `${measure.expected} per match`;
-      chart.options.scales.y.title.text = `${measure.actual} per match`;
-      canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} versus ${measure.expected} per team per match. Dashed line means actual equals expected.`);
+      chart.options.scales.x.title.text = `${measure.expected} ${unitLabel}`;
+      chart.options.scales.y.title.text = `${measure.actual} ${unitLabel}`;
+      canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} versus ${measure.expected} ${unitLabel} per team. Dashed line means actual equals expected.`);
       chart.resize(); chart.update();
       return;
     }
     if (display !== 'chart') return;
-    const chartRows = sortedTeams(rows, measure, 'actual', measure.index === 1 ? 'asc' : 'desc');
+    const chartRows = sortedTeams(rows, measure, 'actual', measure.index === 1 ? 'asc' : 'desc', units);
     const canvas = root.querySelector('[data-chart="teams"]');
     canvas.parentElement.style.height = `${chartRows.length * 48 + 70}px`;
     root.querySelector('[data-team-labels]').replaceChildren(...chartRows.map(teamName));
     const chart = charts.teams || (charts.teams = createTeams(canvas));
-    chart.teamRows = chartRows; chart.teamMeasure = measure;
+    chart.teamRows = chartRows; chart.teamMeasure = measure; chart.teamUnits = units;
     chart.data.labels = chartRows.map(row => row.name);
-    chart.data.datasets[0].data = chartRows.map(row => row.values[measure.index].actual);
-    chart.data.datasets[1].data = chartRows.map(row => row.values[measure.index].expected);
+    chart.data.datasets[0].data = chartRows.map(row => teamMetric(row, measure, units).actual);
+    chart.data.datasets[1].data = chartRows.map(row => teamMetric(row, measure, units).expected);
     chart.data.datasets[0].label = measure.actual;
     chart.data.datasets[1].label = measure.expected;
-    canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} and ${measure.expected} per team per match`);
+    chart.options.scales.x.title.text = units === 'total' ? 'Total' : 'Per match';
+    canvas.setAttribute('aria-label', `${season.season} regular season: ${measure.actual} and ${measure.expected} ${unitLabel} per team`);
     chart.resize(); chart.update('none');
   }
   function sortedTeamHistory(rows, params) {
@@ -666,14 +697,24 @@
       if (!series?.low) return;
       const {ctx, chartArea: area} = chart;
       ctx.save(); ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right';
-      for (const side of ['high', 'low']) {
-        if (side === 'low' && series.low.value === series.high.value) continue;
+      const equal = series.low.value === series.high.value;
+      const close = !equal && Math.abs(chart.scales.y.getPixelForValue(series.low.value)
+        - chart.scales.y.getPixelForValue(series.high.value)) < 22;
+      for (const side of equal ? ['high'] : ['high', 'low']) {
         const bound = series[side], label = series.low.value === series.high.value ? 'high/low' : side;
-        const text = `Record ${label} ${fixed(bound.value)}`;
         const y = chart.scales.y.getPixelForValue(bound.value) - 7;
         // Draw the full width even for a team with only one eligible season.
         ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.5; ctx.setLineDash([2, 5]);
         ctx.beginPath(); ctx.moveTo(area.left, y + 7); ctx.lineTo(area.right, y + 7); ctx.stroke();
+        if (close) continue;
+        const text = `Record ${label} ${fixed(bound.value)}`;
+        ctx.fillStyle = color('--paper'); ctx.fillRect(area.right - ctx.measureText(text).width - 7, y - 12, ctx.measureText(text).width + 8, 16);
+        ctx.fillStyle = color('--muted'); ctx.fillText(text, area.right - 3, y);
+      }
+      if (close) {
+        const text = `Record range ${fixed(series.low.value)}–${fixed(series.high.value)}`;
+        const y = (chart.scales.y.getPixelForValue(series.low.value)
+          + chart.scales.y.getPixelForValue(series.high.value)) / 2 - 7;
         ctx.fillStyle = color('--paper'); ctx.fillRect(area.right - ctx.measureText(text).width - 7, y - 12, ctx.measureText(text).width + 8, 16);
         ctx.fillStyle = color('--muted'); ctx.fillText(text, area.right - 3, y);
       }
@@ -761,13 +802,20 @@
     const contextEnabled = historyContext.checked;
     const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
     const context = historyContextData[measure.index];
+    const isPoints = measure.index === 3;
+    root.querySelector('#explore-team-history-title').textContent =
+      `${isPoints ? 'Points' : 'Scoring'} over time (regular-season)`;
+    const choices = historySeries.options;
+    choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
+    choices[1].textContent = isPoints ? 'Points' : 'Goals';
+    choices[2].textContent = isPoints ? 'xPts' : 'xG';
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
     root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
     root.querySelector('[data-history-context-legend]').hidden = !contextEnabled;
     root.querySelector('[data-history-context-note]').hidden = !contextEnabled;
     showHistoryContextDetails(visible.map(key => context[key]));
     const notes = visible.map(key => context[key].since ? `${context[key].label} records since ${context[key].since}` : `${context[key].label}: no completed-season records`);
-    if (visible.includes('xg') && context.xg.partial) notes.push('Some season xG ranges are unavailable because team coverage is incomplete');
+    if (visible.includes('xg') && context.xg.partial) notes.push(`Some season ${isPoints ? 'xPts' : 'xG'} ranges are unavailable because team coverage is incomplete`);
     root.querySelector('[data-history-context-note]').textContent = notes.join('. ') + '.';
     const rows = teamSeasons.flatMap(season => {
       const team = (season.teams || []).find(row => row.id === historyTeam.value);
@@ -775,14 +823,22 @@
     });
     root.querySelector('[data-team-history-empty]').hidden = rows.length > 0;
     root.querySelector('[data-team-history-results]').hidden = rows.length === 0;
-    root.querySelector('[data-team-history-warning]').hidden = !rows.some(row => row.values[0].expected === null);
+    const missingXG = rows.some(row => row.values[0].expected === null);
+    const missingXPoints = rows.some(row => row.values[3].expected === null);
+    const warning = root.querySelector('[data-team-history-warning]');
+    warning.hidden = !missingXG && !missingXPoints;
+    warning.textContent = missingXG && missingXPoints
+      ? 'Some seasons have incomplete xG and xPts for this team; actual values remain available.'
+      : missingXPoints
+        ? 'Some seasons have incomplete xPts for this team; earned points remain available.'
+        : 'Some seasons have incomplete xG for this team; goals remain available.';
     root.querySelector('[data-history-team-name]').replaceChildren(...(rows.length ? [teamName(rows[0])] : []));
     root.querySelector('[data-history-actual-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-label]').textContent = measure.expected;
     root.querySelector('[data-team-history-rows]').replaceChildren(...sortedTeamHistory(rows, params).map(row => {
       const tr = document.createElement('tr');
       const values = [row.season, row.played];
-      [2, 0, 1].forEach(index => {
+      [2, 0, 1, 3].forEach(index => {
         const value = row.values[index];
         values.push(fixed(value.actual), value.expected === null ? 'Unavailable' : fixed(value.expected));
       });
@@ -806,6 +862,8 @@
     root.querySelector('[data-history-panel-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-panel-label]').textContent = measure.expected;
     root.querySelector('[data-history-xg-empty]').hidden = !visible.includes('xg') || points.some(row => row.xg !== null);
+    root.querySelector('[data-history-xg-empty]').textContent =
+      `This team has no complete ${measure.expected} values in these seasons.`;
     const values = points.flatMap(row => visible.map(key => row[key])).filter(value => value !== null);
     if (contextEnabled) {
       visible.forEach(key => {
@@ -1013,10 +1071,11 @@
     });
   }
   root.querySelector('[data-team-controls]').addEventListener('submit', event => {
-    event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value});
+    event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value, units: teamUnits.value});
   });
   teamSeason.addEventListener('change', () => update({season: teamSeason.value}));
   teamMeasure.addEventListener('change', () => update({measure: teamMeasure.value, 'team-sort': root.querySelector('[name="team-sort"]').value}));
+  teamUnits.addEventListener('change', () => update({units: teamUnits.value}));
   root.addEventListener('error', event => {
     if (event.target.matches('.team-logo')) event.target.style.visibility = 'hidden';
   }, true);

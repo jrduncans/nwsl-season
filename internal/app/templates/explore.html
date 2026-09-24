@@ -76,13 +76,14 @@
 <input type="hidden" name="team-sort" value="{{.TeamSort}}">
 <input type="hidden" name="team-order" value="{{.TeamOrder}}">
 <label>Season <select name="season" data-team-season>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
-<label data-team-measure-control{{if eq .TeamDisplay "table"}} hidden{{end}}>Compare <select name="measure" data-team-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option></select></label>
+<label data-team-measure-control{{if eq .TeamDisplay "table"}} hidden{{end}}>Compare <select name="measure" data-team-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option><option value="points"{{if eq .TeamMeasure "points"}} selected{{end}}>Points</option></select></label>
+<label>Values <select name="units" data-team-units><option value="per-match"{{if eq .TeamUnits "per-match"}} selected{{end}}>Per match</option><option value="total"{{if eq .TeamUnits "total"}} selected{{end}}>Totals</option></select></label>
 <noscript><button class="button" type="submit">Show comparison</button></noscript>
 </form></div>
-<p class="note">Per match, from recorded results.</p>
+<p class="note" data-team-units-note>{{if eq .TeamUnits "total"}}Totals{{else}}Per match{{end}}, from recorded results. Points compare earned points with ASA xPts from those matches.</p>
 <p class="note" data-team-empty{{if .TeamRows}} hidden{{end}}>No team comparison is available for this season yet.</p>
 <div data-team-results{{if not .TeamRows}} hidden{{end}}>
-<p class="explore-data-warning" data-team-warning{{if not .TeamMissingXG}} hidden{{end}}>Some match xG data is missing. Affected teams have no xG comparison yet.</p>
+<p class="explore-data-warning" data-team-warning{{if not (or (and .TeamMissingXG (or (eq .TeamDisplay "table") (ne .TeamMeasure "points"))) (and .TeamMissingXPoints (or (eq .TeamDisplay "table") (eq .TeamMeasure "points"))))}} hidden{{end}}>{{if and (eq .TeamDisplay "table") .TeamMissingXG .TeamMissingXPoints}}Some match xG and xPts data is missing. Affected comparisons are unavailable.{{else if and (eq .TeamDisplay "table") .TeamMissingXPoints}}Some match xPts data is missing. Affected teams have no xPts comparison yet.{{else if eq .TeamMeasure "points"}}Some match xPts data is missing. Affected teams have no xPts comparison yet.{{else}}Some match xG data is missing. Affected teams have no xG comparison yet.{{end}}</p>
 <div data-team-plot hidden>
 <div class="explore-legend"><span class="explore-actual-key">● <span data-team-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key">◆ <span data-team-xg-label>{{.TeamXGLabel}}</span></span></div>
 <div class="explore-chart-wrap explore-team-chart" data-team-chart-wrap><canvas data-chart="teams" tabindex="0" role="img" aria-label="Team goals and expected goals per match" aria-describedby="explore-chart-help"></canvas><div class="explore-team-labels" data-team-labels aria-hidden="true"></div></div>
@@ -91,7 +92,7 @@
 <div data-team-gap-plot hidden>
 <div class="explore-legend explore-gap-legend" data-team-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above expected</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below expected</span></div>
 <p class="note" id="explore-team-gap-note" data-team-gap-note hidden>Bars show actual minus expected per match, sorted by gap.</p>
-<p class="note" data-team-gap-empty hidden>No teams have complete xG for this measure yet.</p>
+<p class="note" data-team-gap-empty hidden>No teams have complete expected data for this measure yet.</p>
 <p class="note" id="explore-team-gap-missing" data-team-gap-missing hidden></p>
 <div class="explore-chart-wrap explore-team-chart" data-team-gap-chart-wrap hidden><canvas data-chart="team-gap" tabindex="0" role="img" aria-label="Team actual minus expected per match" aria-describedby="explore-chart-help explore-team-gap-note explore-team-gap-missing"></canvas><div class="explore-team-labels" data-team-gap-labels aria-hidden="true"></div></div>
 <p class="explore-keyboard-hint" data-team-gap-hint hidden>Use arrow keys to inspect teams. Escape clears the tooltip.</p>
@@ -100,29 +101,29 @@
 <p class="note" id="explore-team-scatter-note" data-team-scatter-note>One dot per team. Dashed line: actual matches expected. Above: higher goal differential than xG differential; below: lower. Farther from the line means a larger gap.</p>
 <div class="explore-legend explore-gap-legend" data-team-scatter-legend><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above expected</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below expected</span><span><i class="explore-scatter-parity" aria-hidden="true"></i>Equal to expected</span></div>
 <p class="note" id="explore-team-scatter-missing" data-team-scatter-missing hidden></p>
-<p class="note" data-team-scatter-empty hidden>No teams have complete xG for this measure yet.</p>
+<p class="note" data-team-scatter-empty hidden>No teams have complete expected data for this measure yet.</p>
 <div class="explore-chart-wrap explore-team-scatter-wrap" data-team-scatter-chart-wrap hidden><canvas data-chart="team-scatter" tabindex="0" role="img" aria-label="Team actual versus expected per match" aria-describedby="explore-chart-help explore-team-scatter-note explore-team-scatter-missing"></canvas></div>
 <p class="explore-keyboard-hint" data-team-scatter-hint hidden>Use arrow keys to inspect teams. Escape clears the tooltip.</p>
 <p class="note" data-team-scatter-table-link><a href="{{.TeamTableURL}}" data-team-display="table">See every team's values in the comparison table</a>.</p>
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
-<div class="table-scroll" tabindex="0" role="region" aria-label="Team performance values"><table class="explore-table explore-team-table"><caption>Gap = actual − expected.</caption><thead>
-<tr>{{range .TeamColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="3">Goal differential</th><th scope="colgroup" colspan="3">Goals scored</th><th scope="colgroup" colspan="3">Goals allowed</th></tr>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Team performance values"><table class="explore-table explore-team-table"><caption data-team-table-caption>{{if eq .TeamUnits "total"}}Totals{{else}}Per-match values{{end}}. Gap = actual − expected.</caption><thead>
+<tr>{{range .TeamColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="3">Goal differential</th><th scope="colgroup" colspan="3">Goals scored</th><th scope="colgroup" colspan="3">Goals allowed</th><th scope="colgroup" colspan="3">Points</th></tr>
 <tr>{{range .TeamColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-rows>{{range .TeamRows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td><td><strong>{{.Gap}}</strong></td>{{end}}</tr>{{end}}</tbody></table></div>
 </div>
 </div>
 </section>
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
-<h2 id="explore-team-history-title">Scoring over time (regular-season)</h2>
+<h2 id="explore-team-history-title">{{if eq .TeamMeasure "points"}}Points over time{{else}}Scoring over time{{end}} (regular-season)</h2>
 <form method="get" data-team-history-controls class="explore-team-controls">
 <input type="hidden" name="view" value="team-history">
 <input type="hidden" name="history-sort" value="{{.HistorySort}}">
 <input type="hidden" name="history-order" value="{{.HistoryOrder}}">
 <label>Team <select name="team" data-history-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-<label>Compare <select name="measure" data-history-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option></select></label>
-<label>Show <select name="series" data-history-series><option value="both"{{if eq .HistorySeries "both"}} selected{{end}}>Goals and xG</option><option value="goals"{{if eq .HistorySeries "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .HistorySeries "xg"}} selected{{end}}>xG</option></select></label>
+<label>Compare <select name="measure" data-history-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option><option value="points"{{if eq .TeamMeasure "points"}} selected{{end}}>Points</option></select></label>
+<label>Show <select name="series" data-history-series><option value="both"{{if eq .HistorySeries "both"}} selected{{end}}>{{if eq .TeamMeasure "points"}}Points and xPts{{else}}Goals and xG{{end}}</option><option value="goals"{{if eq .HistorySeries "goals"}} selected{{end}}>{{if eq .TeamMeasure "points"}}Points{{else}}Goals{{end}}</option><option value="xg"{{if eq .HistorySeries "xg"}} selected{{end}}>{{if eq .TeamMeasure "points"}}xPts{{else}}xG{{end}}</option></select></label>
 <label><input type="checkbox" name="context" value="on" data-history-context{{if eq .HistoryContext "on"}} checked{{end}}> League context</label>
 <noscript><button class="button" type="submit">Show team history</button></noscript>
 </form>
@@ -130,12 +131,12 @@
 <p data-team-history-empty{{if .TeamHistoryRows}} hidden{{end}}>No team history is available from the recorded results yet.</p>
 <div data-team-history-results{{if not .TeamHistoryRows}} hidden{{end}}>
 <h3 data-history-team-name>{{template "teamName" .HistoryTeam}}</h3>
-<p class="explore-data-warning" data-team-history-warning{{if not .TeamHistoryMissingXG}} hidden{{end}}>Some seasons have incomplete xG for this team; their goals remain available.</p>
+<p class="explore-data-warning" data-team-history-warning{{if not (or .TeamHistoryMissingXG .TeamHistoryMissingXPoints)}} hidden{{end}}>{{if and .TeamHistoryMissingXG .TeamHistoryMissingXPoints}}Some seasons have incomplete xG and xPts for this team; actual values remain available.{{else if .TeamHistoryMissingXPoints}}Some seasons have incomplete xPts for this team; earned points remain available.{{else}}Some seasons have incomplete xG for this team; goals remain available.{{end}}</p>
 <div data-team-history-plot hidden>
 <div class="explore-legend"><span class="explore-actual-key" data-history-key="goals">● <span data-history-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key" data-history-key="xg">◆ <span data-history-xg-label>{{.TeamXGLabel}}</span></span></div>
 <div class="explore-legend" data-history-context-legend hidden><span><i class="explore-context-bar"></i>Season high–low range</span><span>⋯ Completed-season records</span></div>
 <p class="note" data-history-context-note hidden></p>
-<p class="note" data-history-xg-empty hidden>This team has no complete xG values in these seasons.</p>
+<p class="note" data-history-xg-empty hidden>This team has no complete expected values in these seasons.</p>
 <h4 class="explore-context-heading" data-history-panel-label hidden></h4>
 <div class="explore-chart-wrap"><canvas data-chart="team-history" tabindex="0" role="img" aria-label="Team goals and expected goals per match, by regular season" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect points. Escape clears the tooltip.</p>
@@ -147,11 +148,11 @@
 </div>
 <details class="explore-context-details" data-history-context-details{{if eq .HistoryContext "off"}} hidden{{end}}>
 <summary>League records and season ranges</summary>
-<p class="note">Per match, from eligible recorded results. Historical records use completed seasons. xG ranges require complete xG for every team in the season comparison. Values are compared before rounding.</p>
+<p class="note">Per match, from eligible recorded results. Historical records use completed seasons. Expected-value ranges require complete coverage for every team in the season comparison. Values are compared before rounding.</p>
 <div data-history-context-values>{{range .HistoryContextDetails}}{{template "exploreContextSeries" .}}{{end}}</div>
 </details>
 <div class="table-scroll explore-team-history-table-wrap" tabindex="0" role="region" aria-label="Team scoring by season"><table class="explore-table explore-team-history-table"><caption>Regular-season values per match. Differential = scored − allowed.</caption><thead>
-<tr>{{range .HistoryColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="2">Goal differential</th><th scope="colgroup" colspan="2">Goals scored</th><th scope="colgroup" colspan="2">Goals allowed</th></tr>
+<tr>{{range .HistoryColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="2">Goal differential</th><th scope="colgroup" colspan="2">Goals scored</th><th scope="colgroup" colspan="2">Goals allowed</th><th scope="colgroup" colspan="2">Points</th></tr>
 <tr>{{range .HistoryColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-history-rows>{{range .TeamHistoryRows}}<tr><th scope="row">{{.Season}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td>{{end}}</tr>{{end}}</tbody></table></div>
 </div>

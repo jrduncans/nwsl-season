@@ -11,8 +11,8 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
 Team performance offers Comparison chart, Gap chart, Outlier plot, Comparison
-table, and Team history as direct views. The charts show one selected measure;
-the table shows all three.
+table, and Team history as direct views. The charts and Comparison table show
+one selected measure; the Team history table shows all four.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-history` selects the initial surface.
 JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
@@ -22,10 +22,10 @@ Chart.js 4.5.1 renders the charts, with chartjs-plugin-datalabels 2.2.0 for
 segment percentages. The pinned browser builds and MIT licenses are vendored
 under `internal/app/static/vendor`; see its README for provenance and updates.
 Chart libraries load locally; team logos use the same ASA image host as the
-season pages. The chart payload retains unrounded values,
-null for unavailable xG and goals-minus-xG gaps, and exact match counts from the
-same archive snapshot. The payload identifies an eligible active season for
-tooltip and keyboard inspection.
+season pages. Explore data retain unrounded values, null for unavailable xG or
+xPoints and their gaps, and exact match counts from the same archive snapshot.
+The chart payload identifies an eligible active season for tooltip and keyboard
+inspection.
 
 Scoring trend offers Goals, xG, Both, and Goals − xG under the same chart.
 Goals − xG uses zero-centered signed bars on a symmetric scale, with positive
@@ -89,21 +89,26 @@ than adding a top-level tab per metric.
 
 ### Team performance
 
-`view=teams` compares actual and expected values per match for one regular
-season. `season=YYYY` selects a catalog year; the default is the newest eligible
+`view=teams` compares actual and expected values for one regular season.
+`season=YYYY` selects a catalog year; the default is the newest eligible
 season, falling back to the newest catalog year when none qualify.
-`measure=for|against|difference` chooses goals scored, goals allowed, or goal
-differential on the chart. Goal differential is the default. Explicit unsupported years, malformed
-or repeated season values, and invalid or repeated measures return 400.
-Selections update locally and support direct URLs and Back/Forward.
-`display=chart|gap|scatter|table` selects comparison views (paired-dot chart by
-default), preserving the season and chart measure. The measure picker appears on
-all three charts; the table always includes all three measures. A small-screen
-cue identifies the table's horizontal scroll. `team-sort` accepts `name`,
-`played`, or a metric-qualified key such as `difference-gap`, `for-actual`, or
-`against-expected`. Each of `difference`, `for`, and `against` supports `actual`,
-`expected`, and `gap`. `team-order=asc|desc` controls ordering, defaulting to
-`difference-gap` descending independently of the selected chart measure.
+`measure=for|against|difference|points` chooses goals scored, goals allowed,
+goal differential, or points on the chart. Goal differential is the default.
+`units=per-match|total` controls the within-season comparison across the
+paired-dot chart, Gap chart, Outlier plot, and table. Per match is the default;
+totals sum the same selected team's recorded regular-season matches. Explicit
+unsupported years, malformed or repeated season values, and invalid or repeated
+measures or units return 400. Selections update locally and support direct URLs
+and Back/Forward. `display=chart|gap|scatter|table` selects comparison views
+(paired-dot chart by default), preserving the season and chart measure. The
+measure picker appears on all three charts; the table always includes all four
+measures. A small-screen cue identifies the table's horizontal scroll.
+`team-sort` accepts `name`, `played`, or a metric-qualified key such as
+`difference-gap`, `for-actual`, `against-expected`, or `points-gap`. Each of
+`difference`, `for`, `against`, and
+`points` supports `actual`, `expected`, and `gap`. `team-order=asc|desc` controls
+ordering, defaulting to `difference-gap` descending independently of the
+selected chart measure.
 Legacy `actual|expected|gap` sort keys resolve using the URL's chart measure;
 new sort links use explicit metric keys.
 Missing expected values and gaps sort last in both directions; numeric sorting
@@ -113,12 +118,18 @@ and sort selections return 400.
 
 The calculation reuses the single archive snapshot and validated scored-match
 loop. Home and away appearances contribute to each team's goals for, goals
-against, played count, and paired xG coverage. Unplayed, abandoned, and malformed
+against, played count, actual points (three for a win, one for a draw, zero for
+a loss), and paired xG and xPoints coverage. Unplayed, abandoned, and malformed
 completed results do not contribute. Team identities must be nonempty and
 distinct within each fixture. Each team needs full xG coverage of its own played
 matches; other teams' missing observations do not hide its xG. Missing or invalid
-xG leaves actual rates intact and expected rates and gaps unavailable. Zero xG
-is valid. xPoints coverage does not gate the comparison.
+xG leaves actual goals intact and expected goals and gaps unavailable. xPoints
+coverage is independent: a team needs valid, paired ASA xPoints for each of its
+played matches to show xPoints and the points gap, regardless of its xG coverage
+or that of another team. Missing or invalid xPoints leaves actual points visible.
+The xPoints value is the retrospective ASA observation for each recorded game;
+it is not a Forecast Lab projection of final points. Zero xG and zero xPoints
+are valid.
 
 Team comparison uses the league integrity checks with a one-result minimum
 instead of the trend's 20-match minimum. Known-incomplete inventory, unavailable
@@ -129,58 +140,65 @@ fixture archive. A selected unavailable season remains selected with an empty
 state. Only teams with valid played matches appear; teams use cached names and
 fall back to their ASA identity. No cross-season franchise mapping is implied.
 
-The paired-dot chart places actual and expected rates on one scale including
-zero, ordered by actual rate (ascending for goals allowed, descending otherwise).
-The Gap chart ranks teams by full-precision actual minus expected per match,
-with signed bars around zero. It orders positive gaps first for goals scored
-and goal differential, and negative gaps first for goals allowed. Green means
-above expected and purple means below expected; neither color implies the
-same performance judgment for every measure. Teams without complete xG appear
-last with no bar, an `xG incomplete` label, and a named note accessible from the chart.
-If every team lacks complete xG, the
-chart shows an explicit empty message. The paired-dot chart remains available.
-The Outlier plot places each fully xG-covered team's expected rate on the
-horizontal axis and actual rate on the vertical axis. Its diagonal marks equal
-actual and expected rates: points above it are above expected (green), and
+The paired-dot chart places actual and expected values in the selected units on
+one scale including zero, ordered by actual value (ascending for goals allowed,
+descending otherwise). The Gap chart ranks teams by full-precision actual minus
+expected, with signed bars around zero. It orders positive gaps first for goals
+scored, goal differential, and points, and negative gaps first for goals allowed.
+Green means above expected and purple means below expected; neither color
+implies the same performance judgment for every measure. Teams without complete
+xG appear
+last for goal measures with no bar, an `xG incomplete` label, and a named note
+accessible from the chart. For points, the same behavior follows xPoints
+coverage and uses an `xPoints incomplete` label. If every team lacks complete
+coverage of the selected expected value, the chart shows an explicit empty
+message. The paired-dot chart remains available.
+The Outlier plot places each fully covered team's expected value on the
+horizontal axis and actual value on the vertical axis. Its diagonal marks equal
+actual and expected values: points above it are above expected (green), and
 points below it are below expected (purple). Both axes use the same numeric
-range, fitted to the selected teams' actual and expected rates with room around
+range, fitted to the selected teams' actual and expected values with room around
 the points. A short note explains above, below, and distance from the line for
 the selected measure. Positive measures do not have to start at zero; signed goal
-differentials can extend below zero. Teams without complete xG have no point
-and are named in a note accessible from the chart. If none are fully covered,
-the plot shows an explicit empty message. Hover and tap inspect points and
-report actual, expected, gap, and played count. Keyboard inspection reaches
-every plotted team; a link below the plot opens the comparison table for all
+differentials can extend below zero. Teams without complete xG for goal measures,
+or xPoints for points, have no point and are named in a note accessible from the
+chart. If none are fully covered, the plot shows an explicit empty message.
+Hover and tap inspect points and report actual, expected, gap, and played count.
+Keyboard inspection reaches every plotted team; a link below the plot opens the
+comparison table for all
 teams, including those whose points overlap. The season and measure selections,
 direct URLs, and Back/Forward work as on the other comparison views.
 Goal differential is goals for minus goals against; xG differential is xG for
-minus xG against. Gap always means actual minus expected. Lower/negative gaps
-are favorable for goals allowed; higher/positive gaps are favorable for goals
-scored and differential. These are descriptive comparisons, not forecasts.
+minus xG against. Points are earned from recorded results, and xPoints are ASA's
+expected points summed over those same matches. Gap always means actual minus
+expected in the selected units. Lower/negative gaps are favorable for goals
+allowed; higher/positive gaps are favorable for goals scored, differential, and
+points. These are descriptive comparisons of recorded matches, not forecasts.
 Tooltip and keyboard inspection include both values, gap, and played count.
 The paired-dot and Gap chart labels and table rows pair team logos with names;
 unavailable images leave the names readable. Those chart labels are HTML aligned
-to Chart.js row positions on layout and resize. The table starts with Team and
-Played, followed by Goal
-differential, Goals scored, and Goals allowed column groups, each with Actual,
-xG, and Gap. Two header rows and contextual accessible sort labels identify
-the groups. Team names stay fixed during horizontal scrolling on small screens.
-A warning appears only when some teams
-lack xG; coverage counts and routine coverage guidance are not shown. The native
-HTML table and GET selectors provide the no-script fallback. Displayed values
-round independently from full precision.
+to Chart.js row positions on layout and resize. The Comparison table starts
+with Team and Played, followed by Goal differential, Goals scored, Goals
+allowed, and Points groups, each with Actual, expected (xG or xPts), and Gap
+columns. Contextual accessible sort labels identify the measure and values.
+Team names stay fixed during horizontal scrolling on small screens. Warnings
+identify missing xG, xPoints, or both for the table.
+Coverage counts and routine coverage guidance are not shown. The native HTML
+table and GET selectors provide the no-script fallback. Displayed values round
+independently from full precision.
 
 Run `make test-explore` for calculation and HTTP regression checks (also included
 in `make test` and CI). For browser verification, the `teams` scenario in
-`TestHistoryPreview` supplies 16 synthetic teams, full/partial xG, and an empty
-season. Verify desktop and 390px layouts, signed differential and gap axes,
-gap ranking for all three measures, the Outlier plot's equal axis ranges and
-parity diagonal for all three measures, positive and negative gaps, coincident
-points, touch/hover, keyboard inspection/dismissal,
-logos and alignment after resize, missing-data warnings and `xG incomplete` labels,
-the named Outlier plot omission note and empty state, sorting in both
-directions, no-script sorting, season/measure/display URLs,
-Back/Forward, and switching analyses without fetching new data.
+`TestHistoryPreview` supplies 16 synthetic teams, full/partial expected-value
+coverage, and an empty season. Verify desktop and 390px layouts, signed
+differential and gap axes, gap ranking for all four measures and both unit modes,
+the Outlier plot's equal axis ranges and parity diagonal for all four measures,
+positive and negative gaps, coincident points, touch/hover, keyboard
+inspection/dismissal, logos and alignment after resize, missing-data warnings
+and `xG incomplete` or `xPoints incomplete` labels, the named Outlier plot
+omission note and empty state, sorting in both directions, no-script sorting,
+season/measure/units/display URLs, Back/Forward, and switching analyses without
+fetching new data.
 
 ### Team history
 
@@ -190,18 +208,20 @@ archive; it defaults to the first team by name, with ID breaking ties. The
 selector uses the newest eligible name for each ID, so a rename keeps its
 history. Distinct IDs remain separate even when names match; relocation or
 franchise lineage is not inferred. Blank, repeated, and unknown team IDs return
-400. `measure=for|against|difference` controls the chart, defaulting to goal
-differential and sharing the season comparison's validation.
+400. `measure=for|against|difference|points` controls the chart, defaulting to
+goal differential and sharing the season comparison's validation.
 
-History reuses the eligible team-season rates and per-team xG coverage already
-calculated for Team performance. A single recorded result can appear with its
-played count. Goals and xG are per match; differential is scored minus allowed.
-A native table always shows all three pairs of measures, newest season first
+History reuses the eligible team-season rates and per-team xG and xPoints
+coverage already calculated for Team performance. A single recorded result can
+appear with its played count. Goals, xG, points, and xPoints are per match;
+differential is scored minus allowed. The within-season `units` control does not
+change history.
+A native table always shows all four pairs of measures, newest season first
 by default. Every column is sortable: `history-sort` accepts `season`, `played`,
-or `difference|for|against` suffixed with `-actual` or `-expected`.
+or `difference|for|against|points` suffixed with `-actual` or `-expected`.
 `history-order=asc|desc` selects direction. Sorting uses unrounded values,
-keeps unavailable xG last in both directions, and breaks metric ties by newest
-season first. Blank, invalid, or repeated sorting parameters return 400.
+keeps unavailable xG or xPoints last in both directions, and breaks metric ties
+by newest season first. Blank, invalid, or repeated sorting parameters return 400.
 Header links toggle direction, expose the active order with `aria-sort`, and
 work without JavaScript. Sort state is independent of the chart measure and
 other Explore tables, survives team and measure changes, and supports direct
@@ -209,13 +229,15 @@ URLs and Back/Forward. The chart always retains chronological order.
 The table keeps season labels compact; in-progress seasons are identified in
 the chart tooltip and keyboard announcement.
 The trend places seasons at calendar-year intervals and breaks lines for missing
-or excluded seasons and unavailable xG. Its scale includes zero and supports
-negative differentials. Point inspection includes the played count. Team and
-measure selections update locally with shareable URLs and Back/Forward; the
-GET form and full table remain usable without JavaScript. Empty archives have
-an explicit empty state, and missing xG produces a warning without hiding goals.
+or excluded seasons and unavailable xG or xPoints. Its scale includes zero and
+supports negative differentials. Point inspection includes the played count.
+Team and measure selections update locally with shareable URLs and Back/Forward;
+the GET form and full table remain usable without JavaScript. Empty archives have
+an explicit empty state, and missing expected values produce a warning without
+hiding actual goals or points.
 
-`series=goals|xg|both` selects the history chart's series (both by default).
+`series=goals|xg|both` selects the history chart's actual or expected series
+(both by default); the labels change to Points and xPoints for the points measure.
 `context=on|off` toggles league context (off by default). Blank, invalid, or
 repeated values return 400. These controls preserve table sorting and work
 through direct URLs, Back/Forward, and the GET fallback. Without context, Both
@@ -229,18 +251,20 @@ snapshot, independently of the selected team. Floating bars span each season's
 lowest and highest rates, including an eligible active season labeled in
 progress. Bars use the same year positions as team points, with full
 width at the first and last seasons; equal bounds remain inspectable as a thin
-mark. Missing/excluded calendar years leave no range. An xG season range
-requires complete xG for every team in that season's comparison; partial coverage
-withholds both bounds while leaving the selected team's own fully covered xG
-available. Zero is valid, signed differentials remain signed, and extrema and
-ties are compared before rounding. High/low refers to the numeric value, so a
-low goals-allowed rate is favorable.
+mark. Missing/excluded calendar years leave no range. An expected-value season
+range requires complete xG or xPoints, as appropriate for the measure, for every
+team in that season's comparison. Partial coverage withholds both bounds while
+leaving the selected team's own fully covered expected value available. Zero is
+valid, signed differentials remain signed, and extrema and ties are compared
+before rounding. High/low refers to the numeric value, so a low goals-allowed
+rate is favorable.
 
 Dotted horizontal record lines use only eligible completed seasons. They span
 the chart even for a team with only one season. Record labels identify the
 available coverage start; they do not claim records outside the cached archive.
-Active results cannot replace these records. For xG, only fully covered season
-comparisons contribute. Missing xG context is explained visibly.
+Active results cannot replace these records. For xG or xPoints, only fully
+covered season comparisons contribute. Missing expected-value context is
+explained visibly.
 
 Hover/tap on a floating bar or team point shows the season's high and low,
 holder names, year, rate, and played count. Hover/tap along a record line shows
@@ -259,10 +283,11 @@ all history columns in both sort directions, record holders/ties and coverage,
 URL validation, fallback HTML,
 and the single cache snapshot. The `team-history`
 scenario in `TestHistoryPreview` supplies multiple years with calendar gaps,
-partial xG, and an active season. Verify desktop and 390px layouts, all three
-measures, team selection, point hover/tap and empty-space dismissal, keyboard
-inspection, table sorting (including missing xG), direct URLs, Back/Forward,
-no-script sorting/forms and full context details, record-line and floating-bar
+partial expected-value coverage, and an active season. Verify desktop and 390px
+layouts, all four measures, team selection, point hover/tap and empty-space
+dismissal, keyboard inspection, table sorting (including missing xG and xPoints),
+direct URLs, Back/Forward, no-script sorting/forms and full context details,
+record-line and floating-bar
 inspection, shared scales for Both, and switching between
 history, season comparison, and league analyses without fetching new data.
 
@@ -368,9 +393,13 @@ xPoints coverage independently requires finite paired values in the inclusive
 range 0 through 3. Zero is valid for either metric.
 
 xG-per-match and goals-minus-xG-per-match are available only when every played
-match has valid xG. xPoints coverage is retained for later work but this first
-calculation does not derive an xPoints rate. Fixture inventory and expected
-value coverage remain separate dimensions, as required by [IDEAS.md](../IDEAS.md).
+match has valid xG. The league scoring calculation reports xPoints coverage
+without adding an xPoints scoring trend. Team performance separately sums ASA's
+retrospective xPoints for each team's recorded regular-season matches and derives
+the per-match rate when that team's xPoints coverage is complete. Coverage of
+xPoints does not require complete xG, and incomplete xPoints do not hide actual
+points. Fixture inventory and expected-value coverage remain separate
+dimensions, as required by [IDEAS.md](../IDEAS.md).
 
 ## Chart eligibility
 

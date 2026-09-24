@@ -25,10 +25,11 @@ type exploreTeamHistoryView struct {
 	HistoryTeamOptions            []teamNameView
 	TeamHistoryRows               []exploreTeamHistoryRow
 	TeamHistoryMissingXG          bool
+	TeamHistoryMissingXPoints     bool
 	HistorySort, HistoryOrder     string
 	HistoryColumns                []exploreTeamColumn
 	HistorySeries, HistoryContext string
-	HistoryContextData            [3]exploreMetricContext
+	HistoryContextData            [4]exploreMetricContext
 	HistoryContextDetails         []exploreSeriesContext
 }
 
@@ -110,13 +111,17 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 	sortExploreTeamHistory(records, page.HistorySort, page.HistoryOrder)
 	for _, team := range records {
 		row := exploreTeamHistoryRow{Season: team.Season, Active: team.Active, Played: team.Played}
-		for _, index := range []int{2, 0, 1} {
+		for _, index := range []int{2, 0, 1, 3} {
 			value := team.Values[index]
 			cells := exploreTeamRowValues{Actual: fmt.Sprintf("%.2f", value.Actual), Expected: "Unavailable"}
 			if value.Expected != nil {
 				cells.Expected = fmt.Sprintf("%.2f", *value.Expected)
 			} else {
-				page.TeamHistoryMissingXG = true
+				if index == 3 {
+					page.TeamHistoryMissingXPoints = true
+				} else {
+					page.TeamHistoryMissingXG = true
+				}
 			}
 			row.Values = append(row.Values, cells)
 		}
@@ -142,8 +147,15 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 
 func exploreTeamHistoryColumns() []exploreTeamColumn {
 	columns := []exploreTeamColumn{{Key: "season", Label: "Season", Description: "Season", Leading: true}, {Key: "played", Label: "Played", Description: "Played", Leading: true}}
-	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}} {
+	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}, {"points", "Points"}} {
 		for _, value := range []struct{ key, label string }{{"actual", "Goals"}, {"expected", "xG"}} {
+			if group.key == "points" {
+				if value.key == "actual" {
+					value.label = "Points"
+				} else {
+					value.label = "xPts"
+				}
+			}
 			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: value.label, Description: group.label + ": " + value.label})
 		}
 	}

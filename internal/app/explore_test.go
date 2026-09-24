@@ -66,14 +66,14 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 				if row.Played != 20 || row.XGCovered != 20 || row.Values[0].Actual != 1 || row.Values[1].Actual != 1 || row.Values[2].Actual != 0 {
 					t.Fatalf("team rates: %+v", row)
 				}
-				for _, value := range row.Values {
+				for _, value := range row.Values[:3] {
 					if value.Expected == nil {
 						t.Fatal("complete xG missing")
 					}
 				}
 			}
 			for _, row := range seasons[1].Teams {
-				for _, value := range row.Values {
+				for _, value := range row.Values[:3] {
 					if value.Expected != nil {
 						t.Fatal("partial xG presented as full-season rate")
 					}
@@ -246,6 +246,9 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=teams&season=", http.StatusBadRequest, ""},
 		{"/explore?view=teams&measure=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&measure=for&measure=against", http.StatusBadRequest, ""},
+		{"/explore?view=teams&units=bad", http.StatusBadRequest, ""},
+		{"/explore?view=teams&units=", http.StatusBadRequest, ""},
+		{"/explore?view=teams&units=total&units=per-match", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=gap&display=chart", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=scatter&display=chart", http.StatusBadRequest, ""},
@@ -276,10 +279,10 @@ func TestExploreRouteValidation(t *testing.T) {
 func TestExploreTeamTableSortsUnroundedValuesAndKeepsMissingLast(t *testing.T) {
 	a, b, zero := 1.0004, 1.0001, 0.0
 	rows := []exploreTeamRecord{
-		{ID: "a", Name: "Alpha", Played: 4, Values: [3]exploreTeamValues{{Actual: 2, Expected: &a}}},
-		{ID: "c", Name: "Missing", Played: 3, Values: [3]exploreTeamValues{{Actual: 3}}},
-		{ID: "b", Name: "Bravo", Played: 2, Values: [3]exploreTeamValues{{Actual: 2, Expected: &b}}},
-		{ID: "d", Name: "Zero", Played: 1, Values: [3]exploreTeamValues{{Actual: 0, Expected: &zero}}},
+		{ID: "a", Name: "Alpha", Played: 4, Values: [4]exploreTeamValues{{Actual: 2, Expected: &a}}},
+		{ID: "c", Name: "Missing", Played: 3, Values: [4]exploreTeamValues{{Actual: 3}}},
+		{ID: "b", Name: "Bravo", Played: 2, Values: [4]exploreTeamValues{{Actual: 2, Expected: &b}}},
+		{ID: "d", Name: "Zero", Played: 1, Values: [4]exploreTeamValues{{Actual: 0, Expected: &zero}}},
 	}
 	for _, tc := range []struct{ column, order, want string }{
 		{"for-gap", "desc", "badc"}, {"for-gap", "asc", "dabc"},
@@ -298,6 +301,113 @@ func TestExploreTeamTableSortsUnroundedValuesAndKeepsMissingLast(t *testing.T) {
 				t.Fatalf("got %s, want %s", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
+	archive := historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+	})
+	for index := range archive[0].Data.XGoals {
+		observation := &archive[0].Data.XGoals[index]
+		observation.HomeXPoints.Float64, observation.HomeXPoints.Valid = 1.4, true
+		observation.AwayXPoints.Float64, observation.AwayXPoints.Valid = 1.6, true
+	}
+	// A missing xG observation must not remove independently covered xPts.
+	archive[0].Data.XGoals[0].HomeXG.Valid = false
+	summaries, err := history.SummarizeScoring(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, units := range []string{"per-match", "total"} {
+		page, err := exploreTeams(url.Values{"measure": {"points"}, "units": {units}, "display": {"table"}, "team-sort": {"points-expected"}}, summaries, archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.TeamUnits != units || page.TeamActualLabel != "Points" || page.TeamXGLabel != "xPts" || !page.TeamMissingXG || page.TeamMissingXPoints {
+			t.Fatalf("points coverage or labels wrong: %+v", page)
+		}
+		if got := page.TeamSeasons[0].Teams[0]; len(got.Values) != 4 || got.XPointsCovered != 20 || got.Values[3].Expected == nil || got.Totals[3].Expected == nil {
+			t.Fatalf("points missing from JSON record: %+v", got)
+		}
+		if page.TeamRows[0].Team.ID != "bravo" {
+			t.Fatalf("points-expected sort did not use xPts: %+v", page.TeamRows)
+		}
+		want := exploreTeamRowValues{Actual: "3.00", Expected: "1.60", Gap: "+1.40"}
+		if units == "total" {
+			want = exploreTeamRowValues{Actual: "60", Expected: "32.00", Gap: "+28.00"}
+		}
+		if got := page.TeamRows[0].Values[3]; got != want {
+			t.Fatalf("%s points row = %+v, want %+v", units, got, want)
+		}
+		if !strings.Contains(page.TeamTableURL, "units="+units) {
+			t.Fatalf("units lost from comparison link: %s", page.TeamTableURL)
+		}
+	}
+	for _, tc := range []struct {
+		path string
+		want []string
+	}{
+		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`<option value="points" selected>Points</option>`, `<option value="total" selected>Totals</option>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
+		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`<option value="points" selected>Points</option>`, `<option value="xg" selected>xPts</option>`, `data-history-sort="points-expected"`, `<h4>xPts</h4>`}},
+	} {
+		store := &historyHTTPStore{archive: archive}
+		response := httptest.NewRecorder()
+		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
+			t.Fatalf("%s: status=%d archive=%d season=%d", tc.path, response.Code, store.archiveCalls, store.seasonCalls)
+		}
+		for _, fragment := range tc.want {
+			if !strings.Contains(response.Body.String(), fragment) {
+				t.Errorf("%s: missing %q", tc.path, fragment)
+			}
+		}
+	}
+	missingPoints := historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+	})
+	for index := range missingPoints[0].Data.XGoals {
+		observation := &missingPoints[0].Data.XGoals[index]
+		observation.HomeXPoints.Float64, observation.HomeXPoints.Valid = 1.4, true
+		observation.AwayXPoints.Float64, observation.AwayXPoints.Valid = 1.6, true
+	}
+	missingPoints[0].Data.XGoals[0].HomeXPoints.Valid = false
+	missingSummaries, err := history.SummarizeScoring(missingPoints)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := exploreTeams(url.Values{"measure": {"points"}}, missingSummaries, missingPoints)
+	if err != nil || page.TeamMissingXG || !page.TeamMissingXPoints {
+		t.Fatalf("xPts-only missing data was not independent of xG: %+v, %v", page, err)
+	}
+	historyPage, err := exploreTeamHistory(url.Values{"team": {"alpha"}, "measure": {"points"}}, page.TeamSeasons)
+	if err != nil || historyPage.TeamHistoryMissingXG || !historyPage.TeamHistoryMissingXPoints {
+		t.Fatalf("history xPts warning was not independent of xG: %+v, %v", historyPage, err)
+	}
+}
+
+func TestExploreTeamTotalSortUsesTotalsAndKeepsMissingLast(t *testing.T) {
+	x1, x2 := 1.0, 4.5
+	t1, t2 := 1.0, 45.0
+	rows := []exploreTeamRecord{
+		{ID: "a", Name: "Alpha", Played: 1, Values: [4]exploreTeamValues{{}, {}, {}, {Actual: 2, Expected: &x1}}, Totals: [4]exploreTeamValues{{}, {}, {}, {Actual: 2, Expected: &t1}}},
+		{ID: "b", Name: "Bravo", Played: 10, Values: [4]exploreTeamValues{{}, {}, {}, {Actual: 5, Expected: &x2}}, Totals: [4]exploreTeamValues{{}, {}, {}, {Actual: 50, Expected: &t2}}},
+		{ID: "c", Name: "Charlie", Played: 2, Values: [4]exploreTeamValues{{}, {}, {}, {Actual: 3}}, Totals: [4]exploreTeamValues{{}, {}, {}, {Actual: 6}}},
+	}
+	for _, tc := range []struct{ units, order, want string }{
+		{"per-match", "desc", "abc"},
+		{"total", "desc", "bac"},
+		{"total", "asc", "abc"},
+	} {
+		copyRows := slices.Clone(rows)
+		sortExploreTeams(copyRows, "points-gap", tc.order, tc.units)
+		got := ""
+		for _, row := range copyRows {
+			got += row.ID
+		}
+		if got != tc.want {
+			t.Errorf("%s/%s sorted %s, want %s", tc.units, tc.order, got, tc.want)
+		}
 	}
 }
 
@@ -436,7 +546,7 @@ func TestExploreUnifiedTableIsIndependentOfChartMeasure(t *testing.T) {
 		if measure == "" && page.TeamMeasure != "difference" {
 			t.Fatal("chart does not default to goal differential")
 		}
-		if page.TeamSort != "difference-gap" || len(page.TeamColumns) != 11 || len(page.TeamRows) != 2 {
+		if page.TeamSort != "difference-gap" || len(page.TeamColumns) != 14 || len(page.TeamRows) != 2 {
 			t.Fatalf("unexpected unified table: %+v", page)
 		}
 		if baseline == nil {
@@ -445,6 +555,7 @@ func TestExploreUnifiedTableIsIndependentOfChartMeasure(t *testing.T) {
 				{Actual: "1.00", Expected: "-1.00", Gap: "+2.00"},
 				{Actual: "2.00", Expected: "0.00", Gap: "+2.00"},
 				{Actual: "1.00", Expected: "1.00", Gap: "+0.00"},
+				{Actual: "3.00", Expected: "Unavailable", Gap: "Unavailable"},
 			}
 			if baseline[0].Team.ID != "bravo" || !reflect.DeepEqual(baseline[0].Values, want) {
 				t.Fatalf("incorrect table group values: %+v", baseline[0])

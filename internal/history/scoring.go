@@ -154,7 +154,7 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 		summary.TotalGoals += combined
 		summary.Played++
 		summary.GoalBins[goalBin(combined)]++
-		teams.addGoals(game)
+		teams.addResult(game)
 
 		if !input.Entry.Supports(competition.CapabilityXG) {
 			continue
@@ -174,6 +174,7 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 		}
 		if validXPointsPair(observation) {
 			summary.XPointsCovered++
+			teams.addXPoints(game, observation)
 		}
 	}
 

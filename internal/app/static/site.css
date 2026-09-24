@@ -363,7 +363,15 @@ th:nth-child(2) { text-align: left; }
 :is(.explore-team-table, .explore-team-history-table, .explore-distribution-table) caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
 .explore-distribution-table { min-width: 48rem; font-size: .875rem; }
 .explore-team-history-table-wrap { margin-top: 1.5rem; }
-.explore-table.explore-team-table :is(th, td) { padding: .75rem .65rem; }
+.explore-team-table { font-size: .78rem; }
+.explore-table.explore-team-table :is(th, td) { padding: .5rem .18rem; }
+.explore-table.explore-team-table thead th { font-size: .74rem; }
+.explore-table.explore-team-table tbody th { max-width: 9rem; font-size: .8rem; white-space: normal; }
+.explore-team-table .team-name { gap: .25rem; white-space: normal; }
+.explore-team-table .team-logo { width: 1.1rem; height: 1.1rem; flex-basis: 1.1rem; }
+.explore-table.explore-team-table thead a { padding: .3rem 0; }
+.explore-table.explore-team-table thead a::after { display: none; }
+.explore-table.explore-team-table [aria-sort="ascending"] a::after, .explore-table.explore-team-table [aria-sort="descending"] a::after { display: inline-block; }
 :is(.explore-team-table, .explore-team-history-table) thead th[scope="colgroup"] { text-align: center; border-left: 1px solid var(--line); }
 .explore-team-table thead tr:nth-child(2) th { text-align: right; }
 .explore-team-table tbody :is(th, td):nth-child(3n) { border-left: 1px solid var(--line); }

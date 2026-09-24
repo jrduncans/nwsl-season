@@ -36,7 +36,8 @@ from the cached fixtures when a season page or CLI report is requested.
   goals-minus-xG gaps, goal distributions, selected goal-bin trends, a sortable
   season table, within-season team comparisons, signed gap rankings, an actual
   versus expected team outlier plot, and team history with floating league ranges
-  for goals scored, goals allowed, and goal differential against xG.
+  for goals scored, goals allowed, and goal differential against xG, plus actual
+  points against ASA's retrospective expected points (xPoints).
 - Health and cache-status endpoints for operators.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240
@@ -74,13 +75,15 @@ The historical forecast comparison is available at
 <http://localhost:8080/seasons/2026/regular-season/model-evaluation>.
 League scoring exploration is available at
 <http://localhost:8080/explore>, with scoring, goal-distribution, and table views
-in one workspace. Team performance compares actual and expected scoring per
-match for a selected regular season, including an outlier plot with expected
-rates on the horizontal axis and actual rates on the vertical axis. Team history
-charts one team’s goals and xG scored, allowed, and differential per match across
-regular seasons, with a sortable season table. Optional league context shows
-seasonal ranges and completed-season records with inspectable holders. The older
-`/history/scoring` route remains available.
+in one workspace. Team performance compares actual and expected goals or points
+for a selected regular season, including an outlier plot with expected values
+on the horizontal axis and actual values on the vertical axis. Comparisons use
+per-match values by default, with a total option for the selected season. Team
+history charts one team's goals, xG, points, and xPoints per match across regular
+seasons, with a sortable season table. Optional league context shows seasonal
+ranges and completed-season records with inspectable holders. Explore's xPoints
+describe recorded matches; they are distinct from Forecast Lab's projected
+final points. The older `/history/scoring` route remains available.
 
 Useful endpoints:
 
@@ -94,7 +97,8 @@ Useful endpoints:
 - `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
 - `/seasons/:season/:stage/forecast` — interactive forecast simulation.
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
-- `/explore` — league scoring charts, sortable season table, team performance vs xG, and team history.
+- `/explore` — league scoring charts, sortable season table, team performance
+  vs xG or xPoints, and team history.
 - `/history/scoring` — legacy scoring page, retained for existing links.
 
 ## Pitchfork development server
