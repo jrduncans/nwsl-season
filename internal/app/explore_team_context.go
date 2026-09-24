@@ -38,12 +38,12 @@ type exploreMetricContext struct {
 	XG    exploreSeriesContext `json:"xg"`
 }
 
-// Context shares the team comparison's eligibility rules. League xG extrema
-// require all compared teams to have complete xG, so missing teams cannot be
-// silently excluded from a claimed season or historical record.
-func exploreTeamContext(seasons []exploreTeamSeason) [3]exploreMetricContext {
-	var metrics [3]exploreMetricContext
-	for index, labels := range [][2]string{{"Goals scored", "xG scored"}, {"Goals allowed", "xG allowed"}, {"Goal differential", "xG differential"}} {
+// Context shares the team comparison's eligibility rules. Expected-value
+// extrema require all compared teams to have complete xG or xPts for the
+// selected measure, so partial coverage cannot appear as a league record.
+func exploreTeamContext(seasons []exploreTeamSeason) [4]exploreMetricContext {
+	var metrics [4]exploreMetricContext
+	for index, labels := range [][2]string{{"Goals scored", "xG scored"}, {"Goals allowed", "xG allowed"}, {"Goal differential", "xG differential"}, {"Points", "xPts"}} {
 		metrics[index] = exploreMetricContext{
 			Goals: exploreContextSeries(seasons, index, false, labels[0]),
 			XG:    exploreContextSeries(seasons, index, true, labels[1]),

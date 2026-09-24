@@ -17,12 +17,14 @@ type exploreTeamValues struct {
 }
 
 type exploreTeamRecord struct {
-	ID        string               `json:"id"`
-	Name      string               `json:"name"`
-	LogoURL   string               `json:"logo"`
-	Played    int                  `json:"played"`
-	XGCovered int                  `json:"xgCovered"`
-	Values    [3]exploreTeamValues `json:"values"`
+	ID             string               `json:"id"`
+	Name           string               `json:"name"`
+	LogoURL        string               `json:"logo"`
+	Played         int                  `json:"played"`
+	XGCovered      int                  `json:"xgCovered"`
+	XPointsCovered int                  `json:"xPointsCovered"`
+	Values         [4]exploreTeamValues `json:"values"`
+	Totals         [4]exploreTeamValues `json:"totals"`
 }
 
 type exploreTeamSeason struct {
@@ -51,23 +53,24 @@ type exploreTeamsView struct {
 	TeamSeasons                                            []exploreTeamSeason
 	TeamSeason, TeamMeasure                                string
 	TeamActualLabel, TeamXGLabel                           string
-	TeamDisplay, TeamSort, TeamOrder                       string
+	TeamDisplay, TeamSort, TeamOrder, TeamUnits            string
 	TeamChartURL, TeamGapURL, TeamScatterURL, TeamTableURL string
-	TeamMissingXG                                          bool
+	TeamMissingXG, TeamMissingXPoints                      bool
 	TeamColumns                                            []exploreTeamColumn
 	TeamRows                                               []exploreTeamRow
 }
 
 func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) (exploreTeamsView, error) {
-	page := exploreTeamsView{TeamMeasure: "difference", TeamDisplay: "chart", TeamSort: "difference-gap", TeamOrder: "desc"}
+	page := exploreTeamsView{TeamMeasure: "difference", TeamDisplay: "chart", TeamSort: "difference-gap", TeamOrder: "desc", TeamUnits: "per-match"}
 	for _, field := range []struct {
 		key     string
 		value   *string
 		allowed []string
 	}{
 		{"display", &page.TeamDisplay, []string{"chart", "gap", "scatter", "table"}},
-		{"team-sort", &page.TeamSort, []string{"name", "played", "actual", "expected", "gap", "difference-actual", "difference-expected", "difference-gap", "for-actual", "for-expected", "for-gap", "against-actual", "against-expected", "against-gap"}},
+		{"team-sort", &page.TeamSort, []string{"name", "played", "actual", "expected", "gap", "difference-actual", "difference-expected", "difference-gap", "for-actual", "for-expected", "for-gap", "against-actual", "against-expected", "against-gap", "points-actual", "points-expected", "points-gap"}},
 		{"team-order", &page.TeamOrder, []string{"asc", "desc"}},
+		{"units", &page.TeamUnits, []string{"per-match", "total"}},
 	} {
 		if values, present := query[field.key]; present {
 			if len(values) != 1 || !slices.Contains(field.allowed, values[0]) {
@@ -77,8 +80,8 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		}
 	}
 	if values, present := query["measure"]; present {
-		if len(values) != 1 || (values[0] != "for" && values[0] != "against" && values[0] != "difference") {
-			return page, fmt.Errorf("measure must be for, against, or difference")
+		if len(values) != 1 || (values[0] != "for" && values[0] != "against" && values[0] != "difference" && values[0] != "points") {
+			return page, fmt.Errorf("measure must be for, against, difference, or points")
 		}
 		page.TeamMeasure = values[0]
 	}
@@ -101,18 +104,26 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		season := exploreTeamSeason{Season: summary.Season, Active: summary.Lifecycle == cache.SourceScopeActive}
 		if summary.TeamComparisonEligible() {
 			for _, team := range summary.Teams {
-				row := exploreTeamRecord{ID: team.TeamID, Name: names[summary.Season][team.TeamID], LogoURL: clubLogoURL(team.TeamID), Played: team.Played, XGCovered: team.XGCovered}
+				row := exploreTeamRecord{ID: team.TeamID, Name: names[summary.Season][team.TeamID], LogoURL: clubLogoURL(team.TeamID), Played: team.Played, XGCovered: team.XGCovered, XPointsCovered: team.XPointsCovered}
 				if row.Name == "" {
 					row.Name = team.TeamID
 				}
 				played := float64(team.Played)
-				row.Values[0].Actual = float64(team.GoalsFor) / played
-				row.Values[1].Actual = float64(team.GoalsAgainst) / played
-				row.Values[2].Actual = float64(team.GoalsFor-team.GoalsAgainst) / played
+				row.Totals[0].Actual = float64(team.GoalsFor)
+				row.Totals[1].Actual = float64(team.GoalsAgainst)
+				row.Totals[2].Actual = float64(team.GoalsFor - team.GoalsAgainst)
+				row.Totals[3].Actual = float64(team.Points)
 				if team.XGFor != nil && team.XGAgainst != nil {
-					forValue, againstValue := *team.XGFor/played, *team.XGAgainst/played
-					difference := (*team.XGFor - *team.XGAgainst) / played
-					row.Values[0].Expected, row.Values[1].Expected, row.Values[2].Expected = &forValue, &againstValue, &difference
+					difference := *team.XGFor - *team.XGAgainst
+					row.Totals[0].Expected, row.Totals[1].Expected, row.Totals[2].Expected = team.XGFor, team.XGAgainst, &difference
+				}
+				row.Totals[3].Expected = team.XPoints
+				for index, total := range row.Totals {
+					row.Values[index].Actual = total.Actual / played
+					if total.Expected != nil {
+						expected := *total.Expected / played
+						row.Values[index].Expected = &expected
+					}
 				}
 				season.Teams = append(season.Teams, row)
 			}
@@ -144,15 +155,20 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		page.TeamActualLabel, page.TeamXGLabel = "Goals allowed", "xG allowed"
 	case "difference":
 		page.TeamActualLabel, page.TeamXGLabel = "Goal differential", "xG differential"
+	case "points":
+		page.TeamActualLabel, page.TeamXGLabel = "Points", "xPts"
 	}
-	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}}
+	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}, "units": {page.TeamUnits}}
 	page.TeamChartURL = exploreTeamURL(selection, map[string]string{"display": "chart"})
 	page.TeamGapURL = exploreTeamURL(selection, map[string]string{"display": "gap"})
 	page.TeamScatterURL = exploreTeamURL(selection, map[string]string{"display": "scatter"})
 	page.TeamTableURL = exploreTeamURL(selection, map[string]string{"display": "table"})
 	columns := []exploreTeamColumn{{Key: "name", Label: "Team", Description: "Team", Leading: true}, {Key: "played", Label: "Played", Description: "Played", Leading: true}}
-	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}} {
+	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}, {"points", "Points"}} {
 		for _, value := range []struct{ key, label string }{{"actual", "Actual"}, {"expected", "xG"}, {"gap", "Gap"}} {
+			if group.key == "points" && value.key == "expected" {
+				value.label = "xPts"
+			}
 			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: value.label, Description: group.label + ": " + value.label})
 		}
 	}
@@ -177,17 +193,28 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 			continue
 		}
 		rows := append([]exploreTeamRecord(nil), season.Teams...)
-		sortExploreTeams(rows, page.TeamSort, page.TeamOrder)
+		sortExploreTeams(rows, page.TeamSort, page.TeamOrder, page.TeamUnits)
 		for _, row := range rows {
 			view := exploreTeamRow{Team: teamNameView{ID: row.ID, Name: row.Name, LogoURL: row.LogoURL}, Played: row.Played}
-			for _, index := range []int{2, 0, 1} {
+			for _, index := range []int{2, 0, 1, 3} {
 				value := row.Values[index]
-				cells := exploreTeamRowValues{Actual: fmt.Sprintf("%.2f", value.Actual), Expected: "Unavailable", Gap: "Unavailable"}
+				if page.TeamUnits == "total" {
+					value = row.Totals[index]
+				}
+				actual := fmt.Sprintf("%.2f", value.Actual)
+				if page.TeamUnits == "total" {
+					actual = fmt.Sprintf("%.0f", value.Actual)
+				}
+				cells := exploreTeamRowValues{Actual: actual, Expected: "Unavailable", Gap: "Unavailable"}
 				if value.Expected != nil {
 					cells.Expected = fmt.Sprintf("%.2f", *value.Expected)
 					cells.Gap = fmt.Sprintf("%+.2f", value.Actual-*value.Expected)
 				} else {
-					page.TeamMissingXG = true
+					if index == 3 {
+						page.TeamMissingXPoints = true
+					} else {
+						page.TeamMissingXG = true
+					}
 				}
 				view.Values = append(view.Values, cells)
 			}
@@ -208,10 +235,13 @@ func exploreTeamURL(selection url.Values, changes map[string]string) string {
 	return "?" + values.Encode()
 }
 
-func sortExploreTeams(rows []exploreTeamRecord, column, order string) {
+func sortExploreTeams(rows []exploreTeamRecord, column, order string, units ...string) {
 	measure, valueColumn := exploreTeamSortMetric(column)
 	value := func(row exploreTeamRecord) *float64 {
 		metric := row.Values[measure]
+		if len(units) > 0 && units[0] == "total" {
+			metric = row.Totals[measure]
+		}
 		number := metric.Actual
 		switch valueColumn {
 		case "played":
@@ -254,7 +284,7 @@ func sortExploreTeams(rows []exploreTeamRecord, column, order string) {
 }
 
 func exploreTeamSortMetric(column string) (int, string) {
-	for index, name := range []string{"for", "against", "difference"} {
+	for index, name := range []string{"for", "against", "difference", "points"} {
 		if suffix, ok := strings.CutPrefix(column, name+"-"); ok {
 			return index, suffix
 		}

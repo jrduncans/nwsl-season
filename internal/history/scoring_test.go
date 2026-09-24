@@ -49,6 +49,21 @@ func TestScoringGoalsAndCompleteXG(t *testing.T) {
 				assertFloat(t, got.XGPerMatch, 2)
 				assertFloat(t, got.GoalsMinusXGPerMatch, .2)
 			}
+			if got.XPointsCovered != test.wantCoverage || len(got.Teams) != 2 {
+				t.Fatalf("expected-points coverage/teams = %+v", got)
+			}
+			for _, team := range got.Teams {
+				wantPoints := 2
+				if team.TeamID == "home" {
+					wantPoints = 11
+				}
+				if team.Points != wantPoints || team.XPointsCovered != test.wantCoverage || (team.XPoints != nil) != test.wantXGPresent {
+					t.Fatalf("earned and expected points = %+v", team)
+				}
+				if test.wantXGPresent {
+					assertFloat(t, team.XPoints, 7.5)
+				}
+			}
 			if got.PlotEligible || !slices.Contains(got.Exclusions, "below_minimum_matches") {
 				t.Fatalf("short season eligibility = %+v", got)
 			}

@@ -12,7 +12,7 @@ import (
 )
 
 func contextTestTeam(id, name string, scored, allowed float64, xg ...float64) exploreTeamRecord {
-	team := exploreTeamRecord{ID: id, Name: name, Played: 20, Values: [3]exploreTeamValues{{Actual: scored}, {Actual: allowed}, {Actual: scored - allowed}}}
+	team := exploreTeamRecord{ID: id, Name: name, Played: 20, Values: [4]exploreTeamValues{{Actual: scored}, {Actual: allowed}, {Actual: scored - allowed}}}
 	if len(xg) == 2 {
 		difference := xg[0] - xg[1]
 		team.Values[0].Expected, team.Values[1].Expected, team.Values[2].Expected = &xg[0], &xg[1], &difference
@@ -76,6 +76,31 @@ func TestExploreContextComparesBeforeRoundingAndHandlesNoRecords(t *testing.T) {
 	}
 }
 
+func TestExplorePointsContextRequiresCompleteXPointsIndependentlyOfXG(t *testing.T) {
+	xa, xb, xc := 1.1, 1.7, 2.2
+	team := func(id string, points float64, expected *float64) exploreTeamRecord {
+		return exploreTeamRecord{ID: id, Name: id, Played: 3, Values: [4]exploreTeamValues{{Actual: 2}, {Actual: 1}, {Actual: 1}, {Actual: points, Expected: expected}}}
+	}
+	seasons := []exploreTeamSeason{
+		{Season: "2026", Active: true, Teams: []exploreTeamRecord{team("active", 3, &xc)}},
+		{Season: "2025", Teams: []exploreTeamRecord{team("alpha", 1, &xa), team("bravo", 2, &xb)}},
+		{Season: "2024", Teams: []exploreTeamRecord{team("alpha", 0, &xa), team("bravo", 3, nil)}},
+	}
+	points := exploreTeamContext(seasons)[3]
+	if points.Goals.Label != "Points" || points.XG.Label != "xPts" || points.Goals.High.Value != 3 || points.Goals.High.Holders[0].Season != "2024" {
+		t.Fatalf("actual points records wrong: %+v", points.Goals)
+	}
+	if !points.XG.Partial || points.XG.Seasons[2].Covered != 1 || points.XG.Seasons[2].High != nil || points.XG.Seasons[2].Low != nil {
+		t.Fatalf("partial xPts produced season range: %+v", points.XG)
+	}
+	if points.XG.High.Value != xb || points.XG.Low.Value != xa || points.XG.Since != "2025" || points.XG.High.Holders[0].ID != "bravo" {
+		t.Fatalf("xPts records did not use complete covered seasons: %+v", points.XG)
+	}
+	if points.XG.Seasons[0].High.Value != xc || points.XG.High.Value == xc {
+		t.Fatal("active season incorrectly replaced completed xPts record")
+	}
+}
+
 func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
 		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
@@ -92,7 +117,7 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	}
 	_, payload, _ := strings.Cut(body, `<script type="application/json" id="explore-context-data">`)
 	payload, _, _ = strings.Cut(payload, "</script>")
-	var metrics [3]exploreMetricContext
+	var metrics [4]exploreMetricContext
 	if err := json.Unmarshal([]byte(payload), &metrics); err != nil {
 		t.Fatal(err)
 	}

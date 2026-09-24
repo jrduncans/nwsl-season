@@ -40,9 +40,9 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []exploreTeamHistoryRow{
-		{Season: "2026", Active: true, Played: 1, Values: []exploreTeamRowValues{{Actual: "-1.00", Expected: "1.00"}, {Actual: "0.00", Expected: "1.00"}, {Actual: "1.00", Expected: "0.00"}}},
-		{Season: "2021", Played: 20, Values: []exploreTeamRowValues{{Actual: "0.00", Expected: "Unavailable"}, {Actual: "2.00", Expected: "Unavailable"}, {Actual: "2.00", Expected: "Unavailable"}}},
-		{Season: "2019", Played: 20, Values: []exploreTeamRowValues{{Actual: "-1.00", Expected: "1.00"}, {Actual: "1.00", Expected: "1.00"}, {Actual: "2.00", Expected: "0.00"}}},
+		{Season: "2026", Active: true, Played: 1, Values: []exploreTeamRowValues{{Actual: "-1.00", Expected: "1.00"}, {Actual: "0.00", Expected: "1.00"}, {Actual: "1.00", Expected: "0.00"}, {Actual: "0.00", Expected: "Unavailable"}}},
+		{Season: "2021", Played: 20, Values: []exploreTeamRowValues{{Actual: "0.00", Expected: "Unavailable"}, {Actual: "2.00", Expected: "Unavailable"}, {Actual: "2.00", Expected: "Unavailable"}, {Actual: "1.00", Expected: "Unavailable"}}},
+		{Season: "2019", Played: 20, Values: []exploreTeamRowValues{{Actual: "-1.00", Expected: "1.00"}, {Actual: "1.00", Expected: "1.00"}, {Actual: "2.00", Expected: "0.00"}, {Actual: "0.00", Expected: "Unavailable"}}},
 	}
 	if !reflect.DeepEqual(page.TeamHistoryRows, want) || !page.TeamHistoryMissingXG {
 		t.Fatalf("history rates, coverage, or eligibility changed: %+v", page)
@@ -52,7 +52,7 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=team-history&team=alpha&measure=against", nil))
 	body := response.Body.String()
-	for _, fragment := range []string{`data-panel="team-history" aria-labelledby=`, `value="alpha" selected`, `<th scope="row">2026</th>`, `<th scope="colgroup" colspan="2">Goals allowed</th>`, `<td>-1.00</td><td>1.00</td>`, `Some seasons have incomplete xG for this team`, `Show team history`} {
+	for _, fragment := range []string{`data-panel="team-history" aria-labelledby=`, `value="alpha" selected`, `<th scope="row">2026</th>`, `<th scope="colgroup" colspan="2">Goals allowed</th>`, `<td>-1.00</td><td>1.00</td>`, `Some seasons have incomplete xG and xPts for this team`, `Show team history`} {
 		if !strings.Contains(body, fragment) {
 			t.Errorf("missing %q", fragment)
 		}
@@ -112,10 +112,10 @@ func TestExploreTeamHistoryEmptyArchive(t *testing.T) {
 func TestExploreTeamHistorySortsEveryColumnBeforeRounding(t *testing.T) {
 	low, high, zero, one, two, negative := 1.0001, 1.0004, 0.0, 1.0, 2.0, -1.0
 	seasons := []exploreTeamSeason{
-		{Season: "2026", Active: true, Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 2, Values: [3]exploreTeamValues{{Actual: low, Expected: &low}, {Actual: 4, Expected: &two}, {Actual: -3, Expected: &negative}}}}},
-		{Season: "2025", Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 4, Values: [3]exploreTeamValues{{Actual: high, Expected: &high}, {Actual: 2, Expected: &zero}, {Actual: -1, Expected: &one}}}}},
-		{Season: "2023", Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 4}}},
-		{Season: "2021", Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 1, Values: [3]exploreTeamValues{{Actual: low, Expected: &zero}, {Actual: 3, Expected: &one}, {Actual: -2, Expected: &zero}}}}},
+		{Season: "2026", Active: true, Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 2, Values: [4]exploreTeamValues{{Actual: low, Expected: &low}, {Actual: 4, Expected: &two}, {Actual: -3, Expected: &negative}, {Actual: 1, Expected: &low}}}}},
+		{Season: "2025", Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 4, Values: [4]exploreTeamValues{{Actual: high, Expected: &high}, {Actual: 2, Expected: &zero}, {Actual: -1, Expected: &one}, {Actual: 2, Expected: &high}}}}},
+		{Season: "2023", Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 4, Values: [4]exploreTeamValues{{}, {}, {}, {Actual: 3}}}}},
+		{Season: "2021", Teams: []exploreTeamRecord{{ID: "alpha", Name: "Alpha", Played: 1, Values: [4]exploreTeamValues{{Actual: low, Expected: &zero}, {Actual: 3, Expected: &one}, {Actual: -2, Expected: &zero}, {Actual: 0, Expected: &zero}}}}},
 	}
 	for _, tc := range []struct{ column, ascending, descending string }{
 		{"season", "2021,2023,2025,2026", "2026,2025,2023,2021"},
@@ -126,6 +126,8 @@ func TestExploreTeamHistorySortsEveryColumnBeforeRounding(t *testing.T) {
 		{"against-expected", "2025,2021,2026,2023", "2026,2021,2025,2023"},
 		{"difference-actual", "2026,2021,2025,2023", "2023,2025,2021,2026"},
 		{"difference-expected", "2026,2021,2025,2023", "2025,2021,2026,2023"},
+		{"points-actual", "2021,2026,2025,2023", "2023,2025,2026,2021"},
+		{"points-expected", "2021,2026,2025,2023", "2025,2026,2021,2023"},
 	} {
 		for _, order := range []string{"asc", "desc"} {
 			t.Run(tc.column+"/"+order, func(t *testing.T) {
@@ -180,7 +182,7 @@ func TestExploreTeamHistorySortURLsAndFallback(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 	body := response.Body.String()
-	if response.Code != http.StatusOK || strings.Count(body, `data-history-sort=`) != 8 {
+	if response.Code != http.StatusOK || strings.Count(body, `data-history-sort=`) != 10 {
 		t.Fatalf("missing sortable headers: %d %s", response.Code, body)
 	}
 	for _, fragment := range []string{`name="history-sort" value="for-actual"`, `name="history-order" value="desc"`, `aria-label="Sort by Goals scored: Goals"`, `aria-label="Sort by Goal differential: xG"`} {

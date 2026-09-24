@@ -68,13 +68,22 @@ func TestHistoryPreview(t *testing.T) {
 					year := int(season.Entry.Season[3] - '0')
 					game.HomeScore.Int64, game.AwayScore.Int64 = int64((j+year)%5), int64((j/3+year)%3)
 				}
-				if (season.Entry.Season == "2026" || season.Entry.Season == "2022") && j == 1 {
+				if season.Entry.Season == "2022" && j == 1 {
 					continue
 				}
-				season.Data.XGoals = append(season.Data.XGoals, cache.GameXG{
+				observation := cache.GameXG{
 					GameID: game.ASAID, Availability: cache.XGAvailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID,
 					HomeXG: sql.NullFloat64{Float64: .5 + float64(j%7)*.3, Valid: true}, AwayXG: sql.NullFloat64{Float64: .2 + float64(j%5)*.25, Valid: true},
-				})
+					HomeXPoints: sql.NullFloat64{Float64: 1.3 + float64(j%5)*.12, Valid: true},
+					AwayXPoints: sql.NullFloat64{Float64: 1.3 - float64(j%5)*.08, Valid: true},
+				}
+				if season.Entry.Season == "2026" && j == 1 {
+					observation.HomeXPoints.Valid = false // xG covered, xPts missing.
+				}
+				if season.Entry.Season == "2026" && j == 2 {
+					observation.HomeXG.Valid = false // xPts covered, xG missing.
+				}
+				season.Data.XGoals = append(season.Data.XGoals, observation)
 			}
 		}
 	case "overview":
