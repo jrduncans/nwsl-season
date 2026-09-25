@@ -289,25 +289,40 @@ necessary.
 The page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
-outside help certified for a draw. All own-result group headings stay visible,
-with their requirements in expandable sections. Two-match result orderings
-share a heading only when their outside help is identical; for example,
-“wins one match and loses the other” still names the two specific fixtures.
+outside help certified for a draw. All own-result group headings and factored
+requirements stay visible, with exact paths in expandable sections. Results
+from one match with identical outside help share a heading, such as “draws or
+loses.” Two-match result orderings share a heading only when their outside help
+is identical; for example, “wins one match and loses the other” still names
+the two specific fixtures.
 For unusual slates with more than four relevant own fixtures, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
 
-Within a group, the page expands factored expressions into complete certified
-paths. Each path puts its requirements on one compact line, separated by `+`,
+Within a group, a visible factored summary puts common requirements once above
+an “any of” list. The summary may contain overlapping alternatives when that
+is shorter and clearer. A group with more than twelve summary paths instead
+directs readers to its exact paths, avoiding a large nested list.
+When different results of one outside match appear in several paths, the
+summary groups a repeated result before other shared conditions. If an earlier
+path already covers one result of a broader condition, the summary removes
+that redundant result. For Bay FC's draw scenarios, KC wins sit together;
+the SEA-win alternatives then name a DEN win where applicable. Each rewrite
+must preserve the certified outcome union. Alternatives with the same number
+of conditions are ordered by their displayed result text, keeping repeated
+results such as DEN wins adjacent regardless of fixture IDs.
+
+Groups with multiple paths also offer expandable, complete certified paths.
+Each exact path puts its requirements on one compact line, separated by `+`,
 with a club crest and two- or three-letter team code; each path is an `OR`
 alternative to the others. When alternatives for two fixtures of the same team
 exactly equal a minimum points total, the page names both matches and that
-total. This rewrite checks all nine outcome combinations;
-it never infers an uncertified combination from a points total. Groups and
-simplified expressions preserve exactly the union of the stored certified
-clauses, including partial results. Repeated equivalent clauses and stronger
-clauses already covered by a weaker one need not be displayed repeatedly.
+total. This rewrite checks all nine outcome combinations and never infers an
+uncertified combination from a points total. Both the summary and exact paths
+preserve the union of stored certified clauses, including partial results.
+Repeated equivalent clauses and stronger clauses already covered by a weaker
+one need not be displayed repeatedly.
 
-The page also subtracts partial overlap between outside-help paths before
+The exact-path view subtracts partial overlap between outside-help paths before
 combining results into points totals. Paths with fewer fixture requirements
 take precedence, with a stable fixture-ID and outcome-mask ordering to break
 ties. Each later path keeps only outcomes not already represented. For example,
@@ -324,16 +339,20 @@ subtraction is capped at 256 paths, including intermediate expansion, and
 retain the original certified alternatives, which can still overlap. These
 limits keep presentation work bounded on ordinary cache-only page requests.
 
-Every complete certified path remains visible in its group. Factoring stays
-bounded while finding the expression, but does not create nested display levels.
+Every complete certified path remains available in its group's disclosure.
+The visible summary has at most one shared-condition factoring level; the
+exact-path view stays flat.
 Unlisted matches are unrestricted. The full included schedule remains collapsed
 below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination paths. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
+No-help winning paths are labeled season-long because they can include matches
+after the displayed slate.
 
-Use `make test-clinching` for focused presentation checks. These checks also run
-within `make test` and CI, including exhaustive outcome-equivalence and
-disjoint-alternative checks; visually verify desktop and 390px layouts, expansion,
+Use `make test-clinching` for focused scenario-proof and presentation checks.
+These checks also run within `make test` and CI, including exhaustive
+outcome-equivalence, disjoint detailed alternatives, future-fixture elimination,
+and summary equivalence; visually verify desktop and 390px layouts, expansion,
 keyboard access, and team filtering when changing the presentation.
 
 ## Playoff-elimination scenarios
@@ -341,18 +360,30 @@ keyboard access, and team filtering when changing the presentation.
 Alongside positive clinching opportunities, the page can show that a team
 **can be eliminated from the playoffs** during the same slate. The search uses
 the target's best possible points ceiling: every still-unfixed target match is
-treated as a win. A condition is published only if, after the named slate
-outcomes, at least eight opponents already sit strictly above that ceiling.
+treated as a win. It first counts opponents already strictly above that
+ceiling. When that alone does not prove elimination, it asks whether any legal
+completion of the other remaining fixtures can keep at least eight opponents
+at or below the ceiling. If no such completion exists, future head-to-head
+fixtures force an eighth opponent above it and the slate condition is certified.
 
-This same strict-points check is completed before any budget-limited scenario
-search, so an already-eliminated team remains identified even if earlier team
-searches consume the shared scenario budget.
+For a fixed candidate set of opponents to keep below the ceiling, a match
+against anyone outside the set can award the outsider the win. Only matches
+between two selected opponents constrain their points capacities. The exact
+search checks every legal result of those matches, with the scenario budget as
+its compute limit. A found feasible completion is a reason to withhold the
+elimination claim; an exhausted search never becomes a proof.
 
-This makes the claim independent of all later fixtures and every tiebreak. It
-also means the feature intentionally withholds close cases in which a team
-could be eliminated only through goal difference, disciplinary points, or
-later coupled results. A team satisfying the same strict-points test before
-the slate is displayed as already eliminated.
+The initial, already-above-ceiling check is completed before any budget-limited
+scenario search, so a team eliminated by that cheap bound remains identified
+even if earlier team searches consume the shared scenario budget. A
+future-fixture proof uses the available compute budget and can be retried.
+
+This makes the claim independent of every score tiebreak. The feature still
+withholds close cases in which a team could be eliminated only through goal
+difference or unavailable tiebreak data. A team satisfying either points-only
+proof before the slate is displayed as already eliminated. Changing the proof
+semantics increments the scenario definition version so the persisted batch is
+recalculated.
 
 ## Where to look in the code
 

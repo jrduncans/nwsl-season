@@ -30,10 +30,12 @@ test-explore:
 	go test ./internal/history
 	go test ./internal/app -run '^TestExplore'
 
-# Includes grouped presentation, exhaustive outcome equivalence, and bounded
-# overlap subtraction with disjoint-alternative regressions.
+# Includes future-fixture elimination proofs, grouped presentation, exhaustive
+# outcome equivalence, grouped and ordered summaries, and bounded/disjoint
+# exact-path regressions.
 .PHONY: test-clinching
 test-clinching:
+	go test ./internal/scenarios
 	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode)'
 
 fmt:

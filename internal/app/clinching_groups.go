@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math/bits"
 	"slices"
 	"sort"
 	"strconv"
@@ -55,11 +56,16 @@ func (e scenarioExpression) Combinations() [][]scenarioRequirement {
 }
 
 type clinchingGroupView struct {
-	Heading        string
-	Own            []scenarioRequirement
-	AlternativeOwn []scenarioRequirement
-	Help           scenarioExpression
+	Heading         string
+	Own             []scenarioRequirement
+	AlternativeOwn  []scenarioRequirement
+	Summary         scenarioExpression
+	SummaryOverflow bool
+	ShowDetails     bool
+	Help            scenarioExpression
 }
+
+const maxScenarioSummaryPaths = 12
 
 var scenarioOutcomes = []clinching.Outcome{clinching.HomeWin, clinching.Draw, clinching.AwayWin}
 
@@ -88,21 +94,35 @@ func requirementText(r scenarioRequirement, perspective string, teams map[string
 		}
 	}
 	g := games[r.GameID]
-	if perspective != "" && len(outcomes) == 1 {
+	if perspective != "" {
 		opponent, win := g.AwayTeamID, clinching.HomeWin
 		venue := "vs"
 		if g.AwayTeamID == perspective {
 			opponent, win = g.HomeTeamID, clinching.AwayWin
 			venue = "at"
 		}
-		verb := "loses"
-		switch outcomes[0] {
-		case win:
-			verb = "wins"
-		case clinching.Draw:
-			verb = "draws"
+		loss := clinching.AwayWin
+		if win == clinching.AwayWin {
+			loss = clinching.HomeWin
 		}
-		return teams[perspective] + " " + verb + " " + venue + " " + teams[opponent]
+		verb := ""
+		switch r.Mask {
+		case outcomeMask([]clinching.Outcome{win}):
+			verb = "wins"
+		case outcomeMask([]clinching.Outcome{clinching.Draw}):
+			verb = "draws"
+		case outcomeMask([]clinching.Outcome{loss}):
+			verb = "loses"
+		case outcomeMask([]clinching.Outcome{win, clinching.Draw}):
+			verb = "wins or draws"
+		case outcomeMask([]clinching.Outcome{loss, clinching.Draw}):
+			verb = "draws or loses"
+		case outcomeMask([]clinching.Outcome{win, loss}):
+			verb = "does not draw"
+		}
+		if verb != "" {
+			return teams[perspective] + " " + verb + " " + venue + " " + teams[opponent]
+		}
 	}
 	return conditionText(scenarios.FixtureCondition{GameID: r.GameID, AllowedOutcomes: outcomes}, teams, games)
 }
@@ -324,18 +344,138 @@ func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, 
 		if len(words) > 0 {
 			heading = "If " + joinConditions(words)
 		}
+		summaryPaths := removeCoveredRequirements(uniqueConjunctions(g.help), games)
+		summaryPaths = removeCoveredRequirements(compactPoints(summaryPaths, games), games)
 		help := removeCoveredRequirements(uniqueConjunctions(g.help), games)
 		help = disjointRequirements(help)
 		help = removeCoveredRequirements(compactPoints(help, games), games)
+		if len(summaryPaths) <= maxScenarioSummaryPaths {
+			summaryPaths = narrowCoveredSummaryMasks(summaryPaths, games)
+		}
+		if len(help) <= maxScenarioSummaryPaths && summaryPathCost(help) < summaryPathCost(summaryPaths) {
+			summaryPaths = help
+		}
+		sort.Slice(summaryPaths, func(i, j int) bool { return conjunctionKey(summaryPaths[i]) < conjunctionKey(summaryPaths[j]) })
+		summaryOverflow := len(summaryPaths) > maxScenarioSummaryPaths
+		summary := scenarioExpression{}
+		if !summaryOverflow {
+			for i, c := range summaryPaths {
+				for j, r := range c {
+					summaryPaths[i][j].Text = requirementText(r, "", teams, games)
+					summaryPaths[i][j].Parts = requirementParts(r, "", teams, games)
+				}
+			}
+			// A single shared-condition level keeps the visible summary short;
+			// deeper factoring remains available in the exact-path expression.
+			summary = orderScenarioExpression(factorRequirements(summaryPaths, 2))
+		}
 		for i, c := range help {
 			for j, r := range c {
 				help[i][j].Text = requirementText(r, "", teams, games)
 				help[i][j].Parts = requirementParts(r, "", teams, games)
 			}
 		}
-		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Help: orderScenarioExpression(factorRequirements(help, 0))})
+		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, ShowDetails: len(help) > 1, Help: orderScenarioExpression(factorRequirements(help, 0))})
 	}
-	return combineOwnPairs(views, teamID, headingTeams, games)
+	return combineOwnSingleResults(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games)
+}
+
+// Merge one-match own results only when their outside help is identical.
+// For example, draw and loss become one "draws or loses" heading without
+// adding any outcome or implying that outside help applies to a win.
+func combineOwnSingleResults(groups []clinchingGroupView, team string, teams map[string]string, games map[string]cache.Game) []clinchingGroupView {
+	out := []clinchingGroupView{}
+	for _, group := range groups {
+		if len(group.Own) != 1 || len(group.AlternativeOwn) != 0 {
+			out = append(out, group)
+			continue
+		}
+		merged := false
+		for i := range out {
+			prior := &out[i]
+			if len(prior.Own) != 1 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || expressionKey(prior.Help) != expressionKey(group.Help) {
+				continue
+			}
+			prior.Own[0].Mask |= group.Own[0].Mask
+			prior.Own[0].Text = requirementText(prior.Own[0], team, teams, games)
+			prior.Own[0].Parts = requirementParts(prior.Own[0], team, teams, games)
+			if prior.Own[0].Mask == 7 {
+				fixtures := noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{prior.Own[0].GameID}}, team, games, teams)
+				prior.Heading = "Regardless of " + teams[team] + "’s result " + fixtures
+			} else {
+				prior.Heading = "If " + requirementText(prior.Own[0], team, teams, games)
+			}
+			merged = true
+			break
+		}
+		if !merged {
+			out = append(out, group)
+		}
+	}
+	return out
+}
+
+// Prefer a disjoint wording when it removes a broad result without adding
+// conditions, as in "UTA win or NC win" becoming the simpler NC win after a
+// separate UTA-win path. Otherwise retain the shorter overlapping summary.
+func summaryPathCost(paths [][]scenarioRequirement) int {
+	cost := 0
+	for _, path := range paths {
+		for _, requirement := range path {
+			cost += 8
+			if requirement.SecondGameID != "" {
+				cost += 2
+			} else {
+				cost += bits.OnesCount8(requirement.Mask) - 1
+			}
+		}
+	}
+	return cost
+}
+
+// Remove a result from a broad summary condition when an earlier path already
+// covers every outcome with that result. Earlier paths stay intact, so this
+// never subtracts the same outcome from two mutually covering alternatives.
+func narrowCoveredSummaryMasks(paths [][]scenarioRequirement, games map[string]cache.Game) [][]scenarioRequirement {
+	ordered := slices.Clone(paths)
+	sort.Slice(ordered, func(i, j int) bool {
+		if len(ordered[i]) != len(ordered[j]) {
+			return len(ordered[i]) < len(ordered[j])
+		}
+		return conjunctionKey(ordered[i]) < conjunctionKey(ordered[j])
+	})
+	narrowed := make([][]scenarioRequirement, 0, len(ordered))
+	for _, path := range ordered {
+		current := slices.Clone(path)
+		drop := false
+		for i, requirement := range current {
+			if requirement.SecondGameID != "" || bits.OnesCount8(requirement.Mask) < 2 {
+				continue
+			}
+			mask := requirement.Mask
+			for bit := uint8(1); bit <= 4; bit <<= 1 {
+				if mask&bit == 0 {
+					continue
+				}
+				current[i].Mask = bit
+				for _, earlier := range narrowed {
+					if requirementsImply(current, earlier, games) {
+						mask &^= bit
+						break
+					}
+				}
+			}
+			if mask == 0 {
+				drop = true
+				break
+			}
+			current[i].Mask = mask
+		}
+		if !drop {
+			narrowed = append(narrowed, current)
+		}
+	}
+	return narrowed
 }
 
 // Factor only identical predicates: A&B OR A&C becomes A AND (B OR C).
@@ -351,19 +491,39 @@ func factorRequirements(clauses [][]scenarioRequirement, depth int) scenarioExpr
 		return scenarioExpression{Conditions: clauses[0]}
 	}
 	counts := map[string]int{}
+	fixtureMasks := map[string]map[uint8]bool{}
+	for _, c := range clauses {
+		for _, r := range c {
+			if r.SecondGameID == "" {
+				if fixtureMasks[r.GameID] == nil {
+					fixtureMasks[r.GameID] = map[uint8]bool{}
+				}
+				fixtureMasks[r.GameID][r.Mask] = true
+			}
+		}
+	}
 	best := scenarioRequirement{}
-	count := 1
+	bestCount, bestPriority := 1, -1
 	for _, c := range clauses {
 		for _, r := range c {
 			key := requirementKey(r)
 			counts[key]++
-			if counts[key] > count {
+			if counts[key] < 2 {
+				continue
+			}
+			priority := 0
+			if counts[key] == len(clauses) {
+				priority = 2
+			} else if r.SecondGameID == "" && len(fixtureMasks[r.GameID]) > 1 {
+				priority = 1
+			}
+			if priority > bestPriority || (priority == bestPriority && counts[key] > bestCount) {
 				best = r
-				count = counts[key]
+				bestCount, bestPriority = counts[key], priority
 			}
 		}
 	}
-	if count == 1 || depth >= 3 {
+	if bestCount == 1 || depth >= 3 {
 		e := scenarioExpression{}
 		for _, c := range clauses {
 			e.Alternatives = append(e.Alternatives, scenarioExpression{Conditions: c})
@@ -392,7 +552,9 @@ func factorRequirements(clauses [][]scenarioRequirement, depth int) scenarioExpr
 	if len(without) == 0 {
 		return branch
 	}
-	other := factorRequirements(without, depth+1)
+	// Sibling branches do not add a visible nesting level. Let each sibling
+	// group one shared result, as with KC-win and SEA-win Bay FC routes.
+	other := factorRequirements(without, depth)
 	alternatives := []scenarioExpression{branch}
 	if len(other.Conditions) == 0 && len(other.Alternatives) > 0 {
 		alternatives = append(alternatives, other.Alternatives...)
@@ -580,9 +742,31 @@ func orderScenarioExpression(e scenarioExpression) scenarioExpression {
 	for i, alternative := range e.Alternatives {
 		e.Alternatives[i] = orderScenarioExpression(alternative)
 	}
-	sort.SliceStable(e.Alternatives, func(i, j int) bool { return expressionSize(e.Alternatives[i]) < expressionSize(e.Alternatives[j]) })
+	sort.SliceStable(e.Alternatives, func(i, j int) bool {
+		left, right := e.Alternatives[i], e.Alternatives[j]
+		if expressionSize(left) != expressionSize(right) {
+			return expressionSize(left) < expressionSize(right)
+		}
+		return expressionDisplayKey(left) < expressionDisplayKey(right)
+	})
 	return e
 }
+
+// Sort equal-sized paths by the conditions people read, rather than opaque
+// fixture IDs, so repeated results appear beside each other.
+func expressionDisplayKey(e scenarioExpression) string {
+	labels := make([]string, 0, len(e.Conditions))
+	for _, condition := range e.Conditions {
+		label := condition.Text
+		if label == "" {
+			label = requirementKey(condition)
+		}
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	return strings.Join(labels, "\x00")
+}
+
 func expressionSize(e scenarioExpression) int {
 	count := len(e.Conditions)
 	for _, alternative := range e.Alternatives {

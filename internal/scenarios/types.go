@@ -13,7 +13,7 @@ import (
 
 // DefinitionVersion changes when scenario result semantics change so a prior
 // completed snapshot cannot preserve an obsolete conclusion.
-const DefinitionVersion = "next-slate-v4"
+const DefinitionVersion = "next-slate-v5"
 
 const (
 	LimitationBudgetExhausted = "scenario computation budget exhausted"
@@ -89,9 +89,10 @@ type Result struct {
 	TotalAssignments, CertifiedAssignments, UnresolvedAssignments int
 	Diagnostics                                                   Diagnostics
 	// Playoff elimination is intentionally a separate outcome from a clinch.
-	// A clause is published only when enough opponents are already strictly
-	// beyond the target's maximum possible points, so no score tiebreak is
-	// being inferred. These fields are populated only for the playoffs.
+	// A clause is published only when every legal completion leaves enough
+	// opponents strictly beyond the target's maximum possible points. Future
+	// head-to-head fixtures can force the final opponent across that ceiling.
+	// These fields are populated only for the playoffs.
 	AlreadyEliminated, CanBeEliminated bool
 	EliminationClauses                 []Clause
 }
