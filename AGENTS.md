@@ -68,14 +68,17 @@ for focused diagnosis.
 - `docs/phases/` and completed work packets are design history unless they
   explicitly identify current behavior. Verify their historical claims against
   the current code.
-- Clinching presentation must group own-team results, keep alternative lists
-  bounded, and preserve the exact union of confirmed outcomes and partial-result
-  notices. Subtract overlap between outside-help alternatives within the
-  presentation's expansion and work limits; retain the original certified union
-  when those limits are reached. Verify logical rewrites with exhaustive
-  outcome-equivalence and disjoint-alternative tests.
-  Use `make test-clinching`
-  for focused checks; the full `make test` also includes these regressions.
+- Clinching presentation must group own-team and repeated outside-match results,
+  order equal-size alternatives by displayed result, keep visible summaries
+  bounded, and preserve the exact union of confirmed
+  outcomes and partial-result notices. Summaries may overlap when factoring
+  makes them shorter; subtract
+  overlap between expandable exact paths within the presentation's expansion
+  and work limits. Retain the original certified union when those limits are
+  reached. Verify logical rewrites with exhaustive outcome-equivalence and
+  disjoint detailed-alternative tests. Verify future-fixture elimination proofs
+  against exhaustive small-season outcomes. Use `make test-clinching` for focused
+  checks; the full `make test` also includes these regressions.
 - When behavior or required checks change, update the active guide, `AGENTS.md`,
   `Makefile`, and CI together.
 

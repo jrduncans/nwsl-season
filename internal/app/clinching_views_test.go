@@ -17,7 +17,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
-func TestClinchingPageBoundsVisiblePathsAndPreservesAlternatives(t *testing.T) {
+func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 	for _, elimination := range []bool{false, true} {
 		t.Run(fmt.Sprintf("elimination=%t", elimination), func(t *testing.T) {
 			data := testSeasonData()
@@ -41,10 +41,13 @@ func TestClinchingPageBoundsVisiblePathsAndPreservesAlternatives(t *testing.T) {
 			}
 			body := response.Body.String()
 			if strings.Count(body, `class="clinching-path-option"`) != 8 || strings.Contains(body, "View 5 more paths") {
-				t.Fatal("all paths should be visible without a second disclosure")
+				t.Fatal("all exact paths should remain available in one disclosure")
 			}
 			if strings.Count(body, `class="clinching-result-group"`) != 1 {
 				t.Fatal("shared own result should appear once")
+			}
+			if !strings.Contains(body, `class="clinching-summary"`) || !strings.Contains(body, `class="clinching-exact-paths"`) {
+				t.Fatal("visible summary and expandable exact paths are required")
 			}
 			if !strings.Contains(body, "Scenario search was incomplete.") {
 				t.Fatal("incomplete-search notice missing")
@@ -306,6 +309,9 @@ func assertScenarioCoverage(t *testing.T, clauses []scenarios.Clause, groups []c
 		got := false
 		for _, g := range groups {
 			helpMatches := testExpressionMatches(g.Help, assignment, games)
+			if !g.SummaryOverflow && testExpressionMatches(g.Summary, assignment, games) != helpMatches {
+				t.Fatalf("assignment %v: summary and exact paths differ; group=%+v", assignment, g)
+			}
 			flatMatches := false
 			matchingPaths := 0
 			for _, combination := range g.Help.Combinations() {
@@ -328,6 +334,124 @@ func assertScenarioCoverage(t *testing.T, clauses []scenarios.Clause, groups []c
 	}
 	walk(0)
 }
+
+func TestClinchingSummaryKeepsShortOverlappingAlternatives(t *testing.T) {
+	games := map[string]cache.Game{
+		"own": {HomeTeamID: "lou", AwayTeamID: "sd"},
+		"sea": {HomeTeamID: "sea", AwayTeamID: "bos"},
+		"kc":  {HomeTeamID: "kc", AwayTeamID: "den"},
+	}
+	clauses := []scenarios.Clause{
+		testScenarioClause(testScenarioCondition("own", 1), testScenarioCondition("sea", 1)),
+		testScenarioClause(testScenarioCondition("own", 1), testScenarioCondition("kc", 3)),
+	}
+	groups := clinchingGroups(clauses, "lou", map[string]string{"lou": "LOU", "sd": "SD", "sea": "SEA", "bos": "BOS", "kc": "KC", "den": "DEN"}, games)
+	if len(groups) != 1 || !groups[0].ShowDetails {
+		t.Fatalf("groups = %+v", groups)
+	}
+	summary := groups[0].Summary.Combinations()
+	if len(summary) != 2 || len(summary[0]) != 1 || len(summary[1]) != 1 {
+		t.Fatalf("summary = %+v, want independent SEA and KC conditions", summary)
+	}
+	if len(groups[0].Help.Combinations()) != 2 {
+		t.Fatalf("exact paths = %+v", groups[0].Help.Combinations())
+	}
+	assertScenarioCoverage(t, clauses, groups, games, true)
+}
+
+func TestClinchingSummaryGroupsBayKCWinRoutes(t *testing.T) {
+	games := map[string]cache.Game{
+		"bay": {HomeTeamID: "bay", AwayTeamID: "orl"},
+		"sea": {HomeTeamID: "sea", AwayTeamID: "bos"},
+		"kc":  {HomeTeamID: "kc", AwayTeamID: "den"},
+		"la":  {HomeTeamID: "was", AwayTeamID: "la"},
+		"nc":  {HomeTeamID: "uta", AwayTeamID: "nc"},
+	}
+	teams := map[string]string{"bay": "BAY", "orl": "ORL", "sea": "SEA", "bos": "BOS", "kc": "KC", "den": "DEN", "was": "WAS", "la": "LA", "uta": "UTA", "nc": "NC"}
+	c := testScenarioCondition
+	clauses := []scenarios.Clause{
+		testScenarioClause(c("bay", 2), c("kc", 1), c("la", 6)),
+		testScenarioClause(c("bay", 2), c("sea", 1), c("kc", 1)),
+		testScenarioClause(c("bay", 2), c("sea", 1), c("kc", 5), c("nc", 6)),
+		testScenarioClause(c("bay", 2), c("sea", 1), c("la", 6), c("nc", 6)),
+		testScenarioClause(c("bay", 2), c("sea", 1), c("kc", 5), c("la", 6)),
+	}
+	groups := clinchingGroups(clauses, "bay", teams, games)
+	if len(groups) != 1 {
+		t.Fatalf("groups = %+v", groups)
+	}
+	summary := groups[0].Summary
+	if len(summary.Alternatives) != 2 || len(summary.Alternatives[0].Conditions) != 1 || summary.Alternatives[0].Conditions[0].GameID != "kc" || summary.Alternatives[0].Conditions[0].Mask != 1 {
+		t.Fatalf("KC-win routes should share the first summary group: %+v", summary)
+	}
+	if len(summary.Alternatives[0].Alternatives) != 2 || len(summary.Alternatives[1].Conditions) != 1 || summary.Alternatives[1].Conditions[0].GameID != "sea" {
+		t.Fatalf("KC-win help and SEA-win routes should be separate groups: %+v", summary)
+	}
+	seaAlternatives := summary.Alternatives[1].Alternatives
+	if len(seaAlternatives) != 3 {
+		t.Fatalf("SEA-win alternatives = %+v", seaAlternatives)
+	}
+	for i, alternative := range seaAlternatives {
+		hasDENWin := false
+		for _, requirement := range alternative.Conditions {
+			hasDENWin = hasDENWin || (requirement.GameID == "kc" && requirement.Mask == 4)
+		}
+		if hasDENWin != (i < 2) {
+			t.Fatalf("DEN-win alternatives should be adjacent before the LA/NC alternative: %+v", seaAlternatives)
+		}
+	}
+	for _, path := range summary.Alternatives[1].Combinations() {
+		for _, requirement := range path {
+			if requirement.GameID == "kc" && requirement.Mask&1 != 0 {
+				t.Fatalf("redundant KC-win condition remains under SEA win: %+v", summary)
+			}
+		}
+	}
+	assertScenarioCoverage(t, clauses, groups, games, true)
+}
+
+func TestClinchingAlternativesGroupRepeatedDisplayedResults(t *testing.T) {
+	den := scenarioRequirement{GameID: "z-kc", Mask: 4, Text: "DEN wins at KC"}
+	la := scenarioRequirement{GameID: "b-la", Mask: 6, Text: "LA wins or draws at WAS"}
+	nc := scenarioRequirement{GameID: "a-nc", Mask: 6, Text: "NC wins or draws at UTA"}
+	// Opaque fixture IDs put LA/NC between the two DEN alternatives.
+	expression := scenarioExpression{Alternatives: []scenarioExpression{
+		{Conditions: []scenarioRequirement{den, nc}},
+		{Conditions: []scenarioRequirement{la, nc}},
+		{Conditions: []scenarioRequirement{den, la}},
+	}}
+	ordered := orderScenarioExpression(expression)
+	got := []string{}
+	for _, alternative := range ordered.Alternatives {
+		got = append(got, alternative.Conditions[0].Text+" + "+alternative.Conditions[1].Text)
+	}
+	want := []string{
+		"DEN wins at KC + LA wins or draws at WAS",
+		"DEN wins at KC + NC wins or draws at UTA",
+		"LA wins or draws at WAS + NC wins or draws at UTA",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("alternative display order = %v, want %v", got, want)
+	}
+}
+
+func TestClinchingGroupsMergeSingleOwnResultsWithIdenticalHelp(t *testing.T) {
+	games := map[string]cache.Game{
+		"own":  {HomeTeamID: "lou", AwayTeamID: "sd"},
+		"help": {HomeTeamID: "sea", AwayTeamID: "bos"},
+	}
+	clauses := []scenarios.Clause{
+		testScenarioClause(testScenarioCondition("own", 2), testScenarioCondition("help", 1)),
+		testScenarioClause(testScenarioCondition("own", 4), testScenarioCondition("help", 1)),
+		testScenarioClause(testScenarioCondition("own", 1), testScenarioCondition("help", 4)),
+	}
+	groups := clinchingGroups(clauses, "lou", map[string]string{"lou": "LOU", "sd": "SD", "sea": "SEA", "bos": "BOS"}, games)
+	if len(groups) != 2 || groups[1].Heading != "If LOU draws or loses vs SD" {
+		t.Fatalf("groups = %+v, want combined draw-or-loss heading", groups)
+	}
+	assertScenarioEquivalent(t, clauses, groups, games)
+}
+
 func testRequirementsMatch(conditions []scenarioRequirement, assignment map[string]clinching.Outcome, games map[string]cache.Game) bool {
 	for _, r := range conditions {
 		if r.SecondGameID != "" {

@@ -67,6 +67,8 @@ type batchScenarioSearch struct {
 	slate       Slate
 	slateGames  []standings.Game
 	searchGames []standings.Game
+	laterGames  []standings.Game
+	teamIDs     []string
 	members     []scenarioMember
 	points      map[string]int
 	// targetSlateRemaining is the best points total the target can have by
@@ -176,6 +178,11 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 	}
 
 	points := map[string]int{}
+	teamIDs := make([]string, 0, len(r.Teams))
+	for _, team := range r.Teams {
+		points[team.ID] = 0
+		teamIDs = append(teamIDs, team.ID)
+	}
 	for _, game := range r.Games {
 		if game.Status == standings.CompletedStatus {
 			applyOutcomePoints(points, game, scoreOutcome(*game.HomeScore, *game.AwayScore))
@@ -195,10 +202,21 @@ func GenerateBatch(ctx context.Context, r BatchRequest) (map[competition.Achieve
 			targetSlateRemaining++
 		}
 	}
+	slateIDs := make(map[string]bool, len(slateGames))
+	for _, game := range slateGames {
+		slateIDs[game.ID] = true
+	}
+	laterGames := []standings.Game{}
+	for _, game := range r.Games {
+		if game.Status == fixtures.PreMatchStatus && !slateIDs[game.ID] {
+			laterGames = append(laterGames, game)
+		}
+	}
 	search := batchScenarioSearch{
 		ctx: ctx, evaluator: r.Evaluator, target: r.TargetTeamID, slate: r.Slate,
 		slateGames: slateGames, searchGames: orderBatchSearchGames(r.Teams, r.Games, r.TargetTeamID, activeAchievements, slateGames),
-		members: members, points: points, targetSlateRemaining: targetSlateRemaining, targetRemaining: targetRemaining,
+		laterGames: laterGames, teamIDs: teamIDs, members: members, points: points,
+		targetSlateRemaining: targetSlateRemaining, targetRemaining: targetRemaining,
 	}
 	active := uint64(1)<<uint(len(members)) - 1
 	search.walk(make([]clinching.FixedResult, 0, len(search.searchGames)), 0, active)
@@ -414,6 +432,40 @@ func (s *batchScenarioSearch) walk(fixed []clinching.FixedResult, depth int, act
 	}
 	if err := s.ctx.Err(); err != nil {
 		s.err = err
+		return
+	}
+	for memberIndex := range s.members {
+		bit := uint64(1) << uint(memberIndex)
+		if active&bit == 0 {
+			continue
+		}
+		member := &s.members[memberIndex]
+		if !member.trackElimination {
+			continue
+		}
+		proven, err := forcedPointsElimination(s.ctx, s.points, s.teamIDs, s.target, member.achievement.TopK, s.searchGames[depth:], s.laterGames)
+		if err != nil {
+			s.err = err
+			return
+		}
+		if !proven {
+			continue
+		}
+		member.diag.SearchNodes++
+		if depth == 0 {
+			member.alreadyEliminated = true
+		} else {
+			clause := Clause{Conditions: fixedConditions(fixed, s.slate.FixtureIDs), ProofMethods: []clinching.ProofMethod{clinching.ProofPointsOptimization}}
+			clause.RepresentedAssignments = represented(clause.Conditions, len(s.slateGames))
+			member.eliminationClauses = append(member.eliminationClauses, clause)
+			if member.trackCoverage {
+				markCoverage(member.eliminated, clause.Conditions, s.slateGames)
+			}
+		}
+		member.diag.OpportunityPrunes++
+		active &^= bit
+	}
+	if active == 0 {
 		return
 	}
 	remaining := uint64(0)

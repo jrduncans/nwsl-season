@@ -878,7 +878,7 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Clinching scenarios", "Elimination scenarios", "Paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{"Included matches", "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -942,7 +942,7 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Paths without outside help", "These paths depend only on that team’s results", "id=\"clinching-team\"", "data-clinching-team-card data-clinching-team=\"alpha\"", "Can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>.", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{"Season-long paths without outside help", "These paths may include matches after this slate", "id=\"clinching-team\"", "data-clinching-team-card data-clinching-team=\"alpha\"", "Can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
