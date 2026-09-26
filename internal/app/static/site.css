@@ -414,6 +414,7 @@ th:nth-child(2) { text-align: left; }
 .explore-scatter-selection-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .explore-scatter-selection-heading h3 { margin: 0; font-size: 1rem; }
 .explore-scatter-selection-heading .button { padding: .4rem .65rem; font-size: .875rem; }
+.explore-scatter-guide-values { margin: .6rem 0 0; color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
 .explore-scatter-selection-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; margin-top: .65rem; }
 .explore-scatter-selection-team { min-width: 0; padding: .65rem .75rem; border-radius: .35rem; background: var(--paper); font-variant-numeric: tabular-nums; }
 .explore-scatter-selection-team h4 { margin: 0 0 .3rem; font-size: .95rem; }

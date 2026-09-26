@@ -169,8 +169,11 @@ chart. If none are fully covered, the plot shows an explicit empty message.
 Hover and tap inspect points and report actual, expected, gap, and played count.
 Clicking or tapping a point pins its team and values in a details card below the
 plot, so the information remains visible after the pointer moves. Gold guide
-lines project that point to both axes. Clicking empty plot space, Clear
-selection, or Escape clears the pinned point. Team logos are shown by default;
+lines extend across the plot through the selected values. Two smaller hollow
+circles on the equal-actual-and-expected line let the reader move both guides to
+the selected team's expected or actual value. The details card names the
+measures and shows the guide values. Clicking empty plot space, Clear selection,
+or Escape clears the pinned point. Team logos are shown by default;
 the Show team logos control can hide them. Crests appear beside points where
 they do not overlap another crest or point. Team names remain available in
 tooltips and the pinned details card; with logo labels off, a pinned point also
