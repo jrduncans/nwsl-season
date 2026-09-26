@@ -14,6 +14,10 @@
   const metric = root.querySelector('[data-metric]');
   const distributionBin = root.querySelector('[data-distribution-bin]');
   const status = root.querySelector('[data-chart-status]');
+  const scatterLogoToggle = root.querySelector('[data-team-scatter-logos]');
+  const scatterSelection = root.querySelector('[data-team-scatter-selection]');
+  const scatterSelectionTitle = root.querySelector('[data-team-scatter-selection-title]');
+  const scatterSelectionTeams = root.querySelector('[data-team-scatter-selection-teams]');
   const charts = {};
   const styles = getComputedStyle(root);
   const color = name => styles.getPropertyValue(name).trim();
@@ -69,7 +73,15 @@
     chart.tooltip.setActiveElements([], {x: 0, y: 0});
     chart.update('none');
   };
-  function dismiss() {
+  function clearScatterSelection(chart, update = true) {
+    if (!chart) return;
+    chart.scatterPinnedIndexes = [];
+    scatterSelection.hidden = true;
+    scatterSelectionTeams.replaceChildren();
+    if (update) chart.update('none');
+  }
+  function dismiss(clearPinned = true) {
+    if (clearPinned) clearScatterSelection(charts.teamScatter, false);
     Object.values(charts).forEach(clearChart);
     status.textContent = '';
   }
@@ -408,9 +420,145 @@
     const padding = Math.max((high - low) * .12, high === low ? Math.max(Math.abs(high) * .15, .15) : .06);
     return {min: measure.index === 2 ? low - padding : Math.max(0, low - padding), max: high + padding};
   }
+  function drawScatterLogos(chart) {
+    const layer = chart.canvas.parentElement.querySelector('[data-team-scatter-logo-layer]');
+    if (!layer) return;
+    layer.hidden = !chart.scatterShowLogos;
+    if (!chart.scatterShowLogos) return;
+    const rows = chart.teamRows || [];
+    const logoRows = rows.filter(row => row.logo);
+    const images = chart.scatterLogoImages || (chart.scatterLogoImages = new Map());
+    const logoKey = logoRows.map(row => `${row.id}\0${row.logo}`).join('\1');
+    if (chart.scatterLogoKey !== logoKey) {
+      const logoElements = logoRows.map(row => {
+        let image = images.get(row.id);
+        if (!image) {
+          image = document.createElement('img');
+          image.className = 'explore-scatter-logo';
+          image.alt = '';
+          image.draggable = false;
+          images.set(row.id, image);
+        }
+        if (image.dataset.logo !== row.logo) {
+          image.dataset.logo = row.logo;
+          image.src = row.logo;
+        }
+        image.title = row.name;
+        image.style.visibility = 'hidden';
+        return image;
+      });
+      layer.replaceChildren(...logoElements);
+      chart.scatterLogoKey = logoKey;
+    }
+    for (const image of layer.children) image.style.visibility = 'hidden';
+    const points = chart.getDatasetMeta(0).data.map((point, index) => {
+      if (!point || point.skip) return null;
+      const {x, y} = point.getProps(['x', 'y'], true);
+      return {index, x, y};
+    }).filter(Boolean);
+    const size = 22, gap = 4, padding = 2;
+    const {left, right, top, bottom} = chart.chartArea;
+    const canvasBounds = chart.canvas.getBoundingClientRect();
+    const layerBounds = layer.getBoundingClientRect();
+    const offsetX = canvasBounds.left - layerBounds.left;
+    const offsetY = canvasBounds.top - layerBounds.top;
+    const visibleLabels = [];
+    const overlaps = (first, second) =>
+      first.left < second.right + padding && first.right + padding > second.left &&
+      first.top < second.bottom + padding && first.bottom + padding > second.top;
+    const obstructsPoint = (box, point) =>
+      point.x >= box.left - 7 && point.x <= box.right + 7 &&
+      point.y >= box.top - 7 && point.y <= box.bottom + 7;
+    const candidates = points.filter(point => rows[point.index]?.logo).map(point => {
+      const nearest = Math.min(Infinity, ...points
+        .filter(other => other.index !== point.index)
+        .map(other => Math.hypot(other.x - point.x, other.y - point.y)));
+      return {...point, nearest};
+    }).sort((a, b) => b.nearest - a.nearest || a.index - b.index);
+    const placements = point => [
+      {left: point.x - size / 2, top: point.y - size - gap},
+      {left: point.x + gap, top: point.y - size / 2},
+      {left: point.x - size / 2, top: point.y + gap},
+      {left: point.x - size - gap, top: point.y - size / 2},
+      {left: point.x + size / 2 - 2, top: point.y - size - gap},
+      {left: point.x - size - size / 2 + 2, top: point.y - size - gap},
+      {left: point.x + size / 2 - 2, top: point.y + gap},
+      {left: point.x - size - size / 2 + 2, top: point.y + gap},
+    ].map(position => ({...position, right: position.left + size, bottom: position.top + size}));
+    for (const candidate of candidates) {
+      const row = rows[candidate.index];
+      const image = images.get(row.id);
+      if (!image || (image.complete && !image.naturalWidth)) continue;
+      const box = placements(candidate).find(rect => {
+        if (rect.left < left || rect.right > right || rect.top < top || rect.bottom > bottom) return false;
+        if (visibleLabels.some(label => overlaps(rect, label.rect))) return false;
+        if (points.some(point => point.index !== candidate.index && obstructsPoint(rect, point))) return false;
+        return true;
+      });
+      if (box) visibleLabels.push({index: candidate.index, rect: box, image});
+    }
+    for (const label of visibleLabels) {
+      const {left, top} = label.rect;
+      const {image} = label;
+      image.style.left = `${left + offsetX}px`;
+      image.style.top = `${top + offsetY}px`;
+      image.style.visibility = 'visible';
+    }
+  }
+  function showScatterSelection(chart, indexes) {
+    const selected = [...new Set(indexes)].filter(index => chart.teamRows[index]);
+    if (!selected.length) {
+      clearScatterSelection(chart);
+      return;
+    }
+    chart.scatterPinnedIndexes = selected;
+    scatterSelectionTitle.textContent = selected.length === 1 ? 'Selected point' : `${selected.length} teams at this point`;
+    scatterSelectionTeams.replaceChildren(...selected.map(index => {
+      const row = chart.teamRows[index];
+      const value = teamMetric(row, chart.teamMeasure, chart.teamUnits);
+      const suffix = chart.teamUnits === 'total' ? ' total' : ' per match';
+      const display = number => chart.teamUnits === 'total' ? String(number) : fixed(number);
+      const card = document.createElement('article');
+      card.className = 'explore-scatter-selection-team';
+      const name = document.createElement('h4');
+      name.textContent = row.name;
+      card.append(name);
+      [
+        `X · ${chart.teamMeasure.expected}: ${display(value.expected)}${suffix}`,
+        `Y · ${chart.teamMeasure.actual}: ${display(value.actual)}${suffix}`,
+        `Gap: ${signed(value.actual - value.expected)}${suffix}`,
+        `${row.played} played`,
+      ].forEach(line => {
+        const detail = document.createElement('p');
+        detail.textContent = line;
+        card.append(detail);
+      });
+      return card;
+    }));
+    scatterSelection.hidden = false;
+    chart.update('none');
+  }
   function createTeamScatter(canvas) {
     const options = commonOptions();
     options.interaction = {mode: 'point', intersect: true};
+    options.onClick = (event, activeElements, chart) => {
+      const points = activeElements.filter(mark => mark.datasetIndex === 0).map(mark => {
+        const center = chart.getDatasetMeta(0).data[mark.index].getCenterPoint();
+        const x = Number.isFinite(event.x) ? event.x : center.x;
+        const y = Number.isFinite(event.y) ? event.y : center.y;
+        return {index: mark.index, distance: Math.hypot(center.x - x, center.y - y)};
+      });
+      if (!points.length) {
+        showScatterSelection(chart, []);
+        return;
+      }
+      // Point-mode hit testing can include nearby dots; pin the nearest dot and
+      // retain every team only when their centers share the same location.
+      const nearest = Math.min(...points.map(point => point.distance));
+      showScatterSelection(chart, points
+        .filter(point => point.distance <= nearest + .25)
+        .map(point => point.index));
+    };
     options.scales = {
       x: {type: 'linear', grid: {color: color('--line')}, border: {display: false},
         ticks: {includeBounds: false, maxTicksLimit: 6}, title: {display: true, text: 'Expected per match'}},
@@ -427,20 +575,50 @@
         return overlapping > items.length ? `+${overlapping - items.length} more; see the table below the plot` : '';
       },
     };
+    options.plugins.datalabels = {
+      align: 'top', anchor: 'center', clamp: true, clip: false,
+      color: color('--ink'), backgroundColor: color('--panel'), borderColor: color('--line'),
+      borderRadius: 3, borderWidth: 1, padding: 3,
+      font: {size: 11, weight: '600'},
+      display: context => {
+        if (context.chart.scatterShowLogos) return false;
+        if (context.chart.scatterPinnedIndexes?.[0] === context.dataIndex) return true;
+        return context.active ? 'auto' : false;
+      },
+      formatter: (_, context) => context.chart.teamRows?.[context.dataIndex]?.name || '',
+    };
     const chart = new Chart(canvas, {
       type: 'scatter', options,
-      plugins: [{id: 'teamScatterParity', beforeDatasetsDraw(chart) {
-        const {x, y} = chart.scales, ctx = chart.ctx;
-        ctx.save(); ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
-        ctx.beginPath(); ctx.moveTo(x.getPixelForValue(x.min), y.getPixelForValue(x.min));
-        ctx.lineTo(x.getPixelForValue(x.max), y.getPixelForValue(x.max)); ctx.stroke(); ctx.restore();
-      }}],
+      plugins: [{id: 'teamScatterParity',
+        beforeDatasetsDraw(chart) {
+          const {x, y} = chart.scales, ctx = chart.ctx;
+          ctx.save(); ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
+          ctx.beginPath(); ctx.moveTo(x.getPixelForValue(x.min), y.getPixelForValue(x.min));
+          ctx.lineTo(x.getPixelForValue(x.max), y.getPixelForValue(x.max)); ctx.stroke(); ctx.restore();
+        },
+        afterDatasetsDraw(chart) {
+          drawScatterLogos(chart);
+          const selectedIndex = chart.scatterPinnedIndexes?.[0]
+            ?? chart.getActiveElements().find(mark => mark.datasetIndex === 0)?.index;
+          if (selectedIndex === undefined) return;
+          const point = chart.getDatasetMeta(0).data[selectedIndex];
+          if (!point || point.skip) return;
+          const {left, bottom} = chart.chartArea;
+          const {x, y} = point.getProps(['x', 'y'], true);
+          const ctx = chart.ctx;
+          ctx.save(); ctx.strokeStyle = color('--gold'); ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(x, y); ctx.moveTo(x, y); ctx.lineTo(x, bottom); ctx.stroke();
+          ctx.setLineDash([]); ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        },
+      }, ChartDataLabels],
       data: {labels: [], datasets: [{
         label: 'Teams', data: [], backgroundColor: [], borderColor: color('--panel'), borderWidth: 1.5,
         pointRadius: 6, pointHitRadius: 6, pointHoverRadius: 9,
         pointHoverBorderColor: color('--gold'), pointHoverBorderWidth: 2,
       }]},
     });
+    chart.scatterPinnedIndexes = [];
+    chart.scatterShowLogos = scatterLogoToggle.checked;
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
@@ -557,6 +735,7 @@
         .filter(row => row.values[measure.index].expected !== null);
       const missingNames = rows.filter(row => row.values[measure.index].expected === null).map(row => row.name);
       const scatterEmpty = scatterRows.length === 0;
+      scatterLogoToggle.closest('label').hidden = scatterEmpty;
       const missingNote = root.querySelector('[data-team-scatter-missing]');
       missingNote.hidden = scatterEmpty || missingNames.length === 0;
       missingNote.textContent = missingNames.length ? `Incomplete ${measure.expected} for ${missingNames.join(', ')}; these teams have no point.` : '';
@@ -1061,7 +1240,7 @@
     const sort = event.target.closest('[data-sort]');
     if (sort) update({sort: sort.dataset.sort, order: sort.parentElement.getAttribute('aria-sort') === 'descending' ? 'asc' : 'desc'});
   });
-  document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(); });
+  document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(false); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
   metric.addEventListener('change', () => update({metric: metric.value}));
   if (distributionBin) {
@@ -1076,8 +1255,14 @@
   teamSeason.addEventListener('change', () => update({season: teamSeason.value}));
   teamMeasure.addEventListener('change', () => update({measure: teamMeasure.value, 'team-sort': root.querySelector('[name="team-sort"]').value}));
   teamUnits.addEventListener('change', () => update({units: teamUnits.value}));
+  scatterLogoToggle.addEventListener('change', () => {
+    if (!charts.teamScatter) return;
+    charts.teamScatter.scatterShowLogos = scatterLogoToggle.checked;
+    charts.teamScatter.update('none');
+  });
+  root.querySelector('[data-team-scatter-clear]').addEventListener('click', () => clearScatterSelection(charts.teamScatter));
   root.addEventListener('error', event => {
-    if (event.target.matches('.team-logo')) event.target.style.visibility = 'hidden';
+    if (event.target.matches('.team-logo, .explore-scatter-logo')) event.target.style.visibility = 'hidden';
   }, true);
   root.querySelector('[data-team-history-controls]').addEventListener('submit', event => {
     event.preventDefault(); update({team: historyTeam.value, measure: historyMeasure.value, series: historySeries.value, context: historyContext.checked ? 'on' : 'off'});

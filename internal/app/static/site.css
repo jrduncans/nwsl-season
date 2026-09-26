@@ -392,6 +392,7 @@ th:nth-child(2) { text-align: left; }
 .explore-data-warning { padding: .7rem .9rem; border-left: 3px solid var(--gold); background: #fffaf0; }
 .explore [hidden] { display: none !important; }
 .explore-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.explore-heading > :is(h2, form) { min-width: 0; max-width: 100%; }
 .explore h2 { font-size: 1.3rem; margin: 0 0 .8rem; }
 .explore select { font: inherit; padding: .5rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--panel); }
 .explore-legend { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: .75rem 0; font-size: .9rem; }
@@ -403,7 +404,20 @@ th:nth-child(2) { text-align: left; }
 .explore-gap-negative { background: var(--hypo); }
 .explore-scatter-parity { display: inline-block; width: 1rem; border-top: 2px dashed var(--muted); }
 .explore-chart-wrap { position: relative; max-width: 58rem; height: 390px; margin-top: 1.25rem; }
-.explore-team-scatter-wrap { width: min(100%, 38rem); height: 38rem; }
+.explore-team-scatter-wrap { width: min(100%, 38rem); height: 38rem; isolation: isolate; }
+.explore-team-scatter-wrap canvas { position: relative; z-index: 1; }
+.explore-scatter-logo-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.explore-scatter-logo { position: absolute; width: 22px; height: 22px; box-sizing: border-box; padding: 2px; object-fit: contain; border: 1px solid var(--line); border-radius: .25rem; background: var(--panel); pointer-events: none; }
+.explore-scatter-logo-toggle { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .9rem; }
+.explore-scatter-logo-toggle input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--green); }
+.explore-scatter-selection { max-width: 38rem; margin-top: 1rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.explore-scatter-selection-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.explore-scatter-selection-heading h3 { margin: 0; font-size: 1rem; }
+.explore-scatter-selection-heading .button { padding: .4rem .65rem; font-size: .875rem; }
+.explore-scatter-selection-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; margin-top: .65rem; }
+.explore-scatter-selection-team { min-width: 0; padding: .65rem .75rem; border-radius: .35rem; background: var(--paper); font-variant-numeric: tabular-nums; }
+.explore-scatter-selection-team h4 { margin: 0 0 .3rem; font-size: .95rem; }
+.explore-scatter-selection-team p { margin: .12rem 0; font-size: .875rem; }
 .explore-chart-wrap canvas { display: block; }
 .explore-keyboard-hint { display: none; color: var(--muted); font-size: .85rem; }
 .explore-chart-wrap:has(canvas:focus-visible) + .explore-keyboard-hint { display: block; }

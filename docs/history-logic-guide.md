@@ -45,7 +45,10 @@ filter or toggle bins. A segment tooltip shows goal count and match count; it
 adds the percentage only when the segment is too narrow for a visible label.
 Arrow keys inspect marks through Chart.js's active-element API and announce
 values, including zero-count bins; Escape, focus leaving the chart, or an outside
-tap clears inspection. The season table has shared-scale rate bars, signed gap
+tap clears transient inspection. The Outlier plot's pinned details remain after
+focus leaves or an outside tap, until the point is cleared, Escape is pressed,
+or its chart selection changes.
+The season table has shared-scale rate bars, signed gap
 badges, row shading, and a sticky season column and header on small screens. Each view shows an explicit
 empty state when no seasons are eligible.
 Goal distribution also has a collapsed, server-rendered values table with
@@ -164,10 +167,17 @@ differentials can extend below zero. Teams without complete xG for goal measures
 or xPoints for points, have no point and are named in a note accessible from the
 chart. If none are fully covered, the plot shows an explicit empty message.
 Hover and tap inspect points and report actual, expected, gap, and played count.
-Keyboard inspection reaches every plotted team; a link below the plot opens the
-comparison table for all
-teams, including those whose points overlap. The season and measure selections,
-direct URLs, and Back/Forward work as on the other comparison views.
+Clicking or tapping a point pins its team and values in a details card below the
+plot, so the information remains visible after the pointer moves. Gold guide
+lines project that point to both axes. Clicking empty plot space, Clear
+selection, or Escape clears the pinned point. Team logos are shown by default;
+the Show team logos control can hide them. Crests appear beside points where
+they do not overlap another crest or point. Team names remain available in
+tooltips and the pinned details card; with logo labels off, a pinned point also
+gets a text label. Keyboard inspection
+reaches every plotted team; a link below the plot opens the comparison table for
+all teams, including those whose points overlap. The season and measure
+selections, direct URLs, and Back/Forward work as on the other comparison views.
 Goal differential is goals for minus goals against; xG differential is xG for
 minus xG against. Points are earned from recorded results, and xPoints are ASA's
 expected points summed over those same matches. Gap always means actual minus
@@ -193,12 +203,13 @@ in `make test` and CI). For browser verification, the `teams` scenario in
 coverage, and an empty season. Verify desktop and 390px layouts, signed
 differential and gap axes, gap ranking for all four measures and both unit modes,
 the Outlier plot's equal axis ranges and parity diagonal for all four measures,
-positive and negative gaps, coincident points, touch/hover, keyboard
-inspection/dismissal, logos and alignment after resize, missing-data warnings
-and `xG incomplete` or `xPoints incomplete` labels, the named Outlier plot
-omission note and empty state, sorting in both directions, no-script sorting,
-season/measure/units/display URLs, Back/Forward, and switching analyses without
-fetching new data.
+positive and negative gaps, coincident points, touch/hover, pinned details and
+axis guides, clearing a pinned point, optional logo labels with overlap
+suppression, keyboard inspection/dismissal, logos and alignment after resize,
+missing-data warnings and `xG incomplete` or `xPoints incomplete` labels, the
+named Outlier plot omission note and empty state, sorting in both directions,
+no-script sorting, season/measure/units/display URLs, Back/Forward, and switching
+analyses without fetching new data.
 
 ### Team history
 
