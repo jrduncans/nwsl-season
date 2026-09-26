@@ -27,7 +27,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 				t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, body)
 			}
-			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js"`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
+			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js"`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)
 				}

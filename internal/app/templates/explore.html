@@ -100,10 +100,16 @@
 <div data-team-scatter-plot hidden>
 <p class="note" id="explore-team-scatter-note" data-team-scatter-note>One dot per team. Dashed line: actual matches expected. Above: higher goal differential than xG differential; below: lower. Farther from the line means a larger gap.</p>
 <div class="explore-legend explore-gap-legend" data-team-scatter-legend><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above expected</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below expected</span><span><i class="explore-scatter-parity" aria-hidden="true"></i>Equal to expected</span></div>
+<label class="explore-scatter-logo-toggle"><input type="checkbox" data-team-scatter-logos checked> Show team logos; hide overlapping logos</label>
 <p class="note" id="explore-team-scatter-missing" data-team-scatter-missing hidden></p>
 <p class="note" data-team-scatter-empty hidden>No teams have complete expected data for this measure yet.</p>
-<div class="explore-chart-wrap explore-team-scatter-wrap" data-team-scatter-chart-wrap hidden><canvas data-chart="team-scatter" tabindex="0" role="img" aria-label="Team actual versus expected per match" aria-describedby="explore-chart-help explore-team-scatter-note explore-team-scatter-missing"></canvas></div>
-<p class="explore-keyboard-hint" data-team-scatter-hint hidden>Use arrow keys to inspect teams. Escape clears the tooltip.</p>
+<div class="explore-chart-wrap explore-team-scatter-wrap" data-team-scatter-chart-wrap hidden><canvas data-chart="team-scatter" tabindex="0" role="img" aria-label="Team actual versus expected per match" aria-describedby="explore-chart-help explore-team-scatter-note explore-team-scatter-missing"></canvas><div class="explore-scatter-logo-layer" data-team-scatter-logo-layer hidden aria-hidden="true"></div></div>
+<section class="explore-scatter-selection" data-team-scatter-selection hidden aria-live="polite" aria-atomic="true">
+<div class="explore-scatter-selection-heading"><h3 data-team-scatter-selection-title>Selected point</h3><button type="button" class="button" data-team-scatter-clear>Clear selection</button></div>
+<p class="explore-scatter-guide-values" data-team-scatter-guide-values></p>
+<div class="explore-scatter-selection-teams" data-team-scatter-selection-teams></div>
+</section>
+<p class="note" data-team-scatter-hint hidden>Click a point to keep its details. Click a hollow circle to move the guides.</p>
 <p class="note" data-team-scatter-table-link><a href="{{.TeamTableURL}}" data-team-display="table">See every team's values in the comparison table</a>.</p>
 </div>
 <div data-team-table>
