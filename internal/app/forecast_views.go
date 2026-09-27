@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -52,6 +53,7 @@ type forecastPage struct {
 	FixedCount          int
 	Remaining           int
 	ScheduleNote        string
+	PositionScaleMax    string
 	Rows                []forecastRowView
 	Assumptions         []forecastAssumptionView
 	Teams               []forecastTeamOption
@@ -100,6 +102,7 @@ type forecastModelView struct {
 type forecastPositionView struct {
 	Position    int
 	Probability string
+	BarWidth    string
 }
 
 type forecastAssumptionView struct {
@@ -125,7 +128,22 @@ type forecastFixtureOption struct {
 	Away       teamNameView
 }
 
-func forecastRows(result simulation.Result, playoffPlaces int) []forecastRowView {
+func forecastRows(result simulation.Result, playoffPlaces int) ([]forecastRowView, string) {
+	maxPositionProbability := 0.0
+	for _, row := range result.Teams {
+		for _, probability := range row.PositionProbability {
+			if probability > maxPositionProbability {
+				maxPositionProbability = probability
+			}
+		}
+	}
+	scale := math.Ceil(maxPositionProbability*10-1e-9) / 10
+	if scale <= 0 {
+		scale = .1
+	}
+	if scale > 1 {
+		scale = 1
+	}
 	rows := make([]forecastRowView, 0, len(result.Teams))
 	for index, row := range result.Teams {
 		view := forecastRowView{
@@ -145,17 +163,17 @@ func forecastRows(result simulation.Result, playoffPlaces int) []forecastRowView
 			if probability < .0005 {
 				continue
 			}
-			view.PositionBreakdown = append(view.PositionBreakdown, forecastPositionView{Position: index + 1, Probability: percent(probability)})
+			view.PositionBreakdown = append(view.PositionBreakdown, forecastPositionView{Position: index + 1, Probability: percent(probability), BarWidth: fmt.Sprintf("%.1f%%", math.Min(100, probability/scale*100))})
 		}
 		rows = append(rows, view)
 	}
-	return rows
+	return rows, fmt.Sprintf("%.0f%%", scale*100)
 }
 
-func forecastComparisonRows(active simulation.Result, comparison *simulation.Result, playoffPlaces int) []forecastRowView {
-	rows := forecastRows(active, playoffPlaces)
+func forecastComparisonRows(active simulation.Result, comparison *simulation.Result, playoffPlaces int) ([]forecastRowView, string) {
+	rows, scale := forecastRows(active, playoffPlaces)
 	if comparison == nil {
-		return rows
+		return rows, scale
 	}
 	byID := map[string]simulation.TeamResult{}
 	for _, row := range comparison.Teams {
@@ -186,7 +204,7 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 		rows[i].PlayoffDeltaTone = comparisonTone(playoffDelta, true)
 		rows[i].ShieldDeltaTone = comparisonTone(shieldDelta, true)
 	}
-	return rows
+	return rows, scale
 }
 func comparisonChangeLabel(value float64, positive, negative string) string {
 	if value > -.05 && value < .05 {

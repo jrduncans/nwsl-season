@@ -280,6 +280,14 @@ of independent per-fixture percentages.
 | Shield | First-place share of the position distribution. |
 | Finish distribution | The 10th through 90th percentile finishing-position range and probability for every finishing place with non-zero probability. |
 
+Expand a team's finish distribution to see positions in ascending order, with a
+compact horizontal bar and the exact probability for each position. The bars
+share one scale across all teams in the displayed forecast. Its ceiling rounds
+the largest position probability on the page up to the next 10 percentage
+points (up to 100%); the small 0% and ceiling labels make that scale visible.
+This keeps team comparisons consistent while allowing a certain finish to use
+the full bar width.
+
 The table is sorted by expected points, then playoff chance, then top-four
 chance, followed by a stable team name/ID order. The full finish distribution
 is available from each team row, so the range of plausible finishes remains

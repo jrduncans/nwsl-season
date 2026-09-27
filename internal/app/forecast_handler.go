@@ -337,6 +337,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	if err != nil {
 		return forecastPage{}, err
 	}
+	rows, positionScaleMax := forecastComparisonRows(result, comparison, playoffPlaces(rules))
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
@@ -346,7 +347,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
-		Rows: forecastComparisonRows(result, comparison, playoffPlaces(rules)), Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules),
+		Rows: rows, PositionScaleMax: positionScaleMax, Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules),
 	}
 	for _, entry := range forecast.Catalog() {
 		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})
