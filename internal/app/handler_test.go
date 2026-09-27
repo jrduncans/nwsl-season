@@ -942,10 +942,13 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Season-long paths without outside help", "These paths may include matches after this slate", "id=\"clinching-team\"", "data-clinching-team-card data-clinching-team=\"alpha\"", "Can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{"Season-long paths without outside help", "These paths may include matches after this slate", `class="clinching-team-card"`, `src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`, "Can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
+	}
+	if strings.Contains(body, "data-clinching-team-filter") || strings.Contains(body, "Show scenarios for") {
+		t.Fatal("body contains the removed clinching team filter")
 	}
 	if strings.Contains(body, "Included matches") {
 		t.Error("body contains an irrelevant included slate")
@@ -959,9 +962,10 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 	store := fullFakeStore{
 		fakeStore:     fakeStore{season: data},
 		scenarioFound: &found,
-		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{
-			TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.Clinched,
-		}}},
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.Clinched},
+			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.Clinched},
+		}},
 	}
 	response := httptest.NewRecorder()
 	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
@@ -969,10 +973,13 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Recalculation pending.", "Already clinched", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the playoffs"} {
+	for _, value := range []string{"Recalculation pending.", "Already clinched the Shield", "Already clinched the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the Shield", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the playoffs"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
+	}
+	if got := strings.Count(body, `class="clinching-status-item"`); got != 2 {
+		t.Fatalf("clinched status rows = %d, want one row per achievement group", got)
 	}
 }
 
@@ -998,8 +1005,8 @@ func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	alphaCard := strings.Index(body, `data-clinching-team-card data-clinching-team="alpha"`)
-	bravoCard := strings.Index(body, `data-clinching-team-card data-clinching-team="bravo"`)
+	alphaCard := strings.Index(body, `<article class="clinching-team-card"><h3><span class="team-name" title="Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;">`)
+	bravoCard := strings.Index(body, `<article class="clinching-team-card"><h3><span class="team-name" title="Bravo FC">`)
 	if alphaCard < 0 || bravoCard < 0 {
 		t.Fatalf("no-help team cards missing; body=%s", body)
 	}
@@ -1019,6 +1026,7 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		fakeStore: fakeStore{season: data},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
 			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch, CanBeEliminated: true, EliminationClauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}}}}}},
+			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch, AlreadyEliminated: true}},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -1027,10 +1035,18 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Elimination scenarios", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
+	for _, value := range []string{"Included matches", "Elimination scenarios", "Already eliminated", "Bravo FC has already been eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
+	}
+	alreadyEliminated := strings.Index(body, "<h2>Already eliminated from the playoffs</h2>")
+	conditionalScenarios := strings.Index(body, "<h2>Elimination scenarios</h2>")
+	if alreadyEliminated < 0 || conditionalScenarios < 0 || alreadyEliminated > conditionalScenarios {
+		t.Fatal("confirmed eliminations are not shown before conditional elimination scenarios")
+	}
+	if strings.Contains(body[alreadyEliminated:conditionalScenarios], `class="clinching-opportunity`) {
+		t.Fatal("confirmed eliminations are rendered as large scenario cards")
 	}
 	if strings.Contains(body, "No teams can clinch during this slate.") {
 		t.Fatal("body hides the only actionable elimination scenario")

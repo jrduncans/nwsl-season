@@ -514,8 +514,8 @@ type clinchingPage struct {
 	NoHelp           []clinchingRowView
 	NoHelpTeams      []clinchingTeamView
 	Elimination      []clinchingRowView
-	AlreadyClinched  []clinchingRowView
-	ClinchingTeams   []teamNameView
+	Eliminated       []clinchingStatusGroupView
+	AlreadyClinched  []clinchingStatusGroupView
 }
 type clinchingRowView struct {
 	Team                               teamNameView
@@ -526,12 +526,16 @@ type clinchingRowView struct {
 	NoHelpFixtures                     string
 	NoHelpFixtureCount                 int
 	AchievementRank, StandingsPosition int
-	AlreadyEliminated                  bool
 }
 
 type clinchingTeamView struct {
 	Team  teamNameView
 	Paths []clinchingRowView
+}
+
+type clinchingStatusGroupView struct {
+	Achievement string
+	Teams       []teamNameView
 }
 
 func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {
