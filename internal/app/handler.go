@@ -154,7 +154,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	}
 	rules, _ = a.rulesForSeason(page.Season, page.Stage)
 	page.Title = page.Season + " clinching scenarios"
-	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, AlreadyClinched: []clinchingRowView{}, SlateGroups: []fixtureGroupView{}}
+	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, Eliminated: []clinchingStatusGroupView{}, AlreadyClinched: []clinchingStatusGroupView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
 	})
@@ -184,6 +184,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	for _, g := range data.Games {
 		games[g.ASAID] = g
 	}
+	alreadyClinchedRows := []clinchingRowView{}
 	qualification := map[string]cache.QualificationStatus{}
 	if store, ok := a.store.(interface {
 		QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error)
@@ -197,12 +198,12 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			for _, status := range value.Statuses {
 				qualification[status.TeamID+"\x00"+string(status.Achievement)] = status
 				if status.Status == clinching.Clinched {
-					view.AlreadyClinched = append(view.AlreadyClinched, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID], Groups: []clinchingGroupView{}, Necessary: []string{}})
+					alreadyClinchedRows = append(alreadyClinchedRows, clinchingRowView{Team: teamViews[status.TeamID], Achievement: achievementPhrase(status.Achievement), AchievementRank: status.TopK, StandingsPosition: standingsPositions[status.TeamID]})
 				}
 			}
 		}
 	}
-	sort.Slice(view.AlreadyClinched, func(i, j int) bool { return clinchingRowLess(view.AlreadyClinched[i], view.AlreadyClinched[j]) })
+	view.AlreadyClinched = groupClinchingStatusRows(alreadyClinchedRows)
 	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion)
 	if err != nil {
 		a.renderError(w, r, err)
@@ -232,12 +233,15 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view.SlateGroups = fixtureGroups(slateData, a.options.Location)
+	eliminatedRows := []clinchingRowView{}
 	for _, v := range snapshot.Results {
 		team := teamViews[v.TeamID]
 		achievement := achievementPhrase(v.Achievement)
-		if v.AlreadyEliminated || v.CanBeEliminated {
-			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupsWithHeadingTeams(v.EliminationClauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}, AlreadyEliminated: v.AlreadyEliminated}
-			if v.BudgetLimited() && !v.AlreadyEliminated {
+		if v.AlreadyEliminated {
+			eliminatedRows = append(eliminatedRows, clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID]})
+		} else if v.CanBeEliminated {
+			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupsWithHeadingTeams(v.EliminationClauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}}
+			if v.BudgetLimited() {
 				row.Limitation = "Scenario search was incomplete."
 			}
 			view.Elimination = append(view.Elimination, row)
@@ -273,8 +277,8 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(view.Actionable, func(i, j int) bool { return clinchingRowLess(view.Actionable[i], view.Actionable[j]) })
 	sort.Slice(view.NoHelp, func(i, j int) bool { return clinchingNoHelpRowLess(view.NoHelp[i], view.NoHelp[j]) })
 	sort.Slice(view.Elimination, func(i, j int) bool { return clinchingRowLess(view.Elimination[i], view.Elimination[j]) })
+	view.Eliminated = groupClinchingStatusRows(eliminatedRows)
 	view.NoHelpTeams = groupClinchingNoHelpRows(view.NoHelp)
-	view.ClinchingTeams = clinchingTeams(view.Actionable, view.NoHelp, view.Elimination)
 	a.render(w, "clinching", view)
 }
 
@@ -304,6 +308,31 @@ func clinchingNoHelpRowLess(left, right clinchingRowView) bool {
 	return clinchingRowLess(left, right)
 }
 
+func groupClinchingStatusRows(rows []clinchingRowView) []clinchingStatusGroupView {
+	sort.Slice(rows, func(i, j int) bool { return clinchingRowLess(rows[i], rows[j]) })
+	groups := []clinchingStatusGroupView{}
+	byAchievement := map[string]int{}
+	teamsByGroup := []map[string]bool{}
+	for index, row := range rows {
+		groupIndex, ok := byAchievement[row.Achievement]
+		if !ok {
+			groupIndex = len(groups)
+			byAchievement[row.Achievement] = groupIndex
+			groups = append(groups, clinchingStatusGroupView{Achievement: row.Achievement, Teams: []teamNameView{}})
+			teamsByGroup = append(teamsByGroup, map[string]bool{})
+		}
+		teamKey := row.Team.ID
+		if teamKey == "" {
+			teamKey = fmt.Sprintf("\x00%d", index)
+		}
+		if !teamsByGroup[groupIndex][teamKey] {
+			teamsByGroup[groupIndex][teamKey] = true
+			groups[groupIndex].Teams = append(groups[groupIndex].Teams, row.Team)
+		}
+	}
+	return groups
+}
+
 func groupClinchingNoHelpRows(rows []clinchingRowView) []clinchingTeamView {
 	groups := []clinchingTeamView{}
 	byTeam := map[string]int{}
@@ -317,21 +346,6 @@ func groupClinchingNoHelpRows(rows []clinchingRowView) []clinchingTeamView {
 		groups[index].Paths = append(groups[index].Paths, row)
 	}
 	return groups
-}
-
-func clinchingTeams(groups ...[]clinchingRowView) []teamNameView {
-	byID := map[string]teamNameView{}
-	for _, rows := range groups {
-		for _, row := range rows {
-			byID[row.Team.ID] = row.Team
-		}
-	}
-	teams := make([]teamNameView, 0, len(byID))
-	for _, team := range byID {
-		teams = append(teams, team)
-	}
-	sort.Slice(teams, func(i, j int) bool { return teams[i].Name < teams[j].Name })
-	return teams
 }
 
 type application struct {
