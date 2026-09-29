@@ -13,7 +13,8 @@ proof. The phase documents retain the design history:
 Forecast Lab completes the season 50,000 times using one selected, versioned
 score model. In every simulated season it preserves played results, samples a
 score for every remaining cached fixture, calculates the regular-season table,
-and aggregates the results.
+then plays the configured fixed-seed playoff bracket to a champion. It
+aggregates both regular-season and Championship outcomes.
 
 - Official standings contain only real completed results. A forecast is a
   model-based outlook, not an updated table.
@@ -33,8 +34,9 @@ flowchart TD
     C --> D["Prepare every remaining fixture once"]
     D --> E["Sample a complete season 50,000 times"]
     E --> F["Calculate the official total-points table for each season"]
-    F --> G["Aggregate points, positions, playoffs, and Shield chances"]
-    G --> H["Render the forecast and an optional model comparison"]
+    F --> G["Simulate the fixed-seed playoff bracket"]
+    G --> I["Aggregate points, positions, playoffs, Shield, and Championship chances"]
+    I --> H["Render the forecast and an optional model comparison"]
 ```
 
 The default model is currently **xG Poisson (schedule load)**
@@ -221,7 +223,9 @@ one score distribution for every remaining fixture. Each iteration then:
 2. samples one scoreline for every remaining fixture, honoring any fixed
    outcome;
 3. calculates a full table using the 2026 official total-points ordering; and
-4. adds each team's points and finishing position to its aggregate.
+4. adds each team's points and finishing position to its aggregate; and
+5. uses that table's seeds to play the configured playoff bracket and credits
+   the winner with one Championship.
 
 The official ordering uses points, goal difference, wins, goals scored,
 head-to-head points, and head-to-head goals scored. If those accessible rules
@@ -233,8 +237,34 @@ spurious probability advantage.
 The production default is 50,000 simulated seasons. The simulator checks the
 HTTP request context at least every 100 iterations, so cancelled requests stop
 instead of continuing to consume CPU. If there are no remaining fixtures, it
-calculates the known final table once and gives that table the full simulation
-weight.
+reuses the known final table but still samples the playoffs in every iteration.
+A forecast without an eligible fixed bracket retains the single-table shortcut.
+
+### Playoff assumptions
+
+The [2026 competition rules](https://images.nwslsoccer.com/image/private/t_q-good/prd/tstudhfledlk7z8ygtzd.pdf)
+define an eight-team bracket. Quarterfinals pair 1–8, 4–5,
+2–7, and 3–6; the first two winners meet and the last two winners meet in the
+semifinals. The higher seed gets the model's home advantage in those two
+rounds. The Championship has a designated venue, so the model samples either
+team as the nominal home side with equal probability. This removes a systematic
+home assignment advantage; it does not attempt to model a team's actual travel
+or local support at that venue. Venue changes in earlier rounds are likewise
+not known in advance.
+
+The model samples a 90-minute score for each playoff match. When that score is
+tied, it chooses the advancing team according to the model's relative
+90-minute win chances, normalized to exclude draws. This is an approximation
+for extra time and penalties, rather than a separate extra-time or shootout
+model. The selected score model is fitted to completed regular-season data
+once. Playoff results do not refit it. The schedule-load model cannot know
+future playoff kickoffs, so its playoff pairings use its underlying xG venue
+rates without a recovery or accumulated-load adjustment.
+
+When the accessible standings rules cannot separate a tied seed group, each
+simulation randomly assigns that group's seeds. Every tied team therefore
+gets an equal opportunity at each seed without using the standings display
+fallback as a predictive tiebreak.
 
 ```mermaid
 flowchart TD
@@ -244,8 +274,11 @@ flowchart TD
     C --> D
     F --> D
     D --> G["Official total-points standings calculation"]
-    G --> H["Points and position histograms"]
-    H --> I["Expected values, 80% intervals, and probabilities"]
+    G --> H["Playoff bracket from those seeds"]
+    G --> I["Points and position histograms"]
+    H --> J["Championship counts"]
+    I --> K["Expected values, 80% intervals, and probabilities"]
+    J --> K
 ```
 
 ## Fixed outcomes are conditional scorelines
@@ -278,6 +311,7 @@ of independent per-fixture percentages.
 | Top 4 | Share of the position distribution that finishes first through fourth. |
 | Playoffs | Share of the position distribution inside the configured playoff field. |
 | Shield | First-place share of the position distribution. |
+| Championship | Share of simulated seasons in which the team wins the playoff bracket. |
 | Finish distribution | The 10th through 90th percentile finishing-position range and probability for every finishing place with non-zero probability. |
 
 Expand a team's finish distribution to see positions in ascending order, with a
@@ -298,10 +332,10 @@ visible without presenting an average finishing position as a literal outcome.
 An optional comparison runs the second selected model with the same teams,
 fixtures, fixed outcomes, iteration count, and playoff rules. The table keeps
 the active model as the main row and shows the comparison metrics plus
-`comparison − active` deltas:
+`active − comparison` deltas:
 
 - expected-point deltas are shown to one decimal; and
-- top-4, playoff, and Shield deltas are percentage points.
+- top-4, playoff, Shield, and Championship deltas are percentage points.
 
 The models do not share forced random score samples. Each model has its own
 deterministic seed because their score distributions are different. The
@@ -372,7 +406,8 @@ probabilities never replace those badges or conditions.
   adds the selected schedule adjustment.
 - [`internal/simulation/simulation.go`](../internal/simulation/simulation.go)
   prepares complete seasons, conditionally samples fixed outcomes, handles
-  unresolved ties, and aggregates results.
+  unresolved ties, and aggregates results. [`internal/simulation/playoffs.go`](../internal/simulation/playoffs.go)
+  advances the configured bracket and samples knockout winners.
 - [`internal/simulation/seed.go`](../internal/simulation/seed.go) creates the
   canonical deterministic seed.
 - [`internal/forecaststate/state.go`](../internal/forecaststate/state.go)

@@ -247,18 +247,24 @@ th:nth-child(2) { text-align: left; }
 .forecast-meta div { display: flex; align-items: baseline; gap: .35rem; padding: 0 .85rem; border-left: 1px solid var(--line); }.forecast-meta div:first-child { padding-left: 0; border-left: 0; }.forecast-meta dt { font-weight: 700; }.forecast-meta dd { margin: 0; color: var(--ink); font-weight: 800; }
 .forecast-results, .forecast-comparison, .forecast-scenario, .forecast-builder { margin-top: 2.25rem; }
 .forecast-cutline { margin: 0 0 .35rem; padding: .3rem .55rem; border-radius: .3rem; color: var(--green); background: var(--green-soft); font-size: .875rem; }
-.forecast-table { min-width: 60rem; table-layout: fixed; }
+.forecast-table { min-width: 0; table-layout: auto; }
 .forecast-scroll-hint { display: none; }
 .forecast-table .forecast-rank { width: 3rem; color: var(--muted); text-align: center; }
-.forecast-table th:nth-child(2) { width: 26%; }
+.forecast-table thead th { white-space: normal; }
+.forecast-table th:nth-child(2) { width: 26%; min-width: 10rem; }
+.forecast-table th:nth-child(3) { min-width: 6rem; }
+.forecast-table :is(th, td):nth-child(n+4) { min-width: calc(6ch + 1.2rem); }
 .forecast-table td:nth-child(3), .forecast-table td:nth-child(4), .forecast-table td:nth-child(5) { width: 16%; }
 .forecast-table th:nth-child(2) { text-align: left; }
+.forecast-table-with-championship th:nth-child(2) { width: 22%; }
+.forecast-table-with-championship td:nth-child(3), .forecast-table-with-championship td:nth-child(4), .forecast-table-with-championship td:nth-child(5) { width: 14%; }
 .forecast-playoff-line th, .forecast-playoff-line td { border-bottom: 3px solid var(--green); }
 .forecast-team { display: grid; gap: .3rem; min-width: 0; }
 .forecast-team .team-name { max-width: 100%; overflow: hidden; }
 .forecast-team .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .forecast-range { display: block; color: var(--muted); font-size: .8rem; }
 .forecast-probability-track { display: block; width: 100%; height: .35rem; margin-top: .35rem; overflow: hidden; border-radius: 1rem; background: #e7ece8; }
+.forecast-table .forecast-probability-track { width: clamp(6ch, 8vw, 7rem); margin-left: auto; }
 .forecast-probability-track > span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
 .forecast-distribution summary, .forecast-method summary { cursor: pointer; color: var(--green); font-size: .85rem; font-weight: 700; }
 .forecast-distribution-range { margin: .4rem 0 .25rem; color: var(--muted); font-size: .75rem; font-weight: 700; }
@@ -276,6 +282,9 @@ th:nth-child(2) { text-align: left; }
 .forecast-comparison-direction { max-width: 50rem; margin: 0; color: var(--ink); }
 .forecast-comparison .table-scroll { margin-top: 1rem; background: var(--panel); }
 .forecast-comparison-table { min-width: 62rem; }
+.forecast-comparison-with-championship { min-width: 69rem; table-layout: fixed; }
+.forecast-comparison-with-championship th:last-child { white-space: normal; }
+.forecast-comparison-with-championship .forecast-comparison-values { white-space: normal; }
 .forecast-comparison-table th:first-child { width: 30%; text-align: left; }
 .forecast-comparison-table td { vertical-align: top; white-space: normal; }
 .forecast-comparison-values { display: block; margin-top: .15rem; color: var(--muted); font-size: .8rem; white-space: nowrap; }
@@ -496,3 +505,8 @@ th:nth-child(2) { text-align: left; }
 .explore-context-series dl { display: grid; grid-template-columns: minmax(6rem, auto) 1fr; gap: .5rem 1rem; }
 .explore-context-series dd { margin: 0; }
 .explore-context-series ul { padding-left: 1.1rem; margin-top: .3rem; }
+
+@media (max-width: 700px) {
+  .forecast-table { min-width: 0; }
+  .forecast-table :is(th, td):nth-child(n+4) { min-width: calc(6ch + .7rem); }
+}

@@ -1435,6 +1435,28 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	}
 }
 
+func TestForecastRendersChampionshipOddsWithEightTeamBracket(t *testing.T) {
+	data := testSeasonData()
+	for i := 0; i < 6; i++ {
+		data.Teams = append(data.Teams, standings.Team{ID: fmt.Sprintf("extra-%d", i), Name: fmt.Sprintf("Extra %d", i)})
+	}
+	rules := testRules(30)
+	rules.ExpectedTeams = 8
+	rules.Achievements[0].TopK = 8
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=results-poisson-v1&c=current-pace-v1", nil)
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: rules, ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, value := range []string{"<th scope=\"col\">Championship</th>", "<th scope=\"col\">Championship chance</th>", "Championship odds continue each simulated table", "Championship chances include a simulated playoff bracket"} {
+		if !strings.Contains(body, value) {
+			t.Errorf("body does not contain %q", value)
+		}
+	}
+}
+
 func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
 	data := catalogSeasonData()
 	configured := testRules(17)

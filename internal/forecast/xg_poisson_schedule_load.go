@@ -96,6 +96,12 @@ func (p scheduleLoadXGPredictor) Distribution(game standings.Game) (Distribution
 	}, nil
 }
 
+// A future playoff pairing has no known kickoff, so recovery and accumulated
+// load cannot be calculated. Use the fitted venue model without that adjustment.
+func (p scheduleLoadXGPredictor) PostseasonDistribution(game standings.Game) (Distribution, error) {
+	return p.base.Distribution(game)
+}
+
 func congestion(load teamScheduleLoad) float64 {
 	return scheduleload.Congestion(scheduleload.Team{Recovery: load.recovery, ThirdWithinNine: load.third})
 }
