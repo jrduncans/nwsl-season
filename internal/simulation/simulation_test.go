@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -165,7 +166,11 @@ func TestSeedIgnoresInputOrderAndChangesWithState(t *testing.T) {
 
 func BenchmarkRun16TeamSeason(b *testing.B) {
 	teams, games := benchmarkSeason(120)
-	request := Request{Teams: teams, Games: games, Model: forecast.NewResultsPoissonV1(), Iterations: 50000, PlayoffPlaces: 8}
+	entry, ok := competition.Lookup("2026", "Playoffs")
+	if !ok {
+		b.Fatal("2026 playoff bracket unavailable")
+	}
+	request := Request{Teams: teams, Games: games, Model: forecast.NewResultsPoissonV1(), Iterations: 50000, PlayoffPlaces: 8, PlayoffBracket: entry.BracketFormat}
 	b.ResetTimer()
 	for range b.N {
 		if _, err := Run(context.Background(), request); err != nil {

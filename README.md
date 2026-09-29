@@ -30,7 +30,8 @@ from the cached fixtures when a season page or CLI report is requested.
 - Qualification proofs for the Shield, top-four seed, and playoff places.
 - Actionable clinching and elimination scenarios for the next slate.
 - Forecast Lab with Current Pace, Results Poisson, and xG Poisson models,
-  including the selected recovery-time and accumulated-load adjustment.
+  including the selected recovery-time and accumulated-load adjustment and
+  Championship odds from a simulated playoff bracket.
 - Shareable forecast URLs with fixed match outcomes and optional model comparison.
 - Explore workspace with interactive regular-season scoring trends, signed
   goals-minus-xG gaps, goal distributions, selected goal-bin trends, a sortable

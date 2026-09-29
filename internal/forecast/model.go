@@ -79,6 +79,12 @@ type Predictor interface {
 	SeedMaterial() []byte
 }
 
+// PostseasonPredictor can forecast a hypothetical playoff pairing whose
+// fixture and kickoff are not yet present in the regular-season schedule.
+type PostseasonPredictor interface {
+	PostseasonDistribution(standings.Game) (Distribution, error)
+}
+
 // Model fits completed results and exposes distributions for future fixtures.
 type Model interface {
 	Info() Info

@@ -38,6 +38,7 @@ type forecastPage struct {
 	ComparisonName      string
 	ComparisonID        string
 	PlayoffPlaces       int
+	HasChampionship     bool
 	XGAvailable         int
 	XGCompleted         int
 	XGCoverage          string
@@ -68,31 +69,35 @@ type forecastPage struct {
 }
 
 type forecastRowView struct {
-	Rank                int
-	PlayoffLine         bool
-	Team                teamNameView
-	ExpectedPoints      string
-	PointsInterval      string
-	TopFourChance       string
-	TopFourWidth        string
-	PlayoffChance       string
-	PlayoffWidth        string
-	FinishInterval      string
-	ShieldChance        string
-	PositionBreakdown   []forecastPositionView
-	Comparison          *forecastRowMetrics
-	ExpectedPointsDelta string
-	TopFourDelta        string
-	PlayoffDelta        string
-	ShieldDelta         string
-	PointsDeltaTone     string
-	TopFourDeltaTone    string
-	PlayoffDeltaTone    string
-	ShieldDeltaTone     string
+	Rank                  int
+	PlayoffLine           bool
+	Team                  teamNameView
+	ExpectedPoints        string
+	PointsInterval        string
+	TopFourChance         string
+	TopFourWidth          string
+	PlayoffChance         string
+	PlayoffWidth          string
+	FinishInterval        string
+	ShieldChance          string
+	ChampionshipChance    string
+	ChampionshipWidth     string
+	PositionBreakdown     []forecastPositionView
+	Comparison            *forecastRowMetrics
+	ExpectedPointsDelta   string
+	TopFourDelta          string
+	PlayoffDelta          string
+	ShieldDelta           string
+	ChampionshipDelta     string
+	PointsDeltaTone       string
+	TopFourDeltaTone      string
+	PlayoffDeltaTone      string
+	ShieldDeltaTone       string
+	ChampionshipDeltaTone string
 }
 type forecastRowMetrics struct {
-	ExpectedPoints, TopFourChance, PlayoffChance, ShieldChance string
-	PositionBreakdown                                          []forecastPositionView
+	ExpectedPoints, TopFourChance, PlayoffChance, ShieldChance, ChampionshipChance string
+	PositionBreakdown                                                              []forecastPositionView
 }
 type forecastModelView struct {
 	ID, Name, Detail, Inputs, Assumptions string
@@ -147,17 +152,19 @@ func forecastRows(result simulation.Result, playoffPlaces int) ([]forecastRowVie
 	rows := make([]forecastRowView, 0, len(result.Teams))
 	for index, row := range result.Teams {
 		view := forecastRowView{
-			Rank:           index + 1,
-			PlayoffLine:    index+1 == playoffPlaces,
-			Team:           teamName(row.Team),
-			ExpectedPoints: fmt.Sprintf("%.1f", row.ExpectedPoints),
-			PointsInterval: fmt.Sprintf("%d–%d", row.PointsLow, row.PointsHigh),
-			TopFourChance:  percent(row.TopFourProbability),
-			TopFourWidth:   percent(row.TopFourProbability),
-			PlayoffChance:  percent(row.PlayoffProbability),
-			PlayoffWidth:   percent(row.PlayoffProbability),
-			FinishInterval: fmt.Sprintf("%d–%d", row.PositionLow, row.PositionHigh),
-			ShieldChance:   percent(row.ShieldProbability),
+			Rank:               index + 1,
+			PlayoffLine:        index+1 == playoffPlaces,
+			Team:               teamName(row.Team),
+			ExpectedPoints:     fmt.Sprintf("%.1f", row.ExpectedPoints),
+			PointsInterval:     fmt.Sprintf("%d–%d", row.PointsLow, row.PointsHigh),
+			TopFourChance:      percent(row.TopFourProbability),
+			TopFourWidth:       percent(row.TopFourProbability),
+			PlayoffChance:      percent(row.PlayoffProbability),
+			PlayoffWidth:       percent(row.PlayoffProbability),
+			FinishInterval:     fmt.Sprintf("%d–%d", row.PositionLow, row.PositionHigh),
+			ShieldChance:       percent(row.ShieldProbability),
+			ChampionshipChance: percent(row.ChampionshipProbability),
+			ChampionshipWidth:  percent(row.ChampionshipProbability),
 		}
 		for index, probability := range row.PositionProbability {
 			if probability < .0005 {
@@ -181,7 +188,7 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 	}
 	for i := range rows {
 		other := byID[active.Teams[i].Team.ID]
-		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), TopFourChance: percent(other.TopFourProbability), PlayoffChance: percent(other.PlayoffProbability), ShieldChance: percent(other.ShieldProbability)}
+		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), TopFourChance: percent(other.TopFourProbability), PlayoffChance: percent(other.PlayoffProbability), ShieldChance: percent(other.ShieldProbability), ChampionshipChance: percent(other.ChampionshipProbability)}
 		for p, prob := range other.PositionProbability {
 			if prob > 0 {
 				metrics.PositionBreakdown = append(metrics.PositionBreakdown, forecastPositionView{Position: p + 1, Probability: percent(prob)})
@@ -195,14 +202,17 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 		topFourDelta := (source.TopFourProbability - other.TopFourProbability) * 100
 		playoffDelta := (source.PlayoffProbability - other.PlayoffProbability) * 100
 		shieldDelta := (source.ShieldProbability - other.ShieldProbability) * 100
+		championshipDelta := (source.ChampionshipProbability - other.ChampionshipProbability) * 100
 		rows[i].ExpectedPointsDelta = comparisonChangeLabel(pointsDelta, "more points", "fewer points")
 		rows[i].TopFourDelta = comparisonChangeLabel(topFourDelta, "pp higher", "pp lower")
 		rows[i].PlayoffDelta = comparisonChangeLabel(playoffDelta, "pp higher", "pp lower")
 		rows[i].ShieldDelta = comparisonChangeLabel(shieldDelta, "pp higher", "pp lower")
+		rows[i].ChampionshipDelta = comparisonChangeLabel(championshipDelta, "pp higher", "pp lower")
 		rows[i].PointsDeltaTone = comparisonTone(pointsDelta, true)
 		rows[i].TopFourDeltaTone = comparisonTone(topFourDelta, true)
 		rows[i].PlayoffDeltaTone = comparisonTone(playoffDelta, true)
 		rows[i].ShieldDeltaTone = comparisonTone(shieldDelta, true)
+		rows[i].ChampionshipDeltaTone = comparisonTone(championshipDelta, true)
 	}
 	return rows, scale
 }

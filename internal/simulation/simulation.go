@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecast"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -46,22 +47,24 @@ type Request struct {
 	Fixed             map[string]Outcome
 	Iterations        int
 	PlayoffPlaces     int
+	PlayoffBracket    *competition.BracketFormat
 }
 
 // TeamResult contains probability and uncertainty aggregates for one team.
 type TeamResult struct {
-	Team                standings.Team
-	ExpectedPoints      float64
-	PointsLow           int
-	PointsHigh          int
-	PointsProbability   []PointsProbability
-	ExpectedPosition    float64
-	PositionLow         int
-	PositionHigh        int
-	PositionProbability []float64
-	TopFourProbability  float64
-	PlayoffProbability  float64
-	ShieldProbability   float64
+	Team                    standings.Team
+	ExpectedPoints          float64
+	PointsLow               int
+	PointsHigh              int
+	PointsProbability       []PointsProbability
+	ExpectedPosition        float64
+	PositionLow             int
+	PositionHigh            int
+	PositionProbability     []float64
+	TopFourProbability      float64
+	PlayoffProbability      float64
+	ShieldProbability       float64
+	ChampionshipProbability float64
 }
 
 type PointsProbability struct {
@@ -71,12 +74,13 @@ type PointsProbability struct {
 
 // Result is a complete forecast result.
 type Result struct {
-	Model      forecast.Info
-	Iterations int
-	Seed       uint64
-	FixedCount int
-	Remaining  int
-	Teams      []TeamResult
+	Model                 forecast.Info
+	Iterations            int
+	Seed                  uint64
+	FixedCount            int
+	Remaining             int
+	Teams                 []TeamResult
+	ChampionshipSimulated bool
 }
 
 type preparedFixture struct {
@@ -86,9 +90,10 @@ type preparedFixture struct {
 }
 
 type accumulator struct {
-	team      standings.Team
-	points    map[int]float64
-	positions []float64
+	team          standings.Team
+	points        map[int]float64
+	positions     []float64
+	championships float64
 }
 
 // Run fits the model once and simulates the requested number of seasons.
@@ -108,6 +113,10 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		}
 		prepared.remaining[index].distribution = distribution
 	}
+	playoffs, err := preparePlayoffs(request, predictor)
+	if err != nil {
+		return Result{}, err
+	}
 
 	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, predictor.SeedMaterial())
 	// #nosec G404 G115 -- a stable seed makes equivalent cached forecasts reproducible; the signed conversion preserves its bits.
@@ -117,22 +126,33 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		byID[team.ID] = &accumulator{team: team, points: map[int]float64{}, positions: make([]float64, len(request.Teams))}
 	}
 
-	if len(prepared.remaining) == 0 {
+	if len(prepared.remaining) == 0 && playoffs == nil {
 		table := standings.Calculate(request.Teams, prepared.completed, standings.OfficialTotalRules())
 		accumulateTable(table, byID, request.PlayoffPlaces, float64(request.Iterations))
 	} else {
+		var knownTable []standings.TableRow
+		if len(prepared.remaining) == 0 {
+			knownTable = standings.Calculate(request.Teams, prepared.completed, standings.OfficialTotalRules())
+		}
 		for iteration := 0; iteration < request.Iterations; iteration++ {
 			if iteration%100 == 0 {
 				if err := ctx.Err(); err != nil {
 					return Result{}, err
 				}
 			}
-			games, err := simulatedGames(prepared.completed, prepared.remaining, rng)
-			if err != nil {
-				return Result{}, err
+			table := knownTable
+			if len(prepared.remaining) != 0 {
+				games, err := simulatedGames(prepared.completed, prepared.remaining, rng)
+				if err != nil {
+					return Result{}, err
+				}
+				table = standings.Calculate(request.Teams, games, standings.OfficialTotalRules())
 			}
-			table := standings.Calculate(request.Teams, games, standings.OfficialTotalRules())
 			accumulateTable(table, byID, request.PlayoffPlaces, 1)
+			if playoffs != nil {
+				champion := playoffs.champion(table, rng)
+				byID[champion].championships++
+			}
 		}
 	}
 
@@ -142,12 +162,13 @@ func Run(ctx context.Context, request Request) (Result, error) {
 	}
 	sortTeamResults(rows)
 	return Result{
-		Model:      request.Model.Info(),
-		Iterations: request.Iterations,
-		Seed:       seed,
-		FixedCount: len(request.Fixed),
-		Remaining:  len(prepared.remaining),
-		Teams:      rows,
+		Model:                 request.Model.Info(),
+		Iterations:            request.Iterations,
+		Seed:                  seed,
+		FixedCount:            len(request.Fixed),
+		Remaining:             len(prepared.remaining),
+		Teams:                 rows,
+		ChampionshipSimulated: playoffs != nil,
 	}, nil
 }
 
@@ -326,6 +347,7 @@ func addPosition(accumulator *accumulator, position int, weight float64) {
 func resultFromAccumulator(value *accumulator, iterations, playoffPlaces int) TeamResult {
 	total := float64(iterations)
 	result := TeamResult{Team: value.team, PositionProbability: make([]float64, len(value.positions))}
+	result.ChampionshipProbability = value.championships / total
 	for points, count := range value.points {
 		result.ExpectedPoints += float64(points) * count / total
 	}

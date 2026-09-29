@@ -28,6 +28,23 @@ import (
 
 const defaultForecastIterations = 50000
 
+func forecastPlayoffBracket(season string, places int) *competition.BracketFormat {
+	entry, ok := competition.Lookup(season, "Playoffs")
+	if !ok || entry.BracketFormat == nil || entry.BracketFormat.AdvancementPolicy != competition.AdvancementFixed {
+		return nil
+	}
+	seeds := 0
+	for _, slot := range entry.BracketFormat.Slots {
+		if slot.SeedPair != nil {
+			seeds += 2
+		}
+	}
+	if seeds != places {
+		return nil
+	}
+	return entry.BracketFormat
+}
+
 // PrecacheForecasts calculates the baseline (zero fixed assumptions) result
 // for every Forecast Lab model and stores each result in this application's
 // process-local forecast cache. It is intended for server startup; individual
@@ -86,6 +103,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	venue := forecastVenueSample(data)
 	games := standingsGames(data.Games)
 	places := playoffPlaces(rules)
+	bracket := forecastPlayoffBracket(a.options.CurrentSeason, places)
 	entries := forecast.Catalog()
 	modelCount = len(entries)
 	// Warm the model selected by a bare Forecast Lab URL first, so a startup
@@ -96,7 +114,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	for _, entry := range entries {
 		request := simulation.Request{
 			Teams: data.Teams, Games: games, XGoals: xgoals, HistoricalVenue: venue,
-			Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places,
+			Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places, PlayoffBracket: bracket,
 		}
 		tasks = append(tasks, forecastTask{
 			key:     forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places),
@@ -220,11 +238,12 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 	xgoals := forecastXGoals(data)
 	venue := forecastVenueSample(data)
 	places := playoffPlaces(rules)
-	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places}
+	bracket := forecastPlayoffBracket(season, places)
+	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: active.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places, PlayoffBracket: bracket}
 	tasks := []forecastTask{{key: forecastResultKey(data, state, active.Model.Info().ID, a.options.ForecastIterations, places), request: request}}
 	if state.ComparisonModelID != "" {
 		entry, _ := forecast.Lookup(state.ComparisonModelID)
-		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places}})
+		tasks = append(tasks, forecastTask{key: forecastResultKey(data, state, entry.Model.Info().ID, a.options.ForecastIterations, places), request: simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: xgoals, HistoricalVenue: venue, Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places, PlayoffBracket: bracket}})
 	}
 	results, err := a.forecasts.results(withForecastTrigger(r.Context(), "http"), tasks)
 	if err != nil {
@@ -261,7 +280,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 // are refreshed independently and affect the xG model without changing the
 // fixture snapshot.
 func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID string, iterations, playoffPlaces int) string {
-	parts := []string{"forecast-result-v1", data.FixtureSnapshotID, modelID, strconv.Itoa(iterations), strconv.Itoa(playoffPlaces)}
+	parts := []string{"forecast-result-v2", data.FixtureSnapshotID, modelID, strconv.Itoa(iterations), strconv.Itoa(playoffPlaces)}
 	// A database Season result always supplies FixtureSnapshotID. Include the
 	// simulator's actual inputs as well so alternate Store implementations
 	// cannot accidentally share results when that field is absent.
@@ -347,7 +366,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
-		Rows: rows, PositionScaleMax: positionScaleMax, Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules),
+		Rows: rows, PositionScaleMax: positionScaleMax, Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules), HasChampionship: result.ChampionshipSimulated,
 	}
 	for _, entry := range forecast.Catalog() {
 		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})
