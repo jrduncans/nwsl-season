@@ -24,9 +24,11 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
-# Explore scoring, team history/records/coverage, sorting across all tables, and single-snapshot pages.
+# Explore scoring, team rankings/direction/ties/units/league xG coverage, team history/records/coverage, venue dates/DST, scoring balance, actual/xG comparisons and rolling/xG gaps,
+# sorting across sortable tables, and single-snapshot pages.
 .PHONY: test-explore
 test-explore:
+	go test ./internal/fixtures
 	go test ./internal/history
 	go test ./internal/app -run '^TestExplore'
 

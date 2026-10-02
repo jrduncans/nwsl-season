@@ -56,7 +56,10 @@ for focused diagnosis.
 ## Documentation routing
 
 - For Explore charts or calculations, read [the History guide](docs/history-logic-guide.md).
-  Run `make test-explore` for scoring, team history/record holders and coverage, sorting across all Explore tables, and cache-only page checks.
+  Run `make test-explore` for scoring, team rankings (direction, ties, units and league xG coverage), team history/record holders and coverage,
+  season trends (scored/allowed balance, actual/xG comparisons, retained Data
+  preferences, mode selections, played order, venue-local dates and DST, venue orientation, full rolling windows
+  and xG gaps), sorting across sortable Explore tables, and cache-only page checks.
 - For sync, cache, scheduler, and ASA-loading work, read the current
   [synchronization guide](docs/sync-logic-guide.md) and
   [ASA-loading index](docs/asa-loading/README.md).

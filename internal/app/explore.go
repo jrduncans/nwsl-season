@@ -13,6 +13,8 @@ type explorePage struct {
 	exploreDistributionView
 	exploreTeamsView
 	exploreTeamHistoryView
+	exploreSeasonTrendView
+	exploreTeamRankingsView
 	View                              string
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
@@ -39,8 +41,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if view == "" {
 		view = "trend"
 	}
-	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" {
-		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, or team-history"))
+	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" && view != "season-trend" && view != "team-rankings" {
+		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, team-history, season-trend, or team-rankings"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -59,6 +61,12 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
+	page.exploreSeasonTrendView, err = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
+	if err != nil {
+		a.renderHistoryBadRequest(w, r, err)
+		return
+	}
+	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
 	page.Title = "Explore"
 	page.ScriptPath = relativeURL(r.URL.Path, "/static/explore.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")

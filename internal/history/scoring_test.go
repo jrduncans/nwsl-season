@@ -114,12 +114,28 @@ func TestScoringCoverageValidation(t *testing.T) {
 	if got.GoalBins[1] != 11 || got.TotalGoals != 11 {
 		t.Fatalf("orphan observation affected scoring = %+v", got)
 	}
+	for _, team := range got.Teams {
+		covered := 0
+		for _, match := range team.Matches {
+			if match.XGFor != nil && match.XGAgainst != nil {
+				covered++
+			}
+		}
+		if len(team.Matches) != team.Played || covered != team.XGCovered {
+			t.Fatalf("match series admitted invalid, unavailable, or mismatched xG: %+v", team)
+		}
+	}
 
 	disabled := testSeason("2016", games[:1], xg[:1], availableReadiness(cache.SourceScopeActive, cache.InventoryCompletenessUnknown))
 	disabled.Entry.Capabilities = []competition.Capability{competition.CapabilityFixtures}
 	got = oneSummary(t, disabled)
 	if got.XGCovered != 0 || got.XPointsCovered != 0 || got.XGPerMatch != nil {
 		t.Fatalf("capability-disabled xG = %+v", got)
+	}
+	for _, team := range got.Teams {
+		if team.Matches[0].XGFor != nil || team.Matches[0].XGAgainst != nil {
+			t.Fatal("match series ignored independent xG capability")
+		}
 	}
 }
 
