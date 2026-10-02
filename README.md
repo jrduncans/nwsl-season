@@ -97,8 +97,8 @@ seasons use the default Forecast Lab model's projected final standings for
 playoff and top-4 groups, and highest Shield probability for the favorite. Group averages weight by recorded
 match appearances. Means, membership, and coverage are inspectable without
 JavaScript. Per-match values and 3/5/10-match rolling averages use separate
-line-chart modes. Missing xG or xPoints leaves gaps in its affected matches and
-full rolling windows.
+line-chart modes. Before a rolling window fills, averages use all matches played
+so far. Missing xG or xPoints leaves gaps in every affected window.
 
 Useful endpoints:
 

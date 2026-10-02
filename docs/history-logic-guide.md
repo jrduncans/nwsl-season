@@ -334,16 +334,17 @@ with verified location evidence. These presentation corrections do not modify
 the source cache or trigger ASA requests.
 
 A trailing average includes the current match and the
-preceding window-minus-one matches, starts only at the first full window, and
-resets each season. An xG or xPoints average requires every observation within that exact
-played-match window; missing expected data breaks that rolling line until it
+preceding window-minus-one matches and resets each season. Before the first full
+window, it averages all matches played so far: the effective window is
+`min(matches played, selected window)`. An xG or xPoints average requires every observation within that exact
+played-match window, including the shorter initial windows; missing expected data breaks that rolling line until it
 leaves the window, without hiding actual values or skipping a match. Values remain unrounded until
-display. Before the first full window, dotted lead-ins show individual match
-values, including for seasons shorter than the selected window; they never
-stand in for missing full-window averages later in the season. Tooltips and
-keyboard announcements identify those early values as individual matches.
-The season-trend values table stays in match order and shows the same early
-match values, identified by its caption.
+display. Before the first full window, dotted lead-ins show expanding averages, including
+for seasons shorter than the selected window; they never stand in for missing
+full-window averages later in the season. Tooltips and keyboard announcements
+identify the actual match count and selected window for early averages.
+The season-trend values table stays in match order and shows the same expanding
+averages, identified by its caption.
 
 The default scoring balance puts scored and allowed together at each match's
 exact horizontal position. Scored uses a solid green line with circles; allowed
@@ -421,7 +422,7 @@ rounding. Expected best values require complete coverage for every league team
 for that metric; a team without recorded matches also withholds Best. Other
 means can remain available from partial expected observations, with coverage
 counts. Unavailable comparisons have a visible explanation and do not fill line gaps
-or invent short windows.
+or shorten windows to bypass missing observations.
 
 Scored and Allowed have separate panels with shared nonnegative axes. Points
 has one panel. Other horizontal gridlines are hidden in Benchmarks. Numeric
@@ -463,8 +464,8 @@ layouts; scored/allowed at the same match position; matched axes across paired p
 all series/view/mode/window selections and restored Data preferences; pointer/touch and keyboard match
 inspection; labeled team and comparison means, reference label collisions, panel-specific tooltips and reference holder names, group membership details, match-weighted league arithmetic,
 identical league scored/allowed references, independent xG/xPoints coverage counts, unchanged means across
-modes/windows, original units, one-match values and insufficient-window states,
-zero, ties, and negative values; solid core series and dotted raw lead-ins,
+modes/windows, original units, one-match values and expanding averages before full windows,
+zero, ties, and negative values; solid core series and dotted expanding-average lead-ins,
 including tooltip/keyboard identification and fallback tables; xG line gaps; short windows and
 empty seasons; chronological table and no-script GET fallback; direct URLs and
 Back/Forward; and switching views without another document/data request (team
