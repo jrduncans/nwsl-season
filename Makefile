@@ -25,7 +25,7 @@ test:
 	go test ./...
 
 # Explore scoring, team rankings/direction/ties/units/league xG coverage, team history/records/coverage, venue dates/DST, scoring balance, actual/xG comparisons and rolling/xG gaps,
-# sorting across sortable tables, and single-snapshot pages.
+# single-basis team/league season means/original units/xG counts, sorting across sortable tables, and single-snapshot pages.
 .PHONY: test-explore
 test-explore:
 	go test ./internal/fixtures

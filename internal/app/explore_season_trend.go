@@ -35,11 +35,12 @@ type exploreTrendColumn struct {
 }
 
 type exploreSeasonTrendView struct {
-	TrendMode, TrendWindow, TrendView, TrendCaption              string
-	TrendColumns                                                 []exploreTrendColumn
-	TrendTeam                                                    teamNameView
-	TrendRows                                                    []exploreSeasonTrendRow
-	TrendMissingXG, TrendUndated, TrendVenueUnknown, TrendActive bool
+	TrendMode, TrendWindow, TrendView, TrendCaption, TrendAverageSeries string
+	TrendAverageReference                                               string
+	TrendColumns                                                        []exploreTrendColumn
+	TrendTeam                                                           teamNameView
+	TrendRows                                                           []exploreSeasonTrendRow
+	TrendMissingXG, TrendUndated, TrendVenueUnknown, TrendActive        bool
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
@@ -73,15 +74,21 @@ func exploreMatches(matches []history.TeamMatch, names map[string]string) []expl
 }
 
 func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamNameView) (exploreSeasonTrendView, error) {
-	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendTeam: selected}
+	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendAverageReference: "team", TrendTeam: selected}
+	page.TrendAverageSeries = "goals"
+	if query.Get("series") == "xg" {
+		page.TrendAverageSeries = "xg"
+	}
 	for _, field := range []struct {
 		key     string
 		value   *string
 		allowed []string
 	}{
 		{"trend-mode", &page.TrendMode, []string{"match", "rolling"}},
-		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference"}},
+		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "relative"}},
 		{"window", &page.TrendWindow, []string{"3", "5", "10"}},
+		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg"}},
+		{"average-reference", &page.TrendAverageReference, []string{"team", "league"}},
 	} {
 		if values, present := query[field.key]; present {
 			if len(values) != 1 || !slices.Contains(field.allowed, values[0]) {
@@ -96,8 +103,11 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	}
 	// Comparison views always include actual and xG. The query still retains
 	// the Data preference for returning to scoring balance or another team view.
-	if page.TrendView != "balance" {
+	switch page.TrendView {
+	case "compare", "difference":
 		series = "both"
+	case "relative":
+		series = page.TrendAverageSeries
 	}
 	measures := []int{0, 1}
 	if page.TrendView == "difference" {
@@ -115,7 +125,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: labels[measure], Measure: measure, Expected: expected})
 		}
 	}
-	if page.TrendView == "compare" {
+	if page.TrendView == "compare" || page.TrendView == "relative" {
 		// Keep the actual/xG pair for each panel adjacent in the fallback table.
 		slices.SortStableFunc(page.TrendColumns, func(a, b exploreTrendColumn) int { return a.Measure - b.Measure })
 	}
