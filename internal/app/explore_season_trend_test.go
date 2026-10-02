@@ -205,7 +205,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 			}
 		}
 		if strings.Contains(path, "trend-view=relative") {
-			for _, fragment := range []string{`value="relative" selected`, `data-trend-data-control hidden`, `data-trend-average-data-control>`, `Season averages</option>`, `Dotted references show each series`, `in the original units`} {
+			for _, fragment := range []string{`value="relative" selected`, `data-trend-data-control hidden`, `data-trend-average-data-control>`, `Benchmarks</option>`, `References show each series`, `in the original units`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("relative fallback missing %s", fragment)
 				}
@@ -217,7 +217,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 			}
 			_, referencePicker, _ := strings.Cut(body, `<select name="average-reference" form="season-trend-controls" data-trend-reference>`)
 			referencePicker, _, _ = strings.Cut(referencePicker, `</select>`)
-			reference := "team"
+			reference := "league"
 			if strings.Contains(path, "average-reference=league") {
 				reference = "league"
 			}
@@ -309,7 +309,7 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 	if err != nil || defaults.TrendView != "balance" || defaults.TrendMode != "rolling" || defaults.TrendWindow != "5" || len(defaults.TrendColumns) != 4 {
 		t.Fatalf("invalid scoring balance default: %+v, %v", defaults, err)
 	}
-	for _, view := range []string{"balance", "compare", "difference", "relative"} {
+	for _, view := range []string{"balance", "compare", "difference", "points", "relative"} {
 		for _, series := range []string{"goals", "xg", "both"} {
 			for _, mode := range []string{"match", "rolling"} {
 				for _, window := range []int{3, 5, 10} {
@@ -329,6 +329,11 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 						if !slices.Equal(page.TrendColumns, want) {
 							t.Fatalf("comparison must pair actual and xG per metric: %v", page.TrendColumns)
 						}
+					} else if view == "points" {
+						measures = []int{3}
+						if !slices.Equal(page.TrendColumns, []exploreTrendColumn{{"Points", 3, false}, {"xPoints", 3, true}}) {
+							t.Fatalf("points columns = %v", page.TrendColumns)
+						}
 					} else if view == "relative" {
 						if strings.Contains(page.TrendColumns[0].Label, "vs average") || page.TrendColumns[0].Measure != 0 || page.TrendColumns[len(page.TrendColumns)-1].Measure != 1 {
 							t.Fatalf("relative columns must pair bases within scored/allowed: %v", page.TrendColumns)
@@ -338,7 +343,7 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					}
 					wantColumns := len(measures)
 					effectiveSeries := series
-					if view == "compare" || view == "difference" {
+					if view == "compare" || view == "difference" || view == "points" {
 						effectiveSeries = "both"
 					}
 					if view == "relative" && effectiveSeries == "both" {
@@ -347,7 +352,7 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					if effectiveSeries == "both" {
 						wantColumns *= 2
 					}
-					if len(page.TrendColumns) != wantColumns || page.TrendMissingXG != (effectiveSeries != "goals") {
+					if len(page.TrendColumns) != wantColumns || page.TrendMissingXG != (view != "points" && effectiveSeries != "goals") {
 						t.Fatalf("wrong series selection: %+v", page)
 					}
 					for end, row := range page.TrendRows {
@@ -392,13 +397,13 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 	zero, one, three := 0.0, 1.0, 3.0
 	matches := []exploreMatchRecord{
-		{Values: [3]exploreTeamValues{{Actual: 0, Expected: &zero}, {Actual: 2, Expected: &one}}},
-		{Values: [3]exploreTeamValues{{Actual: 4}, {Actual: 0}}},
-		{Values: [3]exploreTeamValues{{Actual: 2, Expected: &three}, {Actual: 1, Expected: &three}}},
+		{Values: [4]exploreTeamValues{{Actual: 0, Expected: &zero}, {Actual: 2, Expected: &one}}},
+		{Values: [4]exploreTeamValues{{Actual: 4}, {Actual: 0}}},
+		{Values: [4]exploreTeamValues{{Actual: 2, Expected: &three}, {Actual: 1, Expected: &three}}},
 	}
 	teams := exploreTeamsView{TeamSeason: "2026", TeamSeasons: []exploreTeamSeason{
 		{Season: "2026", Teams: []exploreTeamRecord{{ID: "alpha", Matches: matches}}},
-		{Season: "2025", Teams: []exploreTeamRecord{{ID: "alpha", Matches: []exploreMatchRecord{{Values: [3]exploreTeamValues{{Actual: 7, Expected: &zero}, {Actual: 4, Expected: &zero}}}}}}},
+		{Season: "2025", Teams: []exploreTeamRecord{{ID: "alpha", Matches: []exploreMatchRecord{{Values: [4]exploreTeamValues{{Actual: 7, Expected: &zero}, {Actual: 4, Expected: &zero}}}}}}},
 	}}
 	for _, selection := range []struct{ series, reference string }{{"goals", "team"}, {"xg", "team"}, {"goals", "league"}, {"xg", "league"}} {
 		series := selection.series
