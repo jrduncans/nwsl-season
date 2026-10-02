@@ -338,13 +338,19 @@ preceding window-minus-one matches, starts only at the first full window, and
 resets each season. An xG or xPoints average requires every observation within that exact
 played-match window; missing expected data breaks that rolling line until it
 leaves the window, without hiding actual values or skipping a match. Values remain unrounded until
-display. The season-trend values table intentionally stays in match order.
+display. Before the first full window, dotted lead-ins show individual match
+values, including for seasons shorter than the selected window; they never
+stand in for missing full-window averages later in the season. Tooltips and
+keyboard announcements identify those early values as individual matches.
+The season-trend values table stays in match order and shows the same early
+match values, identified by its caption.
 
 The default scoring balance puts scored and allowed together at each match's
 exact horizontal position. Scored uses a solid green line with circles; allowed
-uses an orange dashed line with open squares. These encodings stay consistent
+uses a solid orange line with open squares. These encodings stay consistent
 between goals and xG. Per-match lines connect successive recorded observations
-without curve smoothing, and rolling lines connect full-window averages.
+without curve smoothing. Rolling lines use dotted segments through the first
+full-window point, then solid segments between full-window averages.
 Missing xG breaks both types of xG line; it is never interpolated or bridged.
 
 In Scoring balance, selecting both goals and xG shows two vertically aligned,
@@ -353,11 +359,13 @@ instead shows Scored above Allowed, with actual goals and xG paired in each
 panel. Differential pairs goal differential and xG differential on one plot.
 Points vs xPoints uses the same actual/expected encodings on one plot.
 Comparison lines encode actual values with solid green circles and expected
-values with dashed purple diamonds. Each plot has at most two match series at identical
+values with solid brighter purple diamonds. The darker chart green and lighter
+purple also distinguish the solid series by brightness. Each plot has at most two match series at identical
 match positions. Two-panel views use identical match and value scales. Scored and
 allowed scales start at zero; differential uses symmetric signed limits. All
-panels use the selected mode and window. Empty panels explain missing xG or
-insufficient full windows while preserving available goals. There is no
+panels use the selected mode and window. Empty panels explain missing expected
+observations while preserving available goals and early
+individual match values. Each position has one value per series; there is no
 raw/rolling overlay mode.
 
 Benchmarks (`trend-view=relative`, retained for existing links) keeps per-match
@@ -456,7 +464,8 @@ all series/view/mode/window selections and restored Data preferences; pointer/to
 inspection; labeled team and comparison means, reference label collisions, panel-specific tooltips and reference holder names, group membership details, match-weighted league arithmetic,
 identical league scored/allowed references, independent xG/xPoints coverage counts, unchanged means across
 modes/windows, original units, one-match values and insufficient-window states,
-zero, ties, and negative values; xG line gaps; short windows and
+zero, ties, and negative values; solid core series and dotted raw lead-ins,
+including tooltip/keyboard identification and fallback tables; xG line gaps; short windows and
 empty seasons; chronological table and no-script GET fallback; direct URLs and
 Back/Forward; and switching views without another document/data request (team
 logos may load).

@@ -24,7 +24,7 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
-# Explore scoring, team rankings/direction/ties/units/league xG coverage, team history/records/coverage, venue dates/DST, scoring balance, actual/xG comparisons and rolling/xG gaps,
+# Explore scoring, team rankings/direction/ties/units/league xG coverage, team history/records/coverage, venue dates/DST, scoring balance, actual/xG comparisons, rolling/xG gaps and individual-match lead-ins,
 # points/xPoints and independent coverage, benchmark group cuts/ties/match weighting/best holders,
 # forecast-selected groups/Shield favorites/shared cache, panel-specific inspection and reference holder names, original units and coverage counts, sorting across sortable tables, and single-snapshot pages.
 .PHONY: test-explore

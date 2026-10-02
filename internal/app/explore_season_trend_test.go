@@ -62,7 +62,7 @@ func TestExploreSeasonTrendChronologyVenueAndPartialXG(t *testing.T) {
 			}
 		}
 		first, away := page.TrendRows[0], page.TrendRows[1]
-		if first.Opponent != "Bravo" || away.Venue != "Away" || away.Score != "1–3" || first.Date != "Mar 1, 2026" || away.Date != "Mar 1, 2026" || first.DisplayValues[0] != "Unavailable" || first.Values[0].Expected == nil || *first.Values[0].Expected != 0 {
+		if first.Opponent != "Bravo" || away.Venue != "Away" || away.Score != "1–3" || first.Date != "Mar 1, 2026" || away.Date != "Mar 1, 2026" || first.DisplayValues[0] != exploreTrendNumber(&first.Values[page.TrendColumns[0].Measure].Actual) || first.Values[0].Expected == nil || *first.Values[0].Expected != 0 {
 			t.Fatalf("date/venue/zero-xG/full-window semantics: %+v / %+v", first, away)
 		}
 		if away.Values[0].Actual != 1 || away.Values[1].Actual != 3 || away.Values[2].Actual != -2 || *away.Values[0].Expected != .5 || *away.Values[1].Expected != .1 || *away.Values[2].Expected != .4 {
@@ -263,7 +263,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal("known incomplete inventory must not produce a trend")
 			}
 		} else if strings.Contains(path, "season=2026") {
-			for _, fragment := range []string{`value="10" selected`, `value="xg" selected`, `value="rolling" selected`, `10-match trailing averages, per match.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
+			for _, fragment := range []string{`value="10" selected`, `value="xg" selected`, `value="rolling" selected`, `10-match trailing averages, per match; matches 1–9 show individual match values.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("direct URL/fallback missing %s", fragment)
 				}
@@ -358,7 +358,7 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					for end, row := range page.TrendRows {
 						for columnIndex, column := range page.TrendColumns {
 							start, count := end, 1
-							if mode == "rolling" {
+							if mode == "rolling" && end+1 >= window {
 								start, count = end+1-window, window
 							}
 							want, total, covered := "Unavailable", 0.0, start >= 0
@@ -446,8 +446,8 @@ func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 		}
 		query.Set("trend-mode", "rolling")
 		page, err = exploreSeasonTrend(query, teams, teamNameView{ID: "alpha"})
-		if err != nil || !slices.Equal(page.TrendRows[0].DisplayValues, []string{"Unavailable", "Unavailable"}) {
-			t.Fatalf("average references must not invent a full rolling window: %+v, %v", page, err)
+		if err != nil || !slices.Equal(page.TrendRows[0].DisplayValues, oneMatch) {
+			t.Fatalf("short seasons must show individual match values before a full rolling window: %+v, %v", page, err)
 		}
 	}
 }

@@ -138,10 +138,10 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		slices.SortStableFunc(page.TrendColumns, func(a, b exploreTrendColumn) int { return a.Measure - b.Measure })
 	}
 	page.TrendCaption = "Individual match values. Scores are shown from this team's perspective."
-	if page.TrendMode == "rolling" {
-		page.TrendCaption = page.TrendWindow + "-match trailing averages, per match. Scores are shown from this team's perspective."
-	}
 	window, _ := strconv.Atoi(page.TrendWindow)
+	if page.TrendMode == "rolling" {
+		page.TrendCaption = fmt.Sprintf("%s-match trailing averages, per match; matches 1–%d show individual match values. Scores are shown from this team's perspective.", page.TrendWindow, window-1)
+	}
 	for _, season := range teams.TeamSeasons {
 		if season.Season != teams.TeamSeason {
 			continue
@@ -161,13 +161,10 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match}
 				for _, column := range page.TrendColumns {
 					value := match.Values[column.Measure]
-					if page.TrendMode == "rolling" {
+					if page.TrendMode == "rolling" && index+1 >= window {
 						value = exploreRollingValue(team.Matches, index, column.Measure, window)
 					}
 					display := exploreTrendNumber(&value.Actual)
-					if page.TrendMode == "rolling" && index+1 < window {
-						display = "Unavailable"
-					}
 					if column.Expected {
 						display = exploreTrendNumber(value.Expected)
 					}

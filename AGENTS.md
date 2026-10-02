@@ -63,7 +63,7 @@ for focused diagnosis.
   and match weighting, forecast-selected groups/Shield favorites/shared cache,
   best-metric direction/holders, panel-specific inspection
   and reference holder names, original units and coverage counts, full rolling
-  windows and expected-data gaps), sorting across sortable Explore tables, and cache-only page checks.
+  windows, dotted individual-match lead-ins, solid core series and expected-data gaps), sorting across sortable Explore tables, and cache-only page checks.
 - For sync, cache, scheduler, and ASA-loading work, read the current
   [synchronization guide](docs/sync-logic-guide.md) and
   [ASA-loading index](docs/asa-loading/README.md).

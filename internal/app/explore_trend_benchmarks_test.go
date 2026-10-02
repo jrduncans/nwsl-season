@@ -211,8 +211,8 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 		if err != nil {
 			t.Fatal(err)
 		}
-		if page.TrendRows[0].DisplayValues[0] != "Unavailable" || page.TrendRows[4].DisplayValues[0] != "3.00" {
-			t.Fatal("points require full windows")
+		if !slices.Equal(page.TrendRows[0].DisplayValues, []string{"3.00", "0.00"}) || page.TrendRows[1].DisplayValues[1] != "Unavailable" || page.TrendRows[4].DisplayValues[0] != "3.00" {
+			t.Fatal("points must show early match values and then full windows, retaining missing xPoints")
 		}
 		if page.TrendRows[4].DisplayValues[1] == "Unavailable" && window == "3" {
 			t.Fatal("xPoints must recover when missing observation leaves the window")
