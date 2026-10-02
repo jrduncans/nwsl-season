@@ -89,7 +89,10 @@ final points. The older `/history/scoring` route remains available.
 Season trend follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
 Actual vs xG pairs actual and expected values in separate Scored and Allowed
-panels; Differential compares goal and xG differential on one plot. Per-match values and 3/5/10-match rolling averages use
+panels; Differential compares goal and xG differential on one plot. Season
+averages shows either Goals or xG, keeping Scored and Allowed in their original
+units with one labeled Team average or League average reference per panel.
+The league benchmark includes every team and weights by recorded matches. Per-match values and 3/5/10-match rolling averages use
 separate line-chart modes. Missing xG leaves gaps in affected matches and full
 rolling windows.
 

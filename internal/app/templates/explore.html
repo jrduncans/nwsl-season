@@ -188,17 +188,18 @@
 </section>
 <section data-panel="season-trend"{{if ne .View "season-trend"}} hidden{{end}} aria-labelledby="explore-season-trend-title">
 <h2 id="explore-season-trend-title">Scoring through the season (regular-season)</h2>
-<form method="get" data-season-trend-controls class="explore-team-controls">
+<form method="get" id="season-trend-controls" data-season-trend-controls class="explore-team-controls">
 <input type="hidden" name="view" value="season-trend">
 <label>Season <select name="season" data-trend-season{{if not .TeamSeasons}} disabled{{end}}>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team" data-trend-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-<label>View <select name="trend-view" data-trend-view><option value="balance"{{if eq .TrendView "balance"}} selected{{end}}>Scoring balance</option><option value="compare"{{if eq .TrendView "compare"}} selected{{end}}>Actual vs xG</option><option value="difference"{{if eq .TrendView "difference"}} selected{{end}}>Differential</option></select></label>
+<label>View <select name="trend-view" data-trend-view><option value="balance"{{if eq .TrendView "balance"}} selected{{end}}>Scoring balance</option><option value="compare"{{if eq .TrendView "compare"}} selected{{end}}>Actual vs xG</option><option value="difference"{{if eq .TrendView "difference"}} selected{{end}}>Differential</option><option value="relative"{{if eq .TrendView "relative"}} selected{{end}}>Season averages</option></select></label>
 <label data-trend-data-control{{if ne .TrendView "balance"}} hidden{{end}}>Data <select name="series" data-trend-series><option value="both"{{if eq .HistorySeries "both"}} selected{{end}}>Goals and xG</option><option value="goals"{{if eq .HistorySeries "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .HistorySeries "xg"}} selected{{end}}>xG</option></select></label>
+<label data-trend-average-data-control{{if ne .TrendView "relative"}} hidden{{end}}>Data <select name="average-series" data-trend-average-series><option value="goals"{{if eq .TrendAverageSeries "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .TrendAverageSeries "xg"}} selected{{end}}>xG</option></select></label>
 <label>Values <select name="trend-mode" data-trend-mode><option value="rolling"{{if eq .TrendMode "rolling"}} selected{{end}}>Rolling average</option><option value="match"{{if eq .TrendMode "match"}} selected{{end}}>Per match</option></select></label>
 <label data-trend-window-control{{if eq .TrendMode "match"}} hidden{{end}}>Window <select name="window" data-trend-window><option value="3"{{if eq .TrendWindow "3"}} selected{{end}}>3 matches</option><option value="5"{{if eq .TrendWindow "5"}} selected{{end}}>5 matches</option><option value="10"{{if eq .TrendWindow "10"}} selected{{end}}>10 matches</option></select></label>
 <button class="button" type="submit" data-trend-submit>Show season trend</button>
 </form>
-<p class="note" data-season-trend-note>Completed regular-season matches, in played order. {{if eq .TrendMode "rolling"}}Averages include the current match and require a full window.{{else}}Lines connect successive matches.{{end}} Dates are local to each match’s venue.</p>
+<p class="note" data-season-trend-note>Completed regular-season matches, in played order. {{if eq .TrendMode "rolling"}}Averages include the current match and require a full window.{{else}}Lines connect successive matches.{{end}} Dates are local to each match’s venue.{{if eq .TrendView "relative"}} Dotted references show each series’ {{if eq .TrendAverageReference "league"}}league{{else}}team{{end}} season mean in the original units. xG means use available matches.{{if eq .TrendAverageReference "league"}} The league includes this team and all recorded matches so far.{{end}}{{end}}</p>
 <p data-season-trend-empty{{if .TrendRows}} hidden{{end}}>No eligible recorded results for this team and season.</p>
 <div data-season-trend-results{{if not .TrendRows}} hidden{{end}}>
 <h3 data-trend-team-name>{{template "teamName" .TrendTeam}}</h3>
@@ -206,16 +207,19 @@
 <p class="explore-data-warning" data-trend-warning{{if not .TrendMissingXG}} hidden{{end}}>Some match xG is unavailable. Affected xG points and rolling windows leave gaps; goals remain available.</p>
 <p class="explore-data-warning" data-trend-venue-unknown{{if not .TrendVenueUnknown}} hidden{{end}}>Some venue dates are unavailable because the venue’s time zone is unknown. These matches still follow kickoff order.</p>
 <p class="explore-data-warning" data-trend-undated{{if not .TrendUndated}} hidden{{end}}>Some match dates are unavailable. Undated results appear last, ordered by fixture ID; their position may not reflect played order.</p>
+<div class="explore-team-controls" data-trend-reference-control{{if ne .TrendView "relative"}} hidden{{end}}><label>Reference <select name="average-reference" form="season-trend-controls" data-trend-reference><option value="team"{{if eq .TrendAverageReference "team"}} selected{{end}}>Team average</option><option value="league"{{if eq .TrendAverageReference "league"}} selected{{end}}>League average</option></select></label></div>
 <div data-season-trend-plot hidden>
 <div class="explore-legend" data-trend-legend></div>
 <section data-trend-goals-panel>
 <h4 class="explore-context-heading" data-trend-goals-title>Goals</h4>
+<p class="note" data-trend-goals-relative-note hidden>Above the average: more scored than usual. Below: fewer scored.</p>
 <p class="note" data-trend-goals-empty hidden></p>
 <div class="explore-chart-wrap explore-season-balance-wrap" data-trend-goals-wrap><canvas data-chart="season-trend" tabindex="0" role="img" aria-label="Goals scored and allowed through the regular season" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect matches. Escape clears the tooltip.</p>
 </section>
 <section data-trend-xg-panel>
 <h4 class="explore-context-heading" data-trend-xg-title>Expected goals (xG)</h4>
+<p class="note" data-trend-xg-relative-note hidden>Above the average: more conceded than usual. Below: fewer conceded.</p>
 <p class="note" data-trend-xg-empty hidden></p>
 <div class="explore-chart-wrap explore-season-balance-wrap" data-trend-xg-wrap><canvas data-chart="season-trend-xg" tabindex="0" role="img" aria-label="xG scored and allowed through the regular season" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect matches. Escape clears the tooltip.</p>
