@@ -11,10 +11,10 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
 Team performance offers Comparison chart, Gap chart, Outlier plot, Comparison
-table, and Team history as direct views. The charts and Comparison table show
+table, Season trend, and Team history as direct views. The charts and Comparison table show
 one selected measure; the Team history table shows all four.
 Each view heading states the regular-season scope.
-`view=trend|distribution|table|teams|team-history` selects the initial surface.
+`view=trend|distribution|table|teams|season-trend|team-history` selects the initial surface.
 JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
 in place, sorts numeric table columns from unrounded values, and restores those
 controls with Back/Forward.
@@ -213,6 +213,118 @@ missing-data warnings and `xG incomplete` or `xPoints incomplete` labels, the
 named Outlier plot omission note and empty state, sorting in both directions,
 no-script sorting, season/measure/units/display URLs, Back/Forward, and switching
 analyses without fetching new data.
+
+### Season trend
+
+`view=season-trend` follows a selected team's completed regular-season matches
+within `season=YYYY`. It shares the validated season, team identity, and
+`series=goals|xg|both` selections with other team views, defaulting to the newest
+eligible season, the first eligible team by name, and both series.
+`trend-view=balance|compare|difference` defaults to Scoring balance, showing
+scored and allowed together. Actual vs xG compares the two bases within Scored
+and Allowed panels; Differential compares goal and xG differential on one plot.
+The Data picker appears only in Scoring balance. Its preference stays in the
+URL and GET form while hidden, so returning to balance restores it; comparison
+and differential always include both bases. The season trend selection
+is independent of `measure` and `units` in other team views. The team picker retains IDs
+across seasons and uses their newest eligible names, while the heading and
+opponents use names from the selected season. A selected team without eligible
+results in a selected season stays selected with an explicit empty state.
+
+`trend-mode=match|rolling` defaults to rolling. `window=3|5|10` defaults to five
+matches; its control is hidden in per-match mode. Match values and rolling
+averages are separate modes, with lines and points in both. Blank, unsupported,
+or repeated trend views/modes/windows return 400. Selections update locally from the
+same single archive payload, with shareable URLs, Back/Forward, and a GET form
+fallback.
+
+The data reuse the scoring loop's validated results and paired xG observations
+and the same season eligibility as Team performance. Upcoming, abandoned, or
+invalid results do not enter the series; known incomplete inventory and other
+season integrity exclusions withhold the view. Home and away appearances are
+oriented to the selected team. Differential is scored minus allowed for both
+goals and xG. Individual xG observations remain available even when that team's
+season-wide xG comparison is unavailable. Invalid, missing, unavailable,
+wrong-team, or capability-disabled xG leaves null values, never zero.
+
+Match numbers follow kickoff instants, using `fixtures.ParseKickoff` for both
+RFC3339 and ASA’s `2006-01-02 15:04:05 MST` timestamps, so representation and
+offsets do not change order. Ties use fixture ID. Missing/invalid dates sort
+last by ID with an explicit warning that their position may not be played order.
+Dates display in the venue’s local calendar, using the cached fixture’s
+`stadium_id` and the checked-in IANA zone catalog in `internal/fixtures/venues.go`.
+Home/away teams, the browser’s zone, and server configuration do not choose the
+zone. Historical daylight-saving rules apply; embedded `time/tzdata` also makes
+this work without system zoneinfo. Unknown venues show `Venue date unavailable`
+and a separate notice, while valid kickoff instants still determine ordering.
+There is no UTC or usual-home-stadium fallback, including at neutral venues.
+
+The catalog covers all 49 entries from the [ASA NWSL stadia endpoint](https://app.americansocceranalysis.com/api/v1/nwsl/stadia),
+checked on 2026-10-01, including historical and alternate venues. ASA IDs and
+geographic fields are the primary source; entries with missing geographic fields
+also use official venue/club sources, including [Harvard’s Jordan Field](https://gocrimson.com/sports/2026/6/18/know-before-you-go.aspx),
+[Chicago’s Northwestern match notes](https://chicagostars.com/assets/2026/03/RS-M01-LA-vs-CHI-Match-Notes.pdf),
+[Seattle’s Memorial Stadium history](https://www.reignfc.com/news/letter-njx5x),
+[Fullerton’s Titan Stadium](https://fullertontitans.com/sports/2023/8/3/athletics-titan-stadium.aspx),
+[Osceola Heritage Park](https://www.osceola.org/Community/Parks-and-Public-Lands/Park-Hours-Rules-and-Reservations),
+and [Denver’s venues](https://www.denversummitfc.com/venues/).
+
+Two fixtures with missing cached stadium IDs have narrow, independently verified
+Inter&Co Stadium corrections: `Xj5YPveRMb` ([May 8, 2026 match report](https://www.orlandocitysc.com/pride/news/match-report-barbra-banda-scores-late-game-winner-as-pride-beat-the-courage-1-0))
+and `KXMeXv6vQ6` ([August 7, 2026 match report](https://www.orlandocitysc.com/pride/news/match-report-orlando-pride-fall-3-1-to-racing-louisville-fc)).
+Corrections apply only when the cached stadium ID is empty; a corrected source
+ID always takes precedence. Add new stadium mappings or fixture corrections only
+with verified location evidence. These presentation corrections do not modify
+the source cache or trigger ASA requests.
+
+A trailing average includes the current match and the
+preceding window-minus-one matches, starts only at the first full window, and
+resets each season. An xG average requires every observation within that exact
+played-match window; missing xG breaks the rolling line until it leaves the
+window, without hiding goals or skipping a match. Values remain unrounded until
+display. The season-trend values table intentionally stays in match order.
+
+The default scoring balance puts scored and allowed together at each match's
+exact horizontal position. Scored uses a solid green line with circles; allowed
+uses an orange dashed line with open squares. These encodings stay consistent
+between goals and xG. Per-match lines connect successive recorded observations
+without curve smoothing, and rolling lines connect full-window averages.
+Missing xG breaks both types of xG line; it is never interpolated or bridged.
+
+In Scoring balance, selecting both goals and xG shows two vertically aligned,
+separately titled panels; selecting one shows only that panel. Actual vs xG
+instead shows Scored above Allowed, with actual goals and xG paired in each
+panel. Differential pairs goal differential and xG differential on one plot.
+Comparison lines encode actual values with solid green circles and xG with
+dashed purple diamonds. Each plot has at most two lines at identical match
+positions. Two-panel views use identical match and value scales. Scored and
+allowed scales start at zero; differential uses symmetric signed limits. All
+panels use the selected mode and window. Empty panels explain missing xG or
+insufficient full windows while preserving available goals. There is no
+raw/rolling overlay mode.
+
+Pointer/touch inspection works by match position and shows all selected values
+for that match, including unavailable xG. Keyboard inspection advances one match
+at a time, with Home/End and Escape, and announces the same values. Tooltips
+include venue-local date, opponent, home/away, team-perspective score, and the
+exact match-number range for an average. A vertical guide identifies the match
+being inspected. The collapsed chronological Match values table follows the
+selected view, series, and averaging mode; it also works through the GET form
+without scripts.
+
+Run `make test-explore` for both kickoff formats, chronological ordering
+(including timezone offsets), venue-local midnight/DST boundaries, missing venue
+handling, venue orientation, all three trend views and retained Data preferences,
+all three windows, unrounded rolling arithmetic, missing xG and recovery,
+season eligibility, selection validation, fallback and single-snapshot
+regressions. The `season-trend` scenario in `TestHistoryPreview` provides 30
+matches per team, partial xG, and an empty season. Verify desktop and 390px
+layouts; scored/allowed at the same match position; matched axes across paired panels;
+all series/view/mode/window selections and restored Data preferences; pointer/touch and keyboard match
+inspection; zero, ties, and negative values; xG line gaps; short windows and
+empty seasons; chronological table and no-script GET fallback; direct URLs and
+Back/Forward; and switching views without another document/data request (team
+logos may load).
 
 ### Team history
 

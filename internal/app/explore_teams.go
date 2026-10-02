@@ -25,6 +25,7 @@ type exploreTeamRecord struct {
 	XPointsCovered int                  `json:"xPointsCovered"`
 	Values         [4]exploreTeamValues `json:"values"`
 	Totals         [4]exploreTeamValues `json:"totals"`
+	Matches        []exploreMatchRecord `json:"matches,omitempty"`
 }
 
 type exploreTeamSeason struct {
@@ -108,6 +109,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 				if row.Name == "" {
 					row.Name = team.TeamID
 				}
+				row.Matches = exploreMatches(team.Matches, names[summary.Season])
 				played := float64(team.Played)
 				row.Totals[0].Actual = float64(team.GoalsFor)
 				row.Totals[1].Actual = float64(team.GoalsAgainst)

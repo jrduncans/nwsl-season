@@ -11,6 +11,8 @@
   const teamUnits = root.querySelector('[data-team-units]');
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = root.querySelector('[data-history-measure]');
+  const trendControls = root.querySelector('[data-season-trend-controls]');
+  trendControls.querySelector('[data-trend-submit]').hidden = true;
   const metric = root.querySelector('[data-metric]');
   const distributionBin = root.querySelector('[data-distribution-bin]');
   const status = root.querySelector('[data-chart-status]');
@@ -103,7 +105,7 @@
       for (let index = 0; index < chart.data.labels.length; index++) {
         chart.data.datasets.forEach((dataset, datasetIndex) => {
           const value = dataset.data[index];
-          if (chart.isDatasetVisible(datasetIndex) && value != null && (!dataset.keyboardOnce || index === 0)) marks.push({datasetIndex, index});
+          if (chart.isDatasetVisible(datasetIndex) && value != null && (!dataset.keyboardOnce || index === 0) && (!chart.keyboardByIndex || marks.at(-1)?.index !== index)) marks.push({datasetIndex, index});
         });
       }
       if (!marks.length) return;
@@ -1206,13 +1208,165 @@
       link.href = `?${selection}`;
     });
   }
+  function rollingMatchValue(matches, end, measure, window, expected) {
+    if (end + 1 < window) return null;
+    let average = 0;
+    for (let index = end + 1 - window; index <= end; index++) {
+      const metric = matches[index].values[measure];
+      const value = expected ? metric.expected : metric.actual;
+      if (value == null) return null;
+      average += value / window;
+    }
+    return average;
+  }
+  function seasonTrendInspection(chart, mark) {
+    const match = chart.matchRows[mark.index];
+    const title = `Match ${mark.index + 1} · ${match.date} · ${match.venue} vs ${match.opponent} · ${match.score}`;
+    const lines = chart.trendAllSeries.map(series => {
+      const value = series.data[mark.index];
+      return `${series.label}: ${value == null ? 'Unavailable' : chart.trendDifference ? signed(value) : fixed(value)}${chart.trendRolling && value != null ? ' per match' : ''}`;
+    });
+    if (chart.trendRolling) lines.unshift(`Matches ${mark.index + 2 - chart.trendWindow}–${mark.index + 1} (including this match)`);
+    return {title, lines};
+  }
+  function createSeasonTrend(canvas) {
+    const options = commonOptions();
+    options.interaction = {mode: 'index', axis: 'x', intersect: false};
+    options.scales = {
+      x: {offset: false, grid: {display: false}, title: {display: true, text: 'Team match number'}, ticks: {maxRotation: 0, maxTicksLimit: 10}},
+      y: {beginAtZero: true, title: {display: true, text: 'Per match'}, grid: {color: color('--line')}},
+    };
+    options.plugins.datalabels = {display: false};
+    options.plugins.tooltip.callbacks = {
+      title: items => items.length ? wrapHistoryTooltip(items[0].chart, [seasonTrendInspection(items[0].chart, {index: items[0].dataIndex}).title]) : [],
+      label: item => wrapHistoryTooltip(item.chart, seasonTrendInspection(item.chart, {index: item.dataIndex}).lines),
+    };
+    const guide = {id: 'seasonMatchGuide', afterDraw(chart) {
+      const mark = chart.getActiveElements()[0];
+      if (!mark || !chart.chartArea) return;
+      const x = chart.scales.x.getPixelForValue(mark.index);
+      const {top, bottom} = chart.chartArea, ctx = chart.ctx;
+      ctx.save(); ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore();
+    }};
+    const chart = new Chart(canvas, {type: 'line', data: {labels: [], datasets: []}, options, plugins: [guide]});
+    chart.keyboardByIndex = true;
+    keyboardAccess(chart, mark => {
+      const inspection = seasonTrendInspection(chart, mark);
+      return `${inspection.title}. ${inspection.lines.join('. ')}`;
+    });
+    return chart;
+  }
+  function showSeasonTrend(params) {
+    const control = key => trendControls.elements.namedItem(key);
+    const season = params.get('season') || root.dataset.defaultTeamSeason;
+    const teamID = params.get('team') || root.dataset.defaultHistoryTeam;
+    const view = ['balance', 'compare', 'difference'].includes(params.get('trend-view')) ? params.get('trend-view') : 'balance';
+    const series = ['goals', 'xg', 'both'].includes(params.get('series')) ? params.get('series') : 'both';
+    const mode = params.get('trend-mode') === 'match' ? 'match' : 'rolling';
+    const window = ['3', '5', '10'].includes(params.get('window')) ? Number(params.get('window')) : 5;
+    const rolling = mode === 'rolling', difference = view === 'difference', balance = view === 'balance';
+    const effectiveSeries = balance ? series : 'both';
+    Object.entries({season, team: teamID, 'trend-view': view, series, 'trend-mode': mode, window: String(window)}).forEach(([key, value]) => { control(key).value = value; });
+    root.querySelector('[data-trend-data-control]').hidden = !balance;
+    root.querySelector('[data-trend-window-control]').hidden = !rolling;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Averages include the current match and require a full window.' : 'Lines connect successive matches.'} Dates are local to each match’s venue.`;
+    const selectedSeason = teamSeasons.find(row => row.season === season);
+    const team = selectedSeason?.teams?.find(row => row.id === teamID);
+    const matches = team?.matches || [];
+    root.querySelector('[data-season-trend-empty]').hidden = matches.length > 0;
+    root.querySelector('[data-season-trend-results]').hidden = matches.length === 0;
+    if (!matches.length) return;
+    root.querySelector('[data-trend-team-name]').replaceChildren(teamName(team));
+    root.querySelector('[data-trend-season-status]').textContent = `${season}${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
+    root.querySelector('[data-trend-warning]').hidden = effectiveSeries === 'goals' || !matches.some(match => match.values[0].expected == null);
+    root.querySelector('[data-trend-venue-unknown]').hidden = !matches.some(match => match.venueDateUnavailable);
+    root.querySelector('[data-trend-undated]').hidden = !matches.some(match => match.undated);
+    const measures = difference ? [2] : [0, 1];
+    const visible = (effectiveSeries === 'both' ? [false, true] : [effectiveSeries === 'xg']).flatMap(expected => measures.map(measure => ({
+      expected, measure, label: expected ? ['xG scored', 'xG allowed', 'xG differential'][measure] : ['Goals scored', 'Goals allowed', 'Goal differential'][measure],
+      data: matches.map((match, index) => rolling ? rollingMatchValue(matches, index, measure, window, expected) : expected ? match.values[measure].expected : match.values[measure].actual),
+    })));
+    if (view === 'compare') visible.sort((a, b) => a.measure - b.measure);
+    const headingRow = root.querySelector('[data-trend-headings]');
+    [...headingRow.children].slice(5).forEach(cell => cell.remove());
+    visible.forEach(dataset => {
+      const heading = document.createElement('th'); heading.scope = 'col'; heading.textContent = dataset.label; headingRow.append(heading);
+    });
+    root.querySelector('[data-trend-table-caption]').textContent = `${rolling ? `${window}-match trailing averages, per match` : 'Individual match values'}. Scores are shown from this team's perspective.`;
+    root.querySelector('[data-trend-rows]').replaceChildren(...matches.map((match, index) => {
+      const row = document.createElement('tr');
+      const values = [index + 1, match.date, match.opponent, match.venue, match.score, ...visible.map(dataset => dataset.data[index])];
+      values.forEach((value, column) => {
+        const cell = document.createElement(column === 0 ? 'th' : 'td');
+        if (column === 0) cell.scope = 'row';
+        cell.textContent = column < 5 ? String(value) : value == null ? 'Unavailable' : fixed(value);
+        row.append(cell);
+      });
+      return row;
+    }));
+    const legend = balance ? [
+      {className: 'explore-season-scored-key', label: '━ ● Scored'},
+      {className: 'explore-season-allowed-key', label: '┄ □ Allowed'},
+    ] : [
+      {className: 'explore-actual-key', label: '━ ● Actual'},
+      {className: 'explore-expected-key', label: '┄ ◇ xG'},
+    ];
+    root.querySelector('[data-trend-legend]').replaceChildren(...legend.map(entry => {
+      const key = document.createElement('span'); key.className = entry.className; key.textContent = entry.label; return key;
+    }));
+    root.querySelector('[data-season-trend-plot]').hidden = false;
+    const values = visible.flatMap(dataset => dataset.data).filter(value => value != null);
+    const limit = difference ? gapExtent(values) : Math.max(1, ...values) * 1.15;
+    // Reuse two chart slots: basis panels for balance, metric panels for
+    // actual/xG comparison, and one combined panel for differential.
+    const panels = balance ? [
+      {prefix: 'goals', label: 'Goals', datasets: visible.filter(dataset => !dataset.expected)},
+      {prefix: 'xg', label: 'Expected goals (xG)', datasets: visible.filter(dataset => dataset.expected)},
+    ] : difference ? [
+      {prefix: 'goals', label: 'Differential', datasets: visible},
+      {prefix: 'xg', label: '', datasets: []},
+    ] : [
+      {prefix: 'goals', label: 'Scored', datasets: visible.filter(dataset => dataset.measure === 0)},
+      {prefix: 'xg', label: 'Allowed', datasets: visible.filter(dataset => dataset.measure === 1)},
+    ];
+    for (const {prefix, label: panelLabel, datasets} of panels) {
+      root.querySelector(`[data-trend-${prefix}-panel]`).hidden = datasets.length === 0;
+      if (!datasets.length) continue;
+      root.querySelector(`[data-trend-${prefix}-title]`).textContent = `${panelLabel} · ${rolling ? `${window}-match average` : 'Per match'}`;
+      const hasMarks = datasets.some(dataset => dataset.data.some(value => value != null));
+      root.querySelector(`[data-trend-${prefix}-wrap]`).hidden = !hasMarks;
+      const empty = root.querySelector(`[data-trend-${prefix}-empty]`); empty.hidden = hasMarks;
+      empty.textContent = rolling && matches.length < window ? `A ${window}-match average needs ${window} played matches; this team has ${matches.length}.` : 'No xG is available for these matches or complete rolling windows.';
+      if (!hasMarks) continue;
+      const canvas = root.querySelector(`[data-chart="${prefix === 'xg' ? 'season-trend-xg' : 'season-trend'}"]`);
+      const key = prefix === 'xg' ? 'seasonTrendXG' : 'seasonTrend';
+      const chart = charts[key] || (charts[key] = createSeasonTrend(canvas));
+      chart.matchRows = matches; chart.trendAllSeries = visible; chart.trendRolling = rolling; chart.trendDifference = difference; chart.trendWindow = window;
+      chart.data.labels = matches.map((_, index) => String(index + 1));
+      chart.data.datasets = datasets.map(dataset => {
+        const secondary = balance ? dataset.measure === 1 : dataset.expected;
+        const ink = secondary ? balance ? color('--scoring-allowed') : xgColor : goalsColor;
+        return {...dataset, type: 'line', borderColor: ink, backgroundColor: balance && secondary ? color('--paper') : ink,
+          borderWidth: 2, borderDash: secondary ? [5, 3] : [], pointStyle: secondary ? balance ? 'rect' : 'rectRot' : 'circle', pointRadius: secondary ? 4 : 3,
+          pointBorderColor: ink, pointBorderWidth: 2, pointHoverRadius: 5, clip: 6, spanGaps: false, tension: 0, fill: false, order: secondary ? 1 : 0};
+      });
+      chart.data.datasets.forEach((_, index) => chart.setDatasetVisibility(index, true));
+      chart.options.scales.y = {min: difference ? -limit : 0, max: limit, border: {display: false},
+        grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
+        ticks: {maxTicksLimit: 6, includeBounds: false, ...(difference ? {callback: value => signed(value)} : {})},
+        title: {display: true, text: balance ? `${prefix === 'xg' ? 'xG' : 'Goals'} per match` : difference ? 'Differential per match' : 'Goals / xG per match'}};
+      canvas.setAttribute('aria-label', `${team.name}, ${season}: ${panelLabel}, ${balance ? 'scored and allowed' : 'actual goals and xG'}, ${rolling ? `${window}-match rolling averages` : 'per-match values'}`);
+      chart.resize(); chart.update('none');
+    }
+  }
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || 'trend';
-    const view = ['trend', 'distribution', 'table', 'teams', 'team-history'].includes(requested) ? requested : 'trend';
+    const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend'].includes(requested) ? requested : 'trend';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
-    const teamView = view === 'teams' || view === 'team-history';
+    const teamView = view === 'teams' || view === 'team-history' || view === 'season-trend';
     root.querySelector('[data-league-views]').hidden = teamView;
     root.querySelector('[data-team-views]').hidden = !teamView;
     root.querySelectorAll('[data-team-display]').forEach(link => {
@@ -1258,6 +1412,7 @@
     }
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
+    if (view === 'season-trend') showSeasonTrend(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
       const target = link.dataset.viewChoice || (link.dataset.groupChoice === 'teams' ? 'teams' : 'trend');
       const selection = new URLSearchParams(params); selection.set('view', target);
@@ -1321,7 +1476,10 @@
     }
     const link = event.target.closest('[data-view-choice], [data-group-choice]');
     if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-      event.preventDefault(); update({view: link.dataset.viewChoice || (link.dataset.groupChoice === 'teams' ? 'teams' : 'trend')});
+      event.preventDefault();
+      const selection = new URL(link.href).searchParams;
+      const changes = {view: selection.get('view')};
+      update(changes);
     }
     const sort = event.target.closest('[data-sort]');
     if (sort) update({sort: sort.dataset.sort, order: sort.parentElement.getAttribute('aria-sort') === 'descending' ? 'asc' : 'desc'});
@@ -1357,6 +1515,12 @@
   historyContext.addEventListener('change', () => update({context: historyContext.checked ? 'on' : 'off'}));
   historyTeam.addEventListener('change', () => update({team: historyTeam.value}));
   historyMeasure.addEventListener('change', () => update({measure: historyMeasure.value}));
+  const updateSeasonTrend = () => {
+    const selection = Object.fromEntries(new FormData(trendControls));
+    update(selection);
+  };
+  trendControls.addEventListener('submit', event => { event.preventDefault(); updateSeasonTrend(); });
+  trendControls.addEventListener('change', updateSeasonTrend);
   window.addEventListener('popstate', applyURL);
   styleTable();
   applyURL();

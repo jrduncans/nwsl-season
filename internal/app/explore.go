@@ -13,6 +13,7 @@ type explorePage struct {
 	exploreDistributionView
 	exploreTeamsView
 	exploreTeamHistoryView
+	exploreSeasonTrendView
 	View                              string
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
@@ -39,8 +40,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if view == "" {
 		view = "trend"
 	}
-	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" {
-		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, or team-history"))
+	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" && view != "season-trend" {
+		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, team-history, or season-trend"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -55,6 +56,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page.exploreTeamHistoryView, err = exploreTeamHistory(r.URL.Query(), teams.TeamSeasons)
+	if err != nil {
+		a.renderHistoryBadRequest(w, r, err)
+		return
+	}
+	page.exploreSeasonTrendView, err = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)
 		return

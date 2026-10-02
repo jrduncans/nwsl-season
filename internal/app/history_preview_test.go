@@ -2,6 +2,7 @@ package app
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,7 +31,7 @@ func TestHistoryPreview(t *testing.T) {
 	archive := historyArchive(t, states)
 	selection := "2022"
 	switch os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") {
-	case "teams", "team-history":
+	case "teams", "team-history", "season-trend":
 		archive = historyArchive(t, map[string]historyArchiveState{
 			"2024": {lifecycle: cache.SourceScopeUpcoming},
 			"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
@@ -59,9 +60,16 @@ func TestHistoryPreview(t *testing.T) {
 				{ID: "7VqG1lYMvW", Name: "San Diego Wave FC"}, {ID: "7vQ7BBzqD1", Name: "Seattle Reign FC"},
 				{ID: "eV5D2w9QKn", Name: "Utah Royals FC"}, {ID: "aDQ0lzvQEv", Name: "Washington Spirit"},
 			}
-			season.Data.Games = historyGames(season.Entry.Season, 64, 3)
+			count := 64
+			if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "season-trend" {
+				count = 240
+			}
+			season.Data.Games = historyGames(season.Entry.Season, count, 3)
 			for j := range season.Data.Games {
 				game := &season.Data.Games[j]
+				stadiums := []string{"7vQ7xbOMD1", "Vj58W84M8n", "2lqRXGLMr0", "KXMe8lXQ64", "p6qb18650G", "NWMW84L5lz", "0x5g6ojM7O", "xW5p3L0Mg1", "gpMOrLOQzy", "vzqoJrj5ap", "p6qbX06M0G", "BLMvra8Mxe", "Oa5wKXY514", "9Yqda07QvJ", "e7MzlRjqr0", "xW5pwORMg1"}
+				game.RawJSON = fmt.Sprintf(`{"stadium_id":%q}`, stadiums[j%16])
+				game.KickoffUTC = time.Date(2026, 3, 2, 1, 0, 0, 0, time.UTC).AddDate(0, 0, j/8*7).Format("2006-01-02 15:04:05 MST")
 				game.HomeTeamID, game.AwayTeamID = season.Data.Teams[j%16].ID, season.Data.Teams[(j+5)%16].ID
 				game.HomeScore.Int64, game.AwayScore.Int64 = int64(j%4), int64((j/3)%3)
 				if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "team-history" {

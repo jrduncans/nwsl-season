@@ -36,7 +36,8 @@ from the cached fixtures when a season page or CLI report is requested.
 - Explore workspace with interactive regular-season scoring trends, signed
   goals-minus-xG gaps, goal distributions, selected goal-bin trends, a sortable
   season table, within-season team comparisons, signed gap rankings, an actual
-  versus expected team outlier plot, and team history with floating league ranges
+  versus expected team outlier plot, within-season team scoring trends with match
+  values and 3/5/10-match rolling averages for goals and xG, and team history with floating league ranges
   for goals scored, goals allowed, and goal differential against xG, plus actual
   points against ASA's retrospective expected points (xPoints).
 - Health and cache-status endpoints for operators.
@@ -85,6 +86,12 @@ seasons, with a sortable season table. Optional league context shows seasonal
 ranges and completed-season records with inspectable holders. Explore's xPoints
 describe recorded matches; they are distinct from Forecast Lab's projected
 final points. The older `/history/scoring` route remains available.
+Season trend follows one team through a regular season. Scoring balance pairs
+scored and allowed, with aligned goals and xG panels when both are selected.
+Actual vs xG pairs actual and expected values in separate Scored and Allowed
+panels; Differential compares goal and xG differential on one plot. Per-match values and 3/5/10-match rolling averages use
+separate line-chart modes. Missing xG leaves gaps in affected matches and full
+rolling windows.
 
 Useful endpoints:
 

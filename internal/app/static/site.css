@@ -1,4 +1,4 @@
-:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
+:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --scoring-allowed: #a04e20; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.5 system-ui, sans-serif; }
 a { color: var(--green); }
@@ -510,3 +510,8 @@ th:nth-child(2) { text-align: left; }
   .forecast-table { min-width: 0; }
   .forecast-table :is(th, td):nth-child(n+4) { min-width: calc(6ch + .7rem); }
 }
+
+.explore-season-scored-key { color: var(--green); }
+.explore-season-allowed-key { color: var(--scoring-allowed); }
+.explore-season-balance-wrap { height: 260px; }
+@media (max-width: 600px) { .explore-season-balance-wrap { height: 240px; } }
