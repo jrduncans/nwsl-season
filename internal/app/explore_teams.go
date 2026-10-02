@@ -17,15 +17,16 @@ type exploreTeamValues struct {
 }
 
 type exploreTeamRecord struct {
-	ID             string               `json:"id"`
-	Name           string               `json:"name"`
-	LogoURL        string               `json:"logo"`
-	Played         int                  `json:"played"`
-	XGCovered      int                  `json:"xgCovered"`
-	XPointsCovered int                  `json:"xPointsCovered"`
-	Values         [4]exploreTeamValues `json:"values"`
-	Totals         [4]exploreTeamValues `json:"totals"`
-	Matches        []exploreMatchRecord `json:"matches,omitempty"`
+	ID             string                `json:"id"`
+	Name           string                `json:"name"`
+	LogoURL        string                `json:"logo"`
+	Played         int                   `json:"played"`
+	XGCovered      int                   `json:"xgCovered"`
+	XPointsCovered int                   `json:"xPointsCovered"`
+	Values         [4]exploreTeamValues  `json:"values"`
+	Totals         [4]exploreTeamValues  `json:"totals"`
+	Rankings       [2][6]exploreTeamRank `json:"rankings"`
+	Matches        []exploreMatchRecord  `json:"matches,omitempty"`
 }
 
 type exploreTeamSeason struct {
@@ -133,6 +134,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 				page.TeamSeason = summary.Season
 			}
 		}
+		populateExploreTeamRanks(season.Teams)
 		page.TeamSeasons = append(page.TeamSeasons, season)
 	}
 	if page.TeamSeason == "" && len(page.TeamSeasons) > 0 {

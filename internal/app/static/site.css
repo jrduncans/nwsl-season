@@ -515,3 +515,14 @@ th:nth-child(2) { text-align: left; }
 .explore-season-allowed-key { color: var(--scoring-allowed); }
 .explore-season-balance-wrap { height: 260px; }
 @media (max-width: 600px) { .explore-season-balance-wrap { height: 240px; } }
+
+.explore-rankings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 1.2rem 0; }
+.explore-rank-card { min-width: 0; padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.explore-rank-card h4 { margin: 0 0 .75rem; font-size: .95rem; }
+.explore-rank-number { margin: 0; font-size: 1.6rem; font-weight: 750; color: var(--green-deep); }
+.explore-rank-number span { font-size: .9rem; font-weight: 400; color: var(--muted); }
+.explore-rank-value { margin: .4rem 0 1.2rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.explore-rank-track { position: relative; height: .4rem; border-radius: 1rem; background: var(--line); }
+.explore-rank-track i { position: absolute; top: 50%; width: .8rem; height: .8rem; border: 2px solid var(--panel); border-radius: 50%; background: var(--green-deep); transform: translate(-50%, -50%); }
+.explore-rank-endpoints { display: flex; justify-content: space-between; margin-top: .5rem; color: var(--muted); font-size: .75rem; }
+@media (max-width: 700px) { .explore-rankings { grid-template-columns: 1fr; gap: .65rem; } .explore-rank-card { padding: .85rem 1rem; } .explore-rank-card h4 { margin-bottom: .4rem; } .explore-rank-number { font-size: 1.35rem; } .explore-rank-value { margin: .3rem 0 .9rem; } }

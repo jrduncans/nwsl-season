@@ -2,19 +2,20 @@
 <div class="explore" data-explore data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-history-team="{{.HistoryTeam.ID}}">
 <header><h1>Explore</h1></header>
 <nav class="explore-views" aria-label="Explore analyses">
-<a href="?view=trend" data-group-choice="league"{{if and (ne .View "teams") (ne .View "team-history") (ne .View "season-trend")}} aria-current="page"{{end}}>League scoring</a>
-<a href="?view=teams" data-group-choice="teams"{{if or (eq .View "teams") (eq .View "team-history") (eq .View "season-trend")}} aria-current="page"{{end}}>Team performance</a>
+<a href="?view=trend" data-group-choice="league"{{if and (ne .View "teams") (ne .View "team-history") (ne .View "season-trend") (ne .View "team-rankings")}} aria-current="page"{{end}}>League scoring</a>
+<a href="?view=teams" data-group-choice="teams"{{if or (eq .View "teams") (eq .View "team-history") (eq .View "season-trend") (eq .View "team-rankings")}} aria-current="page"{{end}}>Team performance</a>
 </nav>
-<nav class="explore-subviews" data-league-views aria-label="League scoring views"{{if or (eq .View "teams") (eq .View "team-history") (eq .View "season-trend")}} hidden{{end}}>
+<nav class="explore-subviews" data-league-views aria-label="League scoring views"{{if or (eq .View "teams") (eq .View "team-history") (eq .View "season-trend") (eq .View "team-rankings")}} hidden{{end}}>
 <a href="?view=trend" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>Scoring trend</a>
 <a href="?view=distribution" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>Goal distribution</a>
 <a href="?view=table" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>Season table</a>
 </nav>
-<nav class="explore-subviews" data-team-views aria-label="Team performance views"{{if and (ne .View "teams") (ne .View "team-history") (ne .View "season-trend")}} hidden{{end}}>
+<nav class="explore-subviews" data-team-views aria-label="Team performance views"{{if and (ne .View "teams") (ne .View "team-history") (ne .View "season-trend") (ne .View "team-rankings")}} hidden{{end}}>
 <a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Comparison chart</a>
 <a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>Gap chart</a>
 <a href="{{.TeamScatterURL}}" data-team-display="scatter"{{if and (eq .View "teams") (eq .TeamDisplay "scatter")}} aria-current="page"{{end}}>Outlier plot</a>
 <a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Comparison table</a>
+<a href="?view=team-rankings" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>Team rankings</a>
 <a href="?view=season-trend" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>Season trend</a>
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Team history</a>
 </nav>
@@ -120,6 +121,27 @@
 <tr>{{range .TeamColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-rows>{{range .TeamRows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td><td><strong>{{.Gap}}</strong></td>{{end}}</tr>{{end}}</tbody></table></div>
 </div>
+</div>
+</section>
+<section data-panel="team-rankings"{{if ne .View "team-rankings"}} hidden{{end}} aria-labelledby="explore-team-rankings-title">
+<h2 id="explore-team-rankings-title">Team rankings (regular-season)</h2>
+<form method="get" data-team-rankings-controls class="explore-team-controls">
+<input type="hidden" name="view" value="team-rankings">
+<label>Season <select name="season">{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
+<label>Team <select name="team"{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+<label>Values <select name="units"><option value="per-match"{{if eq .TeamUnits "per-match"}} selected{{end}}>Per match</option><option value="total"{{if eq .TeamUnits "total"}} selected{{end}}>Totals</option></select></label>
+<noscript><button class="button" type="submit">Show rankings</button></noscript>
+</form>
+<p class="note" data-rankings-empty{{if .RankingRows}} hidden{{end}}>This team has no eligible recorded results for this season.</p>
+<div data-rankings-results{{if not .RankingRows}} hidden{{end}} aria-live="polite" aria-atomic="true">
+<h3 data-rankings-team>{{template "teamName" .RankingTeam}}</h3>
+<p class="note" data-rankings-summary>{{.TeamSeason}} · {{.RankingPlayed}} played · {{.RankingTeamCount}} teams{{if .RankingActive}} · In progress{{end}}</p>
+<p class="note" data-rankings-units>{{if eq .TeamUnits "total"}}Totals{{else}}Per match{{end}}, from recorded results. Lower goals allowed and xG allowed rank better; higher is better for the other stats.</p>
+<p class="explore-data-warning" data-rankings-warning{{if not .RankingMissingXG}} hidden{{end}}>League xG ranks are unavailable until every team's recorded matches have complete xG. Available team values are still shown.</p>
+<div class="explore-rankings" data-rankings-cards>{{range .RankingRows}}
+<article class="explore-rank-card"><h4>{{.Label}}</h4><p class="explore-rank-number">{{.Rank}}{{if .Position}} <span>of {{$.RankingTeamCount}}</span>{{end}}</p><p class="explore-rank-value">{{.Value}}{{if ne .Value "Unavailable"}}{{if eq $.TeamUnits "per-match"}} per match{{else}} total{{end}}{{end}}</p>{{if .Position}}<div class="explore-rank-track" aria-hidden="true"><i style="left:{{.Position}}%"></i></div><div class="explore-rank-endpoints" aria-hidden="true"><span>1st · Best</span><span>{{$.RankingTeamCount}} · Last</span></div>{{end}}</article>
+{{end}}</div>
+<p class="note">Ties share a rank; the next rank skips the tied places. Markers show rank within this season, rather than the size of the statistical gap.</p>
 </div>
 </section>
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">

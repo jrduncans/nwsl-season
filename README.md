@@ -35,7 +35,7 @@ from the cached fixtures when a season page or CLI report is requested.
 - Shareable forecast URLs with fixed match outcomes and optional model comparison.
 - Explore workspace with interactive regular-season scoring trends, signed
   goals-minus-xG gaps, goal distributions, selected goal-bin trends, a sortable
-  season table, within-season team comparisons, signed gap rankings, an actual
+  season table, within-season team comparisons, six-stat team rankings with league-size context, signed gap rankings, an actual
   versus expected team outlier plot, within-season team scoring trends with match
   values and 3/5/10-match rolling averages for goals and xG, and team history with floating league ranges
   for goals scored, goals allowed, and goal differential against xG, plus actual

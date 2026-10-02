@@ -11,6 +11,7 @@
   const teamUnits = root.querySelector('[data-team-units]');
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = root.querySelector('[data-history-measure]');
+  const rankingControls = root.querySelector('[data-team-rankings-controls]');
   const trendControls = root.querySelector('[data-season-trend-controls]');
   trendControls.querySelector('[data-trend-submit]').hidden = true;
   const metric = root.querySelector('[data-metric]');
@@ -1360,13 +1361,52 @@
       chart.resize(); chart.update('none');
     }
   }
+  function showTeamRankings(params) {
+    const season = params.get('season') || root.dataset.defaultTeamSeason;
+    const teamID = params.get('team') || root.dataset.defaultHistoryTeam;
+    const units = params.get('units') === 'total' ? 'total' : 'per-match';
+    Object.entries({season, team: teamID, units}).forEach(([key, value]) => {
+      rankingControls.elements.namedItem(key).value = value;
+    });
+    const selectedSeason = teamSeasons.find(row => row.season === season);
+    const team = selectedSeason?.teams?.find(row => row.id === teamID);
+    root.querySelector('[data-rankings-empty]').hidden = !!team;
+    root.querySelector('[data-rankings-results]').hidden = !team;
+    if (!team) return;
+    const count = selectedSeason.teams.length;
+    root.querySelector('[data-rankings-team]').replaceChildren(teamName(team));
+    root.querySelector('[data-rankings-summary]').textContent = `${season} · ${team.played} played · ${count} teams${selectedSeason.active ? ' · In progress' : ''}`;
+    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. Lower goals allowed and xG allowed rank better; higher is better for the other stats.`;
+    root.querySelector('[data-rankings-warning]').hidden = !selectedSeason.teams.some(row => row.values[0].expected === null);
+    root.querySelector('[data-rankings-cards]').replaceChildren(...team.rankings[units === 'total' ? 1 : 0].map(row => {
+      const card = document.createElement('article'); card.className = 'explore-rank-card';
+      const title = document.createElement('h4'); title.textContent = row.label;
+      const rank = document.createElement('p'); rank.className = 'explore-rank-number'; rank.textContent = row.rank;
+      if (row.position) {
+        const denominator = document.createElement('span'); denominator.textContent = ` of ${count}`;
+        rank.append(denominator);
+      }
+      const value = document.createElement('p'); value.className = 'explore-rank-value';
+      value.textContent = row.value + (row.value === 'Unavailable' ? '' : units === 'total' ? ' total' : ' per match');
+      card.append(title, rank, value);
+      if (row.position) {
+        const track = document.createElement('div'); track.className = 'explore-rank-track'; track.setAttribute('aria-hidden', 'true');
+        const mark = document.createElement('i'); mark.style.left = `${row.position}%`; track.append(mark);
+        const endpoints = document.createElement('div'); endpoints.className = 'explore-rank-endpoints'; endpoints.setAttribute('aria-hidden', 'true');
+        const best = document.createElement('span'); best.textContent = '1st · Best';
+        const last = document.createElement('span'); last.textContent = `${count} · Last`;
+        endpoints.append(best, last); card.append(track, endpoints);
+      }
+      return card;
+    }));
+  }
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || 'trend';
-    const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend'].includes(requested) ? requested : 'trend';
+    const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'trend';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
-    const teamView = view === 'teams' || view === 'team-history' || view === 'season-trend';
+    const teamView = view === 'teams' || view === 'team-history' || view === 'season-trend' || view === 'team-rankings';
     root.querySelector('[data-league-views]').hidden = teamView;
     root.querySelector('[data-team-views]').hidden = !teamView;
     root.querySelectorAll('[data-team-display]').forEach(link => {
@@ -1413,6 +1453,7 @@
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     if (view === 'season-trend') showSeasonTrend(params);
+    if (view === 'team-rankings') showTeamRankings(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
       const target = link.dataset.viewChoice || (link.dataset.groupChoice === 'teams' ? 'teams' : 'trend');
       const selection = new URLSearchParams(params); selection.set('view', target);
@@ -1521,6 +1562,9 @@
   };
   trendControls.addEventListener('submit', event => { event.preventDefault(); updateSeasonTrend(); });
   trendControls.addEventListener('change', updateSeasonTrend);
+  const updateRankings = () => update(Object.fromEntries(new FormData(rankingControls)));
+  rankingControls.addEventListener('submit', event => { event.preventDefault(); updateRankings(); });
+  rankingControls.addEventListener('change', updateRankings);
   window.addEventListener('popstate', applyURL);
   styleTable();
   applyURL();

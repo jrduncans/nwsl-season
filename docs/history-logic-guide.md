@@ -11,10 +11,11 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
 Team performance offers Comparison chart, Gap chart, Outlier plot, Comparison
-table, Season trend, and Team history as direct views. The charts and Comparison table show
-one selected measure; the Team history table shows all four.
+table, Team rankings, Season trend, and Team history as direct views. The
+comparison charts show one selected measure; Comparison table and Team history
+show all four. Team rankings shows all six goal and xG ranks together.
 Each view heading states the regular-season scope.
-`view=trend|distribution|table|teams|season-trend|team-history` selects the initial surface.
+`view=trend|distribution|table|teams|team-rankings|season-trend|team-history` selects the initial surface.
 JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
 in place, sorts numeric table columns from unrounded values, and restores those
 controls with Back/Forward.
@@ -213,6 +214,42 @@ missing-data warnings and `xG incomplete` or `xPoints incomplete` labels, the
 named Outlier plot omission note and empty state, sorting in both directions,
 no-script sorting, season/measure/units/display URLs, Back/Forward, and switching
 analyses without fetching new data.
+
+### Team rankings
+
+`view=team-rankings` shows one team's goals scored, goals allowed, goal
+differential, xG, xG allowed, and xG differential together. It shares the
+validated season, team identity, and `units=per-match|total` controls with the
+other team views. The default team and cross-season identity follow Team
+history; a team with no eligible results in the selected season remains
+selected with an empty state. Headings use the name from the selected season.
+
+Ranks compare unrounded values among every team with eligible recorded results
+in that season. Higher values rank better except for goals allowed and xG
+allowed, where lower values rank better. Equal values share competition rank
+(one plus the number of strictly better values); later ranks skip tied places.
+The six cards show the value, ordinal rank, and season's team count. A marker
+runs from best (1st) to last (the team count), using the same rank direction for
+all six stats. This depicts rank rather than statistical distance. A one-team
+population places its first-place marker at the best endpoint. Per-match ranks
+use each team's own played count; total ranks compare sums over recorded games.
+Active seasons show an in-progress label and the selected team's played count.
+
+League xG ranks require complete xG for every team in the season's comparison.
+If any team's recorded-match xG coverage is incomplete, all three xG ranks and
+markers are withheld with an explanation. Fully covered teams retain their
+own xG values. Goal ranks remain available. Season integrity and cache-only
+boundaries match Team performance, using the same single archive payload.
+The GET selectors and six cards work without scripts; JavaScript changes them
+locally with shareable URLs and Back/Forward, without another data request.
+
+Run `make test-explore` for rank direction, ties and skipped places, full-precision
+comparisons, unit changes with uneven played counts, signed and zero values,
+league xG coverage, empty selections, single-team populations, fallback HTML,
+URL validation, and single-snapshot checks. Use the `teams` preview scenario to
+verify desktop and 390px layouts, selector keyboard access, all six cards,
+season/team/unit changes, direct URLs, Back/Forward, missing xG, empty seasons,
+and no-script forms.
 
 ### Season trend
 
