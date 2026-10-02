@@ -141,27 +141,38 @@ func TestExploreSeasonTrendUnknownVenuePreservesOrder(t *testing.T) {
 func TestExploreSeasonTrendRollingWindows(t *testing.T) {
 	matches := make([]exploreMatchRecord, 14)
 	for index := range matches {
-		for measure := range 3 {
+		for measure := range 4 {
 			expected := float64(index-measure) + .1234
 			matches[index].Values[measure] = exploreTeamValues{Actual: float64(index - measure), Expected: &expected}
 		}
 	}
 	for _, window := range []int{3, 5, 10} {
-		for measure := range 3 {
+		for measure := range 4 {
 			for end := range matches {
 				got := exploreRollingValue(matches, end, measure, window)
-				if end+1 < window {
-					if got.Expected != nil {
-						t.Fatal("short prefix must not yield a rolling point")
-					}
-					continue
-				}
-				want := float64(end-measure) - float64(window-1)/2
+				want := float64(end-measure) - float64(min(end+1, window)-1)/2
 				if math.Abs(got.Actual-want) > 1e-12 || got.Expected == nil || math.Abs(*got.Expected-(want+.1234)) > 1e-12 {
 					t.Fatalf("window=%d measure=%d end=%d: %+v, want %f", window, measure, end, got, want)
 				}
 			}
 		}
+	}
+	// A missing early observation must break even a shorter initial window,
+	// while actual values keep averaging all played matches.
+	for measure := range 4 {
+		saved := matches[1].Values[measure].Expected
+		matches[1].Values[measure].Expected = nil
+		for _, window := range []int{3, 5, 10} {
+			for end := range matches {
+				got := exploreRollingValue(matches, end, measure, window)
+				wantCovered := end == 0 || end > window
+				wantActual := float64(end-measure) - float64(min(end+1, window)-1)/2
+				if (got.Expected != nil) != wantCovered || math.Abs(got.Actual-wantActual) > 1e-12 {
+					t.Fatalf("early missing observation: window=%d measure=%d end=%d: %+v", window, measure, end, got)
+				}
+			}
+		}
+		matches[1].Values[measure].Expected = saved
 	}
 	matches[3].Values[0].Expected = nil
 	for end := 3; end < 6; end++ {
@@ -263,7 +274,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal("known incomplete inventory must not produce a trend")
 			}
 		} else if strings.Contains(path, "season=2026") {
-			for _, fragment := range []string{`value="10" selected`, `value="xg" selected`, `value="rolling" selected`, `10-match trailing averages, per match; matches 1–9 show individual match values.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
+			for _, fragment := range []string{`value="10" selected`, `value="xg" selected`, `value="rolling" selected`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("direct URL/fallback missing %s", fragment)
 				}
@@ -358,8 +369,9 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					for end, row := range page.TrendRows {
 						for columnIndex, column := range page.TrendColumns {
 							start, count := end, 1
-							if mode == "rolling" && end+1 >= window {
-								start, count = end+1-window, window
+							if mode == "rolling" {
+								count = min(end+1, window)
+								start = end + 1 - count
 							}
 							want, total, covered := "Unavailable", 0.0, start >= 0
 							if covered {
@@ -447,7 +459,7 @@ func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 		query.Set("trend-mode", "rolling")
 		page, err = exploreSeasonTrend(query, teams, teamNameView{ID: "alpha"})
 		if err != nil || !slices.Equal(page.TrendRows[0].DisplayValues, oneMatch) {
-			t.Fatalf("short seasons must show individual match values before a full rolling window: %+v, %v", page, err)
+			t.Fatalf("one-match rolling averages must preserve the original value: %+v, %v", page, err)
 		}
 	}
 }

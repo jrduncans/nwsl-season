@@ -1210,7 +1210,7 @@
     });
   }
   function rollingMatchValue(matches, end, measure, window, expected) {
-    if (end + 1 < window) return null;
+    window = Math.min(end + 1, window);
     let average = 0;
     for (let index = end + 1 - window; index <= end; index++) {
       const metric = matches[index].values[measure];
@@ -1221,7 +1221,7 @@
     return average;
   }
   function seasonTrendValue(matches, end, measure, window, expected, rolling) {
-    if (rolling && end + 1 >= window) return rollingMatchValue(matches, end, measure, window, expected);
+    if (rolling) return rollingMatchValue(matches, end, measure, window, expected);
     const metric = matches[end].values[measure];
     return expected ? metric.expected : metric.actual;
   }
@@ -1257,7 +1257,7 @@
       lines.push(`${reference.label}${names}: ${reference.value == null ? 'Unavailable' : fixed(reference.value) + ' per match'}`);
     }));
     if (chart.trendRolling) lines.unshift(mark.index + 1 < chart.trendWindow
-      ? `Individual match values; a ${chart.trendWindow}-match average needs ${chart.trendWindow} played matches`
+      ? `Average over ${mark.index + 1} ${mark.index === 0 ? 'match' : 'matches'} · ${chart.trendWindow}-match window`
       : `Matches ${mark.index + 2 - chart.trendWindow}–${mark.index + 1} (including this match)`);
     return {title, lines};
   }
@@ -1341,7 +1341,7 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
-    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins show individual match values before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected comparison in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}`;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected comparison in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}`;
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
     comparison.replaceChildren(...[{key: 'team', label: 'None (team average only)'}, ...(selectedSeason?.benchmarks || [])].map(reference => {
@@ -1379,7 +1379,7 @@
     visible.forEach(dataset => {
       const heading = document.createElement('th'); heading.scope = 'col'; heading.textContent = dataset.label; headingRow.append(heading);
     });
-    root.querySelector('[data-trend-table-caption]').textContent = `${rolling ? `${window}-match trailing averages, per match; matches 1–${window - 1} show individual match values` : 'Individual match values'}. Scores are shown from this team's perspective.`;
+    root.querySelector('[data-trend-table-caption]').textContent = `${rolling ? `${window}-match trailing averages, per match; matches 1–${window - 1} use all matches played so far` : 'Individual match values'}. Scores are shown from this team's perspective.`;
     root.querySelector('[data-trend-rows]').replaceChildren(...matches.map((match, index) => {
       const row = document.createElement('tr');
       const values = [index + 1, match.date, match.opponent, match.venue, match.score, ...visible.map(dataset => dataset.data[index])];
@@ -1398,7 +1398,7 @@
       {className: 'explore-actual-key', label: '━ ● Actual'},
       {className: 'explore-expected-key', label: pointsMetric ? '━ ◇ xPoints' : '━ ◇ xG'},
     ];
-    if (rolling) legend.push({className: 'explore-season-raw-key', label: 'Individual matches before full window'});
+    if (rolling) legend.push({className: 'explore-season-raw-key', label: 'Averages before full window'});
     root.querySelector('[data-trend-legend]').replaceChildren(...legend.map(entry => {
       const key = document.createElement('span'); key.className = entry.className; key.textContent = entry.label; return key;
     }));
@@ -1427,7 +1427,7 @@
       root.querySelector(`[data-trend-${prefix}-relative-note]`).textContent = pointsMetric ? 'Higher points per match means more points earned.' : `Above a reference: more ${prefix === 'goals' ? 'scored' : 'conceded'}. Below: fewer.`;
       root.querySelector(`[data-trend-${prefix}-wrap]`).hidden = !hasMarks;
       const empty = root.querySelector(`[data-trend-${prefix}-empty]`); empty.hidden = hasMarks;
-      empty.textContent = rolling && matches.length < window ? `A ${window}-match average needs ${window} played matches; this team has ${matches.length}.` : `No ${pointsMetric ? 'xPoints' : 'xG'} is available for these matches or complete rolling windows.`;
+      empty.textContent = `No ${pointsMetric ? 'xPoints' : 'xG'} is available for these matches or fully covered rolling windows.`;
       if (!hasMarks) continue;
       const canvas = root.querySelector(`[data-chart="${prefix === 'xg' ? 'season-trend-xg' : 'season-trend'}"]`);
       const key = prefix === 'xg' ? 'seasonTrendXG' : 'seasonTrend';
@@ -1451,7 +1451,7 @@
         ticks: {maxTicksLimit: 6, includeBounds: false, ...(signedValues ? {callback: value => signed(value)} : {})},
         title: {display: true, text: pointsMetric ? 'Points per match' : relative ? effectiveSeries === 'xg' ? 'xG per match' : effectiveSeries === 'goals' ? 'Goals per match' : 'Goals / xG per match' : balance ? `${prefix === 'xg' ? 'xG' : 'Goals'} per match` : difference ? 'Differential per match' : 'Goals / xG per match'}};
       const dataDescription = pointsMetric ? relative ? effectiveSeries === 'points' ? 'actual points' : 'xPoints' : 'points and xPoints' : balance ? 'scored and allowed' : relative ? effectiveSeries === 'goals' ? 'actual goals' : 'xG' : 'actual goals and xG';
-      canvas.setAttribute('aria-label', `${team.name}, ${season}: ${panelLabel}, ${dataDescription}, ${rolling ? `${window}-match rolling averages with individual match values before the first full window` : 'per-match values'}${relative ? `, original values with team and selected benchmark references` : ''}`);
+      canvas.setAttribute('aria-label', `${team.name}, ${season}: ${panelLabel}, ${dataDescription}, ${rolling ? `${window}-match rolling averages using all matches played so far before the first full window` : 'per-match values'}${relative ? `, original values with team and selected benchmark references` : ''}`);
       chart.resize(); chart.update('none');
     }
   }

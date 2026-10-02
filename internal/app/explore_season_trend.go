@@ -140,7 +140,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	page.TrendCaption = "Individual match values. Scores are shown from this team's perspective."
 	window, _ := strconv.Atoi(page.TrendWindow)
 	if page.TrendMode == "rolling" {
-		page.TrendCaption = fmt.Sprintf("%s-match trailing averages, per match; matches 1–%d show individual match values. Scores are shown from this team's perspective.", page.TrendWindow, window-1)
+		page.TrendCaption = fmt.Sprintf("%s-match trailing averages, per match; matches 1–%d use all matches played so far. Scores are shown from this team's perspective.", page.TrendWindow, window-1)
 	}
 	for _, season := range teams.TeamSeasons {
 		if season.Season != teams.TeamSeason {
@@ -161,7 +161,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match}
 				for _, column := range page.TrendColumns {
 					value := match.Values[column.Measure]
-					if page.TrendMode == "rolling" && index+1 >= window {
+					if page.TrendMode == "rolling" {
 						value = exploreRollingValue(team.Matches, index, column.Measure, window)
 					}
 					display := exploreTrendNumber(&value.Actual)
@@ -182,12 +182,11 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 }
 
 // A trailing window uses consecutive played matches, including the endpoint.
-// Missing xG withholds the window instead of skipping matches or imputing zero.
+// Before it fills, the window uses all matches played so far.
+// Missing expected data withholds the window instead of skipping matches or imputing zero.
 func exploreRollingValue(matches []exploreMatchRecord, end, measure, window int) exploreTeamValues {
 	value := exploreTeamValues{}
-	if end+1 < window {
-		return value
-	}
+	window = min(end+1, window)
 	expected, covered := 0.0, true
 	for _, match := range matches[end+1-window : end+1] {
 		metric := match.Values[measure]
