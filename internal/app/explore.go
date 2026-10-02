@@ -66,6 +66,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
+	// Validate selections before spending forecast capacity. Populate every
+	// eligible active season once so browser selections retain one snapshot.
+	a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
+	page.exploreTeamsView = teams
+	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
 	page.Title = "Explore"
 	page.ScriptPath = relativeURL(r.URL.Path, "/static/explore.js")

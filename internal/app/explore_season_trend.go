@@ -19,7 +19,7 @@ type exploreMatchRecord struct {
 	Opponent             string               `json:"opponent"`
 	Venue                string               `json:"venue"`
 	Score                string               `json:"score"`
-	Values               [3]exploreTeamValues `json:"values"`
+	Values               [4]exploreTeamValues `json:"values"`
 }
 
 type exploreSeasonTrendRow struct {
@@ -37,10 +37,14 @@ type exploreTrendColumn struct {
 type exploreSeasonTrendView struct {
 	TrendMode, TrendWindow, TrendView, TrendCaption, TrendAverageSeries string
 	TrendAverageReference                                               string
+	TrendReferenceOptions                                               []exploreTrendReferenceOption
+	TrendReferences                                                     []exploreTrendReferenceView
+	TrendReferenceStatus                                                string
 	TrendColumns                                                        []exploreTrendColumn
 	TrendTeam                                                           teamNameView
 	TrendRows                                                           []exploreSeasonTrendRow
 	TrendMissingXG, TrendUndated, TrendVenueUnknown, TrendActive        bool
+	TrendMissingXPoints                                                 bool
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
@@ -64,6 +68,7 @@ func exploreMatches(matches []history.TeamMatch, names map[string]string) []expl
 		row.Values[0] = exploreTeamValues{Actual: float64(match.GoalsFor), Expected: match.XGFor}
 		row.Values[1] = exploreTeamValues{Actual: float64(match.GoalsAgainst), Expected: match.XGAgainst}
 		row.Values[2].Actual = float64(match.GoalsFor) - float64(match.GoalsAgainst)
+		row.Values[3] = exploreTeamValues{Actual: float64(match.Points), Expected: match.XPoints}
 		if match.XGFor != nil && match.XGAgainst != nil {
 			difference := *match.XGFor - *match.XGAgainst
 			row.Values[2].Expected = &difference
@@ -74,7 +79,7 @@ func exploreMatches(matches []history.TeamMatch, names map[string]string) []expl
 }
 
 func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamNameView) (exploreSeasonTrendView, error) {
-	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendAverageReference: "team", TrendTeam: selected}
+	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendAverageReference: "league", TrendTeam: selected}
 	page.TrendAverageSeries = "goals"
 	if query.Get("series") == "xg" {
 		page.TrendAverageSeries = "xg"
@@ -85,10 +90,10 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		allowed []string
 	}{
 		{"trend-mode", &page.TrendMode, []string{"match", "rolling"}},
-		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "relative"}},
+		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "points", "relative"}},
 		{"window", &page.TrendWindow, []string{"3", "5", "10"}},
-		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg"}},
-		{"average-reference", &page.TrendAverageReference, []string{"team", "league"}},
+		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg", "points", "xpoints"}},
+		{"average-reference", &page.TrendAverageReference, []string{"team", "league", "playoff", "top-four", "shield", "best"}},
 	} {
 		if values, present := query[field.key]; present {
 			if len(values) != 1 || !slices.Contains(field.allowed, values[0]) {
@@ -104,7 +109,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	// Comparison views always include actual and xG. The query still retains
 	// the Data preference for returning to scoring balance or another team view.
 	switch page.TrendView {
-	case "compare", "difference":
+	case "compare", "difference", "points":
 		series = "both"
 	case "relative":
 		series = page.TrendAverageSeries
@@ -113,13 +118,16 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	if page.TrendView == "difference" {
 		measures = []int{2}
 	}
+	if page.TrendView == "points" || series == "points" || series == "xpoints" {
+		measures = []int{3}
+	}
 	for _, expected := range []bool{false, true} {
-		if (series == "goals" && expected) || (series == "xg" && !expected) {
+		if ((series == "goals" || series == "points") && expected) || ((series == "xg" || series == "xpoints") && !expected) {
 			continue
 		}
-		labels := []string{"Goals scored", "Goals allowed", "Goal differential"}
+		labels := []string{"Goals scored", "Goals allowed", "Goal differential", "Points"}
 		if expected {
-			labels = []string{"xG scored", "xG allowed", "xG differential"}
+			labels = []string{"xG scored", "xG allowed", "xG differential", "xPoints"}
 		}
 		for _, measure := range measures {
 			page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: labels[measure], Measure: measure, Expected: expected})
@@ -130,38 +138,41 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		slices.SortStableFunc(page.TrendColumns, func(a, b exploreTrendColumn) int { return a.Measure - b.Measure })
 	}
 	page.TrendCaption = "Individual match values. Scores are shown from this team's perspective."
-	if page.TrendMode == "rolling" {
-		page.TrendCaption = page.TrendWindow + "-match trailing averages, per match. Scores are shown from this team's perspective."
-	}
 	window, _ := strconv.Atoi(page.TrendWindow)
+	if page.TrendMode == "rolling" {
+		page.TrendCaption = fmt.Sprintf("%s-match trailing averages, per match; matches 1–%d show individual match values. Scores are shown from this team's perspective.", page.TrendWindow, window-1)
+	}
 	for _, season := range teams.TeamSeasons {
 		if season.Season != teams.TeamSeason {
 			continue
 		}
 		page.TrendActive = season.Active
+		page.TrendReferenceOptions = exploreTrendReferenceOptions(season)
 		for _, team := range season.Teams {
 			if team.ID != selected.ID {
 				continue
 			}
 			page.TrendTeam = teamNameView{ID: team.ID, Name: team.Name, LogoURL: team.LogoURL}
+			if page.TrendView == "relative" {
+				page.TrendReferences = exploreTrendReferenceViews(season, team, page.TrendColumns, page.TrendAverageReference)
+				page.TrendReferenceStatus = exploreTrendUnavailableReference(season, page.TrendColumns, page.TrendAverageReference)
+			}
 			for index, match := range team.Matches {
 				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match}
 				for _, column := range page.TrendColumns {
 					value := match.Values[column.Measure]
-					if page.TrendMode == "rolling" {
+					if page.TrendMode == "rolling" && index+1 >= window {
 						value = exploreRollingValue(team.Matches, index, column.Measure, window)
 					}
 					display := exploreTrendNumber(&value.Actual)
-					if page.TrendMode == "rolling" && index+1 < window {
-						display = "Unavailable"
-					}
 					if column.Expected {
 						display = exploreTrendNumber(value.Expected)
 					}
 					row.DisplayValues = append(row.DisplayValues, display)
 				}
 				page.TrendRows = append(page.TrendRows, row)
-				page.TrendMissingXG = page.TrendMissingXG || (series != "goals" && match.Values[0].Expected == nil)
+				page.TrendMissingXG = page.TrendMissingXG || (measures[0] != 3 && series != "goals" && match.Values[0].Expected == nil)
+				page.TrendMissingXPoints = page.TrendMissingXPoints || (measures[0] == 3 && series != "points" && match.Values[3].Expected == nil)
 				page.TrendUndated = page.TrendUndated || match.Undated
 				page.TrendVenueUnknown = page.TrendVenueUnknown || match.VenueDateUnavailable
 			}

@@ -79,6 +79,16 @@ aggregate rows rather than recalculating historical seasons on every request.
 See [How synchronization works](sync-logic-guide.md) for the complete refresh
 flow and terminology.
 
+Explore's Season trend benchmarks reuse the default model's baseline forecast
+with no fixed outcomes. Projected final points select its playoff and top-4
+comparison groups; highest Shield probability selects its Shield favorite,
+including all tied favorites. The comparison lines show those teams' recorded
+match averages. Explore uses its existing cached archive snapshot and shares
+Forecast Lab's executor and result cache. Projection failures leave comparisons
+unavailable while preserving the rest of Explore; there is no current-standings
+fallback. Completed-season groups and the Shield winner use factual standings.
+See [the History guide](history-logic-guide.md) for coverage and membership rules.
+
 ## The model catalog
 
 Every model has a stable ID. Changing its formula or constants requires a new

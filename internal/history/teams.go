@@ -27,6 +27,8 @@ type TeamMatch struct {
 	Home                                  bool
 	GoalsFor, GoalsAgainst                int64
 	XGFor, XGAgainst                      *float64
+	Points                                int
+	XPoints                               *float64
 }
 
 type teamScoringAccumulator struct {
@@ -53,6 +55,12 @@ func (teams teamScoringTotals) addResult(game cache.Game) {
 		match.OpponentID, match.GoalsFor, match.GoalsAgainst = game.AwayTeamID, game.HomeScore.Int64, game.AwayScore.Int64
 		if !match.Home {
 			match.OpponentID, match.GoalsFor, match.GoalsAgainst = game.HomeTeamID, game.AwayScore.Int64, game.HomeScore.Int64
+		}
+		switch {
+		case match.GoalsFor > match.GoalsAgainst:
+			match.Points = 3
+		case match.GoalsFor == match.GoalsAgainst:
+			match.Points = 1
 		}
 		teams[id].Matches = append(teams[id].Matches, match)
 	}
@@ -91,6 +99,8 @@ func (teams teamScoringTotals) addXPoints(game cache.Game, observation cache.Gam
 	away.XPointsCovered++
 	home.xPoints += observation.HomeXPoints.Float64
 	away.xPoints += observation.AwayXPoints.Float64
+	home.Matches[len(home.Matches)-1].XPoints = &observation.HomeXPoints.Float64
+	away.Matches[len(away.Matches)-1].XPoints = &observation.AwayXPoints.Float64
 }
 
 func (teams teamScoringTotals) summaries() []TeamScoring {

@@ -257,21 +257,28 @@ and no-script forms.
 within `season=YYYY`. It shares the validated season, team identity, and
 `series=goals|xg|both` selections with other team views, defaulting to the newest
 eligible season, the first eligible team by name, and both series.
-`trend-view=balance|compare|difference|relative` defaults to Scoring balance, showing
-scored and allowed together. Actual vs xG compares the two bases within Scored
-and Allowed panels; Differential compares goal and xG differential on one plot.
-Season averages shows original values with labeled season-mean references in
-separate Scored and Allowed panels. The Data picker appears in Scoring balance and
-Season averages, which offers only Goals or xG. Scoring balance retains the
-shared `series` preference, including both. Season averages uses
-`average-series=goals|xg`, defaulting to xG when the shared preference is xG and
-to Goals otherwise. Hidden controls retain both preferences in the URL and GET
-form, so switching views restores their selections. Comparison and differential
-always include both bases. Blank, repeated, or unsupported average-series
-selections return 400. `average-reference=team|league` defaults to Team average.
-Its selector replaces the single-series legend above the two Season averages
-charts and remains associated with the GET form. The choice is retained across
-views and Back/Forward; blank, repeated, or unsupported references return 400.
+`trend-view=balance|compare|difference|points|relative` defaults to Scoring balance,
+showing scored and allowed together. Actual vs xG compares the two bases within
+Scored and Allowed panels; Differential compares goal and xG differential on
+one plot. Points vs xPoints compares earned match points (3/1/0) with ASA's
+retrospective xPoints on one plot. These describe played matches, not forecast
+final points. Benchmarks shows original values with team-mean and optional
+comparison references. The retained `relative` value preserves existing links.
+
+The Data picker appears in Scoring balance and Benchmarks. Scoring balance
+retains the shared `series=goals|xg|both` preference. Benchmarks uses
+`average-series=goals|xg|points|xpoints`, defaulting to xG when the shared
+preference is xG and to Goals otherwise. Goals and xG use Scored and Allowed
+panels; Points and xPoints use one Points panel. Hidden controls retain both
+preferences in the URL and GET form, so switching views restores selections.
+Comparison, differential, and Points vs xPoints always include both relevant
+bases. Blank, repeated, or unsupported average-series selections return 400.
+`average-reference=team|league|playoff|top-four|shield|best` defaults to League
+average. The Comparison selector replaces the single-series legend above the
+Benchmarks charts and remains associated with the GET form. `team` means
+None (team average only); every other selection adds one comparison to the
+team's own average. Choices are retained across views and Back/Forward; blank,
+repeated, or unsupported references return 400.
 The season trend selection
 is independent of `measure` and `units` in other team views. The team picker retains IDs
 across seasons and uses their newest eligible names, while the heading and
@@ -292,7 +299,9 @@ season integrity exclusions withhold the view. Home and away appearances are
 oriented to the selected team. Differential is scored minus allowed for both
 goals and xG. Individual xG observations remain available even when that team's
 season-wide xG comparison is unavailable. Invalid, missing, unavailable,
-wrong-team, or capability-disabled xG leaves null values, never zero.
+wrong-team, or capability-disabled expected observations leave null values, never
+zero. Per-match xPoints follows its own paired validation and coverage, independently
+of xG; home/away orientation also applies to points and xPoints.
 
 Match numbers follow kickoff instants, using `fixtures.ParseKickoff` for both
 RFC3339 and ASA’s `2006-01-02 15:04:05 MST` timestamps, so representation and
@@ -326,62 +335,112 @@ the source cache or trigger ASA requests.
 
 A trailing average includes the current match and the
 preceding window-minus-one matches, starts only at the first full window, and
-resets each season. An xG average requires every observation within that exact
-played-match window; missing xG breaks the rolling line until it leaves the
-window, without hiding goals or skipping a match. Values remain unrounded until
-display. The season-trend values table intentionally stays in match order.
+resets each season. An xG or xPoints average requires every observation within that exact
+played-match window; missing expected data breaks that rolling line until it
+leaves the window, without hiding actual values or skipping a match. Values remain unrounded until
+display. Before the first full window, dotted lead-ins show individual match
+values, including for seasons shorter than the selected window; they never
+stand in for missing full-window averages later in the season. Tooltips and
+keyboard announcements identify those early values as individual matches.
+The season-trend values table stays in match order and shows the same early
+match values, identified by its caption.
 
 The default scoring balance puts scored and allowed together at each match's
 exact horizontal position. Scored uses a solid green line with circles; allowed
-uses an orange dashed line with open squares. These encodings stay consistent
+uses a solid orange line with open squares. These encodings stay consistent
 between goals and xG. Per-match lines connect successive recorded observations
-without curve smoothing, and rolling lines connect full-window averages.
+without curve smoothing. Rolling lines use dotted segments through the first
+full-window point, then solid segments between full-window averages.
 Missing xG breaks both types of xG line; it is never interpolated or bridged.
 
 In Scoring balance, selecting both goals and xG shows two vertically aligned,
 separately titled panels; selecting one shows only that panel. Actual vs xG
 instead shows Scored above Allowed, with actual goals and xG paired in each
 panel. Differential pairs goal differential and xG differential on one plot.
-Comparison lines encode actual values with solid green circles and xG with
-dashed purple diamonds. Each plot has at most two match series at identical
+Points vs xPoints uses the same actual/expected encodings on one plot.
+Comparison lines encode actual values with solid green circles and expected
+values with solid brighter purple diamonds. The darker chart green and lighter
+purple also distinguish the solid series by brightness. Each plot has at most two match series at identical
 match positions. Two-panel views use identical match and value scales. Scored and
 allowed scales start at zero; differential uses symmetric signed limits. All
-panels use the selected mode and window. Empty panels explain missing xG or
-insufficient full windows while preserving available goals. There is no
+panels use the selected mode and window. Empty panels explain missing expected
+observations while preserving available goals and early
+individual match values. Each position has one value per series; there is no
 raw/rolling overlay mode.
 
-Season averages (`trend-view=relative`, retained for existing links) keeps
-per-match and rolling values in their original units. Each visible series has
-a dotted horizontal reference at its arithmetic mean across raw completed-match
-observations. Goals use all recorded matches; xG uses available paired
-observations. Team average is the default. League average includes the selected
-team and all eligible recorded fixtures in the selected season. Each fixture is
-counted once, using the mean of its two sides, so uneven schedules are weighted
-by match appearances and scored/allowed share the same league benchmark. League
-xG uses only fixtures with both observations available. Inspection reports
-covered fixtures out of all recorded fixtures. A missing league xG mean leaves
-the reference unavailable. Means reset each season and do not change with the
-rolling window or selected team when using League average. Active seasons use
-all recorded matches so far, rather than a baseline that moves along the chart.
-Missing xG remains unavailable, and a rolling window still needs every xG
-observation; reference lines neither fill gaps nor invent short windows.
+Benchmarks (`trend-view=relative`, retained for existing links) keeps per-match
+and rolling values in their original units. A subdued dotted horizontal
+reference always shows the team's arithmetic mean over raw completed-match
+observations. A selected comparison adds one colored dotted reference. Actual
+means use all recorded matches; xG and xPoints means use available paired
+observations. Means reset each season and do not change with mode or window.
+Active seasons use all recorded matches so far; references stay horizontal
+rather than reconstructing earlier standings or forecasts.
 
-Scored and Allowed have separate panels with shared nonnegative axes. Other
-horizontal gridlines are hidden in this view. Every reference has its numeric value, such as Goals 1.47 or xG 1.04, in a
-reserved right-side axis area headed Team avg or League avg. Labels use the matching series
-color and never cover the plotted observations. Short connectors identify the
-reference position when a label is moved clear of an axis endpoint. Labels draw
-before tooltips so they cannot obscure inspection text. The Data control selects
-Goals or xG. Each panel has one match series and one mean reference. Tooltips and keyboard announcements show
-original values, the selected team/league season mean, and observation counts. The fallback table also
-keeps original values and ordinary column headings. Reference annotations do
-not add keyboard stops or tooltip series. Above the Allowed average means more
-conceded than usual; below means fewer. The other views keep their original
-values without season-average annotations or above-chart average summaries.
-There is no average visibility toggle.
+League average includes every eligible team, including the selected team,
+weighted by recorded match appearances. Each fixture contributes its two
+team-perspective observations. Scored and Allowed have the same league mean.
+Coverage reports available team match appearances out of all recorded
+appearances; xG and xPoints coverage remain independent.
 
-Pointer/touch inspection works by match position and shows all selected values
-for that match, including unavailable xG. Keyboard inspection advances one match
+Playoff-team average follows the catalog's season-specific playoff cut (four,
+six, or eight). Top 4 average uses four teams. Completed seasons use final
+total-points standings, with Shield winner selecting one team across all
+metrics. A missing standings capability, insufficient group size, unplayed
+completed-season fixtures, or unresolved tie across the group cut withholds
+that comparison. Historical catalogs lack season-specific tiebreak rules, so
+any points tie across their cut is withheld even if the current-season ordering
+would resolve it. Unknown historical tiebreaks never certify final playoff or
+Shield membership.
+
+Active seasons label the groups Projected top N average, Projected top 4
+average, and Shield favorite. The default Forecast Lab model's projected final
+points order selects the playoff and top-4 groups; its highest Shield probability
+selects the favorite. Equal Shield probabilities retain all tied favorites.
+Forecasts select membership only: reference means still use recorded matches
+so far, weighted by match appearances and including the selected team when
+applicable. Shield favorite is distinct from the metric-specific Best team
+average.
+
+Explore runs the same baseline forecast as Forecast Lab, without fixed results,
+using the existing archive snapshot, including xG and historical venue rates.
+It shares Forecast Lab's bounded executor and result cache; unchanged inputs
+reuse warmed results, while changed fixture or xG inputs invalidate them. Only
+active scopes with explicit forecast capability, verified rules, recorded team
+observations, and remaining fixtures request a projection. Unsupported scopes,
+failed or busy forecasts, and selected teams without observations leave the
+affected comparisons unavailable; current standings never substitute for a
+forecast. Comparison details identify the model, xG coverage, available fixture
+and xG update timestamps, and fixture/venue coverage warnings. Completed-season
+comparisons remain factual and do not run a forecast.
+
+Best team average selects the best full-season per-match mean for the chosen
+metric: lowest for Allowed, highest otherwise. Scored and Allowed can name
+different teams; ties retain every holder, comparing values before display
+rounding. Expected best values require complete coverage for every league team
+for that metric; a team without recorded matches also withholds Best. Other
+means can remain available from partial expected observations, with coverage
+counts. Unavailable comparisons have a visible explanation and do not fill line gaps
+or invent short windows.
+
+Scored and Allowed have separate panels with shared nonnegative axes. Points
+has one panel. Other horizontal gridlines are hidden in Benchmarks. Numeric
+reference labels occupy a reserved right-side area, use subdued/series colors,
+and are separated when values coincide. Short connectors identify their true
+reference positions. Labels draw before tooltips. Tooltips and keyboard
+announcements show only the active panel’s values and selected means. Shield
+and Best references also name their teams, including tied Best holders.
+Coverage counts and membership notes stay in the expandable details.
+References add no keyboard stops or tooltip datasets. Expand Benchmark values,
+teams and coverage to inspect names, means, coverage and membership notes; this
+also works without JavaScript. The fallback match table retains original values
+and ordinary headings. Above an Allowed reference means more conceded; below
+means fewer. Other views retain original values without references.
+
+Pointer/touch inspection works by match position and shows the inspected panel’s
+values for that match, including unavailable expected data. Scored and Allowed
+inspection stays within its own panel; Scoring balance shows only its Goals or
+xG panel. Each value appears once in the tooltip. Keyboard inspection advances one match
 at a time, with Home/End and Escape, and announces the same values. Tooltips
 include venue-local date, opponent, home/away, team-perspective score, and the
 exact match-number range for an average. A vertical guide identifies the match
@@ -391,17 +450,22 @@ without scripts.
 
 Run `make test-explore` for both kickoff formats, chronological ordering
 (including timezone offsets), venue-local midnight/DST boundaries, missing venue
-handling, venue orientation, all four trend views, single-basis team/league references, validation, and retained Data preferences,
+handling, venue orientation, all five trend views, points/xPoints orientation and independent coverage,
+benchmark membership/cuts/ties, forecast-selected groups and Shield favorites,
+shared forecast cache and unavailable forecasts, match weighting, best-metric
+direction and holders, validation, and retained Data preferences,
 all three windows, unrounded rolling arithmetic, missing xG and recovery,
 season eligibility, selection validation, fallback and single-snapshot
-regressions. The `season-trend` scenario in `TestHistoryPreview` provides 30
-matches per team, partial xG, and an empty season. Verify desktop and 390px
+regressions. The `season-trend` scenario in `TestHistoryPreview` provides 29
+played matches and one remaining fixture per team in the active season, 30
+played matches per team in the completed season, partial xG, and an empty season. Verify desktop and 390px
 layouts; scored/allowed at the same match position; matched axes across paired panels;
 all series/view/mode/window selections and restored Data preferences; pointer/touch and keyboard match
-inspection; labeled team/league means, match-weighted league arithmetic,
-identical league scored/allowed references, available-xG coverage counts, unchanged means across
+inspection; labeled team and comparison means, reference label collisions, panel-specific tooltips and reference holder names, group membership details, match-weighted league arithmetic,
+identical league scored/allowed references, independent xG/xPoints coverage counts, unchanged means across
 modes/windows, original units, one-match values and insufficient-window states,
-zero, ties, and negative values; xG line gaps; short windows and
+zero, ties, and negative values; solid core series and dotted raw lead-ins,
+including tooltip/keyboard identification and fallback tables; xG line gaps; short windows and
 empty seasons; chronological table and no-script GET fallback; direct URLs and
 Back/Forward; and switching views without another document/data request (team
 logos may load).

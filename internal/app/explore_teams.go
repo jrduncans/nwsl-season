@@ -30,9 +30,10 @@ type exploreTeamRecord struct {
 }
 
 type exploreTeamSeason struct {
-	Season string              `json:"season"`
-	Active bool                `json:"active"`
-	Teams  []exploreTeamRecord `json:"teams"`
+	Season     string                  `json:"season"`
+	Active     bool                    `json:"active"`
+	Teams      []exploreTeamRecord     `json:"teams"`
+	Benchmarks []exploreTrendBenchmark `json:"benchmarks"`
 }
 
 type exploreTeamRow struct {
@@ -135,6 +136,12 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 			}
 		}
 		populateExploreTeamRanks(season.Teams)
+		for _, input := range archive {
+			if input.Entry.Season == summary.Season {
+				season.Benchmarks = exploreTrendBenchmarks(season, input)
+				break
+			}
+		}
 		page.TeamSeasons = append(page.TeamSeasons, season)
 	}
 	if page.TeamSeason == "" && len(page.TeamSeasons) > 0 {

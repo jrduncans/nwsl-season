@@ -71,10 +71,28 @@ func TestHistoryPreview(t *testing.T) {
 				game.RawJSON = fmt.Sprintf(`{"stadium_id":%q}`, stadiums[j%16])
 				game.KickoffUTC = time.Date(2026, 3, 2, 1, 0, 0, 0, time.UTC).AddDate(0, 0, j/8*7).Format("2006-01-02 15:04:05 MST")
 				game.HomeTeamID, game.AwayTeamID = season.Data.Teams[j%16].ID, season.Data.Teams[(j+5)%16].ID
+				if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "season-trend" {
+					// Two round-robin legs keep every team at one fixture per
+					// kickoff and one remaining fixture in the active season.
+					round, pairing := j/8, j%8
+					home, away := 15, round%15
+					if pairing > 0 {
+						home, away = (round+pairing)%15, (round+15-pairing)%15
+					}
+					if round >= 15 {
+						home, away = away, home
+					}
+					game.HomeTeamID, game.AwayTeamID = season.Data.Teams[home].ID, season.Data.Teams[away].ID
+				}
 				game.HomeScore.Int64, game.AwayScore.Int64 = int64(j%4), int64((j/3)%3)
 				if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "team-history" {
 					year := int(season.Entry.Season[3] - '0')
 					game.HomeScore.Int64, game.AwayScore.Int64 = int64((j+year)%5), int64((j/3+year)%3)
+				}
+				if os.Getenv("NWSL_HISTORY_PREVIEW_SCENARIO") == "season-trend" && season.Entry.Season == "2026" && j >= count-8 {
+					game.Status = "PreMatch"
+					game.HomeScore, game.AwayScore = sql.NullInt64{}, sql.NullInt64{}
+					continue
 				}
 				if season.Entry.Season == "2022" && j == 1 {
 					continue

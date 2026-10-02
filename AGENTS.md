@@ -58,8 +58,12 @@ for focused diagnosis.
 - For Explore charts or calculations, read [the History guide](docs/history-logic-guide.md).
   Run `make test-explore` for scoring, team rankings (direction, ties, units and league xG coverage), team history/record holders and coverage,
   season trends (scored/allowed balance, actual/xG comparisons, retained Data
-  preferences, mode selections, played order, venue-local dates and DST, venue orientation, single-basis team/league season means, original units and xG counts, full rolling
-  windows and xG gaps), sorting across sortable Explore tables, and cache-only page checks.
+  preferences, mode selections, played order, venue-local dates and DST, venue
+  orientation, points/xPoints and independent coverage, benchmark group cuts/ties
+  and match weighting, forecast-selected groups/Shield favorites/shared cache,
+  best-metric direction/holders, panel-specific inspection
+  and reference holder names, original units and coverage counts, full rolling
+  windows, dotted individual-match lead-ins, solid core series and expected-data gaps), sorting across sortable Explore tables, and cache-only page checks.
 - For sync, cache, scheduler, and ASA-loading work, read the current
   [synchronization guide](docs/sync-logic-guide.md) and
   [ASA-loading index](docs/asa-loading/README.md).

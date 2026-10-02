@@ -111,11 +111,30 @@ func TestTeamScoringExpectedPointsCoverageIsIndependentOfXG(t *testing.T) {
 		t.Fatalf("complete xPoints with partial xG = %+v", home)
 	}
 	assertFloat(t, home.XPoints, 3.625)
+	if len(home.Matches) != 2 || home.Matches[0].Points != 1 || home.Matches[1].Points != 3 {
+		t.Fatalf("chronological home/away match points = %+v", home.Matches)
+	}
+	assertFloat(t, home.Matches[0].XPoints, 1.375)
+	assertFloat(t, home.Matches[1].XPoints, 2.25)
+	if home.Matches[0].XGFor != nil {
+		t.Fatal("missing xG must not hide independently available match xPoints")
+	}
 	away := byID["away"]
 	if away.Played != 2 || away.Points != 0 || away.XGCovered != 2 || away.XPointsCovered != 1 || away.XPoints != nil {
 		t.Fatalf("complete xG with partial xPoints = %+v", away)
 	}
 	assertFloat(t, away.XGFor, 1.5)
+	for _, match := range away.Matches {
+		if match.Points != 0 {
+			t.Fatalf("loss earned points: %+v", match)
+		}
+		if match.ID == "away-win" && match.XPoints != nil {
+			t.Fatal("missing xPoints must remain nil with available xG")
+		}
+		if match.ID == "home-win" {
+			assertFloat(t, match.XPoints, .5)
+		}
+	}
 	third := byID["third"]
 	if third.Played != 2 || third.Points != 4 || third.XPointsCovered != 1 || third.XPoints != nil {
 		t.Fatalf("other team's missing xPoints affected own results = %+v", third)
