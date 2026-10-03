@@ -252,6 +252,10 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=gap&display=chart", http.StatusBadRequest, ""},
 		{"/explore?view=teams&display=scatter&display=chart", http.StatusBadRequest, ""},
+		{"/explore?view=teams&display=quadrant&display=chart", http.StatusBadRequest, ""},
+		{"/explore?view=teams&quadrant-data=", http.StatusBadRequest, ""},
+		{"/explore?view=teams&quadrant-data=invalid", http.StatusBadRequest, ""},
+		{"/explore?view=teams&quadrant-data=goals&quadrant-data=xg", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-sort=bad", http.StatusBadRequest, ""},
 		{"/explore?view=teams&team-order=bad", http.StatusBadRequest, ""},
 		{"/explore?view=team-history&team=unknown", http.StatusBadRequest, ""},
@@ -475,6 +479,7 @@ func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
 		{"paired-dot chart", page.TeamChartURL, "chart"},
 		{"gap chart", page.TeamGapURL, "gap"},
 		{"outlier plot", page.TeamScatterURL, "scatter"},
+		{"quadrant plot", page.TeamQuadrantURL, "quadrant"},
 		{"table", page.TeamTableURL, "table"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -522,6 +527,65 @@ func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testi
 		if !strings.Contains(body, want) {
 			t.Errorf("scatter direct URL missing %q", want)
 		}
+	}
+}
+
+func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
+	for _, mode := range []string{"goals", "xg", "both"} {
+		for _, units := range []string{"per-match", "total"} {
+			t.Run(mode+"/"+units, func(t *testing.T) {
+				store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+					"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+					"2026": {lifecycle: cache.SourceScopeActive, goals: 3, xgCovered: 19},
+				})}
+				response := httptest.NewRecorder()
+				path := "/nwsl-season/explore?view=teams&display=quadrant&season=2026&measure=points&quadrant-data=" + mode + "&units=" + units
+				NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+				if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
+					t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, response.Body.String())
+				}
+				body := response.Body.String()
+				for _, want := range []string{
+					`data-team-display="quadrant" aria-current="page"`,
+					`Scored vs allowed by team (regular-season)</h2>`,
+					`<input type="hidden" name="display" value="quadrant">`,
+					`<option value="` + mode + `" selected>`,
+					`<option value="` + units + `" selected>`,
+					`data-team-measure-control hidden`,
+					`data-team-quadrant-control>`,
+					`data-chart="team-quadrant"`,
+					`data-team-quadrant-selection`,
+					`<table class="explore-table explore-team-table">`,
+					`Unavailable`,
+				} {
+					if !strings.Contains(body, want) {
+						t.Errorf("quadrant URL missing %q", want)
+					}
+				}
+				summaries, err := history.SummarizeScoring(store.archive)
+				if err != nil {
+					t.Fatal(err)
+				}
+				selection, err := url.Parse(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				page, err := exploreTeams(selection.Query(), summaries, store.archive)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, target := range []string{page.TeamQuadrantURL, page.TeamChartURL, page.TeamGapURL, page.TeamScatterURL, page.TeamTableURL, page.TeamColumns[0].URL} {
+					link, err := url.Parse(target)
+					if err != nil || link.Query().Get("quadrant-data") != mode || link.Query().Get("units") != units || link.Query().Get("measure") != "points" || link.Query().Get("season") != "2026" {
+						t.Fatalf("selection lost in link %s: %v", target, err)
+					}
+				}
+			})
+		}
+	}
+	page, err := exploreTeams(nil, nil, nil)
+	if err != nil || page.TeamQuadrantData != "goals" {
+		t.Fatalf("default quadrant selection = %q, error = %v", page.TeamQuadrantData, err)
 	}
 }
 

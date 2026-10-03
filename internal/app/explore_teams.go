@@ -57,20 +57,23 @@ type exploreTeamsView struct {
 	TeamSeason, TeamMeasure                                string
 	TeamActualLabel, TeamXGLabel                           string
 	TeamDisplay, TeamSort, TeamOrder, TeamUnits            string
+	TeamQuadrantData                                       string
 	TeamChartURL, TeamGapURL, TeamScatterURL, TeamTableURL string
+	TeamQuadrantURL                                        string
 	TeamMissingXG, TeamMissingXPoints                      bool
 	TeamColumns                                            []exploreTeamColumn
 	TeamRows                                               []exploreTeamRow
 }
 
 func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) (exploreTeamsView, error) {
-	page := exploreTeamsView{TeamMeasure: "difference", TeamDisplay: "chart", TeamSort: "difference-gap", TeamOrder: "desc", TeamUnits: "per-match"}
+	page := exploreTeamsView{TeamMeasure: "difference", TeamDisplay: "chart", TeamSort: "difference-gap", TeamOrder: "desc", TeamUnits: "per-match", TeamQuadrantData: "goals"}
 	for _, field := range []struct {
 		key     string
 		value   *string
 		allowed []string
 	}{
-		{"display", &page.TeamDisplay, []string{"chart", "gap", "scatter", "table"}},
+		{"display", &page.TeamDisplay, []string{"chart", "gap", "scatter", "quadrant", "table"}},
+		{"quadrant-data", &page.TeamQuadrantData, []string{"goals", "xg", "both"}},
 		{"team-sort", &page.TeamSort, []string{"name", "played", "actual", "expected", "gap", "difference-actual", "difference-expected", "difference-gap", "for-actual", "for-expected", "for-gap", "against-actual", "against-expected", "against-gap", "points-actual", "points-expected", "points-gap"}},
 		{"team-order", &page.TeamOrder, []string{"asc", "desc"}},
 		{"units", &page.TeamUnits, []string{"per-match", "total"}},
@@ -169,10 +172,11 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	case "points":
 		page.TeamActualLabel, page.TeamXGLabel = "Points", "xPts"
 	}
-	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}, "units": {page.TeamUnits}}
+	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}, "units": {page.TeamUnits}, "quadrant-data": {page.TeamQuadrantData}}
 	page.TeamChartURL = exploreTeamURL(selection, map[string]string{"display": "chart"})
 	page.TeamGapURL = exploreTeamURL(selection, map[string]string{"display": "gap"})
 	page.TeamScatterURL = exploreTeamURL(selection, map[string]string{"display": "scatter"})
+	page.TeamQuadrantURL = exploreTeamURL(selection, map[string]string{"display": "quadrant"})
 	page.TeamTableURL = exploreTeamURL(selection, map[string]string{"display": "table"})
 	columns := []exploreTeamColumn{{Key: "name", Label: "Team", Description: "Team", Leading: true}, {Key: "played", Label: "Played", Description: "Played", Leading: true}}
 	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}, {"points", "Points"}} {

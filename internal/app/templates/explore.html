@@ -14,6 +14,7 @@
 <a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Comparison chart</a>
 <a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>Gap chart</a>
 <a href="{{.TeamScatterURL}}" data-team-display="scatter"{{if and (eq .View "teams") (eq .TeamDisplay "scatter")}} aria-current="page"{{end}}>Outlier plot</a>
+<a href="{{.TeamQuadrantURL}}" data-team-display="quadrant"{{if and (eq .View "teams") (eq .TeamDisplay "quadrant")}} aria-current="page"{{end}}>Scored vs allowed</a>
 <a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Comparison table</a>
 <a href="?view=team-rankings" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>Team rankings</a>
 <a href="?view=season-trend" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>Season trend</a>
@@ -71,14 +72,15 @@
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
-<div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team (regular-season){{else if eq .TeamDisplay "scatter"}}Actual vs expected by team (regular-season){{else}}Actual vs expected (regular-season){{end}}</h2>
+<div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team (regular-season){{else if eq .TeamDisplay "scatter"}}Actual vs expected by team (regular-season){{else if eq .TeamDisplay "quadrant"}}Scored vs allowed by team (regular-season){{else}}Actual vs expected (regular-season){{end}}</h2>
 <form method="get" data-team-controls class="explore-team-controls">
 <input type="hidden" name="view" value="teams">
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
 <input type="hidden" name="team-sort" value="{{.TeamSort}}">
 <input type="hidden" name="team-order" value="{{.TeamOrder}}">
 <label>Season <select name="season" data-team-season>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
-<label data-team-measure-control{{if eq .TeamDisplay "table"}} hidden{{end}}>Compare <select name="measure" data-team-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option><option value="points"{{if eq .TeamMeasure "points"}} selected{{end}}>Points</option></select></label>
+<label data-team-measure-control{{if or (eq .TeamDisplay "table") (eq .TeamDisplay "quadrant")}} hidden{{end}}>Compare <select name="measure" data-team-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option><option value="points"{{if eq .TeamMeasure "points"}} selected{{end}}>Points</option></select></label>
+<label data-team-quadrant-control{{if ne .TeamDisplay "quadrant"}} hidden{{end}}>Data <select name="quadrant-data" data-team-quadrant-data><option value="goals"{{if eq .TeamQuadrantData "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .TeamQuadrantData "xg"}} selected{{end}}>xG</option><option value="both"{{if eq .TeamQuadrantData "both"}} selected{{end}}>Goals and xG</option></select></label>
 <label>Values <select name="units" data-team-units><option value="per-match"{{if eq .TeamUnits "per-match"}} selected{{end}}>Per match</option><option value="total"{{if eq .TeamUnits "total"}} selected{{end}}>Totals</option></select></label>
 <noscript><button class="button" type="submit">Show comparison</button></noscript>
 </form></div>
@@ -113,6 +115,18 @@
 </section>
 <p class="note" data-team-scatter-hint hidden>Click a point to keep its details. Click a hollow circle to move the guides.</p>
 <p class="note" data-team-scatter-table-link><a href="{{.TeamTableURL}}" data-team-display="table">See every team's values in the comparison table</a>.</p>
+</div>
+<div data-team-quadrant-plot hidden>
+<p class="note" id="explore-team-quadrant-note">Up means more scored; right means fewer allowed. Dashed lines divide the four quadrants at the average.</p>
+<div class="explore-legend" data-team-quadrant-legend><span class="explore-actual-key" data-quadrant-goals-key>● Goals</span><span class="explore-expected-key" data-quadrant-xg-key>◆ xG</span><span data-quadrant-connection-key>Lines connect each team's xG and goals</span></div>
+<p class="note" data-team-quadrant-average></p>
+<p class="note" id="explore-team-quadrant-missing" data-team-quadrant-missing hidden></p>
+<p class="note" data-team-quadrant-empty hidden>No teams have complete xG for this season yet.</p>
+<label class="explore-scatter-logo-toggle" data-team-quadrant-logo-control><input type="checkbox" data-team-quadrant-logos checked> Show team logos; hide overlapping logos</label>
+<div class="explore-chart-wrap explore-team-scatter-wrap explore-team-quadrant-wrap" data-team-quadrant-chart-wrap><canvas data-chart="team-quadrant" tabindex="0" role="img" aria-label="Team scored versus allowed" aria-describedby="explore-chart-help explore-team-quadrant-note explore-team-quadrant-missing"></canvas><div class="explore-scatter-logo-layer" data-team-scatter-logo-layer hidden aria-hidden="true"></div></div>
+<div class="explore-scatter-selection" data-team-quadrant-selection hidden aria-live="polite" aria-atomic="true"><div class="explore-scatter-selection-heading"><h3>Selected teams</h3><button type="button" class="button" data-team-quadrant-clear>Clear selection</button></div><div class="explore-scatter-selection-teams" data-team-quadrant-selection-teams></div></div>
+<p class="note" data-team-quadrant-hint>Hover or tap a point to inspect it. Click to keep its details. Arrow keys inspect every point; Escape clears the selection.</p>
+<p class="note"><a href="{{.TeamTableURL}}" data-team-display="table">See every team's values in the comparison table</a>.</p>
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
