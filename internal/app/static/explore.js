@@ -9,6 +9,8 @@
   const teamSeason = root.querySelector('[data-team-season]');
   const teamMeasure = root.querySelector('[data-team-measure]');
   const teamUnits = root.querySelector('[data-team-units]');
+  const quadrantData = root.querySelector('[data-team-quadrant-data]');
+  const quadrantLogoToggle = root.querySelector('[data-team-quadrant-logos]');
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = root.querySelector('[data-history-measure]');
   const rankingControls = root.querySelector('[data-team-rankings-controls]');
@@ -91,6 +93,7 @@
   }
   function dismiss(clearPinned = true) {
     if (clearPinned) clearScatterSelection(charts.teamScatter, false);
+    if (clearPinned) clearQuadrantSelection(charts.teamQuadrant, false);
     Object.values(charts).forEach(clearChart);
     status.textContent = '';
   }
@@ -106,7 +109,7 @@
       for (let index = 0; index < chart.data.labels.length; index++) {
         chart.data.datasets.forEach((dataset, datasetIndex) => {
           const value = dataset.data[index];
-          if (chart.isDatasetVisible(datasetIndex) && value != null && (!dataset.keyboardOnce || index === 0) && (!chart.keyboardByIndex || marks.at(-1)?.index !== index)) marks.push({datasetIndex, index});
+          if (chart.isDatasetVisible(datasetIndex) && value != null && !chart.getDatasetMeta(datasetIndex).data[index]?.skip && (!dataset.keyboardOnce || index === 0) && (!chart.keyboardByIndex || marks.at(-1)?.index !== index)) marks.push({datasetIndex, index});
         });
       }
       if (!marks.length) return;
@@ -420,14 +423,57 @@
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
+  function scatterPlotDomain(values, signed = false) {
+    const low = Math.min(...values), high = Math.max(...values);
+    // Fit the visible extremes rather than padding a whole quadrant. A tied
+    // population still needs a small, nonzero range for inspection.
+    const padding = high === low ? Math.max(Math.abs(high) * .025, .05) : (high - low) * .05;
+    return {min: signed ? low - padding : Math.max(0, low - padding), max: high + padding};
+  }
   function scatterDomain(rows, measure, units) {
     const values = rows.flatMap(row => {
       const metric = teamMetric(row, measure, units);
       return [metric.actual, metric.expected];
     });
-    const low = Math.min(...values), high = Math.max(...values);
-    const padding = Math.max((high - low) * .12, high === low ? Math.max(Math.abs(high) * .15, .15) : .06);
-    return {min: measure.index === 2 ? low - padding : Math.max(0, low - padding), max: high + padding};
+    return scatterPlotDomain(values, measure.index === 2);
+  }
+  function scatterMarks(chart) {
+    return chart.data.datasets.flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex)
+      ? dataset.data.flatMap((value, index) => value?.x != null && value?.y != null
+        ? [{index, datasetIndex, x: chart.scales.x.getPixelForValue(value.x), y: chart.scales.y.getPixelForValue(value.y)}] : []) : []);
+  }
+  function scatterPointRadius(points, area) {
+    let clearance = Infinity;
+    points.forEach((point, index) => {
+      clearance = Math.min(clearance, point.x - area.left, area.right - point.x, point.y - area.top, area.bottom - point.y);
+      points.slice(index + 1).forEach(other => {
+        const distance = Math.hypot(other.x - point.x, other.y - point.y);
+        // Crowded or coincident marks retain the existing minimum size.
+        clearance = Math.min(clearance, (distance - 4) / 2);
+      });
+    });
+    return Math.max(6, Math.min(10, Math.floor(clearance - 2)));
+  }
+  function fitScatterPoints(chart) {
+    chart.scatterPointRadius = scatterPointRadius(scatterMarks(chart), chart.chartArea);
+  }
+  function scatterLogoPlacement(point, size, area, obstacles, occupied, radius) {
+    const gap = radius + 3, padding = 2;
+    const placements = [
+      {left: point.x - size / 2, top: point.y - size - gap},
+      {left: point.x + gap, top: point.y - size / 2},
+      {left: point.x - size / 2, top: point.y + gap},
+      {left: point.x - size - gap, top: point.y - size / 2},
+      {left: point.x + gap, top: point.y - size - gap},
+      {left: point.x - size - gap, top: point.y - size - gap},
+      {left: point.x + gap, top: point.y + gap},
+      {left: point.x - size - gap, top: point.y + gap},
+    ].map(position => ({...position, right: position.left + size, bottom: position.top + size}));
+    return placements.find(rect => {
+      if (rect.left < area.left || rect.right > area.right || rect.top < area.top || rect.bottom > area.bottom) return false;
+      if (occupied.some(box => rect.left < box.right + padding && rect.right + padding > box.left && rect.top < box.bottom + padding && rect.bottom + padding > box.top)) return false;
+      return !obstacles.some(other => other.x >= rect.left - radius - padding && other.x <= rect.right + radius + padding && other.y >= rect.top - radius - padding && other.y <= rect.bottom + radius + padding);
+    });
   }
   function drawScatterLogos(chart) {
     const layer = chart.canvas.parentElement.querySelector('[data-team-scatter-logo-layer]');
@@ -460,55 +506,40 @@
       chart.scatterLogoKey = logoKey;
     }
     for (const image of layer.children) image.style.visibility = 'hidden';
-    const points = chart.getDatasetMeta(0).data.map((point, index) => {
-      if (!point || point.skip) return null;
-      const {x, y} = point.getProps(['x', 'y'], true);
-      return {index, x, y};
-    }).filter(Boolean);
-    const size = 22, gap = 4, padding = 2;
-    const {left, right, top, bottom} = chart.chartArea;
+    const anchorDataset = chart.data.datasets.findIndex((_, index) => chart.isDatasetVisible(index));
+    if (anchorDataset < 0) return;
+    const obstacles = scatterMarks(chart);
+    const points = obstacles.filter(point => point.datasetIndex === anchorDataset);
+    const radius = (chart.scatterPointRadius || 6) + 3;
     const canvasBounds = chart.canvas.getBoundingClientRect();
     const layerBounds = layer.getBoundingClientRect();
     const offsetX = canvasBounds.left - layerBounds.left;
     const offsetY = canvasBounds.top - layerBounds.top;
     const visibleLabels = [];
-    const overlaps = (first, second) =>
-      first.left < second.right + padding && first.right + padding > second.left &&
-      first.top < second.bottom + padding && first.bottom + padding > second.top;
-    const obstructsPoint = (box, point) =>
-      point.x >= box.left - 7 && point.x <= box.right + 7 &&
-      point.y >= box.top - 7 && point.y <= box.bottom + 7;
     const candidates = points.filter(point => rows[point.index]?.logo).map(point => {
       const nearest = Math.min(Infinity, ...points
         .filter(other => other.index !== point.index)
         .map(other => Math.hypot(other.x - point.x, other.y - point.y)));
       return {...point, nearest};
     }).sort((a, b) => b.nearest - a.nearest || a.index - b.index);
-    const placements = point => [
-      {left: point.x - size / 2, top: point.y - size - gap},
-      {left: point.x + gap, top: point.y - size / 2},
-      {left: point.x - size / 2, top: point.y + gap},
-      {left: point.x - size - gap, top: point.y - size / 2},
-      {left: point.x + size / 2 - 2, top: point.y - size - gap},
-      {left: point.x - size - size / 2 + 2, top: point.y - size - gap},
-      {left: point.x + size / 2 - 2, top: point.y + gap},
-      {left: point.x - size - size / 2 + 2, top: point.y + gap},
-    ].map(position => ({...position, right: position.left + size, bottom: position.top + size}));
+    // Establish small labels first, then enlarge without displacing neighbors.
     for (const candidate of candidates) {
       const row = rows[candidate.index];
       const image = images.get(row.id);
       if (!image || (image.complete && !image.naturalWidth)) continue;
-      const box = placements(candidate).find(rect => {
-        if (rect.left < left || rect.right > right || rect.top < top || rect.bottom > bottom) return false;
-        if (visibleLabels.some(label => overlaps(rect, label.rect))) return false;
-        if (points.some(point => point.index !== candidate.index && obstructsPoint(rect, point))) return false;
-        return true;
-      });
-      if (box) visibleLabels.push({index: candidate.index, rect: box, image});
+      const box = scatterLogoPlacement(candidate, 22, chart.chartArea, obstacles, visibleLabels.map(label => label.rect), radius);
+      if (box) visibleLabels.push({point: candidate, rect: box, image});
     }
+    const maximumSize = Math.min(48, Math.max(22, Math.floor(chart.chartArea.width / 20)));
     for (const label of visibleLabels) {
+      const occupied = visibleLabels.filter(other => other !== label).map(other => other.rect);
+      for (let size = maximumSize; size > 22; size -= 2) {
+        const box = scatterLogoPlacement(label.point, size, chart.chartArea, obstacles, occupied, radius);
+        if (box) { label.rect = box; break; }
+      }
       const {left, top} = label.rect;
       const {image} = label;
+      image.style.width = image.style.height = `${label.rect.right - left}px`;
       image.style.left = `${left + offsetX}px`;
       image.style.top = `${top + offsetY}px`;
       image.style.visibility = 'visible';
@@ -659,6 +690,7 @@
     const chart = new Chart(canvas, {
       type: 'scatter', options,
       plugins: [{id: 'teamScatterParity',
+        afterLayout: fitScatterPoints,
         beforeDatasetsDraw(chart) {
           const {x, y} = chart.scales, ctx = chart.ctx;
           ctx.save(); ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
@@ -700,7 +732,8 @@
       }, ChartDataLabels],
       data: {labels: [], datasets: [{
         label: 'Teams', data: [], backgroundColor: [], borderColor: color('--panel'), borderWidth: 1.5,
-        pointRadius: 6, pointHitRadius: 6, pointHoverRadius: 9,
+        pointRadius: context => context.chart.scatterPointRadius || 6, pointHitRadius: 6,
+        pointHoverRadius: context => (context.chart.scatterPointRadius || 6) + 3,
         pointHoverBorderColor: color('--gold'), pointHoverBorderWidth: 2,
       }]},
     });
@@ -709,6 +742,159 @@
     chart.scatterShowLogos = scatterLogoToggle.checked;
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
+  }
+  function quadrantPoint(row, expected, units) {
+    const values = units === 'total' ? row.totals : row.values;
+    const key = expected ? 'expected' : 'actual';
+    if (values[0][key] === null || values[1][key] === null) return null;
+    return {x: values[1][key], y: values[0][key]};
+  }
+  function quadrantAverage(rows, expected, units) {
+    // Rates weight by appearances; totals compare the mean team total.
+    const covered = rows.filter(row => quadrantPoint(row, expected, units) !== null);
+    const denominator = covered.reduce((sum, row) => sum + (units === 'total' ? 1 : row.played), 0);
+    if (!denominator) return null;
+    return covered.reduce((sum, row) => {
+      const point = quadrantPoint(row, expected, 'total');
+      return {x: sum.x + point.x / denominator, y: sum.y + point.y / denominator};
+    }, {x: 0, y: 0});
+  }
+  function quadrantDescription(chart, index) {
+    const row = chart.teamRows[index], suffix = chart.teamUnits === 'total' ? ' total' : ' per match';
+    return [false, true].map(expected => {
+      const point = quadrantPoint(row, expected, chart.teamUnits), label = expected ? 'xG' : 'Goals';
+      return point ? `${label} scored: ${fixed(point.y)} · allowed: ${fixed(point.x)}${suffix}` : 'xG unavailable (incomplete coverage)';
+    }).concat(`${row.played} played${chart.quadrantActive ? ' · In progress' : ''}`);
+  }
+  function clearQuadrantSelection(chart, update = true) {
+    if (!chart) return;
+    chart.quadrantPinnedIndexes = [];
+    root.querySelector('[data-team-quadrant-selection]').hidden = true;
+    root.querySelector('[data-team-quadrant-selection-teams]').replaceChildren();
+    if (update) clearChart(chart);
+  }
+  function createTeamQuadrant(canvas) {
+    const options = commonOptions();
+    options.layout = {padding: {top: 34, bottom: 34}};
+    options.interaction.mode = 'point';
+    options.onClick = (_, elements, chart) => {
+      const indexes = [...new Set(elements.map(element => element.index))];
+      clearQuadrantSelection(chart, false);
+      chart.quadrantPinnedIndexes = indexes;
+      root.querySelector('[data-team-quadrant-selection]').hidden = !indexes.length;
+      root.querySelector('[data-team-quadrant-selection-teams]').replaceChildren(...indexes.map(index => {
+        const card = document.createElement('article'); card.className = 'explore-scatter-selection-team';
+        const heading = document.createElement('h4'); heading.append(teamName(chart.teamRows[index])); card.append(heading);
+        quadrantDescription(chart, index).forEach(line => { const p = document.createElement('p'); p.textContent = line; card.append(p); });
+        return card;
+      }));
+      chart.update('none');
+    };
+    options.scales = Object.fromEntries(['x', 'y'].map(axis => [axis, {
+      type: 'linear', reverse: axis === 'x', grid: {color: color('--line')}, border: {display: false},
+      ticks: {includeBounds: false, maxTicksLimit: 5}, title: {display: true, text: ''},
+    }]));
+    options.plugins.tooltip.filter = (_, index) => index < 2;
+    options.plugins.tooltip.callbacks = {
+      title: () => '',
+      label: item => [`${item.chart.teamRows[item.dataIndex].name} · ${item.dataset.label}`, ...quadrantDescription(item.chart, item.dataIndex)],
+      footer: items => {
+        const count = items[0]?.chart.getActiveElements().length || 0;
+        return count > items.length ? '+ More overlapping points; click for all details or use arrow keys' : '';
+      },
+    };
+    options.plugins.datalabels = {
+      align: 'top', offset: 8, clamp: true, color: color('--ink'), backgroundColor: color('--panel'),
+      borderRadius: 3, padding: 3, font: {size: 11},
+      display: context => context.active || (!context.chart.scatterShowLogos && context.chart.quadrantPinnedIndexes?.includes(context.dataIndex)) ? 'auto' : false,
+      formatter: (_, context) => context.chart.teamRows?.[context.dataIndex]?.name || '',
+    };
+    const chart = new Chart(canvas, {
+      type: 'scatter', options, data: {labels: [], datasets: [
+        {label: 'Goals', pointStyle: 'circle', backgroundColor: goalsColor},
+        {label: 'xG', pointStyle: 'rectRot', backgroundColor: xgColor},
+      ].map(series => ({...series, data: [], borderColor: color('--panel'), borderWidth: 1.5,
+        pointRadius: context => context.chart.scatterPointRadius || 6, pointHitRadius: 4,
+        pointHoverRadius: context => (context.chart.scatterPointRadius || 6) + 3,
+        pointHoverBorderColor: color('--gold'), pointHoverBorderWidth: 2}))},
+      plugins: [{id: 'teamQuadrants', afterLayout: fitScatterPoints, beforeDatasetsDraw(chart) {
+        const average = chart.quadrantAverage;
+        if (!average) return;
+        const {left, right, top, bottom} = chart.chartArea;
+        const x = chart.scales.x.getPixelForValue(average.x), y = chart.scales.y.getPixelForValue(average.y), ctx = chart.ctx;
+        ctx.save();
+        ctx.fillStyle = 'rgba(19,111,74,.05)'; ctx.fillRect(x, top, right - x, y - top);
+        ctx.fillStyle = 'rgba(91,63,150,.05)'; ctx.fillRect(left, y, x - left, bottom - y);
+        ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.25; ctx.setLineDash([5, 5]);
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = color('--muted'); ctx.font = `${chart.width < 400 ? 10 : 12}px system-ui`;
+        for (const [align, px, allowance] of [['left', left + 6, 'More allowed'], ['right', right - 6, 'Fewer allowed']]) {
+          ctx.textAlign = align;
+          ctx.fillText('More scored', px, top - 22); ctx.fillText(allowance, px, top - 8);
+          ctx.fillText('Fewer scored', px, chart.height - 22); ctx.fillText(allowance, px, chart.height - 8);
+        }
+        if (chart.isDatasetVisible(0) && chart.isDatasetVisible(1)) {
+          chart.teamRows.forEach((_, index) => {
+            const actual = chart.getDatasetMeta(0).data[index], expected = chart.getDatasetMeta(1).data[index];
+            if (!actual || !expected || actual.skip || expected.skip) return;
+            const selected = chart.quadrantPinnedIndexes?.includes(index) || chart.getActiveElements().some(mark => mark.index === index);
+            ctx.strokeStyle = selected ? color('--gold') : color('--muted'); ctx.globalAlpha = selected ? 1 : .4; ctx.lineWidth = selected ? 2.5 : 1;
+            ctx.beginPath(); ctx.moveTo(expected.x, expected.y); ctx.lineTo(actual.x, actual.y); ctx.stroke();
+          });
+        }
+        ctx.restore();
+      }, afterDatasetsDraw: drawScatterLogos}, ChartDataLabels],
+    });
+    chart.quadrantPinnedIndexes = [];
+    chart.scatterShowLogos = quadrantLogoToggle.checked;
+    keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name} · ${chart.data.datasets[mark.datasetIndex].label}. ${quadrantDescription(chart, mark.index).join('. ')}`);
+    return chart;
+  }
+  function showTeamQuadrant(season, units, mode) {
+    const rows = sortedTeams(season.teams, teamMeasures.for, 'name', 'asc', units);
+    const expectedOnly = mode === 'xg';
+    const points = rows.flatMap(row => [
+      ...(expectedOnly ? [] : [quadrantPoint(row, false, units)]),
+      ...(mode === 'goals' ? [] : [quadrantPoint(row, true, units)]),
+    ].filter(Boolean));
+    const empty = points.length === 0;
+    for (const selector of ['chart-wrap', 'legend', 'logo-control', 'hint']) root.querySelector(`[data-team-quadrant-${selector}]`).hidden = empty;
+    root.querySelector('[data-team-quadrant-empty]').hidden = !empty;
+    root.querySelector('[data-team-quadrant-average]').hidden = empty;
+    root.querySelector('[data-quadrant-goals-key]').hidden = expectedOnly;
+    root.querySelector('[data-quadrant-xg-key]').hidden = mode === 'goals';
+    root.querySelector('[data-quadrant-connection-key]').hidden = mode !== 'both';
+    const missing = rows.filter(row => quadrantPoint(row, true, units) === null).map(row => row.name);
+    const note = root.querySelector('[data-team-quadrant-missing]');
+    note.hidden = mode === 'goals' || !missing.length;
+    note.textContent = `Incomplete xG for ${missing.join(', ')}; ${expectedOnly ? 'these teams have no xG point' : 'their goals remain visible, without an xG point or connecting line'}.`;
+    if (empty) return;
+    const canvas = root.querySelector('[data-chart="team-quadrant"]');
+    const chart = charts.teamQuadrant || (charts.teamQuadrant = createTeamQuadrant(canvas));
+    clearQuadrantSelection(chart, false);
+    chart.teamRows = rows; chart.teamUnits = units; chart.quadrantActive = season.active;
+    chart.quadrantAverage = quadrantAverage(rows, expectedOnly, units);
+    chart.data.labels = rows.map(row => row.name);
+    chart.data.datasets.forEach((series, index) => {
+      // Scatter object parsing requires an object even for an unavailable mark.
+      series.data = rows.map(row => quadrantPoint(row, index === 1, units) ?? {x: null, y: null});
+      chart.setDatasetVisibility(index, index === 0 ? !expectedOnly : mode !== 'goals');
+    });
+    const average = chart.quadrantAverage, suffix = units === 'total' ? 'in total' : 'per match';
+    const domain = scatterPlotDomain([...points.flatMap(point => [point.x, point.y]), average.x, average.y]);
+    for (const axis of ['x', 'y']) {
+      chart.options.scales[axis].min = domain.min;
+      chart.options.scales[axis].max = domain.max;
+    }
+    const label = expectedOnly ? 'xG' : mode === 'both' ? 'Goals / xG' : 'Goals';
+    chart.options.scales.x.title.text = `${label} allowed ${suffix} · fewer →`;
+    chart.options.scales.y.title.text = `${label} scored ${suffix} · more →`;
+    root.querySelector('[data-team-quadrant-average]').textContent =
+      `Dashed lines: ${expectedOnly ? 'covered teams’ xG' : 'league goals'} average — ${fixed(average.y)} scored, ${fixed(average.x)} allowed ${suffix}. ` +
+      (units === 'total' ? 'Average team totals; teams may have played different numbers of matches.' : 'Weighted by played matches.') +
+      (mode === 'both' ? ' Both series use the goals average as a shared reference.' : '');
+    canvas.setAttribute('aria-label', `${season.season} regular season${season.active ? ' (in progress)' : ''}: ${label} scored versus allowed ${suffix}. Up means more scored; right means fewer allowed. Dashed lines show ${expectedOnly ? 'covered teams’ xG' : 'league goals'} averages.`);
+    chart.resize(); chart.update('none');
   }
   function showTeams(params) {
     const season = teamSeasons.find(row => row.season === (params.get('season') || root.dataset.defaultTeamSeason));
@@ -719,7 +905,8 @@
     const unitLabel = units === 'total' ? 'in total' : 'per match';
     const measure = teamMeasures[teamMeasure.value];
     const rows = season?.teams || [];
-    const display = ['chart', 'gap', 'scatter', 'table'].includes(params.get('display')) ? params.get('display') : 'chart';
+    const display = ['chart', 'gap', 'scatter', 'quadrant', 'table'].includes(params.get('display')) ? params.get('display') : 'chart';
+    quadrantData.value = ['goals', 'xg', 'both'].includes(params.get('quadrant-data')) ? params.get('quadrant-data') : 'goals';
     const columns = [...root.querySelectorAll('[data-team-sort]')].map(link => link.dataset.teamSort);
     let requestedSort = params.get('team-sort');
     if (['actual', 'expected', 'gap'].includes(requestedSort)) requestedSort = `${teamMeasure.value}-${requestedSort}`;
@@ -735,19 +922,22 @@
     root.querySelector('[data-team-controls] [name="team-order"]').value = order;
     root.querySelector('#explore-teams-title').textContent = display === 'gap'
       ? 'Actual − expected by team (regular-season)'
-      : display === 'scatter' ? 'Actual vs expected by team (regular-season)' : 'Actual vs expected (regular-season)';
-    root.querySelector('[data-team-measure-control]').hidden = display === 'table';
+      : display === 'scatter' ? 'Actual vs expected by team (regular-season)'
+      : display === 'quadrant' ? 'Scored vs allowed by team (regular-season)' : 'Actual vs expected (regular-season)';
+    root.querySelector('[data-team-measure-control]').hidden = display === 'table' || display === 'quadrant';
+    root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
-      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. Points compare earned points with ASA xPts from those matches.`;
+      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
     root.querySelector('[data-team-plot]').hidden = display !== 'chart';
     root.querySelector('[data-team-gap-plot]').hidden = display !== 'gap';
     root.querySelector('[data-team-scatter-plot]').hidden = display !== 'scatter';
+    root.querySelector('[data-team-quadrant-plot]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-table]').hidden = display !== 'table';
     const missingXG = rows.some(row => row.values[0].expected === null);
     const missingXPoints = rows.some(row => row.values[3].expected === null);
-    const warningTypes = display === 'table'
+    const warningTypes = display === 'quadrant' ? [] : display === 'table'
       ? [missingXG && 'xG', missingXPoints && 'xPts'].filter(Boolean)
       : [measure.index === 3 ? missingXPoints && 'xPts' : missingXG && 'xG'].filter(Boolean);
     const warning = root.querySelector('[data-team-warning]');
@@ -785,6 +975,7 @@
       return tr;
     }));
     if (!rows.length) return;
+    if (display === 'quadrant') { showTeamQuadrant(season, units, quadrantData.value); return; }
     if (display === 'gap') {
       const gapRows = sortedTeams(rows, measure, 'gap', measure.index === 1 ? 'asc' : 'desc', units);
       const gapValues = gapRows.map(row => teamValue(row, measure, 'gap', units));
@@ -1505,7 +1696,7 @@
     root.querySelector('[data-team-views]').hidden = !teamView;
     root.querySelectorAll('[data-team-display]').forEach(link => {
       const selected = view === 'teams' && link.dataset.teamDisplay ===
-        (['chart', 'gap', 'scatter', 'table'].includes(params.get('display')) ? params.get('display') : 'chart');
+        (['chart', 'gap', 'scatter', 'quadrant', 'table'].includes(params.get('display')) ? params.get('display') : 'chart');
       if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
       link.href = teamLink({display: link.dataset.teamDisplay});
     });
@@ -1629,11 +1820,18 @@
     });
   }
   root.querySelector('[data-team-controls]').addEventListener('submit', event => {
-    event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value, units: teamUnits.value});
+    event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value, units: teamUnits.value, 'quadrant-data': quadrantData.value});
   });
   teamSeason.addEventListener('change', () => update({season: teamSeason.value}));
   teamMeasure.addEventListener('change', () => update({measure: teamMeasure.value, 'team-sort': root.querySelector('[name="team-sort"]').value}));
   teamUnits.addEventListener('change', () => update({units: teamUnits.value}));
+  quadrantData.addEventListener('change', () => update({'quadrant-data': quadrantData.value}));
+  quadrantLogoToggle.addEventListener('change', () => {
+    if (!charts.teamQuadrant) return;
+    charts.teamQuadrant.scatterShowLogos = quadrantLogoToggle.checked;
+    charts.teamQuadrant.update('none');
+  });
+  root.querySelector('[data-team-quadrant-clear]').addEventListener('click', () => clearQuadrantSelection(charts.teamQuadrant));
   scatterLogoToggle.addEventListener('change', () => {
     if (!charts.teamScatter) return;
     charts.teamScatter.scatterShowLogos = scatterLogoToggle.checked;

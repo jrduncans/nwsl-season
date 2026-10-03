@@ -36,7 +36,8 @@ from the cached fixtures when a season page or CLI report is requested.
 - Explore workspace with interactive regular-season scoring trends, signed
   goals-minus-xG gaps, goal distributions, selected goal-bin trends, a sortable
   season table, within-season team comparisons, six-stat team rankings with league-size context, signed gap rankings, an actual
-  versus expected team outlier plot, within-season team scoring trends with match
+  versus expected team outlier plot, a scored-versus-allowed quadrant chart with
+  goals, xG, and connected goals/xG modes, within-season team scoring trends with match
   values and 3/5/10-match rolling averages for goals and xG, and team history with floating league ranges
   for goals scored, goals allowed, and goal differential against xG, plus actual
   points against ASA's retrospective expected points (xPoints).
@@ -79,7 +80,10 @@ League scoring exploration is available at
 <http://localhost:8080/explore>, with scoring, goal-distribution, and table views
 in one workspace. Team performance compares actual and expected goals or points
 for a selected regular season, including an outlier plot with expected values
-on the horizontal axis and actual values on the vertical axis. Comparisons use
+on the horizontal axis and actual values on the vertical axis. Scored vs allowed
+plots goals or xG in four quadrants around average dividers; its combined mode
+connects each team's goals and xG points. More scored and fewer allowed moves
+up/right. The square chart grows to 1200 × 1200 on larger screens. Comparisons use
 per-match values by default, with a total option for the selected season. Team
 history charts one team's goals, xG, points, and xPoints per match across regular
 seasons, with a sortable season table. Optional league context shows seasonal

@@ -10,7 +10,7 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 `GET /explore` reuses the same coherent archive read and scoring calculations.
 It groups Scoring trend, Goal distribution, and Season table under League
 scoring, with a separate Team performance analysis in the same workspace.
-Team performance offers Comparison chart, Gap chart, Outlier plot, Comparison
+Team performance offers Comparison chart, Gap chart, Outlier plot, Scored vs allowed, Comparison
 table, Team rankings, Season trend, and Team history as direct views. The
 comparison charts show one selected measure; Comparison table and Team history
 show all four. Team rankings shows all six goal and xG ranks together.
@@ -103,9 +103,9 @@ paired-dot chart, Gap chart, Outlier plot, and table. Per match is the default;
 totals sum the same selected team's recorded regular-season matches. Explicit
 unsupported years, malformed or repeated season values, and invalid or repeated
 measures or units return 400. Selections update locally and support direct URLs
-and Back/Forward. `display=chart|gap|scatter|table` selects comparison views
+and Back/Forward. `display=chart|gap|scatter|quadrant|table` selects comparison views
 (paired-dot chart by default), preserving the season and chart measure. The
-measure picker appears on all three charts; the table always includes all four
+measure picker appears on Comparison chart, Gap chart, and Outlier plot; the table always includes all four
 measures. A small-screen cue identifies the table's horizontal scroll.
 `team-sort` accepts `name`, `played`, or a metric-qualified key such as
 `difference-gap`, `for-actual`, `against-expected`, or `points-gap`. Each of
@@ -162,7 +162,11 @@ horizontal axis and actual value on the vertical axis. Its diagonal marks equal
 actual and expected values: points above it are above expected (green), and
 points below it are below expected (purple). Both axes use the same numeric
 range, fitted to the selected teams' actual and expected values with room around
-the points. A short note explains above, below, and distance from the line for
+the points. Both scatter plots fit the visible extrema with 5% padding on each
+side, including the quadrant averages. They do not force a symmetric distance
+from the average, since an outlier on one side would add empty space on the other.
+Tied populations use a small nonzero range; nonnegative measures stop at zero.
+A short note explains above, below, and distance from the line for
 the selected measure. Positive measures do not have to start at zero; signed goal
 differentials can extend below zero. Teams without complete xG for goal measures,
 or xPoints for points, have no point and are named in a note accessible from the
@@ -182,6 +186,46 @@ gets a text label. Keyboard inspection
 reaches every plotted team; a link below the plot opens the comparison table for
 all teams, including those whose points overlap. The season and measure
 selections, direct URLs, and Back/Forward work as on the other comparison views.
+Scored vs allowed (`display=quadrant`) plots scored vertically against allowed
+horizontally. The horizontal axis runs from high to low, so up/right means more
+scored and fewer conceded. Both axes share a fitted numeric range and the same
+units. The square chart grows with the page to at most 1200 × 1200 CSS pixels;
+small screens retain a square within the available width. Corner labels describe
+the four quadrants from reserved bands outside the data area; dashed dividers
+show the average in the selected units.
+`quadrant-data=goals|xg|both` defaults to Goals and is independent of the retained
+comparison measure. Goals uses one green circle per team; xG uses purple diamonds
+only for teams with complete paired xG coverage. Both shows the two points joined
+by a line per covered team. Goals remains visible for teams without xG; a named
+note explains missing points and connectors. xG shows an explicit empty state
+when no teams qualify. Missing xPoints never affects this chart.
+
+For Goals and Both, dividers use the league goals average across all eligible
+teams. Both uses this single reference for both series. For xG, dividers use
+the xG average of fully covered teams, explicitly labeled as such. Per-match
+averages divide summed team totals by summed played appearances, so uneven
+played counts weight correctly. Totals use the arithmetic mean team total and
+note that teams may have different played counts. No rounding precedes averaging
+or positioning. The visible note gives scored/allowed averages and their units.
+
+Hover/tap and keyboard inspection report team identity, goals and xG scored and
+allowed, played count, and in-progress status. Click pins all teams at an
+overlapping point in details cards and highlights their connectors; empty-space
+clicks, Clear selection, and Escape clear the selection. Team logos are optional,
+with overlap suppression against both series. Arrow keys reach all available
+marks, including coincident teams, and skip missing xG. Season, data mode, units,
+and display restore through Back/Forward and shareable URLs without new requests.
+The comparison table and GET controls remain the no-script fallback.
+
+In both scatter plots, point radii adapt uniformly from 6 to 10 CSS pixels when
+the nearest-point spacing and plot edges allow it. Crowded or coincident points
+retain the minimum size and remain individually keyboard-inspectable. Logo
+placement first reserves 22px boxes, then grows each to at most 48px on large
+plots, checking every other logo, all visible points in both series, hover
+clearance, and plot boundaries. Enlargement does not displace a previously
+placed logo. Recalculate sizing and placement after data, units, mode, and
+viewport changes; marker size is a layout choice, not a statistical encoding.
+
 Goal differential is goals for minus goals against; xG differential is xG for
 minus xG against. Points are earned from recorded results, and xPoints are ASA's
 expected points summed over those same matches. Gap always means actual minus
@@ -207,7 +251,11 @@ in `make test` and CI). For browser verification, the `teams` scenario in
 coverage, and an empty season. Verify desktop and 390px layouts, signed
 differential and gap axes, gap ranking for all four measures and both unit modes,
 the Outlier plot's equal axis ranges and parity diagonal for all four measures,
-positive and negative gaps, coincident points, touch/hover, pinned details and
+positive and negative gaps, Scored vs allowed's reversed allowed axis, average
+dividers and weighted per-match versus total baselines, goals/xG/both modes,
+connecting lines and missing xG, tight/tied/zero bounds, adaptive uniform point
+sizes and two-pass logo growth/collisions, 1200px sizing and square mobile layout,
+coincident points, touch/hover, pinned details and
 axis guides, clearing a pinned point, optional logo labels with overlap
 suppression, keyboard inspection/dismissal, logos and alignment after resize,
 missing-data warnings and `xG incomplete` or `xPoints incomplete` labels, the

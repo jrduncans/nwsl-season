@@ -442,7 +442,10 @@ th:nth-child(2) { text-align: left; }
 .explore-scatter-parity { display: inline-block; width: 1rem; border-top: 2px dashed var(--muted); }
 .explore-chart-wrap { position: relative; max-width: 58rem; height: 390px; margin-top: 1.25rem; }
 .explore-team-scatter-wrap { width: min(100%, 38rem); height: 38rem; isolation: isolate; }
+.page:has([data-panel="teams"]:not([hidden]) [data-team-quadrant-plot]:not([hidden])) { width: min(1200px, calc(100% - 2.5rem)); }
+.explore-chart-wrap.explore-team-quadrant-wrap { width: min(100%, 1200px); max-width: 1200px; height: auto; aspect-ratio: 1; }
 .explore-team-scatter-wrap canvas { position: relative; z-index: 1; }
+.explore-team-quadrant-wrap canvas { position: absolute; inset: 0; }
 .explore-scatter-logo-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .explore-scatter-logo { position: absolute; width: 22px; height: 22px; box-sizing: border-box; padding: 2px; object-fit: contain; border: 1px solid var(--line); border-radius: .25rem; background: var(--panel); pointer-events: none; }
 .explore-scatter-logo-toggle { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .9rem; }
