@@ -63,6 +63,12 @@
       },
     },
   });
+  // Disable Chart.js auto-padding because it changes plot bounds after redraws
+  // in Safari. Keep the same small edge buffer reserved for points and labels.
+  const scatterLayout = (top = 15, bottom = 0) => ({
+    autoPadding: false,
+    padding: {top, right: 15, bottom, left: 0},
+  });
   function trendYAxis(gaps = null) {
     // The hidden bar dataset must not make the goals/xG line modes start at zero.
     const axis = {beginAtZero: false, grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}};
@@ -619,6 +625,7 @@
   }
   function createTeamScatter(canvas) {
     const options = commonOptions();
+    options.layout = scatterLayout();
     options.interaction = {mode: 'point', intersect: true};
     options.onClick = (event, activeElements, chart) => {
       const target = scatterProjectionAt(chart, event.x, event.y);
@@ -775,7 +782,7 @@
   }
   function createTeamQuadrant(canvas) {
     const options = commonOptions();
-    options.layout = {padding: {top: 34, bottom: 34}};
+    options.layout = scatterLayout(34, 34);
     options.interaction.mode = 'point';
     options.onClick = (_, elements, chart) => {
       const indexes = [...new Set(elements.map(element => element.index))];
@@ -830,7 +837,11 @@
         ctx.setLineDash([]); ctx.fillStyle = color('--muted'); ctx.font = `${chart.width < 400 ? 10 : 12}px system-ui`;
         for (const [align, px, allowance] of [['left', left + 6, 'More allowed'], ['right', right - 6, 'Fewer allowed']]) {
           ctx.textAlign = align;
-          ctx.fillText('More scored', px, top - 22); ctx.fillText(allowance, px, top - 8);
+          // On narrow plots, the direction note and axis titles already explain
+          // the upper corners; leave the centered Goals/xG key unobstructed.
+          if (chart.width >= 480) {
+            ctx.fillText('More scored', px, top - 22); ctx.fillText(allowance, px, top - 8);
+          }
           ctx.fillText('Fewer scored', px, chart.height - 22); ctx.fillText(allowance, px, chart.height - 8);
         }
         if (chart.isDatasetVisible(0) && chart.isDatasetVisible(1)) {

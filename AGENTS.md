@@ -56,7 +56,7 @@ for focused diagnosis.
 ## Documentation routing
 
 - For Explore charts or calculations, read [the History guide](docs/history-logic-guide.md).
-  Run `make test-explore` for scoring, team quadrant selections/units/coverage/cache-only fallback (browser-check axis direction, weighted averages, connecting lines, tight/tied/zero bounds, adaptive point sizes/logo collisions, keyboard access and desktop/mobile sizing), team rankings (direction, ties, units and league xG coverage), team history/record holders and coverage,
+  Run `make test-explore` for scoring, team quadrant selections/units/coverage/cache-only fallback (browser-check axis direction, weighted averages, in-chart Goals/xG key, connecting lines, tight/tied/zero bounds, adaptive point sizes/logo collisions, keyboard access, viewport-capped Outlier sizing, circular Outlier markers, stable plot bounds during tooltip redraws, and desktop/mobile sizing), team rankings (direction, ties, units and league xG coverage), team history/record holders and coverage,
   season trends (scored/allowed balance, actual/xG comparisons, retained Data
   preferences, mode selections, played order, venue-local dates and DST, venue
   orientation, points/xPoints and independent coverage, benchmark group cuts/ties

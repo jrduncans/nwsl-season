@@ -21,6 +21,6 @@ jobs:
       - run: make vet
       - name: Test future-fixture clinching proofs and ordered scenario summaries
         run: make test-clinching
-      # Scatter tight/tied/zero bounds and adaptive point/logo collisions also require desktop/mobile browser checks.
+      # Scatter tight/tied/zero bounds, adaptive point/logo collisions, the in-chart Goals/xG key, viewport-capped Outlier sizing, circular Outlier markers, and stable tooltip redraw bounds also require desktop/mobile browser checks.
       - name: Test all packages, including Explore team quadrants (selections, units, coverage, cache-only fallback), team rankings (direction, ties, units, league xG coverage), records, venue dates/DST, scoring balance, actual/xG comparisons, mode selections, points/xPoints and independent coverage, benchmark groups/cuts/ties/weighting/best holders, forecast-selected groups/Shield favorites/shared cache, panel-specific inspection/reference names and original units, rolling windows and expanding-average lead-ins, sorting and coverage
         run: make test

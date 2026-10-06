@@ -27,7 +27,7 @@ test:
 # Explore scoring, team quadrant selections/units/coverage/cache-only fallback, team rankings/direction/ties/units/league xG coverage, team history/records/coverage, venue dates/DST, scoring balance, actual/xG comparisons, rolling/xG gaps and expanding-average lead-ins,
 # points/xPoints and independent coverage, benchmark group cuts/ties/match weighting/best holders,
 # forecast-selected groups/Shield favorites/shared cache, panel-specific inspection and reference holder names, original units and coverage counts, sorting across sortable tables, and single-snapshot pages.
-# Browser-check scatter tight/tied/zero bounds, adaptive point sizes and logo collisions at desktop/mobile widths.
+# Browser-check scatter tight/tied/zero bounds, adaptive point sizes and logo collisions, the in-chart Goals/xG key, viewport-capped Outlier sizing, circular Outlier markers, stable plot bounds during tooltip redraws, and desktop/mobile widths.
 .PHONY: test-explore
 test-explore:
 	go test ./internal/fixtures
