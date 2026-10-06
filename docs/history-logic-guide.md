@@ -166,6 +166,12 @@ the points. Both scatter plots fit the visible extrema with 5% padding on each
 side, including the quadrant averages. They do not force a symmetric distance
 from the average, since an outlier on one side would add empty space on the other.
 Tied populations use a small nonzero range; nonnegative measures stop at zero.
+The square Outlier plot grows with the page to at most 1200 CSS pixels. On
+desktop, its size is capped near the viewport height, with a 608px minimum so
+the plot stays usable in shorter windows. Small screens size it to the
+available width. Its above/below/parity key sits in the chart frame directly
+above the square plot and uses circles for above/below points and a dashed line
+for parity. Redrawing or clearing a tooltip keeps the plot bounds fixed.
 A short note explains above, below, and distance from the line for
 the selected measure. Positive measures do not have to start at zero; signed goal
 differentials can extend below zero. Teams without complete xG for goal measures,
@@ -189,15 +195,18 @@ selections, direct URLs, and Back/Forward work as on the other comparison views.
 Scored vs allowed (`display=quadrant`) plots scored vertically against allowed
 horizontally. The horizontal axis runs from high to low, so up/right means more
 scored and fewer conceded. Both axes share a fitted numeric range and the same
-units. The square chart grows with the page to at most 1200 × 1200 CSS pixels;
-small screens retain a square within the available width. Corner labels describe
-the four quadrants from reserved bands outside the data area; dashed dividers
-show the average in the selected units.
+units. The square chart grows with the page to at most 1200 × 1200 CSS pixels
+and is capped near viewport height with a 608px minimum on desktop; small
+screens retain a square within the available width. Corner labels describe
+the four quadrants from reserved bands outside the data area; compact charts omit
+upper-corner captions where they would collide with the centered key. Dashed
+dividers show the average in the selected units.
 `quadrant-data=goals|xg|both` defaults to Goals and is independent of the retained
 comparison measure. Goals uses one green circle per team; xG uses purple diamonds
 only for teams with complete paired xG coverage. Both shows the two points joined
-by a line per covered team. Goals remains visible for teams without xG; a named
-note explains missing points and connectors. xG shows an explicit empty state
+by a line per covered team. A key in the square plot's top margin identifies the
+Goals and xG marks and the connecting line. Goals remains visible for teams
+without xG; a named note explains missing points and connectors. xG shows an explicit empty state
 when no teams qualify. Missing xPoints never affects this chart.
 
 For Goals and Both, dividers use the league goals average across all eligible
@@ -254,7 +263,9 @@ the Outlier plot's equal axis ranges and parity diagonal for all four measures,
 positive and negative gaps, Scored vs allowed's reversed allowed axis, average
 dividers and weighted per-match versus total baselines, goals/xG/both modes,
 connecting lines and missing xG, tight/tied/zero bounds, adaptive uniform point
-sizes and two-pass logo growth/collisions, 1200px sizing and square mobile layout,
+sizes and two-pass logo growth/collisions, viewport-capped Outlier sizing and
+circular Outlier markers in its key, the in-chart Goals/xG key, and square
+mobile layout, plot bounds after tooltip redraws and dismissals,
 coincident points, touch/hover, pinned details and
 axis guides, clearing a pinned point, optional logo labels with overlap
 suppression, keyboard inspection/dismissal, logos and alignment after resize,
