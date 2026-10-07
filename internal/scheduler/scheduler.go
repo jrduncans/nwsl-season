@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
@@ -54,14 +54,16 @@ type Config struct {
 }
 
 type Scheduler struct {
-	store    SnapshotStore
-	runner   Runner
-	config   Config
-	logger   *slog.Logger
-	now      func() time.Time
-	stop     chan struct{}
-	done     chan struct{}
-	stopOnce sync.Once
+	store  SnapshotStore
+	runner Runner
+	config Config
+	logger *slog.Logger
+	now    func() time.Time
+	// ctx is the scheduler's lifetime. Stop cancels it, which interrupts
+	// in-flight source requests and calculations detached beneath it.
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 const coldSweepLeaseKey = "cold-sweep"
@@ -119,7 +121,8 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Scheduler{store: store, runner: runner, config: config, logger: logger, now: time.Now, stop: make(chan struct{}), done: make(chan struct{})}, nil
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Scheduler{store: store, runner: runner, config: config, logger: logger, now: time.Now, ctx: lifetime.Root(ctx), cancel: cancel, done: make(chan struct{})}, nil
 }
 
 func (s *Scheduler) Start() {
@@ -140,11 +143,11 @@ func (s *Scheduler) Start() {
 		defer ticker.Stop()
 		for {
 			select {
-			case <-s.stop:
+			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
 				select {
-				case <-s.stop:
+				case <-s.ctx.Done():
 					return
 				default:
 				}
@@ -153,8 +156,13 @@ func (s *Scheduler) Start() {
 		}
 	}()
 }
-func (s *Scheduler) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
+
+// Stop ends the scheduler and cancels its in-flight work, including derived
+// calculations and forecast warming that outlive a source-request deadline.
+func (s *Scheduler) Stop() { s.cancel() }
 func (s *Scheduler) Wait() { <-s.done }
+
+func (s *Scheduler) stopped() bool { return s.ctx.Err() != nil }
 
 func (s *Scheduler) check() {
 	s.checkWithTrigger(cache.SourceTriggerScheduler)
@@ -169,11 +177,15 @@ func (s *Scheduler) checkWithTrigger(trigger cache.SourceRefreshTrigger) bool {
 // follow-on catalog batch; failure, deferral, and cancellation retain the
 // normal scheduler cadence rather than creating a rapid retry loop.
 func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPreflight bool) bool {
-	ctx, span := telemetry.Tracer().Start(context.Background(), nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
+	ctx, span := telemetry.Tracer().Start(s.ctx, nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
 	defer span.End()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
 	snapshot, err := s.store.PlanningSnapshot(planningCtx)
 	planningCancel()
+	if s.stopped() {
+		span.SetAttributes(nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeStopped))
+		return false
+	}
 	if err != nil {
 		span.SetAttributes(nwslconv.SchedulerAction("read_planning_snapshot"), nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeFailure))
 		_ = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.ErrorCodeSchedulerPlanningSnapshot, telemetry.ErrorTypeStorageFailure)
@@ -188,6 +200,10 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "preflight")
 	}
 	span.SetAttributes(nwslconv.SchedulerClinchingPreflightOutcome(preflightCalculation))
+	if s.stopped() {
+		span.SetAttributes(nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeStopped))
+		return false
+	}
 	now := s.now().UTC()
 	jobs := Plan(snapshot, s.config, now)
 	availableJobs := Plan(snapshot, unlimitedRequestBudget(s.config), now)
@@ -198,8 +214,11 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 		if outcome == nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded {
 			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "no_source_request_due")
 		}
+		if s.stopped() {
+			outcome = nwslconv.SchedulerOutcomeStopped
+		}
 		span.SetAttributes(nwslconv.SchedulerAction("recalculate"), nwslconv.SchedulerRequestCount(0), nwslconv.SchedulerOutcome(outcome))
-		return true
+		return !s.stopped()
 	}
 	for i := range jobs {
 		jobs[i].Operation.Trigger = trigger
@@ -215,13 +234,10 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 	}
 	requests := 0
 	tickOutcome := nwslconv.SchedulerOutcomeComplete
-jobsLoop:
 	for _, job := range jobs {
-		select {
-		case <-s.stop:
+		if s.stopped() {
 			tickOutcome = nwslconv.SchedulerOutcomeStopped
-			break jobsLoop
-		default:
+			break
 		}
 		requestCtx, requestCancel := context.WithTimeout(ctx, s.config.Timeout)
 		jobCtx, jobSpan := telemetry.Tracer().Start(requestCtx, nwslconv.SpanSchedulerJob, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(jobAttributes(job, syncer.OperationResult{}, nwslconv.SchedulerJobOutcomePlanned, requests)...))
@@ -238,6 +254,10 @@ jobsLoop:
 		}
 		jobSpan.End()
 		requestCancel()
+		if s.stopped() {
+			tickOutcome = nwslconv.SchedulerOutcomeStopped
+			break
+		}
 		if outcome == nwslconv.SchedulerJobOutcomeFailure {
 			tickOutcome = nwslconv.SchedulerOutcomeFailure
 			break
@@ -261,7 +281,7 @@ jobsLoop:
 }
 
 func (s *Scheduler) startupCatalogBootstrapDue() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), s.config.Timeout)
+	ctx, cancel := context.WithTimeout(s.ctx, s.config.Timeout)
 	defer cancel()
 	snapshot, err := s.store.PlanningSnapshot(ctx)
 	if err != nil {
@@ -291,7 +311,7 @@ func (s *Scheduler) waitForStartupBootstrapBatch() bool {
 	timer := time.NewTimer(startupBootstrapInterval(s.config))
 	defer timer.Stop()
 	select {
-	case <-s.stop:
+	case <-s.ctx.Done():
 		return false
 	case <-timer.C:
 		return true
@@ -352,7 +372,11 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	job.Operation.StartedAt = now
 	result, err := s.runner.Execute(parent, job.Operation)
 	if err != nil {
-		s.logger.Error("source job failed", "job", job.Kind, "season", job.Operation.Season, "stage", job.Operation.Stage, "error", err)
+		level := slog.LevelError
+		if s.stopped() && errors.Is(err, context.Canceled) {
+			level = slog.LevelDebug
+		}
+		s.logger.Log(parent, level, "source job failed", "job", job.Kind, "season", job.Operation.Season, "stage", job.Operation.Stage, "error", err)
 		return nwslconv.SchedulerJobOutcomeFailure, result, true, err
 	}
 	return nwslconv.SchedulerJobOutcomeComplete, result, true, nil

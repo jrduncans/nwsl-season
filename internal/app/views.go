@@ -16,7 +16,12 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/strength"
 )
 
-const clubLogoBaseURL = "https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/"
+// clubLogoOrigin is also the only third-party image source the Content
+// Security Policy allows.
+const (
+	clubLogoOrigin  = "https://american-soccer-analysis-headshots.s3.amazonaws.com"
+	clubLogoBaseURL = clubLogoOrigin + "/club_logos/"
+)
 
 type seasonPage struct {
 	Title                  string

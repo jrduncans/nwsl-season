@@ -16,6 +16,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/operations"
 	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
@@ -201,13 +202,31 @@ func (r forecastWarmingRunner) Execute(ctx context.Context, operation syncer.Ope
 		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeNotNeeded)
 		return result, nil
 	}
-	if err := r.application.PrecacheForecastsWithTrigger(context.WithoutCancel(ctx), "post_source_job"); err != nil {
-		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeFailed)
+	outcome, err := r.warmForecasts(ctx, "post_source_job")
+	setSchedulerForecastWarmOutcome(ctx, outcome)
+	if err != nil {
 		r.logger.Warn("pre-cache forecasts after source job", "season", operation.Season, "stage", operation.Stage, "error", err)
-		return result, nil
 	}
-	setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeComplete)
 	return result, nil
+}
+
+// warmForecasts refreshes the baseline forecast cache. Warm-up is independent
+// from the source-request deadline: the forecast executor applies its own
+// per-model deadline, and a failure must not turn a successful ASA cache
+// transaction into a failed sync. It still stops with the scheduler, and that
+// expected interruption is reported as not run rather than as a failure.
+func (r forecastWarmingRunner) warmForecasts(ctx context.Context, trigger string) (string, error) {
+	warmCtx, cancel := lifetime.Detach(ctx)
+	defer cancel()
+	err := r.application.PrecacheForecastsWithTrigger(warmCtx, trigger)
+	switch {
+	case warmCtx.Err() != nil:
+		return nwslconv.SchedulerForecastWarmOutcomeNotRun, nil
+	case err != nil:
+		return nwslconv.SchedulerForecastWarmOutcomeFailed, err
+	default:
+		return nwslconv.SchedulerForecastWarmOutcomeComplete, nil
+	}
 }
 
 func (r forecastWarmingRunner) forecastInputsForScope(season, stage string) bool {
@@ -239,17 +258,16 @@ func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOption
 		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeNotNeeded)
 		return run, err
 	}
-	// Warm-up is independent from the source-request deadline. The forecast
-	// executor applies its own per-model deadline, and a failure must not turn a
-	// successful ASA cache transaction into a failed sync.
-	if err := r.application.PrecacheForecastsWithTrigger(context.WithoutCancel(ctx), "post_sync"); err != nil {
-		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeFailed)
+	outcome, err := r.warmForecasts(ctx, "post_sync")
+	setSchedulerForecastWarmOutcome(ctx, outcome)
+	if err != nil {
 		r.logger.Warn("pre-cache forecasts after data refresh", "season", options.Season, "stage", options.Stage, "error", err)
 		return run, nil
 	}
-	setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeComplete)
-	r.logger.Info("pre-cached forecasts after data refresh", "season", options.Season, "stage", options.Stage,
-		"fixture_snapshot_id", run.FixtureSnapshotID)
+	if outcome == nwslconv.SchedulerForecastWarmOutcomeComplete {
+		r.logger.Info("pre-cached forecasts after data refresh", "season", options.Season, "stage", options.Stage,
+			"fixture_snapshot_id", run.FixtureSnapshotID)
+	}
 	return run, nil
 }
 

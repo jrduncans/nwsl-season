@@ -3,6 +3,7 @@ package qualification
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -221,4 +222,66 @@ func TestCompleteInventoryRequiresEveryDoubleRoundRobinFixture(t *testing.T) {
 	if completeInventory(rules, teams, corrupted) {
 		t.Fatal("degree-correct fixture duplication was accepted")
 	}
+}
+
+func TestRefreshPublishesNothingWhenCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	store := &recordingQualificationStore{}
+	_, err := (Refresher{Store: store, Rules: twoTeamRules()}).Refresh(ctx, cache.SyncRun{ID: 1, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}, twoTeams(), twoTeamGames(), false)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if store.replaced != 0 || store.failures != 0 {
+		t.Fatalf("store writes = replaced %d failures %d, want none after cancellation", store.replaced, store.failures)
+	}
+}
+
+func TestRefreshPublishesBudgetLimitedBatchWhenBudgetExpires(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	store := &recordingQualificationStore{}
+	if _, err := (Refresher{Store: store, Rules: twoTeamRules()}).Refresh(ctx, cache.SyncRun{ID: 1, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}, twoTeams(), twoTeamGames(), false); err != nil {
+		t.Fatal(err)
+	}
+	if store.replaced != 1 || store.failures != 0 {
+		t.Fatalf("store writes = replaced %d failures %d, want one budget-limited batch", store.replaced, store.failures)
+	}
+}
+
+func twoTeamRules() competition.Rules {
+	return competition.Rules{
+		Season: "2026", Stage: "Regular Season", Version: "rules-v1",
+		ExpectedTeams: 2, GamesPerTeam: 2,
+		Achievements: []competition.Achievement{{ID: competition.AchievementShield, Label: "Shield", TopK: 1}},
+	}
+}
+
+func twoTeams() []cache.Team {
+	return []cache.Team{{ASAID: "a", Name: "A"}, {ASAID: "b", Name: "B"}}
+}
+
+func twoTeamGames() []cache.Game {
+	return []cache.Game{
+		{ASAID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: "2026-11-01 22:00:00 UTC"},
+		{ASAID: "g2", Status: "FullTime", HomeTeamID: "b", AwayTeamID: "a", KickoffUTC: "2026-10-01 22:00:00 UTC", HomeScore: sql.NullInt64{Valid: true}, AwayScore: sql.NullInt64{Valid: true}},
+	}
+}
+
+type recordingQualificationStore struct {
+	replaced, failures int
+}
+
+func (*recordingQualificationStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
+	return cache.QualificationSnapshot{}, false, nil
+}
+
+func (s *recordingQualificationStore) ReplaceQualification(context.Context, cache.QualificationRun, []cache.QualificationStatus) (cache.QualificationSnapshot, error) {
+	s.replaced++
+	return cache.QualificationSnapshot{}, nil
+}
+
+func (s *recordingQualificationStore) RecordQualificationFailure(context.Context, cache.QualificationRun, error) error {
+	s.failures++
+	return nil
 }

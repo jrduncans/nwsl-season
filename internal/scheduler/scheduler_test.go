@@ -10,6 +10,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
 
@@ -612,6 +613,56 @@ func TestSchedulerStopPreventsStartingAnotherPlannedJob(t *testing.T) {
 	}
 }
 
+func TestSchedulerStopCancelsInFlightSourceJob(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
+	runner := &blockingRunner{started: make(chan struct{}, 1)}
+	config := testPlannerConfig()
+	config.Timeout = time.Hour
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return now }
+	s.Start()
+	<-runner.started
+	s.Stop()
+	waitForScheduler(t, s)
+	if store.acquired != 1 || store.released != 1 {
+		t.Fatalf("leases = %d/%d, want the interrupted job's lease released", store.acquired, store.released)
+	}
+}
+
+func TestSchedulerStopCancelsDetachedCalculation(t *testing.T) {
+	store := &planningStore{}
+	runner := &blockingRunner{started: make(chan struct{}, 1)}
+	config := testPlannerConfig()
+	config.Timeout = time.Hour
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	<-runner.started
+	s.Stop()
+	waitForScheduler(t, s)
+}
+
+func waitForScheduler(t *testing.T, s *Scheduler) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		s.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("scheduler did not stop its in-flight work")
+	}
+}
+
 func planningScope(season, stage string, readiness cache.SourceReadiness, games []cache.Game) cache.PlanningScopeSnapshot {
 	scope := cache.PlanningScopeSnapshot{Readiness: cache.SeasonReadinessSnapshot{Scope: cache.SourceScope{Season: season, Stage: stage, Lifecycle: cache.SourceScopeActive}, Readiness: readiness, Completeness: cache.InventoryCompletenessComplete}, Games: games}
 	if readiness == cache.SourceReadinessAvailable {
@@ -752,4 +803,24 @@ func (r *operationRunner) Execute(_ context.Context, op syncer.Operation) (synce
 		r.afterExecute()
 	}
 	return syncer.OperationResult{Operation: op, Games: &cache.GameRefreshResult{Audit: cache.SourceRefreshAudit{RequestedRows: len(op.Requested)}}}, nil
+}
+
+// blockingRunner holds source jobs and derived calculations until shutdown.
+// Recalculate detaches like the syncer's derived calculations do.
+type blockingRunner struct {
+	started chan struct{}
+}
+
+func (r *blockingRunner) Execute(ctx context.Context, op syncer.Operation) (syncer.OperationResult, error) {
+	r.started <- struct{}{}
+	<-ctx.Done()
+	return syncer.OperationResult{Operation: op}, ctx.Err()
+}
+
+func (r *blockingRunner) Recalculate(ctx context.Context, _ syncer.RecalculateOptions) (cache.SyncRun, error) {
+	calculation, cancel := lifetime.Detach(ctx)
+	defer cancel()
+	r.started <- struct{}{}
+	<-calculation.Done()
+	return cache.SyncRun{QualificationError: calculation.Err().Error()}, nil
 }

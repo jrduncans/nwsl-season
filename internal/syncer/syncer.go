@@ -14,6 +14,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/attribute"
@@ -214,7 +215,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 	// unchanged source fetch must still be able to fill a missing derived
 	// batch left by a previous failed run or a newly deployed calculation.
 	if gameResult.Games != nil {
-		run = s.refreshCalculations(context.WithoutCancel(ctx), run, gameResult.Games.Teams, gameResult.Games.Games, options.Force)
+		run = s.refreshCalculations(ctx, run, gameResult.Games.Teams, gameResult.Games.Games, options.Force)
 	}
 	return s.pruneHistory(run), nil
 }
@@ -252,11 +253,12 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 	if err != nil {
 		return cache.SyncRun{}, recordRecalculationException(fmt.Errorf("load cached clinching inputs: %w", err), telemetry.ErrorTypeStorageFailure)
 	}
-	// Keep the derived calculation budgets independent from the short caller
-	// deadline used to load the cached inputs. This mirrors Run: a scheduler
-	// check may have a small source-sync timeout, while the qualification and
-	// scenario passes each have their own bounded budgets.
-	run = s.refreshCalculations(context.WithoutCancel(ctx), inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
+	// refreshCalculations keeps the derived calculation budgets independent
+	// from the short caller deadline used to load the cached inputs. This
+	// mirrors Run: a scheduler check may have a small source-sync timeout,
+	// while the qualification and scenario passes each have their own bounded
+	// budgets.
+	run = s.refreshCalculations(ctx, inputs.SyncRun, inputs.Teams, inputs.Games, options.Force)
 	span.SetAttributes(recalculateInputAttributes(s, inputs.Teams, inputs.Games, options.Force)...)
 	return s.pruneHistory(run), nil
 }
@@ -376,7 +378,12 @@ func (s Service) pruneHistory(run cache.SyncRun) cache.SyncRun {
 	return run
 }
 
-func (s Service) refreshCalculations(parent context.Context, run cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) cache.SyncRun {
+// refreshCalculations gives qualification and scenario passes their own
+// budgets, independent of the caller's short source or input-loading deadline.
+// It still stops when the owning lifetime (the server scheduler) shuts down.
+func (s Service) refreshCalculations(caller context.Context, run cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) cache.SyncRun {
+	parent, cancel := lifetime.Detach(caller)
+	defer cancel()
 	calculationMu.Lock()
 	defer calculationMu.Unlock()
 
