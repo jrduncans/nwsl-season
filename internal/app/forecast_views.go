@@ -133,7 +133,7 @@ type forecastFixtureOption struct {
 	Away       teamNameView
 }
 
-func forecastRows(result simulation.Result, playoffPlaces int) ([]forecastRowView, string) {
+func forecastRows(result simulation.Result, playoffPlaces int, certainty forecastCertainty) ([]forecastRowView, string) {
 	maxPositionProbability := 0.0
 	for _, row := range result.Teams {
 		for _, probability := range row.PositionProbability {
@@ -151,34 +151,35 @@ func forecastRows(result simulation.Result, playoffPlaces int) ([]forecastRowVie
 	}
 	rows := make([]forecastRowView, 0, len(result.Teams))
 	for index, row := range result.Teams {
+		chances := forecastChances(row, playoffPlaces, certainty)
 		view := forecastRowView{
 			Rank:               index + 1,
 			PlayoffLine:        index+1 == playoffPlaces,
 			Team:               teamName(row.Team),
 			ExpectedPoints:     fmt.Sprintf("%.1f", row.ExpectedPoints),
 			PointsInterval:     fmt.Sprintf("%d–%d", row.PointsLow, row.PointsHigh),
-			TopFourChance:      percent(row.TopFourProbability),
+			TopFourChance:      chances.TopFour,
 			TopFourWidth:       percent(row.TopFourProbability),
-			PlayoffChance:      percent(row.PlayoffProbability),
+			PlayoffChance:      chances.Playoff,
 			PlayoffWidth:       percent(row.PlayoffProbability),
 			FinishInterval:     fmt.Sprintf("%d–%d", row.PositionLow, row.PositionHigh),
-			ShieldChance:       percent(row.ShieldProbability),
-			ChampionshipChance: percent(row.ChampionshipProbability),
+			ShieldChance:       chances.Shield,
+			ChampionshipChance: chances.Championship,
 			ChampionshipWidth:  percent(row.ChampionshipProbability),
 		}
 		for index, probability := range row.PositionProbability {
 			if probability < .0005 {
 				continue
 			}
-			view.PositionBreakdown = append(view.PositionBreakdown, forecastPositionView{Position: index + 1, Probability: percent(probability), BarWidth: fmt.Sprintf("%.1f%%", math.Min(100, probability/scale*100))})
+			view.PositionBreakdown = append(view.PositionBreakdown, forecastPositionView{Position: index + 1, Probability: boundedPercent(probability), BarWidth: fmt.Sprintf("%.1f%%", math.Min(100, probability/scale*100))})
 		}
 		rows = append(rows, view)
 	}
 	return rows, fmt.Sprintf("%.0f%%", scale*100)
 }
 
-func forecastComparisonRows(active simulation.Result, comparison *simulation.Result, playoffPlaces int) ([]forecastRowView, string) {
-	rows, scale := forecastRows(active, playoffPlaces)
+func forecastComparisonRows(active simulation.Result, comparison *simulation.Result, playoffPlaces int, certainty forecastCertainty) ([]forecastRowView, string) {
+	rows, scale := forecastRows(active, playoffPlaces, certainty)
 	if comparison == nil {
 		return rows, scale
 	}
@@ -188,10 +189,11 @@ func forecastComparisonRows(active simulation.Result, comparison *simulation.Res
 	}
 	for i := range rows {
 		other := byID[active.Teams[i].Team.ID]
-		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), TopFourChance: percent(other.TopFourProbability), PlayoffChance: percent(other.PlayoffProbability), ShieldChance: percent(other.ShieldProbability), ChampionshipChance: percent(other.ChampionshipProbability)}
+		chances := forecastChances(other, playoffPlaces, certainty)
+		metrics := forecastRowMetrics{ExpectedPoints: fmt.Sprintf("%.1f", other.ExpectedPoints), TopFourChance: chances.TopFour, PlayoffChance: chances.Playoff, ShieldChance: chances.Shield, ChampionshipChance: chances.Championship}
 		for p, prob := range other.PositionProbability {
 			if prob > 0 {
-				metrics.PositionBreakdown = append(metrics.PositionBreakdown, forecastPositionView{Position: p + 1, Probability: percent(prob)})
+				metrics.PositionBreakdown = append(metrics.PositionBreakdown, forecastPositionView{Position: p + 1, Probability: boundedPercent(prob)})
 			}
 		}
 		rows[i].Comparison = &metrics

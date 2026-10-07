@@ -13,7 +13,7 @@ func TestForecastRowsUseOneRoundedPageWideFinishScale(t *testing.T) {
 		{Team: standings.Team{ID: "bravo", Name: "Bravo"}, PositionProbability: []float64{.05, 1.0 / 16}},
 	}}
 
-	rows, scale := forecastRows(result, 4)
+	rows, scale := forecastRows(result, 4, forecastCertainty{})
 	if scale != "20%" {
 		t.Fatalf("scale = %q, want 20%%", scale)
 	}
@@ -30,7 +30,7 @@ func TestForecastRowsScaleCertainFinishToFullWidth(t *testing.T) {
 		{Team: standings.Team{ID: "alpha", Name: "Alpha"}, PositionProbability: []float64{1}},
 	}}
 
-	rows, scale := forecastRows(result, 1)
+	rows, scale := forecastRows(result, 1, forecastCertainty{})
 	if scale != "100%" {
 		t.Fatalf("scale = %q, want 100%%", scale)
 	}

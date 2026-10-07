@@ -324,6 +324,16 @@ of independent per-fixture percentages.
 | Championship | Share of simulated seasons in which the team wins the playoff bracket. |
 | Finish distribution | The 10th through 90th percentile finishing-position range and probability for every finishing place with non-zero probability. |
 
+Exact `100%` and `0%` appear only for settled finishes: a proved clinch from
+the standings' qualification run, a proved playoff elimination, or a points-only
+elimination where enough teams already have more points than the team can
+still reach. Playoff elimination also settles the top-four, Shield, and
+Championship columns at `0%`. These proofs come from the real season, so they
+still hold after fixing remaining results in a scenario, and they are shown only
+when the qualification run for the current fixture snapshot completed.
+Otherwise, a simulated share at or above 99.95% appears as `>99.9%`, and a share
+below 0.05%, including zero simulated seasons, appears as `<0.1%`.
+
 Expand a team's finish distribution to see positions in ascending order, with a
 compact horizontal bar and the exact probability for each position. The bars
 share one scale across all teams in the displayed forecast. Its ceiling rounds
@@ -399,7 +409,7 @@ deny a stated achievement?* They answer different questions:
 | Samples a finite number of model-weighted seasons. | Searches feasible outcomes for a guarantee or a blocking completion. |
 | Reports probabilities, averages, and uncertainty intervals. | Reports `clinched`, `not_clinched`, or explicitly `unresolved` proof status. |
 | Depends on model inputs and assumptions. | Uses conservative outcome constraints and does not treat a forecast probability as proof. |
-| Can show a 99.9% playoff chance without a guarantee. | Can prove a playoff place even if Forecast Lab assigns it a lower chance. |
+| Can show a >99.9% playoff chance without a guarantee. | Can prove a playoff place even if Forecast Lab assigns it a lower chance; Forecast Lab then shows `100%`. |
 
 Use the [clinching guide](clinching-logic-guide.md) for the qualification
 proof, its tiebreak boundary, and next-slate clinching conditions. Forecast
