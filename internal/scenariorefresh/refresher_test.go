@@ -2,10 +2,12 @@ package scenariorefresh
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
@@ -160,4 +162,53 @@ func TestShouldRetryComputeBudget(t *testing.T) {
 	if shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "a clinch may depend on score"}}}}) {
 		t.Fatal("non-budget unresolved result should not be retried")
 	}
+}
+
+func TestRefreshPublishesNothingWhenCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rules := competition.Rules{
+		Season: "2026", Stage: "Regular Season", Version: "rules-v1",
+		ExpectedTeams: 2, GamesPerTeam: 2,
+		Achievements: []competition.Achievement{{ID: competition.AchievementShield, Label: "Shield", TopK: 1}},
+	}
+	teams := []cache.Team{{ASAID: "a", Name: "A"}, {ASAID: "b", Name: "B"}}
+	games := []cache.Game{
+		{ASAID: "g1", Status: fixtures.PreMatchStatus, HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: "2026-11-01T22:00:00Z"},
+		{ASAID: "g2", Status: fixtures.PreMatchStatus, HomeTeamID: "b", AwayTeamID: "a", KickoffUTC: "2026-11-08T22:00:00Z"},
+	}
+	store := &recordingScenarioStore{}
+	_, err := (Refresher{Store: store, Rules: rules}).Refresh(ctx, cache.SyncRun{ID: 1, Season: rules.Season, Stage: rules.Stage, FixtureSnapshotID: "fixture-1"}, teams, games, false)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if store.replaced != 0 || store.failures != 0 {
+		t.Fatalf("store writes = replaced %d failures %d, want none after cancellation", store.replaced, store.failures)
+	}
+}
+
+type recordingScenarioStore struct {
+	replaced, failures int
+}
+
+func (*recordingScenarioStore) ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error) {
+	return cache.ScenarioSnapshot{}, false, nil
+}
+
+func (*recordingScenarioStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
+	statuses := []cache.QualificationStatus{
+		{TeamID: "a", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, Method: clinching.ProofCheapBound},
+		{TeamID: "b", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, Method: clinching.ProofCheapBound},
+	}
+	return cache.QualificationSnapshot{Run: cache.QualificationRun{ID: 1, FixtureSnapshotID: "fixture-1", RulesVersion: "rules-v1"}, Statuses: statuses}, true, nil
+}
+
+func (s *recordingScenarioStore) ReplaceScenario(context.Context, cache.ScenarioRun, []cache.ScenarioResult) (cache.ScenarioSnapshot, error) {
+	s.replaced++
+	return cache.ScenarioSnapshot{}, nil
+}
+
+func (s *recordingScenarioStore) RecordScenarioFailure(context.Context, cache.ScenarioRun, error) error {
+	s.failures++
+	return nil
 }

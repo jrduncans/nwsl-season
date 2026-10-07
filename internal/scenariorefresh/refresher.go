@@ -4,6 +4,7 @@ package scenariorefresh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -106,6 +107,12 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	}
 	run := cache.ScenarioRun{FixtureSnapshotID: sync.FixtureSnapshotID, QualificationRunID: q.Run.ID, SourceSyncRunID: sync.ID, Season: sync.Season, Stage: sync.Stage, RulesVersion: r.Rules.Version, DefinitionVersion: scenarios.DefinitionVersion, StartedAt: time.Now().UTC(), ExpectedResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games, q)
+	// The search reports unfinished work as budget-limited when its context
+	// ends. That is a valid result for an expired budget, but a shutdown
+	// cancellation must not publish a degraded batch for this snapshot.
+	if cancelErr := ctx.Err(); errors.Is(cancelErr, context.Canceled) {
+		return result, cancelErr
+	}
 	if err != nil {
 		_ = r.Store.RecordScenarioFailure(context.Background(), run, err)
 		return result, err

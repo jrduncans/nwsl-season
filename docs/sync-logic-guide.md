@@ -88,6 +88,16 @@ The drain stops on a source failure, lease deferral, cancellation, or when the
 next normally selected batch has no catalog bootstrap work. Normal five-minute
 cadence then resumes.
 
+Qualification and clinching calculations and post-refresh forecast warming run
+on their own budgets rather than the short source-request deadline, but they
+remain owned by the scheduler. On server shutdown the scheduler cancels an
+in-flight ASA request, calculation, or warm-up instead of waiting for its
+budget. A canceled calculation publishes nothing. In contrast, an expired
+budget still publishes its budget-limited batch for a later retry. Interrupted
+work runs again after restart. Lease releases still complete during shutdown.
+The scheduler's lifetime is attached with
+[`internal/lifetime`](../internal/lifetime/lifetime.go).
+
 ### Independent result and xG cadence
 
 Games and xG are independent resources with independent full and per-game

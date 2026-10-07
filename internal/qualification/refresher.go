@@ -4,6 +4,7 @@ package qualification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -262,6 +263,12 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	}()
 	run := cache.QualificationRun{FixtureSnapshotID: syncRun.FixtureSnapshotID, SourceSyncRunID: syncRun.ID, Season: syncRun.Season, Stage: syncRun.Stage, RulesVersion: r.Rules.Version, StartedAt: time.Now().UTC(), ExpectedStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenStatuses: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
 	values, err := r.calculate(ctx, teams, games)
+	// The calculation marks unfinished proofs as budget-limited when its
+	// context ends. That is a valid result for an expired budget, but a
+	// shutdown cancellation must not publish a degraded batch for this snapshot.
+	if cancelErr := ctx.Err(); errors.Is(cancelErr, context.Canceled) {
+		return result, cancelErr
+	}
 	if err != nil {
 		_ = r.Store.RecordQualificationFailure(context.Background(), run, err)
 		return result, err

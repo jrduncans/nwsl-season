@@ -11,6 +11,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -487,6 +488,47 @@ func TestRecalculateUsesCachedFixturesWithoutCallingASA(t *testing.T) {
 	}
 }
 
+func TestRecalculateCalculationsOutliveCallerButStopWithOwner(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	client := fakeASA{
+		teams: testTeams(),
+		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+	}
+	if _, err := (Service{ASA: &client, Store: db}).Run(ctx, RunOptions{Season: "2024", Stage: "Regular Season"}); err != nil {
+		t.Fatal(err)
+	}
+
+	owner, stopOwner := context.WithCancel(context.Background())
+	defer stopOwner()
+	caller, cancelCaller := context.WithTimeout(lifetime.Root(owner), time.Hour)
+	defer cancelCaller()
+	refresher := blockingRefresher{started: make(chan context.Context, 1)}
+	service := Service{Store: db, Qualification: refresher, QualificationTimeout: time.Hour}
+	done := make(chan cache.SyncRun, 1)
+	go func() {
+		run, _ := service.Recalculate(caller, RecalculateOptions{Season: "2024", Stage: "Regular Season", Force: true})
+		done <- run
+	}()
+
+	calculation := <-refresher.started
+	cancelCaller()
+	select {
+	case <-calculation.Done():
+		t.Fatal("the caller's deadline ended a derived calculation")
+	case <-time.After(50 * time.Millisecond):
+	}
+	stopOwner()
+	select {
+	case run := <-done:
+		if run.QualificationError != context.Canceled.Error() {
+			t.Fatalf("qualification error = %q, want %q", run.QualificationError, context.Canceled.Error())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("owner shutdown did not stop the derived calculation")
+	}
+}
+
 func TestRecalculateReportsCurrentDecisionsOnParentSpan(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
@@ -868,6 +910,18 @@ type orderedRefresher struct {
 }
 
 type currentRefresher struct{}
+
+// blockingRefresher reports its calculation context, then runs until that
+// context ends.
+type blockingRefresher struct {
+	started chan context.Context
+}
+
+func (r blockingRefresher) Refresh(ctx context.Context, _ cache.SyncRun, _ []cache.Team, _ []cache.Game, _ bool) (cache.DerivedRefreshResult, error) {
+	r.started <- ctx
+	<-ctx.Done()
+	return cache.DerivedRefreshResult{Recalculated: true, Required: true, Reason: "forced"}, ctx.Err()
+}
 
 func (currentRefresher) Refresh(context.Context, cache.SyncRun, []cache.Team, []cache.Game, bool) (cache.DerivedRefreshResult, error) {
 	return cache.DerivedRefreshResult{
