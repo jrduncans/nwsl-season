@@ -271,7 +271,7 @@ func TestRefreshRecordsCalculationFailureWithoutPublishing(t *testing.T) {
 	if len(store.failures) != 1 {
 		t.Fatalf("RecordScenarioFailure called %d times, want once", len(store.failures))
 	}
-	if store.failures[0] != err {
+	if !errors.Is(store.failures[0], err) {
 		t.Errorf("recorded failure = %v, want the error Refresh returned (%v)", store.failures[0], err)
 	}
 	if got := scenarioErrorType(err); got != telemetry.ErrorTypeInvalidData {

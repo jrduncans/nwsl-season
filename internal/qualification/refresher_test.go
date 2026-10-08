@@ -408,7 +408,10 @@ func TestRefreshPublishesUnresolvedRowsForUnsafeFixtureState(t *testing.T) {
 	}{
 		{name: "unknown status", mutate: func(g *cache.Game) { g.Status = "InProgress" }},
 		{name: "completed without score", mutate: func(g *cache.Game) { g.Status = fixtures.CompletedStatus; g.HomeScore = sql.NullInt64{} }},
-		{name: "scheduled with score", mutate: func(g *cache.Game) { g.Status = fixtures.PreMatchStatus; g.HomeScore = sql.NullInt64{Int64: 1, Valid: true} }},
+		{name: "scheduled with score", mutate: func(g *cache.Game) {
+			g.Status = fixtures.PreMatchStatus
+			g.HomeScore = sql.NullInt64{Int64: 1, Valid: true}
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -443,7 +446,7 @@ func TestRefreshRecordsCalculationFailureWithoutPublishing(t *testing.T) {
 	if len(store.failures) != 1 {
 		t.Fatalf("RecordQualificationFailure called %d times, want once", len(store.failures))
 	}
-	if store.failures[0] != err {
+	if !errors.Is(store.failures[0], err) {
 		t.Errorf("recorded failure = %v, want the error Refresh returned (%v)", store.failures[0], err)
 	}
 	if got := errorTypeOf(err); got != telemetry.ErrorTypeInvalidData {
