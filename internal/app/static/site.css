@@ -127,6 +127,8 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 .standings th:nth-child(2) .team-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .standings th:nth-child(2) .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 caption { padding: .75rem; text-align: left; font-weight: 800; }
+/* Keep caption text in view while a wide table scrolls sideways; it has no effect when the table fits. */
+caption > span { position: sticky; left: .75rem; display: inline-block; max-width: calc(100vw - 4.5rem); }
 th, td { padding: .55rem .6rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
 th:nth-child(2) { text-align: left; }
 .team-name { display: inline-flex; align-items: center; gap: .45rem; }

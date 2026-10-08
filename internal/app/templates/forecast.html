@@ -42,7 +42,7 @@
   <p class="forecast-scroll-hint" id="forecast-comparison-scroll-hint">Swipe left on the comparison to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable model comparison">
     <table class="forecast-comparison-table{{if .HasChampionship}} forecast-comparison-with-championship{{end}}" aria-describedby="forecast-comparison-direction forecast-comparison-scroll-hint">
-      <caption>{{.ComparisonName}} → {{.ModelName}} by team</caption>
+      <caption><span>{{.ComparisonName}} → {{.ModelName}} by team</span></caption>
       <thead><tr><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoff chance</th><th scope="col">Top 4 chance</th><th scope="col">Shield chance</th>{{if .HasChampionship}}<th scope="col">Championship chance</th>{{end}}</tr></thead>
       <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td class="comparison-{{.PointsDeltaTone}}"><strong>{{.ExpectedPointsDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ExpectedPoints}} → {{.ExpectedPoints}} pts</span></td><td class="comparison-{{.PlayoffDeltaTone}}"><strong>{{.PlayoffDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.PlayoffChance}} → {{.PlayoffChance}}</span></td><td class="comparison-{{.TopFourDeltaTone}}"><strong>{{.TopFourDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.TopFourChance}} → {{.TopFourChance}}</span></td><td class="comparison-{{.ShieldDeltaTone}}"><strong>{{.ShieldDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ShieldChance}} → {{.ShieldChance}}</span></td>{{if $.HasChampionship}}<td class="comparison-{{.ChampionshipDeltaTone}}"><strong>{{.ChampionshipDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ChampionshipChance}} → {{.ChampionshipChance}}</span></td>{{end}}</tr>{{end}}</tbody>
     </table>
@@ -58,7 +58,7 @@
   <p class="forecast-scroll-hint" id="forecast-scroll-hint">Swipe left on the table to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll forecast-table-scroll" tabindex="0" role="region" aria-label="Scrollable {{.Season}} regular-season forecast">
     <table class="forecast-table{{if .HasChampionship}} forecast-table-with-championship{{end}}" aria-describedby="forecast-scroll-hint">
-      <caption>{{.Season}} season forecast</caption>
+      <caption><span>{{.Season}} season forecast</span></caption>
       <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoffs</th><th scope="col">Top 4</th><th class="forecast-shield" scope="col">Shield</th>{{if .HasChampionship}}<th scope="col">Championship</th>{{end}}</tr></thead>
       <tbody>{{range .Rows}}
         <tr{{if .PlayoffLine}} class="forecast-playoff-line"{{end}}>

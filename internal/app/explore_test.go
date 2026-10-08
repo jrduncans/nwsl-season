@@ -109,7 +109,7 @@ func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
 	}
 	_, values, found := strings.Cut(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`)
 	values, _, _ = strings.Cut(values, `</details>`)
-	if !found || !strings.Contains(values, `<summary>Distribution values</summary>`) || !strings.Contains(values, `<table class="explore-table explore-distribution-table">`) || !strings.Contains(values, `<caption>Count (share of matches).</caption>`) {
+	if !found || !strings.Contains(values, `<summary>Distribution values</summary>`) || !strings.Contains(values, `<table class="explore-table explore-distribution-table">`) || !strings.Contains(values, `<caption><span>Count (share of matches).</span></caption>`) {
 		t.Fatalf("server-rendered distribution values missing: %s", values)
 	}
 	for _, row := range []string{

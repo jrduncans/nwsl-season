@@ -71,7 +71,7 @@
           {{else}}
             <p class="data-warning">At least one opponent lacks completed-match history, so this team’s aggregate estimate is unavailable.</p>
           {{end}}
-          <div class="table-scroll"><table class="fixture-detail"><caption>Remaining fixtures for {{.Team.Name}}</caption><thead><tr><th scope="col">Opponent</th><th scope="col">Home/Away</th><th scope="col">Raw opponent PPG</th><th scope="col">Venue adjusted</th><th scope="col">Relative load</th><th scope="col">Final difficulty</th></tr></thead><tbody>{{range .Fixtures}}<tr><th scope="row">{{template "teamName" .Opponent}}</th><td>{{.Venue}}</td><td>{{.OpponentPPG}}</td><td>{{.VenueAdjustedOpponentPPG}}</td><td>{{.LoadAdjustment}}</td><td>{{.ScheduleAdjustedPPG}}</td></tr>{{end}}</tbody></table></div>
+          <div class="table-scroll"><table class="fixture-detail"><caption><span>Remaining fixtures for {{.Team.Name}}</span></caption><thead><tr><th scope="col">Opponent</th><th scope="col">Home/Away</th><th scope="col">Raw opponent PPG</th><th scope="col">Venue adjusted</th><th scope="col">Relative load</th><th scope="col">Final difficulty</th></tr></thead><tbody>{{range .Fixtures}}<tr><th scope="row">{{template "teamName" .Opponent}}</th><td>{{.Venue}}</td><td>{{.OpponentPPG}}</td><td>{{.VenueAdjustedOpponentPPG}}</td><td>{{.LoadAdjustment}}</td><td>{{.ScheduleAdjustedPPG}}</td></tr>{{end}}</tbody></table></div>
         </details>
       {{end}}
       </div>

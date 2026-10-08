@@ -56,7 +56,7 @@
 <summary>Distribution values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Goal distribution values"><table class="explore-table explore-distribution-table">
-<caption>Count (share of matches).</caption>
+<caption><span>Count (share of matches).</span></caption>
 <thead><tr>{{range .DistributionColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-distribution-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
 <tbody data-distribution-rows>{{range .DistributionRows}}<tr data-matches="{{.Total}}"><th scope="row" data-value="{{.Season}}">{{.Season}}</th><td data-value="{{.Total}}">{{.Total}}</td>{{range .Segments}}<td data-value="{{.Count}}">{{.Count}} ({{.Percent}})</td>{{end}}</tr>{{end}}</tbody>
 </table></div>
@@ -128,7 +128,7 @@
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
-<div class="table-scroll" tabindex="0" role="region" aria-label="Team performance values"><table class="explore-table explore-team-table"><caption data-team-table-caption>{{if eq .TeamUnits "total"}}Totals{{else}}Per-match values{{end}}. Gap = actual − expected.</caption><thead>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Team performance values"><table class="explore-table explore-team-table"><caption><span data-team-table-caption>{{if eq .TeamUnits "total"}}Totals{{else}}Per-match values{{end}}. Gap = actual − expected.</span></caption><thead>
 <tr>{{range .TeamColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="3">Goal differential</th><th scope="colgroup" colspan="3">Goals scored</th><th scope="colgroup" colspan="3">Goals allowed</th><th scope="colgroup" colspan="3">Points</th></tr>
 <tr>{{range .TeamColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-rows>{{range .TeamRows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td><td><strong>{{.Gap}}</strong></td>{{end}}</tr>{{end}}</tbody></table></div>
@@ -192,7 +192,7 @@
 <p class="note">Per match, from eligible recorded results. Historical records use completed seasons. Expected-value ranges require complete coverage for every team in the season comparison. Values are compared before rounding.</p>
 <div data-history-context-values>{{range .HistoryContextDetails}}{{template "exploreContextSeries" .}}{{end}}</div>
 </details>
-<div class="table-scroll explore-team-history-table-wrap" tabindex="0" role="region" aria-label="Team scoring by season"><table class="explore-table explore-team-history-table"><caption>Regular-season values per match. Differential = scored − allowed.</caption><thead>
+<div class="table-scroll explore-team-history-table-wrap" tabindex="0" role="region" aria-label="Team scoring by season"><table class="explore-table explore-team-history-table"><caption><span>Regular-season values per match. Differential = scored − allowed.</span></caption><thead>
 <tr>{{range .HistoryColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="2">Goal differential</th><th scope="colgroup" colspan="2">Goals scored</th><th scope="colgroup" colspan="2">Goals allowed</th><th scope="colgroup" colspan="2">Points</th></tr>
 <tr>{{range .HistoryColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-history-rows>{{range .TeamHistoryRows}}<tr><th scope="row">{{.Season}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td>{{end}}</tr>{{end}}</tbody></table></div>
@@ -247,7 +247,7 @@
 <summary>Match values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Season trend match values"><table class="explore-table explore-season-trend-table">
-<caption data-trend-table-caption>{{.TrendCaption}}</caption>
+<caption><span data-trend-table-caption>{{.TrendCaption}}</span></caption>
 <thead><tr data-trend-headings><th scope="col">Match</th><th scope="col">Date (venue local)</th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col">Score</th>{{range .TrendColumns}}<th scope="col">{{.Label}}</th>{{end}}</tr></thead>
 <tbody data-trend-rows>{{range .TrendRows}}<tr><th scope="row">{{.Number}}</th><td>{{.Date}}</td><td>{{.Opponent}}</td><td>{{.Venue}}</td><td>{{.Score}}</td>{{range .DisplayValues}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody>
 </table></div>
