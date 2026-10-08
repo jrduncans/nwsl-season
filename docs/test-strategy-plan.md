@@ -127,8 +127,8 @@ Merge each task before starting tasks that depend on it.
 - Hand off: files changed, behavior added, commands run with results, any
   deviation, open questions.
 
-**Implementation prompt** (start a session with the task's model, for example
-`claude --model sonnet` or `/model sonnet`):
+**Implementation prompt** (start a session with the task's model, chosen in
+the app's model picker next to the message box):
 
 > Implement task TN from `docs/test-strategy-plan.md`. Read §5 and the TN
 > section first. Treat the decisions listed there as settled and stay within
@@ -145,8 +145,8 @@ Merge each task before starting tasks that depend on it.
 
 ## 6. Running the plan
 
-Use one **Sonnet 5.5 coordinator session per wave**, running locally in Claude
-Code. The coordinator doesn't write code. It starts each task as a subagent on
+Use one **Sonnet 5.5 coordinator session per wave**, running locally in the
+Claude desktop app (Code tab, this project's folder). The coordinator doesn't write code. It starts each task as a subagent on
 the model §3 assigns, has the Opus reviews done, passes findings back to the
 implementer, and reports. You merge the PRs between waves. That gives six
 checkpoints (waves A–F) instead of about 20 hand-run sessions, and it keeps
@@ -154,18 +154,72 @@ each coordinator's context small.
 
 ### Before each wave
 
-1. Merge the previous wave's PRs, then run `git switch main && git pull`.
-2. Start the coordinator from a shell where `NWSL_CONFIG_FILE=/dev/null` is
-   set, for example `NWSL_CONFIG_FILE=/dev/null claude --model sonnet`.
-   Subagents inherit the variable, so none of them can block on the
-   1Password-backed `config.env`.
-3. Pre-approve the commands the tasks run, so background subagents don't
-   stall waiting for permission prompts: `go`, `make`, `golangci-lint`,
-   `govulncheck`, `git` (including pushes of `test-plan/*` branches) and
-   opening PRs. Put them in `.claude/settings.local.json`, or run the
-   coordinator in a permission mode that allows them.
-4. From wave B on, install the Chromium version that matches playwright-go
-   once (see T6, decision 2).
+1. **Update `main`.** Merge the previous wave's PRs on GitHub. Then, in the
+   desktop app's Terminal panel (or any terminal) in the project folder, run:
+
+   ```sh
+   git switch main && git pull
+   ```
+
+2. **One-time setup (first wave only): create `.claude/settings.local.json`**
+   in the project folder with the content below. Claude Code reads this file
+   for every session in this project, in the CLI and the desktop app. It
+   does two things. The `env` block sets `NWSL_CONFIG_FILE=/dev/null` for
+   the coordinator and all its subagents, so none of them can touch the
+   1Password-backed `config.env`. The `allow` list pre-approves the commands
+   the tasks run, so background subagents don't stall on permission prompts.
+   The `git` entries cover what the tasks need and leave out force pushes
+   and anything that rewrites history.
+
+   ```json
+   {
+     "env": { "NWSL_CONFIG_FILE": "/dev/null" },
+     "permissions": {
+       "allow": [
+         "Bash(go *)",
+         "Bash(make *)",
+         "Bash(golangci-lint *)",
+         "Bash(govulncheck *)",
+         "Bash(git status*)",
+         "Bash(git diff*)",
+         "Bash(git log*)",
+         "Bash(git switch *)",
+         "Bash(git checkout -b test-plan/*)",
+         "Bash(git add *)",
+         "Bash(git commit *)",
+         "Bash(git push origin test-plan/*)",
+         "Bash(git push -u origin test-plan/*)",
+         "Bash(gh pr create *)",
+         "Bash(gh pr view *)",
+         "Bash(gh pr checks *)"
+       ]
+     }
+   }
+   ```
+
+   The file is machine-local; don't commit it. If `git status` shows it as
+   untracked, add `.claude/settings.local.json` to `.git/info/exclude`.
+3. **Start the coordinator.** In the desktop app, open a new Code session on
+   this project's folder, pick **Sonnet 5.5** in the model picker, and paste
+   the coordinator prompt below. Subagents get their models from the prompt,
+   so the picker only sets the coordinator's.
+4. **From wave B on, install Chromium once**, before starting the wave. Do
+   this yourself in the Terminal panel, not in a Claude session: the download
+   goes to `~/Library/Caches/ms-playwright`, which a session's sandbox can't
+   write to. After T6 has merged, run:
+
+   ```sh
+   make e2e-install
+   ```
+
+   It downloads about 150 MB and only needs repeating when a task upgrades
+   `playwright-go`. If a later e2e run fails with "Executable doesn't exist",
+   run it again. If e2e tests fail with "Operation not permitted" when
+   binding a port or launching Chromium, the session sandbox is blocking
+   them. Tell the coordinator, and allow local port binding for the session
+   (`sandbox.network.allowLocalBinding: true` in the session's sandbox
+   settings) or let it re-run that one command outside the sandbox with your
+   approval.
 
 ### Usage limits
 
@@ -472,15 +526,26 @@ loaded with the same data.
 1. `make test-e2e` runs `go test -tags e2e -count=1 ./e2e/...`. A plain
    `go test ./...` never needs a browser.
 2. Browser setup in `TestMain`:
-   - Call `playwright.Install` with `SkipInstallBrowsers: true`.
-   - Launch Chromium. If `NWSL_E2E_CHROMIUM` is set, use it as
-     `ExecutablePath`; in Claude cloud sessions it is
-     `/opt/pw-browsers/chromium`. Otherwise use the browser installed by the
-     playwright-go CLI.
-   - Locally and in CI, install the matching browser with
-     `go run github.com/playwright-community/playwright-go/cmd/playwright@<version in go.mod> install chromium`.
-     CI adds `--with-deps`. Document the local command in the `test-e2e`
-     Makefile comment.
+   - Never download anything from tests. Use `playwright.Run` (driver only),
+     not `playwright.Install`, and launch Chromium from the browser cache
+     that the install step below filled.
+   - If the browser is missing, fail with the message "Chromium is not
+     installed; run `make e2e-install`". If `NWSL_E2E_CHROMIUM` is set, use
+     it as `ExecutablePath` instead (for environments with a preinstalled
+     browser).
+   - Add a Makefile target `e2e-install` that runs
+     `go run github.com/playwright-community/playwright-go/cmd/playwright install chromium`.
+     Run from the module root, this uses the `playwright-go` version in
+     `go.mod`, so the browser always matches the library. Verify it works
+     from a clean cache (`PLAYWRIGHT_BROWSERS_PATH=$TMPDIR/pw make e2e-install`
+     and `make test-e2e` with the same variable), and add whatever import or
+     `go mod tidy` step it needs. Add `e2e-install` to `.PHONY` and mention it
+     in the `test-e2e` Makefile comment.
+   - CI runs the same target with `--with-deps` added
+     (`go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps chromium`),
+     with no browser cache: Playwright's CI guide advises against caching
+     browser binaries because restoring a cache takes about as long as
+     downloading them.
    - Use one browser per process and a new context for each test.
 3. Fixture per test:
    - a temporary `NWSL_DATA_DIR`;
