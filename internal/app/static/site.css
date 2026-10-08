@@ -149,6 +149,12 @@ th:nth-child(2) { text-align: left; }
 .fixture-view-button[aria-pressed="true"] { color: white; background: var(--green); }
 .fixture-view-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 45%, white); outline-offset: 1px; }
 .fixture-group-status { display: inline-block; margin-left: .4rem; padding: .1rem .4rem; border-radius: 1rem; color: var(--green); background: var(--green-soft); vertical-align: middle; font-size: .7rem; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
+.fixture-team-code { display: none; }
+@media (max-width: 700px) {
+  /* Phone rows show team codes so each result fits on one line; screen readers and the title keep the full name. */
+  .fixtures .fixture-team-code { display: inline; }
+  .fixtures .team-name:has(.fixture-team-code) .fixture-team-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+}
 /* Fade the losing side lightly so a matchday scans by result; draws stay unmarked. */
 .fixtures li[data-winner="away"] > .team-name:nth-of-type(1), .fixtures li[data-winner="home"] > .team-name:nth-of-type(2) { opacity: .75; }
 .fixtures li:first-child { border-top: 0; }.fixtures li > .team-name:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.fixture-xg { margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }

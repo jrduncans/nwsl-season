@@ -465,6 +465,8 @@ type fixtureView struct {
 	KickoffUTC      string
 	HomeTeam        teamNameView
 	AwayTeam        teamNameView
+	HomeCode        string
+	AwayCode        string
 	Score           string
 	XG              string
 	Winner          string
@@ -477,6 +479,16 @@ type fixtureView struct {
 	KnockoutGame    bool
 	Outlook         *fixtureOutlookView
 }
+
+// fixtureTeamView pairs a team with the short code that replaces its name
+// in narrow fixture rows.
+type fixtureTeamView struct {
+	teamNameView
+	Code string
+}
+
+func (f fixtureView) Home() fixtureTeamView { return fixtureTeamView{f.HomeTeam, f.HomeCode} }
+func (f fixtureView) Away() fixtureTeamView { return fixtureTeamView{f.AwayTeam, f.AwayCode} }
 
 // fixtureOutlookView is the pre-match, three-way result distribution shown on
 // the fixtures page. Its shares remain numeric so the same values drive the
@@ -854,8 +866,10 @@ func fixtureGroupsWithOutlooks(data cache.SeasonData, location *time.Location, o
 
 func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location, outlooks map[string]fixtureOutlookView, includeXG bool) []fixtureGroupView {
 	teams := make(map[string]teamNameView, len(data.Teams))
+	codes := make(map[string]string, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
+		codes[team.ID] = scenarioTeamCode(team)
 	}
 	xgoals := make(map[string]cache.GameXG, len(data.XGoals))
 	for _, xg := range data.XGoals {
@@ -890,6 +904,7 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		view := fixtureView{
 			ID: game.ASAID, Kickoff: localKickoff.Format("Mon Jan 2, 3:04 PM MST"), KickoffUTC: kickoff.UTC().Format(time.RFC3339),
 			HomeTeam: teams[game.HomeTeamID], AwayTeam: teams[game.AwayTeamID],
+			HomeCode: codes[game.HomeTeamID], AwayCode: codes[game.AwayTeamID],
 			Completed:    game.Status == standings.CompletedStatus,
 			Remaining:    game.Status == remainingStatus,
 			Status:       game.Status,

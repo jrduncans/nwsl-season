@@ -19,7 +19,7 @@
 {{define "fixtureLists"}}{{if .HasResults}}<section{{if .ShowFixtureViewToggle}} data-fixture-view="results"{{end}}>
 {{range .ResultFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status{{if not .InProgress}} hidden{{end}}>{{if .InProgress}}In progress{{end}}</span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"{{if .Winner}} data-winner="{{.Winner}}"{{end}}><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"{{if .Winner}} data-winner="{{.Winner}}"{{end}}><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "fixtureTeamName" .Home}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "fixtureTeamName" .Away}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>{{end}}
@@ -28,7 +28,7 @@
 {{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include a match outlook for each result. Outlooks use expected goals, venue, recovery time, and recent fixture load.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
 {{range .UpcomingFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status hidden></span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"{{if .Winner}} data-winner="{{.Winner}}"{{end}}><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"{{if .Winner}} data-winner="{{.Winner}}"{{end}}><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "fixtureTeamName" .Home}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "fixtureTeamName" .Away}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>{{end}}{{end}}
@@ -40,3 +40,5 @@
   <div class="fixture-outcome-labels" aria-hidden="true"><span class="fixture-outcome-home">Home win <strong>{{.Outlook.HomeWinText}}</strong></span><span class="fixture-outcome-draw">Draw <strong>{{.Outlook.DrawText}}</strong></span><span class="fixture-outcome-away">Away win <strong>{{.Outlook.AwayWinText}}</strong></span></div>
   <div class="fixture-outcome-bar" aria-hidden="true"><span class="fixture-outcome-segment fixture-outcome-home" style="--fixture-outcome-share: {{.Outlook.HomeWin}}"></span><span class="fixture-outcome-segment fixture-outcome-draw" style="--fixture-outcome-share: {{.Outlook.Draw}}"></span><span class="fixture-outcome-segment fixture-outcome-away" style="--fixture-outcome-share: {{.Outlook.AwayWin}}"></span></div>
 </div>{{end}}
+
+{{define "fixtureTeamName"}}<span class="team-name" title="{{.Name}}">{{if .LogoURL}}<img class="team-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span class="fixture-team-full">{{.Name}}</span>{{if .Code}}<span class="fixture-team-code" aria-hidden="true">{{.Code}}</span>{{end}}</span>{{end}}

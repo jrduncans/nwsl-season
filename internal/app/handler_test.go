@@ -1145,6 +1145,9 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 			t.Errorf("body does not contain %q", text)
 		}
 	}
+	if !strings.Contains(response.Body.String(), `<span class="fixture-team-full">`) || !strings.Contains(response.Body.String(), `<span class="fixture-team-code" aria-hidden="true">`) {
+		t.Error("fixture rows do not carry both full team names and phone codes")
+	}
 	if strings.Contains(response.Body.String(), ">Scheduled<") {
 		t.Error("upcoming fixtures repeat a Scheduled tag")
 	}
