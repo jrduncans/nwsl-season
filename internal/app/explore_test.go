@@ -238,7 +238,7 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
 		"2026": {lifecycle: cache.SourceScopeActive, goals: 4},
 	})}
-	groups := map[string]string{"league": "League", "teams": "Compare teams", "team": "One team"}
+	groups := map[string]string{"league": "League", "teams": "Compare teams", "profile": "Team profile"}
 	for _, tc := range []struct{ query, group, current string }{
 		{"", "league", `data-view-choice="trend" aria-current="page">Scoring trend</a>`},
 		{"view=distribution", "league", `data-view-choice="distribution" aria-current="page">Goal distribution</a>`},
@@ -246,9 +246,9 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		{"view=teams", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
 		{"view=teams&display=gap", "teams", `data-team-display="gap" aria-current="page">Gap to expected</a>`},
 		{"view=teams&display=table", "teams", `data-team-display="table" aria-current="page">Table</a>`},
-		{"view=team-rankings", "team", `data-view-choice="team-rankings" aria-current="page">Rankings</a>`},
-		{"view=season-trend", "team", `data-view-choice="season-trend" aria-current="page">Match by match</a>`},
-		{"view=team-history", "team", `data-view-choice="team-history" aria-current="page">Season by season</a>`},
+		{"view=team-rankings", "profile", `data-view-choice="team-rankings" aria-current="page">Rankings</a>`},
+		{"view=season-trend", "profile", `data-view-choice="season-trend" aria-current="page">Match by match</a>`},
+		{"view=team-history", "profile", `data-view-choice="team-history" aria-current="page">Season by season</a>`},
 	} {
 		response := httptest.NewRecorder()
 		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?"+tc.query, nil))
@@ -269,8 +269,8 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 	}
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore", nil))
-	if !strings.Contains(response.Body.String(), `<a href="?view=team-rankings" data-group-choice="team">One team</a>`) {
-		t.Error("One team group must open Rankings")
+	if !strings.Contains(response.Body.String(), `<a href="?view=team-rankings" data-group-choice="profile">Team profile</a>`) {
+		t.Error("Team profile group must open Rankings")
 	}
 }
 

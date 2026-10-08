@@ -11,7 +11,7 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 Its navigation groups views by scope. League holds Scoring trend, Goal
 distribution, and Scoring table across seasons. Compare teams holds every team
 in one season: Actual vs expected (paired dots), Gap to expected, Outlier plot,
-Scored vs allowed, and Table. One team holds Rankings, Match by match, and
+Scored vs allowed, and Table. Team profile holds Rankings, Match by match, and
 Season by season for a selected team; its group link opens Rankings. Only the
 selected group's views are listed. The comparison charts show one selected
 measure; Table and Season by season show all four. Rankings shows all six goal
@@ -537,7 +537,7 @@ logos may load).
 
 ### Season by season
 
-One team also includes Season by season (`view=team-history`). The `team`
+Team profile also includes Season by season (`view=team-history`). The `team`
 selector chooses an ASA team ID from eligible recorded results across the
 archive; it defaults to the first team by name, with ID breaking ties. The
 selector uses the newest eligible name for each ID, so a rename keeps its

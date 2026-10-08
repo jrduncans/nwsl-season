@@ -1703,7 +1703,7 @@
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
-      : ['team-rankings', 'season-trend', 'team-history'].includes(view) ? 'team' : 'league';
+      : ['team-rankings', 'season-trend', 'team-history'].includes(view) ? 'profile' : 'league';
     root.querySelectorAll('[data-group-views]').forEach(nav => { nav.hidden = nav.dataset.groupViews !== group; });
     root.querySelectorAll('[data-team-display]').forEach(link => {
       const selected = view === 'teams' && link.dataset.teamDisplay ===
@@ -1751,7 +1751,7 @@
     if (view === 'season-trend') showSeasonTrend(params);
     if (view === 'team-rankings') showTeamRankings(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
-      const target = link.dataset.viewChoice || {league: 'trend', teams: 'teams', team: 'team-rankings'}[link.dataset.groupChoice];
+      const target = link.dataset.viewChoice || {league: 'trend', teams: 'teams', profile: 'team-rankings'}[link.dataset.groupChoice];
       const selection = new URLSearchParams(params); selection.set('view', target);
       link.href = `?${selection}`;
     });

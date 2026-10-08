@@ -23,13 +23,13 @@ type explorePage struct {
 }
 
 // exploreViewGroup names the navigation group for a view: league-wide views
-// across seasons, every team in one season, or one selected team.
+// across seasons, every team in one season, or a selected team's profile.
 func exploreViewGroup(view string) string {
 	switch view {
 	case "teams":
 		return "teams"
 	case "team-rankings", "season-trend", "team-history":
-		return "team"
+		return "profile"
 	default:
 		return "league"
 	}

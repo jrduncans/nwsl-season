@@ -425,7 +425,7 @@ th:nth-child(2) { text-align: left; }
 .explore-subviews { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: -1rem 0 1.5rem; }
 .explore-subviews a { padding: .4rem 0; color: var(--muted); text-decoration: none; }
 .explore-subviews a[aria-current] { color: var(--green-deep); font-weight: 700; text-decoration: underline; text-underline-offset: .4rem; }
-@media (max-width: 600px) { .explore-views { gap: .25rem; }.explore-views a { padding: .55rem .6rem; } }
+@media (max-width: 600px) { .explore-views { flex-wrap: nowrap; gap: .25rem; }.explore-views a { padding: .55rem .5rem; text-align: center; } }
 .explore-table-scroll-hint { display: none; margin: .35rem 0 .5rem; color: var(--muted); font-size: .8rem; font-weight: 700; }
 .explore-team-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; }
 .explore-team-controls label { display: flex; align-items: center; gap: .5rem; max-width: 100%; }

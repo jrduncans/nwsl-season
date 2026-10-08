@@ -78,7 +78,7 @@ The historical forecast comparison is available at
 <http://localhost:8080/seasons/2026/regular-season/model-evaluation>.
 Explore is available at <http://localhost:8080/explore>. It groups views by
 scope: League (scoring trend, goal distribution, and scoring table across
-seasons), Compare teams (every team in one season), and One team (Rankings,
+seasons), Compare teams (every team in one season), and Team profile (Rankings,
 Match by match, and Season by season). Compare teams compares actual and expected goals or points
 for a selected regular season, including an outlier plot with expected values
 on the horizontal axis and actual values on the vertical axis. Scored vs allowed

@@ -4,7 +4,7 @@
 <nav class="explore-views" aria-label="Explore analyses">
 <a href="?view=trend" data-group-choice="league"{{if eq .ViewGroup "league"}} aria-current="page"{{end}}>League</a>
 <a href="?view=teams" data-group-choice="teams"{{if eq .ViewGroup "teams"}} aria-current="page"{{end}}>Compare teams</a>
-<a href="?view=team-rankings" data-group-choice="team"{{if eq .ViewGroup "team"}} aria-current="page"{{end}}>One team</a>
+<a href="?view=team-rankings" data-group-choice="profile"{{if eq .ViewGroup "profile"}} aria-current="page"{{end}}>Team profile</a>
 </nav>
 <nav class="explore-subviews" data-group-views="league" aria-label="League views"{{if ne .ViewGroup "league"}} hidden{{end}}>
 <a href="?view=trend" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>Scoring trend</a>
@@ -18,7 +18,7 @@
 <a href="{{.TeamQuadrantURL}}" data-team-display="quadrant"{{if and (eq .View "teams") (eq .TeamDisplay "quadrant")}} aria-current="page"{{end}}>Scored vs allowed</a>
 <a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Table</a>
 </nav>
-<nav class="explore-subviews" data-group-views="team" aria-label="One team views"{{if ne .ViewGroup "team"}} hidden{{end}}>
+<nav class="explore-subviews" data-group-views="profile" aria-label="Team profile views"{{if ne .ViewGroup "profile"}} hidden{{end}}>
 <a href="?view=team-rankings" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>Rankings</a>
 <a href="?view=season-trend" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>Match by match</a>
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Season by season</a>
