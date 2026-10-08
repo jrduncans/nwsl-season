@@ -766,6 +766,37 @@ func TestCheckNowStopsWhenCallerContextIsCanceled(t *testing.T) {
 	}
 }
 
+func TestCheckNowCallerCancellationInterruptsDetachedWork(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
+	runner := &detachedBlockingRunner{started: make(chan struct{}, 1)}
+	config := testPlannerConfig()
+	config.Timeout = time.Hour
+	config.Now = func() time.Time { return now }
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Stop)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.CheckNow(ctx) }()
+	<-runner.started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("CheckNow error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("CheckNow did not return after its caller canceled detached work")
+	}
+	if s.stopped() {
+		t.Fatal("caller cancellation stopped the scheduler")
+	}
+}
+
 func TestCheckNowAfterStopReturnsErrStopped(t *testing.T) {
 	store := &planningStore{}
 	runner := &operationRunner{}
@@ -936,6 +967,21 @@ func (r *operationRunner) Execute(_ context.Context, op syncer.Operation) (synce
 		r.afterExecute()
 	}
 	return syncer.OperationResult{Operation: op, Games: &cache.GameRefreshResult{Audit: cache.SourceRefreshAudit{RequestedRows: len(op.Requested)}}}, nil
+}
+
+// detachedBlockingRunner detaches its source job from the request deadline,
+// as derived calculations and forecast warming do, and holds it until the
+// owning lifetime ends.
+type detachedBlockingRunner struct {
+	started chan struct{}
+}
+
+func (r *detachedBlockingRunner) Execute(ctx context.Context, op syncer.Operation) (syncer.OperationResult, error) {
+	detached, cancel := lifetime.Detach(ctx)
+	defer cancel()
+	r.started <- struct{}{}
+	<-detached.Done()
+	return syncer.OperationResult{Operation: op}, detached.Err()
 }
 
 // blockingRunner holds source jobs and derived calculations until shutdown.

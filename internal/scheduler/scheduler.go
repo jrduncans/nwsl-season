@@ -187,14 +187,20 @@ var ErrStopped = errors.New("scheduler stopped")
 // maintenance trigger, using the same planning, leases, and follow-up
 // clinching calculations as a scheduled tick. It returns after every job and
 // calculation in that check has finished. Canceling ctx or stopping the
-// scheduler interrupts the check. A failed or partially failed check returns
-// an error; deferred or current checks do not.
+// scheduler interrupts the check, including source requests and derived work
+// detached with lifetime.Detach beneath it; canceling ctx does not stop the
+// scheduler itself. A failed or partially failed check returns an error;
+// deferred or current checks do not.
 func (s *Scheduler) CheckNow(ctx context.Context) error {
 	if s.stopped() {
 		return ErrStopped
 	}
-	checkCtx, cancel := context.WithCancel(s.ctx)
+	// The check gets its own lifetime root, ended by either the scheduler or
+	// the caller, so detached calculations stop with this check rather than
+	// outliving the caller's cancellation until the scheduler stops.
+	cancelable, cancel := context.WithCancel(s.ctx)
 	defer cancel()
+	checkCtx := lifetime.Root(cancelable)
 	stop := context.AfterFunc(ctx, cancel)
 	defer stop()
 	outcome, _ := s.runCheck(checkCtx, cache.SourceTriggerMaintenance, true)
