@@ -24,13 +24,8 @@ jobs:
         run: make test-clinching
       - name: Benchmark budget guards
         run: make test-guards
-      - name: All packages with coverage
-        run: go test -coverpkg=./... -coverprofile=coverage.out ./...
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage
-          path: coverage.out
+      - name: All packages
+        run: make test
 
   race:
     name: Race
