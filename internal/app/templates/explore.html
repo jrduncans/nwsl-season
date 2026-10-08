@@ -7,21 +7,21 @@
 <a href="?view=trend" data-group-choice="league"{{if eq .ViewGroup "league"}} aria-current="page"{{end}}>League trends</a>
 </nav>
 <nav class="explore-subviews" data-group-views="teams" aria-label="Compare teams views"{{if ne .ViewGroup "teams"}} hidden{{end}}>
-<a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Actual vs expected</a>
-<a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>Gap to expected</a>
-<a href="{{.TeamScatterURL}}" data-team-display="scatter"{{if and (eq .View "teams") (eq .TeamDisplay "scatter")}} aria-current="page"{{end}}>Outlier plot</a>
-<a href="{{.TeamQuadrantURL}}" data-team-display="quadrant"{{if and (eq .View "teams") (eq .TeamDisplay "quadrant")}} aria-current="page"{{end}}>Scored vs allowed</a>
-<a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>Table</a>
+<a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>{{.ViewLabel "teams-chart"}}</a>
+<a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>{{.ViewLabel "teams-gap"}}</a>
+<a href="{{.TeamScatterURL}}" data-team-display="scatter"{{if and (eq .View "teams") (eq .TeamDisplay "scatter")}} aria-current="page"{{end}}>{{.ViewLabel "teams-scatter"}}</a>
+<a href="{{.TeamQuadrantURL}}" data-team-display="quadrant"{{if and (eq .View "teams") (eq .TeamDisplay "quadrant")}} aria-current="page"{{end}}>{{.ViewLabel "teams-quadrant"}}</a>
+<a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>{{.ViewLabel "teams-table"}}</a>
 </nav>
 <nav class="explore-subviews" data-group-views="profile" aria-label="Team profile views"{{if ne .ViewGroup "profile"}} hidden{{end}}>
-<a href="?view=team-rankings" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>Rankings</a>
-<a href="?view=season-trend" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>Match by match</a>
-<a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Season by season</a>
+<a href="?view=team-rankings" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>{{.ViewLabel "team-rankings"}}</a>
+<a href="?view=season-trend" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>{{.ViewLabel "season-trend"}}</a>
+<a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>{{.ViewLabel "team-history"}}</a>
 </nav>
 <nav class="explore-subviews" data-group-views="league" aria-label="League trends views"{{if ne .ViewGroup "league"}} hidden{{end}}>
-<a href="?view=trend" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>Scoring trend</a>
-<a href="?view=distribution" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>Goal distribution</a>
-<a href="?view=table" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>Scoring table</a>
+<a href="?view=trend" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>{{.ViewLabel "trend"}}</a>
+<a href="?view=distribution" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>{{.ViewLabel "distribution"}}</a>
+<a href="?view=table" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>{{.ViewLabel "table"}}</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
 <div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label></div>
@@ -160,7 +160,7 @@
 </div>
 </section>
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
-<h2 id="explore-team-history-title">{{if eq .TeamMeasure "points"}}Points over time{{else}}Scoring over time{{end}} (regular-season)</h2>
+<h2 id="explore-team-history-title">Season-by-season {{if eq .TeamMeasure "points"}}points{{else}}scoring{{end}} (regular-season)</h2>
 <form method="get" data-team-history-controls class="explore-team-controls">
 <input type="hidden" name="view" value="team-history">
 <input type="hidden" name="history-sort" value="{{.HistorySort}}">
@@ -212,7 +212,7 @@
 <label data-trend-average-data-control{{if ne .TrendView "relative"}} hidden{{end}}>Show <select name="average-series" data-trend-average-series><option value="goals"{{if eq .TrendAverageSeries "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .TrendAverageSeries "xg"}} selected{{end}}>xG</option><option value="points"{{if eq .TrendAverageSeries "points"}} selected{{end}}>Points</option><option value="xpoints"{{if eq .TrendAverageSeries "xpoints"}} selected{{end}}>xPoints</option></select></label>
 <label>Smoothing <select name="trend-mode" data-trend-mode><option value="rolling"{{if eq .TrendMode "rolling"}} selected{{end}}>Rolling average</option><option value="match"{{if eq .TrendMode "match"}} selected{{end}}>None (each match)</option></select></label>
 <label data-trend-window-control{{if eq .TrendMode "match"}} hidden{{end}}>Window <select name="window" data-trend-window><option value="3"{{if eq .TrendWindow "3"}} selected{{end}}>3 matches</option><option value="5"{{if eq .TrendWindow "5"}} selected{{end}}>5 matches</option><option value="10"{{if eq .TrendWindow "10"}} selected{{end}}>10 matches</option></select></label>
-<button class="button" type="submit" data-trend-submit>Show season trend</button>
+<button class="button" type="submit" data-trend-submit>Show matches</button>
 </form>
 <p class="note" data-season-trend-note>Completed regular-season matches, in played order. {{if eq .TrendMode "rolling"}}Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.{{else}}Solid lines connect successive matches.{{end}} Dates are local to each match’s venue.{{if eq .TrendView "relative"}} References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.{{end}}{{if eq .TrendView "points"}} xPoints are ASA’s retrospective expected points for played matches.{{end}}</p>
 <p data-season-trend-empty{{if .TrendRows}} hidden{{end}}>No eligible recorded results for this team and season.</p>

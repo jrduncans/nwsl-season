@@ -22,6 +22,20 @@ type explorePage struct {
 	ChartLibraryPath, ChartLabelsPath string
 }
 
+// exploreViewLabels holds each Explore tab's visible name, keyed by view, or by
+// "teams-" and display for Compare teams. Tabs and page titles share them.
+var exploreViewLabels = map[string]string{
+	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
+	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
+	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season",
+	"trend": "Scoring trend", "distribution": "Goal distribution", "table": "Scoring table",
+}
+
+// ViewLabel returns the visible name of an Explore tab.
+func (explorePage) ViewLabel(key string) string {
+	return exploreViewLabels[key]
+}
+
 // exploreViewGroup names the navigation group for a view: league-wide views
 // across seasons, every team in one season, or a selected team's profile.
 func exploreViewGroup(view string) string {
@@ -90,7 +104,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
-	page.Title = "Explore"
+	label := exploreViewLabels[view]
+	if view == "teams" {
+		label = exploreViewLabels["teams-"+page.TeamDisplay]
+	}
+	page.Title = label + " · Explore"
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
 	page.ChartLabelsPath = relativeURL(r.URL.Path, "/static/vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")

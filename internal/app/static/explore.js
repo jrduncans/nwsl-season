@@ -1,6 +1,8 @@
 (() => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
+  // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
+  const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
   const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
   const teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
   const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
@@ -1274,7 +1276,7 @@
     const context = historyContextData[measure.index];
     const isPoints = measure.index === 3;
     root.querySelector('#explore-team-history-title').textContent =
-      `${isPoints ? 'Points' : 'Scoring'} over time (regular-season)`;
+      `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
     const choices = historySeries.options;
     choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
@@ -1719,6 +1721,8 @@
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
+    const currentTab = root.querySelector('[data-group-views]:not([hidden]) [aria-current]');
+    if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
     metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
     root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
       ? 'Goals − xG per match (regular-season)' : 'Goals and chances per match (regular-season)';

@@ -9,20 +9,33 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 
 `GET /explore` reuses the same coherent archive read and scoring calculations.
 Its navigation groups views by scope, ordered from the current season to
-league history. Compare teams holds every team in one season: Actual vs
-expected (paired dots), Gap to expected, Outlier plot, Scored vs allowed, and
-Table. Team profile holds Rankings, Match by match, and Season by season for a
-selected team; its group link opens Rankings. League trends holds Scoring
-trend, Goal distribution, and Scoring table across seasons. Only the selected
-group's views are listed. The comparison charts show one selected measure;
-Table and Season by season show all four. Rankings shows all six goal and xG
-ranks together.
-Each view heading states the regular-season scope.
-`view=trend|distribution|table|teams|team-rankings|season-trend|team-history` selects the initial surface.
-An omitted view opens Compare teams' Actual vs expected for the default
-season, matching the current-season focus of the other site sections. Explicit
-`view=trend` links still open Scoring trend, as do older view-less links that
-carry `metric`, from when Scoring trend was the default.
+league history. Only the selected group's tabs are listed. Tab names are the
+visible names; the `view` and `display` keys keep earlier names so existing
+links stay valid.
+
+| Group | Scope | Tab | URL |
+|---|---|---|---|
+| Compare teams | Every team, one season | Actual vs expected (paired dots) | `view=teams&display=chart` |
+| | | Gap to expected | `view=teams&display=gap` |
+| | | Outlier plot | `view=teams&display=scatter` |
+| | | Scored vs allowed | `view=teams&display=quadrant` |
+| | | Table | `view=teams&display=table` |
+| Team profile | One team | Rankings | `view=team-rankings` |
+| | | Match by match | `view=season-trend` |
+| | | Season by season | `view=team-history` |
+| League trends | League, across seasons | Scoring trend | `view=trend` |
+| | | Goal distribution | `view=distribution` |
+| | | Scoring table | `view=table` |
+
+The Team profile group link opens Rankings. An omitted view opens Actual vs
+expected for the default season, matching the current-season focus of the
+other site sections. Older view-less links that carry `metric`, from when
+Scoring trend was the default, still open Scoring trend. `exploreViewLabels`
+in `internal/app/explore.go` holds the tab names; the page title leads with
+the current tab's name and follows in-place view changes. The comparison charts
+show one selected measure; Table and Season by season show all four. Rankings
+shows all six goal and xG ranks together. Each view heading states the
+regular-season scope.
 JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
 in place, sorts numeric table columns from unrounded values, and restores those
 controls with Back/Forward.

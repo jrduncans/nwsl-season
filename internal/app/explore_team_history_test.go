@@ -132,6 +132,22 @@ func TestExploreDefaultTeamPrefersPortlandThorns(t *testing.T) {
 	}
 }
 
+func TestExploreTeamHistoryHeadingNamesTheView(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+	})}
+	for query, heading := range map[string]string{
+		"view=team-history":                "Season-by-season scoring (regular-season)</h2>",
+		"view=team-history&measure=points": "Season-by-season points (regular-season)</h2>",
+	} {
+		response := httptest.NewRecorder()
+		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?"+query, nil))
+		if !strings.Contains(response.Body.String(), heading) {
+			t.Errorf("%s: missing heading %q", query, heading)
+		}
+	}
+}
+
 func TestExploreTeamHistoryEmptyArchive(t *testing.T) {
 	page, err := exploreTeamHistory(nil, nil)
 	if err != nil || page.HistoryTeam.ID != "" || len(page.TeamHistoryRows) != 0 || page.TeamHistoryMissingXG {
