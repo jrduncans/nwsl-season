@@ -802,7 +802,7 @@ func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
-	for _, value := range []string{`class="badge qualification-badge"`, "✓ Shield", "Guaranteed achievements: Shield", `class="standings-status elimination-status" role="img" aria-label="Eliminated from playoff contention." title="Eliminated from playoff contention."`, "×</span> Eliminated from playoffs"} {
+	for _, value := range []string{`class="badge qualification-badge"`, "✓ Shield", "Guaranteed achievements: Shield", `class="standings-status elimination-status" role="img" aria-label="Eliminated from playoff contention." title="Eliminated from playoff contention."`, "×</span> Eliminated from playoffs</span>"} {
 		if !strings.Contains(response.Body.String(), value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -1252,6 +1252,9 @@ func TestUnknownSeasonPhaseKeepsActiveSeasonCapabilities(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
 		t.Fatal("unknown incomplete season did not retain the ordinary schedule indicators")
+	}
+	if !strings.Contains(response.Body.String(), `<span class="schedule-key-track" aria-hidden="true">`) || !strings.Contains(response.Body.String(), "SD is remaining schedule difficulty") {
+		t.Fatal("schedule difficulty column rendered without its key")
 	}
 	if !strings.Contains(response.Body.String(), ">Schedule difficulty</a>") || !strings.Contains(response.Body.String(), ">Forecast lab</a>") || !strings.Contains(response.Body.String(), ">Clinching scenarios</a>") {
 		t.Fatal("unknown incomplete season did not retain the ordinary feature navigation")

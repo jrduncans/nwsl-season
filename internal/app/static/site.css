@@ -138,7 +138,8 @@ th:nth-child(2) { text-align: left; }
 .qualification-badge { font-weight: 800; }
 .standings-status { display: inline-grid; flex: 0 0 auto; place-items: center; width: 1em; height: 1em; font-size: 1em; font-weight: 900; line-height: 1; }
 .elimination-status { color: var(--red); }
-.standings-status-key { display: inline-flex; align-items: center; gap: .2rem; margin: .55rem 0 0; color: var(--muted); font-size: .75rem; font-weight: 700; }
+.standings-status-key { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem 1.25rem; margin: .55rem 0 0; color: var(--muted); font-size: .75rem; font-weight: 700; }
+.standings-key-item { display: inline-flex; align-items: center; gap: .25rem; }
 .warning { color: var(--gold); }
 .fixtures { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .fixtures li { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(0, 1fr) 7rem minmax(0, 1fr) 6rem; align-items: center; gap: 1rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
@@ -360,6 +361,10 @@ th:nth-child(2) { text-align: left; }
 .schedule-marker-easier { color: var(--green); }
 .schedule-marker-harder { color: var(--gold); border-radius: .15rem; }
 .schedule-marker-average { color: var(--muted); }
+.schedule-key-track { position: relative; display: inline-block; width: 3rem; height: .9rem; }
+.schedule-key-track .schedule-mini-marker { --schedule-scale: 1; --schedule-opacity: 1; }
+.schedule-key-track .schedule-marker-easier { left: 18%; }
+.schedule-key-track .schedule-marker-harder { left: 82%; }
 .schedule-cell[open] .schedule-explanation { position: absolute; z-index: 5; top: calc(100% + .35rem); right: 0; width: min(18rem, calc(100vw - 2rem)); box-shadow: 0 .35rem 1rem rgb(23 33 29 / 16%); }
 .standings tbody tr:nth-last-child(-n+2) .schedule-cell[open] .schedule-explanation { top: auto; bottom: calc(100% + .35rem); }
 .schedule-explanation { padding: .55rem .75rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--paper); color: var(--muted); font-size: .875rem; text-align: left; white-space: normal; }

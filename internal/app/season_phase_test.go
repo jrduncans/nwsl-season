@@ -87,7 +87,7 @@ func TestUpcomingAndCompleteSeasonPresentation(t *testing.T) {
 			t.Errorf("complete season missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{">Schedule difficulty</a>", ">Forecast lab</a>", ">Clinching scenarios</a>", `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline"`} {
+	for _, forbidden := range []string{">Schedule difficulty</a>", ">Forecast lab</a>", ">Clinching scenarios</a>", `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline"`, `class="schedule-key-track"`} {
 		if contains(completeResponse, forbidden) {
 			t.Errorf("complete season rendered %q", forbidden)
 		}
