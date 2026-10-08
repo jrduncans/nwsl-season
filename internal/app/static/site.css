@@ -522,9 +522,17 @@ th:nth-child(2) { text-align: left; }
   .forecast-table { min-width: 0; }
   .forecast-table :is(th, td):nth-child(n+4) { min-width: calc(6ch + .7rem); }
   /* Pin rank and team while the remaining columns scroll. Separate borders keep row lines on the pinned cells. */
-  .forecast-table { border-collapse: separate; border-spacing: 0; }
-  .forecast-table .forecast-rank { position: sticky; left: 0; z-index: 1; box-sizing: border-box; width: 2rem; min-width: 2rem; max-width: 2rem; background: var(--panel); }
-  .forecast-table th:nth-child(2) { position: sticky; left: 2rem; z-index: 1; background: var(--panel); box-shadow: inset -1px 0 var(--line); }
+  :is(.standings, .forecast-table, .forecast-comparison-table) { border-collapse: separate; border-spacing: 0; }
+  :is(.standings :is(th, td):first-child, .forecast-table .forecast-rank, .standings th:nth-child(2), .forecast-table th:nth-child(2), .forecast-comparison-table th:first-child) { position: sticky; z-index: 1; box-sizing: border-box; background: var(--panel); }
+  :is(.standings th:nth-child(2), .forecast-table th:nth-child(2), .forecast-comparison-table th:first-child) { box-shadow: inset -1px 0 var(--line); }
+  .forecast-table .forecast-rank { left: 0; width: 2rem; min-width: 2rem; max-width: 2rem; }
+  .forecast-table th:nth-child(2) { left: 2rem; }
+  .standings { min-width: 0; }
+  .standings :is(th, td):first-child { left: 0; width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem; }
+  .standings th:nth-child(2) { left: 2.5rem; width: 9.5rem; min-width: 9.5rem; max-width: 9.5rem; white-space: normal; }
+  .standings th:nth-child(2) .standings-team-cell { flex-wrap: wrap; }
+  .standings th:nth-child(2) .qualification-badge { white-space: nowrap; }
+  .forecast-comparison-table th:first-child { left: 0; width: 9.5rem; min-width: 9.5rem; white-space: normal; }
 }
 
 .explore-season-scored-key { color: var(--chart-actual); }
