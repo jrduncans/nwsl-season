@@ -1543,7 +1543,7 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
-    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected comparison in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}`;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}`;
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
     comparison.replaceChildren(...[{key: 'team', label: 'None (team average only)'}, ...(selectedSeason?.benchmarks || [])].map(reference => {
@@ -1623,7 +1623,7 @@
     for (const {prefix, label: panelLabel, datasets} of panels) {
       root.querySelector(`[data-trend-${prefix}-panel]`).hidden = datasets.length === 0;
       if (!datasets.length) continue;
-      root.querySelector(`[data-trend-${prefix}-title]`).textContent = `${panelLabel} · ${rolling ? `${window}-match average` : 'Per match'}`;
+      root.querySelector(`[data-trend-${prefix}-title]`).textContent = `${panelLabel} · ${rolling ? `${window}-match average` : 'Each match'}`;
       const hasMarks = datasets.some(dataset => dataset.data.some(value => value != null));
       root.querySelector(`[data-trend-${prefix}-relative-note]`).hidden = !relative;
       root.querySelector(`[data-trend-${prefix}-relative-note]`).textContent = pointsMetric ? 'Higher points per match means more points earned.' : `Above a reference: more ${prefix === 'goals' ? 'scored' : 'conceded'}. Below: fewer.`;
@@ -1702,9 +1702,9 @@
     const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'trend';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
-    const teamView = view === 'teams' || view === 'team-history' || view === 'season-trend' || view === 'team-rankings';
-    root.querySelector('[data-league-views]').hidden = teamView;
-    root.querySelector('[data-team-views]').hidden = !teamView;
+    const group = view === 'teams' ? 'teams'
+      : ['team-rankings', 'season-trend', 'team-history'].includes(view) ? 'team' : 'league';
+    root.querySelectorAll('[data-group-views]').forEach(nav => { nav.hidden = nav.dataset.groupViews !== group; });
     root.querySelectorAll('[data-team-display]').forEach(link => {
       const selected = view === 'teams' && link.dataset.teamDisplay ===
         (['chart', 'gap', 'scatter', 'quadrant', 'table'].includes(params.get('display')) ? params.get('display') : 'chart');
@@ -1712,7 +1712,7 @@
       link.href = teamLink({display: link.dataset.teamDisplay});
     });
     root.querySelectorAll('[data-group-choice]').forEach(link => {
-      if (link.dataset.groupChoice === (teamView ? 'teams' : 'league')) link.setAttribute('aria-current', 'page');
+      if (link.dataset.groupChoice === group) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
     root.querySelectorAll('[data-view-choice]').forEach(link => {
@@ -1751,7 +1751,7 @@
     if (view === 'season-trend') showSeasonTrend(params);
     if (view === 'team-rankings') showTeamRankings(params);
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
-      const target = link.dataset.viewChoice || (link.dataset.groupChoice === 'teams' ? 'teams' : 'trend');
+      const target = link.dataset.viewChoice || {league: 'trend', teams: 'teams', team: 'team-rankings'}[link.dataset.groupChoice];
       const selection = new URLSearchParams(params); selection.set('view', target);
       link.href = `?${selection}`;
     });

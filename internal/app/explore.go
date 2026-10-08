@@ -16,9 +16,23 @@ type explorePage struct {
 	exploreSeasonTrendView
 	exploreTeamRankingsView
 	View                              string
+	ViewGroup                         string
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
 	ChartLibraryPath, ChartLabelsPath string
+}
+
+// exploreViewGroup names the navigation group for a view: league-wide views
+// across seasons, every team in one season, or one selected team.
+func exploreViewGroup(view string) string {
+	switch view {
+	case "teams":
+		return "teams"
+	case "team-rankings", "season-trend", "team-history":
+		return "team"
+	default:
+		return "league"
+	}
 }
 
 type exploreChartRecord struct {
@@ -50,7 +64,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
-	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view}
+	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
 	page.exploreDistributionView, err = exploreDistribution(r.URL.Query(), page.Distributions)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)

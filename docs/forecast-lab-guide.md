@@ -79,7 +79,7 @@ aggregate rows rather than recalculating historical seasons on every request.
 See [How synchronization works](sync-logic-guide.md) for the complete refresh
 flow and terminology.
 
-Explore's Season trend benchmarks reuse the default model's baseline forecast
+Explore's Match by match benchmarks reuse the default model's baseline forecast
 with no fixed outcomes. Projected final points select its playoff and top-4
 comparison groups; highest Shield probability selects its Shield favorite,
 including all tied favorites. The comparison lines show those teams' recorded

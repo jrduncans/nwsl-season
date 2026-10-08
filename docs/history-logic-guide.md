@@ -8,12 +8,14 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 ## Explore workspace
 
 `GET /explore` reuses the same coherent archive read and scoring calculations.
-It groups Scoring trend, Goal distribution, and Season table under League
-scoring, with a separate Team performance analysis in the same workspace.
-Team performance offers Comparison chart, Gap chart, Outlier plot, Scored vs allowed, Comparison
-table, Team rankings, Season trend, and Team history as direct views. The
-comparison charts show one selected measure; Comparison table and Team history
-show all four. Team rankings shows all six goal and xG ranks together.
+Its navigation groups views by scope. League holds Scoring trend, Goal
+distribution, and Scoring table across seasons. Compare teams holds every team
+in one season: Actual vs expected (paired dots), Gap to expected, Outlier plot,
+Scored vs allowed, and Table. One team holds Rankings, Match by match, and
+Season by season for a selected team; its group link opens Rankings. Only the
+selected group's views are listed. The comparison charts show one selected
+measure; Table and Season by season show all four. Rankings shows all six goal
+and xG ranks together.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-rankings|season-trend|team-history` selects the initial surface.
 JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
@@ -31,7 +33,7 @@ inspection.
 Scoring trend offers Goals, xG, Both, and Goals − xG under the same chart.
 Goals − xG uses zero-centered signed bars on a symmetric scale, with positive
 bars for goals above xG and negative bars for goals below xG. It uses the
-full-precision season gap already shown in the Season table. Seasons without
+full-precision season gap already shown in the Scoring table. Seasons without
 complete xG have no bar; if none qualify, the chart shows an explicit empty
 message. Goals and xG line modes retain a scale fitted to their values; the
 hidden bar series does not force those nonnegative charts to start at zero.
@@ -91,7 +93,7 @@ including an eligible in-progress year and its match count.
 Future analyses must fit broader groups with data/metric sub-controls rather
 than adding a top-level tab per metric.
 
-### Team performance
+### Compare teams
 
 `view=teams` compares actual and expected values for one regular season.
 `season=YYYY` selects a catalog year; the default is the newest eligible
@@ -99,13 +101,13 @@ season, falling back to the newest catalog year when none qualify.
 `measure=for|against|difference|points` chooses goals scored, goals allowed,
 goal differential, or points on the chart. Goal differential is the default.
 `units=per-match|total` controls the within-season comparison across the
-paired-dot chart, Gap chart, Outlier plot, and table. Per match is the default;
+paired-dot chart, Gap to expected, Outlier plot, and table. Per match is the default;
 totals sum the same selected team's recorded regular-season matches. Explicit
 unsupported years, malformed or repeated season values, and invalid or repeated
 measures or units return 400. Selections update locally and support direct URLs
 and Back/Forward. `display=chart|gap|scatter|quadrant|table` selects comparison views
 (paired-dot chart by default), preserving the season and chart measure. The
-measure picker appears on Comparison chart, Gap chart, and Outlier plot; the table always includes all four
+measure picker appears on Actual vs expected, Gap to expected, and Outlier plot; the table always includes all four
 measures. A small-screen cue identifies the table's horizontal scroll.
 `team-sort` accepts `name`, `played`, or a metric-qualified key such as
 `difference-gap`, `for-actual`, `against-expected`, or `points-gap`. Each of
@@ -146,7 +148,7 @@ fall back to their ASA identity. No cross-season franchise mapping is implied.
 
 The paired-dot chart places actual and expected values in the selected units on
 one scale including zero, ordered by actual value (ascending for goals allowed,
-descending otherwise). The Gap chart ranks teams by full-precision actual minus
+descending otherwise). Gap to expected ranks teams by full-precision actual minus
 expected, with signed bars around zero. It orders positive gaps first for goals
 scored, goal differential, and points, and negative gaps first for goals allowed.
 Green means above expected and purple means below expected; neither color
@@ -189,7 +191,7 @@ the Show team logos control can hide them. Crests appear beside points where
 they do not overlap another crest or point. Team names remain available in
 tooltips and the pinned details card; with logo labels off, a pinned point also
 gets a text label. Keyboard inspection
-reaches every plotted team; a link below the plot opens the comparison table for
+reaches every plotted team; a link below the plot opens the Table view for
 all teams, including those whose points overlap. The season and measure
 selections, direct URLs, and Back/Forward work as on the other comparison views.
 Scored vs allowed (`display=quadrant`) plots scored vertically against allowed
@@ -224,7 +226,7 @@ clicks, Clear selection, and Escape clear the selection. Team logos are optional
 with overlap suppression against both series. Arrow keys reach all available
 marks, including coincident teams, and skip missing xG. Season, data mode, units,
 and display restore through Back/Forward and shareable URLs without new requests.
-The comparison table and GET controls remain the no-script fallback.
+The Table view and GET controls remain the no-script fallback.
 
 In both scatter plots, point radii adapt uniformly from 6 to 10 CSS pixels when
 the nearest-point spacing and plot edges allow it. Crowded or coincident points
@@ -242,9 +244,9 @@ expected in the selected units. Lower/negative gaps are favorable for goals
 allowed; higher/positive gaps are favorable for goals scored, differential, and
 points. These are descriptive comparisons of recorded matches, not forecasts.
 Tooltip and keyboard inspection include both values, gap, and played count.
-The paired-dot and Gap chart labels and table rows pair team logos with names;
+The paired-dot and Gap to expected labels and table rows pair team logos with names;
 unavailable images leave the names readable. Those chart labels are HTML aligned
-to Chart.js row positions on layout and resize. The Comparison table starts
+to Chart.js row positions on layout and resize. The Table view starts
 with Team and Played, followed by Goal differential, Goals scored, Goals
 allowed, and Points groups, each with Actual, expected (xG or xPts), and Gap
 columns. Contextual accessible sort labels identify the measure and values.
@@ -274,7 +276,7 @@ named Outlier plot omission note and empty state, sorting in both directions,
 no-script sorting, season/measure/units/display URLs, Back/Forward, and switching
 analyses without fetching new data.
 
-### Team rankings
+### Rankings
 
 `view=team-rankings` shows one team's goals scored, goals allowed, goal
 differential, xG, xG allowed, and xG differential together. It shares the
@@ -298,7 +300,7 @@ League xG ranks require complete xG for every team in the season's comparison.
 If any team's recorded-match xG coverage is incomplete, all three xG ranks and
 markers are withheld with an explanation. Fully covered teams retain their
 own xG values. Goal ranks remain available. Season integrity and cache-only
-boundaries match Team performance, using the same single archive payload.
+boundaries match Compare teams, using the same single archive payload.
 The GET selectors and six cards work without scripts; JavaScript changes them
 locally with shareable URLs and Back/Forward, without another data request.
 
@@ -310,13 +312,14 @@ verify desktop and 390px layouts, selector keyboard access, all six cards,
 season/team/unit changes, direct URLs, Back/Forward, missing xG, empty seasons,
 and no-script forms.
 
-### Season trend
+### Match by match
 
 `view=season-trend` follows a selected team's completed regular-season matches
 within `season=YYYY`. It shares the validated season, team identity, and
 `series=goals|xg|both` selections with other team views, defaulting to the newest
 eligible season, the first eligible team by name, and both series.
-`trend-view=balance|compare|difference|points|relative` defaults to Scoring balance,
+The Chart picker (`trend-view=balance|compare|difference|points|relative`)
+defaults to Scoring balance,
 showing scored and allowed together. Actual vs xG compares the two bases within
 Scored and Allowed panels; Differential compares goal and xG differential on
 one plot. Points vs xPoints compares earned match points (3/1/0) with ASA's
@@ -324,7 +327,7 @@ retrospective xPoints on one plot. These describe played matches, not forecast
 final points. Benchmarks shows original values with team-mean and optional
 comparison references. The retained `relative` value preserves existing links.
 
-The Data picker appears in Scoring balance and Benchmarks. Scoring balance
+The Show picker appears in Scoring balance and Benchmarks. Scoring balance
 retains the shared `series=goals|xg|both` preference. Benchmarks uses
 `average-series=goals|xg|points|xpoints`, defaulting to xG when the shared
 preference is xG and to Goals otherwise. Goals and xG use Scored and Allowed
@@ -333,7 +336,7 @@ preferences in the URL and GET form, so switching views restores selections.
 Comparison, differential, and Points vs xPoints always include both relevant
 bases. Blank, repeated, or unsupported average-series selections return 400.
 `average-reference=team|league|playoff|top-four|shield|best` defaults to League
-average. The Comparison selector replaces the single-series legend above the
+average. The Benchmark selector replaces the single-series legend above the
 Benchmarks charts and remains associated with the GET form. `team` means
 None (team average only); every other selection adds one comparison to the
 team's own average. Choices are retained across views and Back/Forward; blank,
@@ -344,15 +347,17 @@ across seasons and uses their newest eligible names, while the heading and
 opponents use names from the selected season. A selected team without eligible
 results in a selected season stays selected with an explicit empty state.
 
-`trend-mode=match|rolling` defaults to rolling. `window=3|5|10` defaults to five
-matches; its control is hidden in per-match mode. Match values and rolling
+The Smoothing picker (`trend-mode=match|rolling`) defaults to Rolling average;
+None (each match) plots individual match values. It is labeled apart from
+the per-match/total Values picker in other team views. `window=3|5|10` defaults
+to five matches; its control is hidden in per-match mode. Match values and rolling
 averages are separate modes, with lines and points in both. Blank, unsupported,
 or repeated trend views/modes/windows return 400. Selections update locally from the
 same single archive payload, with shareable URLs, Back/Forward, and a GET form
 fallback.
 
 The data reuse the scoring loop's validated results and paired xG observations
-and the same season eligibility as Team performance. Upcoming, abandoned, or
+and the same season eligibility as Compare teams. Upcoming, abandoned, or
 invalid results do not enter the series; known incomplete inventory and other
 season integrity exclusions withhold the view. Home and away appearances are
 oriented to the selected team. Differential is scored minus allowed for both
@@ -530,9 +535,9 @@ empty seasons; chronological table and no-script GET fallback; direct URLs and
 Back/Forward; and switching views without another document/data request (team
 logos may load).
 
-### Team history
+### Season by season
 
-Team performance also includes Team history (`view=team-history`). The `team`
+One team also includes Season by season (`view=team-history`). The `team`
 selector chooses an ASA team ID from eligible recorded results across the
 archive; it defaults to the first team by name, with ID breaking ties. The
 selector uses the newest eligible name for each ID, so a rename keeps its
@@ -542,7 +547,7 @@ franchise lineage is not inferred. Blank, repeated, and unknown team IDs return
 goal differential and sharing the season comparison's validation.
 
 History reuses the eligible team-season rates and per-team xG and xPoints
-coverage already calculated for Team performance. A single recorded result can
+coverage already calculated for Compare teams. A single recorded result can
 appear with its played count. Goals, xG, points, and xPoints are per match;
 differential is scored minus allowed. The within-season `units` control does not
 change history.
@@ -724,7 +729,7 @@ range 0 through 3. Zero is valid for either metric.
 
 xG-per-match and goals-minus-xG-per-match are available only when every played
 match has valid xG. The league scoring calculation reports xPoints coverage
-without adding an xPoints scoring trend. Team performance separately sums ASA's
+without adding an xPoints scoring trend. Compare teams separately sums ASA's
 retrospective xPoints for each team's recorded regular-season matches and derives
 the per-match rate when that team's xPoints coverage is complete. Coverage of
 xPoints does not require complete xG, and incomplete xPoints do not hide actual
