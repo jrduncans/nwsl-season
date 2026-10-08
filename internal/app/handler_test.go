@@ -394,11 +394,21 @@ func TestRequestCompetitionUsesOnlyExactCapabilities(t *testing.T) {
 func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
 	application := newApplicationWithForecastExecutor(nil, Options{Location: time.UTC}, nil)
 	var fixtures bytes.Buffer
-	if err := application.app.pages.ExecuteTemplate(&fixtures, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true}); err != nil {
+	if err := application.app.pages.ExecuteTemplate(&fixtures, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true, HasUpcomingFixtures: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(fixtures.String(), "Scheduled fixtures include a match outlook") || strings.Contains(fixtures.String(), "Explore the season forecast") {
 		t.Fatalf("fixtures outlook note linked an unavailable forecast: %s", fixtures.String())
+	}
+
+	var toggled bytes.Buffer
+	if err := application.app.pages.ExecuteTemplate(&toggled, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true, HasResults: true, HasUpcomingFixtures: true, ShowFixtureViewToggle: true}); err != nil {
+		t.Fatal(err)
+	}
+	// The note describes scheduled fixtures, so it belongs to the Upcoming view only.
+	note, upcoming := strings.Index(toggled.String(), "fixture-outlook-note"), strings.Index(toggled.String(), `data-fixture-view="upcoming"`)
+	if note < 0 || upcoming < 0 || note < upcoming {
+		t.Fatalf("outlook note is outside the upcoming view: %s", toggled.String())
 	}
 
 	var standings bytes.Buffer

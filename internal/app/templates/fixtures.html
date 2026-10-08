@@ -11,8 +11,6 @@
   <button class="fixture-view-button" type="button" data-fixture-view-button="results" aria-pressed="true">Results</button>
   <button class="fixture-view-button" type="button" data-fixture-view-button="upcoming" aria-pressed="false">Upcoming</button>
 </div>{{end}}
-{{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include a match outlook for each result. Outlooks use expected goals, venue, recovery time, and recent fixture load.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
-
 {{template "fixtureLists" .}}
 {{template "foot" .}}{{end}}
 
@@ -27,6 +25,7 @@
 </section>{{end}}
 
 {{if .HasUpcomingFixtures}}<section{{if .ShowFixtureViewToggle}} data-fixture-view="upcoming"{{end}}>
+{{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include a match outlook for each result. Outlooks use expected goals, venue, recovery time, and recent fixture load.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
 {{range .UpcomingFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status hidden></span></h2>
     <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
