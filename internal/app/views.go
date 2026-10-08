@@ -467,6 +467,7 @@ type fixtureView struct {
 	AwayTeam        teamNameView
 	Score           string
 	XG              string
+	Winner          string
 	Completed       bool
 	Remaining       bool
 	Status          string
@@ -908,6 +909,7 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		}
 		if view.Completed && game.HomeScore.Valid && game.AwayScore.Valid {
 			view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
+			view.Winner = fixtureWinner(game)
 			if includeXG {
 				if xg, ok := xgoals[game.ASAID]; ok {
 					view.XG = fmt.Sprintf("%.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
@@ -917,6 +919,22 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		groups[index].Games = append(groups[index].Games, view)
 	}
 	return groups
+}
+
+// fixtureWinner names the side that won a completed match ("home" or "away"),
+// using the shootout when a knockout match finished level. A draw has none.
+func fixtureWinner(game cache.Game) string {
+	home, away := game.HomeScore.Int64, game.AwayScore.Int64
+	if home == away && game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
+		home, away = game.HomePenalties.Int64, game.AwayPenalties.Int64
+	}
+	switch {
+	case home > away:
+		return "home"
+	case away > home:
+		return "away"
+	}
+	return ""
 }
 
 func bracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData) bracketPage {
