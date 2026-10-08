@@ -286,8 +286,9 @@ necessary.
 
 ### Scenario presentation
 
-A line under the page title gives the slate's local date range and links to
-its included matches, which are listed at the end of the page. The page groups confirmed scenarios by the team's own results, in kickoff
+A line under the page title gives the slate's local date range and expands
+to list its included matches; the list stays collapsed by default so the
+results remain near the top. The page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored

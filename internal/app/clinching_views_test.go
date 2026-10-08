@@ -55,8 +55,10 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 			if strings.Contains(body, "Choose a group matching") || strings.Contains(body, "Other paths may exist") {
 				t.Fatal("obsolete explanatory copy was rendered")
 			}
-			if strings.Index(body, `class="clinching-path-option"`) > strings.Index(body, `id="clinching-matches"`) {
-				t.Fatal("schedule must follow results")
+			// The slate's matches sit above the results, so they must stay
+			// collapsed until the reader asks for them.
+			if !strings.Contains(body, `<details class="clinching-slate"><summary>`) || strings.Index(body, `class="clinching-slate"`) > strings.Index(body, `class="clinching-path-option"`) {
+				t.Fatal("collapsed slate matches must precede results")
 			}
 			if strings.Contains(body, "<script>alert(1)</script>") || !strings.Contains(body, "&lt;script&gt;alert(1)&lt;/script&gt;") {
 				t.Fatal("team names must remain escaped")
@@ -65,7 +67,7 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 	}
 }
 
-func TestClinchingPageSummarizesSlateDatesBeforeScenarios(t *testing.T) {
+func TestClinchingPageSummarizesSlateBeforeScenarios(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	result := scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{testScenarioCondition("future-1", 1)}}}}
@@ -74,8 +76,8 @@ func TestClinchingPageSummarizesSlateDatesBeforeScenarios(t *testing.T) {
 		latest time.Time
 		want   string
 	}{
-		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> – <time data-local-date="2026-10-18T23:00:00Z">Sun, Oct 18</time> · <a href="#clinching-matches">2 matches</a>`},
-		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> · <a href="#clinching-matches">2 matches</a>`},
+		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `<summary>Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> – <time data-local-date="2026-10-18T23:00:00Z">Sun, Oct 18</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
+		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `<summary>Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			slate := scenarios.Slate{State: scenarios.SlateReady, StartsAtUTC: time.Date(2026, 10, 16, 19, 0, 0, 0, time.UTC), LatestKickoffUTC: test.latest, FixtureIDs: []string{"future-1", "future-2"}}

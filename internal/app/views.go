@@ -510,9 +510,7 @@ type clinchingPage struct {
 	State            string
 	Slate            scenarios.Slate
 	SlateStartsAtUTC string
-	SlateStartsAt    string
 	SlateLatestUTC   string
-	SlateLatest      string
 	SlateStartDate   string
 	SlateLatestDate  string
 	SlateCutoffUTC   string

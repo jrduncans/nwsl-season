@@ -878,7 +878,7 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
+	for _, value := range []string{`<details class="clinching-slate">`, "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
@@ -950,7 +950,7 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 	if strings.Contains(body, "data-clinching-team-filter") || strings.Contains(body, "Show scenarios for") {
 		t.Fatal("body contains the removed clinching team filter")
 	}
-	if strings.Contains(body, "Included matches") {
+	if strings.Contains(body, `class="clinching-slate"`) {
 		t.Error("body contains an irrelevant included slate")
 	}
 }
@@ -1035,7 +1035,7 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Included matches", "Elimination scenarios", "Already eliminated", "Bravo FC has already been eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
+	for _, value := range []string{`<details class="clinching-slate">`, "Elimination scenarios", "Already eliminated", "Bravo FC has already been eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain %q", value)
 		}
