@@ -12,6 +12,17 @@ linters:
     - predeclared
     - unconvert
     - usestdlibvars
+    - depguard
+  settings:
+    depguard:
+      rules:
+        page-requests-read-cache:
+          files:
+            - "**/internal/app/**"
+            - "**/internal/history/**"
+          deny:
+            - pkg: github.com/jrduncans/nwsl-season/internal/asa
+              desc: Page requests must read the local SQLite cache; only the scheduler and cmd/sync may call ASA.
   exclusions:
     rules:
       # Test fixtures commonly discard cleanup errors and use context-free test helpers.
