@@ -270,7 +270,7 @@ Change the wave letter, and optionally `max parallel`:
   command. **Depends on:** nothing. **Size:** S.
 - **Files:** `Makefile`, `.github/workflows/test.yml`, new
   `.github/workflows/vulncheck.yml`, `.golangci.yml`, `AGENTS.md` (only the
-  lines named below).
+  lines named below), `docs/test-strategy-plan.md` (this section only).
 
 Steps:
 
@@ -281,7 +281,12 @@ Steps:
      `go test -run '^$$' -bench . -benchtime=1x ./internal/clinching ./internal/scenarios ./internal/simulation`.
      It takes about 15s, and its budgets count work rather than time, so it
      doesn't depend on the CI machine's speed.
-   - Add both new targets to `.PHONY`.
+   - Add a local-only `test-coverage` target. It runs
+     `go test -coverpkg=./... -coverprofile=work/coverage.out ./...` and then
+     `go tool cover -func=work/coverage.out`, so per-function coverage prints
+     without extra steps. `work/` is git-ignored. CI does not run this target;
+     it is for local and agent use.
+   - Add the new targets (`test-guards` and `test-coverage`) to `.PHONY`.
    - Replace the long feature-list comments above `test-explore` and
      `test-clinching` with one line each that points to the History guide and
      the clinching guide.
@@ -290,9 +295,9 @@ Steps:
      regressions" and "All packages".
    - Add a `make test-guards` step.
    - Add a separate `race` job that runs `make race`.
-   - Make the `test` step write a coverage profile
-     (`go test -coverpkg=./... -coverprofile=coverage.out ./...`) and upload it
-     with `actions/upload-artifact`. This is a report, not a gate.
+   - The full-suite step runs `make test`. Every CI step is a Make target, so
+     workflow YAML contains no raw `go` commands. CI uploads no coverage
+     artifact; coverage comes from `make test-coverage` locally.
 3. New `vulncheck.yml`:
    - Triggers: pull requests that change `go.mod` or `go.sum`, pushes to
      `main`, a weekly schedule, and `workflow_dispatch`.
@@ -314,9 +319,12 @@ Steps:
 
 **Acceptance criteria:**
 
-- `make test-clinching`, `make test-guards` and `make lint` pass.
+- `make test-clinching`, `make test-guards`, `make test-coverage` and `make lint`
+  pass. `make test-coverage` writes `work/coverage.out` and prints per-function
+  coverage.
 - The workflow YAML parses (`actionlint` if available, otherwise a careful
-  read).
+  read). Every workflow run line is a Make target, and no workflow uploads a
+  coverage artifact.
 - No workflow step name is longer than 40 characters.
 
 **Stop if** any benchmark guard fails on `main`. That is a product finding to
