@@ -487,7 +487,7 @@ func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
 				}
 			}
 		} else {
-			for _, want := range []string{"Historical standings", `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, `data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`} {
+			for _, want := range []string{" standings</span> · <span data-standings-mode-label data-per-game=\"per game\" data-total=\"totals\">totals</span></span></caption>", `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, `data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("%s missing %q", path, want)
 				}
@@ -845,7 +845,7 @@ func TestSeasonRendersXGInStandingsWithoutCoverageWarning(t *testing.T) {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
 	body := response.Body.String()
-	for _, value := range []string{`data-total="2.36/1.11" data-per-game="2.36/1.11"`, `data-total="&#43;1.25" data-per-game="&#43;1.25"`, `data-standings-caption data-goals-label="Current standings" data-xg-label="xG standings, ordered by xPts"`, `data-standings-points-label data-goals-label="Pts" data-xg-label="xPts"`, `data-standings-points data-total="3" data-per-game="3.00" data-xg-total="2.47" data-xg-per-game="2.47"`} {
+	for _, value := range []string{`data-total="2.36/1.11" data-per-game="2.36/1.11"`, `data-total="&#43;1.25" data-per-game="&#43;1.25"`, `data-standings-caption data-goals-label="2026 Regular Season" data-xg-label="2026 Regular Season xG, ordered by xPts">2026 Regular Season</span> · <span data-standings-mode-label data-per-game="per game" data-total="totals">per game</span> · through Jul 1</span></caption>`, `data-standings-points-label data-goals-label="Pts" data-xg-label="xPts"`, `data-standings-points data-total="3" data-per-game="3.00" data-xg-total="2.47" data-xg-per-game="2.47"`} {
 		if !strings.Contains(body, value) {
 			t.Errorf("body does not contain xG value %q", value)
 		}
@@ -1690,6 +1690,39 @@ func TestForecastResultKeyChangesWhenHistoricalVenueSummaryArrives(t *testing.T)
 	data.VenueHistory = []cache.VenueSummary{{Season: "2025", Stage: "Regular Season", FixtureReady: true, XGReady: true, Matches: 182, HomeGoals: 260, AwayGoals: 220, XGMatches: 182, HomeXG: 250.5, AwayXG: 215.5}}
 	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8); second == first {
 		t.Fatal("forecast result key did not change with historical venue summary")
+	}
+}
+
+func TestForecastCaptionNamesModelResultsDateAndFixedResults(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-schedule-load-v1&p=future-1:h", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	if want := "<caption><span>2026 forecast · xG Poisson (schedule load) · through Jul 1 · 1 fixed result</span></caption>"; !strings.Contains(response.Body.String(), want) {
+		t.Fatalf("body does not contain caption %q", want)
+	}
+}
+
+func TestLatestCompletedMatchDateUsesLocalDateOfCompletedMatches(t *testing.T) {
+	pacific, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	games := []cache.Game{
+		{Status: standings.CompletedStatus, KickoffUTC: "2026-10-04 23:00:00 UTC"},
+		// A later kickoff in UTC that is still Oct 4 in Pacific time.
+		{Status: standings.CompletedStatus, KickoffUTC: "2026-10-05 02:30:00 UTC"},
+		{Status: "PreMatch", KickoffUTC: "2026-10-16 23:00:00 UTC"},
+	}
+	if got, ok := latestCompletedMatchDate(games, pacific); !ok || got != "Oct 4" {
+		t.Fatalf("latestCompletedMatchDate = %q, %v; want Oct 4", got, ok)
+	}
+	if _, ok := latestCompletedMatchDate(games[2:], pacific); ok {
+		t.Fatal("latestCompletedMatchDate reported a date without completed matches")
 	}
 }
 

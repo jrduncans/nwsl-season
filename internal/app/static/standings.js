@@ -37,6 +37,9 @@ document.addEventListener("click", (event) => {
     display.querySelectorAll("[data-standings-mode-button]").forEach((candidate) => {
       candidate.setAttribute("aria-pressed", String(candidate === button));
     });
+    display.querySelectorAll("[data-standings-mode-label]").forEach((label) => {
+      label.textContent = mode === "per-game" ? label.dataset.perGame : label.dataset.total;
+    });
     updateStandingsValues(display, mode);
     requestAnimationFrame(() => display.classList.remove("is-switching"));
   });

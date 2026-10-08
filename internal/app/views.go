@@ -59,6 +59,7 @@ type seasonPage struct {
 	FixturesHeading        string
 	StandingsCaption       string
 	StandingsXGCaption     string
+	StandingsCaptionSuffix string
 	StandingsMode          string
 	Phase                  seasonPhase
 	Standings              []tableRowView

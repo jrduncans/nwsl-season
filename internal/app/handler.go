@@ -855,24 +855,32 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	hasUpcoming := len(upcomingFixtureGroups) > 0
 	presentation.HasUpcoming = hasUpcoming
 	retrospective := presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming)
-	standingsCaption := "Current standings"
-	standingsXGCaption := "xG standings, ordered by xPts"
+	// Captions name the season and how current the table is, so a cropped
+	// screenshot keeps its context. The template adds the per-game or totals
+	// mode, which the page script updates when the reader switches it.
+	seasonLabel := scope.Entry.Label
+	if seasonLabel == "" {
+		seasonLabel = strings.TrimSpace(season + " " + scope.Stage)
+	}
+	standingsCaption := seasonLabel
+	standingsXGCaption := seasonLabel + " xG, ordered by xPts"
+	standingsCaptionSuffix := ""
 	standingsMode := "per-game"
 	if presentation.Phase == seasonPhaseComplete {
 		standingsMode = "total"
 		if presentation.FinalStandingsSafe {
-			standingsCaption = "Final standings"
-			standingsXGCaption = "Final xG standings, ordered by xPts"
+			standingsCaption = seasonLabel + " final standings"
+			standingsXGCaption = seasonLabel + " final xG standings, ordered by xPts"
 		} else {
-			standingsCaption = "Season standings"
-			standingsXGCaption = "Season xG standings, ordered by xPts"
+			standingsCaption = seasonLabel + " standings"
+			standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
 		}
-	} else if presentation.Historical {
-		standingsCaption = "Historical standings"
-		standingsXGCaption = "Historical xG standings, ordered by xPts"
-		if !hasUpcoming {
-			standingsMode = "total"
-		}
+	} else if presentation.Historical && !hasUpcoming {
+		standingsMode = "total"
+		standingsCaption = seasonLabel + " standings"
+		standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
+	} else if through, ok := latestCompletedMatchDate(data.Games, a.options.Location); ok {
+		standingsCaptionSuffix = "through " + through
 	}
 	fixturesHeading := "Results and fixtures"
 	if presentation.Phase == seasonPhaseUpcoming {
@@ -905,6 +913,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		FixturesHeading:        fixturesHeading,
 		StandingsCaption:       standingsCaption,
 		StandingsXGCaption:     standingsXGCaption,
+		StandingsCaptionSuffix: standingsCaptionSuffix,
 		StandingsMode:          standingsMode,
 		Phase:                  presentation.Phase,
 		Standings:              addTotalPositions(standingsView, totalTable, scope.Entry.PlayoffPlaces),
@@ -1135,6 +1144,29 @@ func scheduleDifficultyNote(data cache.SeasonData, inventory *competition.Invent
 	}
 	return strings.Join(notes, " ")
 }
+
+// latestCompletedMatchDate returns the local date of the most recent
+// completed match, which tells a reader how current a table is.
+func latestCompletedMatchDate(games []cache.Game, location *time.Location) (string, bool) {
+	var latest time.Time
+	for _, game := range games {
+		if game.Status != standings.CompletedStatus {
+			continue
+		}
+		kickoff, err := fixtures.ParseKickoff(game.KickoffUTC)
+		if err != nil {
+			continue
+		}
+		if kickoff.After(latest) {
+			latest = kickoff
+		}
+	}
+	if latest.IsZero() {
+		return "", false
+	}
+	return latest.In(location).Format("Jan 2"), true
+}
+
 func qualificationViews(rows []tableRowView, values []cache.QualificationStatus) []tableRowView {
 	byTeam := map[string][]cache.QualificationStatus{}
 	for _, v := range values {
