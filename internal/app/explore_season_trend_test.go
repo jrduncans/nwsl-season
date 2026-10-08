@@ -210,7 +210,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 			t.Fatalf("cache-only trend %s: %d %d/%d", path, response.Code, store.archiveCalls, store.seasonCalls)
 		}
-		for _, fragment := range []string{`data-view-choice="season-trend" aria-current="page"`, `data-panel="season-trend" aria-labelledby=`, `Show season trend`, `data-trend-rows`, `data-chart="season-trend"`} {
+		for _, fragment := range []string{`data-view-choice="season-trend" aria-current="page"`, `data-panel="season-trend" aria-labelledby=`, `Show matches</button>`, `data-trend-rows`, `data-chart="season-trend"`} {
 			if !strings.Contains(body, fragment) {
 				t.Errorf("missing %s", fragment)
 			}

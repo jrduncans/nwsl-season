@@ -7,6 +7,10 @@ import (
 	"sort"
 )
 
+// portlandThornsTeamID is the ASA ID of Portland Thorns FC, the site owner's
+// team and the default Team profile selection.
+const portlandThornsTeamID = "Pk5LeeNqOW"
+
 type exploreTeamHistoryRecord struct {
 	exploreTeamRecord
 	Season string
@@ -86,7 +90,9 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 		}
 		return left.ID < right.ID
 	})
-	if len(page.HistoryTeamOptions) > 0 {
+	if team, found := byID[portlandThornsTeamID]; found {
+		page.HistoryTeam = team
+	} else if len(page.HistoryTeamOptions) > 0 {
 		page.HistoryTeam = page.HistoryTeamOptions[0]
 	}
 	if values, present := query["team"]; present {

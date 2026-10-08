@@ -233,6 +233,67 @@ func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
 	}
 }
 
+func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+		"2026": {lifecycle: cache.SourceScopeActive, goals: 4},
+	})}
+	groups := map[string]string{"league": "League trends", "teams": "Compare teams", "profile": "Team profile"}
+	for _, tc := range []struct{ query, group, current string }{
+		{"", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
+		{"view=trend", "league", `data-view-choice="trend" aria-current="page">Scoring trend</a>`},
+		// Scoring trend was the default, so its metric links could omit the view.
+		{"metric=gap", "league", `data-view-choice="trend" aria-current="page">Scoring trend</a>`},
+		{"view=teams&metric=gap", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
+		{"view=distribution", "league", `data-view-choice="distribution" aria-current="page">Goal distribution</a>`},
+		{"view=table", "league", `data-view-choice="table" aria-current="page">Scoring table</a>`},
+		{"view=teams", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
+		{"view=teams&display=gap", "teams", `data-team-display="gap" aria-current="page">Gap to expected</a>`},
+		{"view=teams&display=table", "teams", `data-team-display="table" aria-current="page">Table</a>`},
+		{"view=team-rankings", "profile", `data-view-choice="team-rankings" aria-current="page">Rankings</a>`},
+		{"view=season-trend", "profile", `data-view-choice="season-trend" aria-current="page">Match by match</a>`},
+		{"view=team-history", "profile", `data-view-choice="team-history" aria-current="page">Season by season</a>`},
+	} {
+		response := httptest.NewRecorder()
+		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?"+tc.query, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d", tc.query, response.Code)
+		}
+		body := response.Body.String()
+		if !strings.Contains(body, tc.current) {
+			t.Errorf("%s: missing current view %q", tc.query, tc.current)
+		}
+		_, label, _ := strings.Cut(tc.current, `aria-current="page">`)
+		label = strings.TrimSuffix(label, "</a>")
+		if title := "<title>" + label + " · Explore · NWSL Season Explorer</title>"; !strings.Contains(body, title) {
+			t.Errorf("%s: missing view title %q", tc.query, title)
+		}
+		for group, label := range groups {
+			current := strings.Contains(body, `data-group-choice="`+group+`" aria-current="page">`+label+`</a>`)
+			hidden := strings.Contains(body, `data-group-views="`+group+`" aria-label="`+label+` views" hidden>`)
+			if current != (group == tc.group) || hidden != (group != tc.group) {
+				t.Errorf("%s: group %s current=%t hidden=%t", tc.query, group, current, hidden)
+			}
+		}
+	}
+	response := httptest.NewRecorder()
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore", nil))
+	body := response.Body.String()
+	links := []string{
+		`<a href="?view=teams" data-group-choice="teams" aria-current="page">Compare teams</a>`,
+		`<a href="?view=team-rankings" data-group-choice="profile">Team profile</a>`,
+		`<a href="?view=trend" data-group-choice="league">League trends</a>`,
+	}
+	previous := -1
+	for _, link := range links {
+		index := strings.Index(body, link)
+		if index < 0 || index < previous {
+			t.Fatalf("group links must run from this season to league history; missing or out of order: %q", link)
+		}
+		previous = index
+	}
+}
+
 func TestExploreRouteValidation(t *testing.T) {
 	handler := NewHandler(&historyHTTPStore{})
 	for _, tc := range []struct {

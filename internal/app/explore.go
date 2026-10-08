@@ -16,9 +16,37 @@ type explorePage struct {
 	exploreSeasonTrendView
 	exploreTeamRankingsView
 	View                              string
+	ViewGroup                         string
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
 	ChartLibraryPath, ChartLabelsPath string
+}
+
+// exploreViewLabels holds each Explore tab's visible name, keyed by view, or by
+// "teams-" and display for Compare teams. Tabs and page titles share them.
+var exploreViewLabels = map[string]string{
+	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
+	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
+	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season",
+	"trend": "Scoring trend", "distribution": "Goal distribution", "table": "Scoring table",
+}
+
+// ViewLabel returns the visible name of an Explore tab.
+func (explorePage) ViewLabel(key string) string {
+	return exploreViewLabels[key]
+}
+
+// exploreViewGroup names the navigation group for a view: league-wide views
+// across seasons, every team in one season, or a selected team's profile.
+func exploreViewGroup(view string) string {
+	switch view {
+	case "teams":
+		return "teams"
+	case "team-rankings", "season-trend", "team-history":
+		return "profile"
+	default:
+		return "league"
+	}
 }
 
 type exploreChartRecord struct {
@@ -39,7 +67,11 @@ type exploreRecord struct {
 func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) {
 	view := r.URL.Query().Get("view")
 	if view == "" {
-		view = "trend"
+		view = "teams"
+		// Scoring trend was once the default view, so its metric links omitted it.
+		if r.URL.Query().Has("metric") {
+			view = "trend"
+		}
 	}
 	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" && view != "season-trend" && view != "team-rankings" {
 		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, team-history, season-trend, or team-rankings"))
@@ -50,7 +82,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
-	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view}
+	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
 	page.exploreDistributionView, err = exploreDistribution(r.URL.Query(), page.Distributions)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)
@@ -72,7 +104,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
-	page.Title = "Explore"
+	label := exploreViewLabels[view]
+	if view == "teams" {
+		label = exploreViewLabels["teams-"+page.TeamDisplay]
+	}
+	page.Title = label + " · Explore"
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
 	page.ChartLabelsPath = relativeURL(r.URL.Path, "/static/vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")

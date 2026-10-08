@@ -76,21 +76,23 @@ season is available at
 <http://localhost:8080/seasons/2026/regular-season/forecast>.
 The historical forecast comparison is available at
 <http://localhost:8080/seasons/2026/regular-season/model-evaluation>.
-League scoring exploration is available at
-<http://localhost:8080/explore>, with scoring, goal-distribution, and table views
-in one workspace. Team performance compares actual and expected goals or points
+Explore is available at <http://localhost:8080/explore>. It groups views by
+scope: Compare teams (every team in one season, and the default view), Team
+profile (Rankings, Match by match, and Season by season), and League trends
+(scoring trend, goal distribution, and scoring table across seasons). Compare
+teams compares actual and expected goals or points
 for a selected regular season, including an outlier plot with expected values
 on the horizontal axis and actual values on the vertical axis. Scored vs allowed
 plots goals or xG in four quadrants around average dividers; its combined mode
 connects each team's goals and xG points. More scored and fewer allowed moves
 up/right. The square chart grows to 1200 × 1200 on larger screens. Comparisons use
-per-match values by default, with a total option for the selected season. Team
-history charts one team's goals, xG, points, and xPoints per match across regular
+per-match values by default, with a total option for the selected season. Season
+by season charts one team's goals, xG, points, and xPoints per match across regular
 seasons, with a sortable season table. Optional league context shows seasonal
 ranges and completed-season records with inspectable holders. Explore's xPoints
 describe recorded matches; they are distinct from Forecast Lab's projected
 final points. The older `/history/scoring` route remains available.
-Season trend follows one team through a regular season. Scoring balance pairs
+Match by match follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
 Actual vs xG pairs actual and expected values in separate Scored and Allowed
 panels; Differential compares goal and xG differential on one plot. Points vs
