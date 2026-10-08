@@ -73,7 +73,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
 	page.Title = "Explore"
-	page.ScriptPath = relativeURL(r.URL.Path, "/static/explore.js")
+	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
 	page.ChartLabelsPath = relativeURL(r.URL.Path, "/static/vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")
 	scope := a.requestScope(r)
