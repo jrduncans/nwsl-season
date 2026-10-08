@@ -182,7 +182,7 @@ func (a *application) renderHistoryError(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(status)
 	a.render(w, "error", errorPage{
 		Title: title, Message: message,
-		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation: []navigationItem{
 			{Label: "Seasons", Path: relativeURL(r.URL.Path, "/seasons")},
 			{Label: "History", Path: relativeURL(r.URL.Path, "/history/scoring"), Current: true},

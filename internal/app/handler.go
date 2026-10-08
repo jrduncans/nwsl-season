@@ -535,8 +535,8 @@ func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
 	page := seasonsPage{
 		Title:          "Seasons",
 		HomePath:       relativeURL(r.URL.Path, "/"),
-		StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"),
-		ScriptPath:     relativeURL(r.URL.Path, "/static/standings.js"),
+		StylesheetPath: staticURL(r.URL.Path, "site.css"),
+		ScriptPath:     staticURL(r.URL.Path, "standings.js"),
 		CatalogPage:    true,
 		HistoryPath:    relativeURL(r.URL.Path, "/explore"),
 		Seasons:        seasonArchiveItems(r.URL.Path, a.options.CurrentSeason, readinessByScope),
@@ -898,8 +898,8 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		Season:                 season,
 		Stage:                  scope.Stage,
 		HomePath:               relativeURL(r.URL.Path, "/"),
-		StylesheetPath:         relativeURL(r.URL.Path, "/static/site.css"),
-		ScriptPath:             relativeURL(r.URL.Path, "/static/standings.js"),
+		StylesheetPath:         staticURL(r.URL.Path, "site.css"),
+		ScriptPath:             staticURL(r.URL.Path, "standings.js"),
 		SeasonsPath:            seasonArchiveURL(r.URL.Path),
 		HasStandings:           showStandings,
 		HasFixtures:            scope.fixturesAvailable(),
@@ -1013,7 +1013,7 @@ func (a *application) factualLoadPage(r *http.Request, scope requestCompetition)
 	if err != nil {
 		return seasonPage{}, err
 	}
-	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Results and fixtures", StandingsMode: "per-game", FormatNotice: notice}, nil
+	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Results and fixtures", StandingsMode: "per-game", FormatNotice: notice}, nil
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -1039,8 +1039,8 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 		Season:          scope.Season,
 		Stage:           scope.Stage,
 		HomePath:        relativeURL(r.URL.Path, "/"),
-		StylesheetPath:  relativeURL(r.URL.Path, "/static/site.css"),
-		ScriptPath:      relativeURL(r.URL.Path, "/static/standings.js"),
+		StylesheetPath:  staticURL(r.URL.Path, "site.css"),
+		ScriptPath:      staticURL(r.URL.Path, "standings.js"),
 		SeasonPath:      relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
 		FixturesPath:    relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"),
 		CurrentPath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
@@ -1281,7 +1281,7 @@ func (a *application) renderError(w http.ResponseWriter, r *http.Request, err er
 	w.WriteHeader(http.StatusInternalServerError)
 	a.render(w, "error", errorPage{
 		Title: "Season unavailable", Message: err.Error(),
-		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season),
 		StageSelector:  stageSelector(r.URL.Path, a.requestScope(r).Season, a.requestScope(r).Stage),
 	})
@@ -1297,7 +1297,7 @@ func (a *application) renderUnavailableFeatureWithNavigation(w http.ResponseWrit
 	w.WriteHeader(http.StatusNotFound)
 	a.render(w, "error", errorPage{
 		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
-		HomePath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		HomePath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation:     navigation,
 		SeasonSelector: seasonSelector(r.URL.Path, scope.Season),
 		StageSelector:  stageSelector(r.URL.Path, scope.Season, scope.Stage),

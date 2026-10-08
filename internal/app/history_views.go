@@ -120,8 +120,8 @@ func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, se
 	page := historyPage{
 		Title:          "Scoring by season",
 		HomePath:       relativeURL(fromPath, "/"),
-		StylesheetPath: relativeURL(fromPath, "/static/site.css"),
-		ScriptPath:     relativeURL(fromPath, "/static/standings.js"),
+		StylesheetPath: staticURL(fromPath, "site.css"),
+		ScriptPath:     staticURL(fromPath, "standings.js"),
 		FormPath:       historyURL(fromPath, "", metric),
 		CatalogPage:    true,
 		Metric:         metric,

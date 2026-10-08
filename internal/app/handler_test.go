@@ -597,7 +597,7 @@ func TestRenderedHTTPPathsAreRelative(t *testing.T) {
 			t.Fatalf("body contains absolute HTTP path %q", absolutePath)
 		}
 	}
-	for _, relativePath := range []string{`href="regular-season/fixtures"`, `href="regular-season/schedule-difficulty"`, `href="regular-season/forecast"`, `href="../../static/site.css"`, `src="../../static/standings.js"`} {
+	for _, relativePath := range []string{`href="regular-season/fixtures"`, `href="regular-season/schedule-difficulty"`, `href="regular-season/forecast"`, `href="../../static/site.css?v=`, `src="../../static/standings.js?v=`} {
 		if !strings.Contains(body, relativePath) {
 			t.Errorf("body does not contain relative path %q", relativePath)
 		}

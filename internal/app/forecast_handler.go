@@ -361,7 +361,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	rows, positionScaleMax := forecastComparisonRows(result, comparison, playoffPlaces(rules), certainty)
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage, ResultsThrough: resultsThrough,
-		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
+		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		SeasonSelector: seasonChoices, StageSelector: stageChoices,
 		Navigation: seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, verified, presentation), ModelEvaluationPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/model-evaluation"),
@@ -567,5 +567,5 @@ func forecastURL(fromPath, season, stageSlug string, state forecaststate.State, 
 func (a *application) renderScenarioBadRequest(w http.ResponseWriter, r *http.Request, title string, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
+	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
 }
