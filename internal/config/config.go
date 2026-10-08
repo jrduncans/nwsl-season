@@ -120,14 +120,15 @@ func FromEnvironment() (Config, error) {
 }
 
 // absoluteHTTPURLFromEnvironment accepts only absolute http or https URLs
-// with a host, so a typo cannot silently send source requests elsewhere.
+// with a host name and no user information, query string, or fragment, so a
+// typo cannot silently send source requests elsewhere.
 func absoluteHTTPURLFromEnvironment(name, fallback string) (string, error) {
 	value := os.Getenv(name)
 	if value == "" {
 		return fallback, nil
 	}
 	parsed, err := url.Parse(value)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", fmt.Errorf("%s must be an absolute http or https URL, got %q", name, value)
 	}
 	return value, nil

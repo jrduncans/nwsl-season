@@ -193,6 +193,7 @@ func TestFromEnvironmentRejectsInvalidASABaseURL(t *testing.T) {
 		"file:///tmp/asa",
 		"http://",
 		"https:///api/v1",
+		"http://:8080/api",
 		"http://[::1",
 		"http://user:secret@example.test/api",
 		"http://example.test/api?token=x",
