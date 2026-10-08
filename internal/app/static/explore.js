@@ -1698,8 +1698,8 @@
   }
   function applyURL() {
     const params = new URL(location.href).searchParams;
-    const requested = params.get('view') || 'trend';
-    const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'trend';
+    const requested = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
+    const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
@@ -1823,7 +1823,7 @@
   });
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(false); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
-  metric.addEventListener('change', () => update({metric: metric.value}));
+  metric.addEventListener('change', () => update({view: 'trend', metric: metric.value}));
   if (distributionBin) {
     distributionBin.addEventListener('change', () => update({'distribution-bin': distributionBin.value}));
     root.querySelector('[data-distribution-controls]').addEventListener('submit', event => {

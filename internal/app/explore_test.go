@@ -238,9 +238,13 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
 		"2026": {lifecycle: cache.SourceScopeActive, goals: 4},
 	})}
-	groups := map[string]string{"league": "League", "teams": "Compare teams", "profile": "Team profile"}
+	groups := map[string]string{"league": "League trends", "teams": "Compare teams", "profile": "Team profile"}
 	for _, tc := range []struct{ query, group, current string }{
-		{"", "league", `data-view-choice="trend" aria-current="page">Scoring trend</a>`},
+		{"", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
+		{"view=trend", "league", `data-view-choice="trend" aria-current="page">Scoring trend</a>`},
+		// Scoring trend was the default, so its metric links could omit the view.
+		{"metric=gap", "league", `data-view-choice="trend" aria-current="page">Scoring trend</a>`},
+		{"view=teams&metric=gap", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
 		{"view=distribution", "league", `data-view-choice="distribution" aria-current="page">Goal distribution</a>`},
 		{"view=table", "league", `data-view-choice="table" aria-current="page">Scoring table</a>`},
 		{"view=teams", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
@@ -269,8 +273,19 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 	}
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore", nil))
-	if !strings.Contains(response.Body.String(), `<a href="?view=team-rankings" data-group-choice="profile">Team profile</a>`) {
-		t.Error("Team profile group must open Rankings")
+	body := response.Body.String()
+	links := []string{
+		`<a href="?view=teams" data-group-choice="teams" aria-current="page">Compare teams</a>`,
+		`<a href="?view=team-rankings" data-group-choice="profile">Team profile</a>`,
+		`<a href="?view=trend" data-group-choice="league">League trends</a>`,
+	}
+	previous := -1
+	for _, link := range links {
+		index := strings.Index(body, link)
+		if index < 0 || index < previous {
+			t.Fatalf("group links must run from this season to league history; missing or out of order: %q", link)
+		}
+		previous = index
 	}
 }
 

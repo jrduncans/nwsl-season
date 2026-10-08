@@ -2,14 +2,9 @@
 <div class="explore" data-explore data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-history-team="{{.HistoryTeam.ID}}">
 <header><h1>Explore</h1></header>
 <nav class="explore-views" aria-label="Explore analyses">
-<a href="?view=trend" data-group-choice="league"{{if eq .ViewGroup "league"}} aria-current="page"{{end}}>League</a>
 <a href="?view=teams" data-group-choice="teams"{{if eq .ViewGroup "teams"}} aria-current="page"{{end}}>Compare teams</a>
 <a href="?view=team-rankings" data-group-choice="profile"{{if eq .ViewGroup "profile"}} aria-current="page"{{end}}>Team profile</a>
-</nav>
-<nav class="explore-subviews" data-group-views="league" aria-label="League views"{{if ne .ViewGroup "league"}} hidden{{end}}>
-<a href="?view=trend" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>Scoring trend</a>
-<a href="?view=distribution" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>Goal distribution</a>
-<a href="?view=table" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>Scoring table</a>
+<a href="?view=trend" data-group-choice="league"{{if eq .ViewGroup "league"}} aria-current="page"{{end}}>League trends</a>
 </nav>
 <nav class="explore-subviews" data-group-views="teams" aria-label="Compare teams views"{{if ne .ViewGroup "teams"}} hidden{{end}}>
 <a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>Actual vs expected</a>
@@ -22,6 +17,11 @@
 <a href="?view=team-rankings" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>Rankings</a>
 <a href="?view=season-trend" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>Match by match</a>
 <a href="?view=team-history" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>Season by season</a>
+</nav>
+<nav class="explore-subviews" data-group-views="league" aria-label="League trends views"{{if ne .ViewGroup "league"}} hidden{{end}}>
+<a href="?view=trend" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>Scoring trend</a>
+<a href="?view=distribution" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>Goal distribution</a>
+<a href="?view=table" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>Scoring table</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
 <div class="explore-heading"><h2 id="explore-trend-title">Goals and chances per match (regular-season)</h2><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label></div>

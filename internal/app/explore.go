@@ -53,7 +53,11 @@ type exploreRecord struct {
 func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) {
 	view := r.URL.Query().Get("view")
 	if view == "" {
-		view = "trend"
+		view = "teams"
+		// Scoring trend was once the default view, so its metric links omitted it.
+		if r.URL.Query().Has("metric") {
+			view = "trend"
+		}
 	}
 	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" && view != "season-trend" && view != "team-rankings" {
 		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, team-history, season-trend, or team-rankings"))

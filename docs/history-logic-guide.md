@@ -8,16 +8,21 @@ applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 ## Explore workspace
 
 `GET /explore` reuses the same coherent archive read and scoring calculations.
-Its navigation groups views by scope. League holds Scoring trend, Goal
-distribution, and Scoring table across seasons. Compare teams holds every team
-in one season: Actual vs expected (paired dots), Gap to expected, Outlier plot,
-Scored vs allowed, and Table. Team profile holds Rankings, Match by match, and
-Season by season for a selected team; its group link opens Rankings. Only the
-selected group's views are listed. The comparison charts show one selected
-measure; Table and Season by season show all four. Rankings shows all six goal
-and xG ranks together.
+Its navigation groups views by scope, ordered from the current season to
+league history. Compare teams holds every team in one season: Actual vs
+expected (paired dots), Gap to expected, Outlier plot, Scored vs allowed, and
+Table. Team profile holds Rankings, Match by match, and Season by season for a
+selected team; its group link opens Rankings. League trends holds Scoring
+trend, Goal distribution, and Scoring table across seasons. Only the selected
+group's views are listed. The comparison charts show one selected measure;
+Table and Season by season show all four. Rankings shows all six goal and xG
+ranks together.
 Each view heading states the regular-season scope.
 `view=trend|distribution|table|teams|team-rankings|season-trend|team-history` selects the initial surface.
+An omitted view opens Compare teams' Actual vs expected for the default
+season, matching the current-season focus of the other site sections. Explicit
+`view=trend` links still open Scoring trend, as do older view-less links that
+carry `metric`, from when Scoring trend was the default.
 JavaScript switches surfaces, Goals/xG/gap selections, and goal-bin chart modes
 in place, sorts numeric table columns from unrounded values, and restores those
 controls with Back/Forward.
