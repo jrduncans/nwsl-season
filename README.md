@@ -168,6 +168,7 @@ retry, watching, and proxy settings.
 | `HOST` | `127.0.0.1` | Host used when `NWSL_HTTP_ADDR` is unset. |
 | `PORT` | `8080` | Port used when `NWSL_HTTP_ADDR` is unset. |
 | `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache. |
+| `NWSL_ASA_BASE_URL` | `https://app.americansocceranalysis.com/api/v1` | ASA API root used by the server's scheduler and as the `sync -base-url` default. Must be an absolute `http` or `https` URL; override it only to point at a local fake ASA in tests. |
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the scheduler checks cache freshness. |
