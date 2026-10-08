@@ -221,6 +221,7 @@ th:nth-child(2) { text-align: left; }
 .fixture-filter-summary { margin-top: 0; }
 .clinching-section-heading h2 { margin-bottom: .35rem; }
 .clinching-section-heading .note { margin-top: 0; }
+.clinching-slate-summary a { white-space: nowrap; }
 .clinching-team-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; margin-top: 1rem; }
 .clinching-team-card { padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .clinching-team-card h3 { margin: 0; font-size: 1.1rem; }
