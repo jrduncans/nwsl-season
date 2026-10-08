@@ -16,15 +16,14 @@
 {{if eq .Strength.RemainingMatches 0}}
   <p class="note">No remaining regular-season fixtures are present in the cache.</p>
 {{else}}
-  <p class="note" id="schedule-definition">Remaining schedule difficulty starts with each opponent’s current points per game (PPG), adjusts for whether that opponent will play at home or away, and then adjusts for the two teams’ relative fixture load entering that match. Short recovery raises pressure between six and five elapsed days and saturates at five days; a third or later match within nine elapsed days adds accumulated load. A team’s schedule gets harder when it is more loaded than its opponent, easier when its opponent is more loaded, and no load adjustment when both are equally loaded. Higher values mean a harder remaining schedule.</p>
-  <p class="note">For each fixture, the venue-adjusted opponent PPG is multiplied by <code>exp(team congestion − opponent congestion)</code>. Congestion is <code>0.04 × recovery pressure + 0.075</code> for a third-or-later match within nine days. These are the same strongly shrunk effects used by the selected Forecast Lab model. The venue adjustment uses {{.Strength.CompletedMatches}} completed regular-season matches from this season and up to the two previous seasons: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
+  <p class="note" id="schedule-definition">Difficulty is the average points per game of each team’s remaining opponents, adjusted for home or away and for both teams’ recent fixture load. Higher means a harder remaining schedule.</p>
   {{if .Strength.HasBaseline}}
     <section aria-labelledby="adjusted-title">
       <div class="section-heading"><div><h2 id="adjusted-title">Venue- and load-adjusted comparison</h2><p class="note">Sorted hardest to easiest. The vertical marker is the league baseline of {{.Strength.Baseline}} adjusted opponent PPG.</p></div></div>
       <div class="schedule-plot" aria-describedby="schedule-definition">
         <div class="schedule-axis"><span>Easier</span><span class="schedule-axis-baseline" style="left: {{.Strength.BaselinePosition}}%;">League baseline</span><span>Harder</span></div>
         {{range .Strength.Rows}}{{if .Available}}
-          <div class="schedule-plot-row"><div class="schedule-plot-team">{{template "teamName" .Team}}</div><div class="schedule-track" aria-hidden="true"><span class="schedule-baseline" style="left: {{$.Strength.BaselinePosition}}%;"></span><span class="schedule-dot" style="left: {{.PlotPosition}}%;"></span></div><div class="schedule-plot-value"><strong>{{.ScheduleAdjustedPPG}}</strong><span>{{.DeltaFromBaseline}} · {{.ScheduleLabel}}</span></div></div>
+          <div class="schedule-plot-row"><div class="schedule-plot-team">{{template "teamName" .Team}}</div><div class="schedule-track" aria-hidden="true"><span class="schedule-baseline" style="left: {{$.Strength.BaselinePosition}}%;"></span><span class="schedule-dot schedule-dot-{{.ScheduleDirection}}" style="left: {{.PlotPosition}}%;"></span></div><div class="schedule-plot-value"><strong>{{.ScheduleAdjustedPPG}}</strong><span>{{.DeltaFromBaseline}} · {{.ScheduleLabel}}</span></div></div>
         {{end}}{{end}}
       </div>
     </section>
@@ -57,6 +56,11 @@
   {{else}}
     <p class="data-warning">Schedule difficulty is unavailable until the remaining opponents have completed-match history.</p>
   {{end}}
+
+    <details class="comparison-disclosure schedule-method"><summary>How this is calculated</summary>
+      <p class="note">Remaining schedule difficulty starts with each opponent’s current points per game (PPG), adjusts for whether that opponent will play at home or away, and then adjusts for the two teams’ relative fixture load entering that match. Short recovery raises pressure between six and five elapsed days and saturates at five days; a third or later match within nine elapsed days adds accumulated load. A team’s schedule gets harder when it is more loaded than its opponent, easier when its opponent is more loaded, and no load adjustment when both are equally loaded. Higher values mean a harder remaining schedule.</p>
+      <p class="note">For each fixture, the venue-adjusted opponent PPG is multiplied by <code>exp(team congestion − opponent congestion)</code>. Congestion is <code>0.04 × recovery pressure + 0.075</code> for a third-or-later match within nine days. These are the same strongly shrunk effects used by the selected Forecast Lab model. The venue adjustment uses {{.Strength.CompletedMatches}} completed regular-season matches from this season and up to the two previous seasons: home teams average {{.Strength.HomePPG}} points per game and away teams average {{.Strength.AwayPPG}}, for a {{.Strength.VenueGap}}-point gap.</p>
+    </details>
 
     <section aria-labelledby="fixtures-title">
       <h2 id="fixtures-title">Team and fixture detail</h2>
