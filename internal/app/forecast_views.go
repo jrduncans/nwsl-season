@@ -16,6 +16,7 @@ import (
 type forecastPage struct {
 	Title               string
 	Season              string
+	ResultsThrough      string
 	Stage               string
 	HomePath            string
 	StylesheetPath      string

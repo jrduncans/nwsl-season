@@ -58,7 +58,7 @@
   <p class="forecast-scroll-hint" id="forecast-scroll-hint">Swipe left on the table to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll forecast-table-scroll" tabindex="0" role="region" aria-label="Scrollable {{.Season}} regular-season forecast">
     <table class="forecast-table{{if .HasChampionship}} forecast-table-with-championship{{end}}" aria-describedby="forecast-scroll-hint">
-      <caption><span>{{.Season}} season forecast</span></caption>
+      <caption><span>{{.Season}} forecast · {{.ModelName}}{{if .ResultsThrough}} · through {{.ResultsThrough}}{{end}}{{if .FixedCount}} · {{.FixedCount}} fixed result{{if ne .FixedCount 1}}s{{end}}{{end}}</span></caption>
       <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoffs</th><th scope="col">Top 4</th><th class="forecast-shield" scope="col">Shield</th>{{if .HasChampionship}}<th scope="col">Championship</th>{{end}}</tr></thead>
       <tbody>{{range .Rows}}
         <tr{{if .PlayoffLine}} class="forecast-playoff-line"{{end}}>

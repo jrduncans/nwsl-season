@@ -356,10 +356,11 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	if err != nil {
 		return forecastPage{}, err
 	}
+	resultsThrough, _ := latestCompletedMatchDate(data.Games, a.options.Location)
 	certainty := a.forecastCertainties(r.Context(), data, scope, rules, verified, presentation)
 	rows, positionScaleMax := forecastComparisonRows(result, comparison, playoffPlaces(rules), certainty)
 	page := forecastPage{
-		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage,
+		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage, ResultsThrough: resultsThrough,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: relativeURL(r.URL.Path, "/static/site.css"), ScriptPath: relativeURL(r.URL.Path, "/static/standings.js"),
 		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		SeasonSelector: seasonChoices, StageSelector: stageChoices,
