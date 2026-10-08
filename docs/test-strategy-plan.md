@@ -5,7 +5,8 @@ Status: proposed (2026-10-08). This plan adds browser and end-to-end tests with
 assigns each task to the cheapest model that can finish it reliably.
 
 Each task below is self-contained, so you can start each one in a fresh
-session. Read **Conventions for every task** before starting any task.
+session. Read **Conventions for every task** (§5) before starting any task.
+§6 explains how to run the plan.
 
 ## 1. Where the suite stands
 
@@ -141,6 +142,71 @@ Merge each task before starting tasks that depend on it.
 > acceptance criterion. Look for assertions that would still pass if the
 > behavior broke. Run the task's verification with `-count=1`. List the
 > findings first, most severe first, citing file and line.
+
+## 6. Running the plan
+
+Use one **Sonnet 5.5 coordinator session per wave**, running locally in Claude
+Code. The coordinator doesn't write code. It starts each task as a subagent on
+the model §3 assigns, has the Opus reviews done, passes findings back to the
+implementer, and reports. You merge the PRs between waves. That gives six
+checkpoints (waves A–F) instead of about 20 hand-run sessions, and it keeps
+each coordinator's context small.
+
+### Before each wave
+
+1. Merge the previous wave's PRs, then run `git switch main && git pull`.
+2. Start the coordinator from a shell where `NWSL_CONFIG_FILE=/dev/null` is
+   set, for example `NWSL_CONFIG_FILE=/dev/null claude --model sonnet`.
+   Subagents inherit the variable, so none of them can block on the
+   1Password-backed `config.env`.
+3. Pre-approve the commands the tasks run, so background subagents don't
+   stall waiting for permission prompts: `go`, `make`, `golangci-lint`,
+   `govulncheck`, `git` (including pushes of `test-plan/*` branches) and
+   opening PRs. Put them in `.claude/settings.local.json`, or run the
+   coordinator in a permission mode that allows them.
+4. From wave B on, install the Chromium version that matches playwright-go
+   once (see T6, decision 2).
+
+### Usage limits
+
+- Parallel subagents use the same total amount as running the tasks one
+  after another, but they spend it faster, so they reach a rolling usage
+  limit sooner. If you're close to a limit, lower the `max parallel` value in
+  the prompt below. `1` runs the wave one task at a time.
+- If usage runs out partway through a wave, nothing committed is lost.
+  Implementers commit after each step, and their worktrees and branches stay
+  on disk. Start a new coordinator with the same prompt; its first step
+  resumes from whatever branches and PRs exist.
+- Wave A is the heaviest: five tasks, one of them on Opus (T4). If usage is
+  tight, run T1–T3 first and T4–T5 in a later session.
+
+### Coordinator prompt
+
+Change the wave letter, and optionally `max parallel`:
+
+> Coordinate wave **A** of `docs/test-strategy-plan.md` (§4 lists the waves,
+> §6 explains this role). Max parallel: **5**. Don't implement anything
+> yourself.
+>
+> 1. **Resume first.** For each task in the wave, check for an existing
+>    `test-plan/tN-…` branch (local or remote), worktree or PR. Skip tasks
+>    whose PR is open with its review finished. Restart partial tasks from
+>    their branch, telling the implementer what is already committed.
+> 2. **Implement.** Spawn each remaining task as a background subagent with
+>    the model §3 assigns, `isolation: "worktree"`, and the §5 implementation
+>    prompt. Run at most the max-parallel number at once. Tell implementers
+>    to commit after each step and to push and open a PR when their
+>    verification passes. You have my permission to push `test-plan/*`
+>    branches and open PRs.
+> 3. **Review.** When an implementer finishes, if the task names a reviewer,
+>    spawn an Opus subagent with the §5 review prompt. Send blocking findings
+>    back to the same implementer with SendMessage. Allow at most two fix
+>    rounds. After that, restart the task one model tier up, or ask me if it
+>    is already on Opus.
+> 4. **Stop conditions.** If a task hits a stop condition, stop that task and
+>    report it. Don't work around it.
+> 5. **Report.** Finish with a table: task, model used, PR link, CI status,
+>    review outcome, deviations, open questions. Don't merge anything.
 
 ---
 
@@ -409,9 +475,12 @@ loaded with the same data.
    - Call `playwright.Install` with `SkipInstallBrowsers: true`.
    - Launch Chromium. If `NWSL_E2E_CHROMIUM` is set, use it as
      `ExecutablePath`; in Claude cloud sessions it is
-     `/opt/pw-browsers/chromium`.
-   - In CI, install the matching browser with
-     `go run github.com/playwright-community/playwright-go/cmd/playwright@<version in go.mod> install --with-deps chromium`.
+     `/opt/pw-browsers/chromium`. Otherwise use the browser installed by the
+     playwright-go CLI.
+   - Locally and in CI, install the matching browser with
+     `go run github.com/playwright-community/playwright-go/cmd/playwright@<version in go.mod> install chromium`.
+     CI adds `--with-deps`. Document the local command in the `test-e2e`
+     Makefile comment.
    - Use one browser per process and a new context for each test.
 3. Fixture per test:
    - a temporary `NWSL_DATA_DIR`;
