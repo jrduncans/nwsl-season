@@ -24,23 +24,23 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
-# Explore scoring, team quadrant selections/units/coverage/cache-only fallback, team rankings/direction/ties/units/league xG coverage, team history/records/coverage, venue dates/DST, scoring balance, actual/xG comparisons, rolling/xG gaps and expanding-average lead-ins,
-# points/xPoints and independent coverage, benchmark group cuts/ties/match weighting/best holders,
-# forecast-selected groups/Shield favorites/shared cache, panel-specific inspection and reference holder names, original units and coverage counts, sorting across sortable tables, and single-snapshot pages.
-# Browser-check scatter tight/tied/zero bounds, adaptive point sizes and logo collisions, the in-chart Goals/xG key, viewport-capped Outlier sizing, circular Outlier markers, stable plot bounds during tooltip redraws, and desktop/mobile widths.
+# Explore checks: see the Explore workspace section of docs/history-logic-guide.md.
 .PHONY: test-explore
 test-explore:
 	go test ./internal/fixtures
 	go test ./internal/history
 	go test ./internal/app -run '^TestExplore'
 
-# Includes future-fixture elimination proofs, grouped presentation, exhaustive
-# outcome equivalence, grouped and ordered summaries, and bounded/disjoint
-# exact-path regressions.
+# Clinching checks: see docs/clinching-logic-guide.md.
 .PHONY: test-clinching
 test-clinching:
-	go test ./internal/scenarios
+	go test ./internal/scenarios ./internal/clinching ./internal/qualification
 	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode)'
+
+# Benchmark budget guards. Budgets count work, not time, so they are stable on CI.
+.PHONY: test-guards
+test-guards:
+	go test -run '^$$' -bench . -benchtime=1x ./internal/clinching ./internal/scenarios ./internal/simulation
 
 fmt:
 	$(GOLANGCI_LINT) fmt ./...
