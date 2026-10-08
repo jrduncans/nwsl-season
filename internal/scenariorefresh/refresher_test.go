@@ -212,3 +212,94 @@ func (s *recordingScenarioStore) RecordScenarioFailure(context.Context, cache.Sc
 	s.failures++
 	return nil
 }
+
+// capturingScenarioStore wraps the recording store's qualification baseline
+// and keeps the arguments of every write.
+type capturingScenarioStore struct {
+	recordingScenarioStore
+	replaceErr  error
+	replaceRuns []cache.ScenarioRun
+	failures    []error
+	failureRuns []cache.ScenarioRun
+}
+
+func (s *capturingScenarioStore) ReplaceScenario(_ context.Context, run cache.ScenarioRun, _ []cache.ScenarioResult) (cache.ScenarioSnapshot, error) {
+	s.replaceRuns = append(s.replaceRuns, run)
+	return cache.ScenarioSnapshot{}, s.replaceErr
+}
+
+func (s *capturingScenarioStore) RecordScenarioFailure(_ context.Context, run cache.ScenarioRun, err error) error {
+	s.failureRuns = append(s.failureRuns, run)
+	s.failures = append(s.failures, err)
+	return nil
+}
+
+func scenarioTestRules() competition.Rules {
+	return competition.Rules{
+		Season: "2026", Stage: "Regular Season", Version: "rules-v1",
+		ExpectedTeams: 2, GamesPerTeam: 2,
+		Achievements: []competition.Achievement{{ID: competition.AchievementShield, Label: "Shield", TopK: 1}},
+	}
+}
+
+func scenarioTestGames() []cache.Game {
+	return []cache.Game{
+		{ASAID: "g1", Status: fixtures.PreMatchStatus, HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: "2026-11-01T22:00:00Z"},
+		{ASAID: "g2", Status: fixtures.PreMatchStatus, HomeTeamID: "b", AwayTeamID: "a", KickoffUTC: "2026-11-08T22:00:00Z"},
+	}
+}
+
+func scenarioErrorType(err error) string {
+	var typed interface{ ErrorType() string }
+	if errors.As(err, &typed) {
+		return typed.ErrorType()
+	}
+	return ""
+}
+
+func TestRefreshRecordsCalculationFailureWithoutPublishing(t *testing.T) {
+	store := &capturingScenarioStore{}
+	// Team b plays fixtures but is absent from the team list.
+	teams := []cache.Team{{ASAID: "a", Name: "A"}}
+	_, err := (Refresher{Store: store, Rules: scenarioTestRules()}).Refresh(context.Background(), cache.SyncRun{ID: 7, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}, teams, scenarioTestGames(), false)
+	if err == nil {
+		t.Fatal("Refresh succeeded, want calculation error")
+	}
+	if len(store.replaceRuns) != 0 || store.replaced != 0 {
+		t.Fatalf("ReplaceScenario called %d times, want never", len(store.replaceRuns)+store.replaced)
+	}
+	if len(store.failures) != 1 {
+		t.Fatalf("RecordScenarioFailure called %d times, want once", len(store.failures))
+	}
+	if store.failures[0] != err {
+		t.Errorf("recorded failure = %v, want the error Refresh returned (%v)", store.failures[0], err)
+	}
+	if got := scenarioErrorType(err); got != telemetry.ErrorTypeInvalidData {
+		t.Errorf("error type = %q, want %q", got, telemetry.ErrorTypeInvalidData)
+	}
+	if run := store.failureRuns[0]; run.FixtureSnapshotID != "fixture-1" || run.SourceSyncRunID != 7 || run.QualificationRunID != 1 {
+		t.Errorf("failure run = %+v, want fixture-1, sync run 7, qualification run 1", run)
+	}
+}
+
+func TestRefreshRecordsStorageFailureWhenReplaceFails(t *testing.T) {
+	boom := errors.New("disk full")
+	store := &capturingScenarioStore{replaceErr: boom}
+	teams := []cache.Team{{ASAID: "a", Name: "A"}, {ASAID: "b", Name: "B"}}
+	_, err := (Refresher{Store: store, Rules: scenarioTestRules()}).Refresh(context.Background(), cache.SyncRun{ID: 7, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}, teams, scenarioTestGames(), false)
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want it to wrap %v", err, boom)
+	}
+	if got := scenarioErrorType(err); got != telemetry.ErrorTypeStorageFailure {
+		t.Errorf("returned error type = %q, want %q", got, telemetry.ErrorTypeStorageFailure)
+	}
+	if len(store.replaceRuns) != 1 {
+		t.Fatalf("ReplaceScenario called %d times, want once", len(store.replaceRuns))
+	}
+	if len(store.failures) != 1 {
+		t.Fatalf("RecordScenarioFailure called %d times, want once", len(store.failures))
+	}
+	if !errors.Is(store.failures[0], boom) || scenarioErrorType(store.failures[0]) != telemetry.ErrorTypeStorageFailure {
+		t.Errorf("recorded failure = %v (type %q), want storage-classified %v", store.failures[0], scenarioErrorType(store.failures[0]), boom)
+	}
+}
