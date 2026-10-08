@@ -19,7 +19,7 @@
 {{define "fixtureLists"}}{{if .HasResults}}<section{{if .ShowFixtureViewToggle}} data-fixture-view="results"{{end}}>
 {{range .ResultFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status{{if not .InProgress}} hidden{{end}}>{{if .InProgress}}In progress{{end}}</span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"{{if .Winner}} data-winner="{{.Winner}}"{{end}}><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>{{end}}
@@ -28,7 +28,7 @@
 {{if .HasFixtureOutlooks}}<p class="note fixture-outlook-note">Scheduled fixtures include a match outlook for each result. Outlooks use expected goals, venue, recovery time, and recent fixture load.{{if .HasForecast}} <a href="{{.ForecastPath}}">Explore the season forecast</a>.{{end}}</p>{{end}}
 {{range .UpcomingFixtureGroups}}
   <section class="fixture-group" data-fixture-filter-section data-fixture-group-start="{{.StartUTC}}"><h2>{{.Label}} <span class="fixture-group-status" data-fixture-group-status hidden></span></h2>
-    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
+    <ul class="fixtures">{{range .Games}}<li data-fixture-home-team="{{.HomeTeam.ID}}" data-fixture-away-team="{{.AwayTeam.ID}}"{{if .Winner}} data-winner="{{.Winner}}"{{end}}><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong class="fixture-result">{{if .Completed}}<span>{{.Score}}</span>{{if .XG}}<span class="fixture-xg">xG {{.XG}}</span>{{end}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{template "fixtureMetadata" .}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}</li>{{end}}</ul>
   </section>
 {{end}}
 </section>{{end}}{{end}}
