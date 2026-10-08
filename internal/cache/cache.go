@@ -168,15 +168,6 @@ type XGStatus struct {
 	LastSuccess *XGSyncRun
 }
 
-// RefreshSnapshot is the minimal cached state the background scheduler needs.
-type RefreshSnapshot struct {
-	Games       []Game
-	LastAttempt *SyncRun
-	LastSuccess *SyncRun
-	XGoals      []GameXG
-	XGStatus    XGStatus
-}
-
 // ErrSyncInProgress means another process holds the lease for this cache stream.
 var ErrSyncInProgress = errors.New("cache sync already in progress")
 
@@ -1349,27 +1340,6 @@ func (c *DB) LastSuccess(ctx context.Context, season, stage string) (*SyncRun, e
 	return c.latestRun(ctx, "success", season, stage)
 }
 
-// RefreshSnapshot returns the fixtures and audit data needed for a refresh decision.
-func (c *DB) RefreshSnapshot(ctx context.Context, season, stage string) (RefreshSnapshot, error) {
-	games, err := c.seasonGames(ctx, season, stage)
-	if err != nil {
-		return RefreshSnapshot{}, err
-	}
-	status, err := c.Status(ctx, season, stage)
-	if err != nil {
-		return RefreshSnapshot{}, err
-	}
-	xgoals, err := c.seasonXGoals(ctx, season, stage)
-	if err != nil {
-		return RefreshSnapshot{}, err
-	}
-	xgStatus, err := c.XGStatus(ctx, season, stage)
-	if err != nil {
-		return RefreshSnapshot{}, err
-	}
-	return RefreshSnapshot{Games: games, LastAttempt: status.LastAttempt, LastSuccess: status.LastSuccess, XGoals: xgoals, XGStatus: xgStatus}, nil
-}
-
 // TryAcquireSyncLease atomically obtains a short-lived cross-process sync lease.
 func (c *DB) TryAcquireSyncLease(ctx context.Context, key, holder string, expiresAt time.Time) (bool, error) {
 	result, err := c.db.ExecContext(ctx, `INSERT INTO sync_leases (lock_key, holder, expires_at_unix_nano)
@@ -1788,9 +1758,6 @@ func latestXGRun(ctx context.Context, dbq queryer, outcome, season, stage string
 		return nil, err
 	}
 	return &run, nil
-}
-func (c *DB) seasonXGoals(ctx context.Context, season, stage string) ([]GameXG, error) {
-	return seasonXGoals(ctx, c.db, season, stage)
 }
 
 func seasonXGoals(ctx context.Context, dbq queryer, season, stage string) ([]GameXG, error) {
