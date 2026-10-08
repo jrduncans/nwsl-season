@@ -24,6 +24,13 @@ verify: fmt lint vet test
 test:
 	go test ./...
 
+# Local and agent use only; not run in CI. Writes work/coverage.out (git-ignored) and prints per-function coverage.
+.PHONY: test-coverage
+test-coverage:
+	mkdir -p work
+	go test -coverpkg=./... -coverprofile=work/coverage.out ./...
+	go tool cover -func=work/coverage.out
+
 # Explore checks: see the Explore workspace section of docs/history-logic-guide.md.
 .PHONY: test-explore
 test-explore:
