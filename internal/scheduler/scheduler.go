@@ -51,6 +51,9 @@ type Config struct {
 	XGCorrectionWindow       time.Duration
 	InventoryInterval        time.Duration
 	ColdSweepInterval        time.Duration
+	// Now overrides the scheduler's planning clock. Nil uses time.Now. Tests
+	// use it to make due work deterministic without changing planning rules.
+	Now func() time.Time
 }
 
 type Scheduler struct {
@@ -121,8 +124,12 @@ func New(store SnapshotStore, runner Runner, config Config, logger *slog.Logger)
 	if logger == nil {
 		logger = slog.Default()
 	}
+	now := config.Now
+	if now == nil {
+		now = time.Now
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Scheduler{store: store, runner: runner, config: config, logger: logger, now: time.Now, ctx: lifetime.Root(ctx), cancel: cancel, done: make(chan struct{})}, nil
+	return &Scheduler{store: store, runner: runner, config: config, logger: logger, now: now, ctx: lifetime.Root(ctx), cancel: cancel, done: make(chan struct{})}, nil
 }
 
 func (s *Scheduler) Start() {
@@ -172,24 +179,65 @@ func (s *Scheduler) checkWithTrigger(trigger cache.SourceRefreshTrigger) bool {
 	return s.checkWithPreflight(trigger, true)
 }
 
+// ErrStopped reports that a synchronous check was requested from, or
+// interrupted by, a stopped scheduler.
+var ErrStopped = errors.New("scheduler stopped")
+
+// CheckNow runs one ordinary scheduler check synchronously with the
+// maintenance trigger, using the same planning, leases, and follow-up
+// clinching calculations as a scheduled tick. It returns after every job and
+// calculation in that check has finished. Canceling ctx or stopping the
+// scheduler interrupts the check. A failed or partially failed check returns
+// an error; deferred or current checks do not.
+func (s *Scheduler) CheckNow(ctx context.Context) error {
+	if s.stopped() {
+		return ErrStopped
+	}
+	checkCtx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+	stop := context.AfterFunc(ctx, cancel)
+	defer stop()
+	outcome, _ := s.runCheck(checkCtx, cache.SourceTriggerMaintenance, true)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.stopped() {
+		return ErrStopped
+	}
+	if outcome == nwslconv.SchedulerOutcomeFailure || outcome == nwslconv.SchedulerOutcomePartialFailure {
+		return fmt.Errorf("scheduler check finished with outcome %s", outcome)
+	}
+	return nil
+}
+
 // checkWithPreflight runs one ordinary, bounded scheduler batch. It reports
 // whether source execution completed cleanly enough for startup to consider a
 // follow-on catalog batch; failure, deferral, and cancellation retain the
 // normal scheduler cadence rather than creating a rapid retry loop.
 func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPreflight bool) bool {
-	ctx, span := telemetry.Tracer().Start(s.ctx, nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
+	_, completed := s.runCheck(s.ctx, trigger, runPreflight)
+	return completed
+}
+
+// runCheck performs one scheduler batch beneath parent, which is the
+// scheduler's lifetime or a context derived from it. It returns the tick
+// outcome recorded on the span and whether checkWithPreflight should treat the
+// batch as complete.
+func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefreshTrigger, runPreflight bool) (string, bool) {
+	stopped := func() bool { return parent.Err() != nil }
+	ctx, span := telemetry.Tracer().Start(parent, nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
 	defer span.End()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
 	snapshot, err := s.store.PlanningSnapshot(planningCtx)
 	planningCancel()
-	if s.stopped() {
+	if stopped() {
 		span.SetAttributes(nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeStopped))
-		return false
+		return nwslconv.SchedulerOutcomeStopped, false
 	}
 	if err != nil {
 		span.SetAttributes(nwslconv.SchedulerAction("read_planning_snapshot"), nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeFailure))
 		_ = telemetry.RecordWarningWithType(ctx, span, err, nwslconv.ErrorCodeSchedulerPlanningSnapshot, telemetry.ErrorTypeStorageFailure)
-		return false
+		return nwslconv.SchedulerOutcomeFailure, false
 	}
 	// Source jobs use the split-operation API, so they do not invoke
 	// syncer.Service.Run's derived-data refresh. Recheck an already published
@@ -200,9 +248,9 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "preflight")
 	}
 	span.SetAttributes(nwslconv.SchedulerClinchingPreflightOutcome(preflightCalculation))
-	if s.stopped() {
+	if stopped() {
 		span.SetAttributes(nwslconv.SchedulerOutcome(nwslconv.SchedulerOutcomeStopped))
-		return false
+		return nwslconv.SchedulerOutcomeStopped, false
 	}
 	now := s.now().UTC()
 	jobs := Plan(snapshot, s.config, now)
@@ -214,11 +262,11 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 		if outcome == nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded {
 			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "no_source_request_due")
 		}
-		if s.stopped() {
+		if stopped() {
 			outcome = nwslconv.SchedulerOutcomeStopped
 		}
 		span.SetAttributes(nwslconv.SchedulerAction("recalculate"), nwslconv.SchedulerRequestCount(0), nwslconv.SchedulerOutcome(outcome))
-		return !s.stopped()
+		return outcome, !stopped()
 	}
 	for i := range jobs {
 		jobs[i].Operation.Trigger = trigger
@@ -235,7 +283,7 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 	requests := 0
 	tickOutcome := nwslconv.SchedulerOutcomeComplete
 	for _, job := range jobs {
-		if s.stopped() {
+		if stopped() {
 			tickOutcome = nwslconv.SchedulerOutcomeStopped
 			break
 		}
@@ -254,7 +302,7 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 		}
 		jobSpan.End()
 		requestCancel()
-		if s.stopped() {
+		if stopped() {
 			tickOutcome = nwslconv.SchedulerOutcomeStopped
 			break
 		}
@@ -277,7 +325,7 @@ func (s *Scheduler) checkWithPreflight(trigger cache.SourceRefreshTrigger, runPr
 		}
 	}
 	span.SetAttributes(nwslconv.SchedulerRequestCount(requests), nwslconv.SchedulerOutcome(tickOutcome))
-	return tickOutcome != nwslconv.SchedulerOutcomeFailure && tickOutcome != nwslconv.SchedulerOutcomeDeferred && tickOutcome != nwslconv.SchedulerOutcomeStopped
+	return tickOutcome, tickOutcome != nwslconv.SchedulerOutcomeFailure && tickOutcome != nwslconv.SchedulerOutcomeDeferred && tickOutcome != nwslconv.SchedulerOutcomeStopped
 }
 
 func (s *Scheduler) startupCatalogBootstrapDue() bool {

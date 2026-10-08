@@ -649,6 +649,139 @@ func TestSchedulerStopCancelsDetachedCalculation(t *testing.T) {
 	waitForScheduler(t, s)
 }
 
+func TestConfigNowControlsPlanningClock(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
+	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: timePointer(now)}}
+	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}
+
+	for _, test := range []struct {
+		name string
+		now  time.Time
+		want int
+	}{
+		{name: "before the result check is due", now: now.Add(-time.Minute), want: 0},
+		{name: "when the result check is due", now: now, want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := &planningStore{snapshot: snapshot}
+			runner := &operationRunner{}
+			config := testPlannerConfig()
+			config.Now = func() time.Time { return test.now }
+			s, err := New(store, runner, config, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.CheckNow(context.Background()); err != nil {
+				t.Fatalf("CheckNow: %v", err)
+			}
+			if len(runner.operations) != test.want {
+				t.Fatalf("operations = %+v, want %d", runner.operations, test.want)
+			}
+			if test.want > 0 && !runner.operations[0].StartedAt.Equal(test.now) {
+				t.Errorf("operation StartedAt = %s, want injected clock %s", runner.operations[0].StartedAt, test.now)
+			}
+		})
+	}
+}
+
+func TestCheckNowUsesMaintenanceTriggerAndReturnsAfterJobsAndCalculations(t *testing.T) {
+	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
+	current := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("current", fixtures.PreMatchStatus, now.Add(time.Hour))})
+	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
+	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{current, archive}}}
+	runner := &historicalCorrectionRunner{}
+	config := testPlannerConfig()
+	config.Now = func() time.Time { return now }
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CheckNow(context.Background()); err != nil {
+		t.Fatalf("CheckNow: %v", err)
+	}
+	if len(runner.operations) != 1 || runner.operations[0].Trigger != cache.SourceTriggerMaintenance {
+		t.Fatalf("operations = %+v, want one maintenance-triggered job", runner.operations)
+	}
+	if runner.recalculations != 1 {
+		t.Fatalf("recalculations = %d, want the preflight calculation finished before CheckNow returned", runner.recalculations)
+	}
+	if store.acquired == 0 || store.acquired != store.released {
+		t.Fatalf("leases = %d/%d, want every acquired lease released before CheckNow returned", store.acquired, store.released)
+	}
+}
+
+func TestCheckNowReportsFailedCheck(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
+	runner := &startupDrainRunner{err: errors.New("source unavailable")}
+	config := testPlannerConfig()
+	config.Now = func() time.Time { return now }
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CheckNow(context.Background()); err == nil {
+		t.Fatal("CheckNow error = nil, want failed check")
+	}
+	if len(runner.operations) != 1 {
+		t.Fatalf("operations = %d, want one attempted job", len(runner.operations))
+	}
+}
+
+func TestCheckNowStopsWhenCallerContextIsCanceled(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
+	runner := &blockingRunner{started: make(chan struct{}, 1)}
+	config := testPlannerConfig()
+	config.Timeout = time.Hour
+	config.Now = func() time.Time { return now }
+	s, err := New(store, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.CheckNow(ctx) }()
+	<-runner.started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("CheckNow error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("CheckNow did not return after its context was canceled")
+	}
+	if store.acquired != 1 || store.released != 1 {
+		t.Fatalf("leases = %d/%d, want the interrupted job's lease released", store.acquired, store.released)
+	}
+	// The scheduler itself is still usable after a caller cancels one check.
+	if s.stopped() {
+		t.Fatal("caller cancellation stopped the scheduler")
+	}
+}
+
+func TestCheckNowAfterStopReturnsErrStopped(t *testing.T) {
+	store := &planningStore{}
+	runner := &operationRunner{}
+	s, err := New(store, runner, testPlannerConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Stop()
+	if err := s.CheckNow(context.Background()); !errors.Is(err, ErrStopped) {
+		t.Fatalf("CheckNow error = %v, want ErrStopped", err)
+	}
+	if len(runner.operations) != 0 {
+		t.Fatalf("operations = %+v, want none after Stop", runner.operations)
+	}
+}
+
 func waitForScheduler(t *testing.T, s *Scheduler) {
 	t.Helper()
 	done := make(chan struct{})
