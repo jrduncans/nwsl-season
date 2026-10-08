@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -795,6 +797,73 @@ func TestCheckNowCallerCancellationInterruptsDetachedWork(t *testing.T) {
 	if s.stopped() {
 		t.Fatal("caller cancellation stopped the scheduler")
 	}
+}
+
+func TestSourceJobFailureLogLevel(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	scope := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
+	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}
+	config := testPlannerConfig()
+	config.Timeout = time.Hour
+	config.Now = func() time.Time { return now }
+
+	t.Run("caller cancellation is debug", func(t *testing.T) {
+		logs := &levelRecorder{}
+		runner := &blockingRunner{started: make(chan struct{}, 1)}
+		s, err := New(&planningStore{snapshot: snapshot}, runner, config, slog.New(logs))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(s.Stop)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- s.CheckNow(ctx) }()
+		<-runner.started
+		cancel()
+		<-done
+		if got := logs.levels("source job failed"); !reflect.DeepEqual(got, []slog.Level{slog.LevelDebug}) {
+			t.Fatalf("source job failure levels = %v, want [DEBUG]", got)
+		}
+	})
+	t.Run("source failure is error", func(t *testing.T) {
+		logs := &levelRecorder{}
+		runner := &startupDrainRunner{err: errors.New("source unavailable")}
+		s, err := New(&planningStore{snapshot: snapshot}, runner, config, slog.New(logs))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = s.CheckNow(context.Background())
+		if got := logs.levels("source job failed"); !reflect.DeepEqual(got, []slog.Level{slog.LevelError}) {
+			t.Fatalf("source job failure levels = %v, want [ERROR]", got)
+		}
+	})
+}
+
+// levelRecorder is a slog handler that records the level of each message.
+type levelRecorder struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *levelRecorder) Enabled(context.Context, slog.Level) bool { return true }
+func (h *levelRecorder) Handle(_ context.Context, record slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, record)
+	return nil
+}
+func (h *levelRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *levelRecorder) WithGroup(string) slog.Handler      { return h }
+func (h *levelRecorder) levels(message string) []slog.Level {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var levels []slog.Level
+	for _, record := range h.records {
+		if record.Message == message {
+			levels = append(levels, record.Level)
+		}
+	}
+	return levels
 }
 
 func TestCheckNowAfterStopReturnsErrStopped(t *testing.T) {

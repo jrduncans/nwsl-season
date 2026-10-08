@@ -427,7 +427,9 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	result, err := s.runner.Execute(parent, job.Operation)
 	if err != nil {
 		level := slog.LevelError
-		if s.stopped() && errors.Is(err, context.Canceled) {
+		// Cancellation by Stop or by a CheckNow caller is expected; a request
+		// deadline (context.DeadlineExceeded) remains an error.
+		if (s.stopped() || parent.Err() != nil) && errors.Is(err, context.Canceled) {
 			level = slog.LevelDebug
 		}
 		s.logger.Log(parent, level, "source job failed", "job", job.Kind, "season", job.Operation.Season, "stage", job.Operation.Stage, "error", err)
