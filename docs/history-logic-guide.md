@@ -286,8 +286,8 @@ analyses without fetching new data.
 `view=team-rankings` shows one team's goals scored, goals allowed, goal
 differential, xG, xG allowed, and xG differential together. It shares the
 validated season, team identity, and `units=per-match|total` controls with the
-other team views. The default team and cross-season identity follow Team
-history; a team with no eligible results in the selected season remains
+other team views. The default team and cross-season identity follow Season
+by season; a team with no eligible results in the selected season remains
 selected with an empty state. Headings use the name from the selected season.
 
 Ranks compare unrounded values among every team with eligible recorded results
@@ -322,7 +322,7 @@ and no-script forms.
 `view=season-trend` follows a selected team's completed regular-season matches
 within `season=YYYY`. It shares the validated season, team identity, and
 `series=goals|xg|both` selections with other team views, defaulting to the newest
-eligible season, the first eligible team by name, and both series.
+eligible season, the Season by season default team, and both series.
 The Chart picker (`trend-view=balance|compare|difference|points|relative`)
 defaults to Scoring balance,
 showing scored and allowed together. Actual vs xG compares the two bases within
@@ -544,7 +544,10 @@ logos may load).
 
 Team profile also includes Season by season (`view=team-history`). The `team`
 selector chooses an ASA team ID from eligible recorded results across the
-archive; it defaults to the first team by name, with ID breaking ties. The
+archive. It defaults to Portland Thorns FC (ASA ID `Pk5LeeNqOW`), the site
+owner's team, which has played every NWSL season; if the archive has no
+Thorns results, it falls back to the first team by name, with ID breaking
+ties. The
 selector uses the newest eligible name for each ID, so a rename keeps its
 history. Distinct IDs remain separate even when names match; relocation or
 franchise lineage is not inferred. Blank, repeated, and unknown team IDs return

@@ -97,6 +97,41 @@ func TestExploreTeamHistoryUsesIDsAcrossNameChanges(t *testing.T) {
 	}
 }
 
+func TestExploreDefaultTeamPrefersPortlandThorns(t *testing.T) {
+	for _, tc := range []struct {
+		name, awayID, want string
+	}{
+		{"Thorns recorded", portlandThornsTeamID, portlandThornsTeamID},
+		{"Thorns absent", "bravo", "alpha"},
+	} {
+		archive := historyArchive(t, map[string]historyArchiveState{
+			"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+		})
+		for i := range archive {
+			for j := range archive[i].Data.Games {
+				archive[i].Data.Games[j].AwayTeamID = tc.awayID
+			}
+			archive[i].Data.Teams = []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: tc.awayID, Name: "Portland Thorns FC"}}
+		}
+		summaries, err := history.SummarizeScoring(archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		teams, err := exploreTeams(nil, summaries, archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := exploreTeamHistory(nil, teams.TeamSeasons)
+		if err != nil || page.HistoryTeam.ID != tc.want {
+			t.Fatalf("%s: default team = %q, %v", tc.name, page.HistoryTeam.ID, err)
+		}
+		// Rankings and Match by match follow the same default.
+		if rankings := exploreTeamRankings(teams, page.HistoryTeam); rankings.RankingTeam.ID != tc.want {
+			t.Fatalf("%s: rankings team = %q", tc.name, rankings.RankingTeam.ID)
+		}
+	}
+}
+
 func TestExploreTeamHistoryEmptyArchive(t *testing.T) {
 	page, err := exploreTeamHistory(nil, nil)
 	if err != nil || page.HistoryTeam.ID != "" || len(page.TeamHistoryRows) != 0 || page.TeamHistoryMissingXG {
