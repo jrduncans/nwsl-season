@@ -521,6 +521,10 @@ th:nth-child(2) { text-align: left; }
 @media (max-width: 700px) {
   .forecast-table { min-width: 0; }
   .forecast-table :is(th, td):nth-child(n+4) { min-width: calc(6ch + .7rem); }
+  /* Pin rank and team while the remaining columns scroll. Separate borders keep row lines on the pinned cells. */
+  .forecast-table { border-collapse: separate; border-spacing: 0; }
+  .forecast-table .forecast-rank { position: sticky; left: 0; z-index: 1; box-sizing: border-box; width: 2rem; min-width: 2rem; max-width: 2rem; background: var(--panel); }
+  .forecast-table th:nth-child(2) { position: sticky; left: 2rem; z-index: 1; background: var(--panel); box-shadow: inset -1px 0 var(--line); }
 }
 
 .explore-season-scored-key { color: var(--chart-actual); }
