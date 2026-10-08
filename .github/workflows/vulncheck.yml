@@ -1,0 +1,28 @@
+name: Vulnerability check
+
+on:
+  pull_request:
+    paths:
+      - go.mod
+      - go.sum
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@v4
+      - run: make vuln
