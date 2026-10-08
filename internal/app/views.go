@@ -513,6 +513,8 @@ type clinchingPage struct {
 	SlateStartsAt    string
 	SlateLatestUTC   string
 	SlateLatest      string
+	SlateStartDate   string
+	SlateLatestDate  string
 	SlateCutoffUTC   string
 	SlateCutoff      string
 	SlateGroups      []fixtureGroupView

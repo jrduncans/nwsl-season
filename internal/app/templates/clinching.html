@@ -49,7 +49,7 @@
 
 {{define "clinching"}}{{template "head" .}}
 <div class="title-row"><div>{{template "seasonContext" .}}<h1>Clinching scenarios</h1></div></div>
-{{if .State}}<p class="data-warning">{{.State}}</p>{{end}}
+{{if .State}}<p class="data-warning">{{.State}}</p>{{else if and (or .Actionable .Elimination) (not .Slate.StartsAtUTC.IsZero)}}<p class="note clinching-slate-summary">Scenarios cover <time data-local-date="{{.SlateStartsAtUTC}}">{{.SlateStartDate}}</time>{{if ne .SlateStartDate .SlateLatestDate}} – <time data-local-date="{{.SlateLatestUTC}}">{{.SlateLatestDate}}</time>{{end}} · <a href="#clinching-matches">{{len .Slate.FixtureIDs}} match{{if ne (len .Slate.FixtureIDs) 1}}es{{end}}</a></p>{{end}}
 {{range .AlreadyClinched}}{{$group := .}}<section class="clinching-status-group clinching-status-group-clinched"><h2>Already clinched {{$group.Achievement}}</h2><ul class="clinching-status-list">{{range $group.Teams}}<li class="clinching-status-item" aria-label="{{.Name}} has already clinched {{$group.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .}}</span></li>{{end}}</ul></section>{{end}}
 {{if not .State}}
   {{range .Eliminated}}{{$group := .}}<section class="clinching-status-group clinching-status-group-eliminated"><h2>Already eliminated from {{$group.Achievement}}</h2><ul class="clinching-status-list">{{range $group.Teams}}<li class="clinching-status-item" aria-label="{{.Name}} has already been eliminated from {{$group.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .}}</span></li>{{end}}</ul></section>{{end}}

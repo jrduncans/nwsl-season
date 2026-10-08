@@ -65,6 +65,38 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 	}
 }
 
+func TestClinchingPageSummarizesSlateDatesBeforeScenarios(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	result := scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{testScenarioCondition("future-1", 1)}}}}
+	for _, test := range []struct {
+		name   string
+		latest time.Time
+		want   string
+	}{
+		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> – <time data-local-date="2026-10-18T23:00:00Z">Sun, Oct 18</time> · <a href="#clinching-matches">2 matches</a>`},
+		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> · <a href="#clinching-matches">2 matches</a>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			slate := scenarios.Slate{State: scenarios.SlateReady, StartsAtUTC: time.Date(2026, 10, 16, 19, 0, 0, 0, time.UTC), LatestKickoffUTC: test.latest, FixtureIDs: []string{"future-1", "future-2"}}
+			store := fullFakeStore{fakeStore: fakeStore{season: data}, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: slate}, Results: []cache.ScenarioResult{{Result: result}}}}
+			response := httptest.NewRecorder()
+			NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d", response.Code)
+			}
+			body := response.Body.String()
+			summary := strings.Index(body, test.want)
+			if summary < 0 {
+				t.Fatalf("slate summary %q missing", test.want)
+			}
+			if scenarios := strings.Index(body, "<h2>Clinching scenarios</h2>"); scenarios < 0 || summary > scenarios {
+				t.Fatal("slate summary must precede the scenarios")
+			}
+		})
+	}
+}
+
 func TestClinchingPageDoesNotCallTiebreakDependentPathsIncomplete(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"

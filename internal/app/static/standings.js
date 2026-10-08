@@ -102,6 +102,11 @@ function localizeTimes() {
     if (!localTime) return;
     element.textContent = localTime;
   });
+  document.querySelectorAll("[data-local-date]").forEach((element) => {
+    const date = new Date(element.dataset.localDate);
+    if (Number.isNaN(date.getTime())) return;
+    element.textContent = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(date);
+  });
 }
 
 function setupEvaluationCharts() {
