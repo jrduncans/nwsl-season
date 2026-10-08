@@ -7,70 +7,79 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/config"
 )
 
-func TestRunStopsWhenSourceScopeSeedingFails(t *testing.T) {
-	originalEnsure := ensureSourceScopeRegistry
-	ensureSourceScopeRegistry = func(context.Context, *cache.DB, string, string, time.Time) error {
-		return errors.New("source scope registry unavailable")
+func TestRunReportsServerBuildFailure(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	t.Cleanup(func() { ensureSourceScopeRegistry = originalEnsure })
 	err := run(context.Background(), config.Config{
-		DBPath:     t.TempDir() + "/cache.sqlite",
+		DBPath:     filepath.Join(blocker, "cache.sqlite"),
 		SyncSeason: "2026",
 		SyncStage:  "Regular Season",
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err == nil || !strings.Contains(err.Error(), "seed source scope registry") {
-		t.Fatalf("run error = %v, want source-scope seeding failure", err)
+	if err == nil || !strings.Contains(err.Error(), "open cache database") {
+		t.Fatalf("run error = %v, want cache open failure", err)
 	}
 }
 
-func TestForecastInputsChanged(t *testing.T) {
-	tests := []struct {
-		name string
-		run  cache.SyncRun
-		want bool
-	}{
-		{name: "unchanged", run: cache.SyncRun{}, want: false},
-		{name: "team inserted", run: cache.SyncRun{TeamsInserted: 1}, want: true},
-		{name: "team updated", run: cache.SyncRun{TeamsUpdated: 1}, want: true},
-		{name: "game inserted", run: cache.SyncRun{GamesInserted: 1}, want: true},
-		{name: "game updated", run: cache.SyncRun{GamesUpdated: 1}, want: true},
-		{name: "game deleted", run: cache.SyncRun{GamesDeleted: 1}, want: true},
-		{name: "xg inserted", run: cache.SyncRun{XGRun: &cache.XGSyncRun{RowsInserted: 1}}, want: true},
-		{name: "xg updated", run: cache.SyncRun{XGRun: &cache.XGSyncRun{RowsUpdated: 1}}, want: true},
-		{name: "xg unchanged", run: cache.SyncRun{XGRun: &cache.XGSyncRun{RowsUnchanged: 1}}, want: false},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := forecastInputsChanged(test.run); got != test.want {
-				t.Errorf("forecastInputsChanged(%+v) = %t, want %t", test.run, got, test.want)
-			}
-		})
-	}
-}
+// TestRunStartsSchedulerAndShutsDownOnCancel drives run end to end against a
+// local fake ASA: the scheduler must start (its first request reaches the
+// fake), and canceling the context must stop the scheduler, interrupt its
+// in-flight request, shut down the listener, and return without error.
+func TestRunStartsSchedulerAndShutsDownOnCancel(t *testing.T) {
+	requested := make(chan struct{})
+	var once sync.Once
+	var requests atomic.Int64
+	fake := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		once.Do(func() { close(requested) })
+		<-r.Context().Done()
+	}))
+	t.Cleanup(fake.Close)
 
-func TestForecastWarmingRunnerUsesOnlyCurrentAndPreviousTwoRegularSeasons(t *testing.T) {
-	runner := forecastWarmingRunner{currentSeason: "2026", currentStage: "Regular Season"}
-	for _, test := range []struct {
-		season, stage string
-		want          bool
-	}{
-		{"2026", "Regular Season", true},
-		{"2025", "Regular Season", true},
-		{"2024", "Regular Season", true},
-		{"2023", "Regular Season", false},
-		{"2025", "Playoffs", false},
-	} {
-		if got := runner.forecastInputsForScope(test.season, test.stage); got != test.want {
-			t.Errorf("forecastInputsForScope(%q, %q) = %t, want %t", test.season, test.stage, got, test.want)
+	t.Setenv("NWSL_DATA_DIR", t.TempDir())
+	t.Setenv("NWSL_ASA_BASE_URL", fake.URL)
+	t.Setenv("NWSL_HTTP_ADDR", "127.0.0.1:0")
+	t.Setenv("NWSL_SYNC_TIMEOUT", "1m")
+	cfg, err := config.FromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
+	select {
+	case <-requested:
+	case err := <-done:
+		t.Fatalf("run returned before the scheduler requested ASA: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("scheduler made no ASA request after run started")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run error = %v, want clean shutdown", err)
 		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("run did not return after its context was canceled")
+	}
+	if requests.Load() == 0 {
+		t.Fatal("fake ASA saw no requests")
 	}
 }
 
