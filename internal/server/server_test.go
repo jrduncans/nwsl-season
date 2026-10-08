@@ -18,6 +18,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/scheduler"
 )
 
 // countingASA is a stand-in ASA that records every request and tracks
@@ -170,10 +171,9 @@ func TestCheckNowRequestsOnlyConfiguredASAAndWaitsForThem(t *testing.T) {
 		t.Fatalf("ASA requests after Build = %d, want none", got)
 	}
 
-	// The fake returns empty inventories, so the check may report a failed
-	// source job; this test is about where requests go and when CheckNow
-	// returns, not about the sync outcome.
-	_ = srv.CheckNow(context.Background())
+	if err := srv.CheckNow(context.Background()); err != nil {
+		t.Fatalf("CheckNow: %v", err)
+	}
 
 	if fake.total.Load() == 0 {
 		t.Fatal("CheckNow made no ASA requests, want at least one due job")
@@ -236,8 +236,8 @@ func TestStopThenWaitReturnsWithoutScheduler(t *testing.T) {
 	srv.Start()
 	srv.Stop()
 	waitWithTimeout(t, "Wait after Stop", srv.Wait)
-	if err := srv.CheckNow(context.Background()); err == nil {
-		t.Fatal("CheckNow after Stop succeeded, want an error")
+	if err := srv.CheckNow(context.Background()); !errors.Is(err, scheduler.ErrStopped) {
+		t.Fatalf("CheckNow after Stop error = %v, want scheduler.ErrStopped", err)
 	}
 	if got := fake.total.Load(); got != 0 {
 		t.Fatalf("ASA requests = %d, want none", got)

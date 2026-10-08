@@ -168,7 +168,8 @@ func (s *Server) Wait() {
 	}
 }
 
-// Close releases the cache. Call it after Stop, Wait, and HTTP shutdown.
+// Close releases the cache. Call it after Stop, Wait, and HTTP shutdown; it
+// must not be called while a CheckNow is running.
 func (s *Server) Close() error {
 	s.closeOnce.Do(func() { s.closeErr = s.db.Close() })
 	return s.closeErr
