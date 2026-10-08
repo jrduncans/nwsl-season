@@ -216,9 +216,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	}
 	view.Slate = snapshot.Run.Slate
 	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
-	view.SlateStartsAt = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
 	view.SlateLatestUTC = snapshot.Run.Slate.LatestKickoffUTC.UTC().Format(time.RFC3339)
-	view.SlateLatest = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
 	view.SlateStartDate = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Mon, Jan 2")
 	view.SlateLatestDate = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Mon, Jan 2")
 	view.SlateCutoffUTC = snapshot.Run.Slate.CutoffUTC.UTC().Format(time.RFC3339)
