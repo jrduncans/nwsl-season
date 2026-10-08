@@ -61,8 +61,14 @@ func main() {
 	}
 }
 
+// serverOptions is a variable so tests can substitute the ASA transport and
+// observe when scheduler work finishes relative to run's return.
+var serverOptions = func(logger *slog.Logger) server.Options {
+	return server.Options{Logger: logger, StartScheduler: true}
+}
+
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
-	srv, err := server.Build(ctx, cfg, server.Options{Logger: logger, StartScheduler: true})
+	srv, err := server.Build(ctx, cfg, serverOptions(logger))
 	if err != nil {
 		return err
 	}

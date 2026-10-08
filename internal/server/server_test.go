@@ -211,8 +211,22 @@ func TestStopThenWaitReturnsWithInFlightASARequest(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("started scheduler made no ASA request")
 	}
+	waited := make(chan struct{})
+	go func() {
+		srv.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+		t.Fatal("Wait returned while the scheduler still had an ASA request in flight")
+	case <-time.After(100 * time.Millisecond):
+	}
 	srv.Stop()
-	waitWithTimeout(t, "Wait after Stop", srv.Wait)
+	select {
+	case <-waited:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Wait did not return after Stop")
+	}
 	waitWithTimeout(t, "second Wait", srv.Wait)
 }
 

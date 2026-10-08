@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/server"
 )
 
 func TestRunReportsServerBuildFailure(t *testing.T) {
@@ -34,23 +34,44 @@ func TestRunReportsServerBuildFailure(t *testing.T) {
 	}
 }
 
-// TestRunStartsSchedulerAndShutsDownOnCancel drives run end to end against a
-// local fake ASA: the scheduler must start (its first request reaches the
-// fake), and canceling the context must stop the scheduler, interrupt its
-// in-flight request, shut down the listener, and return without error.
+// lingeringASATransport stands in for ASA. Each request blocks until it is
+// canceled and then takes a while longer to unwind, so a caller that returns
+// without waiting for the scheduler is observable.
+type lingeringASATransport struct {
+	requested chan struct{}
+	once      sync.Once
+	requests  atomic.Int64
+	inFlight  atomic.Int64
+	linger    time.Duration
+}
+
+func (t *lingeringASATransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	t.requests.Add(1)
+	t.inFlight.Add(1)
+	defer t.inFlight.Add(-1)
+	t.once.Do(func() { close(t.requested) })
+	<-request.Context().Done()
+	time.Sleep(t.linger)
+	return nil, request.Context().Err()
+}
+
+// TestRunStartsSchedulerAndShutsDownOnCancel drives run end to end: the
+// scheduler must start (its first ASA request arrives), and canceling the
+// context must stop the scheduler, wait for its in-flight request to unwind,
+// shut down the listener, and return without error.
 func TestRunStartsSchedulerAndShutsDownOnCancel(t *testing.T) {
-	requested := make(chan struct{})
-	var once sync.Once
-	var requests atomic.Int64
-	fake := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		once.Do(func() { close(requested) })
-		<-r.Context().Done()
-	}))
-	t.Cleanup(fake.Close)
+	transport := &lingeringASATransport{requested: make(chan struct{}), linger: 300 * time.Millisecond}
+	originalOptions := serverOptions
+	serverOptions = func(logger *slog.Logger) server.Options {
+		options := originalOptions(logger)
+		options.ASAHTTPClient = &http.Client{Transport: transport}
+		return options
+	}
+	t.Cleanup(func() { serverOptions = originalOptions })
 
 	t.Setenv("NWSL_DATA_DIR", t.TempDir())
-	t.Setenv("NWSL_ASA_BASE_URL", fake.URL)
+	// The transport never dials; this address only has to be valid.
+	t.Setenv("NWSL_ASA_BASE_URL", "http://127.0.0.1:1/api/v1")
 	t.Setenv("NWSL_HTTP_ADDR", "127.0.0.1:0")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "1m")
 	cfg, err := config.FromEnvironment()
@@ -63,7 +84,7 @@ func TestRunStartsSchedulerAndShutsDownOnCancel(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- run(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
 	select {
-	case <-requested:
+	case <-transport.requested:
 	case err := <-done:
 		t.Fatalf("run returned before the scheduler requested ASA: %v", err)
 	case <-time.After(10 * time.Second):
@@ -78,8 +99,11 @@ func TestRunStartsSchedulerAndShutsDownOnCancel(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("run did not return after its context was canceled")
 	}
-	if requests.Load() == 0 {
-		t.Fatal("fake ASA saw no requests")
+	if inFlight := transport.inFlight.Load(); inFlight != 0 {
+		t.Fatalf("ASA requests still in flight when run returned = %d, want run to wait for the scheduler", inFlight)
+	}
+	if transport.requests.Load() == 0 {
+		t.Fatal("transport saw no ASA requests")
 	}
 }
 
