@@ -33,7 +33,7 @@
 {{end}}
 </section>{{end}}{{end}}
 
-{{define "fixtureMetadata"}}<span class="scheduled">{{if .Remaining}}Scheduled{{else if not .Completed}}{{.Status}}{{end}}{{if .KnockoutGame}}<span class="fixture-meta-tag">Knockout game</span>{{end}}{{if .ExtraTime}}<span class="fixture-meta-tag">{{.ExtraTime}}</span>{{end}}{{if .Shootout}}<span class="fixture-meta-tag">{{.Shootout}}</span>{{end}}{{if .ExpandedMinutes}}<span class="fixture-meta-tag">{{.ExpandedMinutes}}</span>{{end}}</span>{{end}}
+{{define "fixtureMetadata"}}<span class="scheduled">{{if and (not .Remaining) (not .Completed)}}{{.Status}}{{end}}{{if .KnockoutGame}}<span class="fixture-meta-tag">Knockout game</span>{{end}}{{if .ExtraTime}}<span class="fixture-meta-tag">{{.ExtraTime}}</span>{{end}}{{if .Shootout}}<span class="fixture-meta-tag">{{.Shootout}}</span>{{end}}{{if .ExpandedMinutes}}<span class="fixture-meta-tag">{{.ExpandedMinutes}}</span>{{end}}</span>{{end}}
 
 {{define "fixtureOutlook"}}<div class="fixture-outlook" role="group" aria-label="Match outlook: {{.HomeTeam.Name}} has a {{.Outlook.HomeWinText}} chance of winning, the draw chance is {{.Outlook.DrawText}}, and {{.AwayTeam.Name}} has a {{.Outlook.AwayWinText}} chance of winning.">
   <span class="fixture-outlook-model" title="Selected Forecast Lab model: {{.Outlook.ModelName}}">Match outlook</span>
