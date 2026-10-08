@@ -56,14 +56,7 @@ for focused diagnosis.
 ## Documentation routing
 
 - For Explore (Compare teams, Team profile, League trends) charts or calculations, read [the History guide](docs/history-logic-guide.md); its Explore workspace table maps tab names to `view` keys such as `season-trend` (Match by match) and `team-history` (Season by season).
-  Run `make test-explore` for scoring, team quadrant selections/units/coverage/cache-only fallback (browser-check axis direction, weighted averages, in-chart Goals/xG key, connecting lines, tight/tied/zero bounds, adaptive point sizes/logo collisions, keyboard access, viewport-capped Outlier sizing, circular Outlier markers, stable plot bounds during tooltip redraws, and desktop/mobile sizing), team rankings (direction, ties, units and league xG coverage), team history/record holders and coverage,
-  season trends (scored/allowed balance, actual/xG comparisons, retained Data
-  preferences, mode selections, played order, venue-local dates and DST, venue
-  orientation, points/xPoints and independent coverage, benchmark group cuts/ties
-  and match weighting, forecast-selected groups/Shield favorites/shared cache,
-  best-metric direction/holders, panel-specific inspection
-  and reference holder names, original units and coverage counts, full rolling
-  windows, dotted expanding-average lead-ins, solid core series and expected-data gaps), sorting across sortable Explore tables, and cache-only page checks.
+  Run `make test-explore` for Explore checks; the Explore workspace section of the History guide lists what they cover.
 - For sync, cache, scheduler, and ASA-loading work, read the current
   [synchronization guide](docs/sync-logic-guide.md) and
   [ASA-loading index](docs/asa-loading/README.md).
@@ -86,8 +79,8 @@ for focused diagnosis.
   disjoint detailed-alternative tests. Verify future-fixture elimination proofs
   against exhaustive small-season outcomes. Use `make test-clinching` for focused
   checks; the full `make test` also includes these regressions.
-- When behavior or required checks change, update the active guide, `AGENTS.md`,
-  `Makefile`, and CI together.
+- When behavior or required checks change, update the active guide; update
+  `AGENTS.md`, `Makefile` and CI only when a command or required check changes.
 
 ## Observability and configuration
 
