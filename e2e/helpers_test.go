@@ -1,0 +1,204 @@
+//go:build e2e
+
+package e2e
+
+import (
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"testing"
+
+	playwright "github.com/mxschmitt/playwright-go"
+
+	"github.com/jrduncans/nwsl-season/internal/asatest"
+)
+
+// viewport is a named browser window size.
+type viewport struct {
+	Name          string
+	Width, Height int
+}
+
+// Standard viewports. Journeys run at both.
+var (
+	Desktop = viewport{Name: "desktop", Width: 1280, Height: 800}
+	Mobile  = viewport{Name: "mobile", Width: 390, Height: 844}
+)
+
+// traceDirEnv names a directory for Playwright traces of failed tests. CI sets
+// it and uploads the directory; locally it is usually unset.
+const traceDirEnv = "NWSL_E2E_TRACE_DIR"
+
+// cspReporter turns CSP violations into console errors, so newPage's console
+// listener fails the test on them.
+const cspReporter = `document.addEventListener("securitypolicyviolation", (event) => {
+	console.error("CSP violation: " + event.violatedDirective + " blocked " + event.blockedURI);
+});`
+
+// newPage returns a page in a fresh browser context sized to vp. The test
+// fails if the page logs a console error, throws an uncaught error, has a
+// same-origin request fail or return a 4xx/5xx status, or violates the CSP.
+// The failures are reported when the test ends.
+func newPage(t *testing.T, vp viewport) playwright.Page {
+	t.Helper()
+	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
+		Viewport: &playwright.Size{Width: vp.Width, Height: vp.Height},
+	})
+	if err != nil {
+		t.Fatalf("new browser context: %v", err)
+	}
+	if err := context.AddInitScript(playwright.Script{Content: playwright.String(cspReporter)}); err != nil {
+		t.Fatalf("add CSP init script: %v", err)
+	}
+	if err := context.Tracing().Start(playwright.TracingStartOptions{
+		Screenshots: playwright.Bool(true),
+		Snapshots:   playwright.Bool(true),
+	}); err != nil {
+		t.Fatalf("start tracing: %v", err)
+	}
+	page, err := context.NewPage()
+	if err != nil {
+		t.Fatalf("new page: %v", err)
+	}
+
+	var (
+		mu       sync.Mutex
+		problems []string
+	)
+	record := func(format string, args ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+	page.On("console", func(message playwright.ConsoleMessage) {
+		if message.Type() == "error" {
+			record("console error: %s", message.Text())
+		}
+	})
+	page.On("pageerror", func(err error) { record("page error: %v", err) })
+	page.On("requestfailed", func(request playwright.Request) {
+		if sameOrigin(page, request.URL()) {
+			record("request failed: %s %s: %v", request.Method(), request.URL(), request.Failure())
+		}
+	})
+	page.On("response", func(response playwright.Response) {
+		if sameOrigin(page, response.URL()) && response.Status() >= 400 {
+			record("bad response: %s %s: %d", response.Request().Method(), response.URL(), response.Status())
+		}
+	})
+
+	t.Cleanup(func() {
+		mu.Lock()
+		for _, problem := range problems {
+			t.Errorf("%s viewport: %s", vp.Name, problem)
+		}
+		mu.Unlock()
+
+		if dir := os.Getenv(traceDirEnv); dir != "" && t.Failed() {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				t.Logf("create trace directory: %v", err)
+			} else if err := context.Tracing().Stop(filepath.Join(dir, traceName(t, vp)+".zip")); err != nil {
+				t.Logf("save trace: %v", err)
+			}
+		} else if err := context.Tracing().Stop(); err != nil {
+			t.Logf("stop tracing: %v", err)
+		}
+		if err := context.Close(); err != nil {
+			t.Logf("close browser context: %v", err)
+		}
+	})
+	return page
+}
+
+var unsafeFileChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
+func traceName(t *testing.T, vp viewport) string {
+	return unsafeFileChars.ReplaceAllString(t.Name()+"-"+vp.Name, "_")
+}
+
+// sameOrigin reports whether rawURL has the same scheme and host as the
+// page's current document. Before the first navigation the page is
+// about:blank, so nothing is same-origin and nothing is flagged.
+func sameOrigin(page playwright.Page, rawURL string) bool {
+	current, err := url.Parse(page.URL())
+	if err != nil || current.Host == "" {
+		return false
+	}
+	other, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return other.Scheme == current.Scheme && other.Host == current.Host
+}
+
+// visit loads rawURL, waits for the network to settle, and requires a
+// successful status and a visible page heading.
+func visit(t *testing.T, page playwright.Page, rawURL string) {
+	t.Helper()
+	response, err := page.Goto(rawURL, playwright.PageGotoOptions{
+		WaitUntil: playwright.WaitUntilStateNetworkidle,
+	})
+	if err != nil {
+		t.Fatalf("goto %s: %v", rawURL, err)
+	}
+	if response == nil || !response.Ok() {
+		status := 0
+		if response != nil {
+			status = response.Status()
+		}
+		t.Fatalf("goto %s: status %d, want 2xx", rawURL, status)
+	}
+	expect := playwright.NewPlaywrightAssertions()
+	if err := expect.Locator(page.Locator("h1").First()).ToBeVisible(); err != nil {
+		t.Fatalf("%s has no visible h1: %v", rawURL, err)
+	}
+}
+
+// assertNoHorizontalOverflow fails the test if the page is wider than its
+// viewport, which would make it scroll sideways.
+func assertNoHorizontalOverflow(t *testing.T, page playwright.Page) {
+	t.Helper()
+	result, err := page.Evaluate(`() => ({
+		scroll: document.documentElement.scrollWidth,
+		client: document.documentElement.clientWidth,
+	})`)
+	if err != nil {
+		t.Fatalf("measure overflow on %s: %v", page.URL(), err)
+	}
+	measured, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("measure overflow on %s: unexpected result %T", page.URL(), result)
+	}
+	scroll, client := toFloat(measured["scroll"]), toFloat(measured["client"])
+	if scroll > client {
+		t.Errorf("%s overflows horizontally: scrollWidth %.0f > clientWidth %.0f", page.URL(), scroll, client)
+	}
+}
+
+func toFloat(v any) float64 {
+	switch n := v.(type) {
+	case int:
+		return float64(n)
+	case float64:
+		return n
+	default:
+		return -1
+	}
+}
+
+// assertNoASARequests fails the test if the fake ASA received any request
+// since its requests were last reset. Page requests must read only the cache.
+func assertNoASARequests(t *testing.T, fake *asatest.Server) {
+	t.Helper()
+	if requests := fake.Requests(); len(requests) > 0 {
+		var paths []string
+		for _, request := range requests {
+			paths = append(paths, request.Path)
+		}
+		t.Errorf("fake ASA received %d request(s), want none: %s", len(requests), strings.Join(paths, ", "))
+	}
+}
