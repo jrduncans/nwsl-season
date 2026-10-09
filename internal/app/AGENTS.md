@@ -6,5 +6,5 @@
   explicitly enables modeled behavior.
 - Use relative links and redirects so the production `/nwsl-season/` proxy
   prefix survives.
-- For template or CSS changes, visually verify desktop and a 390px viewport,
-  including overflow and keyboard access.
+- For template, JavaScript or CSS changes, run `make test-e2e`; still check
+  visual design by eye at desktop and 390px.

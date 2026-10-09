@@ -26,6 +26,13 @@ The race suite passed in roughly 30 seconds in the development environment, so
 it is appropriate as a targeted pre-handoff check without requiring it for
 documentation-only or otherwise unrelated changes.
 
+When a change touches templates, JavaScript, CSS or `internal/app`, also run
+`make test-e2e` (headless Chromium; run `make e2e-install` once first).
+
+For new tests, build data with `internal/apptest` (seeded cache scenarios) and
+`internal/asatest` (a fake ASA server for sync journeys). A test must never
+call the real ASA API.
+
 For every AI-authored Go change, run the Go vulnerability scan when network
 access is available:
 
