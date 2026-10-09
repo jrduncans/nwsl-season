@@ -778,17 +778,29 @@ func TestJ4IncompleteInventory(t *testing.T) {
 		t.Fatalf("test bug: without team-8's last game team-0 should look clinched, got %q", got)
 	}
 
+	// First let the scheduler poll the games that are now due. The vanished
+	// fixture is among them; an ID missing from a targeted response is only
+	// an unchanged observation, so the cache keeps it.
+	j.ASA.ResetRequests()
+	j.setGames(incomplete)
+	j.Clock.Advance(lateRoundsDue)
+	j.sync(t)
+	if len(requestsFor(j.ASA, asatest.PathGames)) == 0 {
+		t.Fatal("the scheduler never polled the due games")
+	}
+
 	// The scheduler's next full-inventory audit is a week after the first sync,
 	// stamped with the wall clock, so a test cannot make it due. The operator's
 	// sync command (cmd/sync) fetches the same full inventory through the same
 	// cache and sync lease, so the journey runs that instead.
 	j.ASA.ResetRequests()
-	j.setGames(incomplete)
 	run, err := j.runMaintenanceSync(t)
 	if err == nil {
 		t.Fatalf("the sync accepted an incomplete inventory: %+v", run)
 	}
-	t.Logf("maintenance sync rejected the inventory: %v", err)
+	if !strings.Contains(err.Error(), "inventory has 239 games, want 240") {
+		t.Fatalf("the sync failed for another reason than the incomplete inventory: %v", err)
+	}
 
 	var audited bool
 	for _, request := range requestsFor(j.ASA, asatest.PathGames) {
