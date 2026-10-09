@@ -107,6 +107,17 @@ The plan front-loads T1–T3: they are cheap and close real gaps even if the
 browser work is postponed. Within a wave, the tasks' file lists don't overlap.
 Merge each task before starting tasks that depend on it.
 
+### Follow-ups from wave D
+
+- <https://github.com/jrduncans/nwsl-season/issues/124>: stub the S3 logo host
+  in the shared `newPage`. Must land before wave E.
+- <https://github.com/jrduncans/nwsl-season/issues/125>: `apptest` season
+  without xG. Deferred.
+- <https://github.com/jrduncans/nwsl-season/issues/123>: all of `e2e` under
+  4 min in CI. End of the plan.
+- <https://github.com/jrduncans/nwsl-season/issues/122>: fixture-view-toggle is
+  visible without JavaScript. Product bug; skipped test in PR #121.
+
 ## 5. Conventions for every task
 
 - Branch from up-to-date `main` as `test-plan/tN-short-name`. Open one PR per
@@ -635,7 +646,9 @@ for the cache, plus a development tool.
   `internal/app/static/explore.js`, new
   `internal/app/static/explore-geometry.js`, `internal/app/templates/explore.html`
   (script tag only), `internal/app/security_headers_test.go` (only if the new
-  script needs listing).
+  script needs listing), `internal/app/explore.go` (adds a `GeometryPath`
+  field so the geometry script URL is versioned and works under
+  `/history/scoring`; accepted in review of PR #120).
 
 **Steps:**
 
@@ -673,7 +686,9 @@ for the cache, plus a development tool.
 
 - Step 1 tests pass both before and after step 2. Show this with two
   commits.
-- Running all of `e2e` takes under 4 min in CI.
+- Running all of `e2e` takes under 4 min in CI. *Deferred to the end of the
+  plan, tracked in <https://github.com/jrduncans/nwsl-season/issues/123>
+  (journeys run sequentially before the parallel tests; see the issue).*
 - For each checklist item, the handoff says "automated by <test>" or "still
   manual: <reason>". Only visual judgment calls should stay manual.
 
@@ -743,6 +758,11 @@ bug; report it.
   `internal/app/*_test.go`. `go.mod` changes only to promote `golang.org/x/net`
   from indirect to direct.
 
+**Note from wave D:** PR #121 (T9) lists the 17 `handler_test.go` assertions
+its browser tests duplicate, in the PR body under "Assertions in
+internal/app/handler_test.go now duplicated by browser tests (input for T11)".
+Start from that list.
+
 **Decisions:**
 
 1. Write a helper based on `golang.org/x/net/html`:
@@ -774,6 +794,14 @@ bug; report it.
 - **Files:** `AGENTS.md`, `internal/app/AGENTS.md`, `README.md` (testing
   section), `docs/history-logic-guide.md` (browser verification section),
   this plan (set Status to Complete and add a short outcomes section).
+
+**Notes from wave D:**
+
+- `docs/history-logic-guide.md` (lines ~177 and ~292) says "xPoints
+  incomplete", but `explore.js:419` draws "xPts incomplete". The owner decided
+  the docs are wrong: update the guide to "xPts incomplete".
+- Reflect the new Explore geometry script and its tests in the History
+  guide's Explore section, if T8 has not already.
 
 **Steps:**
 
