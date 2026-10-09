@@ -693,6 +693,22 @@ const (
 	remainingPerTeam = fixtureTeams - 1
 )
 
+// forecastNavTimeout bounds navigations that make the server compute a
+// forecast. On a loaded CI runner one took over 8s, so the 5s assertion
+// default is too short; this does not change what is asserted.
+const forecastNavTimeout = 30 * time.Second
+
+// waitForecastURL waits for the page to navigate to a URL matching want and
+// finish loading, allowing forecastNavTimeout for the server's computation.
+func waitForecastURL(page playwright.Page, want any) error {
+	if err := playwright.NewPlaywrightAssertions(forecastNavTimeout.Seconds() * 1000).Page(page).ToHaveURL(want); err != nil {
+		return err
+	}
+	return page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+		State: playwright.LoadStateLoad, Timeout: playwright.Float(forecastNavTimeout.Seconds() * 1000),
+	})
+}
+
 var assumptionURL = regexp.MustCompile(`[?&]p=`)
 
 // fixedResults reads the forecast page's "Fixed results" count, which counts assumptions, not played games.
@@ -823,7 +839,7 @@ func testForecastAssumptionFlow(t *testing.T, f *fixture) {
 
 			// Applying navigates to the scenario, which fixes one more result.
 			click(t, applyButton)
-			if err := expect.Page(page).ToHaveURL(assumptionURL); err != nil {
+			if err := waitForecastURL(page, assumptionURL); err != nil {
 				t.Fatalf("applying the scenario should navigate to a URL with p=: %v", err)
 			}
 			if err := expect.Locator(page.Locator("h1")).ToHaveText("Forecast lab"); err != nil {
@@ -857,7 +873,7 @@ func testForecastCopyLink(t *testing.T, f *fixture) {
 	}
 	click(t, page.Locator("form[data-assumption-builder] button[type=submit]"))
 	click(t, page.Locator("#forecast-update-button"))
-	if err := expect.Page(page).ToHaveURL(assumptionURL); err != nil {
+	if err := waitForecastURL(page, assumptionURL); err != nil {
 		t.Fatalf("applying the scenario should navigate to a URL with p=: %v", err)
 	}
 	scenarioURL := page.URL()
@@ -938,7 +954,7 @@ func testForecastCompareModel(t *testing.T, f *fixture) {
 	selectValue(t, page.Locator("#forecast-team"), teamUnderTest)
 	click(t, page.Locator("form[data-assumption-builder] button[type=submit]"))
 	click(t, page.Locator("#forecast-update-button"))
-	if err := expect.Page(page).ToHaveURL(assumptionURL); err != nil {
+	if err := waitForecastURL(page, assumptionURL); err != nil {
 		t.Fatalf("applying the scenario should navigate to a URL with p=: %v", err)
 	}
 	assumed := mustQuery(t, page.URL()).Get("p")
@@ -949,7 +965,7 @@ func testForecastCompareModel(t *testing.T, f *fixture) {
 	}
 	click(t, page.Locator(".forecast-comparison-control summary")) // opens the closed disclosure
 	selectValue(t, page.Locator("#forecast-comparison"), modelComparison)
-	if err := expect.Page(page).ToHaveURL(regexp.MustCompile(`[?&]c=` + modelComparison)); err != nil {
+	if err := waitForecastURL(page, regexp.MustCompile(`[?&]c=`+modelComparison)); err != nil {
 		t.Fatalf("choosing a comparison should reload with c=: %v", err)
 	}
 	if got := mustQuery(t, page.URL()).Get("p"); got != assumed {
@@ -975,7 +991,7 @@ func testForecastCompareModel(t *testing.T, f *fixture) {
 
 	// Making the compared model the main model clears the comparison.
 	selectValue(t, page.Locator("#forecast-model"), modelComparison)
-	if err := expect.Page(page).ToHaveURL(regexp.MustCompile(`[?&]m=` + modelComparison)); err != nil {
+	if err := waitForecastURL(page, regexp.MustCompile(`[?&]m=`+modelComparison)); err != nil {
 		t.Fatalf("choosing a model should reload with m=: %v", err)
 	}
 	if err := expect.Locator(page.Locator(".forecast-comparison")).ToHaveCount(0); err != nil {
@@ -1007,7 +1023,7 @@ func testForecastNoScript(t *testing.T, f *fixture) {
 		t.Fatalf("choose draw: %v", err)
 	}
 	click(t, page.Locator("form[data-assumption-builder] button[type=submit]"))
-	if err := expect.Page(page).ToHaveURL(assumptionURL); err != nil {
+	if err := waitForecastURL(page, assumptionURL); err != nil {
 		t.Fatalf("the plain form should add the assumption on the server: %v", err)
 	}
 	if err := expect.Locator(page.Locator("section.forecast-scenario .forecast-assumptions li")).ToHaveCount(1); err != nil {
