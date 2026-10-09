@@ -48,7 +48,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if err := serve(*scenario, *addr, *metric, *noScript, stdout, stderr); err != nil {
-		fmt.Fprintf(stderr, "preview: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "preview: %v\n", err)
 		return 1
 	}
 	return 0
@@ -100,7 +100,7 @@ func serve(scenario, addr, metric string, noScript bool, stdout, stderr io.Write
 		err = errors.Join(err, srv.Close())
 	}()
 
-	listener, err := net.Listen("tcp", addr)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
@@ -116,8 +116,8 @@ func serve(scenario, addr, metric string, noScript bool, stdout, stderr io.Write
 	httpServer := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 
 	query := url.Values{"metric": {metric}, "season": {selection}}
-	fmt.Fprintf(stdout, "http://%s%s/history/scoring?%s\n", listener.Addr(), mountPrefix, query.Encode())
-	fmt.Fprintf(stderr, "preview: scenario %q; press Ctrl-C to stop\n", scenario)
+	_, _ = fmt.Fprintf(stdout, "http://%s%s/history/scoring?%s\n", listener.Addr(), mountPrefix, query.Encode())
+	_, _ = fmt.Fprintf(stderr, "preview: scenario %q; press Ctrl-C to stop\n", scenario)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
