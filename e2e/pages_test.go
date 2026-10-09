@@ -25,6 +25,7 @@ import (
 	playwright "github.com/mxschmitt/playwright-go"
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
+	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -35,6 +36,18 @@ import (
 // and render-and-fit checks for the rest. The local-time, no-script and
 // clipboard cases need browser-context options that newPage does not take, so
 // newPageWith builds the context itself and applies the same failure rules.
+
+// clubLogoPattern matches the team logos that pages load from ASA's S3 bucket.
+const clubLogoPattern = "https://american-soccer-analysis-headshots.s3.amazonaws.com/**"
+
+// logoPNG is a 1x1 transparent PNG.
+var logoPNG = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+	0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xff, 0xff, 0x3f,
+	0x00, 0x05, 0xfe, 0x02, 0xfe, 0xdc, 0xcc, 0x59, 0xe7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+	0x44, 0xae, 0x42, 0x60, 0x82,
+}
 
 // pageOptions are the browser-context settings a test needs beyond a viewport.
 type pageOptions struct {
@@ -72,6 +85,17 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	}
 	if err := browserContext.AddInitScript(playwright.Script{Content: playwright.String(cspReporter)}); err != nil {
 		t.Fatalf("add CSP init script: %v", err)
+	}
+	// Pages load club logos from ASA's S3 bucket. Serve a stub so the suite
+	// never depends on (or flakes with) the real network.
+	if err := browserContext.Route(clubLogoPattern, func(route playwright.Route) {
+		if err := route.Fulfill(playwright.RouteFulfillOptions{
+			Status: playwright.Int(200), ContentType: playwright.String("image/png"), Body: logoPNG,
+		}); err != nil {
+			t.Logf("stub club logo: %v", err)
+		}
+	}); err != nil {
+		t.Fatalf("route club logos: %v", err)
 	}
 	traceDir := os.Getenv(traceDirEnv)
 	if traceDir != "" {
@@ -418,7 +442,7 @@ func assertSequentialPositions(t *testing.T, label string, rows []standingsRow) 
 // home standings and checks the row order, the positions and the values after
 // every change.
 func testStandingsSorting(t *testing.T, f *fixture) {
-	page := newPage(t, Desktop)
+	page := newPageWith(t, pageOptions{Viewport: Desktop})
 	visit(t, page, f.URL(""))
 	expect := playwright.NewPlaywrightAssertions()
 	caption := page.Locator("[data-standings-caption]")
@@ -462,6 +486,9 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	}
 	byTotals := readStandingsRows(t, page)
 	assertSequentialPositions(t, "totals", byTotals)
+	if got := sortedByPositionData(byTotals, func(r standingsRow) string { return r.TotalPos }); !sameStrings(got, ids(byTotals)) {
+		t.Errorf("totals order = %v, want total position order %v", ids(byTotals), got)
+	}
 	for i, row := range byTotals {
 		if row.Points != row.Total {
 			t.Errorf("totals: %s shows %q points, want total %q", row.Name, row.Points, row.Total)
@@ -486,7 +513,7 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	if err := expect.Locator(pointsHeader).ToHaveText("xPts"); err != nil {
 		t.Error(err)
 	}
-	if err := expect.Locator(caption).Not().ToHaveText(initialCaption(t, page, false)); err != nil {
+	if err := expect.Locator(caption).ToHaveText(initialCaption(t, page, true)); err != nil {
 		t.Error(err)
 	}
 	byXG := readStandingsRows(t, page)
@@ -674,7 +701,7 @@ func fixedResults(t *testing.T, page playwright.Page) int {
 func testForecastAssumptionFlow(t *testing.T, f *fixture) {
 	for _, vp := range []viewport{Desktop, Mobile} {
 		t.Run(vp.Name, func(t *testing.T) {
-			page := newPage(t, vp)
+			page := newPageWith(t, pageOptions{Viewport: vp})
 			visit(t, page, f.URL(seasonPath("forecast")))
 			expect := playwright.NewPlaywrightAssertions()
 			baseline := fixedResults(t, page)
@@ -889,7 +916,7 @@ func mustQuery(t *testing.T, raw string) url.Values {
 // testForecastCompareModel keeps a scenario while the model and its comparison
 // change.
 func testForecastCompareModel(t *testing.T, f *fixture) {
-	page := newPage(t, Desktop)
+	page := newPageWith(t, pageOptions{Viewport: Desktop})
 	visit(t, page, f.URL(seasonPath("forecast")))
 	expect := playwright.NewPlaywrightAssertions()
 	if err := expect.Locator(page.Locator(".forecast-comparison")).ToHaveCount(0); err != nil {
@@ -956,6 +983,9 @@ func testForecastNoScript(t *testing.T, f *fixture) {
 	if err := expect.Locator(page.Locator("#forecast-pending")).ToBeHidden(); err != nil {
 		t.Error(err)
 	}
+	if err := expect.Locator(page.Locator("#forecast-update-button")).ToHaveJSProperty("disabled", true); err != nil {
+		t.Error(err)
+	}
 	// The server lists every unplayed game.
 	if err := expect.Locator(page.Locator("#forecast-fixture option")).ToHaveCount(fixtureGames - fixturePlayedGames); err != nil {
 		t.Error(err)
@@ -994,7 +1024,7 @@ func forEachViewport(t *testing.T, check func(*testing.T, viewport)) {
 
 func testFixturesPage(t *testing.T, f *fixture) {
 	forEachViewport(t, func(t *testing.T, vp viewport) {
-		page := newPage(t, vp)
+		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("fixtures")))
 		expect := playwright.NewPlaywrightAssertions()
 		if err := expect.Locator(page.Locator("[data-fixture-home-team]")).ToHaveCount(fixtureGames); err != nil {
@@ -1020,7 +1050,7 @@ func testFixturesPage(t *testing.T, f *fixture) {
 
 func testScheduleDifficultyPage(t *testing.T, f *fixture) {
 	forEachViewport(t, func(t *testing.T, vp viewport) {
-		page := newPage(t, vp)
+		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("schedule-difficulty")))
 		expect := playwright.NewPlaywrightAssertions()
 		if err := expect.Locator(page.GetByText("Toughest remaining schedule")).ToBeVisible(); err != nil {
@@ -1035,7 +1065,7 @@ func testScheduleDifficultyPage(t *testing.T, f *fixture) {
 
 func testModelEvaluationPage(t *testing.T, f *fixture) {
 	forEachViewport(t, func(t *testing.T, vp viewport) {
-		page := newPage(t, vp)
+		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("model-evaluation")))
 		expect := playwright.NewPlaywrightAssertions()
 		svg := page.Locator("[data-evaluation-svg]")
@@ -1054,6 +1084,57 @@ func testModelEvaluationPage(t *testing.T, f *fixture) {
 }
 
 // ---------------------------------------------------------------- clinching
+
+// assertKeyboardDisclosures focuses every details summary on the page and
+// checks that Enter and Space each expand and collapse it, showing and hiding
+// its content. It returns how many disclosures it found.
+func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
+	t.Helper()
+	expect := playwright.NewPlaywrightAssertions()
+	count, err := page.Locator("details > summary").Count()
+	if err != nil {
+		t.Fatalf("count disclosures: %v", err)
+	}
+	for i := range count {
+		summary := page.Locator("details > summary").Nth(i)
+		details := page.Locator("details").Nth(i)
+		name, err := summary.InnerText()
+		if err != nil {
+			t.Fatalf("read summary %d: %v", i, err)
+		}
+		if err := summary.Focus(); err != nil {
+			t.Fatalf("focus %q: %v", name, err)
+		}
+		if err := expect.Locator(summary).ToBeFocused(); err != nil {
+			t.Errorf("%q should take focus: %v", name, err)
+		}
+		if err := expect.Locator(details).ToHaveJSProperty("open", false); err != nil {
+			t.Errorf("%q should start collapsed: %v", name, err)
+		}
+		for _, key := range []string{"Enter", "Space"} {
+			if err := summary.Press(key); err != nil {
+				t.Fatalf("press %s on %q: %v", key, name, err)
+			}
+			if err := expect.Locator(details).ToHaveJSProperty("open", true); err != nil {
+				t.Errorf("%s should expand %q: %v", key, name, err)
+			}
+			// The body is shown while expanded.
+			if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeVisible(); err != nil {
+				t.Errorf("%q should show its content when expanded: %v", name, err)
+			}
+			if err := summary.Press(key); err != nil {
+				t.Fatalf("press %s on %q: %v", key, name, err)
+			}
+			if err := expect.Locator(details).ToHaveJSProperty("open", false); err != nil {
+				t.Errorf("%s should collapse %q: %v", key, name, err)
+			}
+			if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeHidden(); err != nil {
+				t.Errorf("%q should hide its content when collapsed: %v", name, err)
+			}
+		}
+	}
+	return count
+}
 
 // TestPagesClinching keyboard-toggles every disclosure on the late-season clinching
 // page. The late-season arrangement (see lateSeason) gives team-0 and team-8
@@ -1098,57 +1179,81 @@ func TestPagesClinching(t *testing.T) {
 			}
 		}
 
-		count, err := page.Locator("details > summary").Count()
-		if err != nil || count < 2 {
-			t.Fatalf("clinching page has %d disclosures (%v), want at least the slate and a season-long path", count, err)
+		if got := assertKeyboardDisclosures(t, page); got < 2 {
+			t.Errorf("clinching page has %d disclosures, want at least the slate and a season-long path", got)
 		}
-		for i := range count {
-			summary := page.Locator("details > summary").Nth(i)
-			details := page.Locator("details").Nth(i)
-			name, err := summary.InnerText()
-			if err != nil {
-				t.Fatalf("read summary %d: %v", i, err)
-			}
-			if err := summary.Focus(); err != nil {
-				t.Fatalf("focus %q: %v", name, err)
-			}
-			if err := expect.Locator(summary).ToBeFocused(); err != nil {
-				t.Errorf("%q should take focus: %v", name, err)
-			}
-			if err := expect.Locator(details).ToHaveJSProperty("open", false); err != nil {
-				t.Errorf("%q should start collapsed: %v", name, err)
-			}
-			for _, key := range []string{"Enter", "Space"} {
-				if err := summary.Press(key); err != nil {
-					t.Fatalf("press %s on %q: %v", key, name, err)
-				}
-				if err := expect.Locator(details).ToHaveJSProperty("open", true); err != nil {
-					t.Errorf("%s should expand %q: %v", key, name, err)
-				}
-				// The body is shown while expanded.
-				if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeVisible(); err != nil {
-					t.Errorf("%q should show its content when expanded: %v", name, err)
-				}
-				if err := summary.Press(key); err != nil {
-					t.Fatalf("press %s on %q: %v", key, name, err)
-				}
-				if err := expect.Locator(details).ToHaveJSProperty("open", false); err != nil {
-					t.Errorf("%s should collapse %q: %v", key, name, err)
-				}
-				if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeHidden(); err != nil {
-					t.Errorf("%q should hide its content when collapsed: %v", name, err)
-				}
+		assertNoHorizontalOverflow(t, page)
+	})
+}
+
+// TestPagesClinchingExactPaths covers the grouped summary with its "View exact
+// paths" disclosure, which appears only when a result needs one of several
+// outside results. Arrangement after 29 of 30 rounds: team-1..6 are far ahead
+// and the rest far behind; team-0 has 47 points, team-8 46 and team-9 44, and
+// only their last-round games are unplayed. Team-8 and team-9 can each pass
+// team-0 only by winning, and team-0 stays in the top eight unless both do, so
+// a result for team-0 that needs help has two disjoint outside alternatives.
+// The test asserts the page shows the disclosure, not the arithmetic.
+func TestPagesClinchingExactPaths(t *testing.T) {
+	order := []string{"team-1", "team-2", "team-3", "team-4", "team-5", "team-6",
+		"team-0", "team-8", "team-9", "team-7", "team-10", "team-11", "team-12", "team-13", "team-14", "team-15"}
+	rank := func(id string) int {
+		for i, o := range order {
+			if o == id {
+				return i
 			}
 		}
+		panic("unknown team " + id)
+	}
+	// Strength order decides every game except team-0 v team-8 and team-8 v
+	// team-9, which are draws.
+	draw := func(a, b string) bool { return (a == "team-0" && b == "team-8") || (a == "team-8" && b == "team-9") }
+	cfg := lateSeason()
+	cfg.score = func(g asa.Game) (int, int) {
+		if draw(g.HomeTeamID, g.AwayTeamID) || draw(g.AwayTeamID, g.HomeTeamID) {
+			return 1, 1
+		}
+		if rank(g.HomeTeamID) < rank(g.AwayTeamID) {
+			return 1, 0
+		}
+		return 0, 1
+	}
+	cfg.leaveUnplayed = func(g asa.Game) bool {
+		in := func(id string) bool { return id == "team-0" || id == "team-8" || id == "team-9" }
+		return in(g.HomeTeamID) || in(g.AwayTeamID)
+	}
+	j := newJourney(t, cfg)
+	table := expectedTable(j.Teams, j.Games)
+	for id, want := range map[string]int{"team-0": 47, "team-8": 46, "team-9": 44} {
+		if got := table[id].Points; got != want {
+			t.Fatalf("%s has %d points, want %d", id, got, want)
+		}
+	}
+	forEachViewport(t, func(t *testing.T, vp viewport) {
+		page := newPageWith(t, pageOptions{Viewport: vp})
+		visit(t, page, j.URL(seasonPath("clinching")))
+		expect := playwright.NewPlaywrightAssertions()
+		exact := page.Locator("details.clinching-exact-paths")
+		if n, err := exact.Count(); err != nil || n == 0 {
+			t.Fatalf("no \"View exact paths\" disclosure on the page (%d, %v); the arrangement no longer needs outside results", n, err)
+		}
+		// The grouped summary sits next to the disclosure, outside it.
+		if err := expect.Locator(page.Locator("section.clinching-result-group .clinching-summary").First()).ToBeVisible(); err != nil {
+			t.Errorf("grouped summary should be visible: %v", err)
+		}
+		if err := expect.Locator(exact.First().Locator("summary")).ToHaveText("View exact paths"); err != nil {
+			t.Error(err)
+		}
+		assertKeyboardDisclosures(t, page)
 		assertNoHorizontalOverflow(t, page)
 	})
 }
 
 // ------------------------------------------------------------------ bracket
 
-// seedPlayoffs serves a cache whose only data is a 2024 Playoffs knockout, with
-// no ASA behind it. The pages at the end of the season redirect to a bracket
-// only when a knockout stage has concrete pairings.
+// newBracketFixture serves a cache seeded with the teams scenario plus a 2024
+// Playoffs knockout, with no ASA behind it. A knockout stage renders a bracket
+// only when it has at least one concrete pairing.
 func newBracketFixture(t *testing.T) *fixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -1216,7 +1321,7 @@ func TestPagesBracket(t *testing.T) {
 	f := newBracketFixture(t)
 	path := "seasons/2024/playoffs"
 	forEachViewport(t, func(t *testing.T, vp viewport) {
-		page := newPage(t, vp)
+		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(path))
 		expect := playwright.NewPlaywrightAssertions()
 		if err := expect.Locator(page.Locator("[data-bracket-state]")).ToBeVisible(); err != nil {
@@ -1270,7 +1375,7 @@ const collectLinksScript = `() => {
 // current season, so pages such as the home page legitimately error.
 func assertUnderPrefix(t *testing.T, vp viewport, f *fixture, path string, resolveLinks bool) {
 	t.Helper()
-	page := newPage(t, vp)
+	page := newPageWith(t, pageOptions{Viewport: vp})
 	var (
 		mu        sync.Mutex
 		responses []string
@@ -1311,6 +1416,7 @@ func assertUnderPrefix(t *testing.T, vp viewport, f *fixture, path string, resol
 		t.Fatalf("%s: found no links or assets", path)
 	}
 	unique := map[string]bool{}
+	hiddenTargets := map[string]bool{}
 	for _, link := range links {
 		same, ok := underPrefix(link.URL)
 		if !same {
@@ -1320,16 +1426,15 @@ func assertUnderPrefix(t *testing.T, vp viewport, f *fixture, path string, resol
 			t.Errorf("%s: %s %q resolves to %s, outside %s/", path, link.Kind, link.Raw, link.URL, mountPrefix)
 			continue
 		}
-		if link.Hidden {
-			// The season and competition switchers keep a hidden link per choice
-			// for the script to click. Their prefix is checked above, but some
-			// destinations are not served for every page (a season's forecast
-			// 404s), a product issue outside this task; see the handoff.
-			continue
-		}
 		parsed, _ := url.Parse(link.URL)
 		parsed.Fragment = ""
 		unique[parsed.String()] = true
+		if link.Hidden {
+			// The season and competition switchers keep a hidden link per
+			// choice for the script to click. A season without the feature
+			// answers 404 with the intentional "<feature> unavailable" page.
+			hiddenTargets[parsed.String()] = true
+		}
 	}
 	targets := make([]string, 0, len(unique))
 	for target := range unique {
@@ -1347,9 +1452,16 @@ func assertUnderPrefix(t *testing.T, vp viewport, f *fixture, path string, resol
 			t.Errorf("%s: link %s: %v", path, target, err)
 			continue
 		}
-		if status := response.Status(); status < 200 || status >= 400 {
-			t.Errorf("%s: link %s answered %d", path, target, status)
+		status := response.Status()
+		if status >= 200 && status < 400 {
+			continue
 		}
+		if hiddenTargets[target] && status == http.StatusNotFound {
+			if body, err := response.Text(); err == nil && strings.Contains(body, " is unavailable for ") {
+				continue
+			}
+		}
+		t.Errorf("%s: link %s answered %d", path, target, status)
 	}
 }
 
@@ -1360,6 +1472,8 @@ func testProxyPrefix(t *testing.T, f *fixture) {
 	paths := []string{
 		"seasons",
 		"history",
+		"history/scoring",
+		"seasons/" + currentSeason,
 		"explore",
 		"",
 		seasonPath("fixtures"),
