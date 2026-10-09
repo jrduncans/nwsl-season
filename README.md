@@ -436,6 +436,25 @@ make vet
 make build
 ```
 
+### Test layers
+
+| Layer | Owns | Command |
+| --- | --- | --- |
+| Go unit and integration | Proof engine, sync and cache invariants, forecasts, Explore calculations | `make test` |
+| Go HTTP contract | What the server sends: escaping, relative links, headers and CSP, status codes, no-script fallbacks, cache-only fallback | `make test` |
+| JS geometry units | Pure chart geometry in `explore-geometry.js`, run in the browser | `make test-e2e` |
+| Browser tests | What a user sees after JavaScript runs: interactions, URL state, keyboard, 1280px and 390px, no console errors | `make test-e2e` |
+| Fake-ASA journeys | Sync to page, against `internal/asatest` | `make test-e2e` |
+
+Choose the layer by the assertion: what the server sends is a Go test; what a
+user sees after JavaScript runs is a browser test. Domain logic never moves
+into browser tests. Tests never call the real ASA API.
+
+Browser tests need Chromium. Run `make e2e-install` once (and again after
+upgrading `playwright-go`), then `make test-e2e`. Set `NWSL_E2E_CHROMIUM` to use
+an existing browser. Seed data comes from `internal/apptest`; to look at a
+scenario by hand, run `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams`.
+
 `make build` creates host-platform server, sync, and back-test binaries in `bin/`.
 `make build-linux` creates Linux binaries; ARM64 is the default target and
 `TARGET_ARCH=amd64` selects x86_64:
