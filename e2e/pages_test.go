@@ -37,18 +37,6 @@ import (
 // clipboard cases need browser-context options that newPage does not take, so
 // newPageWith builds the context itself and applies the same failure rules.
 
-// clubLogoPattern matches the team logos that pages load from ASA's S3 bucket.
-const clubLogoPattern = "https://american-soccer-analysis-headshots.s3.amazonaws.com/**"
-
-// logoPNG is a 1x1 transparent PNG.
-var logoPNG = []byte{
-	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-	0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xff, 0xff, 0x3f,
-	0x00, 0x05, 0xfe, 0x02, 0xfe, 0xdc, 0xcc, 0x59, 0xe7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
-	0x44, 0xae, 0x42, 0x60, 0x82,
-}
-
 // pageOptions are the browser-context settings a test needs beyond a viewport.
 type pageOptions struct {
 	Viewport viewport
@@ -86,17 +74,7 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	if err := browserContext.AddInitScript(playwright.Script{Content: playwright.String(cspReporter)}); err != nil {
 		t.Fatalf("add CSP init script: %v", err)
 	}
-	// Pages load club logos from ASA's S3 bucket. Serve a stub so the suite
-	// never depends on (or flakes with) the real network.
-	if err := browserContext.Route(clubLogoPattern, func(route playwright.Route) {
-		if err := route.Fulfill(playwright.RouteFulfillOptions{
-			Status: playwright.Int(200), ContentType: playwright.String("image/png"), Body: logoPNG,
-		}); err != nil {
-			t.Logf("stub club logo: %v", err)
-		}
-	}); err != nil {
-		t.Fatalf("route club logos: %v", err)
-	}
+	stubClubLogos(t, browserContext)
 	traceDir := os.Getenv(traceDirEnv)
 	if traceDir != "" {
 		if err := browserContext.Tracing().Start(playwright.TracingStartOptions{Snapshots: playwright.Bool(true)}); err != nil {

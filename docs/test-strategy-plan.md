@@ -110,7 +110,7 @@ Merge each task before starting tasks that depend on it.
 ### Follow-ups from wave D
 
 - <https://github.com/jrduncans/nwsl-season/issues/124>: stub the S3 logo host
-  in the shared `newPage`. Must land before wave E.
+  in the shared `newPage`. Done in PR #128.
 - <https://github.com/jrduncans/nwsl-season/issues/125>: `apptest` season
   without xG. Deferred.
 - <https://github.com/jrduncans/nwsl-season/issues/123>: all of `e2e` under

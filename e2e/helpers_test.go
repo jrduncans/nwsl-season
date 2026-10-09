@@ -3,7 +3,11 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -45,11 +49,48 @@ const cspReporter = `document.addEventListener("securitypolicyviolation", (event
 	console.error("CSP violation: " + event.violatedDirective + " blocked " + event.blockedURI);
 });`
 
+// clubLogoPattern matches the team logos that pages load from ASA's S3 bucket.
+const clubLogoPattern = "https://american-soccer-analysis-headshots.s3.amazonaws.com/**"
+
+// clubLogoPNG is a small opaque PNG that stands in for team logos, so the tests
+// never contact the logo host.
+var clubLogoPNG = func() []byte {
+	img := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	for y := range 8 {
+		for x := range 8 {
+			img.Set(x, y, color.NRGBA{R: 0x33, G: 0x66, B: 0x99, A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}()
+
+// stubClubLogos answers every request to the club logo host from context with
+// clubLogoPNG. Every context built for a test must call it, so the suite never
+// depends on (or flakes with) the real network.
+func stubClubLogos(t *testing.T, context playwright.BrowserContext) {
+	t.Helper()
+	err := context.Route(clubLogoPattern, func(route playwright.Route) {
+		// A request still in flight when the test ends can fail to fulfill;
+		// logging from here then would panic, so the error is ignored.
+		_ = route.Fulfill(playwright.RouteFulfillOptions{
+			Status: playwright.Int(200), ContentType: playwright.String("image/png"), Body: clubLogoPNG,
+		})
+	})
+	if err != nil {
+		t.Fatalf("route club logos: %v", err)
+	}
+}
+
 // newPage returns a page in a fresh browser context sized to vp. The test
 // fails if the page logs a console error, throws an uncaught error, has a
 // same-origin request fail or return a 4xx/5xx status, or violates the CSP.
 // The failures are reported when the test ends, after the page has settled, so
-// errors raised just after load are caught too.
+// errors raised just after load are caught too. Team logos are served from a
+// stub (see stubClubLogos), so the page never contacts the real logo host.
 func newPage(t *testing.T, vp viewport) playwright.Page {
 	t.Helper()
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
@@ -61,6 +102,7 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 	if err := context.AddInitScript(playwright.Script{Content: playwright.String(cspReporter)}); err != nil {
 		t.Fatalf("add CSP init script: %v", err)
 	}
+	stubClubLogos(t, context)
 	// Tracing snapshots the DOM on every action, which is slow on large
 	// pages, so it only runs when failed tests' traces will be kept.
 	traceDir := os.Getenv(traceDirEnv)
