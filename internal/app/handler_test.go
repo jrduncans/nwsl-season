@@ -1192,20 +1192,18 @@ func TestUnknownSeasonPhaseKeepsActiveSeasonCapabilities(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
-		t.Fatal("unknown incomplete season did not retain the ordinary schedule indicators")
-	}
-	if !strings.Contains(response.Body.String(), `<span class="schedule-key-track" aria-hidden="true">`) || !strings.Contains(response.Body.String(), "SD is remaining schedule difficulty") {
-		t.Fatal("schedule difficulty column rendered without its key")
-	}
-	if !strings.Contains(response.Body.String(), ">Schedule difficulty</a>") || !strings.Contains(response.Body.String(), ">Forecast lab</a>") || !strings.Contains(response.Body.String(), ">Clinching scenarios</a>") {
-		t.Fatal("unknown incomplete season did not retain the ordinary feature navigation")
-	}
+	body := response.Body.String()
+	requireAttr(t, body, "table.standings th", "title", "Venue- and load-adjusted remaining schedule difficulty relative to the league baseline")
+	requireText(t, body, "table.standings th", "SD")
+	requireElements(t, body, `[aria-label="Remaining schedule difficulty unavailable"]`, ".schedule-key-track[aria-hidden=true]")
+	requireText(t, body, "main", "SD is remaining schedule difficulty")
+	requireText(t, body, ".site-nav a", "Schedule difficulty", "Forecast lab", "Clinching scenarios")
 	fixturesResponse := httptest.NewRecorder()
 	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(2), Location: time.UTC}).ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/fixtures", nil))
-	if fixturesResponse.Code != http.StatusOK || !strings.Contains(fixturesResponse.Body.String(), "<h1>Results and fixtures</h1>") {
+	if fixturesResponse.Code != http.StatusOK {
 		t.Fatalf("unknown incomplete fixtures = %d %q", fixturesResponse.Code, fixturesResponse.Body.String())
 	}
+	requireText(t, fixturesResponse.Body.String(), "main h1", "Results and fixtures")
 }
 
 func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
@@ -1217,25 +1215,13 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Venue- and load-adjusted comparison", "Compare venue-only opponent PPG", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha &amp; Co"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
 	body := response.Body.String()
-	for _, text := range []string{"adjusts for the two teams’ relative fixture load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects", "shown for comparison"} {
-		if !strings.Contains(body, text) {
-			t.Errorf("body does not contain schedule explanation %q", text)
-		}
-	}
-	for _, text := range []string{"These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is"} {
-		if strings.Contains(body, text) {
-			t.Errorf("body still contains removed schedule wording %q", text)
-		}
-	}
-	if !strings.Contains(response.Body.String(), `class="comparison-disclosure"`) || !strings.Contains(response.Body.String(), `class="team-schedule-detail"`) {
-		t.Fatal("schedule detail does not use native disclosures")
-	}
+	// The "Toughest remaining schedule" overview and the plot rows are exercised by
+	// testScheduleDifficultyPage in e2e.
+	requireText(t, body, "main", "Remaining schedule difficulty", "Easiest remaining schedule", "Venue- and load-adjusted comparison", "Compare venue-only opponent PPG", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha & Co")
+	requireText(t, body, "main", "adjusts for the two teams’ relative fixture load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects", "shown for comparison")
+	forbidText(t, body, "main", "These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is")
+	requireElements(t, body, ".comparison-disclosure", ".team-schedule-detail")
 }
 
 func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
@@ -1249,11 +1235,7 @@ func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Schedule difficulty is unavailable", "Remaining fixtures for Alpha &amp; Co", "Bravo FC", "Unavailable"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
+	requireText(t, response.Body.String(), "main", "Schedule difficulty is unavailable", "Remaining fixtures for Alpha & Co", "Bravo FC", "Unavailable")
 }
 
 func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
@@ -1270,12 +1252,11 @@ func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
 	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/schedule-difficulty", nil))
 
 	body := response.Body.String()
-	if response.Code != http.StatusOK || !strings.Contains(body, "League-wide schedule comparison is unavailable") {
+	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d; body=%s", response.Code, body)
 	}
-	if strings.Contains(body, "Toughest remaining schedule") || strings.Contains(body, "Venue-adjusted comparison") {
-		t.Fatal("partial data rendered league-wide comparison")
-	}
+	requireText(t, body, "main", "League-wide schedule comparison is unavailable")
+	forbidText(t, body, "main", "Toughest remaining schedule", "Venue-adjusted comparison")
 }
 
 func TestScheduleDifficultyRendersMissingVenueSplitAndNoFixturesAccurately(t *testing.T) {
