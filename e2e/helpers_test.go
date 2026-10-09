@@ -99,7 +99,7 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 		mu.Unlock()
 
 		if dir := os.Getenv(traceDirEnv); dir != "" && t.Failed() {
-			if err := os.MkdirAll(dir, 0o750); err != nil {
+			if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // G703: dir is the developer-set trace directory, not request input
 				t.Logf("create trace directory: %v", err)
 			} else if err := context.Tracing().Stop(filepath.Join(dir, traceName(t, vp)+".zip")); err != nil {
 				t.Logf("save trace: %v", err)

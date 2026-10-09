@@ -53,7 +53,7 @@ func newFixture(t *testing.T) *fixture {
 	// apart. Kickoffs are relative to the wall clock because the syncer stamps
 	// its operations with real time. The first round was 105 days ago, so the
 	// first 15 rounds are played and the other half is ahead.
-	start := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -105).Add(19 * time.Hour)
+	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -105).Add(19 * time.Hour)
 	fake := asatest.New(t)
 	season := asatest.Season(16, start)
 	for i := range season.Games {

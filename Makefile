@@ -44,6 +44,19 @@ test-clinching:
 	go test ./internal/scenarios ./internal/clinching ./internal/qualification
 	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode)'
 
+# Browser journeys (build tag e2e) in headless Chromium; a plain `go test ./...` never needs a browser.
+# Run `make e2e-install` once first (and again after upgrading playwright-go); tests never download anything.
+# NWSL_E2E_CHROMIUM=/path/to/chromium uses a preinstalled browser instead.
+.PHONY: test-e2e
+test-e2e:
+	go test -tags e2e -count=1 ./e2e/...
+
+# Installs the Playwright driver and Chromium that match the playwright-go version in go.mod.
+# Honors PLAYWRIGHT_BROWSERS_PATH and PLAYWRIGHT_DRIVER_PATH. CI adds --with-deps.
+.PHONY: e2e-install
+e2e-install:
+	go run github.com/mxschmitt/playwright-go/cmd/playwright install chromium
+
 # Benchmark budget guards. Budgets count work, not time, so they are stable on CI.
 .PHONY: test-guards
 test-guards:
