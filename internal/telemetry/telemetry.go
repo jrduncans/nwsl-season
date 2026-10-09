@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otellog "go.opentelemetry.io/otel/log"
-	"go.opentelemetry.io/otel/log/global"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -138,7 +137,7 @@ func Configure(ctx context.Context, logger *slog.Logger, fallbackServiceName str
 	}
 
 	otel.SetTracerProvider(traces)
-	global.SetLoggerProvider(logs)
+	otel.SetLoggerProvider(logs)
 	if metrics != nil {
 		otel.SetMeterProvider(metrics)
 	}
@@ -180,7 +179,7 @@ func Tracer() oteltrace.Tracer { return otel.Tracer(instrumentationName) }
 func Meter() otelmetric.Meter { return otel.Meter(instrumentationName) }
 
 // Logger returns the common application logger for manually emitted log records.
-func Logger() otellog.Logger { return global.GetLoggerProvider().Logger(instrumentationName) }
+func Logger() otellog.Logger { return otel.GetLoggerProvider().Logger(instrumentationName) }
 
 // RecordError emits a correlated exception log record and marks span as failed.
 // Prefer RecordErrorWithCode for a stable identifier of the failure site.

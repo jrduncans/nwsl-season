@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	otellog "go.opentelemetry.io/otel/log"
-	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -206,10 +205,10 @@ func TestRecordErrorWithCode(t *testing.T) {
 	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
 	logExporter := &inMemoryLogExporter{}
 	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
-	previousLogProvider := global.GetLoggerProvider()
-	global.SetLoggerProvider(logProvider)
+	previousLogProvider := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(logProvider)
 	t.Cleanup(func() {
-		global.SetLoggerProvider(previousLogProvider)
+		otel.SetLoggerProvider(previousLogProvider)
 		_ = logProvider.Shutdown(context.Background())
 	})
 
@@ -278,10 +277,10 @@ func TestRecordErrorWithCode(t *testing.T) {
 func TestRecordErrorWithUnknownCodeUsesGenericEvent(t *testing.T) {
 	logExporter := &inMemoryLogExporter{}
 	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
-	previousLogProvider := global.GetLoggerProvider()
-	global.SetLoggerProvider(logProvider)
+	previousLogProvider := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(logProvider)
 	t.Cleanup(func() {
-		global.SetLoggerProvider(previousLogProvider)
+		otel.SetLoggerProvider(previousLogProvider)
 		_ = logProvider.Shutdown(context.Background())
 	})
 
@@ -340,10 +339,10 @@ func TestExceptionSeverityReflectsDisposition(t *testing.T) {
 			defer func() { _ = traceProvider.Shutdown(context.Background()) }()
 			logExporter := &inMemoryLogExporter{}
 			logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
-			previousLogProvider := global.GetLoggerProvider()
-			global.SetLoggerProvider(logProvider)
+			previousLogProvider := otel.GetLoggerProvider()
+			otel.SetLoggerProvider(logProvider)
 			t.Cleanup(func() {
-				global.SetLoggerProvider(previousLogProvider)
+				otel.SetLoggerProvider(previousLogProvider)
 				_ = logProvider.Shutdown(context.Background())
 			})
 
@@ -371,10 +370,10 @@ func TestRecordErrorWithTypeAlignsWrappedJoinedErrorAcrossSignals(t *testing.T) 
 	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
 	logExporter := &inMemoryLogExporter{}
 	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
-	previousLogProvider := global.GetLoggerProvider()
-	global.SetLoggerProvider(logProvider)
+	previousLogProvider := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(logProvider)
 	t.Cleanup(func() {
-		global.SetLoggerProvider(previousLogProvider)
+		otel.SetLoggerProvider(previousLogProvider)
 		_ = logProvider.Shutdown(context.Background())
 	})
 
@@ -446,10 +445,10 @@ func TestMarkErrorDoesNotEmitExceptionLog(t *testing.T) {
 	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
 	logExporter := &inMemoryLogExporter{}
 	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
-	previousLogProvider := global.GetLoggerProvider()
-	global.SetLoggerProvider(logProvider)
+	previousLogProvider := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(logProvider)
 	t.Cleanup(func() {
-		global.SetLoggerProvider(previousLogProvider)
+		otel.SetLoggerProvider(previousLogProvider)
 		_ = logProvider.Shutdown(context.Background())
 	})
 

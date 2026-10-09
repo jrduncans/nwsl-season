@@ -17,7 +17,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	otellog "go.opentelemetry.io/otel/log"
-	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -133,10 +132,10 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 	otel.SetTracerProvider(traceProvider)
 	logExporter := &syncerLogExporter{}
 	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
-	previousLogProvider := global.GetLoggerProvider()
-	global.SetLoggerProvider(logProvider)
+	previousLogProvider := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(logProvider)
 	t.Cleanup(func() {
-		global.SetLoggerProvider(previousLogProvider)
+		otel.SetLoggerProvider(previousLogProvider)
 		_ = logProvider.Shutdown(context.Background())
 		otel.SetTracerProvider(previousTraceProvider)
 		_ = traceProvider.Shutdown(context.Background())
