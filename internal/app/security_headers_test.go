@@ -98,7 +98,7 @@ func TestTemplatesAndScriptsStayWithinContentSecurityPolicy(t *testing.T) {
 	}
 
 	blockedScriptAPI := regexp.MustCompile(`\beval\(|new Function\(|\bfetch\(|XMLHttpRequest|EventSource|WebSocket|sendBeacon`)
-	for _, path := range []string{"static/explore.js", "static/standings.js"} {
+	for _, path := range []string{"static/explore.js", "static/explore-geometry.js", "static/standings.js"} {
 		content, err := fs.ReadFile(pageFiles, path)
 		if err != nil {
 			t.Fatal(err)

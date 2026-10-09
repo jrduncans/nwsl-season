@@ -20,6 +20,9 @@ type explorePage struct {
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
 	ChartLibraryPath, ChartLabelsPath string
+	// GeometryPath is the versioned link to explore-geometry.js, which must
+	// load before explore.js (the page's ScriptPath).
+	GeometryPath string
 }
 
 // exploreViewLabels holds each Explore tab's visible name, keyed by view, or by
@@ -110,6 +113,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	}
 	page.Title = label + " · Explore"
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
+	page.GeometryPath = staticURL(r.URL.Path, "explore-geometry.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
 	page.ChartLabelsPath = relativeURL(r.URL.Path, "/static/vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")
 	scope := a.requestScope(r)

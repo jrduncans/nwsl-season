@@ -265,6 +265,7 @@
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>
 <script src="{{.ChartLabelsPath}}" defer></script>
+<script src="{{.GeometryPath}}" defer></script>
 {{template "foot" .}}{{end}}
 {{define "exploreTeamColumn"}}<a href="{{.URL}}" data-team-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a>{{end}}
 {{define "exploreHistoryColumn"}}<a href="{{.URL}}" data-history-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a>{{end}}
