@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -54,9 +56,12 @@ func TestStageRoutesRedirectLegacyAndRenderPlayoffFacts(t *testing.T) {
 	}
 	playoffs := httptest.NewRecorder()
 	handler.ServeHTTP(playoffs, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/fixtures", nil))
-	if playoffs.Code != http.StatusOK || !strings.Contains(playoffs.Body.String(), "Knockout game") || !strings.Contains(playoffs.Body.String(), "120 minutes") || strings.Contains(playoffs.Body.String(), "Clinching scenarios") || !strings.Contains(playoffs.Body.String(), "data-stage-selector") {
+	if playoffs.Code != http.StatusOK {
 		t.Fatalf("playoffs=%d %s", playoffs.Code, playoffs.Body.String())
 	}
+	requireText(t, playoffs.Body.String(), "main", "Knockout game", "120 minutes")
+	forbidRaw(t, playoffs.Body.String(), "Clinching scenarios")
+	requireElements(t, playoffs.Body.String(), "[data-stage-selector]")
 	unknown := httptest.NewRecorder()
 	handler.ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/seasons/2026/not-a-stage", nil))
 	if unknown.Code != http.StatusNotFound {
@@ -81,16 +86,14 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 	if root.Code != http.StatusOK {
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
-	for _, want := range []string{"Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80", "data-bracket-state"} {
-		if !strings.Contains(root.Body.String(), want) {
-			t.Errorf("bracket root missing %q", want)
-		}
-	}
+	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80")
 	fixtures := httptest.NewRecorder()
 	handler.ServeHTTP(fixtures, httptest.NewRequest(http.MethodGet, "/seasons/2024/playoffs/fixtures", nil))
-	if fixtures.Code != http.StatusOK || strings.Contains(fixtures.Body.String(), "data-bracket-state") || !strings.Contains(fixtures.Body.String(), "Knockout game") {
+	if fixtures.Code != http.StatusOK {
 		t.Fatalf("fixtures route did not remain chronological: %d %s", fixtures.Code, fixtures.Body.String())
 	}
+	forbidElements(t, fixtures.Body.String(), "[data-bracket-state]")
+	requireText(t, fixtures.Body.String(), "main", "Knockout game")
 }
 
 func TestBracketRootStatesKeepFactsAndRelativeFallback(t *testing.T) {
@@ -136,17 +139,17 @@ func TestBracketRootStatesKeepFactsAndRelativeFallback(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewHandler(fakeStore{season: tc.data}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2024/playoffs", nil))
 			body := response.Body.String()
+			if response.Code != http.StatusOK {
+				t.Fatalf("%s playoff root = %d %s", tc.name, response.Code, body)
+			}
+			requireText(t, body, "main", tc.notice)
 			if tc.empty {
-				if response.Code != http.StatusOK || strings.Contains(body, "data-bracket-state") || !strings.Contains(body, tc.notice) {
-					t.Fatalf("empty playoff root = %d %s", response.Code, body)
-				}
+				forbidElements(t, body, "[data-bracket-state]")
 				return
 			}
-			if response.Code != http.StatusOK || !strings.Contains(body, `data-bracket-state="`+tc.state+`"`) || !strings.Contains(body, tc.notice) {
-				t.Fatalf("bracket %s = %d %s", tc.name, response.Code, body)
-			}
-			if tc.wantSource && !strings.Contains(body, `href="playoffs/fixtures"`) {
-				t.Fatalf("mismatch did not retain the factual-results fallback: %s", body)
+			requireElements(t, body, `[data-bracket-state="`+tc.state+`"]`)
+			if tc.wantSource {
+				requireElements(t, body, `main a[href="playoffs/fixtures"]`)
 			}
 		})
 	}
@@ -164,28 +167,34 @@ func TestUnpopulatedKnockoutsAreNotLinkedOrRenderedAsEmptyBrackets(t *testing.T)
 
 	regular := httptest.NewRecorder()
 	handler.ServeHTTP(regular, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season", nil))
-	if regular.Code != http.StatusOK || strings.Contains(regular.Body.String(), `data-stage-destination="playoffs"`) {
-		t.Fatalf("regular page linked an unpopulated playoff stage: %d %s", regular.Code, regular.Body.String())
+	if regular.Code != http.StatusOK {
+		t.Fatalf("regular page = %d %s", regular.Code, regular.Body.String())
 	}
+	forbidElements(t, regular.Body.String(), `[data-stage-destination="playoffs"]`)
 
 	populated := httptest.NewRecorder()
 	handler.ServeHTTP(populated, httptest.NewRequest(http.MethodGet, "/seasons/2025/playoffs", nil))
-	if populated.Code != http.StatusOK || strings.Contains(populated.Body.String(), `href="../2026/playoffs"`) || !strings.Contains(populated.Body.String(), `href="../2026/regular-season"`) {
-		t.Fatalf("season selector retained an unpopulated playoff target: %d %s", populated.Code, populated.Body.String())
+	if populated.Code != http.StatusOK {
+		t.Fatalf("populated playoffs = %d %s", populated.Code, populated.Body.String())
 	}
+	forbidElements(t, populated.Body.String(), `[href="../2026/playoffs"]`)
+	requireElements(t, populated.Body.String(), `[href="../2026/regular-season"]`)
 
 	archive := httptest.NewRecorder()
 	handler.ServeHTTP(archive, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if archive.Code != http.StatusOK || strings.Contains(archive.Body.String(), `href="seasons/2026/playoffs"`) {
-		t.Fatalf("archive linked an unpopulated playoff stage: %d %s", archive.Code, archive.Body.String())
+	if archive.Code != http.StatusOK {
+		t.Fatalf("archive = %d %s", archive.Code, archive.Body.String())
 	}
+	forbidElements(t, archive.Body.String(), `[href="seasons/2026/playoffs"]`)
 
 	empty := httptest.NewRecorder()
 	emptyStore := seasonArchiveStore{fakeStore: fakeStore{season: cache.SeasonData{}}, readiness: readiness}
 	NewHandler(emptyStore).ServeHTTP(empty, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs", nil))
-	if empty.Code != http.StatusOK || strings.Contains(empty.Body.String(), "data-bracket-state") || !strings.Contains(empty.Body.String(), "Playoffs fixtures have not been loaded yet") {
+	if empty.Code != http.StatusOK {
 		t.Fatalf("unpopulated playoff root = %d %s", empty.Code, empty.Body.String())
 	}
+	forbidElements(t, empty.Body.String(), "[data-bracket-state]")
+	requireText(t, empty.Body.String(), "main", "Playoffs fixtures have not been loaded yet")
 }
 
 func TestFixtureMinutesAreKnockoutFactsOnly(t *testing.T) {
@@ -193,15 +202,17 @@ func TestFixtureMinutesAreKnockoutFactsOnly(t *testing.T) {
 	data.Games[0].ExpandedMinutes = sql.NullInt64{Int64: 120, Valid: true}
 	regular := httptest.NewRecorder()
 	NewHandler(fakeStore{season: data}).ServeHTTP(regular, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/fixtures", nil))
-	if regular.Code != http.StatusOK || strings.Contains(regular.Body.String(), "120 minutes") {
+	if regular.Code != http.StatusOK {
 		t.Fatalf("regular=%d %s", regular.Code, regular.Body.String())
 	}
+	forbidRaw(t, regular.Body.String(), "120 minutes")
 	data.Games[0].Stage, data.Games[0].KnockoutGame = "Playoffs", true
 	playoffs := httptest.NewRecorder()
 	NewHandler(fakeStore{season: data}).ServeHTTP(playoffs, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/fixtures", nil))
-	if playoffs.Code != http.StatusOK || !strings.Contains(playoffs.Body.String(), "120 minutes") {
+	if playoffs.Code != http.StatusOK {
 		t.Fatalf("playoffs=%d %s", playoffs.Code, playoffs.Body.String())
 	}
+	requireText(t, playoffs.Body.String(), "main", "120 minutes")
 }
 
 func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
@@ -218,14 +229,12 @@ func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
 			t.Fatalf("%s status = %d; body=%s", path, response.Code, response.Body.String())
 		}
 		body := response.Body.String()
-		for _, want := range []string{">Challenge Cup Group Stage</option>", "2–1", "xG 1.40–0.70", "data-stage-selector"} {
-			if !strings.Contains(body, want) {
-				t.Errorf("%s missing %q", path, want)
-			}
-		}
-		for _, forbidden := range []string{"<h1>Standings</h1>", "Matchday 1", "Clinching scenarios", "Forecast lab", "Schedule difficulty"} {
-			if strings.Contains(body, forbidden) {
-				t.Errorf("%s unexpectedly rendered %q", path, forbidden)
+		requireText(t, body, "[data-stage-selector] option", "Challenge Cup Group Stage")
+		requireText(t, body, "main", "2–1", "xG 1.40–0.70")
+		forbidRaw(t, body, "Matchday 1", "Clinching scenarios", "Forecast lab", "Schedule difficulty")
+		for _, heading := range find(t, body, "h1") {
+			if text(heading) == "Standings" {
+				t.Errorf("%s unexpectedly rendered a Standings heading", path)
 			}
 		}
 	}
@@ -260,26 +269,18 @@ func TestSeasonArchiveListsPublicSeasonsWithoutChangingGlobalNavigation(t *testi
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, want := range []string{
-		"<h1>Seasons</h1>",
-		"Current season",
-		"Historical season",
-		`class="brand" href="."`,
-		`href="seasons/2026/regular-season"`,
-		`href="seasons/2026/regular-season/fixtures"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("archive missing %q", want)
-		}
+	requireExact(t, body, "main h1", "Seasons")
+	requireText(t, body, "main", "Current season", "Historical season")
+	requireElements(t, body, `a.brand[href="."]`, `[href="seasons/2026/regular-season"]`, `[href="seasons/2026/regular-season/fixtures"]`)
+	var years []string
+	for _, heading := range find(t, body, "main h2") {
+		years = append(years, text(heading))
 	}
-	if current, historical := strings.Index(body, "<h2>2026</h2>"), strings.Index(body, "<h2>2025</h2>"); current < 0 || historical < 0 || current > historical {
-		t.Errorf("season order is not descending: 2026=%d 2025=%d", current, historical)
+	if current, historical := slices.Index(years, "2026"), slices.Index(years, "2025"); current < 0 || historical < 0 || current > historical {
+		t.Errorf("season order is not descending: %v", years)
 	}
-	for _, forbidden := range []string{`aria-label="Season sections"`, "Data fetch time unavailable"} {
-		if strings.Contains(body, forbidden) {
-			t.Errorf("archive unexpectedly contains %q", forbidden)
-		}
-	}
+	forbidElements(t, body, ".site-nav")
+	forbidRaw(t, body, "Data fetch time unavailable")
 }
 
 func TestSeasonArchiveUsesOptionalReadinessAndReportsReadFailure(t *testing.T) {
@@ -292,17 +293,14 @@ func TestSeasonArchiveUsesOptionalReadinessAndReportsReadFailure(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, want := range []string{"Not published", "Partial data"} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("archive missing readiness label %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), ".season-archive-stage", "Not published", "Partial data")
 
 	failure := httptest.NewRecorder()
 	NewHandler(seasonArchiveStore{err: errors.New("readiness failed")}).ServeHTTP(failure, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if failure.Code != http.StatusInternalServerError || !strings.Contains(failure.Body.String(), "load season archive readiness") {
+	if failure.Code != http.StatusInternalServerError {
 		t.Fatalf("readiness failure = %d %q", failure.Code, failure.Body.String())
 	}
+	requireText(t, failure.Body.String(), "body", "load season archive readiness")
 }
 
 func TestSeasonArchiveGroupsAllPublicStagesInCatalogOrder(t *testing.T) {
@@ -397,9 +395,8 @@ func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
 	if err := application.app.pages.ExecuteTemplate(&fixtures, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true, HasUpcomingFixtures: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fixtures.String(), "Scheduled fixtures include a match outlook") || strings.Contains(fixtures.String(), "Explore the season forecast") {
-		t.Fatalf("fixtures outlook note linked an unavailable forecast: %s", fixtures.String())
-	}
+	requireText(t, fixtures.String(), ".fixture-outlook-note", "Scheduled fixtures include a match outlook")
+	forbidRaw(t, fixtures.String(), "Explore the season forecast")
 
 	var toggled bytes.Buffer
 	if err := application.app.pages.ExecuteTemplate(&toggled, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true, HasResults: true, HasUpcomingFixtures: true, ShowFixtureViewToggle: true}); err != nil {
@@ -416,13 +413,12 @@ func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := standings.String()
-	for _, want := range []string{"Per game", "Totals"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("score-only standings missing %q", want)
+	requireText(t, body, "body", "Per game", "Totals")
+	forbidElements(t, body, "[data-standings-stat-button]")
+	for _, button := range find(t, body, "button") {
+		if text(button) == "xG" {
+			t.Errorf("score-only standings rendered an xG control: %s", body)
 		}
-	}
-	if strings.Contains(body, `data-standings-stat-button`) || strings.Contains(body, ">xG<") {
-		t.Errorf("score-only standings rendered xG controls: %s", body)
 	}
 }
 
@@ -437,16 +433,10 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 		t.Fatalf("season status = %d, want 200", seasonResponse.Code)
 	}
 	seasonBody := seasonResponse.Body.String()
-	for _, want := range []string{unknownFormatNotice, `href="regular-season/fixtures"`} {
-		if !strings.Contains(seasonBody, want) {
-			t.Errorf("factual season page missing %q", want)
-		}
-	}
-	for _, forbidden := range []string{`<table class="standings"`, "qualification-badge", "playoff-line", "expected regular-season", "16 expected", "30 fixtures", "top 8"} {
-		if strings.Contains(seasonBody, forbidden) {
-			t.Errorf("factual season page contains %q", forbidden)
-		}
-	}
+	requireText(t, seasonBody, "main", unknownFormatNotice)
+	requireElements(t, seasonBody, `[href="regular-season/fixtures"]`)
+	forbidElements(t, seasonBody, "table.standings", ".qualification-badge", ".playoff-line")
+	forbidRaw(t, seasonBody, "expected regular-season", "16 expected", "30 fixtures", "top 8")
 
 	fixturesResponse := httptest.NewRecorder()
 	handler.ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2099/regular-season/fixtures", nil))
@@ -454,16 +444,10 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 		t.Fatalf("fixtures status = %d, want 200", fixturesResponse.Code)
 	}
 	fixturesBody := fixturesResponse.Body.String()
-	for _, want := range []string{unknownFormatNotice, "2–1", "xG 2.36–1.11", "Results &amp; fixtures"} {
-		if !strings.Contains(fixturesBody, want) {
-			t.Errorf("factual fixtures page missing %q", want)
-		}
-	}
-	for _, forbidden := range []string{"expected regular-season", "fixture-outlook", "Forecast lab", "Schedule difficulty", "Clinching scenarios"} {
-		if strings.Contains(fixturesBody, forbidden) {
-			t.Errorf("factual fixtures page contains %q", forbidden)
-		}
-	}
+	requireText(t, fixturesBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
+	requireText(t, fixturesBody, ".site-nav", "Results & fixtures")
+	forbidRaw(t, fixturesBody, "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios")
+	forbidRaw(t, fixturesBody, "fixture-outlook")
 }
 
 func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
@@ -480,42 +464,20 @@ func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
 			t.Fatalf("%s status = %d, want 200", path, response.Code)
 		}
 		body := response.Body.String()
-		for _, want := range []string{`data-season-selector`, `class="season-selector"`, `<span>Season</span>`, `>2026</option>`} {
-			if !strings.Contains(body, want) {
-				t.Errorf("%s missing %q", path, want)
-			}
-		}
+		requireElements(t, body, "[data-season-selector]", ".season-selector")
+		requireText(t, body, ".season-selector span", "Season")
+		requireText(t, body, "[data-season-selector] option", "2026")
 		if strings.HasSuffix(path, "/fixtures") {
-			for _, want := range []string{"<h1>Results</h1>", "2–1"} {
-				if !strings.Contains(body, want) {
-					t.Errorf("%s missing %q", path, want)
-				}
-			}
-			for _, forbidden := range []string{"Historical results and xG", `data-fixture-view-toggle`, `data-fixture-view="upcoming"`, ">Upcoming<"} {
-				if strings.Contains(body, forbidden) {
-					t.Errorf("%s unexpectedly rendered %q", path, forbidden)
-				}
-			}
+			requireExact(t, body, "main h1", "Results")
+			requireText(t, body, "main", "2–1")
+			forbidRaw(t, body, "Historical results and xG", "Upcoming")
+			forbidElements(t, body, "[data-fixture-view-toggle]", `[data-fixture-view="upcoming"]`)
 		} else {
-			for _, want := range []string{" standings</span> · <span data-standings-mode-label data-per-game=\"per game\" data-total=\"totals\">totals</span></span></caption>", `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, `data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`} {
-				if !strings.Contains(body, want) {
-					t.Errorf("%s missing %q", path, want)
-				}
-			}
-			if strings.Contains(body, "competition format") || strings.Contains(body, "playoff line") {
-				t.Errorf("%s still renders the removed historical-format caveat", path)
-			}
+			requireText(t, body, "table.standings caption", "standings · totals")
+			requireElements(t, body, `[data-standings-mode="total"]`, `[data-standings-mode-value="per-game"]`, `[data-standings-mode-value="total"]`, `[data-per-game-playoff-line="true"]`, `[data-total-playoff-line="true"]`)
+			forbidRaw(t, body, "competition format", "playoff line")
 		}
-		for _, hidden := range []string{"All seasons", "2026 Regular Season", "2025 Regular Season"} {
-			if strings.Contains(body, hidden) {
-				t.Errorf("%s unexpectedly rendered %q", path, hidden)
-			}
-		}
-		for _, forbidden := range []string{"Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8"} {
-			if strings.Contains(body, forbidden) {
-				t.Errorf("%s unexpectedly rendered %q", path, forbidden)
-			}
-		}
+		forbidRaw(t, body, "All seasons", "2026 Regular Season", "2025 Regular Season", "Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8")
 	}
 }
 
@@ -530,9 +492,11 @@ func TestHistoricalCatalogEmptyCacheRendersLoadState(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewHandler(test.store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2018/regular-season/fixtures", nil))
-			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.notice) || !strings.Contains(response.Body.String(), "data-season-selector") || !strings.Contains(response.Body.String(), "Browse seasons") {
+			if response.Code != http.StatusOK {
 				t.Fatalf("historical empty response = %d %q", response.Code, response.Body.String())
 			}
+			requireText(t, response.Body.String(), "main", html.UnescapeString(test.notice), "Browse seasons")
+			requireElements(t, response.Body.String(), "[data-season-selector]")
 		})
 	}
 }
@@ -542,8 +506,8 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 	for _, test := range []struct {
 		name, path, destination string
 	}{
-		{name: "standings", path: "/seasons/2026/regular-season", destination: `href="../2025/regular-season"`},
-		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: `href="../../2025/regular-season/fixtures"`},
+		{name: "standings", path: "/seasons/2026/regular-season", destination: "../2025/regular-season"},
+		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: "../../2025/regular-season/fixtures"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -552,14 +516,10 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 			}
 			body := response.Body.String()
-			for _, want := range []string{`data-season-switcher`, `class="season-selector"`, `<span>Season</span>`, `data-season-selector`, `value="2025"`, test.destination, `data-season-destination="2025" hidden`, `>2025</option>`} {
-				if !strings.Contains(body, want) {
-					t.Errorf("body does not contain %q", want)
-				}
-			}
-			if strings.Contains(body, "All seasons") {
-				t.Error("page still presents the season catalog as a universal parent")
-			}
+			requireElements(t, body, "[data-season-switcher] .season-selector", "[data-season-selector] option[value=2025]", `[data-season-destination="2025"][hidden][href="`+test.destination+`"]`)
+			requireText(t, body, ".season-selector span", "Season")
+			requireText(t, body, "[data-season-selector] option", "2025")
+			forbidRaw(t, body, "All seasons")
 		})
 	}
 }
@@ -573,8 +533,9 @@ func TestUnavailableFeaturesDoNotReadUnknownScope(t *testing.T) {
 		if response.Code != http.StatusNotFound {
 			t.Errorf("%s status = %d, want 404", route, response.Code)
 		}
-		if !strings.Contains(response.Body.String(), "unavailable for 2099 Regular Season") || !strings.Contains(response.Body.String(), "Return to the season") || strings.Contains(response.Body.String(), `href="/`) {
-			t.Errorf("%s did not render explanatory relative unavailable page", route)
+		requireText(t, response.Body.String(), "main", "unavailable for 2099 Regular Season", "Return to the season")
+		if strings.Contains(response.Body.String(), `href="/`) {
+			t.Errorf("%s rendered an absolute path", route)
 		}
 	}
 	if store.seasonReads != 0 {
@@ -620,16 +581,15 @@ func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
 	if pageResponse.Code != http.StatusOK {
 		t.Fatalf("base-path season status = %d, want 200", pageResponse.Code)
 	}
-	if !strings.Contains(pageResponse.Body.String(), `data-season-selector`) || !strings.Contains(pageResponse.Body.String(), `value="2025"`) || !strings.Contains(pageResponse.Body.String(), `href="../2025/regular-season"`) {
-		t.Fatalf("base-path season did not retain relative season destinations: %s", pageResponse.Body.String())
-	}
+	requireElements(t, pageResponse.Body.String(), "[data-season-selector] option[value=2025]", `[href="../2025/regular-season"]`)
 
 	archiveRequest := httptest.NewRequest(http.MethodGet, "/explorer/seasons", nil)
 	archiveResponse := httptest.NewRecorder()
 	handler.ServeHTTP(archiveResponse, archiveRequest)
-	if archiveResponse.Code != http.StatusOK || !strings.Contains(archiveResponse.Body.String(), `href="seasons/2026/regular-season"`) {
+	if archiveResponse.Code != http.StatusOK {
 		t.Fatalf("base-path archive = status %d, body %q", archiveResponse.Code, archiveResponse.Body.String())
 	}
+	requireElements(t, archiveResponse.Body.String(), `[href="seasons/2026/regular-season"]`)
 
 	staticRequest := httptest.NewRequest(http.MethodGet, "/explorer/static/site.css", nil)
 	staticResponse := httptest.NewRecorder()
@@ -727,29 +687,29 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"<span>Season</span>", ">2026</option>", ">Regular Season</option>", "<h1>Standings</h1>", "Alpha &amp; Co", "Bravo FC", "Forecast lab", "Results &amp; fixtures", "Schedule difficulty", "Data last fetched on", `class="github-link" href="https://github.com/jrduncans/nwsl-season"`, `aria-label="View the project source on GitHub"`, ">SD</th>", "Harder"} {
-		if !strings.Contains(body, text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
-	footerStart := strings.Index(body, `<footer class="site-footer">`)
-	if footerStart < 0 {
-		t.Fatal("body does not contain the site footer")
-	}
-	if strings.Contains(body[:footerStart], "Data last fetched on") {
+	requireText(t, body, ".season-selector span", "Season")
+	requireText(t, body, ".season-selector option", "2026", "Regular Season")
+	requireExact(t, body, "main h1", "Standings")
+	requireText(t, body, "table.standings", "Alpha & Co", "Bravo FC", "Harder")
+	requireText(t, body, "table.standings th", "SD")
+	requireText(t, body, ".site-nav", "Forecast lab", "Results & fixtures", "Schedule difficulty")
+	requireAttr(t, body, "a.github-link", "href", "https://github.com/jrduncans/nwsl-season")
+	requireAttr(t, body, "a.github-link", "aria-label", "View the project source on GitHub")
+	if footer := strings.Index(body, "<footer"); footer < 0 || strings.Contains(body[:footer], "Data last fetched on") {
 		t.Fatal("season page renders the data fetch time above the footer")
 	}
-	if !strings.Contains(body[footerStart:], `Data last fetched on <time datetime="2026-07-09T20:00:00Z" data-local-time="2026-07-09T20:00:00Z">Jul 9, 2026 at 8:00 PM UTC</time>.`) {
-		t.Fatal("site footer does not render the data fetch time with a browser-local timestamp")
-	}
-	if strings.Contains(response.Body.String(), "<h1>Remaining schedule difficulty</h1>") || strings.Contains(response.Body.String(), "Toughest remaining schedule") {
-		t.Fatal("main season page still renders the prominent schedule-difficulty summary")
-	}
-	for _, text := range []string{`data-standings-mode="per-game"`, `data-standings-stat="goals"`, ">Goals</button>", ">xG</button>", ">Per game</button>", ">Totals</button>", `data-standings-stat-column="goals" title="Goals for / against">+/-</th>`, `data-standings-stat-column="xg" title="Expected goals for / against">xG +/-</th>`, `data-total="2/1" data-per-game="2.00/1.00"`, "Incomplete xG data:"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain default per-game standings control %q", text)
-		}
-	}
+	forbidRaw(t, body, "Toughest remaining schedule")
+	forbidText(t, body, "main h1", "Remaining schedule difficulty")
+	requireText(t, body, ".site-footer", "Data last fetched on Jul 9, 2026 at 8:00 PM UTC.")
+	requireAttr(t, body, ".site-footer time", "datetime", "2026-07-09T20:00:00Z")
+	requireAttr(t, body, ".site-footer time", "data-local-time", "2026-07-09T20:00:00Z")
+	requireText(t, body, "main button", "Goals", "xG", "Per game", "Totals")
+	requireAttr(t, body, "th[data-standings-stat-column=goals]", "title", "Goals for / against")
+	requireText(t, body, "th[data-standings-stat-column=goals]", "+/-")
+	requireAttr(t, body, "th[data-standings-stat-column=xg]", "title", "Expected goals for / against")
+	requireText(t, body, "th[data-standings-stat-column=xg]", "xG +/-")
+	requireText(t, body, "main", "Incomplete xG data:")
+	requireElements(t, body, `[data-total="2/1"][data-per-game="2.00/1.00"]`)
 	for _, logo := range []string{
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`,
 		`src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/bravo.png"`,
@@ -758,14 +718,10 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 			t.Errorf("%s appears %d times, want 1 in the standings", logo, got)
 		}
 	}
-	if strings.Contains(response.Body.String(), "2–1") {
-		t.Fatal("season page still renders fixture results")
-	}
+	forbidRaw(t, body, "2–1", "Clinching is not evaluated")
+	forbidElements(t, body, ".badge")
 	if strings.Contains(response.Body.String(), "<script>alert") {
 		t.Fatal("team name was not escaped")
-	}
-	if strings.Contains(response.Body.String(), "Clinching is not evaluated") || strings.Contains(response.Body.String(), `class="badge"`) {
-		t.Fatal("season page still renders the removed clinching note or misleading indicator")
 	}
 }
 
@@ -777,14 +733,11 @@ func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"data-season-selector", "data-stage-selector", "<h1>Forecast model evaluation</h1>", `data-evaluation-chart`, "Final points error", "Relative to the simple baseline", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Model evaluation"} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	if !strings.Contains(body, "data-season-selector") || !strings.Contains(body, "data-stage-selector") {
-		t.Error("model evaluation is missing the accessible competition selectors")
-	}
+	requireElements(t, body, "[data-season-selector]", "[data-stage-selector]")
+	requireExact(t, body, "main h1", "Forecast model evaluation")
+	requireText(t, body, "main", "Final points error", "Relative to the simple baseline")
+	requireAttrContains(t, body, "[data-evaluation-chart]", "data-evaluation", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1")
+	requireText(t, body, "title", "Model evaluation")
 }
 
 func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
@@ -802,11 +755,11 @@ func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
-	for _, value := range []string{`class="badge qualification-badge"`, "✓ Shield", "Guaranteed achievements: Shield", `class="standings-status elimination-status" role="img" aria-label="Eliminated from playoff contention." title="Eliminated from playoff contention."`, "×</span> Eliminated from playoffs</span>"} {
-		if !strings.Contains(response.Body.String(), value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
+	body := response.Body.String()
+	requireText(t, body, "table.standings .badge.qualification-badge", "✓ Shield")
+	requireText(t, body, "table.standings", "Guaranteed achievements: Shield")
+	requireElements(t, body, `.standings-status.elimination-status[role=img][aria-label="Eliminated from playoff contention."][title="Eliminated from playoff contention."]`)
+	requireText(t, body, "main", "× Eliminated from playoffs")
 }
 
 func TestNonCurrentCatalogSeasonUsesCatalogRulesForStandingsScheduleAndQualification(t *testing.T) {
@@ -827,11 +780,8 @@ func TestNonCurrentCatalogSeasonUsesCatalogRulesForStandingsScheduleAndQualifica
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, want := range []string{`data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`, "6 of 240 expected regular-season fixtures"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("body does not contain %q", want)
-		}
-	}
+	requireElements(t, body, `tr[data-per-game-playoff-line=true]`, `tr[data-total-playoff-line=true]`)
+	requireText(t, body, "main", "6 of 240 expected regular-season fixtures")
 	if got, want := store.qualificationRulesVersions, []string{"2026-regular-v2"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("qualification rules versions = %v, want %v", got, want)
 	}
@@ -855,14 +805,15 @@ func TestSeasonRendersXGInStandingsWithoutCoverageWarning(t *testing.T) {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
 	body := response.Body.String()
-	for _, value := range []string{`data-total="2.36/1.11" data-per-game="2.36/1.11"`, `data-total="&#43;1.25" data-per-game="&#43;1.25"`, `data-standings-caption data-goals-label="2026 Regular Season" data-xg-label="2026 Regular Season xG, ordered by xPts">2026 Regular Season</span> · <span data-standings-mode-label data-per-game="per game" data-total="totals">per game</span> · through Jul 1</span></caption>`, `data-standings-points-label data-goals-label="Pts" data-xg-label="xPts"`, `data-standings-points data-total="3" data-per-game="3.00" data-xg-total="2.47" data-xg-per-game="2.47"`} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain xG value %q", value)
-		}
-	}
-	if strings.Contains(body, "Incomplete xG data:") {
-		t.Fatal("season page warns about xG coverage when every completed match has xG")
-	}
+	requireElements(t, body, `[data-total="2.36/1.11"][data-per-game="2.36/1.11"]`, `[data-total="+1.25"][data-per-game="+1.25"]`)
+	requireText(t, body, "[data-standings-caption]", "2026 Regular Season")
+	requireAttr(t, body, "[data-standings-caption]", "data-xg-label", "2026 Regular Season xG, ordered by xPts")
+	requireText(t, body, "table.standings caption", "2026 Regular Season · per game · through Jul 1")
+	requireAttr(t, body, "[data-standings-caption]", "data-goals-label", "2026 Regular Season")
+	requireAttr(t, body, "th[data-standings-points-label]", "data-goals-label", "Pts")
+	requireAttr(t, body, "th[data-standings-points-label]", "data-xg-label", "xPts")
+	requireElements(t, body, `td[data-standings-points][data-total=3][data-per-game="3.00"][data-xg-total="2.47"][data-xg-per-game="2.47"]`)
+	forbidRaw(t, body, "Incomplete xG data:")
 }
 
 func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
@@ -888,16 +839,13 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{`<details class="clinching-slate">`, "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	for _, value := range []string{"Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield"} {
-		if strings.Contains(body, value) {
-			t.Errorf("body contains removed or internal text %q", value)
-		}
-	}
+	// The slate disclosure and the "can clinch the playoffs" heading are
+	// exercised by TestPagesClinching in e2e.
+	requireText(t, body, "main h2", "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help")
+	requireAttr(t, body, ".clinching-opportunity-elimination h3", "aria-label", "Alpha & Co <script>alert(1)</script> can be eliminated from the playoffs")
+	requireText(t, body, ".clinching-result-group h4", "If Alpha & Co <script>alert(1)</script> wins vs Bravo FC", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	requireText(t, body, "main .clinching-statement", "with 1 win", "Win each of these remaining matches: vs Bravo FC.")
+	forbidRaw(t, body, "Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield")
 }
 
 func TestClinchingNonCurrentCatalogSeasonUsesCatalogRulesVersion(t *testing.T) {
@@ -952,17 +900,10 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Season-long paths without outside help", "These paths may include matches after this slate", `class="clinching-team-card"`, `src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`, "Can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	if strings.Contains(body, "data-clinching-team-filter") || strings.Contains(body, "Show scenarios for") {
-		t.Fatal("body contains the removed clinching team filter")
-	}
-	if strings.Contains(body, `class="clinching-slate"`) {
-		t.Error("body contains an irrelevant included slate")
-	}
+	requireText(t, body, ".clinching-no-help", "Season-long paths without outside help", "These paths may include matches after this slate", "Can clinch the playoffs with 1 win", "Win each of these remaining matches: vs Bravo FC.")
+	requireAttr(t, body, ".clinching-team-card img", "src", "https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png")
+	forbidElements(t, body, "[data-clinching-team-filter]", ".clinching-slate")
+	forbidRaw(t, body, "Show scenarios for")
 }
 
 func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *testing.T) {
@@ -983,14 +924,13 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Recalculation pending.", "Already clinched the Shield", "Already clinched the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the Shield", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the playoffs"} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	if got := strings.Count(body, `class="clinching-status-item"`); got != 2 {
+	requireText(t, body, "main", "Recalculation pending.")
+	requireText(t, body, ".clinching-status-group-clinched h2", "Already clinched the Shield", "Already clinched the playoffs")
+	if got := len(find(t, body, "li.clinching-status-item")); got != 2 {
 		t.Fatalf("clinched status rows = %d, want one row per achievement group", got)
 	}
+	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Alpha & Co <script>alert(1)</script> has already clinched the Shield")
+	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Alpha & Co <script>alert(1)</script> has already clinched the playoffs")
 }
 
 func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
@@ -1015,17 +955,27 @@ func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	alphaCard := strings.Index(body, `<article class="clinching-team-card"><h3><span class="team-name" title="Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;">`)
-	bravoCard := strings.Index(body, `<article class="clinching-team-card"><h3><span class="team-name" title="Bravo FC">`)
-	if alphaCard < 0 || bravoCard < 0 {
-		t.Fatalf("no-help team cards missing; body=%s", body)
+	cards := find(t, body, "article.clinching-team-card")
+	if len(cards) != 2 {
+		t.Fatalf("no-help team cards = %d, want 2", len(cards))
 	}
-	if alphaCard > bravoCard {
-		t.Error("cards are not ordered by the shortest path, then achievement importance")
+	var owners []string
+	for _, card := range cards {
+		names := findIn(t, card, ".team-name")
+		if len(names) == 0 {
+			t.Fatal("no-help team card has no team name")
+		}
+		owners = append(owners, attr(names[0], "title"))
 	}
-	alphaPaths := body[alphaCard:bravoCard]
-	if shield, playoffs := strings.Index(alphaPaths, "Can clinch the Shield"), strings.Index(alphaPaths, "Can clinch the playoffs"); shield < 0 || playoffs < 0 || shield > playoffs {
-		t.Error("paths inside a team card are not ordered by relevance")
+	if !slices.Equal(owners, []string{"Alpha & Co <script>alert(1)</script>", "Bravo FC"}) {
+		t.Fatalf("cards are not ordered by the shortest path, then achievement importance: %q", owners)
+	}
+	var alphaPaths []string
+	for _, path := range findIn(t, cards[0], "summary") {
+		alphaPaths = append(alphaPaths, text(path))
+	}
+	if len(alphaPaths) != 2 || !strings.HasPrefix(alphaPaths[0], "Can clinch the Shield") || !strings.HasPrefix(alphaPaths[1], "Can clinch the playoffs") {
+		t.Errorf("paths inside a team card are not ordered by relevance: %q", alphaPaths)
 	}
 }
 
@@ -1045,22 +995,20 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{`<details class="clinching-slate">`, "Elimination scenarios", "Already eliminated", "Bravo FC has already been eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
+	requireText(t, body, "main", "Elimination scenarios", "Already eliminated")
+	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Bravo FC has already been eliminated from the playoffs")
+	requireAttr(t, body, ".clinching-opportunity-elimination h3", "aria-label", "Alpha & Co <script>alert(1)</script> can be eliminated from the playoffs")
+	requireText(t, body, ".clinching-result-group h4", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	var headings []string
+	for _, heading := range find(t, body, "main h2") {
+		headings = append(headings, text(heading))
 	}
-	alreadyEliminated := strings.Index(body, "<h2>Already eliminated from the playoffs</h2>")
-	conditionalScenarios := strings.Index(body, "<h2>Elimination scenarios</h2>")
+	alreadyEliminated, conditionalScenarios := slices.Index(headings, "Already eliminated from the playoffs"), slices.Index(headings, "Elimination scenarios")
 	if alreadyEliminated < 0 || conditionalScenarios < 0 || alreadyEliminated > conditionalScenarios {
-		t.Fatal("confirmed eliminations are not shown before conditional elimination scenarios")
+		t.Fatalf("confirmed eliminations are not shown before conditional elimination scenarios: %q", headings)
 	}
-	if strings.Contains(body[alreadyEliminated:conditionalScenarios], `class="clinching-opportunity`) {
-		t.Fatal("confirmed eliminations are rendered as large scenario cards")
-	}
-	if strings.Contains(body, "No teams can clinch during this slate.") {
-		t.Fatal("body hides the only actionable elimination scenario")
-	}
+	forbidElements(t, body, ".clinching-status-group-eliminated .clinching-opportunity")
+	forbidRaw(t, body, "No teams can clinch during this slate.")
 }
 
 func TestNoHelpTextUsesWinCountAndHidesUnresolvedReason(t *testing.T) {
@@ -1140,18 +1088,25 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="../regular-season"`, `href="forecast"`, "Scheduled fixtures include a match outlook for each result.", "Outlooks use expected goals, venue, recovery time, and recent fixture load.", `title="Selected Forecast Lab model: xG Poisson (schedule load)"`, ">Match outlook</span>", `aria-label="Match outlook:`, `class="fixture-outlook"`, "Home win <strong>", "Draw <strong>", "Away win <strong>", `class="fixture-outcome-segment fixture-outcome-home"`, `style="--fixture-outcome-share: `} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
+	body := response.Body.String()
+	// The team filter select, its options and the fixture rows'
+	// data-fixture-home-team/away-team hooks are exercised by testFixturesPage in e2e.
+	requireExact(t, body, "main h1", "Results and fixtures")
+	requireText(t, body, "main", "2–1", "xG 2.36–1.11", "Matchday 1", "Show fixtures for")
+	requireElements(t, body, "[data-fixture-team-filter]", "[data-fixture-view-toggle]", "[data-fixture-view-button=results]", "[data-fixture-view-button=upcoming]", "[data-fixture-view=results]", "[data-fixture-view=upcoming]", `[href="../regular-season"]`, `[href="forecast"]`)
+	requireText(t, body, ".fixture-outlook-note", "Scheduled fixtures include a match outlook for each result.", "Outlooks use expected goals, venue, recovery time, and recent fixture load.")
+	requireAttr(t, body, ".fixture-outlook-model", "title", "Selected Forecast Lab model: xG Poisson (schedule load)")
+	requireText(t, body, ".fixture-outlook-model", "Match outlook")
+	requireAttrContains(t, body, ".fixture-outlook", "aria-label", "Match outlook:")
+	requireText(t, body, ".fixture-outlook", "Home win", "Draw", "Away win")
+	requireElements(t, body, ".fixture-outlook strong", ".fixture-outcome-segment.fixture-outcome-home", ".fixture-team-full", ".fixture-team-code[aria-hidden=true]")
+	requireAttrContains(t, body, ".fixture-outcome-segment.fixture-outcome-home", "style", "--fixture-outcome-share: ")
+	for _, tag := range find(t, body, "main span") {
+		if text(tag) == "Scheduled" {
+			t.Error("upcoming fixtures repeat a Scheduled tag")
 		}
 	}
-	if !strings.Contains(response.Body.String(), `<span class="fixture-team-full">`) || !strings.Contains(response.Body.String(), `<span class="fixture-team-code" aria-hidden="true">`) {
-		t.Error("fixture rows do not carry both full team names and phone codes")
-	}
-	if strings.Contains(response.Body.String(), ">Scheduled<") {
-		t.Error("upcoming fixtures repeat a Scheduled tag")
-	}
-	if got := strings.Count(response.Body.String(), `class="fixture-outlook"`); got != 5 {
+	if got := len(find(t, body, ".fixture-outlook")); got != 5 {
 		t.Errorf("rendered %d fixture outlooks, want one for each of 5 remaining fixtures", got)
 	}
 }
@@ -1253,20 +1208,18 @@ func TestUnknownSeasonPhaseKeepsActiveSeasonCapabilities(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline">SD</th>`) || !strings.Contains(response.Body.String(), `aria-label="Remaining schedule difficulty unavailable"`) {
-		t.Fatal("unknown incomplete season did not retain the ordinary schedule indicators")
-	}
-	if !strings.Contains(response.Body.String(), `<span class="schedule-key-track" aria-hidden="true">`) || !strings.Contains(response.Body.String(), "SD is remaining schedule difficulty") {
-		t.Fatal("schedule difficulty column rendered without its key")
-	}
-	if !strings.Contains(response.Body.String(), ">Schedule difficulty</a>") || !strings.Contains(response.Body.String(), ">Forecast lab</a>") || !strings.Contains(response.Body.String(), ">Clinching scenarios</a>") {
-		t.Fatal("unknown incomplete season did not retain the ordinary feature navigation")
-	}
+	body := response.Body.String()
+	requireAttr(t, body, "table.standings th", "title", "Venue- and load-adjusted remaining schedule difficulty relative to the league baseline")
+	requireText(t, body, "table.standings th", "SD")
+	requireElements(t, body, `[aria-label="Remaining schedule difficulty unavailable"]`, ".schedule-key-track[aria-hidden=true]")
+	requireText(t, body, "main", "SD is remaining schedule difficulty")
+	requireText(t, body, ".site-nav a", "Schedule difficulty", "Forecast lab", "Clinching scenarios")
 	fixturesResponse := httptest.NewRecorder()
 	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(2), Location: time.UTC}).ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/fixtures", nil))
-	if fixturesResponse.Code != http.StatusOK || !strings.Contains(fixturesResponse.Body.String(), "<h1>Results and fixtures</h1>") {
+	if fixturesResponse.Code != http.StatusOK {
 		t.Fatalf("unknown incomplete fixtures = %d %q", fixturesResponse.Code, fixturesResponse.Body.String())
 	}
+	requireExact(t, fixturesResponse.Body.String(), "main h1", "Results and fixtures")
 }
 
 func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
@@ -1278,25 +1231,13 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Remaining schedule difficulty", "Toughest remaining schedule", "Easiest remaining schedule", "Venue- and load-adjusted comparison", "Compare venue-only opponent PPG", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha &amp; Co"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
 	body := response.Body.String()
-	for _, text := range []string{"adjusts for the two teams’ relative fixture load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects", "shown for comparison"} {
-		if !strings.Contains(body, text) {
-			t.Errorf("body does not contain schedule explanation %q", text)
-		}
-	}
-	for _, text := range []string{"These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is"} {
-		if strings.Contains(body, text) {
-			t.Errorf("body still contains removed schedule wording %q", text)
-		}
-	}
-	if !strings.Contains(response.Body.String(), `class="comparison-disclosure"`) || !strings.Contains(response.Body.String(), `class="team-schedule-detail"`) {
-		t.Fatal("schedule detail does not use native disclosures")
-	}
+	// The "Toughest remaining schedule" overview and the plot rows are exercised by
+	// testScheduleDifficultyPage in e2e.
+	requireText(t, body, "main", "Remaining schedule difficulty", "Easiest remaining schedule", "Venue- and load-adjusted comparison", "Compare venue-only opponent PPG", "Compare raw opponent PPG", "Team and fixture detail", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha & Co")
+	requireText(t, body, "main", "adjusts for the two teams’ relative fixture load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects", "shown for comparison")
+	forbidRaw(t, body, "These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is")
+	requireElements(t, body, ".comparison-disclosure", ".team-schedule-detail")
 }
 
 func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
@@ -1310,11 +1251,7 @@ func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Schedule difficulty is unavailable", "Remaining fixtures for Alpha &amp; Co", "Bravo FC", "Unavailable"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
+	requireText(t, response.Body.String(), "main", "Schedule difficulty is unavailable", "Remaining fixtures for Alpha & Co", "Bravo FC", "Unavailable")
 }
 
 func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
@@ -1331,12 +1268,11 @@ func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
 	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/schedule-difficulty", nil))
 
 	body := response.Body.String()
-	if response.Code != http.StatusOK || !strings.Contains(body, "League-wide schedule comparison is unavailable") {
+	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d; body=%s", response.Code, body)
 	}
-	if strings.Contains(body, "Toughest remaining schedule") || strings.Contains(body, "Venue-adjusted comparison") {
-		t.Fatal("partial data rendered league-wide comparison")
-	}
+	requireText(t, body, "main", "League-wide schedule comparison is unavailable")
+	forbidRaw(t, body, "Toughest remaining schedule", "Venue-adjusted comparison")
 }
 
 func TestScheduleDifficultyRendersMissingVenueSplitAndNoFixturesAccurately(t *testing.T) {
@@ -1401,9 +1337,10 @@ func TestSeasonRouteReadsTemporarySQLiteCache(t *testing.T) {
 	response := httptest.NewRecorder()
 	NewHandlerWithOptions(db, Options{Rules: testRules(2), Location: time.UTC}).ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Alpha FC") || !strings.Contains(response.Body.String(), "3–1") {
+	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
 	}
+	requireText(t, response.Body.String(), "main", "Alpha FC", "3–1")
 }
 
 func TestClubLogoURLPathEscapesTeamID(t *testing.T) {
@@ -1424,33 +1361,35 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast lab", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Top 4", "Playoffs", "Shield", "Finish distribution", "Middle 80%", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
+	body := response.Body.String()
+	// The model form, the assumption builder form, the pending/update hooks and the
+	// fixture option kickoff times are exercised by TestPages in e2e
+	// (testForecastNoScript, testForecastAssumptionFlow, testLocalTimes).
+	requireExact(t, body, "main h1", "Forecast lab")
+	requireElements(t, body, "#forecast-model option[value=xg-poisson-schedule-load-v1][selected]")
+	requireText(t, body, "#forecast-model option[selected]", "xG Poisson (schedule load)")
+	requireText(t, body, ".forecast-model-detail summary .badge", "Default")
+	requireText(t, body, "[data-forecast-control-status]", "Changes keep your assumptions")
+	requireText(t, body, ".forecast-comparison-control summary", "Compare another approach")
+	requireText(t, body, ".forecast-evaluation-link", "Model evaluation", "See how the forecast approaches performed historically.")
+	requireElements(t, body, `.forecast-evaluation-link a[href="model-evaluation"]`)
+	requireText(t, body, ".forecast-meta", "Possible seasons considered 20", "Data updated")
+	requireText(t, body, "table.forecast-table thead", "Expected points", "Top 4", "Playoffs", "Shield")
+	requireText(t, body, "table.forecast-table .forecast-distribution", "Finish distribution", "Middle 80%")
+	requireText(t, body, ".forecast-builder", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario")
+	requireAttr(t, body, "a[data-copy-scenario]", "aria-label", "Copy scenario link")
+	requireAttr(t, body, "#forecast-fixture option", "data-home-label", "Home vs Bravo FC")
+	requireAttr(t, body, "#forecast-fixture option", "data-away-label", "Away at Alpha & Co <script>alert(1)</script>")
+	requireText(t, body, ".forecast-outcomes", "Alpha & Co <script>alert(1)</script> win", "Bravo FC win")
+	requireText(t, body, ".forecast-cutline", "Playoff line: top 1")
+	forbidText(t, body, "table.forecast-table thead", "Expected finish")
+	forbidElements(t, body, "[data-auto-submit]", "details.forecast-comparison-control[open]", "[data-fixture-filter]")
+	forbidRaw(t, body, "Show fixtures", "Find fixture", "Add assumption", "Update forecast", "Build a what-if scenario")
+	forbidText(t, body, ".forecast-outcomes", "Home win", "Away win")
+	for _, link := range find(t, body, "a") {
+		if strings.Contains(attr(link, "href"), "docs/model-evaluation") || text(link) == "Formula" {
+			t.Errorf("Forecast Lab links to repository documentation that the server does not expose: %q", attr(link, "href"))
 		}
-	}
-	if strings.Contains(response.Body.String(), ">Expected finish<") {
-		t.Fatal("forecast still renders the expected-finish column")
-	}
-	if strings.Contains(response.Body.String(), `data-auto-submit`) {
-		t.Fatal("forecast builder still uses page-submit behavior")
-	}
-	if strings.Contains(response.Body.String(), `class="forecast-comparison-control" open`) {
-		t.Fatal("comparison control should stay collapsed until a comparison is selected")
-	}
-	for _, text := range []string{"Show fixtures", "Find fixture", `data-fixture-filter`, "Add assumption", "Update forecast"} {
-		if strings.Contains(response.Body.String(), text) {
-			t.Errorf("body still contains retired forecast-builder control %q", text)
-		}
-	}
-	if strings.Contains(response.Body.String(), ">Home win<") || strings.Contains(response.Body.String(), ">Away win<") {
-		t.Fatal("forecast outcome choices still use home and away labels")
-	}
-	if strings.Contains(response.Body.String(), "Build a what-if scenario") {
-		t.Fatal("Forecast Lab still uses legacy visible navigation")
-	}
-	if strings.Contains(response.Body.String(), "docs/model-evaluation") || strings.Contains(response.Body.String(), "Formula</a>") {
-		t.Fatal("Forecast Lab links to repository documentation that the server does not expose")
 	}
 }
 
@@ -1469,11 +1408,10 @@ func TestForecastRendersChampionshipOddsWithEightTeamBracket(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"<th scope=\"col\">Championship</th>", "<th scope=\"col\">Championship chance</th>", "Championship odds continue each simulated table", "Championship chances include a simulated playoff bracket"} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
+	requireText(t, body, "table.forecast-table th[scope=col]", "Championship")
+	requireText(t, body, "table.forecast-comparison-table th[scope=col]", "Championship chance")
+	requireText(t, body, ".forecast-method", "Championship odds continue each simulated table")
+	requireText(t, body, ".forecast-results .section-heading", "Championship chances include a simulated playoff bracket")
 }
 
 func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
@@ -1513,11 +1451,8 @@ func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
 			t.Fatal("forecast cache used the configured current-scope playoff-place count")
 		}
 	}
-	for _, want := range []string{"Playoff line:</strong> top 8", "6 of 240 expected regular-season fixtures"} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("body does not contain %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), ".forecast-cutline", "Playoff line: top 8")
+	requireText(t, response.Body.String(), "main", "6 of 240 expected regular-season fixtures")
 }
 
 func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *testing.T) {
@@ -1529,8 +1464,8 @@ func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *test
 		team, want string
 		fixtures   int
 	}{
-		{team: "alpha", want: `data-home-team-id="alpha"`, fixtures: 4},
-		{team: "bravo", want: `data-away-team-id="bravo"`, fixtures: 5},
+		{team: "alpha", want: `data-home-team-id=alpha`, fixtures: 4},
+		{team: "bravo", want: `data-away-team-id=bravo`, fixtures: 5},
 	} {
 		request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?team="+test.team, nil)
 		response := httptest.NewRecorder()
@@ -1540,19 +1475,12 @@ func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *test
 		if response.Code != http.StatusOK {
 			t.Fatalf("team %s: status = %d, want 200; body=%s", test.team, response.Code, response.Body.String())
 		}
-		if !strings.Contains(response.Body.String(), test.want) {
-			t.Errorf("team %s: body does not contain %q", test.team, test.want)
-		}
 		body := response.Body.String()
-		start := strings.Index(body, `<select id="forecast-fixture"`)
-		end := strings.Index(body[start:], `</select>`)
-		if start < 0 || end < 0 {
-			t.Fatalf("team %s: body does not contain the visible fixture selector", test.team)
-		}
-		if got := strings.Count(body[start:start+end], `<option value="future-`); got != test.fixtures {
+		requireElements(t, body, "#forecast-fixture option["+test.want+"]")
+		if got := len(find(t, body, "select#forecast-fixture option")); got != test.fixtures {
 			t.Errorf("team %s: rendered %d fixtures in the fallback selector, want %d", test.team, got, test.fixtures)
 		}
-		if got := strings.Count(body, `<template id="forecast-all-fixtures">`); got != 1 {
+		if got := len(find(t, body, "template#forecast-all-fixtures")); got != 1 {
 			t.Errorf("team %s: rendered %d client fixture sources, want 1", test.team, got)
 		}
 	}
@@ -1568,20 +1496,21 @@ func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"Model comparison", "Results Poisson vs Current pace", `class="forecast-comparison-table"`, "Values read <strong>Current pace</strong> → <strong>Results Poisson</strong>.", "Top 4 chance", "more points", "pp higher"} {
-		if !strings.Contains(body, text) {
-			t.Errorf("body does not contain %q", text)
+	// The comparison section, its heading and one row per team are exercised by
+	// testForecastCompareModel in e2e.
+	requireText(t, body, ".forecast-comparison", "Model comparison", "Results Poisson vs Current pace", "Values read Current pace → Results Poisson.")
+	requireText(t, body, "table.forecast-comparison-table", "Top 4 chance", "more points", "pp higher")
+	requireElements(t, body, "details.forecast-comparison-control[open]")
+	var sections []string
+	for _, section := range find(t, body, "main section") {
+		if class := attr(section, "class"); class == "forecast-comparison" || class == "forecast-results" {
+			sections = append(sections, class)
 		}
 	}
-	if !strings.Contains(body, `class="forecast-comparison-control" open`) {
-		t.Fatal("comparison control should open when a comparison is selected")
+	if !slices.Equal(sections, []string{"forecast-comparison", "forecast-results"}) {
+		t.Fatalf("model comparison should be rendered before the primary projection: %q", sections)
 	}
-	if comparison, projection := strings.Index(body, `class="forecast-comparison"`), strings.Index(body, `class="forecast-results"`); comparison < 0 || projection < 0 || comparison > projection {
-		t.Fatalf("model comparison should be rendered before the primary projection: comparison=%d projection=%d", comparison, projection)
-	}
-	if strings.Contains(body, "Δ comparison − active") {
-		t.Fatal("forecast still renders the comparison inside the primary forecast table")
-	}
+	forbidText(t, body, "table.forecast-table", "Δ comparison − active")
 }
 
 func TestForecastAcceptsRecentFormModel(t *testing.T) {
@@ -1593,11 +1522,9 @@ func TestForecastAcceptsRecentFormModel(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"xG Poisson (recent form)", "xg-poisson-recent-form-v1", "experimental xG Poisson model"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
+	requireElements(t, response.Body.String(), "#forecast-model option[value=xg-poisson-recent-form-v1][selected]")
+	requireText(t, response.Body.String(), "#forecast-model option[selected]", "xG Poisson (recent form)")
+	requireText(t, response.Body.String(), ".forecast-model-detail", "experimental xG Poisson model")
 }
 
 func TestForecastAcceptsScheduleLoadComparison(t *testing.T) {
@@ -1609,11 +1536,9 @@ func TestForecastAcceptsScheduleLoadComparison(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Model comparison", "xG Poisson (schedule load) vs xG Poisson"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
+	requireElements(t, response.Body.String(), "#forecast-model option[value=xg-poisson-schedule-load-v1][selected]")
+	requireText(t, response.Body.String(), "#forecast-model option[selected]", "xG Poisson (schedule load)")
+	requireText(t, response.Body.String(), ".forecast-comparison", "Model comparison", "xG Poisson (schedule load) vs xG Poisson")
 }
 
 func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
@@ -1638,7 +1563,7 @@ func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s: status = %d, want 200; body=%s", test.path, response.Code, response.Body.String())
 		}
-		if got := strings.Contains(response.Body.String(), "xG coverage:"); got != test.want {
+		if got := len(find(t, response.Body.String(), ".forecast-xg-coverage")) > 0; got != test.want {
 			t.Errorf("%s: xG coverage shown = %t, want %t", test.path, got, test.want)
 		}
 	}
@@ -1660,11 +1585,8 @@ func TestForecastShowsIndependentXGFreshnessAndFailure(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, want := range []string{"xG data refreshed", `data-local-time="2026-07-08T20:00:00Z"`, "the latest xG refresh failed"} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("body does not contain %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), ".forecast-xg-coverage", "xG data refreshed", "the latest xG refresh failed")
+	requireAttr(t, response.Body.String(), ".forecast-xg-coverage time", "data-local-time", "2026-07-08T20:00:00Z")
 }
 
 func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing.T) {
@@ -1721,9 +1643,7 @@ func TestForecastCaptionNamesModelResultsDateAndFixedResults(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	if want := "<caption><span>2026 forecast · xG Poisson (schedule load) · through Jul 1 · 1 fixed result</span></caption>"; !strings.Contains(response.Body.String(), want) {
-		t.Fatalf("body does not contain caption %q", want)
-	}
+	requireText(t, response.Body.String(), "table.forecast-table caption", "2026 forecast · xG Poisson (schedule load) · through Jul 1 · 1 fixed result")
 }
 
 func TestLatestCompletedMatchDateUsesLocalDateOfCompletedMatches(t *testing.T) {
@@ -1754,11 +1674,8 @@ func TestForecastAssumptionsIncludeBrowserLocalTimeData(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", `<time data-local-time="2026-07-11T19:00:00Z">Sat Jul 11, 7:00 PM UTC</time>`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; vs Bravo FC"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
-		}
-	}
+	requireText(t, response.Body.String(), "ul.forecast-assumptions li", "Alpha & Co <script>alert(1)</script> win", "Alpha & Co <script>alert(1)</script> vs Bravo FC", "Sat Jul 11, 7:00 PM UTC")
+	requireAttr(t, response.Body.String(), "ul.forecast-assumptions time", "data-local-time", "2026-07-11T19:00:00Z")
 }
 
 func TestForecastAddResultRedirectsToCanonicalState(t *testing.T) {
@@ -1784,9 +1701,10 @@ func TestForecastPreservesReverseProxyBasePath(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
-	if strings.Contains(response.Body.String(), `href="/`) || !strings.Contains(response.Body.String(), `href="../regular-season"`) {
-		t.Fatalf("forecast page does not preserve relative base-path links: %s", response.Body.String())
+	if strings.Contains(response.Body.String(), `href="/`) {
+		t.Fatalf("forecast page rendered an absolute path: %s", response.Body.String())
 	}
+	requireElements(t, response.Body.String(), `[href="../regular-season"]`)
 }
 
 func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
@@ -1795,7 +1713,7 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 		seasonSelector         bool
 	}{
 		{"/seasons/2026/regular-season", "Standings", "Standings", true},
-		{"/seasons/2026/regular-season/fixtures", "Results &amp; fixtures", "Results and fixtures", true},
+		{"/seasons/2026/regular-season/fixtures", "Results & fixtures", "Results and fixtures", true},
 		{"/seasons/2026/regular-season/schedule-difficulty", "Schedule difficulty", "Remaining schedule difficulty", true},
 		{"/seasons/2026/regular-season/clinching", "Clinching scenarios", "Clinching scenarios", true},
 		{"/seasons/2026/regular-season/forecast", "Forecast lab", "Forecast lab", true},
@@ -1808,34 +1726,23 @@ func TestSeasonNavigationIsSharedAcrossPages(t *testing.T) {
 				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 			}
 			body := response.Body.String()
-			if !strings.Contains(body, "data-stage-selector") || strings.Contains(body, "</span><span>· Regular Season</span>") || !strings.Contains(body, "<h1>"+test.heading+"</h1>") {
-				t.Errorf("page does not use the shared season/stage and functional-title hierarchy")
-			}
-			if got := strings.Contains(body, "data-season-selector"); got != test.seasonSelector {
+			requireElements(t, body, "[data-stage-selector]", "nav.site-nav[aria-label=Season sections]")
+			requireExact(t, body, "main h1", test.heading)
+			forbidRaw(t, body, "· Regular Season")
+			if got := len(find(t, body, "[data-season-selector]")) > 0; got != test.seasonSelector {
 				t.Errorf("season selector presence = %t, want %t", got, test.seasonSelector)
 			}
-			if !strings.Contains(body, `<nav class="site-nav" aria-label="Season sections">`) {
-				t.Fatal("page does not render the shared season navigation")
+			var labels []string
+			for _, link := range find(t, body, "nav.site-nav a") {
+				labels = append(labels, text(link))
 			}
-			navEnd := strings.Index(body, "</nav>")
-			if navEnd == -1 {
-				t.Fatal("page does not close the shared season navigation")
+			if want := []string{"Standings", "Results & fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast lab", "Explore"}; !slices.Equal(labels, want) {
+				t.Errorf("navigation labels = %q, want %q", labels, want)
 			}
-			navigation := body[:navEnd]
-			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast lab", "Explore"} {
-				if !strings.Contains(navigation, ">"+label+"</a>") {
-					t.Errorf("navigation does not contain %q", label)
-				}
+			if test.path != "/seasons/2026/regular-season" {
+				requireElements(t, body, `nav.site-nav a[href="../regular-season"]`)
 			}
-			if test.path != "/seasons/2026/regular-season" && !strings.Contains(navigation, `href="../regular-season">Standings</a>`) {
-				t.Error("nested page standings link does not target the canonical regular-season route")
-			}
-			if strings.Contains(navigation, `>Model evaluation</a>`) {
-				t.Error("navigation still includes Model evaluation")
-			}
-			if !strings.Contains(navigation, `aria-current="page">`+test.current+"</a>") {
-				t.Errorf("navigation does not mark %q as current", test.current)
-			}
+			requireExact(t, body, `nav.site-nav a[aria-current=page]`, test.current)
 		})
 	}
 }

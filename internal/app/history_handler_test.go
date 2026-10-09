@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -33,22 +34,21 @@ func TestHistoryScoringRendersOneArchiveReadAndNoSeasonReads(t *testing.T) {
 		t.Fatalf("archive=%d season=%d status=%d; want 1/0/0", store.archiveCalls, store.seasonCalls, store.statusCalls)
 	}
 	body := response.Body.String()
-	for _, want := range []string{
-		"<h1>Scoring by season</h1>", "History · League trends", "Regular seasons since 2016 in the available archive",
-		"The NWSL did not hold a regular season in 2020", "20 completed, valid matches", "<caption>Regular-season scoring data in the available archive</caption>",
-		"<th scope=\"col\">Goals per match</th>", "<th scope=\"row\"><a href=\"scoring?season=2019\">2019</a></th>",
-		">60</td><td>3.00</td>", "Active through 20 matches", "Cached matches; inventory unverified", "<details class=\"history-data\">",
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("history page missing %q", want)
-		}
+	requireExact(t, body, "main h1", "Scoring by season")
+	requireText(t, body, "main", "History · League trends", "Regular seasons since 2016 in the available archive", "The NWSL did not hold a regular season in 2020", "20 completed, valid matches", "Active through 20 matches", "Cached matches; inventory unverified")
+	requireText(t, body, "table caption", "Regular-season scoring data in the available archive")
+	requireText(t, body, "table thead th[scope=col]", "Goals per match")
+	requireAttr(t, body, "table tbody th[scope=row] a", "href", "scoring?season=2019")
+	requireRowText(t, body, "table tbody tr", "2019", "60 3.00")
+	requireElements(t, body, "details.history-data")
+	var panels []string
+	for _, panel := range find(t, body, "section.history-distribution, details.history-data") {
+		panels = append(panels, panel.Data)
 	}
-	if distribution, details := strings.Index(body, `<section class="history-distribution"`), strings.Index(body, `<details class="history-data">`); distribution < 0 || details < 0 || distribution > details {
-		t.Fatalf("distribution panel is not visible before supporting data details: distribution=%d details=%d", distribution, details)
+	if !slices.Equal(panels, []string{"section", "details"}) {
+		t.Fatalf("distribution panel is not visible before supporting data details: %q", panels)
 	}
-	if strings.Contains(body, "all-time") || strings.Contains(body, "fake chart") {
-		t.Fatal("history page made an unsupported claim or rendered a placeholder")
-	}
+	forbidText(t, body, "main", "all-time", "fake chart")
 }
 
 func TestHistoryRouteAndProxyLinksResolveWithinMount(t *testing.T) {
@@ -125,23 +125,19 @@ func TestHistorySelectionAndErrorPaths(t *testing.T) {
 	})}
 	handler := NewHandler(store)
 	for _, test := range []struct{ path, want string }{
-		{"/history/scoring", "<h2 id=\"selected-season-heading\">2024</h2>"},
-		{"/history/scoring?season=2016", "<h2 id=\"selected-season-heading\">2016</h2>"},
+		{"/history/scoring", "2024"},
+		{"/history/scoring?season=2016", "2016"},
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
-		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.want) {
-			t.Fatalf("%s = %d %q; want %q", test.path, response.Code, response.Body.String(), test.want)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s = %d %q", test.path, response.Code, response.Body.String())
 		}
-		if !strings.Contains(response.Body.String(), "Currently eligible for comparison: 2024, 2026.") {
-			t.Fatalf("%s changed the comparison population: %s", test.path, response.Body.String())
-		}
-		if !strings.Contains(response.Body.String(), "Excluded from comparison:") || !strings.Contains(response.Body.String(), "<strong>2016</strong> — known fixture inventory incomplete") {
-			t.Fatalf("%s omitted the excluded-season summary: %s", test.path, response.Body.String())
-		}
-		if !strings.Contains(response.Body.String(), `href="scoring?season=2024"`) || !strings.Contains(response.Body.String(), ">40</td><td>2.00</td>") {
-			t.Fatalf("%s changed non-selected 2024 aggregate: %s", test.path, response.Body.String())
-		}
+		body := response.Body.String()
+		requireExact(t, body, "#selected-season-heading", test.want)
+		requireText(t, body, "main", "Currently eligible for comparison: 2024, 2026.", "Excluded from comparison:", "2016 — known fixture inventory incomplete")
+		requireAttr(t, body, "table tbody th[scope=row] a", "href", "scoring?season=2024")
+		requireRowText(t, body, "table tbody tr", "2024", "40 2.00")
 	}
 	for _, path := range []string{
 		"/history/scoring?season=", "/history/scoring?season=202", "/history/scoring?season=2020",
@@ -149,9 +145,10 @@ func TestHistorySelectionAndErrorPaths(t *testing.T) {
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
-		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "Invalid history selection") {
+		if response.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d %q, want useful 400", path, response.Code, response.Body.String())
 		}
+		requireText(t, response.Body.String(), "body", "Invalid history selection")
 	}
 	ignored := httptest.NewRecorder()
 	handler.ServeHTTP(ignored, httptest.NewRequest(http.MethodGet, "/history/scoring?source=archive&unexpected=1", nil))
@@ -165,15 +162,17 @@ func TestHistorySelectionAndErrorPaths(t *testing.T) {
 	}
 	validWithMalformedUnrelated := httptest.NewRecorder()
 	handler.ServeHTTP(validWithMalformedUnrelated, httptest.NewRequest(http.MethodGet, "/history/scoring?season=2024&note=%ZZ", nil))
-	if validWithMalformedUnrelated.Code != http.StatusOK || !strings.Contains(validWithMalformedUnrelated.Body.String(), "<h2 id=\"selected-season-heading\">2024</h2>") {
+	if validWithMalformedUnrelated.Code != http.StatusOK {
 		t.Fatalf("valid selection with malformed unrelated query = %d %q, want selected 2024", validWithMalformedUnrelated.Code, validWithMalformedUnrelated.Body.String())
 	}
+	requireExact(t, validWithMalformedUnrelated.Body.String(), "#selected-season-heading", "2024")
 
 	unsupported := httptest.NewRecorder()
 	NewHandler(fakeStore{}).ServeHTTP(unsupported, httptest.NewRequest(http.MethodGet, "/history/scoring", nil))
-	if unsupported.Code != http.StatusServiceUnavailable || !strings.Contains(unsupported.Body.String(), "local archive") {
+	if unsupported.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unsupported store = %d %q", unsupported.Code, unsupported.Body.String())
 	}
+	requireText(t, unsupported.Body.String(), "body", "local archive")
 	duplicate := historyArchive(t, map[string]historyArchiveState{"2016": {Lifecycle: cache.SourceScopeCompleted, Goals: 2}})
 	duplicate = append(duplicate, duplicate[0])
 	for _, store := range []*historyHTTPStore{
@@ -197,9 +196,11 @@ func TestHistoryReadsTemporarySQLiteCache(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	empty := httptest.NewRecorder()
 	NewHandler(db).ServeHTTP(empty, httptest.NewRequest(http.MethodGet, "/history/scoring", nil))
-	if empty.Code != http.StatusOK || !strings.Contains(empty.Body.String(), "Source data unavailable") || !strings.Contains(empty.Body.String(), ">2016</a></th>") {
+	if empty.Code != http.StatusOK {
 		t.Fatalf("empty SQLite history = %d %s", empty.Code, empty.Body.String())
 	}
+	requireText(t, empty.Body.String(), "main", "Source data unavailable")
+	requireText(t, empty.Body.String(), "table tbody th[scope=row] a", "2016")
 	teams := []cache.Team{{ASAID: "alpha", Name: "Alpha", ShortName: "Alpha", Abbreviation: "ALP", RawJSON: "{}"}, {ASAID: "bravo", Name: "Bravo", ShortName: "Bravo", Abbreviation: "BRV", RawJSON: "{}"}}
 	games := historyGames("2024", 20, 3)
 	if _, err := db.ReplaceSeason(ctx, "2024", "Regular Season", teams, games, time.Now()); err != nil {
@@ -207,9 +208,11 @@ func TestHistoryReadsTemporarySQLiteCache(t *testing.T) {
 	}
 	response := httptest.NewRecorder()
 	NewHandler(db).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/history/scoring?season=2024", nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "<h2 id=\"selected-season-heading\">2024</h2>") || !strings.Contains(response.Body.String(), ">60</td><td>3.00</td>") {
+	if response.Code != http.StatusOK {
 		t.Fatalf("temporary SQLite history = %d %s", response.Code, response.Body.String())
 	}
+	requireExact(t, response.Body.String(), "#selected-season-heading", "2024")
+	requireRowText(t, response.Body.String(), "table tbody tr", "2024", "60 3.00")
 	assertHistoryCatalogRows(t, response.Body.String())
 }
 
@@ -231,14 +234,7 @@ func TestHistoryRendersInvalidAndIncompleteHistoricalExclusions(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	for _, want := range []string{
-		"<strong>2016</strong> — invalid completed results", "<strong>2017</strong> — historical results incomplete",
-		"invalid completed results", "historical results incomplete",
-	} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("history exclusion copy missing %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), "main", "2016 — invalid completed results", "2017 — historical results incomplete")
 }
 
 func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
@@ -295,9 +291,11 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 
 	goals := httptest.NewRecorder()
 	handler.ServeHTTP(goals, httptest.NewRequest(http.MethodGet, "/nwsl-season/history/scoring?metric=goals&season=2019", nil))
-	if goals.Code != http.StatusOK || !strings.Contains(goals.Body.String(), `<h2 id="selected-season-heading">2019</h2>`) || !strings.Contains(goals.Body.String(), `Goals per match`) {
+	if goals.Code != http.StatusOK {
 		t.Fatalf("Goals round trip = %d %s", goals.Code, goals.Body.String())
 	}
+	requireExact(t, goals.Body.String(), "#selected-season-heading", "2019")
+	requireText(t, goals.Body.String(), "main", "Goals per match")
 
 	for _, query := range []string{"metric=", "metric=foo", "metric=xg&metric=goals"} {
 		invalid := httptest.NewRecorder()
@@ -332,9 +330,11 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 	noXG := httptest.NewRecorder()
 	noXGArchive := historyArchive(t, map[string]historyArchiveState{"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3}})
 	NewHandler(&historyHTTPStore{archive: noXGArchive}).ServeHTTP(noXG, httptest.NewRequest(http.MethodGet, "/history/scoring?metric=xg&season=2019", nil))
-	if noXG.Code != http.StatusOK || strings.Contains(noXG.Body.String(), `<svg class="history-chart"`) || !strings.Contains(noXG.Body.String(), `View Goals`) || !strings.Contains(noXG.Body.String(), `href="scoring?season=2019"`) {
+	if noXG.Code != http.StatusOK {
 		t.Fatalf("all-unavailable xG state = %d %s", noXG.Code, noXG.Body.String())
 	}
+	forbidElements(t, noXG.Body.String(), "svg.history-chart")
+	requireText(t, noXG.Body.String(), "main a[href=\"scoring?season=2019\"]", "View Goals")
 }
 
 func assertHistoryMetricRoundTrip(t *testing.T, handler http.Handler, rawPath, season string) {
@@ -353,9 +353,11 @@ func assertHistoryMetricRoundTrip(t *testing.T, handler http.Handler, rawPath, s
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, resolved.RequestURI(), nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `<h2 id="selected-season-heading">`+season+`</h2>`) || !strings.Contains(response.Body.String(), `Expected goals per match`) {
+	if response.Code != http.StatusOK {
 		t.Fatalf("round trip %q = %d; want selected xG season %s", rawPath, response.Code, season)
 	}
+	requireExact(t, response.Body.String(), "#selected-season-heading", season)
+	requireText(t, response.Body.String(), "main", "Expected goals per match")
 }
 
 type historyHTTPStore struct {
