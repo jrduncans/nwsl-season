@@ -88,9 +88,9 @@ func TestExploreTeamRankingsFullPrecisionAndMissingLeagueXG(t *testing.T) {
 
 func TestExploreTeamRankingsFallbackAndEmptySelections(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2024": {lifecycle: cache.SourceScopeUpcoming},
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 2, xgCovered: 20},
+		"2024": {Lifecycle: cache.SourceScopeUpcoming},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 20},
 	})}
 	for _, tc := range []struct {
 		query string

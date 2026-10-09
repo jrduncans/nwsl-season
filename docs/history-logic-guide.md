@@ -775,9 +775,42 @@ plot-eligible season and complete xG coverage.
 
 ## UI verification
 
-The opt-in `TestHistoryPreview` loopback harness supports an `overview` scenario
-with ten synthetic seasons and all five goal bins, as well as partial, empty,
-and single-season cases. Set `NWSL_HISTORY_PREVIEW_NO_SCRIPT=1` to block page
-scripts using a preview-only Content Security Policy and verify native links,
-season forms, and disclosures. This does not change application CSP or access
-ASA. Run the harness with `NWSL_CONFIG_FILE=/dev/null`.
+`go run ./cmd/preview -scenario <name>` seeds a temporary SQLite cache from
+`internal/apptest`, serves the app under `/nwsl-season/` on a loopback port, and
+prints the history scoring URL. It writes nothing outside its temporary
+directory (removed on exit), never starts the scheduler, and makes no ASA
+request. It reads no configuration file. Stop it with Ctrl-C.
+
+What each scenario shows once seeded (lifecycle comes from the calendar year, so
+every season before the current year is completed and the current year is
+active):
+
+- `default`: 2018, 2019, 2021 and 2022, each with 20 completed matches and
+  placeholder teams, all completed with unverified inventory. xG covers 2018
+  and 2021 fully, 2019 for 19 of 20 matches, and 2022 not at all. 2022 is
+  preselected.
+- `overview`: ten seasons, 2016 to 2026 without 2020, each with 20 matches
+  whose scores cover all five goal bins and with full xG. 2025 is preselected.
+- `empty`: one 2024 season with 19 completed matches and no xG, below the
+  20-match minimum.
+- `single`: one 2024 season with 20 matches of 1.00 goals each and no xG.
+- `teams`: 2025 and 2026 with 64 matches among the 16 real clubs and xG, plus a
+  2024 with no fixtures. The 2026 data has one match missing expected points
+  and one missing xG, which seed as no xPts and no xG respectively.
+- `team-history`: `teams` plus 2016 to 2023 (without 2020), 64 matches each
+  with scores that vary by year.
+- `season-trend`: 2025 and 2026 as 240-match double round robins among the 16
+  clubs; the last eight 2026 matches are unplayed. A 2024 with no fixtures is
+  also present.
+
+`-metric xg|goals` picks the metric in the printed URL, and `-no-script` sends a
+preview-only Content Security Policy that blocks page scripts so you can verify
+native links, season forms, and disclosures. This does not change application
+CSP.
+
+The same scenarios are available to Go code as `apptest.Seed(t, db, scenario)`
+(cache-backed) and `apptest.Scenario(t, scenario)` (in-memory archive). The
+`internal/app` handler tests use `apptest.Archive` and `apptest.Games` through
+small wrappers to build their own in-memory archives. A seeded cache derives
+source-scope lifecycle and inventory completeness from the calendar year and
+the catalog, so those two labels can differ from the in-memory scenario.
