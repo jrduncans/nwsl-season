@@ -36,11 +36,13 @@ import (
 // here can reach ASA.
 func exploreBase(t *testing.T, scenario string) string {
 	t.Helper()
-	t.Setenv("NWSL_DATA_DIR", t.TempDir())
+	// The data directory is set on the config rather than with t.Setenv, which
+	// parallel tests cannot use.
 	cfg, err := config.FromEnvironment()
 	if err != nil {
 		t.Fatalf("config.FromEnvironment: %v", err)
 	}
+	cfg.DataDir = t.TempDir()
 	cfg.DBPath = filepath.Join(cfg.DataDir, "nwsl-season.sqlite")
 	ctx := context.Background()
 	db, err := cache.Open(ctx, cfg.DBPath)
@@ -289,10 +291,17 @@ func exploreViews() []exploreView {
 // URL and the controls exactly, and opening the final URL fresh must show the
 // final controls.
 func TestExploreSelectionsRoundTripThroughURL(t *testing.T) {
+	t.Parallel()
+	bases := map[string]string{}
+	for _, view := range exploreViews() {
+		if _, ok := bases[view.scenario]; !ok {
+			bases[view.scenario] = exploreBase(t, view.scenario)
+		}
+	}
 	for _, view := range exploreViews() {
 		t.Run(view.name, func(t *testing.T) {
-			base := exploreBase(t, view.scenario)
-			page := explorePage(t, base, Desktop, view.path)
+			t.Parallel()
+			page := explorePage(t, bases[view.scenario], Desktop, view.path)
 
 			snapshot := func() historyEntry {
 				return historyEntry{url: page.URL(), controls: controlValues(t, page, view.controls)}
@@ -371,15 +380,11 @@ var exploreTabs = []struct{ group, tab, query string }{
 // data payload, so no document, script, style or fetch request may follow the
 // first load. Team logos are images and are exempt.
 func TestExploreSwitchingAnalysesMakesNoRequests(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	page := explorePage(t, base, Desktop, "explore?view=teams&display=chart")
 
-	var requests []string
-	page.On("request", func(request playwright.Request) {
-		if request.ResourceType() != "image" {
-			requests = append(requests, request.ResourceType()+" "+request.URL())
-		}
-	})
+	requests := watchRequests(page)
 	for _, tab := range exploreTabs {
 		group := page.Locator(".explore-views").GetByText(tab.group, playwright.LocatorGetByTextOptions{Exact: playwright.Bool(true)})
 		if err := group.Click(); err != nil {
@@ -404,17 +409,49 @@ func TestExploreSwitchingAnalysesMakesNoRequests(t *testing.T) {
 			t.Errorf("after opening %q, the title is %q (%v)", tab.tab, title, err)
 		}
 	}
-	if len(requests) > 0 {
-		t.Errorf("switching analyses made %d request(s), want none: %s", len(requests), strings.Join(requests, ", "))
+	requests.assertNone(t, "switching analyses")
+}
+
+// requestLog records a page's requests other than images. Playwright delivers
+// events on its own goroutine, so reads and writes take the lock.
+type requestLog struct {
+	mu      sync.Mutex
+	entries []string
+}
+
+// watchRequests starts recording page's non-image requests.
+func watchRequests(page playwright.Page) *requestLog {
+	log := &requestLog{}
+	page.On("request", func(request playwright.Request) {
+		if request.ResourceType() == "image" {
+			return
+		}
+		log.mu.Lock()
+		defer log.mu.Unlock()
+		log.entries = append(log.entries, request.ResourceType()+" "+request.URL())
+	})
+	return log
+}
+
+// assertNone fails if any request was recorded. Team logos are images and are
+// not recorded.
+func (l *requestLog) assertNone(t *testing.T, what string) {
+	t.Helper()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.entries) > 0 {
+		t.Errorf("%s made %d request(s), want none: %s", what, len(l.entries), strings.Join(l.entries, ", "))
 	}
 }
 
 // TestExploreHasNoHorizontalOverflowOnPhone checks every analysis at 390px.
 func TestExploreHasNoHorizontalOverflowOnPhone(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Mobile, "explore?"+exploreTabs[0].query)
 	for _, tab := range exploreTabs {
 		t.Run(tab.tab, func(t *testing.T) {
-			page := explorePage(t, base, Mobile, "explore?"+tab.query)
+			gotoInPage(t, page, "explore?"+tab.query)
 			assertNoHorizontalOverflow(t, page)
 		})
 	}
@@ -429,6 +466,58 @@ func teamTableColumn(t *testing.T, page playwright.Page, index int) []string {
 	evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-team-rows] tr')]
 		.map((row) => row.children[index].textContent.trim())`, index, &cells)
 	return cells
+}
+
+// gotoInPage moves an open Explore page to another Explore URL the way Back
+// and Forward do: it pushes the URL onto the history and fires popstate, so
+// the script re-renders from its single data payload without a reload. It is
+// cheaper than a fresh page, and the script's own URL handling is the code
+// under test either way.
+func gotoInPage(t *testing.T, page playwright.Page, path string) {
+	t.Helper()
+	_, query, _ := strings.Cut(path, "?")
+	if _, err := page.Evaluate(`(query) => {
+		history.pushState(null, '', '?' + query);
+		window.dispatchEvent(new PopStateEvent('popstate'));
+	}`, query); err != nil {
+		t.Fatalf("move to %s: %v", path, err)
+	}
+	if err := settle(page); err != nil {
+		t.Fatalf("settle after moving to %s: %v", path, err)
+	}
+}
+
+// markDocument tags the current document so assertSameDocument can tell
+// whether the page has since reloaded or navigated to a new document.
+func markDocument(t *testing.T, page playwright.Page) {
+	t.Helper()
+	if _, err := page.Evaluate(`() => { window.__documentMarker = true; }`); err != nil {
+		t.Fatalf("mark document: %v", err)
+	}
+}
+
+// assertSameDocument fails if the page is no longer the document that
+// markDocument tagged.
+func assertSameDocument(t *testing.T, page playwright.Page, what string) {
+	t.Helper()
+	marked, err := page.Evaluate(`() => window.__documentMarker === true`)
+	if err != nil || marked != true {
+		t.Errorf("%s reloaded the page instead of updating it in place (marker %v, error %v)", what, marked, err)
+	}
+}
+
+// expectInPlace marks the page's document and starts recording requests. The
+// function it returns fails the test if the page has since reloaded or made a
+// request. Call it before the interaction and defer the result.
+func expectInPlace(t *testing.T, page playwright.Page, what string) func() {
+	t.Helper()
+	requests := watchRequests(page)
+	markDocument(t, page)
+	return func() {
+		t.Helper()
+		assertSameDocument(t, page, what)
+		requests.assertNone(t, what)
+	}
 }
 
 // Column positions in the Compare teams table.
@@ -473,8 +562,12 @@ func assertSorted(t *testing.T, label string, values []float64, descending bool)
 // its header links. Each header toggles direction, reports aria-sort, and keeps
 // teams without expected values last whichever way the column runs.
 func TestExploreTableSortsBothDirections(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	page := explorePage(t, base, Desktop, "explore?view=teams&display=table&season=2026")
+	// The server renders the same sorted table for the header links, so only
+	// an unchanged document and no requests prove that the script sorted it.
+	defer expectInPlace(t, page, "sorting")()
 
 	ariaSort := func(key string) string {
 		t.Helper()
@@ -709,9 +802,11 @@ var pinScenarios = []struct {
 // inspection keys, then pins a point, and clears the pin with the Clear
 // selection button, Escape and a click on empty plot space.
 func TestExplorePointsInspectAndPinWithKeyboardAndPointer(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	for _, scenario := range pinScenarios {
 		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
 			page := explorePage(t, base, Desktop, scenario.path)
 			expect := playwright.NewPlaywrightAssertions()
 			canvas := page.Locator(scenario.canvas)
@@ -920,11 +1015,13 @@ func scatterChartState(t *testing.T, page playwright.Page, canvas string) scatte
 // range holds every point, nonnegative measures stop at zero, and the chart
 // paints a dashed line from the range's low corner to its high corner.
 func TestExploreOutlierPlotUsesEqualAxesAndParityDiagonal(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams&display=scatter&season=2025")
 	for _, measure := range []string{"for", "against", "difference", "points"} {
 		for _, units := range []string{"per-match", "total"} {
 			t.Run(measure+"/"+units, func(t *testing.T) {
-				page := explorePage(t, base, Desktop, "explore?view=teams&display=scatter&season=2025&measure="+measure+"&units="+units)
+				gotoInPage(t, page, "explore?view=teams&display=scatter&season=2025&measure="+measure+"&units="+units)
 				const canvas = `[data-chart="team-scatter"]`
 				state := scatterChartState(t, page, canvas)
 				if state.X.Min != state.Y.Min || state.X.Max != state.Y.Max {
@@ -985,10 +1082,12 @@ func TestExploreOutlierPlotUsesEqualAxesAndParityDiagonal(t *testing.T) {
 // run from high to low on the horizontal axis, so up and right are better, and
 // that both axes cover the same range.
 func TestExploreScoredVsAllowedReversesTheAllowedAxis(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams&display=quadrant&season=2025")
 	for _, mode := range []string{"goals", "xg", "both"} {
 		t.Run(mode, func(t *testing.T) {
-			page := explorePage(t, base, Desktop, "explore?view=teams&display=quadrant&season=2025&quadrant-data="+mode)
+			gotoInPage(t, page, "explore?view=teams&display=quadrant&season=2025&quadrant-data="+mode)
 			const canvas = `[data-chart="team-quadrant"]`
 			state := scatterChartState(t, page, canvas)
 			if !state.X.Reverse || state.Y.Reverse {
@@ -1034,7 +1133,10 @@ func TestExploreScoredVsAllowedReversesTheAllowedAxis(t *testing.T) {
 // point or bar for them, and the Gap to expected chart paints the
 // "xG incomplete" and "xPts incomplete" labels.
 func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	// One page serves every case; each moves it to a URL in place.
+	page := explorePage(t, base, Desktop, "explore?view=teams&season=2026&display=gap")
 	count := func(texts []string, want string) int {
 		n := 0
 		for _, text := range texts {
@@ -1056,7 +1158,8 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 		t.Run(tc.measure, func(t *testing.T) {
 			path := "explore?view=teams&season=2026&measure=" + tc.measure + "&display="
 
-			gap := explorePage(t, base, Desktop, path+"gap")
+			gotoInPage(t, page, path+"gap")
+			gap := page
 			texts := drawnText(recordDraw(t, gap, `[data-chart="team-gap"]`))
 			if got := count(texts, tc.label); got != len(tc.missing) {
 				t.Errorf("Gap to expected paints %q %d times, want %d (all text: %v)", tc.label, got, len(tc.missing), texts)
@@ -1078,7 +1181,8 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 				t.Errorf("Gap to expected has %d null bars among %d teams, want %d among %d", nulls, len(gaps), len(tc.missing), fixtureTeams)
 			}
 
-			scatter := explorePage(t, base, Desktop, path+"scatter")
+			gotoInPage(t, page, path+"scatter")
+			scatter := page
 			state := scatterChartState(t, scatter, `[data-chart="team-scatter"]`)
 			if want := fixtureTeams - len(tc.missing); len(state.Points[0]) != want {
 				t.Errorf("Outlier plot has %d points, want %d", len(state.Points[0]), want)
@@ -1097,7 +1201,7 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 	}
 
 	t.Run("table", func(t *testing.T) {
-		page := explorePage(t, base, Desktop, "explore?view=teams&season=2026&display=table")
+		gotoInPage(t, page, "explore?view=teams&season=2026&display=table")
 		if err := expect.Locator(page.Locator("[data-team-warning]")).ToContainText("xG and xPts"); err != nil {
 			t.Errorf("table warning: %v", err)
 		}
@@ -1108,7 +1212,7 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 	})
 
 	t.Run("scored vs allowed", func(t *testing.T) {
-		page := explorePage(t, base, Desktop, "explore?view=teams&season=2026&display=quadrant&quadrant-data=both")
+		gotoInPage(t, page, "explore?view=teams&season=2026&display=quadrant&quadrant-data=both")
 		for _, name := range []string{"Boston Legacy FC", "Seattle Reign FC"} {
 			if err := expect.Locator(page.Locator("[data-team-quadrant-missing]")).ToContainText(name); err != nil {
 				t.Errorf("Scored vs allowed note does not name %s: %v", name, err)
@@ -1130,11 +1234,13 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 // TestExploreShowsEmptyStatesForSeasonsWithoutData selects a season whose
 // results are not in the cache, and a team with no results in a season.
 func TestExploreShowsEmptyStatesForSeasonsWithoutData(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams&season=2024&display=chart")
 	expect := playwright.NewPlaywrightAssertions()
 	for _, display := range []string{"chart", "gap", "scatter", "quadrant", "table"} {
 		t.Run(display, func(t *testing.T) {
-			page := explorePage(t, base, Desktop, "explore?view=teams&season=2024&display="+display)
+			gotoInPage(t, page, "explore?view=teams&season=2024&display="+display)
 			if err := expect.Locator(page.Locator("[data-team-empty]")).ToBeVisible(); err != nil {
 				t.Errorf("empty message: %v", err)
 			}
@@ -1147,7 +1253,7 @@ func TestExploreShowsEmptyStatesForSeasonsWithoutData(t *testing.T) {
 		})
 	}
 	t.Run("rankings", func(t *testing.T) {
-		page := explorePage(t, base, Desktop, "explore?view=team-rankings&season=2024")
+		gotoInPage(t, page, "explore?view=team-rankings&season=2024")
 		if err := expect.Locator(page.Locator("[data-rankings-empty]")).ToBeVisible(); err != nil {
 			t.Errorf("empty rankings message: %v", err)
 		}
@@ -1156,7 +1262,7 @@ func TestExploreShowsEmptyStatesForSeasonsWithoutData(t *testing.T) {
 		}
 	})
 	t.Run("match by match", func(t *testing.T) {
-		page := explorePage(t, base, Desktop, "explore?view=season-trend&season=2024")
+		gotoInPage(t, page, "explore?view=season-trend&season=2024")
 		if err := expect.Locator(page.Locator("[data-season-trend-empty]")).ToBeVisible(); err != nil {
 			t.Errorf("empty match message: %v", err)
 		}
@@ -1167,7 +1273,19 @@ func TestExploreShowsEmptyStatesForSeasonsWithoutData(t *testing.T) {
 // allowed sizing: both charts are square, grow to the viewport height less the
 // page chrome with a 608px floor on desktop, and shrink to fit on a phone.
 func TestExploreSquarePlotsFollowTheViewport(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	viewports := []viewport{
+		{Name: "short desktop", Width: 1280, Height: 500},
+		Desktop,
+		{Name: "tall desktop", Width: 1280, Height: 1000},
+		Mobile,
+	}
+	// One page per viewport serves both plots, which it moves between in place.
+	pages := map[string]playwright.Page{}
+	for _, vp := range viewports {
+		pages[vp.Name] = explorePage(t, base, vp, "explore?view=teams&display=scatter&season=2025")
+	}
 	for _, plot := range []struct {
 		name, path, canvas, wrap string
 		// chrome is the vertical space the CSS reserves around the plot.
@@ -1176,14 +1294,10 @@ func TestExploreSquarePlotsFollowTheViewport(t *testing.T) {
 		{"outlier plot", "explore?view=teams&display=scatter&season=2025", `[data-chart="team-scatter"]`, ".explore-team-scatter-wrap", 72},
 		{"scored vs allowed", "explore?view=teams&display=quadrant&season=2025", `[data-chart="team-quadrant"]`, ".explore-team-quadrant-wrap", 32},
 	} {
-		for _, vp := range []viewport{
-			{Name: "short desktop", Width: 1280, Height: 500},
-			Desktop,
-			{Name: "tall desktop", Width: 1280, Height: 1000},
-			Mobile,
-		} {
+		for _, vp := range viewports {
 			t.Run(plot.name+"/"+vp.Name, func(t *testing.T) {
-				page := explorePage(t, base, vp, plot.path)
+				page := pages[vp.Name]
+				gotoInPage(t, page, plot.path)
 				var size struct{ Canvas, Wrap, Parent, Height float64 }
 				evalJSON(t, page, `(arg) => {
 					const canvas = document.querySelector(arg.canvas);
@@ -1278,12 +1392,14 @@ func assertLogoLayout(t *testing.T, layout logoLayout) {
 // Outlier plot and Scored vs allowed on a desktop window, after the window is
 // resized, and when the logos are turned off.
 func TestExploreTeamLogosAvoidEachOtherAndThePoints(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	for _, plot := range []struct{ name, path, canvas, layer, toggle string }{
 		{"outlier plot", "explore?view=teams&display=scatter&season=2025", `[data-chart="team-scatter"]`, "[data-team-scatter-chart-wrap] [data-team-scatter-logo-layer]", "[data-team-scatter-logos]"},
 		{"scored vs allowed", "explore?view=teams&display=quadrant&season=2025&quadrant-data=both", `[data-chart="team-quadrant"]`, "[data-team-quadrant-chart-wrap] [data-team-scatter-logo-layer]", "[data-team-quadrant-logos]"},
 	} {
 		t.Run(plot.name, func(t *testing.T) {
+			t.Parallel()
 			page := explorePage(t, base, Desktop, plot.path)
 			expect := playwright.NewPlaywrightAssertions()
 			// Logo images load asynchronously and the layout reruns when they do.
@@ -1315,6 +1431,7 @@ func TestExploreTeamLogosAvoidEachOtherAndThePoints(t *testing.T) {
 // table and the Season by season table in the browser by clicking their
 // headers.
 func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	column := func(page playwright.Page, rows string, index int) []string {
 		t.Helper()
@@ -1325,7 +1442,9 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 	}
 
 	t.Run("scoring table", func(t *testing.T) {
+		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=table")
+		defer expectInPlace(t, page, "sorting the Scoring table")()
 		// Matches: 2025 has 240 completed matches and 2026 has 232.
 		for _, want := range [][]string{{"240", "232"}, {"232", "240"}} {
 			if err := page.Locator(`[data-sort="1"]`).Click(); err != nil {
@@ -1338,7 +1457,9 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 	})
 
 	t.Run("season by season", func(t *testing.T) {
+		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=team-history")
+		defer expectInPlace(t, page, "sorting Season by season")()
 		link := page.Locator(`[data-history-sort="season"]`)
 		for _, want := range [][]string{{"2025", "2026"}, {"2026", "2025"}} {
 			if err := link.Click(); err != nil {
@@ -1352,6 +1473,335 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 			t.Errorf("URL after two clicks = %v, want history-sort=season&history-order=desc", got)
 		}
 	})
+}
+
+// distributionRows returns each Goal distribution table row's cell texts.
+func distributionRows(t *testing.T, page playwright.Page) [][]string {
+	t.Helper()
+	var rows [][]string
+	evalJSON(t, page, `() => [...document.querySelectorAll('[data-distribution-rows] tr')]
+		.map((row) => [...row.cells].map((cell) => cell.textContent.trim()))`, nil, &rows)
+	return rows
+}
+
+// distributionSeasons returns the Season column of the distribution table.
+func distributionSeasons(t *testing.T, page playwright.Page) string {
+	t.Helper()
+	var seasons []string
+	for _, row := range distributionRows(t, page) {
+		seasons = append(seasons, row[0])
+	}
+	return strings.Join(seasons, ",")
+}
+
+// TestExploreGoalDistributionShowsCountsSharesAndBins checks the chart data
+// against the table, the bin selector's URL with Back and Forward, keyboard
+// inspection of both distribution charts, and table sorting.
+func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	expect := playwright.NewPlaywrightAssertions()
+
+	t.Run("chart shares match the table counts", func(t *testing.T) {
+		t.Parallel()
+		page := explorePage(t, base, Desktop, "explore?view=distribution&distribution-sort=season&distribution-order=asc")
+		var chart struct {
+			Labels []string
+			Shares [][]float64
+		}
+		evalJSON(t, page, `() => {
+			const chart = Chart.getChart(document.querySelector('[data-chart="distribution"]'));
+			return {labels: chart.data.labels, shares: chart.data.datasets.map((dataset) => dataset.data)};
+		}`, nil, &chart)
+		rows := distributionRows(t, page)
+		if len(rows) != 2 || len(chart.Labels) != 2 || len(chart.Shares) != 5 {
+			t.Fatalf("rows = %v, chart labels = %v, datasets = %d; want 2 seasons and 5 bins", rows, chart.Labels, len(chart.Shares))
+		}
+		for season, row := range rows {
+			played, err := strconv.ParseFloat(row[1], 64)
+			if err != nil {
+				t.Fatalf("matches cell %q: %v", row[1], err)
+			}
+			var total float64
+			for bin := range 5 {
+				// A cell reads "20 (8.3%)": the count and its share.
+				count, share, _ := strings.Cut(row[2+bin], " (")
+				wantCount, err := strconv.ParseFloat(count, 64)
+				if err != nil {
+					t.Fatalf("count cell %q: %v", row[2+bin], err)
+				}
+				got := chart.Shares[bin][season]
+				if math.Abs(got-wantCount/played*100) > 1e-9 {
+					t.Errorf("%s, bin %d: chart share %v, want %v of %v matches", row[0], bin, got, wantCount, played)
+				}
+				if want := fmt.Sprintf("%.1f%%)", got); share != want {
+					t.Errorf("%s, bin %d: table share %q, chart share reads %q", row[0], bin, share, want)
+				}
+				total += got
+			}
+			if math.Abs(total-100) > 1e-9 {
+				t.Errorf("%s: bin shares sum to %v, want 100", row[0], total)
+			}
+		}
+	})
+
+	t.Run("bin selection reaches the URL and survives Back and Forward", func(t *testing.T) {
+		t.Parallel()
+		page := explorePage(t, base, Desktop, "explore?view=distribution")
+		defer expectInPlace(t, page, "choosing a goal bin")()
+		chooseOption(t, page, "[data-distribution-bin]", "3")
+		if got := queryOf(t, page).Get("distribution-bin"); got != "3" {
+			t.Fatalf("distribution-bin = %q, want 3", got)
+		}
+		if err := expect.Locator(page.Locator("[data-distribution-trend-panel]")).ToBeVisible(); err != nil {
+			t.Errorf("share-by-season chart for one bin: %v", err)
+		}
+		if err := expect.Locator(page.Locator("[data-distribution-stacked-panel]")).ToBeHidden(); err != nil {
+			t.Errorf("stacked chart still shown for one bin: %v", err)
+		}
+		if err := expect.Locator(page.Locator("#explore-distribution-title")).ToContainText("3 goals"); err != nil {
+			t.Errorf("heading for the 3-goal bin: %v", err)
+		}
+		var shares []*float64
+		evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="bin-trend"]')).data.datasets[0].data`, nil, &shares)
+		// The 3-goal bin is 59 of 240 matches in 2025 and 56 of 232 in 2026.
+		var populated []float64
+		for _, share := range shares {
+			if share != nil {
+				populated = append(populated, *share)
+			}
+		}
+		if len(populated) != 2 || math.Abs(populated[0]-59.0/240*100) > 1e-9 || math.Abs(populated[1]-56.0/232*100) > 1e-9 {
+			t.Errorf("3-goal shares = %v, want %v and %v", populated, 59.0/240*100, 56.0/232*100)
+		}
+
+		chooseOption(t, page, "[data-distribution-bin]", "0")
+		if _, err := page.GoBack(); err != nil {
+			t.Fatalf("back: %v", err)
+		}
+		if got := queryOf(t, page).Get("distribution-bin"); got != "3" {
+			t.Errorf("after Back, distribution-bin = %q, want 3", got)
+		}
+		if got := controlValues(t, page, []string{"[data-distribution-bin]"})["[data-distribution-bin]"]; got != "3" {
+			t.Errorf("after Back, the selector shows %q, want 3", got)
+		}
+		if _, err := page.GoBack(); err != nil {
+			t.Fatalf("back: %v", err)
+		}
+		if err := expect.Locator(page.Locator("[data-distribution-stacked-panel]")).ToBeVisible(); err != nil {
+			t.Errorf("stacked chart after Back to all totals: %v", err)
+		}
+		if _, err := page.GoForward(); err != nil {
+			t.Fatalf("forward: %v", err)
+		}
+		if got := controlValues(t, page, []string{"[data-distribution-bin]"})["[data-distribution-bin]"]; got != "3" {
+			t.Errorf("after Forward, the selector shows %q, want 3", got)
+		}
+	})
+
+	t.Run("keyboard inspection of both charts", func(t *testing.T) {
+		t.Parallel()
+		page := explorePage(t, base, Desktop, "explore?view=distribution")
+		assertKeyboardInspection(t, page, `[data-chart="distribution"]`, "of 240 matches")
+		chooseOption(t, page, "[data-distribution-bin]", "2")
+		assertKeyboardInspection(t, page, `[data-chart="bin-trend"]`, "2 goals")
+	})
+
+	t.Run("table sorts and the sorted URL opens the disclosure", func(t *testing.T) {
+		t.Parallel()
+		page := explorePage(t, base, Desktop, "explore?view=distribution")
+		defer expectInPlace(t, page, "sorting the distribution table")()
+		if err := page.Locator("[data-distribution-values] summary").Click(); err != nil {
+			t.Fatalf("open Distribution values: %v", err)
+		}
+		for _, want := range []struct{ order, seasons string }{{"descending", "2025,2026"}, {"ascending", "2026,2025"}} {
+			if err := page.Locator(`[data-distribution-sort="matches"]`).Click(); err != nil {
+				t.Fatalf("click Matches header: %v", err)
+			}
+			if got := distributionSeasons(t, page); got != want.seasons {
+				t.Errorf("seasons after sorting %s = %s, want %s", want.order, got, want.seasons)
+			}
+			if err := expect.Locator(page.Locator(`th:has([data-distribution-sort="matches"])`)).ToHaveAttribute("aria-sort", want.order); err != nil {
+				t.Errorf("aria-sort: %v", err)
+			}
+		}
+		if got := queryOf(t, page); got.Get("distribution-sort") != "matches" || got.Get("distribution-order") != "asc" {
+			t.Errorf("URL = %v, want distribution-sort=matches&distribution-order=asc", got)
+		}
+		if _, err := page.GoBack(); err != nil {
+			t.Fatalf("back: %v", err)
+		}
+		if got := distributionSeasons(t, page); got != "2025,2026" {
+			t.Errorf("after Back, seasons = %s, want 2025,2026", got)
+		}
+
+		// A sorted URL opened directly shows the table already open.
+		direct := explorePage(t, base, Desktop, "explore?view=distribution&distribution-sort=matches&distribution-order=asc")
+		if err := expect.Locator(direct.Locator("[data-distribution-values]")).ToHaveAttribute("open", ""); err != nil {
+			t.Errorf("disclosure of a directly opened sorted URL: %v", err)
+		}
+		if got := distributionSeasons(t, direct); got != "2026,2025" {
+			t.Errorf("directly opened sorted URL shows seasons %s, want 2026,2025", got)
+		}
+	})
+}
+
+// assertKeyboardInspection focuses the chart and walks Home, ArrowRight, End
+// and Escape: a mark becomes active with an open tooltip and an announcement
+// that contains wantText, and Escape clears all three.
+func assertKeyboardInspection(t *testing.T, page playwright.Page, canvas, wantText string) {
+	t.Helper()
+	if err := page.Locator(canvas).Focus(); err != nil {
+		t.Fatalf("focus %s: %v", canvas, err)
+	}
+	press := func(key string) {
+		t.Helper()
+		if err := page.Keyboard().Press(key); err != nil {
+			t.Fatalf("press %s on %s: %v", key, canvas, err)
+		}
+	}
+	press("Home")
+	first := chartInspection(t, page, canvas)
+	if len(first.Active) == 0 || first.TooltipActive == 0 || !strings.Contains(first.Status, wantText) {
+		t.Fatalf("%s after Home: %+v, want an active mark, an open tooltip and an announcement containing %q", canvas, first, wantText)
+	}
+	press("ArrowRight")
+	second := chartInspection(t, page, canvas)
+	if len(second.Active) == 0 || second.Active[0] == first.Active[0] {
+		t.Errorf("%s after ArrowRight: %+v, want a different mark than %+v", canvas, second, first.Active)
+	}
+	press("End")
+	last := chartInspection(t, page, canvas)
+	if len(last.Active) == 0 || last.Active[0] == first.Active[0] {
+		t.Errorf("%s after End: %+v, want the last mark, not %+v", canvas, last, first.Active)
+	}
+	press("Escape")
+	if cleared := chartInspection(t, page, canvas); len(cleared.Active) != 0 || cleared.TooltipActive != 0 || cleared.Status != "" {
+		t.Errorf("%s after Escape: %+v, want nothing active", canvas, cleared)
+	}
+}
+
+// TestExploreChartsInspectWithTheKeyboard walks the keyboard on the charts the
+// pin test does not cover: the league trend, the paired-dot and gap-bar team
+// charts, Match by match and Season by season.
+func TestExploreChartsInspectWithTheKeyboard(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=trend")
+	for _, chart := range []struct{ name, path, canvas, text string }{
+		{"scoring trend", "explore?view=trend", `[data-chart="trend"]`, "per match"},
+		{"actual vs expected", "explore?view=teams&display=chart&season=2025", `[data-chart="teams"]`, "played"},
+		{"gap to expected", "explore?view=teams&display=gap&season=2025", `[data-chart="team-gap"]`, "Gap:"},
+		{"match by match", "explore?view=season-trend&season=2025", `[data-chart="season-trend"]`, ""},
+		{"season by season", "explore?view=team-history", `[data-chart="team-history"]`, ""},
+	} {
+		t.Run(chart.name, func(t *testing.T) {
+			gotoInPage(t, page, chart.path)
+			assertKeyboardInspection(t, page, chart.canvas, chart.text)
+		})
+	}
+}
+
+// TestExploreDisplaySwitchesRestoreWithBackAndForward moves through the
+// Compare teams displays and back, checking the URL, the current tab and which
+// plot is shown at each step.
+func TestExploreDisplaySwitchesRestoreWithBackAndForward(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams&display=chart&season=2025")
+	defer expectInPlace(t, page, "switching displays")()
+	plots := map[string]string{
+		"chart": "[data-team-plot]", "gap": "[data-team-gap-plot]", "scatter": "[data-team-scatter-plot]",
+		"quadrant": "[data-team-quadrant-plot]", "table": "[data-team-table]",
+	}
+	expect := playwright.NewPlaywrightAssertions()
+	assertDisplay := func(step, display string) {
+		t.Helper()
+		if got := queryOf(t, page).Get("display"); got != display {
+			t.Errorf("%s: display = %q, want %q", step, got, display)
+		}
+		if err := expect.Locator(page.Locator("[data-team-display][aria-current=page]").First()).ToHaveAttribute("data-team-display", display); err != nil {
+			t.Errorf("%s: current tab: %v", step, err)
+		}
+		for name, selector := range plots {
+			locator := page.Locator("[data-team-results] " + selector).First()
+			if name == display {
+				if err := expect.Locator(locator).ToBeVisible(); err != nil {
+					t.Errorf("%s: the %s plot is not shown: %v", step, name, err)
+				}
+			} else if err := expect.Locator(locator).ToBeHidden(); err != nil {
+				t.Errorf("%s: the %s plot is shown: %v", step, name, err)
+			}
+		}
+	}
+	order := []string{"chart", "gap", "scatter", "quadrant", "table"}
+	assertDisplay("initial", "chart")
+	for _, display := range order[1:] {
+		if err := page.Locator(".explore-subviews:not([hidden]) [data-team-display=" + display + "]").Click(); err != nil {
+			t.Fatalf("open %s: %v", display, err)
+		}
+		assertDisplay("forward through "+display, display)
+	}
+	for i := len(order) - 2; i >= 0; i-- {
+		if _, err := page.GoBack(); err != nil {
+			t.Fatalf("back: %v", err)
+		}
+		assertDisplay("back to "+order[i], order[i])
+	}
+	for _, display := range order[1:] {
+		if _, err := page.GoForward(); err != nil {
+			t.Fatalf("forward: %v", err)
+		}
+		assertDisplay("forward to "+display, display)
+	}
+}
+
+// TestExploreTeamHistoryLeagueContextToggles checks the League context
+// checkbox: it reaches the URL, shows the context details, legend and second
+// chart, and Back removes them again.
+func TestExploreTeamHistoryLeagueContextToggles(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	page := explorePage(t, base, Desktop, "explore?view=team-history")
+	defer expectInPlace(t, page, "toggling league context")()
+	expect := playwright.NewPlaywrightAssertions()
+	assertContext := func(step string, on bool) {
+		t.Helper()
+		// Off is the default, so the parameter is "off" or absent.
+		if got := queryOf(t, page).Get("context"); (got == "on") != on {
+			t.Errorf("%s: context = %q, want on = %v", step, got, on)
+		}
+		if err := expect.Locator(page.Locator("[data-history-context]")).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(on)}); err != nil {
+			t.Errorf("%s: checkbox: %v", step, err)
+		}
+		for _, selector := range []string{"[data-history-context-details]", "[data-history-context-legend]", "[data-history-xg-panel]"} {
+			locator := page.Locator(selector)
+			if on {
+				if err := expect.Locator(locator).ToBeVisible(); err != nil {
+					t.Errorf("%s: %s: %v", step, selector, err)
+				}
+			} else if err := expect.Locator(locator).ToBeHidden(); err != nil {
+				t.Errorf("%s: %s: %v", step, selector, err)
+			}
+		}
+	}
+	assertContext("initial", false)
+	if err := page.Locator("[data-history-context]").Check(); err != nil {
+		t.Fatalf("check league context: %v", err)
+	}
+	assertContext("checked", true)
+	if err := page.Locator("[data-history-context]").Uncheck(); err != nil {
+		t.Fatalf("uncheck league context: %v", err)
+	}
+	assertContext("unchecked", false)
+	if _, err := page.GoBack(); err != nil {
+		t.Fatalf("back: %v", err)
+	}
+	assertContext("Back to checked", true)
+	if _, err := page.GoBack(); err != nil {
+		t.Fatalf("back: %v", err)
+	}
+	assertContext("Back to the start", false)
 }
 
 // historyTableSeasons returns the Season column of the Season by season table.
@@ -1368,6 +1818,7 @@ func historyTableSeasons(t *testing.T, page playwright.Page) []string {
 // renders: sortable header links, GET forms with their submit buttons, and the
 // full tables.
 func TestExploreWorksWithoutJavaScript(t *testing.T) {
+	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	page := noScriptPage(t, Desktop)
 	goTo := func(path string) {

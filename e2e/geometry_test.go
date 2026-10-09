@@ -48,8 +48,27 @@ func near(a, b float64) bool {
 	return math.Abs(a-b) <= 1e-9*math.Max(1, math.Max(math.Abs(a), math.Abs(b)))
 }
 
-func TestGeometryExposesOneGlobal(t *testing.T) {
+// TestGeometry runs every geometry test against one loaded page: the functions
+// are pure, so sharing the page saves a server and a browser context each.
+func TestGeometry(t *testing.T) {
+	t.Parallel()
 	page := geometryPage(t)
+	for _, tc := range []struct {
+		name string
+		run  func(*testing.T, playwright.Page)
+	}{
+		{"ExposesOneGlobal", testGeometryExposesOneGlobal},
+		{"GapExtent", testGeometryGapExtent},
+		{"PlotDomain", testGeometryPlotDomain},
+		{"PointRadius", testGeometryPointRadius},
+		{"LogoPlacement", testGeometryLogoPlacement},
+		{"LayoutLogos", testGeometryLayoutLogos},
+	} {
+		t.Run(tc.name, func(t *testing.T) { tc.run(t, page) })
+	}
+}
+
+func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
 	want := []string{"gapExtent", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius"}
@@ -68,8 +87,7 @@ func TestGeometryExposesOneGlobal(t *testing.T) {
 	}
 }
 
-func TestGeometryGapExtent(t *testing.T) {
-	page := geometryPage(t)
+func testGeometryGapExtent(t *testing.T, page playwright.Page) {
 	for _, tc := range []struct {
 		name   string
 		values []float64
@@ -93,8 +111,7 @@ func TestGeometryGapExtent(t *testing.T) {
 	}
 }
 
-func TestGeometryPlotDomain(t *testing.T) {
-	page := geometryPage(t)
+func testGeometryPlotDomain(t *testing.T, page playwright.Page) {
 	for _, tc := range []struct {
 		name     string
 		values   []float64
@@ -139,8 +156,7 @@ type pixelArea struct {
 	Bottom float64 `json:"bottom"`
 }
 
-func TestGeometryPointRadius(t *testing.T) {
-	page := geometryPage(t)
+func testGeometryPointRadius(t *testing.T, page playwright.Page) {
 	area := pixelArea{Left: 0, Right: 600, Top: 0, Bottom: 600}
 	for _, tc := range []struct {
 		name   string
@@ -177,8 +193,7 @@ type rect struct {
 	Bottom float64 `json:"bottom"`
 }
 
-func TestGeometryLogoPlacement(t *testing.T) {
-	page := geometryPage(t)
+func testGeometryLogoPlacement(t *testing.T, page playwright.Page) {
 	area := pixelArea{Left: 0, Right: 600, Top: 0, Bottom: 600}
 	const radius = 9 // The gap to the point is radius + 3.
 	centre := pixel{300, 300}
@@ -261,8 +276,7 @@ func assertLogosClear(t *testing.T, placed []placedLogo, points []logoPoint, are
 	}
 }
 
-func TestGeometryLayoutLogos(t *testing.T) {
-	page := geometryPage(t)
+func testGeometryLayoutLogos(t *testing.T, page playwright.Page) {
 	area := pixelArea{Left: 0, Right: 600, Top: 0, Bottom: 600}
 	const radius = 9
 
@@ -341,8 +355,10 @@ func TestGeometryLayoutLogos(t *testing.T) {
 	t.Run("coincident points never share space", func(t *testing.T) {
 		points := []logoPoint{{300, 300, 0}, {300, 300, 1}, {300, 300, 2}, {300, 300, 3}}
 		placed := layoutLogos(t, page, points, area, radius, []int{0, 1, 2, 3})
-		if len(placed) == 0 {
-			t.Fatal("no logo was placed for the coincident points")
+		// Four logos cannot all sit beside one spot; the first two by index
+		// get places and the others are dropped rather than overlapped.
+		if len(placed) != 2 || placed[0].Point.Index != 0 || placed[1].Point.Index != 1 {
+			t.Fatalf("placed %+v, want only points 0 and 1", placed)
 		}
 		assertLogosClear(t, placed, points, area, radius)
 	})
@@ -355,8 +371,8 @@ func TestGeometryLayoutLogos(t *testing.T) {
 			usable = append(usable, i)
 		}
 		placed := layoutLogos(t, page, points, area, radius, usable)
-		if len(placed) == 0 || len(placed) > len(points) {
-			t.Fatalf("placed %d logos for %d points", len(placed), len(points))
+		if len(placed) == 0 || len(placed) >= len(points) {
+			t.Fatalf("placed %d logos for %d points, want some but not all", len(placed), len(points))
 		}
 		assertLogosClear(t, placed, points, area, radius)
 	})
