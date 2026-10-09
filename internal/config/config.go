@@ -3,11 +3,14 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/asa"
 )
 
 const (
@@ -40,6 +43,10 @@ type Config struct {
 	DataDir  string
 	DBPath   string
 
+	// ASABaseURL is the American Soccer Analysis API root used for source
+	// refreshes. Tests point it at a local fake; production keeps the default.
+	ASABaseURL string
+
 	SyncSeason          string
 	SyncStage           string
 	SyncCheckInterval   time.Duration
@@ -55,6 +62,10 @@ type Config struct {
 // FromEnvironment reads configuration, applying local-development defaults.
 func FromEnvironment() (Config, error) {
 	dataDir := valueOrDefault("NWSL_DATA_DIR", defaultDataDir)
+	asaBaseURL, err := absoluteHTTPURLFromEnvironment("NWSL_ASA_BASE_URL", asa.DefaultBaseURL)
+	if err != nil {
+		return Config{}, err
+	}
 	checkInterval, err := durationFromEnvironment("NWSL_SYNC_CHECK_INTERVAL", defaultSyncCheckInterval)
 	if err != nil {
 		return Config{}, err
@@ -93,6 +104,8 @@ func FromEnvironment() (Config, error) {
 		DataDir:  dataDir,
 		DBPath:   filepath.Join(dataDir, "nwsl-season.sqlite"),
 
+		ASABaseURL: asaBaseURL,
+
 		SyncSeason:          valueOrDefault("NWSL_SYNC_SEASON", defaultSyncSeason),
 		SyncStage:           valueOrDefault("NWSL_SYNC_STAGE", defaultSyncStage),
 		SyncCheckInterval:   checkInterval,
@@ -104,6 +117,21 @@ func FromEnvironment() (Config, error) {
 		ForecastConcurrency: forecastConcurrency,
 		ForecastTimeout:     forecastTimeout,
 	}, nil
+}
+
+// absoluteHTTPURLFromEnvironment accepts only absolute http or https URLs
+// with a host name and no user information, query string, or fragment, so a
+// typo cannot silently send source requests elsewhere.
+func absoluteHTTPURLFromEnvironment(name, fallback string) (string, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("%s must be an absolute http or https URL, got %q", name, value)
+	}
+	return value, nil
 }
 
 func positiveIntFromEnvironment(name string, fallback int) (int, error) {

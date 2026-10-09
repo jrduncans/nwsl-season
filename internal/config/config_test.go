@@ -3,6 +3,8 @@ package config
 import (
 	"testing"
 	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/asa"
 )
 
 func TestFromEnvironmentUsesDefaults(t *testing.T) {
@@ -20,12 +22,16 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_HISTORY_RETENTION", "")
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "")
+	t.Setenv("NWSL_ASA_BASE_URL", "")
 
 	got, err := FromEnvironment()
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	if got.ASABaseURL != asa.DefaultBaseURL {
+		t.Errorf("ASABaseURL = %q, want %q", got.ASABaseURL, asa.DefaultBaseURL)
+	}
 	if got.HTTPAddr != defaultHTTPAddr {
 		t.Errorf("HTTPAddr = %q, want %q", got.HTTPAddr, defaultHTTPAddr)
 	}
@@ -68,10 +74,15 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	t.Setenv("NWSL_HISTORY_RETENTION", "2160h")
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "3")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "40s")
+	t.Setenv("NWSL_ASA_BASE_URL", "http://127.0.0.1:9999/api/v1")
 
 	got, err := FromEnvironment()
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if got.ASABaseURL != "http://127.0.0.1:9999/api/v1" {
+		t.Errorf("ASABaseURL = %q, want configured fake URL", got.ASABaseURL)
 	}
 
 	if got.HTTPAddr != ":9090" {
@@ -169,6 +180,29 @@ func TestFromEnvironmentRejectsInvalidForecastLimits(t *testing.T) {
 			t.Setenv(test.key, test.value)
 			if _, err := FromEnvironment(); err == nil {
 				t.Fatalf("FromEnvironment() with %s=%q succeeded", test.key, test.value)
+			}
+		})
+	}
+}
+
+func TestFromEnvironmentRejectsInvalidASABaseURL(t *testing.T) {
+	for _, value := range []string{
+		"app.americansocceranalysis.com/api/v1",
+		"/api/v1",
+		"ftp://example.test/api",
+		"file:///tmp/asa",
+		"http://",
+		"https:///api/v1",
+		"http://:8080/api",
+		"http://[::1",
+		"http://user:secret@example.test/api",
+		"http://example.test/api?token=x",
+		"http://example.test/api#fragment",
+	} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("NWSL_ASA_BASE_URL", value)
+			if got, err := FromEnvironment(); err == nil {
+				t.Fatalf("FromEnvironment() with NWSL_ASA_BASE_URL=%q = %q, want validation error", value, got.ASABaseURL)
 			}
 		})
 	}

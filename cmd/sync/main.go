@@ -46,7 +46,7 @@ func run() (exitCode int) {
 	}
 	season := flag.String("season", cfg.SyncSeason, "NWSL season year to fetch")
 	stage := flag.String("stage", cfg.SyncStage, "NWSL competition stage to fetch")
-	baseURL := flag.String("base-url", asa.DefaultBaseURL, "ASA API base URL")
+	baseURL := flag.String("base-url", cfg.ASABaseURL, "ASA API base URL (default from NWSL_ASA_BASE_URL)")
 	dbPath := flag.String("db", cfg.DBPath, "SQLite cache database path")
 	recalculate := flag.Bool("recalculate", false, "recalculate qualification and clinching scenarios from cached fixtures without syncing ASA data")
 	force := flag.Bool("force", false, "force all clinching calculations after synchronizing source data")
