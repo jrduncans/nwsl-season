@@ -11,6 +11,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel"
@@ -284,4 +285,244 @@ func (s *recordingQualificationStore) ReplaceQualification(context.Context, cach
 func (s *recordingQualificationStore) RecordQualificationFailure(context.Context, cache.QualificationRun, error) error {
 	s.failures++
 	return nil
+}
+
+// capturingQualificationStore records every write so tests can assert exactly
+// what Refresh published or reported.
+type capturingQualificationStore struct {
+	replaceErr  error
+	replaced    [][]cache.QualificationStatus
+	replaceRuns []cache.QualificationRun
+	failures    []error
+	failureRuns []cache.QualificationRun
+}
+
+func (*capturingQualificationStore) QualificationForSnapshot(context.Context, string, string) (cache.QualificationSnapshot, bool, error) {
+	return cache.QualificationSnapshot{}, false, nil
+}
+
+func (s *capturingQualificationStore) ReplaceQualification(_ context.Context, run cache.QualificationRun, rows []cache.QualificationStatus) (cache.QualificationSnapshot, error) {
+	s.replaceRuns = append(s.replaceRuns, run)
+	s.replaced = append(s.replaced, append([]cache.QualificationStatus(nil), rows...))
+	return cache.QualificationSnapshot{}, s.replaceErr
+}
+
+func (s *capturingQualificationStore) RecordQualificationFailure(_ context.Context, run cache.QualificationRun, err error) error {
+	s.failureRuns = append(s.failureRuns, run)
+	s.failures = append(s.failures, err)
+	return nil
+}
+
+func fourTeamRules() competition.Rules {
+	return competition.Rules{
+		Season: "2026", Stage: "Regular Season", Version: "rules-v1",
+		ExpectedTeams: 4, GamesPerTeam: 6,
+		Achievements: []competition.Achievement{
+			{ID: competition.AchievementShield, Label: "Shield", TopK: 1},
+			{ID: competition.AchievementPlayoffs, Label: "Playoffs", TopK: 2},
+		},
+	}
+}
+
+func fourTeams() []cache.Team {
+	return []cache.Team{{ASAID: "a", Name: "A"}, {ASAID: "b", Name: "B"}, {ASAID: "c", Name: "C"}, {ASAID: "d", Name: "D"}}
+}
+
+// fourTeamGames returns a complete double round robin of 12 fixtures. The
+// first completed fixtures are final (home team wins 1-0); the rest are
+// scheduled one week apart.
+func fourTeamGames(completed int) []cache.Game {
+	ids := []string{"a", "b", "c", "d"}
+	games := []cache.Game{}
+	kickoff := time.Date(2026, 11, 1, 22, 0, 0, 0, time.UTC)
+	for _, home := range ids {
+		for _, away := range ids {
+			if home == away {
+				continue
+			}
+			game := cache.Game{ASAID: home + "-" + away, HomeTeamID: home, AwayTeamID: away, KickoffUTC: kickoff.Format(time.RFC3339)}
+			if len(games) < completed {
+				game.Status = fixtures.CompletedStatus
+				game.HomeScore = sql.NullInt64{Int64: 1, Valid: true}
+				game.AwayScore = sql.NullInt64{Int64: 0, Valid: true}
+			} else {
+				game.Status = fixtures.PreMatchStatus
+				kickoff = kickoff.Add(7 * 24 * time.Hour)
+			}
+			games = append(games, game)
+		}
+	}
+	return games
+}
+
+func fourTeamSync() cache.SyncRun {
+	return cache.SyncRun{ID: 7, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}
+}
+
+func requireUnresolvedBatch(t *testing.T, store *capturingQualificationStore, err error, reason string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if len(store.replaced) != 1 || len(store.failures) != 0 {
+		t.Fatalf("store writes = replaced %d failures %d, want one replacement and no failure", len(store.replaced), len(store.failures))
+	}
+	rules := fourTeamRules()
+	rows := store.replaced[0]
+	if want := 4 * len(rules.Achievements); len(rows) != want {
+		t.Fatalf("published %d rows, want %d", len(rows), want)
+	}
+	seen := map[string]bool{}
+	for _, row := range rows {
+		seen[row.TeamID+"/"+string(row.Achievement)] = true
+		if row.Status != clinching.Unresolved || row.Method != clinching.ProofIncompleteSchedule || row.Reason != reason {
+			t.Errorf("%s/%s = %s via %s (%q), want unresolved via incomplete_schedule (%q)", row.TeamID, row.Achievement, row.Status, row.Method, row.Reason, reason)
+		}
+		if row.NoHelp.State != clinching.NoHelpUnresolved || row.NoHelp.Reason != reason {
+			t.Errorf("%s/%s no-help = %+v, want unresolved with %q", row.TeamID, row.Achievement, row.NoHelp, reason)
+		}
+	}
+	for _, team := range []string{"a", "b", "c", "d"} {
+		for _, achievement := range rules.Achievements {
+			if !seen[team+"/"+string(achievement.ID)] {
+				t.Errorf("no row published for %s/%s", team, achievement.ID)
+			}
+		}
+	}
+	if store.replaceRuns[0].ExpectedStatuses != len(rows) || store.replaceRuns[0].WrittenStatuses != len(rows) {
+		t.Errorf("run = %+v, want expected and written statuses %d", store.replaceRuns[0], len(rows))
+	}
+}
+
+func TestRefreshPublishesUnresolvedRowsForIncompleteInventory(t *testing.T) {
+	store := &capturingQualificationStore{}
+	games := fourTeamGames(4)[:11]
+	_, err := (Refresher{Store: store, Rules: fourTeamRules()}).Refresh(context.Background(), fourTeamSync(), fourTeams(), games, false)
+	requireUnresolvedBatch(t, store, err, "fixture inventory is incomplete")
+}
+
+func TestRefreshPublishesUnresolvedRowsForUnsafeFixtureState(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*cache.Game)
+	}{
+		{name: "unknown status", mutate: func(g *cache.Game) { g.Status = "InProgress" }},
+		{name: "completed without score", mutate: func(g *cache.Game) { g.Status = fixtures.CompletedStatus; g.HomeScore = sql.NullInt64{} }},
+		{name: "scheduled with score", mutate: func(g *cache.Game) {
+			g.Status = fixtures.PreMatchStatus
+			g.HomeScore = sql.NullInt64{Int64: 1, Valid: true}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &capturingQualificationStore{}
+			games := fourTeamGames(4)
+			test.mutate(&games[len(games)-1])
+			_, err := (Refresher{Store: store, Rules: fourTeamRules()}).Refresh(context.Background(), fourTeamSync(), fourTeams(), games, false)
+			requireUnresolvedBatch(t, store, err, "fixture inventory is incomplete")
+		})
+	}
+}
+
+func TestRefreshPublishesUnresolvedRowsForInvalidKickoffOrder(t *testing.T) {
+	store := &capturingQualificationStore{}
+	games := fourTeamGames(4)
+	games[len(games)-1].KickoffUTC = "not a kickoff"
+	_, err := (Refresher{Store: store, Rules: fourTeamRules()}).Refresh(context.Background(), fourTeamSync(), fourTeams(), games, false)
+	requireUnresolvedBatch(t, store, err, "fixture kickoff order is invalid")
+}
+
+func TestRefreshRecordsCalculationFailureWithoutPublishing(t *testing.T) {
+	store := &capturingQualificationStore{}
+	// Team d plays fixtures but is absent from the team list.
+	teams := fourTeams()[:3]
+	_, err := (Refresher{Store: store, Rules: fourTeamRules()}).Refresh(context.Background(), fourTeamSync(), teams, fourTeamGames(4), false)
+	if err == nil {
+		t.Fatal("Refresh succeeded, want calculation error")
+	}
+	if len(store.replaced) != 0 {
+		t.Fatalf("ReplaceQualification called %d times, want never", len(store.replaced))
+	}
+	if len(store.failures) != 1 {
+		t.Fatalf("RecordQualificationFailure called %d times, want once", len(store.failures))
+	}
+	if !errors.Is(store.failures[0], err) {
+		t.Errorf("recorded failure = %v, want the error Refresh returned (%v)", store.failures[0], err)
+	}
+	if got := errorTypeOf(err); got != telemetry.ErrorTypeInvalidData {
+		t.Errorf("error type = %q, want %q", got, telemetry.ErrorTypeInvalidData)
+	}
+	if store.failureRuns[0].FixtureSnapshotID != "fixture-1" || store.failureRuns[0].SourceSyncRunID != 7 {
+		t.Errorf("failure run = %+v, want fixture-1 from sync run 7", store.failureRuns[0])
+	}
+}
+
+func TestRefreshRecordsStorageFailureWhenReplaceFails(t *testing.T) {
+	boom := errors.New("disk full")
+	store := &capturingQualificationStore{replaceErr: boom}
+	_, err := (Refresher{Store: store, Rules: fourTeamRules()}).Refresh(context.Background(), fourTeamSync(), fourTeams(), fourTeamGames(4), false)
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want it to wrap %v", err, boom)
+	}
+	if got := errorTypeOf(err); got != telemetry.ErrorTypeStorageFailure {
+		t.Errorf("returned error type = %q, want %q", got, telemetry.ErrorTypeStorageFailure)
+	}
+	if len(store.replaced) != 1 {
+		t.Fatalf("ReplaceQualification called %d times, want once", len(store.replaced))
+	}
+	if len(store.failures) != 1 {
+		t.Fatalf("RecordQualificationFailure called %d times, want once", len(store.failures))
+	}
+	if !errors.Is(store.failures[0], boom) || errorTypeOf(store.failures[0]) != telemetry.ErrorTypeStorageFailure {
+		t.Errorf("recorded failure = %v (type %q), want storage-classified %v", store.failures[0], errorTypeOf(store.failures[0]), boom)
+	}
+}
+
+func TestRefreshComputesNoHelpPathForAliveNotClinchedTeam(t *testing.T) {
+	store := &capturingQualificationStore{}
+	// Eight fixtures remain, so no team has clinched or been eliminated from
+	// the top two and every team is NotClinched but still alive.
+	_, err := (Refresher{Store: store, Rules: fourTeamRules(), Budget: time.Minute}).Refresh(context.Background(), fourTeamSync(), fourTeams(), fourTeamGames(4), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(store.replaced) != 1 || len(store.failures) != 0 {
+		t.Fatalf("store writes = replaced %d failures %d, want one replacement", len(store.replaced), len(store.failures))
+	}
+	checked, decisive := 0, 0
+	for _, row := range store.replaced[0] {
+		if row.Status != clinching.NotClinched {
+			continue
+		}
+		checked++
+		if row.Method == clinching.ProofComputeBudget || row.Method == clinching.ProofIncompleteSchedule {
+			t.Errorf("%s/%s method = %s, want a computed proof", row.TeamID, row.Achievement, row.Method)
+		}
+		switch row.NoHelp.State {
+		case clinching.NoHelpGuaranteed, clinching.NoHelpImpossible:
+			decisive++
+		case clinching.NoHelpUnresolved:
+			// A tiebreak limitation is acceptable; only budget exhaustion
+			// means the batch never ran.
+		default:
+			t.Errorf("%s/%s no-help = %+v, want the batch to compute a path", row.TeamID, row.Achievement, row.NoHelp)
+		}
+		if row.NoHelp.Reason == "calculation budget exhausted" {
+			t.Errorf("%s/%s no-help reason = %q, want the batch to run", row.TeamID, row.Achievement, row.NoHelp.Reason)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no NotClinched rows; season does not exercise the no-help batch")
+	}
+	if decisive == 0 {
+		t.Fatal("no NotClinched row has a guaranteed or impossible no-help path")
+	}
+}
+
+func errorTypeOf(err error) string {
+	var typed interface{ ErrorType() string }
+	if errors.As(err, &typed) {
+		return typed.ErrorType()
+	}
+	return ""
 }
