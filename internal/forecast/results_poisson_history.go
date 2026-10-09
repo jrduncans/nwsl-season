@@ -9,11 +9,6 @@ const (
 	resultsPoissonHomeHistoryID    = "results-poisson-home-history-v1"
 )
 
-// NewResultsPoissonHomeHistoryV1 keeps team attack and defence season-specific
-// while estimating the league home and away scoring rates from all completed
-// earlier seasons plus the current season to date.
-func NewResultsPoissonHomeHistoryV1() Model { return resultsPoissonHomeHistoryV1{} }
-
 // NewResultsPoissonHomeTwoSeasonsV1 uses the two most recent completed
 // regular seasons plus current-season results for league venue rates.
 func NewResultsPoissonHomeTwoSeasonsV1() Model { return resultsPoissonHomeHistoryV1{seasons: 2} }
