@@ -14,7 +14,8 @@ import (
 // own it. A selector is a space-separated chain of compound selectors
 // (descendant combinator). A compound selector is any combination of a tag
 // name, #id, .class, [attr] and [attr=value] (value optionally quoted), for
-// example `main section.forecast-comparison [data-total]`.
+// example `main section.forecast-comparison [data-total]`. Alternatives are
+// separated by commas.
 
 type selectorPart struct {
 	tag, id string
@@ -161,15 +162,23 @@ func find(t testing.TB, body, selector string) []*html.Node {
 	return findIn(t, root, selector)
 }
 
-// findIn is find within an already parsed subtree.
+// findIn is find within an already parsed subtree. A comma separates
+// alternative selectors; elements matching any alternative are returned once,
+// in document order.
 func findIn(t testing.TB, root *html.Node, selector string) []*html.Node {
 	t.Helper()
-	parts := parseSelector(t, selector)
+	var alternatives [][]selectorPart
+	for _, alternative := range splitAlternatives(selector) {
+		alternatives = append(alternatives, parseSelector(t, alternative))
+	}
 	var out []*html.Node
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
-		if parts[len(parts)-1].matches(n) && ancestorsMatch(n, parts[:len(parts)-1]) {
-			out = append(out, n)
+		for _, parts := range alternatives {
+			if parts[len(parts)-1].matches(n) && ancestorsMatch(n, parts[:len(parts)-1]) {
+				out = append(out, n)
+				break
+			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
@@ -177,6 +186,27 @@ func findIn(t testing.TB, root *html.Node, selector string) []*html.Node {
 	}
 	walk(root)
 	return out
+}
+
+// splitAlternatives splits a selector list at commas outside attribute
+// brackets.
+func splitAlternatives(selector string) []string {
+	var out []string
+	start, depth := 0, 0
+	for i, r := range selector {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				out = append(out, selector[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, selector[start:])
 }
 
 func ancestorsMatch(n *html.Node, parts []selectorPart) bool {
@@ -351,6 +381,9 @@ three</p><div data-flag><span class="k">k</span></div></section><section class="
 	requireElements(t, page, "nav", "[data-flag]")
 	forbidElements(t, page, "table", "main nav")
 	requireAttr(t, page, "a", "href", "b")
+	if got := len(find(t, page, "nav, section.other, p.none")); got != 2 {
+		t.Errorf("selector list matched %d elements, want 2", got)
+	}
 	requireAttrContains(t, page, "a", "href", "a", "b")
 	if got := len(find(t, `<p title="x y">1</p><p>2</p>`, `p[title="x y"]`)); got != 1 {
 		t.Errorf("quoted attribute with space matched %d elements", got)
