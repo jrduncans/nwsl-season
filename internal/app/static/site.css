@@ -144,6 +144,7 @@ th:nth-child(2) { text-align: left; }
 .fixtures { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .fixtures li { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(0, 1fr) 7rem minmax(0, 1fr) 6rem; align-items: center; gap: 1rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
 .fixtures li[hidden], .fixture-group[hidden] { display: none !important; }
+.fixture-view-toggle[hidden] { display: none; }
 .fixture-view-toggle { display: inline-flex; gap: .2rem; margin-top: 1.5rem; padding: .2rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .fixture-view-button { border: 0; border-radius: .3rem; padding: .35rem .6rem; color: var(--muted); background: transparent; font: inherit; font-size: .875rem; font-weight: 700; cursor: pointer; }
 .fixture-view-button[aria-pressed="true"] { color: white; background: var(--green); }

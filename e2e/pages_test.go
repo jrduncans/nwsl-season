@@ -652,7 +652,6 @@ func testStandingsNoScript(t *testing.T, f *fixture) {
 // testFixtureToggleNoScript checks that the Results/Upcoming toggle, which only
 // the script can operate, stays hidden when JavaScript is off.
 func testFixtureToggleNoScript(t *testing.T, f *fixture) {
-	t.Skip("bug: .fixture-view-toggle display:inline-flex overrides hidden without JS; see https://github.com/jrduncans/nwsl-season/issues/122")
 	page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
 	visitStatic(t, page, f.URL(seasonPath("fixtures")))
 	expect := playwright.NewPlaywrightAssertions()

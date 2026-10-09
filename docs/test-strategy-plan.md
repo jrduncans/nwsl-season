@@ -128,7 +128,8 @@ Merge each task before starting tasks that depend on it.
 - <https://github.com/jrduncans/nwsl-season/issues/123>: all of `e2e` under
   4 min in CI. End of the plan.
 - <https://github.com/jrduncans/nwsl-season/issues/122>: fixture-view-toggle is
-  visible without JavaScript. Product bug; skipped test in PR #121.
+  visible without JavaScript. Fixed with a `[hidden]` rule; the no-script test is
+  enabled.
 
 ## 5. Conventions for every task
 
