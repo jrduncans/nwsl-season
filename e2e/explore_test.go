@@ -1194,6 +1194,22 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 	})
 }
 
+// TestExploreOutlierPlotExplainsWhenNoTeamHasCompleteXG uses a season in which
+// only one game has xG, so no team has complete xG and the Outlier plot has
+// nothing to draw.
+func TestExploreOutlierPlotExplainsWhenNoTeamHasCompleteXG(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioNoXG)
+	page := explorePage(t, base, Desktop, "explore?view=teams&season=2026&measure=for&display=scatter")
+	expect := playwright.NewPlaywrightAssertions()
+	if err := expect.Locator(page.Locator("[data-team-scatter-empty]")).ToContainText("No teams have complete xG for this measure yet."); err != nil {
+		t.Errorf("Outlier plot empty message: %v", err)
+	}
+	if err := expect.Locator(page.Locator("[data-team-scatter-chart-wrap]")).ToBeHidden(); err != nil {
+		t.Errorf("Outlier plot chart should be hidden: %v", err)
+	}
+}
+
 // TestExploreShowsEmptyStatesForSeasonsWithoutData selects a season whose
 // results are not in the cache, and a team with no results in a season.
 func TestExploreShowsEmptyStatesForSeasonsWithoutData(t *testing.T) {

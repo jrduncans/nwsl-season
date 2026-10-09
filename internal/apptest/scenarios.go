@@ -15,6 +15,7 @@ const (
 	ScenarioDefault     = "default"
 	ScenarioTeams       = "teams"
 	ScenarioTeamHistory = "team-history"
+	ScenarioNoXG        = "no-xg"
 	ScenarioSeasonTrend = "season-trend"
 	ScenarioOverview    = "overview"
 	ScenarioEmpty       = "empty"
@@ -23,7 +24,7 @@ const (
 
 // ScenarioNames lists every scenario in the order cmd/preview documents them.
 func ScenarioNames() []string {
-	return []string{ScenarioDefault, ScenarioTeams, ScenarioTeamHistory, ScenarioSeasonTrend, ScenarioOverview, ScenarioEmpty, ScenarioSingle}
+	return []string{ScenarioDefault, ScenarioTeams, ScenarioNoXG, ScenarioTeamHistory, ScenarioSeasonTrend, ScenarioOverview, ScenarioEmpty, ScenarioSingle}
 }
 
 // Scenario returns the in-memory historical seasons for a named scenario and
@@ -40,7 +41,7 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason, sele
 			"2021": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 20},
 			"2022": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 1},
 		})
-	case ScenarioTeams, ScenarioTeamHistory, ScenarioSeasonTrend:
+	case ScenarioTeams, ScenarioNoXG, ScenarioTeamHistory, ScenarioSeasonTrend:
 		archive = teamsArchive(t, name)
 	case ScenarioOverview:
 		states := make(map[string]ArchiveState)
@@ -112,7 +113,7 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 		}
 		season.Data.Teams = previewTeams()
 		count := 64
-		if scenario == ScenarioSeasonTrend {
+		if scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG {
 			count = 240
 		}
 		season.Data.Games = Games(season.Entry.Season, count, 3)
@@ -121,7 +122,7 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 			game.RawJSON = fmt.Sprintf(`{"stadium_id":%q}`, previewStadiums[j%16])
 			game.KickoffUTC = time.Date(2026, 3, 2, 1, 0, 0, 0, time.UTC).AddDate(0, 0, j/8*7).Format("2006-01-02 15:04:05 MST")
 			game.HomeTeamID, game.AwayTeamID = season.Data.Teams[j%16].ID, season.Data.Teams[(j+5)%16].ID
-			if scenario == ScenarioSeasonTrend {
+			if scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG {
 				// Two round-robin legs keep every team at one fixture per
 				// kickoff and one remaining fixture in the active season.
 				round, pairing := j/8, j%8
@@ -139,7 +140,7 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 				year := int(season.Entry.Season[3] - '0')
 				game.HomeScore.Int64, game.AwayScore.Int64 = int64((j+year)%5), int64((j/3+year)%3)
 			}
-			if scenario == ScenarioSeasonTrend && season.Entry.Season == "2026" && j >= count-8 {
+			if (scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG) && season.Entry.Season == "2026" && j >= count-8 {
 				game.Status = "PreMatch"
 				game.HomeScore, game.AwayScore = sql.NullInt64{}, sql.NullInt64{}
 				continue
@@ -152,6 +153,11 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 				HomeXG: sql.NullFloat64{Float64: .5 + float64(j%7)*.3, Valid: true}, AwayXG: sql.NullFloat64{Float64: .2 + float64(j%5)*.25, Valid: true},
 				HomeXPoints: sql.NullFloat64{Float64: 1.3 + float64(j%5)*.12, Valid: true},
 				AwayXPoints: sql.NullFloat64{Float64: 1.3 - float64(j%5)*.08, Valid: true},
+			}
+			if scenario == ScenarioNoXG && j > 0 {
+				// Only the first game has xG, so every team misses some and
+				// none has complete xG while the season still has xG data.
+				observation.HomeXG.Valid = false
 			}
 			if season.Entry.Season == "2026" && j == 1 {
 				observation.HomeXPoints.Valid = false // xG covered, xPts missing.

@@ -30,6 +30,7 @@ func scenarioPages(selection string) map[string][]pageExpectation {
 		apptest.ScenarioSingle:      {{scoring, selected}, {scoring, "xG available for 0 of 20 completed matches"}},
 		apptest.ScenarioEmpty:       {{scoring, selected}, {scoring, "No eligible seasons currently have complete xG coverage to plot."}},
 		apptest.ScenarioTeams:       {{"/explore", "Angel City FC"}},
+		apptest.ScenarioNoXG:        {{"/explore", "Angel City FC"}},
 		apptest.ScenarioTeamHistory: {{"/explore?view=team-history", "Angel City FC"}},
 		apptest.ScenarioSeasonTrend: {{"/explore?view=season-trend", "Angel City FC"}},
 	}
