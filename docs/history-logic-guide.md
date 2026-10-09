@@ -775,9 +775,22 @@ plot-eligible season and complete xG coverage.
 
 ## UI verification
 
-The opt-in `TestHistoryPreview` loopback harness supports an `overview` scenario
-with ten synthetic seasons and all five goal bins, as well as partial, empty,
-and single-season cases. Set `NWSL_HISTORY_PREVIEW_NO_SCRIPT=1` to block page
-scripts using a preview-only Content Security Policy and verify native links,
-season forms, and disclosures. This does not change application CSP or access
-ASA. Run the harness with `NWSL_CONFIG_FILE=/dev/null`.
+`go run ./cmd/preview -scenario <name>` seeds a temporary SQLite cache from
+`internal/apptest`, serves the app under `/nwsl-season/` on a loopback port, and
+prints the history scoring URL. It writes nothing outside its temporary
+directory (removed on exit), never starts the scheduler, and makes no ASA
+request. Set `NWSL_CONFIG_FILE=/dev/null` so it ignores any user configuration.
+Stop it with Ctrl-C.
+
+Scenarios: `default` (partial, active and incomplete seasons), `overview` (ten
+synthetic seasons covering all five goal bins), `empty`, `single`, `teams`,
+`team-history` and `season-trend`. `-metric xg|goals` picks the metric in the
+printed URL, and `-no-script` sends a preview-only Content Security Policy that
+blocks page scripts so you can verify native links, season forms, and
+disclosures. This does not change application CSP.
+
+The same scenarios are available to Go code as `apptest.Seed(t, db, scenario)`
+(cache-backed) and `apptest.Scenario(t, scenario)` (in-memory, used by the
+`internal/app` handler tests). A seeded cache derives source-scope lifecycle
+and inventory completeness from the calendar year and the catalog, so those
+two labels can differ from the in-memory scenario.
