@@ -24,6 +24,13 @@ const mountPrefix = "/nwsl-season"
 // currentSeason matches the default NWSL_SYNC_SEASON.
 const currentSeason = "2026"
 
+// The fixture is a 16-team double round robin with its first half played.
+const (
+	fixtureTeams       = 16
+	fixtureGames       = fixtureTeams * (fixtureTeams - 1)
+	fixturePlayedGames = fixtureGames / 2
+)
+
 // fixture is a running app backed by a temporary cache and a fake ASA.
 type fixture struct {
 	// ASA is the fake ASA API. Its recorded requests show whether a page
