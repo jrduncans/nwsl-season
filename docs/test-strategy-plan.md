@@ -164,16 +164,21 @@ each coordinator's context small.
 2. **One-time setup (first wave only): create `.claude/settings.local.json`**
    in the project folder with the content below. Claude Code reads this file
    for every session in this project, in the CLI and the desktop app. It
-   does two things. The `env` block sets `NWSL_CONFIG_FILE=/dev/null` for
+   does three things. The `env` block sets `NWSL_CONFIG_FILE=/dev/null` for
    the coordinator and all its subagents, so none of them can touch the
    1Password-backed `config.env`. The `allow` list pre-approves the commands
    the tasks run, so background subagents don't stall on permission prompts.
    The `git` entries cover what the tasks need and leave out force pushes
-   and anything that rewrites history.
+   and anything that rewrites history. The `sandbox` entry turns off Claude
+   Code's Bash sandbox for this project, in case it's on in your user
+   settings. On macOS the sandbox blocks git over SSH, `gh`, the Go build
+   cache and Chromium, which the tasks all need, and background subagents
+   can't ask you to approve an unsandboxed retry.
 
    ```json
    {
      "env": { "NWSL_CONFIG_FILE": "/dev/null" },
+     "sandbox": { "enabled": false },
      "permissions": {
        "allow": [
          "Bash(go *)",
@@ -204,9 +209,9 @@ each coordinator's context small.
    the coordinator prompt below. Subagents get their models from the prompt,
    so the picker only sets the coordinator's.
 4. **From wave B on, install Chromium once**, before starting the wave. Do
-   this yourself in the Terminal panel, not in a Claude session: the download
-   goes to `~/Library/Caches/ms-playwright`, which a session's sandbox can't
-   write to. After T6 has merged, run:
+   this yourself in the Terminal panel, so parallel implementers don't each
+   start the same download into `~/Library/Caches/ms-playwright`. After T6
+   has merged, run:
 
    ```sh
    make e2e-install
@@ -215,11 +220,8 @@ each coordinator's context small.
    It downloads about 150 MB and only needs repeating when a task upgrades
    `playwright-go`. If a later e2e run fails with "Executable doesn't exist",
    run it again. If e2e tests fail with "Operation not permitted" when
-   binding a port or launching Chromium, the session sandbox is blocking
-   them. Tell the coordinator, and allow local port binding for the session
-   (`sandbox.network.allowLocalBinding: true` in the session's sandbox
-   settings) or let it re-run that one command outside the sandbox with your
-   approval.
+   binding a port or launching Chromium, the Bash sandbox is on; check the
+   `sandbox` entry from step 2.
 
 ### Usage limits
 
