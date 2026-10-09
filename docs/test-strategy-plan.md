@@ -1,12 +1,24 @@
 # Test strategy plan
 
-Status: proposed (2026-10-08). This plan adds browser and end-to-end tests with
+Status: Complete (2026-10-09). This plan adds browser and end-to-end tests with
 `playwright-go`, closes the gaps found in the October 2026 test assessment, and
 assigns each task to the cheapest model that can finish it reliably.
 
 Each task below is self-contained, so you can start each one in a fresh
 session. Read **Conventions for every task** (§5) before starting any task.
 §6 explains how to run the plan.
+
+## Outcomes
+
+T1–T12 are merged. CI now runs the race suite, `govulncheck` and a
+Chromium-based E2E job; `make test-e2e` covers Explore, the other pages and
+fake-ASA journeys, and Explore's chart geometry lives in
+`explore-geometry.js` with its own browser tests. `TestHistoryPreview` is
+replaced by `internal/apptest` scenarios and `cmd/preview`. Docs now describe
+the layers (README), require `make test-e2e` for UI changes (`AGENTS.md`,
+`internal/app/AGENTS.md`) and keep only visual-judgment checks manual (History
+guide). Open follow-ups: #122 (product bug, skipped test), #123 (E2E under 4
+min in CI) and #125 (`apptest` season without xG).
 
 ## 1. Where the suite stands
 
