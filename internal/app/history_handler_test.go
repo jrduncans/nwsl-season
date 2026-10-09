@@ -34,12 +34,12 @@ func TestHistoryScoringRendersOneArchiveReadAndNoSeasonReads(t *testing.T) {
 		t.Fatalf("archive=%d season=%d status=%d; want 1/0/0", store.archiveCalls, store.seasonCalls, store.statusCalls)
 	}
 	body := response.Body.String()
-	requireText(t, body, "main h1", "Scoring by season")
+	requireExact(t, body, "main h1", "Scoring by season")
 	requireText(t, body, "main", "History · League trends", "Regular seasons since 2016 in the available archive", "The NWSL did not hold a regular season in 2020", "20 completed, valid matches", "Active through 20 matches", "Cached matches; inventory unverified")
 	requireText(t, body, "table caption", "Regular-season scoring data in the available archive")
 	requireText(t, body, "table thead th[scope=col]", "Goals per match")
 	requireAttr(t, body, "table tbody th[scope=row] a", "href", "scoring?season=2019")
-	requireText(t, body, "table tbody tr", "60 3.00")
+	requireRowText(t, body, "table tbody tr", "2019", "60 3.00")
 	requireElements(t, body, "details.history-data")
 	var panels []string
 	for _, panel := range find(t, body, "section.history-distribution, details.history-data") {
@@ -134,10 +134,10 @@ func TestHistorySelectionAndErrorPaths(t *testing.T) {
 			t.Fatalf("%s = %d %q", test.path, response.Code, response.Body.String())
 		}
 		body := response.Body.String()
-		requireText(t, body, "#selected-season-heading", test.want)
+		requireExact(t, body, "#selected-season-heading", test.want)
 		requireText(t, body, "main", "Currently eligible for comparison: 2024, 2026.", "Excluded from comparison:", "2016 — known fixture inventory incomplete")
 		requireAttr(t, body, "table tbody th[scope=row] a", "href", "scoring?season=2024")
-		requireText(t, body, "table tbody tr", "40 2.00")
+		requireRowText(t, body, "table tbody tr", "2024", "40 2.00")
 	}
 	for _, path := range []string{
 		"/history/scoring?season=", "/history/scoring?season=202", "/history/scoring?season=2020",
@@ -165,7 +165,7 @@ func TestHistorySelectionAndErrorPaths(t *testing.T) {
 	if validWithMalformedUnrelated.Code != http.StatusOK {
 		t.Fatalf("valid selection with malformed unrelated query = %d %q, want selected 2024", validWithMalformedUnrelated.Code, validWithMalformedUnrelated.Body.String())
 	}
-	requireText(t, validWithMalformedUnrelated.Body.String(), "#selected-season-heading", "2024")
+	requireExact(t, validWithMalformedUnrelated.Body.String(), "#selected-season-heading", "2024")
 
 	unsupported := httptest.NewRecorder()
 	NewHandler(fakeStore{}).ServeHTTP(unsupported, httptest.NewRequest(http.MethodGet, "/history/scoring", nil))
@@ -211,8 +211,8 @@ func TestHistoryReadsTemporarySQLiteCache(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("temporary SQLite history = %d %s", response.Code, response.Body.String())
 	}
-	requireText(t, response.Body.String(), "#selected-season-heading", "2024")
-	requireText(t, response.Body.String(), "table tbody tr", "60 3.00")
+	requireExact(t, response.Body.String(), "#selected-season-heading", "2024")
+	requireRowText(t, response.Body.String(), "table tbody tr", "2024", "60 3.00")
 	assertHistoryCatalogRows(t, response.Body.String())
 }
 
@@ -294,7 +294,7 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 	if goals.Code != http.StatusOK {
 		t.Fatalf("Goals round trip = %d %s", goals.Code, goals.Body.String())
 	}
-	requireText(t, goals.Body.String(), "#selected-season-heading", "2019")
+	requireExact(t, goals.Body.String(), "#selected-season-heading", "2019")
 	requireText(t, goals.Body.String(), "main", "Goals per match")
 
 	for _, query := range []string{"metric=", "metric=foo", "metric=xg&metric=goals"} {
@@ -356,7 +356,7 @@ func assertHistoryMetricRoundTrip(t *testing.T, handler http.Handler, rawPath, s
 	if response.Code != http.StatusOK {
 		t.Fatalf("round trip %q = %d; want selected xG season %s", rawPath, response.Code, season)
 	}
-	requireText(t, response.Body.String(), "#selected-season-heading", season)
+	requireExact(t, response.Body.String(), "#selected-season-heading", season)
 	requireText(t, response.Body.String(), "main", "Expected goals per match")
 }
 

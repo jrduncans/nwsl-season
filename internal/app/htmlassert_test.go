@@ -281,10 +281,16 @@ func requireText(t testing.TB, body, scope string, wants ...string) {
 }
 
 // forbidText checks that none of the unwanted strings appear in the text of
-// the elements matching scope. A scope that matches nothing passes.
+// the elements matching scope. It fails when scope matches nothing, so a
+// renamed container cannot make the check pass vacuously. Use forbidRaw to
+// also catch attributes and markup.
 func forbidText(t testing.TB, body, scope string, unwanted ...string) {
 	t.Helper()
-	for _, n := range find(t, body, scope) {
+	nodes := find(t, body, scope)
+	if len(nodes) == 0 {
+		t.Errorf("no element matches %q", scope)
+	}
+	for _, n := range nodes {
 		got := text(n)
 		for _, bad := range unwanted {
 			if strings.Contains(got, bad) {
@@ -292,6 +298,59 @@ func forbidText(t testing.TB, body, scope string, unwanted ...string) {
 			}
 		}
 	}
+}
+
+// forbidRaw checks that none of the unwanted strings appear anywhere in the
+// raw response body, including attribute values and markup. Use it for
+// internal identifiers and enum values that must never reach the page.
+func forbidRaw(t testing.TB, body string, unwanted ...string) {
+	t.Helper()
+	for _, bad := range unwanted {
+		if strings.Contains(body, bad) {
+			t.Errorf("body unexpectedly contains %q", bad)
+		}
+	}
+}
+
+// requireExact checks that, for each want, some element matching selector has
+// text exactly equal to want.
+func requireExact(t testing.TB, body, selector string, wants ...string) {
+	t.Helper()
+	nodes := find(t, body, selector)
+	if len(nodes) == 0 {
+		t.Errorf("no element matches %q", selector)
+		return
+	}
+	for _, want := range wants {
+		found := false
+		for _, n := range nodes {
+			found = found || text(n) == want
+		}
+		if !found {
+			t.Errorf("no %q element has text exactly %q", selector, want)
+		}
+	}
+}
+
+// requireRowText checks that a single element matching selector (for example
+// one table row) contains every want in its text.
+func requireRowText(t testing.TB, body, selector string, wants ...string) {
+	t.Helper()
+	nodes := find(t, body, selector)
+	if len(nodes) == 0 {
+		t.Errorf("no element matches %q", selector)
+		return
+	}
+	for _, n := range nodes {
+		got, all := text(n), true
+		for _, want := range wants {
+			all = all && strings.Contains(got, want)
+		}
+		if all {
+			return
+		}
+	}
+	t.Errorf("no single %q element contains all of %q", selector, wants)
 }
 
 // requireElements checks that every selector matches at least one element.
@@ -326,7 +385,7 @@ func requireAttr(t testing.TB, body, selector, name, want string) {
 	t.Errorf("no %q element has %s=%q", selector, name, want)
 }
 
-// requireAttrContains checks that some element matching selector has an
+// requireAttrContains checks that one element matching selector has an
 // attribute name that contains every want.
 func requireAttrContains(t testing.TB, body, selector, name string, wants ...string) {
 	t.Helper()
@@ -335,15 +394,16 @@ func requireAttrContains(t testing.TB, body, selector, name string, wants ...str
 		t.Errorf("no element matches %q", selector)
 		return
 	}
-	for _, want := range wants {
-		found := false
-		for _, n := range nodes {
-			found = found || strings.Contains(attr(n, name), want)
+	for _, n := range nodes {
+		all := true
+		for _, want := range wants {
+			all = all && strings.Contains(attr(n, name), want)
 		}
-		if !found {
-			t.Errorf("no %q element has %s containing %q", selector, name, want)
+		if all {
+			return
 		}
 	}
+	t.Errorf("no single %q element has %s containing all of %q", selector, name, wants)
 }
 
 func TestHTMLAssertHelpers(t *testing.T) {
@@ -377,14 +437,16 @@ three</p><div data-flag><span class="k">k</span></div></section><section class="
 	}
 	requireText(t, page, "section.box", "Title", "One two three")
 	forbidText(t, page, "section.box", "Beta")
-	forbidText(t, page, "section.nothing", "anything")
+	forbidRaw(t, page, "Gamma")
+	requireExact(t, page, "section.box h2", "Title")
+	requireRowText(t, page, "section", "Title", "One two three")
 	requireElements(t, page, "nav", "[data-flag]")
 	forbidElements(t, page, "table", "main nav")
 	requireAttr(t, page, "a", "href", "b")
 	if got := len(find(t, page, "nav, section.other, p.none")); got != 2 {
 		t.Errorf("selector list matched %d elements, want 2", got)
 	}
-	requireAttrContains(t, page, "a", "href", "a", "b")
+	requireAttrContains(t, page, "a", "href", "a")
 	if got := len(find(t, `<p title="x y">1</p><p>2</p>`, `p[title="x y"]`)); got != 1 {
 		t.Errorf("quoted attribute with space matched %d elements", got)
 	}
