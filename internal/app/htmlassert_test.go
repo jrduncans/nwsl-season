@@ -86,10 +86,10 @@ func splitCompounds(selector string) []string {
 	var out []string
 	start, depth := -1, 0
 	for i, r := range selector {
-		switch {
-		case r == '[':
+		switch r {
+		case '[':
 			depth++
-		case r == ']':
+		case ']':
 			depth--
 		}
 		space := depth == 0 && (r == ' ' || r == '\t' || r == '\n')
