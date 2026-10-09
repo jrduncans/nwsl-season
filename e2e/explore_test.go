@@ -1209,6 +1209,108 @@ func TestExploreSquarePlotsFollowTheViewport(t *testing.T) {
 	}
 }
 
+// logoLayout is where a scatter chart's visible team logos, marks and plot area
+// are, in viewport coordinates.
+type logoLayout struct {
+	Logos []struct{ Left, Top, Right, Bottom float64 }
+	Marks []markPoint
+	Area  struct{ Left, Right, Top, Bottom float64 }
+	// Radius is the points' drawn radius.
+	Radius float64
+	Total  int
+}
+
+func scatterLogoLayout(t *testing.T, page playwright.Page, canvas, layer string) logoLayout {
+	t.Helper()
+	var layout logoLayout
+	evalJSON(t, page, `(arg) => {
+		const element = document.querySelector(arg.canvas);
+		const chart = Chart.getChart(element);
+		const box = element.getBoundingClientRect();
+		const images = [...document.querySelector(arg.layer).querySelectorAll('img')];
+		const marks = chart.data.datasets.flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex)
+			? chart.getDatasetMeta(datasetIndex).data.filter((p) => !p.skip).map((p) => ({x: box.x + p.x, y: box.y + p.y})) : []);
+		return {
+			logos: images.filter((image) => image.style.visibility === 'visible').map((image) => {
+				const r = image.getBoundingClientRect();
+				return {left: r.left, top: r.top, right: r.right, bottom: r.bottom};
+			}),
+			marks,
+			area: {left: box.x + chart.chartArea.left, right: box.x + chart.chartArea.right, top: box.y + chart.chartArea.top, bottom: box.y + chart.chartArea.bottom},
+			radius: chart.scatterPointRadius,
+			total: images.length,
+		};
+	}`, map[string]any{"canvas": canvas, "layer": layer}, &layout)
+	return layout
+}
+
+// assertLogoLayout checks the placement rules: logos are 22 to 48px squares
+// inside the plot, never overlap each other, and never cover a point.
+func assertLogoLayout(t *testing.T, layout logoLayout) {
+	t.Helper()
+	if len(layout.Logos) < 4 {
+		t.Errorf("only %d of %d logos are shown, want at least 4", len(layout.Logos), layout.Total)
+	}
+	const slack = 0.6
+	for i, logo := range layout.Logos {
+		width, height := logo.Right-logo.Left, logo.Bottom-logo.Top
+		if width < 22-slack || width > 48+slack || math.Abs(width-height) > slack {
+			t.Errorf("logo %d is %.1f x %.1f, want a square from 22 to 48px", i, width, height)
+		}
+		if logo.Left < layout.Area.Left-slack || logo.Right > layout.Area.Right+slack || logo.Top < layout.Area.Top-slack || logo.Bottom > layout.Area.Bottom+slack {
+			t.Errorf("logo %d (%v) leaves the plot area %+v", i, logo, layout.Area)
+		}
+		for j, other := range layout.Logos[i+1:] {
+			if logo.Left < other.Right && other.Left < logo.Right && logo.Top < other.Bottom && other.Top < logo.Bottom {
+				t.Errorf("logos %d and %d overlap: %v and %v", i, i+1+j, logo, other)
+			}
+		}
+		for _, mark := range layout.Marks {
+			if mark.X > logo.Left-layout.Radius+slack && mark.X < logo.Right+layout.Radius-slack &&
+				mark.Y > logo.Top-layout.Radius+slack && mark.Y < logo.Bottom+layout.Radius-slack {
+				t.Errorf("logo %d (%v) covers the point at (%.1f, %.1f) of radius %.1f", i, logo, mark.X, mark.Y, layout.Radius)
+			}
+		}
+	}
+}
+
+// TestExploreTeamLogosAvoidEachOtherAndThePoints checks the logo layout of the
+// Outlier plot and Scored vs allowed on a desktop window, after the window is
+// resized, and when the logos are turned off.
+func TestExploreTeamLogosAvoidEachOtherAndThePoints(t *testing.T) {
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, plot := range []struct{ name, path, canvas, layer, toggle string }{
+		{"outlier plot", "explore?view=teams&display=scatter&season=2025", `[data-chart="team-scatter"]`, "[data-team-scatter-chart-wrap] [data-team-scatter-logo-layer]", "[data-team-scatter-logos]"},
+		{"scored vs allowed", "explore?view=teams&display=quadrant&season=2025&quadrant-data=both", `[data-chart="team-quadrant"]`, "[data-team-quadrant-chart-wrap] [data-team-scatter-logo-layer]", "[data-team-quadrant-logos]"},
+	} {
+		t.Run(plot.name, func(t *testing.T) {
+			page := explorePage(t, base, Desktop, plot.path)
+			expect := playwright.NewPlaywrightAssertions()
+			// Logo images load asynchronously and the layout reruns when they do.
+			if _, err := page.WaitForFunction(`(arg) => [...document.querySelector(arg.layer).querySelectorAll('img')]
+				.some((image) => image.style.visibility === 'visible')`, map[string]any{"layer": plot.layer}); err != nil {
+				t.Fatalf("no logo became visible: %v", err)
+			}
+			assertLogoLayout(t, scatterLogoLayout(t, page, plot.canvas, plot.layer))
+
+			if err := page.SetViewportSize(960, 700); err != nil {
+				t.Fatalf("resize: %v", err)
+			}
+			if err := settle(page); err != nil {
+				t.Fatalf("settle after resize: %v", err)
+			}
+			assertLogoLayout(t, scatterLogoLayout(t, page, plot.canvas, plot.layer))
+
+			if err := page.Locator(plot.toggle).Uncheck(); err != nil {
+				t.Fatalf("hide logos: %v", err)
+			}
+			if err := expect.Locator(page.Locator(plot.layer)).ToBeHidden(); err != nil {
+				t.Errorf("logo layer after turning logos off: %v", err)
+			}
+		})
+	}
+}
+
 // TestExploreSortsScoringAndHistoryTablesInBothDirections sorts the Scoring
 // table and the Season by season table in the browser by clicking their
 // headers.
