@@ -20,7 +20,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: work/telemetry-baseline
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - name: Generate Markdown schema diff
         run: >-
           make telemetry-diff
