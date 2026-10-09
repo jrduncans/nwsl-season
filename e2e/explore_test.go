@@ -3,13 +3,9 @@
 package e2e
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"io"
 	"log/slog"
 	"math"
@@ -75,41 +71,11 @@ func exploreBase(t *testing.T, scenario string) string {
 	return web.URL + mountPrefix + "/"
 }
 
-// exploreLogoPNG is a small opaque PNG that stands in for team logos, so the tests
-// never contact the logo host.
-var exploreLogoPNG = func() []byte {
-	img := image.NewNRGBA(image.Rect(0, 0, 8, 8))
-	for y := range 8 {
-		for x := range 8 {
-			img.Set(x, y, color.NRGBA{R: 0x33, G: 0x66, B: 0x99, A: 0xff})
-		}
-	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
-}()
-
-// stubLogos answers every request to the club logo host with exploreLogoPNG.
-func stubLogos(t *testing.T, page playwright.Page) {
-	t.Helper()
-	err := page.Route(clubLogoPattern, func(route playwright.Route) {
-		if err := route.Fulfill(playwright.RouteFulfillOptions{Body: exploreLogoPNG, ContentType: playwright.String("image/png")}); err != nil {
-			t.Logf("fulfill logo: %v", err)
-		}
-	})
-	if err != nil {
-		t.Fatalf("stub logos: %v", err)
-	}
-}
-
 // explorePage opens the Explore page at path (relative to the app root) in a
-// browser sized to vp, with logos stubbed, and waits for its scripts.
+// browser sized to vp, and waits for its scripts.
 func explorePage(t *testing.T, base string, vp viewport, path string) playwright.Page {
 	t.Helper()
 	page := newPage(t, vp)
-	stubLogos(t, page)
 	visit(t, page, base+path)
 	return page
 }
@@ -650,11 +616,11 @@ func noScriptPage(t *testing.T, vp viewport) playwright.Page {
 	if err != nil {
 		t.Fatalf("new browser context: %v", err)
 	}
+	stubClubLogos(t, context)
 	page, err := context.NewPage()
 	if err != nil {
 		t.Fatalf("new page: %v", err)
 	}
-	stubLogos(t, page)
 	var mu sync.Mutex
 	var problems []string
 	page.On("response", func(response playwright.Response) {
