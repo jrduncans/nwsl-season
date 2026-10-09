@@ -47,7 +47,8 @@
   };
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
-  const gapExtent = values => Math.max(.1, ...values.map(value => Math.abs(value))) * 1.15;
+  // Pure chart geometry lives in explore-geometry.js, which loads first.
+  const {gapExtent, plotDomain, pointRadius, layoutLogos} = window.NWSLGeometry;
   const percent = value => `${value.toFixed(1)}%`;
   // Use the same fit rule for visible labels and tooltip content.
   const hasSegmentLabel = (chart, value) => chart.chartArea && chart.chartArea.width * value / 100 >= 58;
@@ -431,57 +432,20 @@
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
-  function scatterPlotDomain(values, signed = false) {
-    const low = Math.min(...values), high = Math.max(...values);
-    // Fit the visible extremes rather than padding a whole quadrant. A tied
-    // population still needs a small, nonzero range for inspection.
-    const padding = high === low ? Math.max(Math.abs(high) * .025, .05) : (high - low) * .05;
-    return {min: signed ? low - padding : Math.max(0, low - padding), max: high + padding};
-  }
   function scatterDomain(rows, measure, units) {
     const values = rows.flatMap(row => {
       const metric = teamMetric(row, measure, units);
       return [metric.actual, metric.expected];
     });
-    return scatterPlotDomain(values, measure.index === 2);
+    return plotDomain(values, measure.index === 2);
   }
   function scatterMarks(chart) {
     return chart.data.datasets.flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex)
       ? dataset.data.flatMap((value, index) => value?.x != null && value?.y != null
         ? [{index, datasetIndex, x: chart.scales.x.getPixelForValue(value.x), y: chart.scales.y.getPixelForValue(value.y)}] : []) : []);
   }
-  function scatterPointRadius(points, area) {
-    let clearance = Infinity;
-    points.forEach((point, index) => {
-      clearance = Math.min(clearance, point.x - area.left, area.right - point.x, point.y - area.top, area.bottom - point.y);
-      points.slice(index + 1).forEach(other => {
-        const distance = Math.hypot(other.x - point.x, other.y - point.y);
-        // Crowded or coincident marks retain the existing minimum size.
-        clearance = Math.min(clearance, (distance - 4) / 2);
-      });
-    });
-    return Math.max(6, Math.min(10, Math.floor(clearance - 2)));
-  }
   function fitScatterPoints(chart) {
-    chart.scatterPointRadius = scatterPointRadius(scatterMarks(chart), chart.chartArea);
-  }
-  function scatterLogoPlacement(point, size, area, obstacles, occupied, radius) {
-    const gap = radius + 3, padding = 2;
-    const placements = [
-      {left: point.x - size / 2, top: point.y - size - gap},
-      {left: point.x + gap, top: point.y - size / 2},
-      {left: point.x - size / 2, top: point.y + gap},
-      {left: point.x - size - gap, top: point.y - size / 2},
-      {left: point.x + gap, top: point.y - size - gap},
-      {left: point.x - size - gap, top: point.y - size - gap},
-      {left: point.x + gap, top: point.y + gap},
-      {left: point.x - size - gap, top: point.y + gap},
-    ].map(position => ({...position, right: position.left + size, bottom: position.top + size}));
-    return placements.find(rect => {
-      if (rect.left < area.left || rect.right > area.right || rect.top < area.top || rect.bottom > area.bottom) return false;
-      if (occupied.some(box => rect.left < box.right + padding && rect.right + padding > box.left && rect.top < box.bottom + padding && rect.bottom + padding > box.top)) return false;
-      return !obstacles.some(other => other.x >= rect.left - radius - padding && other.x <= rect.right + radius + padding && other.y >= rect.top - radius - padding && other.y <= rect.bottom + radius + padding);
-    });
+    chart.scatterPointRadius = pointRadius(scatterMarks(chart), chart.chartArea);
   }
   function drawScatterLogos(chart) {
     const layer = chart.canvas.parentElement.querySelector('[data-team-scatter-logo-layer]');
@@ -523,30 +487,14 @@
     const layerBounds = layer.getBoundingClientRect();
     const offsetX = canvasBounds.left - layerBounds.left;
     const offsetY = canvasBounds.top - layerBounds.top;
-    const visibleLabels = [];
-    const candidates = points.filter(point => rows[point.index]?.logo).map(point => {
-      const nearest = Math.min(Infinity, ...points
-        .filter(other => other.index !== point.index)
-        .map(other => Math.hypot(other.x - point.x, other.y - point.y)));
-      return {...point, nearest};
-    }).sort((a, b) => b.nearest - a.nearest || a.index - b.index);
     // Establish small labels first, then enlarge without displacing neighbors.
-    for (const candidate of candidates) {
-      const row = rows[candidate.index];
-      const image = images.get(row.id);
-      if (!image || (image.complete && !image.naturalWidth)) continue;
-      const box = scatterLogoPlacement(candidate, 22, chart.chartArea, obstacles, visibleLabels.map(label => label.rect), radius);
-      if (box) visibleLabels.push({point: candidate, rect: box, image});
-    }
-    const maximumSize = Math.min(48, Math.max(22, Math.floor(chart.chartArea.width / 20)));
-    for (const label of visibleLabels) {
-      const occupied = visibleLabels.filter(other => other !== label).map(other => other.rect);
-      for (let size = maximumSize; size > 22; size -= 2) {
-        const box = scatterLogoPlacement(label.point, size, chart.chartArea, obstacles, occupied, radius);
-        if (box) { label.rect = box; break; }
-      }
+    const usable = point => {
+      const image = rows[point.index]?.logo && images.get(rows[point.index].id);
+      return Boolean(image) && !(image.complete && !image.naturalWidth);
+    };
+    for (const label of layoutLogos(points, obstacles, chart.chartArea, radius, usable)) {
       const {left, top} = label.rect;
-      const {image} = label;
+      const image = images.get(rows[label.point.index].id);
       image.style.width = image.style.height = `${label.rect.right - left}px`;
       image.style.left = `${left + offsetX}px`;
       image.style.top = `${top + offsetY}px`;
@@ -894,7 +842,7 @@
       chart.setDatasetVisibility(index, index === 0 ? !expectedOnly : mode !== 'goals');
     });
     const average = chart.quadrantAverage, suffix = units === 'total' ? 'in total' : 'per match';
-    const domain = scatterPlotDomain([...points.flatMap(point => [point.x, point.y]), average.x, average.y]);
+    const domain = plotDomain([...points.flatMap(point => [point.x, point.y]), average.x, average.y]);
     for (const axis of ['x', 'y']) {
       chart.options.scales[axis].min = domain.min;
       chart.options.scales[axis].max = domain.max;
