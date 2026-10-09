@@ -48,7 +48,8 @@ const cspReporter = `document.addEventListener("securitypolicyviolation", (event
 // newPage returns a page in a fresh browser context sized to vp. The test
 // fails if the page logs a console error, throws an uncaught error, has a
 // same-origin request fail or return a 4xx/5xx status, or violates the CSP.
-// The failures are reported when the test ends.
+// The failures are reported when the test ends, after the page has settled, so
+// errors raised just after load are caught too.
 func newPage(t *testing.T, vp viewport) playwright.Page {
 	t.Helper()
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
@@ -117,6 +118,10 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 	})
 
 	t.Cleanup(func() {
+		// Let late errors arrive before judging the page: assertions that ran
+		// after visit (such as the overflow check) may have triggered some.
+		// A failed settle just means the page is already gone.
+		_ = settle(page)
 		mu.Lock()
 		closed = true
 		for _, problem := range problems {
@@ -186,7 +191,25 @@ func visit(t *testing.T, page playwright.Page, rawURL string) {
 	if err := expect.Locator(page.Locator("h1").First()).ToBeVisible(); err != nil {
 		t.Fatalf("%s has no visible h1: %v", rawURL, err)
 	}
+	if err := settle(page); err != nil {
+		t.Fatalf("%s did not settle: %v", rawURL, err)
+	}
 	logNavigationTiming(t, page)
+}
+
+// settle returns after the page has rendered two animation frames and run its
+// already-queued tasks, which is when errors thrown by load-time and
+// first-paint script work have been reported. It does not wait on a timer.
+// Playwright delivers events in order, so any console, pageerror or request
+// event raised before settle returns is recorded before it returns.
+func settle(page playwright.Page) error {
+	_, err := page.Evaluate(`() => new Promise((resolve) => {
+		// The timer only bounds the wait if the browser throttles animation
+		// frames for a background page; normally the frames settle first.
+		setTimeout(resolve, 2000);
+		requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0)));
+	})`)
+	return err
 }
 
 // logNavigationTiming logs the browser's navigation timings and the size of
