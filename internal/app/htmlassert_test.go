@@ -30,7 +30,7 @@ type attrMatch struct {
 func parseSelector(t testing.TB, selector string) []selectorPart {
 	t.Helper()
 	var parts []selectorPart
-	for _, compound := range strings.Fields(selector) {
+	for _, compound := range splitCompounds(selector) {
 		var part selectorPart
 		for i := 0; i < len(compound); {
 			switch compound[i] {
@@ -77,6 +77,33 @@ func parseSelector(t testing.TB, selector string) []selectorPart {
 		t.Fatalf("empty selector %q", selector)
 	}
 	return parts
+}
+
+// splitCompounds splits a selector at whitespace outside attribute brackets,
+// so attribute values may contain spaces.
+func splitCompounds(selector string) []string {
+	var out []string
+	start, depth := -1, 0
+	for i, r := range selector {
+		switch {
+		case r == '[':
+			depth++
+		case r == ']':
+			depth--
+		}
+		space := depth == 0 && (r == ' ' || r == '\t' || r == '\n')
+		switch {
+		case space && start >= 0:
+			out = append(out, selector[start:i])
+			start = -1
+		case !space && start < 0:
+			start = i
+		}
+	}
+	if start >= 0 {
+		out = append(out, selector[start:])
+	}
+	return out
 }
 
 func (p selectorPart) matches(n *html.Node) bool {
@@ -165,17 +192,30 @@ func ancestorsMatch(n *html.Node, parts []selectorPart) bool {
 	return true
 }
 
-// text returns the rendered text of n with runs of whitespace collapsed.
+var inlineTags = map[string]bool{
+	"a": true, "abbr": true, "b": true, "code": true, "em": true, "i": true, "small": true,
+	"span": true, "strong": true, "sub": true, "sup": true, "time": true, "label": true,
+}
+
+// text returns the text of n with runs of whitespace collapsed. Inline
+// elements join their neighbours; every other element separates its text
+// from the text around it.
 func text(n *html.Node) string {
 	var b strings.Builder
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.TextNode {
 			b.WriteString(n.Data)
+		}
+		separate := n.Type == html.ElementNode && !inlineTags[n.Data]
+		if separate {
 			b.WriteByte(' ')
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
+		}
+		if separate {
+			b.WriteByte(' ')
 		}
 	}
 	walk(n)
@@ -256,6 +296,26 @@ func requireAttr(t testing.TB, body, selector, name, want string) {
 	t.Errorf("no %q element has %s=%q", selector, name, want)
 }
 
+// requireAttrContains checks that some element matching selector has an
+// attribute name that contains every want.
+func requireAttrContains(t testing.TB, body, selector, name string, wants ...string) {
+	t.Helper()
+	nodes := find(t, body, selector)
+	if len(nodes) == 0 {
+		t.Errorf("no element matches %q", selector)
+		return
+	}
+	for _, want := range wants {
+		found := false
+		for _, n := range nodes {
+			found = found || strings.Contains(attr(n, name), want)
+		}
+		if !found {
+			t.Errorf("no %q element has %s containing %q", selector, name, want)
+		}
+	}
+}
+
 func TestHTMLAssertHelpers(t *testing.T) {
 	const page = `<html><body><nav id="top" class="site-nav wide"><a href="a" data-x="1">Alpha</a></nav>
 <main><section class="box"><h2>Title</h2><p>One   two
@@ -291,4 +351,11 @@ three</p><div data-flag><span class="k">k</span></div></section><section class="
 	requireElements(t, page, "nav", "[data-flag]")
 	forbidElements(t, page, "table", "main nav")
 	requireAttr(t, page, "a", "href", "b")
+	requireAttrContains(t, page, "a", "href", "a", "b")
+	if got := len(find(t, `<p title="x y">1</p><p>2</p>`, `p[title="x y"]`)); got != 1 {
+		t.Errorf("quoted attribute with space matched %d elements", got)
+	}
+	if got := scopeText(t, `<p>a<b>b</b><span>c</span></p><p>d</p>`, "body"); got != "abc d" {
+		t.Errorf("inline joining text = %q", got)
+	}
 }
