@@ -378,6 +378,17 @@ func clinchedLine(teamName string) string {
 	return teamName + " has already clinched the playoffs"
 }
 
+// assertOthersClinched fails unless the standings still show a playoffs
+// indicator for the strongest team, which has clinched in every late-season
+// state. It makes "team-0 has no indicator" a meaningful check: indicators are
+// rendered, just not for team-0.
+func assertOthersClinched(t *testing.T, rows []tableRow) {
+	t.Helper()
+	if row := rowOf(t, rows, "team-1"); row.Badge == "" {
+		t.Errorf("team-1 should still show a clinched indicator, got none")
+	}
+}
+
 // clinchedOnPage reports whether the clinching page lists the team as already
 // clinched.
 func clinchedOnPage(t *testing.T, page playwright.Page, teamName string) bool {
@@ -831,10 +842,14 @@ func TestJ4IncompleteInventory(t *testing.T) {
 			if row := rowOf(t, rows, teamZero); strings.Contains(row.Badge, "Playoffs") {
 				t.Errorf("standings published a playoffs indicator for team-0 from incomplete data: %+v", row)
 			}
+			assertOthersClinched(t, rows)
 
 			visit(t, page, j.URL("seasons/"+currentSeason+"/clinching"))
 			if clinchedOnPage(t, page, teamZeroNm) {
 				t.Error("clinching page lists team-0 as clinched from incomplete data")
+			}
+			if !clinchedOnPage(t, page, "Team 1 FC") {
+				t.Error("clinching page lost the earlier clinched entries")
 			}
 		})
 	}
@@ -908,6 +923,7 @@ func TestJ6ASAErrors(t *testing.T) {
 			if row := rowOf(t, rows, teamZero); strings.Contains(row.Badge, "Playoffs") {
 				t.Errorf("a playoffs indicator appeared although the new result was never fetched: %+v", row)
 			}
+			assertOthersClinched(t, rows)
 			assertNoHorizontalOverflow(t, page)
 
 			visit(t, page, j.URL("seasons/"+currentSeason+"/fixtures"))
@@ -917,6 +933,9 @@ func TestJ6ASAErrors(t *testing.T) {
 			visit(t, page, j.URL("seasons/"+currentSeason+"/clinching"))
 			if clinchedOnPage(t, page, teamZeroNm) {
 				t.Error("clinching page shows the result that was never fetched")
+			}
+			if !clinchedOnPage(t, page, "Team 1 FC") {
+				t.Error("clinching page lost the earlier clinched entries")
 			}
 		})
 	}
