@@ -1344,33 +1344,35 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, text := range []string{"Forecast lab", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "Default", "Changes keep your assumptions", `data-forecast-model-form`, "Compare another approach", `href="model-evaluation">Model evaluation</a>`, "See how the forecast approaches performed historically.", "Possible seasons considered", ">20</dd>", "Expected points", "Top 4", "Playoffs", "Shield", "Finish distribution", "Middle 80%", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario", "Copy scenario link", `data-assumption-builder`, `id="forecast-update"`, `id="forecast-pending-values"`, "Data updated", `data-local-time="2026-07-11T19:00:00Z"`, `data-home-label="Home vs Bravo FC"`, `data-away-label="Away at Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;"`, "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; win", "Bravo FC win", "Playoff line:</strong> top 1"} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
+	body := response.Body.String()
+	// The model form, the assumption builder form, the pending/update hooks and the
+	// fixture option kickoff times are exercised by TestPages in e2e
+	// (testForecastNoScript, testForecastAssumptionFlow, testLocalTimes).
+	requireText(t, body, "main h1", "Forecast lab")
+	requireElements(t, body, "#forecast-model option[value=xg-poisson-schedule-load-v1][selected]")
+	requireText(t, body, "#forecast-model option[selected]", "xG Poisson (schedule load)")
+	requireText(t, body, ".forecast-model-detail summary .badge", "Default")
+	requireText(t, body, "[data-forecast-control-status]", "Changes keep your assumptions")
+	requireText(t, body, ".forecast-comparison-control summary", "Compare another approach")
+	requireText(t, body, ".forecast-evaluation-link", "Model evaluation", "See how the forecast approaches performed historically.")
+	requireElements(t, body, `.forecast-evaluation-link a[href="model-evaluation"]`)
+	requireText(t, body, ".forecast-meta", "Possible seasons considered 20", "Data updated")
+	requireText(t, body, "table.forecast-table thead", "Expected points", "Top 4", "Playoffs", "Shield")
+	requireText(t, body, "table.forecast-table .forecast-distribution", "Finish distribution", "Middle 80%")
+	requireText(t, body, ".forecast-builder", "Build a scenario", "Filter by team", "Choose a fixture", "Add result", "Apply scenario")
+	requireAttr(t, body, "a[data-copy-scenario]", "aria-label", "Copy scenario link")
+	requireAttr(t, body, "#forecast-fixture option", "data-home-label", "Home vs Bravo FC")
+	requireAttr(t, body, "#forecast-fixture option", "data-away-label", "Away at Alpha & Co <script>alert(1)</script>")
+	requireText(t, body, ".forecast-outcomes", "Alpha & Co <script>alert(1)</script> win", "Bravo FC win")
+	requireText(t, body, ".forecast-cutline", "Playoff line: top 1")
+	forbidText(t, body, "table.forecast-table thead", "Expected finish")
+	forbidElements(t, body, "[data-auto-submit]", "details.forecast-comparison-control[open]", "[data-fixture-filter]")
+	forbidText(t, body, "main", "Show fixtures", "Find fixture", "Add assumption", "Update forecast", "Build a what-if scenario")
+	forbidText(t, body, ".forecast-outcomes", "Home win", "Away win")
+	for _, link := range find(t, body, "a") {
+		if strings.Contains(attr(link, "href"), "docs/model-evaluation") || text(link) == "Formula" {
+			t.Errorf("Forecast Lab links to repository documentation that the server does not expose: %q", attr(link, "href"))
 		}
-	}
-	if strings.Contains(response.Body.String(), ">Expected finish<") {
-		t.Fatal("forecast still renders the expected-finish column")
-	}
-	if strings.Contains(response.Body.String(), `data-auto-submit`) {
-		t.Fatal("forecast builder still uses page-submit behavior")
-	}
-	if strings.Contains(response.Body.String(), `class="forecast-comparison-control" open`) {
-		t.Fatal("comparison control should stay collapsed until a comparison is selected")
-	}
-	for _, text := range []string{"Show fixtures", "Find fixture", `data-fixture-filter`, "Add assumption", "Update forecast"} {
-		if strings.Contains(response.Body.String(), text) {
-			t.Errorf("body still contains retired forecast-builder control %q", text)
-		}
-	}
-	if strings.Contains(response.Body.String(), ">Home win<") || strings.Contains(response.Body.String(), ">Away win<") {
-		t.Fatal("forecast outcome choices still use home and away labels")
-	}
-	if strings.Contains(response.Body.String(), "Build a what-if scenario") {
-		t.Fatal("Forecast Lab still uses legacy visible navigation")
-	}
-	if strings.Contains(response.Body.String(), "docs/model-evaluation") || strings.Contains(response.Body.String(), "Formula</a>") {
-		t.Fatal("Forecast Lab links to repository documentation that the server does not expose")
 	}
 }
 
@@ -1433,11 +1435,8 @@ func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
 			t.Fatal("forecast cache used the configured current-scope playoff-place count")
 		}
 	}
-	for _, want := range []string{"Playoff line:</strong> top 8", "6 of 240 expected regular-season fixtures"} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("body does not contain %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), ".forecast-cutline", "Playoff line: top 8")
+	requireText(t, response.Body.String(), "main", "6 of 240 expected regular-season fixtures")
 }
 
 func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *testing.T) {
@@ -1449,8 +1448,8 @@ func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *test
 		team, want string
 		fixtures   int
 	}{
-		{team: "alpha", want: `data-home-team-id="alpha"`, fixtures: 4},
-		{team: "bravo", want: `data-away-team-id="bravo"`, fixtures: 5},
+		{team: "alpha", want: `data-home-team-id=alpha`, fixtures: 4},
+		{team: "bravo", want: `data-away-team-id=bravo`, fixtures: 5},
 	} {
 		request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?team="+test.team, nil)
 		response := httptest.NewRecorder()
@@ -1460,19 +1459,12 @@ func TestForecastTeamFilterRendersFilteredFallbackAndClientFixtureSource(t *test
 		if response.Code != http.StatusOK {
 			t.Fatalf("team %s: status = %d, want 200; body=%s", test.team, response.Code, response.Body.String())
 		}
-		if !strings.Contains(response.Body.String(), test.want) {
-			t.Errorf("team %s: body does not contain %q", test.team, test.want)
-		}
 		body := response.Body.String()
-		start := strings.Index(body, `<select id="forecast-fixture"`)
-		end := strings.Index(body[start:], `</select>`)
-		if start < 0 || end < 0 {
-			t.Fatalf("team %s: body does not contain the visible fixture selector", test.team)
-		}
-		if got := strings.Count(body[start:start+end], `<option value="future-`); got != test.fixtures {
+		requireElements(t, body, "#forecast-fixture option["+test.want+"]")
+		if got := len(find(t, body, "select#forecast-fixture option")); got != test.fixtures {
 			t.Errorf("team %s: rendered %d fixtures in the fallback selector, want %d", test.team, got, test.fixtures)
 		}
-		if got := strings.Count(body, `<template id="forecast-all-fixtures">`); got != 1 {
+		if got := len(find(t, body, "template#forecast-all-fixtures")); got != 1 {
 			t.Errorf("team %s: rendered %d client fixture sources, want 1", test.team, got)
 		}
 	}
@@ -1488,20 +1480,21 @@ func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, text := range []string{"Model comparison", "Results Poisson vs Current pace", `class="forecast-comparison-table"`, "Values read <strong>Current pace</strong> → <strong>Results Poisson</strong>.", "Top 4 chance", "more points", "pp higher"} {
-		if !strings.Contains(body, text) {
-			t.Errorf("body does not contain %q", text)
+	// The comparison section, its heading and one row per team are exercised by
+	// testForecastCompareModel in e2e.
+	requireText(t, body, ".forecast-comparison", "Model comparison", "Results Poisson vs Current pace", "Values read Current pace → Results Poisson.")
+	requireText(t, body, "table.forecast-comparison-table", "Top 4 chance", "more points", "pp higher")
+	requireElements(t, body, "details.forecast-comparison-control[open]")
+	var sections []string
+	for _, section := range find(t, body, "main section") {
+		if class := attr(section, "class"); class == "forecast-comparison" || class == "forecast-results" {
+			sections = append(sections, class)
 		}
 	}
-	if !strings.Contains(body, `class="forecast-comparison-control" open`) {
-		t.Fatal("comparison control should open when a comparison is selected")
+	if !slices.Equal(sections, []string{"forecast-comparison", "forecast-results"}) {
+		t.Fatalf("model comparison should be rendered before the primary projection: %q", sections)
 	}
-	if comparison, projection := strings.Index(body, `class="forecast-comparison"`), strings.Index(body, `class="forecast-results"`); comparison < 0 || projection < 0 || comparison > projection {
-		t.Fatalf("model comparison should be rendered before the primary projection: comparison=%d projection=%d", comparison, projection)
-	}
-	if strings.Contains(body, "Δ comparison − active") {
-		t.Fatal("forecast still renders the comparison inside the primary forecast table")
-	}
+	forbidText(t, body, "table.forecast-table", "Δ comparison − active")
 }
 
 func TestForecastAcceptsRecentFormModel(t *testing.T) {
