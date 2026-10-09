@@ -498,7 +498,9 @@ func evaluatePlayoffs(t *testing.T, teams []asa.Team, games []asa.Game, teamID s
 //	team-8 (9th strongest): wins both games against each of the 7 weaker teams
 //	  = 14 wins = 42 points, plus the two draws with team-1 = 44 points. Its
 //	  unplayed game is against the stronger team-5, so it is not missing a win.
-//	team-9 and weaker: at most 12 wins = 36 points.
+//	team-9 and weaker: team-9 wins both games against each of the 6 weaker
+//	  teams = 12 wins = 36 points, and it has no unplayed game, so 36 is its
+//	  final total. Weaker teams have fewer wins.
 //	team-1 ... team-7: at least 54 points.
 //
 // Playoffs are the top 8 of 16, so team-0 has clinched when fewer than 8 of
@@ -510,8 +512,9 @@ func evaluatePlayoffs(t *testing.T, teams []asa.Team, games []asa.Game, teamID s
 // opponents can finish strictly ahead: team-0 has not clinched.
 //
 // If team-0 beats team-14, the worst case is 45 + 3 = 48 points. Team-8 can
-// reach only 47 < 48 and team-9 and weaker only 39, so only the seven stronger
-// teams can reach 48: fewer than 8, so team-0 has clinched the playoffs.
+// reach only 47 < 48. Team-9 and weaker are final at 36 or fewer points: their
+// games are all played, and team-14's only unplayed game is the one team-0 just
+// won. So only the seven stronger teams can reach 48: fewer than 8, so team-0 has clinched the playoffs.
 //
 // If team-8's last game were missing from the schedule, team-8 could not gain
 // those 3 points: it would stay at 44 < 45 and team-0 would appear clinched
@@ -810,7 +813,7 @@ func TestJ4IncompleteInventory(t *testing.T) {
 		}
 	}
 	if !audited {
-		t.Fatalf("the scheduler never requested the full games inventory: %v", j.ASA.Requests())
+		t.Fatalf("the maintenance sync never requested the full games inventory: %v", j.ASA.Requests())
 	}
 
 	for _, vp := range []viewport{Desktop, Mobile} {
@@ -886,7 +889,8 @@ func TestJ6ASAErrors(t *testing.T) {
 	// /cache/status still serves the last good sync. The plan expects it to
 	// report the failed attempt as well, but a failed source operation is
 	// recorded only in the source audit tables, never in sync_runs, which is
-	// all /cache/status reads (see the handoff for this PR).
+	// all /cache/status reads; cache.DB.RecordFailure, which would write a
+	// failed run there, has no caller.
 	failed := readCacheStatus(t, j.fixture)
 	if !failed.OK {
 		t.Errorf("/cache/status ok = false after the failure")
