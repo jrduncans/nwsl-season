@@ -234,6 +234,7 @@ func TestPages(t *testing.T) {
 		"standings local times":     testLocalTimes,
 		"standings sorting":         testStandingsSorting,
 		"standings without script":  testStandingsNoScript,
+		"fixture toggle no script":  testFixtureToggleNoScript,
 		"forecast assumption flow":  testForecastAssumptionFlow,
 		"forecast copy link":        testForecastCopyLink,
 		"forecast compare model":    testForecastCompareModel,
@@ -670,6 +671,18 @@ func testStandingsNoScript(t *testing.T, f *fixture) {
 	}
 }
 
+// testFixtureToggleNoScript checks that the Results/Upcoming toggle, which only
+// the script can operate, stays hidden when JavaScript is off.
+func testFixtureToggleNoScript(t *testing.T, f *fixture) {
+	t.Skip("bug: .fixture-view-toggle display:inline-flex overrides hidden without JS; see https://github.com/jrduncans/nwsl-season/issues/122")
+	page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
+	visitStatic(t, page, f.URL(seasonPath("fixtures")))
+	expect := playwright.NewPlaywrightAssertions()
+	if err := expect.Locator(page.Locator("[data-fixture-view-toggle]")).ToBeHidden(); err != nil {
+		t.Errorf("the fixture view toggle should be hidden without JavaScript: %v", err)
+	}
+}
+
 // ------------------------------------------------------------------ forecast
 
 const (
@@ -1091,13 +1104,13 @@ func testModelEvaluationPage(t *testing.T, f *fixture) {
 func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 	t.Helper()
 	expect := playwright.NewPlaywrightAssertions()
-	count, err := page.Locator("details > summary").Count()
+	count, err := page.Locator("details").Count()
 	if err != nil {
 		t.Fatalf("count disclosures: %v", err)
 	}
 	for i := range count {
-		summary := page.Locator("details > summary").Nth(i)
 		details := page.Locator("details").Nth(i)
+		summary := details.Locator("> summary")
 		name, err := summary.InnerText()
 		if err != nil {
 			t.Fatalf("read summary %d: %v", i, err)
