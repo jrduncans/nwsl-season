@@ -75,9 +75,9 @@ func exploreBase(t *testing.T, scenario string) string {
 	return web.URL + mountPrefix + "/"
 }
 
-// logoPNG is a small opaque PNG that stands in for team logos, so the tests
+// exploreLogoPNG is a small opaque PNG that stands in for team logos, so the tests
 // never contact the logo host.
-var logoPNG = func() []byte {
+var exploreLogoPNG = func() []byte {
 	img := image.NewNRGBA(image.Rect(0, 0, 8, 8))
 	for y := range 8 {
 		for x := range 8 {
@@ -91,14 +91,11 @@ var logoPNG = func() []byte {
 	return buf.Bytes()
 }()
 
-// logoHost matches the club logo origin the Content Security Policy allows.
-const logoHost = "https://american-soccer-analysis-headshots.s3.amazonaws.com/**"
-
-// stubLogos answers every request to the club logo host with logoPNG.
+// stubLogos answers every request to the club logo host with exploreLogoPNG.
 func stubLogos(t *testing.T, page playwright.Page) {
 	t.Helper()
-	err := page.Route(logoHost, func(route playwright.Route) {
-		if err := route.Fulfill(playwright.RouteFulfillOptions{Body: logoPNG, ContentType: playwright.String("image/png")}); err != nil {
+	err := page.Route(clubLogoPattern, func(route playwright.Route) {
+		if err := route.Fulfill(playwright.RouteFulfillOptions{Body: exploreLogoPNG, ContentType: playwright.String("image/png")}); err != nil {
 			t.Logf("fulfill logo: %v", err)
 		}
 	})
@@ -1674,6 +1671,11 @@ func assertKeyboardInspection(t *testing.T, page playwright.Page, canvas, wantTe
 	last := chartInspection(t, page, canvas)
 	if len(last.Active) == 0 || last.Active[0] == first.Active[0] {
 		t.Errorf("%s after End: %+v, want the last mark, not %+v", canvas, last, first.Active)
+	}
+	// Nothing lies beyond the last mark, so ArrowRight must leave it active.
+	press("ArrowRight")
+	if beyond := chartInspection(t, page, canvas); len(beyond.Active) == 0 || beyond.Active[0] != last.Active[0] || beyond.Status != last.Status {
+		t.Errorf("%s: ArrowRight after End moved to %+v, want to stay on %+v", canvas, beyond.Active, last.Active)
 	}
 	press("Escape")
 	if cleared := chartInspection(t, page, canvas); len(cleared.Active) != 0 || cleared.TooltipActive != 0 || cleared.Status != "" {
