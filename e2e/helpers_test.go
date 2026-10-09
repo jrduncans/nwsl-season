@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	playwright "github.com/mxschmitt/playwright-go"
 
@@ -33,6 +34,11 @@ var (
 // it and uploads the directory; locally it is usually unset.
 const traceDirEnv = "NWSL_E2E_TRACE_DIR"
 
+// logRequestsEnv, when non-empty, logs every page's requests, responses and
+// load milestones with timestamps, plus how long visit's checks took. Run with
+// -v to see the output.
+const logRequestsEnv = "NWSL_E2E_LOG_REQUESTS"
+
 // cspReporter turns CSP violations into console errors, so newPage's console
 // listener fails the test on them.
 const cspReporter = `document.addEventListener("securitypolicyviolation", (event) => {
@@ -54,11 +60,15 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 	if err := context.AddInitScript(playwright.Script{Content: playwright.String(cspReporter)}); err != nil {
 		t.Fatalf("add CSP init script: %v", err)
 	}
-	if err := context.Tracing().Start(playwright.TracingStartOptions{
-		Screenshots: playwright.Bool(true),
-		Snapshots:   playwright.Bool(true),
-	}); err != nil {
-		t.Fatalf("start tracing: %v", err)
+	// Tracing snapshots the DOM on every action, which is slow on large
+	// pages, so it only runs when failed tests' traces will be kept.
+	traceDir := os.Getenv(traceDirEnv)
+	if traceDir != "" {
+		if err := context.Tracing().Start(playwright.TracingStartOptions{
+			Snapshots: playwright.Bool(true),
+		}); err != nil {
+			t.Fatalf("start tracing: %v", err)
+		}
 	}
 	page, err := context.NewPage()
 	if err != nil {
@@ -68,7 +78,22 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 	var (
 		mu       sync.Mutex
 		problems []string
+		closed   bool
 	)
+	if os.Getenv(logRequestsEnv) != "" {
+		began := time.Now()
+		logf := func(format string, args ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+			if !closed {
+				t.Logf("+%5dms %s", time.Since(began).Milliseconds(), fmt.Sprintf(format, args...))
+			}
+		}
+		page.On("request", func(request playwright.Request) { logf("request  %s %s", request.Method(), request.URL()) })
+		page.On("response", func(response playwright.Response) { logf("response %d %s", response.Status(), response.URL()) })
+		page.On("domcontentloaded", func(playwright.Page) { logf("domcontentloaded") })
+		page.On("load", func(playwright.Page) { logf("load") })
+	}
 	record := func(format string, args ...any) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -93,19 +118,24 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 
 	t.Cleanup(func() {
 		mu.Lock()
+		closed = true
 		for _, problem := range problems {
 			t.Errorf("%s viewport: %s", vp.Name, problem)
 		}
 		mu.Unlock()
 
-		if dir := os.Getenv(traceDirEnv); dir != "" && t.Failed() {
-			if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // G703: dir is the developer-set trace directory, not request input
+		switch {
+		case traceDir == "":
+		case t.Failed():
+			if err := os.MkdirAll(traceDir, 0o750); err != nil { //nolint:gosec // G703: traceDir is the developer-set trace directory, not request input
 				t.Logf("create trace directory: %v", err)
-			} else if err := context.Tracing().Stop(filepath.Join(dir, traceName(t, vp)+".zip")); err != nil {
+			} else if err := context.Tracing().Stop(filepath.Join(traceDir, traceName(t, vp)+".zip")); err != nil {
 				t.Logf("save trace: %v", err)
 			}
-		} else if err := context.Tracing().Stop(); err != nil {
-			t.Logf("stop tracing: %v", err)
+		default:
+			if err := context.Tracing().Stop(); err != nil {
+				t.Logf("stop tracing: %v", err)
+			}
 		}
 		if err := context.Close(); err != nil {
 			t.Logf("close browser context: %v", err)
@@ -156,6 +186,30 @@ func visit(t *testing.T, page playwright.Page, rawURL string) {
 	if err := expect.Locator(page.Locator("h1").First()).ToBeVisible(); err != nil {
 		t.Fatalf("%s has no visible h1: %v", rawURL, err)
 	}
+	logNavigationTiming(t, page)
+}
+
+// logNavigationTiming logs the browser's navigation timings and the size of
+// the page when logRequestsEnv is set, to show where load time goes.
+func logNavigationTiming(t *testing.T, page playwright.Page) {
+	t.Helper()
+	if os.Getenv(logRequestsEnv) == "" {
+		return
+	}
+	timing, err := page.Evaluate(`() => {
+		const nav = performance.getEntriesByType("navigation")[0];
+		const resources = performance.getEntriesByType("resource")
+			.map((r) => r.name.split("/").pop() + "=" + Math.round(r.responseEnd - r.startTime) + "ms");
+		return "response " + Math.round(nav.responseEnd) + "ms, domInteractive " + Math.round(nav.domInteractive) +
+			"ms, domContentLoaded " + Math.round(nav.domContentLoadedEventEnd) + "ms, load " + Math.round(nav.loadEventEnd) +
+			"ms; " + document.querySelectorAll("*").length + " elements, " +
+			document.querySelectorAll("[data-local-time]").length + " local-time; resources: " + resources.join(" ");
+	}`)
+	if err != nil {
+		t.Logf("navigation timing: %v", err)
+		return
+	}
+	t.Logf("%s timing: %v", page.URL(), timing)
 }
 
 // assertNoHorizontalOverflow fails the test if the page is wider than its
