@@ -1072,18 +1072,25 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	for _, text := range []string{"Results and fixtures", "2–1", "xG 2.36–1.11", "Matchday 1", "Show fixtures for", `data-fixture-team-filter`, `data-fixture-view-toggle`, `data-fixture-view-button="results"`, `data-fixture-view-button="upcoming"`, `data-fixture-view="results"`, `data-fixture-view="upcoming"`, `value="alpha"`, `value="bravo"`, `data-fixture-home-team="alpha"`, `data-fixture-away-team="bravo"`, `href="../regular-season"`, `href="forecast"`, "Scheduled fixtures include a match outlook for each result.", "Outlooks use expected goals, venue, recovery time, and recent fixture load.", `title="Selected Forecast Lab model: xG Poisson (schedule load)"`, ">Match outlook</span>", `aria-label="Match outlook:`, `class="fixture-outlook"`, "Home win <strong>", "Draw <strong>", "Away win <strong>", `class="fixture-outcome-segment fixture-outcome-home"`, `style="--fixture-outcome-share: `} {
-		if !strings.Contains(response.Body.String(), text) {
-			t.Errorf("body does not contain %q", text)
+	body := response.Body.String()
+	// The team filter select, its options and the fixture rows'
+	// data-fixture-home-team/away-team hooks are exercised by testFixturesPage in e2e.
+	requireText(t, body, "main h1", "Results and fixtures")
+	requireText(t, body, "main", "2–1", "xG 2.36–1.11", "Matchday 1", "Show fixtures for")
+	requireElements(t, body, "[data-fixture-team-filter]", "[data-fixture-view-toggle]", "[data-fixture-view-button=results]", "[data-fixture-view-button=upcoming]", "[data-fixture-view=results]", "[data-fixture-view=upcoming]", `[href="../regular-season"]`, `[href="forecast"]`)
+	requireText(t, body, ".fixture-outlook-note", "Scheduled fixtures include a match outlook for each result.", "Outlooks use expected goals, venue, recovery time, and recent fixture load.")
+	requireAttr(t, body, ".fixture-outlook-model", "title", "Selected Forecast Lab model: xG Poisson (schedule load)")
+	requireText(t, body, ".fixture-outlook-model", "Match outlook")
+	requireAttrContains(t, body, ".fixture-outlook", "aria-label", "Match outlook:")
+	requireText(t, body, ".fixture-outlook", "Home win", "Draw", "Away win")
+	requireElements(t, body, ".fixture-outlook strong", ".fixture-outcome-segment.fixture-outcome-home", ".fixture-team-full", ".fixture-team-code[aria-hidden=true]")
+	requireAttrContains(t, body, ".fixture-outcome-segment.fixture-outcome-home", "style", "--fixture-outcome-share: ")
+	for _, tag := range find(t, body, "main span") {
+		if text(tag) == "Scheduled" {
+			t.Error("upcoming fixtures repeat a Scheduled tag")
 		}
 	}
-	if !strings.Contains(response.Body.String(), `<span class="fixture-team-full">`) || !strings.Contains(response.Body.String(), `<span class="fixture-team-code" aria-hidden="true">`) {
-		t.Error("fixture rows do not carry both full team names and phone codes")
-	}
-	if strings.Contains(response.Body.String(), ">Scheduled<") {
-		t.Error("upcoming fixtures repeat a Scheduled tag")
-	}
-	if got := strings.Count(response.Body.String(), `class="fixture-outlook"`); got != 5 {
+	if got := len(find(t, body, ".fixture-outlook")); got != 5 {
 		t.Errorf("rendered %d fixture outlooks, want one for each of 5 remaining fixtures", got)
 	}
 }
