@@ -24,33 +24,40 @@ func cachePages() []string {
 	}
 }
 
+// visitCachePages visits every cache page at every viewport in parallel, each
+// in its own browser context. It returns after all of them finish, because a
+// parent test waits for its parallel subtests. Subtests must only read the
+// shared fixture.
+func visitCachePages(t *testing.T, f *fixture) {
+	t.Helper()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		for _, path := range cachePages() {
+			t.Run(vp.Name+" /"+path, func(t *testing.T) {
+				t.Parallel()
+				page := newPage(t, vp)
+				visit(t, page, f.URL(path))
+				assertNoHorizontalOverflow(t, page)
+			})
+		}
+	}
+}
+
 // TestJ1CacheOnlyPages is journey J1: every page loads from the cache with no
 // browser errors or overflow and without contacting ASA, and still renders
 // while ASA is down.
+//
+// The two phases run one after the other on a shared fixture: SetDown and
+// Requests are fixture-wide, so the phase that asserts zero ASA requests must
+// not overlap the phase that takes ASA down. Pages within a phase run in
+// parallel.
 func TestJ1CacheOnlyPages(t *testing.T) {
 	f := newFixture(t)
 	f.ASA.ResetRequests()
 
-	for _, vp := range []viewport{Desktop, Mobile} {
-		t.Run(vp.Name, func(t *testing.T) {
-			page := newPage(t, vp)
+	t.Run("ASA up", func(t *testing.T) { visitCachePages(t, f) })
+	assertNoASARequests(t, f.ASA)
 
-			visitAll := func(t *testing.T) {
-				for _, path := range cachePages() {
-					t.Run("/"+path, func(t *testing.T) {
-						visit(t, page, f.URL(path))
-						assertNoHorizontalOverflow(t, page)
-					})
-				}
-			}
-
-			visitAll(t)
-			assertNoASARequests(t, f.ASA)
-
-			f.ASA.SetDown(true)
-			t.Cleanup(func() { f.ASA.SetDown(false) })
-			t.Run("ASA down", visitAll)
-			assertNoASARequests(t, f.ASA)
-		})
-	}
+	f.ASA.SetDown(true)
+	t.Run("ASA down", func(t *testing.T) { visitCachePages(t, f) })
+	assertNoASARequests(t, f.ASA)
 }
