@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -54,9 +56,12 @@ func TestStageRoutesRedirectLegacyAndRenderPlayoffFacts(t *testing.T) {
 	}
 	playoffs := httptest.NewRecorder()
 	handler.ServeHTTP(playoffs, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/fixtures", nil))
-	if playoffs.Code != http.StatusOK || !strings.Contains(playoffs.Body.String(), "Knockout game") || !strings.Contains(playoffs.Body.String(), "120 minutes") || strings.Contains(playoffs.Body.String(), "Clinching scenarios") || !strings.Contains(playoffs.Body.String(), "data-stage-selector") {
+	if playoffs.Code != http.StatusOK {
 		t.Fatalf("playoffs=%d %s", playoffs.Code, playoffs.Body.String())
 	}
+	requireText(t, playoffs.Body.String(), "main", "Knockout game", "120 minutes")
+	forbidText(t, playoffs.Body.String(), "body", "Clinching scenarios")
+	requireElements(t, playoffs.Body.String(), "[data-stage-selector]")
 	unknown := httptest.NewRecorder()
 	handler.ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/seasons/2026/not-a-stage", nil))
 	if unknown.Code != http.StatusNotFound {
@@ -81,16 +86,14 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 	if root.Code != http.StatusOK {
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
-	for _, want := range []string{"Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80", "data-bracket-state"} {
-		if !strings.Contains(root.Body.String(), want) {
-			t.Errorf("bracket root missing %q", want)
-		}
-	}
+	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80")
 	fixtures := httptest.NewRecorder()
 	handler.ServeHTTP(fixtures, httptest.NewRequest(http.MethodGet, "/seasons/2024/playoffs/fixtures", nil))
-	if fixtures.Code != http.StatusOK || strings.Contains(fixtures.Body.String(), "data-bracket-state") || !strings.Contains(fixtures.Body.String(), "Knockout game") {
+	if fixtures.Code != http.StatusOK {
 		t.Fatalf("fixtures route did not remain chronological: %d %s", fixtures.Code, fixtures.Body.String())
 	}
+	forbidElements(t, fixtures.Body.String(), "[data-bracket-state]")
+	requireText(t, fixtures.Body.String(), "main", "Knockout game")
 }
 
 func TestBracketRootStatesKeepFactsAndRelativeFallback(t *testing.T) {
@@ -136,17 +139,17 @@ func TestBracketRootStatesKeepFactsAndRelativeFallback(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewHandler(fakeStore{season: tc.data}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2024/playoffs", nil))
 			body := response.Body.String()
+			if response.Code != http.StatusOK {
+				t.Fatalf("%s playoff root = %d %s", tc.name, response.Code, body)
+			}
+			requireText(t, body, "main", tc.notice)
 			if tc.empty {
-				if response.Code != http.StatusOK || strings.Contains(body, "data-bracket-state") || !strings.Contains(body, tc.notice) {
-					t.Fatalf("empty playoff root = %d %s", response.Code, body)
-				}
+				forbidElements(t, body, "[data-bracket-state]")
 				return
 			}
-			if response.Code != http.StatusOK || !strings.Contains(body, `data-bracket-state="`+tc.state+`"`) || !strings.Contains(body, tc.notice) {
-				t.Fatalf("bracket %s = %d %s", tc.name, response.Code, body)
-			}
-			if tc.wantSource && !strings.Contains(body, `href="playoffs/fixtures"`) {
-				t.Fatalf("mismatch did not retain the factual-results fallback: %s", body)
+			requireElements(t, body, `[data-bracket-state="`+tc.state+`"]`)
+			if tc.wantSource {
+				requireElements(t, body, `main a[href="playoffs/fixtures"]`)
 			}
 		})
 	}
@@ -164,28 +167,34 @@ func TestUnpopulatedKnockoutsAreNotLinkedOrRenderedAsEmptyBrackets(t *testing.T)
 
 	regular := httptest.NewRecorder()
 	handler.ServeHTTP(regular, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season", nil))
-	if regular.Code != http.StatusOK || strings.Contains(regular.Body.String(), `data-stage-destination="playoffs"`) {
-		t.Fatalf("regular page linked an unpopulated playoff stage: %d %s", regular.Code, regular.Body.String())
+	if regular.Code != http.StatusOK {
+		t.Fatalf("regular page = %d %s", regular.Code, regular.Body.String())
 	}
+	forbidElements(t, regular.Body.String(), `[data-stage-destination="playoffs"]`)
 
 	populated := httptest.NewRecorder()
 	handler.ServeHTTP(populated, httptest.NewRequest(http.MethodGet, "/seasons/2025/playoffs", nil))
-	if populated.Code != http.StatusOK || strings.Contains(populated.Body.String(), `href="../2026/playoffs"`) || !strings.Contains(populated.Body.String(), `href="../2026/regular-season"`) {
-		t.Fatalf("season selector retained an unpopulated playoff target: %d %s", populated.Code, populated.Body.String())
+	if populated.Code != http.StatusOK {
+		t.Fatalf("populated playoffs = %d %s", populated.Code, populated.Body.String())
 	}
+	forbidElements(t, populated.Body.String(), `[href="../2026/playoffs"]`)
+	requireElements(t, populated.Body.String(), `[href="../2026/regular-season"]`)
 
 	archive := httptest.NewRecorder()
 	handler.ServeHTTP(archive, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if archive.Code != http.StatusOK || strings.Contains(archive.Body.String(), `href="seasons/2026/playoffs"`) {
-		t.Fatalf("archive linked an unpopulated playoff stage: %d %s", archive.Code, archive.Body.String())
+	if archive.Code != http.StatusOK {
+		t.Fatalf("archive = %d %s", archive.Code, archive.Body.String())
 	}
+	forbidElements(t, archive.Body.String(), `[href="seasons/2026/playoffs"]`)
 
 	empty := httptest.NewRecorder()
 	emptyStore := seasonArchiveStore{fakeStore: fakeStore{season: cache.SeasonData{}}, readiness: readiness}
 	NewHandler(emptyStore).ServeHTTP(empty, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs", nil))
-	if empty.Code != http.StatusOK || strings.Contains(empty.Body.String(), "data-bracket-state") || !strings.Contains(empty.Body.String(), "Playoffs fixtures have not been loaded yet") {
+	if empty.Code != http.StatusOK {
 		t.Fatalf("unpopulated playoff root = %d %s", empty.Code, empty.Body.String())
 	}
+	forbidElements(t, empty.Body.String(), "[data-bracket-state]")
+	requireText(t, empty.Body.String(), "main", "Playoffs fixtures have not been loaded yet")
 }
 
 func TestFixtureMinutesAreKnockoutFactsOnly(t *testing.T) {
@@ -193,15 +202,17 @@ func TestFixtureMinutesAreKnockoutFactsOnly(t *testing.T) {
 	data.Games[0].ExpandedMinutes = sql.NullInt64{Int64: 120, Valid: true}
 	regular := httptest.NewRecorder()
 	NewHandler(fakeStore{season: data}).ServeHTTP(regular, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/fixtures", nil))
-	if regular.Code != http.StatusOK || strings.Contains(regular.Body.String(), "120 minutes") {
+	if regular.Code != http.StatusOK {
 		t.Fatalf("regular=%d %s", regular.Code, regular.Body.String())
 	}
+	forbidText(t, regular.Body.String(), "main", "120 minutes")
 	data.Games[0].Stage, data.Games[0].KnockoutGame = "Playoffs", true
 	playoffs := httptest.NewRecorder()
 	NewHandler(fakeStore{season: data}).ServeHTTP(playoffs, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/fixtures", nil))
-	if playoffs.Code != http.StatusOK || !strings.Contains(playoffs.Body.String(), "120 minutes") {
+	if playoffs.Code != http.StatusOK {
 		t.Fatalf("playoffs=%d %s", playoffs.Code, playoffs.Body.String())
 	}
+	requireText(t, playoffs.Body.String(), "main", "120 minutes")
 }
 
 func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
@@ -218,14 +229,12 @@ func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
 			t.Fatalf("%s status = %d; body=%s", path, response.Code, response.Body.String())
 		}
 		body := response.Body.String()
-		for _, want := range []string{">Challenge Cup Group Stage</option>", "2–1", "xG 1.40–0.70", "data-stage-selector"} {
-			if !strings.Contains(body, want) {
-				t.Errorf("%s missing %q", path, want)
-			}
-		}
-		for _, forbidden := range []string{"<h1>Standings</h1>", "Matchday 1", "Clinching scenarios", "Forecast lab", "Schedule difficulty"} {
-			if strings.Contains(body, forbidden) {
-				t.Errorf("%s unexpectedly rendered %q", path, forbidden)
+		requireText(t, body, "[data-stage-selector] option", "Challenge Cup Group Stage")
+		requireText(t, body, "main", "2–1", "xG 1.40–0.70")
+		forbidText(t, body, "body", "Matchday 1", "Clinching scenarios", "Forecast lab", "Schedule difficulty")
+		for _, heading := range find(t, body, "h1") {
+			if text(heading) == "Standings" {
+				t.Errorf("%s unexpectedly rendered a Standings heading", path)
 			}
 		}
 	}
@@ -260,26 +269,18 @@ func TestSeasonArchiveListsPublicSeasonsWithoutChangingGlobalNavigation(t *testi
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, want := range []string{
-		"<h1>Seasons</h1>",
-		"Current season",
-		"Historical season",
-		`class="brand" href="."`,
-		`href="seasons/2026/regular-season"`,
-		`href="seasons/2026/regular-season/fixtures"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("archive missing %q", want)
-		}
+	requireText(t, body, "main h1", "Seasons")
+	requireText(t, body, "main", "Current season", "Historical season")
+	requireElements(t, body, `a.brand[href="."]`, `[href="seasons/2026/regular-season"]`, `[href="seasons/2026/regular-season/fixtures"]`)
+	var years []string
+	for _, heading := range find(t, body, "main h2") {
+		years = append(years, text(heading))
 	}
-	if current, historical := strings.Index(body, "<h2>2026</h2>"), strings.Index(body, "<h2>2025</h2>"); current < 0 || historical < 0 || current > historical {
-		t.Errorf("season order is not descending: 2026=%d 2025=%d", current, historical)
+	if current, historical := slices.Index(years, "2026"), slices.Index(years, "2025"); current < 0 || historical < 0 || current > historical {
+		t.Errorf("season order is not descending: %v", years)
 	}
-	for _, forbidden := range []string{`aria-label="Season sections"`, "Data fetch time unavailable"} {
-		if strings.Contains(body, forbidden) {
-			t.Errorf("archive unexpectedly contains %q", forbidden)
-		}
-	}
+	forbidElements(t, body, ".site-nav")
+	forbidText(t, body, "body", "Data fetch time unavailable")
 }
 
 func TestSeasonArchiveUsesOptionalReadinessAndReportsReadFailure(t *testing.T) {
@@ -292,17 +293,14 @@ func TestSeasonArchiveUsesOptionalReadinessAndReportsReadFailure(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	for _, want := range []string{"Not published", "Partial data"} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("archive missing readiness label %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), ".season-archive-stage", "Not published", "Partial data")
 
 	failure := httptest.NewRecorder()
 	NewHandler(seasonArchiveStore{err: errors.New("readiness failed")}).ServeHTTP(failure, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if failure.Code != http.StatusInternalServerError || !strings.Contains(failure.Body.String(), "load season archive readiness") {
+	if failure.Code != http.StatusInternalServerError {
 		t.Fatalf("readiness failure = %d %q", failure.Code, failure.Body.String())
 	}
+	requireText(t, failure.Body.String(), "body", "load season archive readiness")
 }
 
 func TestSeasonArchiveGroupsAllPublicStagesInCatalogOrder(t *testing.T) {
@@ -397,9 +395,8 @@ func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
 	if err := application.app.pages.ExecuteTemplate(&fixtures, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true, HasUpcomingFixtures: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fixtures.String(), "Scheduled fixtures include a match outlook") || strings.Contains(fixtures.String(), "Explore the season forecast") {
-		t.Fatalf("fixtures outlook note linked an unavailable forecast: %s", fixtures.String())
-	}
+	requireText(t, fixtures.String(), ".fixture-outlook-note", "Scheduled fixtures include a match outlook")
+	forbidText(t, fixtures.String(), "body", "Explore the season forecast")
 
 	var toggled bytes.Buffer
 	if err := application.app.pages.ExecuteTemplate(&toggled, "fixtures", seasonPage{Title: "Fixtures", HasFixtureOutlooks: true, HasResults: true, HasUpcomingFixtures: true, ShowFixtureViewToggle: true}); err != nil {
@@ -416,13 +413,12 @@ func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := standings.String()
-	for _, want := range []string{"Per game", "Totals"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("score-only standings missing %q", want)
+	requireText(t, body, "body", "Per game", "Totals")
+	forbidElements(t, body, "[data-standings-stat-button]")
+	for _, button := range find(t, body, "button") {
+		if text(button) == "xG" {
+			t.Errorf("score-only standings rendered an xG control: %s", body)
 		}
-	}
-	if strings.Contains(body, `data-standings-stat-button`) || strings.Contains(body, ">xG<") {
-		t.Errorf("score-only standings rendered xG controls: %s", body)
 	}
 }
 
@@ -437,16 +433,10 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 		t.Fatalf("season status = %d, want 200", seasonResponse.Code)
 	}
 	seasonBody := seasonResponse.Body.String()
-	for _, want := range []string{unknownFormatNotice, `href="regular-season/fixtures"`} {
-		if !strings.Contains(seasonBody, want) {
-			t.Errorf("factual season page missing %q", want)
-		}
-	}
-	for _, forbidden := range []string{`<table class="standings"`, "qualification-badge", "playoff-line", "expected regular-season", "16 expected", "30 fixtures", "top 8"} {
-		if strings.Contains(seasonBody, forbidden) {
-			t.Errorf("factual season page contains %q", forbidden)
-		}
-	}
+	requireText(t, seasonBody, "main", unknownFormatNotice)
+	requireElements(t, seasonBody, `[href="regular-season/fixtures"]`)
+	forbidElements(t, seasonBody, "table.standings", ".qualification-badge", ".playoff-line")
+	forbidText(t, seasonBody, "body", "expected regular-season", "16 expected", "30 fixtures", "top 8")
 
 	fixturesResponse := httptest.NewRecorder()
 	handler.ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2099/regular-season/fixtures", nil))
@@ -454,16 +444,10 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 		t.Fatalf("fixtures status = %d, want 200", fixturesResponse.Code)
 	}
 	fixturesBody := fixturesResponse.Body.String()
-	for _, want := range []string{unknownFormatNotice, "2–1", "xG 2.36–1.11", "Results &amp; fixtures"} {
-		if !strings.Contains(fixturesBody, want) {
-			t.Errorf("factual fixtures page missing %q", want)
-		}
-	}
-	for _, forbidden := range []string{"expected regular-season", "fixture-outlook", "Forecast lab", "Schedule difficulty", "Clinching scenarios"} {
-		if strings.Contains(fixturesBody, forbidden) {
-			t.Errorf("factual fixtures page contains %q", forbidden)
-		}
-	}
+	requireText(t, fixturesBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
+	requireText(t, fixturesBody, ".site-nav", "Results & fixtures")
+	forbidText(t, fixturesBody, "body", "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios")
+	forbidElements(t, fixturesBody, ".fixture-outlook")
 }
 
 func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
@@ -480,42 +464,20 @@ func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
 			t.Fatalf("%s status = %d, want 200", path, response.Code)
 		}
 		body := response.Body.String()
-		for _, want := range []string{`data-season-selector`, `class="season-selector"`, `<span>Season</span>`, `>2026</option>`} {
-			if !strings.Contains(body, want) {
-				t.Errorf("%s missing %q", path, want)
-			}
-		}
+		requireElements(t, body, "[data-season-selector]", ".season-selector")
+		requireText(t, body, ".season-selector span", "Season")
+		requireText(t, body, "[data-season-selector] option", "2026")
 		if strings.HasSuffix(path, "/fixtures") {
-			for _, want := range []string{"<h1>Results</h1>", "2–1"} {
-				if !strings.Contains(body, want) {
-					t.Errorf("%s missing %q", path, want)
-				}
-			}
-			for _, forbidden := range []string{"Historical results and xG", `data-fixture-view-toggle`, `data-fixture-view="upcoming"`, ">Upcoming<"} {
-				if strings.Contains(body, forbidden) {
-					t.Errorf("%s unexpectedly rendered %q", path, forbidden)
-				}
-			}
+			requireText(t, body, "main h1", "Results")
+			requireText(t, body, "main", "2–1")
+			forbidText(t, body, "main", "Historical results and xG", "Upcoming")
+			forbidElements(t, body, "[data-fixture-view-toggle]", `[data-fixture-view="upcoming"]`)
 		} else {
-			for _, want := range []string{" standings</span> · <span data-standings-mode-label data-per-game=\"per game\" data-total=\"totals\">totals</span></span></caption>", `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, `data-per-game-playoff-line="true"`, `data-total-playoff-line="true"`} {
-				if !strings.Contains(body, want) {
-					t.Errorf("%s missing %q", path, want)
-				}
-			}
-			if strings.Contains(body, "competition format") || strings.Contains(body, "playoff line") {
-				t.Errorf("%s still renders the removed historical-format caveat", path)
-			}
+			requireText(t, body, "table.standings caption", "standings · totals")
+			requireElements(t, body, `[data-standings-mode="total"]`, `[data-standings-mode-value="per-game"]`, `[data-standings-mode-value="total"]`, `[data-per-game-playoff-line="true"]`, `[data-total-playoff-line="true"]`)
+			forbidText(t, body, "main", "competition format", "playoff line")
 		}
-		for _, hidden := range []string{"All seasons", "2026 Regular Season", "2025 Regular Season"} {
-			if strings.Contains(body, hidden) {
-				t.Errorf("%s unexpectedly rendered %q", path, hidden)
-			}
-		}
-		for _, forbidden := range []string{"Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8"} {
-			if strings.Contains(body, forbidden) {
-				t.Errorf("%s unexpectedly rendered %q", path, forbidden)
-			}
-		}
+		forbidText(t, body, "body", "All seasons", "2026 Regular Season", "2025 Regular Season", "Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8")
 	}
 }
 
@@ -530,9 +492,11 @@ func TestHistoricalCatalogEmptyCacheRendersLoadState(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			NewHandler(test.store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2018/regular-season/fixtures", nil))
-			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.notice) || !strings.Contains(response.Body.String(), "data-season-selector") || !strings.Contains(response.Body.String(), "Browse seasons") {
+			if response.Code != http.StatusOK {
 				t.Fatalf("historical empty response = %d %q", response.Code, response.Body.String())
 			}
+			requireText(t, response.Body.String(), "main", html.UnescapeString(test.notice), "Browse seasons")
+			requireElements(t, response.Body.String(), "[data-season-selector]")
 		})
 	}
 }
@@ -542,8 +506,8 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 	for _, test := range []struct {
 		name, path, destination string
 	}{
-		{name: "standings", path: "/seasons/2026/regular-season", destination: `href="../2025/regular-season"`},
-		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: `href="../../2025/regular-season/fixtures"`},
+		{name: "standings", path: "/seasons/2026/regular-season", destination: "../2025/regular-season"},
+		{name: "results", path: "/seasons/2026/regular-season/fixtures", destination: "../../2025/regular-season/fixtures"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -552,14 +516,10 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 				t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 			}
 			body := response.Body.String()
-			for _, want := range []string{`data-season-switcher`, `class="season-selector"`, `<span>Season</span>`, `data-season-selector`, `value="2025"`, test.destination, `data-season-destination="2025" hidden`, `>2025</option>`} {
-				if !strings.Contains(body, want) {
-					t.Errorf("body does not contain %q", want)
-				}
-			}
-			if strings.Contains(body, "All seasons") {
-				t.Error("page still presents the season catalog as a universal parent")
-			}
+			requireElements(t, body, "[data-season-switcher] .season-selector", "[data-season-selector] option[value=2025]", `[data-season-destination="2025"][hidden][href="`+test.destination+`"]`)
+			requireText(t, body, ".season-selector span", "Season")
+			requireText(t, body, "[data-season-selector] option", "2025")
+			forbidText(t, body, "body", "All seasons")
 		})
 	}
 }
@@ -573,8 +533,9 @@ func TestUnavailableFeaturesDoNotReadUnknownScope(t *testing.T) {
 		if response.Code != http.StatusNotFound {
 			t.Errorf("%s status = %d, want 404", route, response.Code)
 		}
-		if !strings.Contains(response.Body.String(), "unavailable for 2099 Regular Season") || !strings.Contains(response.Body.String(), "Return to the season") || strings.Contains(response.Body.String(), `href="/`) {
-			t.Errorf("%s did not render explanatory relative unavailable page", route)
+		requireText(t, response.Body.String(), "main", "unavailable for 2099 Regular Season", "Return to the season")
+		if strings.Contains(response.Body.String(), `href="/`) {
+			t.Errorf("%s rendered an absolute path", route)
 		}
 	}
 	if store.seasonReads != 0 {
@@ -620,16 +581,15 @@ func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
 	if pageResponse.Code != http.StatusOK {
 		t.Fatalf("base-path season status = %d, want 200", pageResponse.Code)
 	}
-	if !strings.Contains(pageResponse.Body.String(), `data-season-selector`) || !strings.Contains(pageResponse.Body.String(), `value="2025"`) || !strings.Contains(pageResponse.Body.String(), `href="../2025/regular-season"`) {
-		t.Fatalf("base-path season did not retain relative season destinations: %s", pageResponse.Body.String())
-	}
+	requireElements(t, pageResponse.Body.String(), "[data-season-selector] option[value=2025]", `[href="../2025/regular-season"]`)
 
 	archiveRequest := httptest.NewRequest(http.MethodGet, "/explorer/seasons", nil)
 	archiveResponse := httptest.NewRecorder()
 	handler.ServeHTTP(archiveResponse, archiveRequest)
-	if archiveResponse.Code != http.StatusOK || !strings.Contains(archiveResponse.Body.String(), `href="seasons/2026/regular-season"`) {
+	if archiveResponse.Code != http.StatusOK {
 		t.Fatalf("base-path archive = status %d, body %q", archiveResponse.Code, archiveResponse.Body.String())
 	}
+	requireElements(t, archiveResponse.Body.String(), `[href="seasons/2026/regular-season"]`)
 
 	staticRequest := httptest.NewRequest(http.MethodGet, "/explorer/static/site.css", nil)
 	staticResponse := httptest.NewRecorder()
