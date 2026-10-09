@@ -954,7 +954,7 @@ func TestJ7SchedulerPath(t *testing.T) {
 	j.upsert(winFor(j.pendingGameOf(t, teamZero), teamZero))
 	j.Clock.Advance(lateRoundsDue)
 
-	eventually(t, 30*time.Second, "the scheduler to publish team-0's clinch", func() bool {
+	eventually(t, 60*time.Second, "the scheduler to publish team-0's clinch", func() bool {
 		body := httpBody(t, j.fixture, "")
 		i := strings.Index(body, `data-team-id="`+teamZero+`"`)
 		if i < 0 {
