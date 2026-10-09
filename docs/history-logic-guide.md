@@ -174,7 +174,7 @@ implies the same performance judgment for every measure. Teams without complete
 xG appear
 last for goal measures with no bar, an `xG incomplete` label, and a named note
 accessible from the chart. For points, the same behavior follows xPoints
-coverage and uses an `xPoints incomplete` label. If every team lacks complete
+coverage and uses an `xPts incomplete` label. If every team lacks complete
 coverage of the selected expected value, the chart shows an explicit empty
 message. The paired-dot chart remains available.
 The Outlier plot places each fully covered team's expected value on the
@@ -275,24 +275,8 @@ table and GET selectors provide the no-script fallback. Displayed values round
 independently from full precision.
 
 Run `make test-explore` for calculation and HTTP regression checks (also included
-in `make test` and CI). For browser verification, the `teams` scenario in
-`TestHistoryPreview` supplies 16 synthetic teams, full/partial expected-value
-coverage, and an empty season. Verify desktop and 390px layouts, signed
-differential and gap axes, gap ranking for all four measures and both unit modes,
-the Outlier plot's equal axis ranges and parity diagonal for all four measures,
-positive and negative gaps, Scored vs allowed's reversed allowed axis, average
-dividers and weighted per-match versus total baselines, goals/xG/both modes,
-connecting lines and missing xG, tight/tied/zero bounds, adaptive uniform point
-sizes and two-pass logo growth/collisions, viewport-capped Outlier sizing and
-circular Outlier markers in its key, the in-chart Goals/xG key, and square
-mobile layout, plot bounds after tooltip redraws and dismissals,
-coincident points, touch/hover, pinned details and
-axis guides, clearing a pinned point, optional logo labels with overlap
-suppression, keyboard inspection/dismissal, logos and alignment after resize,
-missing-data warnings and `xG incomplete` or `xPoints incomplete` labels, the
-named Outlier plot omission note and empty state, sorting in both directions,
-no-script sorting, season/measure/units/display URLs, Back/Forward, and switching
-analyses without fetching new data.
+in `make test` and CI). Browser behavior for these views is covered by
+`make test-e2e`; see [Browser verification](#browser-verification).
 
 ### Rankings
 
@@ -539,19 +523,11 @@ shared forecast cache and unavailable forecasts, match weighting, best-metric
 direction and holders, validation, and retained Data preferences,
 all three windows, unrounded rolling arithmetic, missing xG and recovery,
 season eligibility, selection validation, fallback and single-snapshot
-regressions. The `season-trend` scenario in `TestHistoryPreview` provides 29
+regressions. The `season-trend` scenario in `internal/apptest` provides 29
 played matches and one remaining fixture per team in the active season, 30
-played matches per team in the completed season, partial xG, and an empty season. Verify desktop and 390px
-layouts; scored/allowed at the same match position; matched axes across paired panels;
-all series/view/mode/window selections and restored Data preferences; pointer/touch and keyboard match
-inspection; labeled team and comparison means, reference label collisions, panel-specific tooltips and reference holder names, group membership details, match-weighted league arithmetic,
-identical league scored/allowed references, independent xG/xPoints coverage counts, unchanged means across
-modes/windows, original units, one-match values and expanding averages before full windows,
-zero, ties, and negative values; solid core series and dotted expanding-average lead-ins,
-including tooltip/keyboard identification and fallback tables; xG line gaps; short windows and
-empty seasons; chronological table and no-script GET fallback; direct URLs and
-Back/Forward; and switching views without another document/data request (team
-logos may load).
+played matches per team in the completed season, partial xG, and an empty
+season. Browser behavior is covered by `make test-e2e`; see
+[Browser verification](#browser-verification).
 
 ### Season by season
 
@@ -638,14 +614,39 @@ historical names. No franchise mapping is inferred.
 all history columns in both sort directions, record holders/ties and coverage,
 URL validation, fallback HTML,
 and the single cache snapshot. The `team-history`
-scenario in `TestHistoryPreview` supplies multiple years with calendar gaps,
-partial expected-value coverage, and an active season. Verify desktop and 390px
-layouts, all four measures, team selection, point hover/tap and empty-space
-dismissal, keyboard inspection, table sorting (including missing xG and xPoints),
-direct URLs, Back/Forward, no-script sorting/forms and full context details,
-record-line and floating-bar
-inspection, shared scales for Both, and switching between
-history, season comparison, and league analyses without fetching new data.
+scenario in `internal/apptest` supplies multiple years with calendar gaps,
+partial expected-value coverage, and an active season. Browser behavior is
+covered by `make test-e2e`; see [Browser verification](#browser-verification).
+
+### Browser verification
+
+Explore's JavaScript is tested in headless Chromium by `make test-e2e` (run
+`make e2e-install` once first). `e2e/explore_test.go` drives the scenarios in
+`internal/apptest` through the real server and covers:
+
+- season, measure, units and display options in the URL for every view, and
+  Back/Forward restoring them;
+- switching analyses without another document or data request;
+- table sorting in both directions, and the no-script table and GET forms;
+- keyboard inspection, dismissal and clearing a pinned point;
+- the Outlier plot's equal axes and parity diagonal, and Scored vs allowed's
+  reversed allowed axis;
+- `xG incomplete` and `xPts incomplete` labels, named omission notes and empty
+  states;
+- square plots and no horizontal overflow at 390px, and logo placement.
+
+The pure chart geometry (tight, tied and zero bounds, uniform point sizing,
+logo collision passes, viewport-capped Outlier sizing) lives in
+`internal/app/static/explore-geometry.js`, which defines `window.NWSLGeometry`
+without a build step. `e2e/geometry_test.go` runs table-driven cases against it
+in the browser. Change geometry there, not inline in `explore.js`.
+
+Still manual, because they are visual judgment: that desktop and 390px layouts
+look right, green/purple gap encoding and legibility of labels, logo and
+connecting-line aesthetics, and touch behavior on a real device. To look at a
+scenario, run `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams`
+(scenarios: `teams`, `team-history`, `season-trend`; `cmd/preview -h` lists
+all).
 
 ## Legacy scoring page
 
