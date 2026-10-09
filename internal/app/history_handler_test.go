@@ -234,14 +234,7 @@ func TestHistoryRendersInvalidAndIncompleteHistoricalExclusions(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	for _, want := range []string{
-		"<strong>2016</strong> — invalid completed results", "<strong>2017</strong> — historical results incomplete",
-		"invalid completed results", "historical results incomplete",
-	} {
-		if !strings.Contains(response.Body.String(), want) {
-			t.Errorf("history exclusion copy missing %q", want)
-		}
-	}
+	requireText(t, response.Body.String(), "main", "2016 — invalid completed results", "2017 — historical results incomplete")
 }
 
 func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
@@ -298,9 +291,11 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 
 	goals := httptest.NewRecorder()
 	handler.ServeHTTP(goals, httptest.NewRequest(http.MethodGet, "/nwsl-season/history/scoring?metric=goals&season=2019", nil))
-	if goals.Code != http.StatusOK || !strings.Contains(goals.Body.String(), `<h2 id="selected-season-heading">2019</h2>`) || !strings.Contains(goals.Body.String(), `Goals per match`) {
+	if goals.Code != http.StatusOK {
 		t.Fatalf("Goals round trip = %d %s", goals.Code, goals.Body.String())
 	}
+	requireText(t, goals.Body.String(), "#selected-season-heading", "2019")
+	requireText(t, goals.Body.String(), "main", "Goals per match")
 
 	for _, query := range []string{"metric=", "metric=foo", "metric=xg&metric=goals"} {
 		invalid := httptest.NewRecorder()
@@ -335,9 +330,11 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 	noXG := httptest.NewRecorder()
 	noXGArchive := historyArchive(t, map[string]historyArchiveState{"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3}})
 	NewHandler(&historyHTTPStore{archive: noXGArchive}).ServeHTTP(noXG, httptest.NewRequest(http.MethodGet, "/history/scoring?metric=xg&season=2019", nil))
-	if noXG.Code != http.StatusOK || strings.Contains(noXG.Body.String(), `<svg class="history-chart"`) || !strings.Contains(noXG.Body.String(), `View Goals`) || !strings.Contains(noXG.Body.String(), `href="scoring?season=2019"`) {
+	if noXG.Code != http.StatusOK {
 		t.Fatalf("all-unavailable xG state = %d %s", noXG.Code, noXG.Body.String())
 	}
+	forbidElements(t, noXG.Body.String(), "svg.history-chart")
+	requireText(t, noXG.Body.String(), "main a[href=\"scoring?season=2019\"]", "View Goals")
 }
 
 func assertHistoryMetricRoundTrip(t *testing.T, handler http.Handler, rawPath, season string) {
@@ -356,9 +353,11 @@ func assertHistoryMetricRoundTrip(t *testing.T, handler http.Handler, rawPath, s
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, resolved.RequestURI(), nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `<h2 id="selected-season-heading">`+season+`</h2>`) || !strings.Contains(response.Body.String(), `Expected goals per match`) {
+	if response.Code != http.StatusOK {
 		t.Fatalf("round trip %q = %d; want selected xG season %s", rawPath, response.Code, season)
 	}
+	requireText(t, response.Body.String(), "#selected-season-heading", season)
+	requireText(t, response.Body.String(), "main", "Expected goals per match")
 }
 
 type historyHTTPStore struct {
