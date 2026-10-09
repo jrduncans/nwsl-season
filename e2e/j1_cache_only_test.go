@@ -179,6 +179,12 @@ func visitCachePages(t *testing.T, f *fixture, seen *sync.Map, compare bool) {
 // parallel.
 func TestJ1CacheOnlyPages(t *testing.T) {
 	f := newFixture(t)
+
+	// The fixture's CheckNow must have reached the fake, or "no requests
+	// after the reset" would hold for the wrong reason.
+	if len(f.ASA.Requests()) == 0 {
+		t.Fatal("CheckNow made no requests to the fake ASA; the cache was not filled from it")
+	}
 	f.ASA.ResetRequests()
 
 	var seen sync.Map
