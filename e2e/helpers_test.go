@@ -250,20 +250,24 @@ func assertNoHorizontalOverflow(t *testing.T, page playwright.Page) {
 	if !ok {
 		t.Fatalf("measure overflow on %s: unexpected result %T", page.URL(), result)
 	}
-	scroll, client := toFloat(measured["scroll"]), toFloat(measured["client"])
+	scroll, scrollOK := toFloat(measured["scroll"])
+	client, clientOK := toFloat(measured["client"])
+	if !scrollOK || !clientOK {
+		t.Fatalf("measure overflow on %s: unexpected widths %T and %T", page.URL(), measured["scroll"], measured["client"])
+	}
 	if scroll > client {
 		t.Errorf("%s overflows horizontally: scrollWidth %.0f > clientWidth %.0f", page.URL(), scroll, client)
 	}
 }
 
-func toFloat(v any) float64 {
+func toFloat(v any) (float64, bool) {
 	switch n := v.(type) {
 	case int:
-		return float64(n)
+		return float64(n), true
 	case float64:
-		return n
+		return n, true
 	default:
-		return -1
+		return 0, false
 	}
 }
 
