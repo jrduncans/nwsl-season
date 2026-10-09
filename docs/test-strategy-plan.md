@@ -525,9 +525,12 @@ loaded with the same data.
   patterns. **Depends on:** T1 (it edits the same Makefile, workflow and lint
   files), T4, T5. **Size:** L.
 - **Files:** new `e2e/` directory with `//go:build e2e` on every file,
-  `go.mod` and `go.sum` (add `github.com/playwright-community/playwright-go`),
+  `go.mod` and `go.sum` (add `github.com/mxschmitt/playwright-go`),
   `Makefile` (`test-e2e` target), `.github/workflows/test.yml` (new `e2e`
   job), `.golangci.yml` (add `build-tags: [e2e]` under `run`).
+  The upstream module moved back to `github.com/mxschmitt/playwright-go`; the
+  playwright-community path redirects to it and recent tags no longer resolve
+  under it.
 
 **Decisions:**
 
@@ -542,7 +545,7 @@ loaded with the same data.
      it as `ExecutablePath` instead (for environments with a preinstalled
      browser).
    - Add a Makefile target `e2e-install` that runs
-     `go run github.com/playwright-community/playwright-go/cmd/playwright install chromium`.
+     `go run github.com/mxschmitt/playwright-go/cmd/playwright install chromium`.
      Run from the module root, this uses the `playwright-go` version in
      `go.mod`, so the browser always matches the library. Verify it works
      from a clean cache (`PLAYWRIGHT_BROWSERS_PATH=$TMPDIR/pw make e2e-install`
@@ -550,7 +553,7 @@ loaded with the same data.
      `go mod tidy` step it needs. Add `e2e-install` to `.PHONY` and mention it
      in the `test-e2e` Makefile comment.
    - CI runs the same target with `--with-deps` added
-     (`go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps chromium`),
+     (`go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps chromium`),
      with no browser cache: Playwright's CI guide advises against caching
      browser binaries because restoring a cache takes about as long as
      downloading them.
