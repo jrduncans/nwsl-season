@@ -10,6 +10,14 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
+// The configured season and stage match the NWSL_SYNC_SEASON and
+// NWSL_SYNC_STAGE defaults that cmd/preview and server.Build run with, so the
+// source-scope registry Seed creates equals the one the server would create.
+const (
+	configuredSeason = "2026"
+	configuredStage  = "Regular Season"
+)
+
 // Seed writes a named scenario (see ScenarioNames) into db through the
 // cache's public write methods, so the pages read it exactly as they read a
 // synchronized cache. It makes no ASA request.
@@ -21,6 +29,11 @@ import (
 // "complete" only when it matches the catalog's expected inventory. xG rows
 // that the cache would reject (one side missing, or only one side's expected
 // points) are seeded as unavailable xG or without expected points.
+//
+// Lifecycles follow the wall clock (time.Now), so they move forward with the
+// calendar: the "active" 2026 season becomes completed from 2027-01-01 and a
+// later year becomes active. Browser tests must not depend on a season being
+// active beyond the year this was written for.
 func Seed(t testing.TB, db *cache.DB, scenario string) {
 	t.Helper()
 	ctx := context.Background()
@@ -28,7 +41,7 @@ func Seed(t testing.TB, db *cache.DB, scenario string) {
 	now := time.Now().UTC()
 	// The scheduler and server seed the same registry; doing it here lets a
 	// bare database serve the history pages.
-	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", now); err != nil {
+	if _, err := db.EnsureSourceScopes(ctx, configuredSeason, configuredStage, now); err != nil {
 		t.Fatalf("seed source scopes: %v", err)
 	}
 	for _, season := range archive {
