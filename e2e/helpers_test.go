@@ -74,11 +74,11 @@ var clubLogoPNG = func() []byte {
 func stubClubLogos(t *testing.T, context playwright.BrowserContext) {
 	t.Helper()
 	err := context.Route(clubLogoPattern, func(route playwright.Route) {
-		if err := route.Fulfill(playwright.RouteFulfillOptions{
+		// A request still in flight when the test ends can fail to fulfill;
+		// logging from here then would panic, so the error is ignored.
+		_ = route.Fulfill(playwright.RouteFulfillOptions{
 			Status: playwright.Int(200), ContentType: playwright.String("image/png"), Body: clubLogoPNG,
-		}); err != nil {
-			t.Logf("stub club logo: %v", err)
-		}
+		})
 	})
 	if err != nil {
 		t.Fatalf("route club logos: %v", err)
@@ -89,7 +89,8 @@ func stubClubLogos(t *testing.T, context playwright.BrowserContext) {
 // fails if the page logs a console error, throws an uncaught error, has a
 // same-origin request fail or return a 4xx/5xx status, or violates the CSP.
 // The failures are reported when the test ends, after the page has settled, so
-// errors raised just after load are caught too.
+// errors raised just after load are caught too. Team logos are served from a
+// stub (see stubClubLogos), so the page never contacts the real logo host.
 func newPage(t *testing.T, vp viewport) playwright.Page {
 	t.Helper()
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
