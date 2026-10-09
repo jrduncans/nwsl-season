@@ -17,7 +17,7 @@ import (
 )
 
 func TestExploreSeasonTrendChronologyVenueAndPartialXG(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{"2026": {lifecycle: cache.SourceScopeActive, goals: 3, xgCovered: 19}})
+	archive := historyArchive(t, map[string]historyArchiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19}})
 	season := &archive[0]
 	season.Data.Teams = []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: "bravo", Name: "Bravo"}}
 	for index := range season.Data.Games {
@@ -111,7 +111,7 @@ func TestExploreSeasonTrendVenueDates(t *testing.T) {
 }
 
 func TestExploreSeasonTrendUnknownVenuePreservesOrder(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{"2026": {lifecycle: cache.SourceScopeActive, goals: 3}})
+	archive := historyArchive(t, map[string]historyArchiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3}})
 	for index := range archive[0].Data.Games {
 		game := &archive[0].Data.Games[index]
 		game.KickoffUTC = time.Date(2026, 3, index+1, 1, 0, 0, 0, time.UTC).Format("2006-01-02 15:04:05 MST")
@@ -187,9 +187,9 @@ func TestExploreSeasonTrendRollingWindows(t *testing.T) {
 
 func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 	archive := historyArchive(t, map[string]historyArchiveState{
-		"2024": {lifecycle: cache.SourceScopeCompleted, inventory: cache.InventoryCompletenessIncomplete, goals: 3},
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 2, xgCovered: 19},
+		"2024": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 3},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	for _, path := range []string{
 		"/nwsl-season/explore?view=season-trend&season=2026&team=alpha&trend-view=balance&series=xg&trend-mode=rolling&window=10",
@@ -301,7 +301,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 }
 
 func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{"2026": {lifecycle: cache.SourceScopeActive, goals: 3, xgCovered: 19}})
+	archive := historyArchive(t, map[string]historyArchiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19}})
 	for index := range archive[0].Data.Games {
 		archive[0].Data.Games[index].HomeScore.Int64 = int64(index % 4)
 		archive[0].Data.Games[index].AwayScore.Int64 = int64(index % 3)

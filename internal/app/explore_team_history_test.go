@@ -15,10 +15,10 @@ import (
 
 func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 	archive := historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
-		"2021": {lifecycle: cache.SourceScopeCompleted, goals: 4, xgCovered: 19},
-		"2022": {lifecycle: cache.SourceScopeCompleted, inventory: cache.InventoryCompletenessIncomplete, goals: 9},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 1, xgCovered: 20},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
+		"2021": {Lifecycle: cache.SourceScopeCompleted, Goals: 4, XGCovered: 19},
+		"2022": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 9},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 1, XGCovered: 20},
 	})
 	for i := range archive {
 		if archive[i].Entry.Season == "2026" {
@@ -64,8 +64,8 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 
 func TestExploreTeamHistoryUsesIDsAcrossNameChanges(t *testing.T) {
 	archive := historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 2},
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 2},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})
 	for i := range archive {
 		season := &archive[i]
@@ -105,7 +105,7 @@ func TestExploreDefaultTeamPrefersPortlandThorns(t *testing.T) {
 		{"Thorns absent", "bravo", "alpha"},
 	} {
 		archive := historyArchive(t, map[string]historyArchiveState{
-			"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+			"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 		})
 		for i := range archive {
 			for j := range archive[i].Data.Games {
@@ -134,7 +134,7 @@ func TestExploreDefaultTeamPrefersPortlandThorns(t *testing.T) {
 
 func TestExploreTeamHistoryHeadingNamesTheView(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})}
 	for query, heading := range map[string]string{
 		"view=team-history":                "Season-by-season scoring (regular-season)</h2>",
@@ -224,9 +224,9 @@ func TestExploreTeamHistorySortsEveryColumnBeforeRounding(t *testing.T) {
 
 func TestExploreTeamHistorySortURLsAndFallback(t *testing.T) {
 	archive := historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 5, xgCovered: 20},
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 2, xgCovered: 19},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 5, XGCovered: 20},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	handler := NewHandler(&historyHTTPStore{archive: archive})
 	path := "/nwsl-season/explore?view=team-history&team=alpha&measure=against&history-sort=for-actual&history-order=desc"

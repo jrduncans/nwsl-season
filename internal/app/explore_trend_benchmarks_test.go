@@ -72,7 +72,7 @@ func exploreBenchmarkArchive(t *testing.T, year string, active bool) []cache.His
 	if active {
 		lifecycle = cache.SourceScopeActive
 	}
-	archive := historyArchive(t, map[string]historyArchiveState{year: {lifecycle: lifecycle}})
+	archive := historyArchive(t, map[string]historyArchiveState{year: {Lifecycle: lifecycle}})
 	data := &archive[0].Data
 	data.Games = nil
 	for i := range 10 {

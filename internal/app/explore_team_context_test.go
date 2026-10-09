@@ -103,10 +103,10 @@ func TestExplorePointsContextRequiresCompleteXPointsIndependentlyOfXG(t *testing
 
 func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
-		"2022": {lifecycle: cache.SourceScopeCompleted, inventory: cache.InventoryCompletenessIncomplete, goals: 100},
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 10, xgCovered: 19},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
+		"2022": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 100},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 10, XGCovered: 19},
 	})}
 	handler := NewHandler(store)
 	response := httptest.NewRecorder()
@@ -144,7 +144,7 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 
 func TestExploreContextFloatingBarsDirectURLAndSortLinks(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2025": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 20},
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 	})}
 	handler := NewHandler(store)
 	response := httptest.NewRecorder()

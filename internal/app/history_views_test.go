@@ -158,8 +158,8 @@ func TestHistoryChartSelectionDoesNotChangeGeometryOrPopulation(t *testing.T) {
 
 func TestHistoryChartAccessibleHTTPMarkup(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 2},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2},
 	})}
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/history/scoring?season=2019", nil))

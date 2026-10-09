@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"html"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -21,8 +21,8 @@ import (
 
 func TestHistoryScoringRendersOneArchiveReadAndNoSeasonReads(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 2},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2},
 	})}
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/history/scoring", nil))
@@ -52,7 +52,7 @@ func TestHistoryScoringRendersOneArchiveReadAndNoSeasonReads(t *testing.T) {
 }
 
 func TestHistoryRouteAndProxyLinksResolveWithinMount(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{"2024": {lifecycle: cache.SourceScopeCompleted, goals: 2}})}
+	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{"2024": {Lifecycle: cache.SourceScopeCompleted, Goals: 2}})}
 	handler := NewHandler(store)
 	for _, test := range []struct {
 		path, wantLocation string
@@ -119,9 +119,9 @@ func TestHistoryRouteAndProxyLinksResolveWithinMount(t *testing.T) {
 
 func TestHistorySelectionAndErrorPaths(t *testing.T) {
 	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
-		"2016": {lifecycle: cache.SourceScopeCompleted, inventory: cache.InventoryCompletenessIncomplete, goals: 4},
-		"2024": {lifecycle: cache.SourceScopeCompleted, goals: 2},
-		"2026": {lifecycle: cache.SourceScopeActive, goals: 3},
+		"2016": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 4},
+		"2024": {Lifecycle: cache.SourceScopeCompleted, Goals: 2},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3},
 	})}
 	handler := NewHandler(store)
 	for _, test := range []struct{ path, want string }{
@@ -174,7 +174,7 @@ func TestHistorySelectionAndErrorPaths(t *testing.T) {
 	if unsupported.Code != http.StatusServiceUnavailable || !strings.Contains(unsupported.Body.String(), "local archive") {
 		t.Fatalf("unsupported store = %d %q", unsupported.Code, unsupported.Body.String())
 	}
-	duplicate := historyArchive(t, map[string]historyArchiveState{"2016": {lifecycle: cache.SourceScopeCompleted, goals: 2}})
+	duplicate := historyArchive(t, map[string]historyArchiveState{"2016": {Lifecycle: cache.SourceScopeCompleted, Goals: 2}})
 	duplicate = append(duplicate, duplicate[0])
 	for _, store := range []*historyHTTPStore{
 		{err: errors.New("SELECT secret_token FROM source")},
@@ -215,8 +215,8 @@ func TestHistoryReadsTemporarySQLiteCache(t *testing.T) {
 
 func TestHistoryRendersInvalidAndIncompleteHistoricalExclusions(t *testing.T) {
 	archive := historyArchive(t, map[string]historyArchiveState{
-		"2016": {lifecycle: cache.SourceScopeCompleted, goals: 2},
-		"2017": {lifecycle: cache.SourceScopeCompleted, goals: 2},
+		"2016": {Lifecycle: cache.SourceScopeCompleted, Goals: 2},
+		"2017": {Lifecycle: cache.SourceScopeCompleted, Goals: 2},
 	})
 	for index := range archive {
 		switch archive[index].Entry.Season {
@@ -243,8 +243,8 @@ func TestHistoryRendersInvalidAndIncompleteHistoricalExclusions(t *testing.T) {
 
 func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 	archive := historyArchive(t, map[string]historyArchiveState{
-		"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3, xgCovered: 19},
-		"2021": {lifecycle: cache.SourceScopeCompleted, goals: 2, xgCovered: 20},
+		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19},
+		"2021": {Lifecycle: cache.SourceScopeCompleted, Goals: 2, XGCovered: 20},
 	})
 	for index := range archive {
 		if archive[index].Entry.Season != "2021" {
@@ -330,7 +330,7 @@ func TestHistoryXGStateAndDistributionHTTP(t *testing.T) {
 	}
 
 	noXG := httptest.NewRecorder()
-	noXGArchive := historyArchive(t, map[string]historyArchiveState{"2019": {lifecycle: cache.SourceScopeCompleted, goals: 3}})
+	noXGArchive := historyArchive(t, map[string]historyArchiveState{"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3}})
 	NewHandler(&historyHTTPStore{archive: noXGArchive}).ServeHTTP(noXG, httptest.NewRequest(http.MethodGet, "/history/scoring?metric=xg&season=2019", nil))
 	if noXG.Code != http.StatusOK || strings.Contains(noXG.Body.String(), `<svg class="history-chart"`) || !strings.Contains(noXG.Body.String(), `View Goals`) || !strings.Contains(noXG.Body.String(), `href="scoring?season=2019"`) {
 		t.Fatalf("all-unavailable xG state = %d %s", noXG.Code, noXG.Body.String())
@@ -379,51 +379,17 @@ func (s *historyHTTPStore) Status(context.Context, string, string) (cache.Status
 	return cache.Status{}, errors.New("unexpected status read")
 }
 
-type historyArchiveState struct {
-	lifecycle cache.SourceScopeLifecycle
-	inventory cache.InventoryCompleteness
-	goals     int64
-	xgCovered int
-}
+// The history fixtures live in internal/apptest so browser tests and
+// cmd/preview share them.
+type historyArchiveState = apptest.ArchiveState
 
 func historyArchive(t *testing.T, states map[string]historyArchiveState) []cache.HistoricalSeason {
 	t.Helper()
-	archive := make([]cache.HistoricalSeason, 0, len(states))
-	for season, state := range states {
-		entry, ok := competition.Lookup(season, "Regular Season")
-		if !ok {
-			t.Fatalf("catalog lacks %s regular season", season)
-		}
-		inventory := state.inventory
-		if inventory == "" {
-			inventory = cache.InventoryCompletenessUnknown
-		}
-		data := cache.SeasonData{Games: historyGames(season, 20, state.goals)}
-		for index, game := range data.Games {
-			if index >= state.xgCovered {
-				break
-			}
-			data.XGoals = append(data.XGoals, cache.GameXG{
-				GameID: game.ASAID, Availability: cache.XGAvailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID,
-				HomeXG: sql.NullFloat64{Float64: 1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0, Valid: true},
-			})
-		}
-		archive = append(archive, cache.HistoricalSeason{Entry: entry, Readiness: &cache.SeasonReadinessSnapshot{
-			Scope:     cache.SourceScope{Season: season, Stage: "Regular Season", Lifecycle: state.lifecycle, Discovery: cache.SourceScopeAvailable},
-			Readiness: cache.SourceReadinessAvailable, Completeness: inventory,
-		}, Data: data})
-	}
-	return archive
+	return apptest.Archive(t, states)
 }
 
 func historyGames(season string, count int, totalGoals int64) []cache.Game {
-	games := make([]cache.Game, 0, count)
-	for index := range count {
-		home := totalGoals / 2
-		away := totalGoals - home
-		games = append(games, cache.Game{ASAID: fmt.Sprintf("history-%s-%d", season, index), Season: season, Stage: "Regular Season", Status: fixtures.CompletedStatus, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeScore: sql.NullInt64{Int64: home, Valid: true}, AwayScore: sql.NullInt64{Int64: away, Valid: true}})
-	}
-	return games
+	return apptest.Games(season, count, totalGoals)
 }
 
 func assertHistoryCatalogRows(t *testing.T, body string) {
