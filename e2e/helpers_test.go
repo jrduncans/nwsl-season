@@ -135,12 +135,12 @@ func sameOrigin(page playwright.Page, rawURL string) bool {
 	return other.Scheme == current.Scheme && other.Host == current.Host
 }
 
-// visit loads rawURL, waits for the network to settle, and requires a
-// successful status and a visible page heading.
+// visit loads rawURL, waits for the load event (deferred scripts have run by
+// then), and requires a successful status and a visible page heading.
 func visit(t *testing.T, page playwright.Page, rawURL string) {
 	t.Helper()
 	response, err := page.Goto(rawURL, playwright.PageGotoOptions{
-		WaitUntil: playwright.WaitUntilStateNetworkidle,
+		WaitUntil: playwright.WaitUntilStateLoad,
 	})
 	if err != nil {
 		t.Fatalf("goto %s: %v", rawURL, err)
