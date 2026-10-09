@@ -834,16 +834,13 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{`<details class="clinching-slate">`, "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help", "can clinch the playoffs", "can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; wins vs Bravo FC", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC", "with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	for _, value := range []string{"Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield"} {
-		if strings.Contains(body, value) {
-			t.Errorf("body contains removed or internal text %q", value)
-		}
-	}
+	// The slate disclosure and the "can clinch the playoffs" heading are
+	// exercised by TestPagesClinching in e2e.
+	requireText(t, body, "main h2", "Clinching scenarios", "Elimination scenarios", "Season-long paths without outside help")
+	requireAttr(t, body, ".clinching-opportunity-elimination h3", "aria-label", "Alpha & Co <script>alert(1)</script> can be eliminated from the playoffs")
+	requireText(t, body, ".clinching-result-group h4", "If Alpha & Co <script>alert(1)</script> wins vs Bravo FC", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	requireText(t, body, "main .clinching-statement", "with 1 win", "Win each of these remaining matches: vs Bravo FC.")
+	forbidText(t, body, "main", "Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha & Co <script>alert(1)</script> — the Shield (no-help path)", "Bravo FC — the Shield")
 }
 
 func TestClinchingNonCurrentCatalogSeasonUsesCatalogRulesVersion(t *testing.T) {
@@ -898,17 +895,10 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Season-long paths without outside help", "These paths may include matches after this slate", `class="clinching-team-card"`, `src="https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png"`, "Can clinch the playoffs with <span class=\"clinching-disclosure\">1 win</span>", "Win each of these remaining matches: vs Bravo FC."} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	if strings.Contains(body, "data-clinching-team-filter") || strings.Contains(body, "Show scenarios for") {
-		t.Fatal("body contains the removed clinching team filter")
-	}
-	if strings.Contains(body, `class="clinching-slate"`) {
-		t.Error("body contains an irrelevant included slate")
-	}
+	requireText(t, body, ".clinching-no-help", "Season-long paths without outside help", "These paths may include matches after this slate", "Can clinch the playoffs with 1 win", "Win each of these remaining matches: vs Bravo FC.")
+	requireAttr(t, body, ".clinching-team-card img", "src", "https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png")
+	forbidElements(t, body, "[data-clinching-team-filter]", ".clinching-slate")
+	forbidText(t, body, "body", "Show scenarios for")
 }
 
 func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *testing.T) {
@@ -929,14 +919,13 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{"Recalculation pending.", "Already clinched the Shield", "Already clinched the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the Shield", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; has already clinched the playoffs"} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
-	}
-	if got := strings.Count(body, `class="clinching-status-item"`); got != 2 {
+	requireText(t, body, "main", "Recalculation pending.")
+	requireText(t, body, ".clinching-status-group-clinched h2", "Already clinched the Shield", "Already clinched the playoffs")
+	if got := len(find(t, body, "li.clinching-status-item")); got != 2 {
 		t.Fatalf("clinched status rows = %d, want one row per achievement group", got)
 	}
+	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Alpha & Co <script>alert(1)</script> has already clinched the Shield")
+	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Alpha & Co <script>alert(1)</script> has already clinched the playoffs")
 }
 
 func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
@@ -961,17 +950,16 @@ func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	alphaCard := strings.Index(body, `<article class="clinching-team-card"><h3><span class="team-name" title="Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt;">`)
-	bravoCard := strings.Index(body, `<article class="clinching-team-card"><h3><span class="team-name" title="Bravo FC">`)
-	if alphaCard < 0 || bravoCard < 0 {
-		t.Fatalf("no-help team cards missing; body=%s", body)
+	cards := find(t, body, "article.clinching-team-card")
+	if len(cards) != 2 || attr(findIn(t, cards[0], ".team-name")[0], "title") != "Alpha & Co <script>alert(1)</script>" || attr(findIn(t, cards[1], ".team-name")[0], "title") != "Bravo FC" {
+		t.Fatalf("cards are not ordered by the shortest path, then achievement importance; got %d cards", len(cards))
 	}
-	if alphaCard > bravoCard {
-		t.Error("cards are not ordered by the shortest path, then achievement importance")
+	var alphaPaths []string
+	for _, path := range findIn(t, cards[0], "summary") {
+		alphaPaths = append(alphaPaths, text(path))
 	}
-	alphaPaths := body[alphaCard:bravoCard]
-	if shield, playoffs := strings.Index(alphaPaths, "Can clinch the Shield"), strings.Index(alphaPaths, "Can clinch the playoffs"); shield < 0 || playoffs < 0 || shield > playoffs {
-		t.Error("paths inside a team card are not ordered by relevance")
+	if len(alphaPaths) != 2 || !strings.HasPrefix(alphaPaths[0], "Can clinch the Shield") || !strings.HasPrefix(alphaPaths[1], "Can clinch the playoffs") {
+		t.Errorf("paths inside a team card are not ordered by relevance: %q", alphaPaths)
 	}
 }
 
@@ -991,22 +979,20 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	for _, value := range []string{`<details class="clinching-slate">`, "Elimination scenarios", "Already eliminated", "Bravo FC has already been eliminated from the playoffs", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; can be eliminated from the playoffs", "If Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; loses vs Bravo FC"} {
-		if !strings.Contains(body, value) {
-			t.Errorf("body does not contain %q", value)
-		}
+	requireText(t, body, "main", "Elimination scenarios", "Already eliminated")
+	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Bravo FC has already been eliminated from the playoffs")
+	requireAttr(t, body, ".clinching-opportunity-elimination h3", "aria-label", "Alpha & Co <script>alert(1)</script> can be eliminated from the playoffs")
+	requireText(t, body, ".clinching-result-group h4", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	var headings []string
+	for _, heading := range find(t, body, "main h2") {
+		headings = append(headings, text(heading))
 	}
-	alreadyEliminated := strings.Index(body, "<h2>Already eliminated from the playoffs</h2>")
-	conditionalScenarios := strings.Index(body, "<h2>Elimination scenarios</h2>")
+	alreadyEliminated, conditionalScenarios := slices.Index(headings, "Already eliminated from the playoffs"), slices.Index(headings, "Elimination scenarios")
 	if alreadyEliminated < 0 || conditionalScenarios < 0 || alreadyEliminated > conditionalScenarios {
-		t.Fatal("confirmed eliminations are not shown before conditional elimination scenarios")
+		t.Fatalf("confirmed eliminations are not shown before conditional elimination scenarios: %q", headings)
 	}
-	if strings.Contains(body[alreadyEliminated:conditionalScenarios], `class="clinching-opportunity`) {
-		t.Fatal("confirmed eliminations are rendered as large scenario cards")
-	}
-	if strings.Contains(body, "No teams can clinch during this slate.") {
-		t.Fatal("body hides the only actionable elimination scenario")
-	}
+	forbidElements(t, body, ".clinching-status-group-eliminated .clinching-opportunity")
+	forbidText(t, body, "main", "No teams can clinch during this slate.")
 }
 
 func TestNoHelpTextUsesWinCountAndHidesUnresolvedReason(t *testing.T) {
