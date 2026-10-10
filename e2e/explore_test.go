@@ -596,45 +596,6 @@ func mustNumbers(t *testing.T, cells []string) []float64 {
 	return values
 }
 
-// noScriptPage returns a page whose browser context has JavaScript disabled, so
-// only the server-rendered HTML, native links and GET forms are in play. Failed
-// or error responses from the app fail the test.
-func noScriptPage(t *testing.T, vp viewport) playwright.Page {
-	t.Helper()
-	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
-		Viewport:          &playwright.Size{Width: vp.Width, Height: vp.Height},
-		JavaScriptEnabled: playwright.Bool(false),
-	})
-	if err != nil {
-		t.Fatalf("new browser context: %v", err)
-	}
-	stubClubLogos(t, context)
-	page, err := context.NewPage()
-	if err != nil {
-		t.Fatalf("new page: %v", err)
-	}
-	var mu sync.Mutex
-	var problems []string
-	page.On("response", func(response playwright.Response) {
-		if sameOrigin(page, response.URL()) && response.Status() >= 400 {
-			mu.Lock()
-			problems = append(problems, fmt.Sprintf("%s: %d", response.URL(), response.Status()))
-			mu.Unlock()
-		}
-	})
-	t.Cleanup(func() {
-		mu.Lock()
-		for _, problem := range problems {
-			t.Errorf("no-script page: bad response %s", problem)
-		}
-		mu.Unlock()
-		if err := context.Close(); err != nil {
-			t.Logf("close browser context: %v", err)
-		}
-	})
-	return page
-}
-
 // inspection is a chart's keyboard and pointer inspection state.
 type inspection struct {
 	Active []struct {
@@ -1796,7 +1757,7 @@ func historyTableSeasons(t *testing.T, page playwright.Page) []string {
 func TestExploreWorksWithoutJavaScript(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := noScriptPage(t, Desktop)
+	page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
 	goTo := func(path string) {
 		t.Helper()
 		if _, err := page.Goto(base + path); err != nil {

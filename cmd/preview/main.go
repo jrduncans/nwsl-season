@@ -104,16 +104,7 @@ func serve(scenario, addr, metric string, noScript bool, stdout, stderr io.Write
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	mux := http.NewServeMux()
-	mux.Handle(mountPrefix+"/", http.StripPrefix(mountPrefix, srv.Handler()))
-	var handler http.Handler = mux
-	if noScript {
-		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Security-Policy", "script-src 'none'")
-			mux.ServeHTTP(w, r)
-		})
-	}
-	httpServer := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	httpServer := &http.Server{Handler: previewHandler(srv.Handler(), noScript), ReadHeaderTimeout: 10 * time.Second}
 
 	query := url.Values{"metric": {metric}, "season": {selection}}
 	_, _ = fmt.Fprintf(stdout, "http://%s%s/history/scoring?%s\n", listener.Addr(), mountPrefix, query.Encode())
@@ -182,3 +173,46 @@ func (*reporter) Helper() {}
 func (*reporter) Fatalf(format string, args ...any) {
 	panic(fatalError(fmt.Sprintf(format, args...)))
 }
+
+func previewHandler(application http.Handler, noScript bool) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle(mountPrefix+"/", http.StripPrefix(mountPrefix, application))
+	if !noScript {
+		return mux
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writer := &scriptBlockingWriter{ResponseWriter: w}
+		mux.ServeHTTP(writer, r)
+		// A handler that writes nothing gets net/http's implicit 200, which
+		// would bypass the wrapper; commit it here so the policy still applies.
+		if !writer.wroteHeader {
+			writer.WriteHeader(http.StatusOK)
+		}
+	})
+}
+
+// scriptBlockingWriter adds a second, restrictive policy when headers are
+// committed, after the application's security middleware has set its policy.
+// Browsers enforce both policies, preserving the application's other rules.
+type scriptBlockingWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *scriptBlockingWriter) WriteHeader(status int) {
+	if !w.wroteHeader {
+		w.Header().Add("Content-Security-Policy", "script-src 'none'")
+		w.wroteHeader = true
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *scriptBlockingWriter) Write(body []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+// Unwrap lets http.NewResponseController reach the underlying writer.
+func (w *scriptBlockingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

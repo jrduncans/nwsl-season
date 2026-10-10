@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,7 +46,11 @@ import (
 
 // journeyClock is the scheduler's planning clock. It is safe for the
 // scheduler goroutine to read while the test advances it.
-type journeyClock struct{ nanos atomic.Int64 }
+type journeyClock struct {
+	nanos    atomic.Int64
+	mu       sync.Mutex
+	nextRead func()
+}
 
 func newJourneyClock(start time.Time) *journeyClock {
 	c := &journeyClock{}
@@ -52,7 +58,56 @@ func newJourneyClock(start time.Time) *journeyClock {
 	return c
 }
 
-func (c *journeyClock) Now() time.Time { return time.Unix(0, c.nanos.Load()).UTC() }
+func (c *journeyClock) Now() time.Time {
+	now := time.Unix(0, c.nanos.Load()).UTC()
+	c.mu.Lock()
+	hook := c.nextRead
+	if hook != nil && calledFromPlanner() {
+		c.nextRead = nil
+	} else {
+		hook = nil
+	}
+	c.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return now
+}
+
+// calledFromPlanner reports whether the clock is being read by the
+// scheduler's tick planning (runCheck), not by job execution or a lease stamp.
+func calledFromPlanner() bool {
+	pcs := make([]uintptr, 8)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
+	for {
+		frame, more := frames.Next()
+		// Skip Now itself and the method-value wrapper the scheduler calls.
+		if !strings.Contains(frame.Function, "journeyClock") {
+			return strings.HasSuffix(frame.Function, "scheduler.(*Scheduler).runCheck")
+		}
+		if !more {
+			return false
+		}
+	}
+}
+
+// holdNextRead holds the next planning read of the clock (the first runCheck
+// after it is called) at the old value, so a test can change source data
+// without that tick seeing it as due. Other clock reads pass through. No sleep
+// or count of scheduler clock calls is needed.
+func (c *journeyClock) holdNextRead(t *testing.T) (<-chan struct{}, func()) {
+	t.Helper()
+	entered, release := make(chan struct{}), make(chan struct{})
+	resume := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(resume)
+	c.mu.Lock()
+	c.nextRead = func() {
+		close(entered)
+		<-release
+	}
+	c.mu.Unlock()
+	return entered, resume
+}
 
 func (c *journeyClock) Advance(d time.Duration) { c.nanos.Add(int64(d)) }
 
@@ -843,8 +898,8 @@ func readCacheStatus(t *testing.T, f *fixture) cacheStatus {
 }
 
 // TestJ6ASAErrors is journey J6: ASA answers 503 to a later games request.
-// Pages keep the last good data, /cache/status reports the failed attempt, and
-// the next check recovers.
+// Pages keep the last good data and the next check recovers. Failure reporting
+// through /cache/status remains an open follow-up in docs/test-strategy-plan.md.
 func TestJ6ASAErrors(t *testing.T) {
 	t.Parallel()
 	j := newJourney(t, lateSeason())
@@ -931,13 +986,25 @@ func TestJ7SchedulerPath(t *testing.T) {
 	// Start only after the cache is filled, so the startup bootstrap has no
 	// catalog loading left to wait for. From here on the test never calls
 	// CheckNow.
+	startupPlanning, resumeStartup := j.Clock.holdNextRead(t)
 	j.Server.Start()
+	// Startup recalculates cached clinching before reading the planning clock;
+	// allow the same budget as publishing below, including under the race detector.
+	select {
+	case <-startupPlanning:
+	case <-time.After(60 * time.Second):
+		t.Fatal("scheduler did not reach startup planning")
+	}
 
 	// The result is at ASA, but the game is not due until the clock passes its
-	// kickoff plus the 2h completion grace. Moving the clock makes it due on the
-	// scheduler's next tick.
+	// kickoff plus the 2h completion grace. Startup already captured the old
+	// time, so it cannot fetch this result; a periodic tick must pick it up.
+	// This relies on fillCache having drained every due job: a games job due
+	// at the old time would still fetch the result, which the audit check
+	// below reports as a startup fetch.
 	j.upsert(winFor(j.pendingGameOf(t, teamZero), teamZero))
 	j.Clock.Advance(lateRoundsDue)
+	resumeStartup()
 
 	eventually(t, 60*time.Second, "the scheduler to publish team-0's clinch", func() bool {
 		body := httpBody(t, j.fixture, "")
@@ -951,6 +1018,33 @@ func TestJ7SchedulerPath(t *testing.T) {
 		}
 		return strings.Contains(row, "qualification-badge")
 	})
+
+	// Prove that a periodic source operation changed the fixture inputs, rather
+	// than accepting a page updated by startup or the fixture's manual checks.
+	db, err := cache.Open(context.Background(), j.cfg.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	audits, err := db.SourceRefreshAudits(context.Background(), cache.SourceResourceGames, currentSeason, "Regular Season")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scheduledResult bool
+	for _, audit := range audits {
+		if !audit.DownstreamInputsChanged || audit.Outcome != cache.SourceRefreshSuccess {
+			continue
+		}
+		switch audit.Trigger {
+		case cache.SourceTriggerStartup:
+			t.Fatal("startup fetched the result: fillCache left a games job due at the held clock")
+		case cache.SourceTriggerScheduler:
+			scheduledResult = true
+		}
+	}
+	if !scheduledResult {
+		t.Fatal("no successful scheduler-triggered game operation changed fixture inputs")
+	}
 
 	page := newPage(t, Desktop)
 	visit(t, page, j.URL(""))

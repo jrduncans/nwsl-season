@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -30,115 +28,6 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/server"
 )
-
-// T9: browser tests for the pages that script (standings, forecast, clinching)
-// and render-and-fit checks for the rest. The local-time, no-script and
-// clipboard cases need browser-context options that newPage does not take, so
-// newPageWith builds the context itself and applies the same failure rules.
-
-// pageOptions are the browser-context settings a test needs beyond a viewport.
-type pageOptions struct {
-	Viewport viewport
-	// Timezone is an IANA zone such as "Asia/Tokyo"; empty keeps the machine's.
-	Timezone string
-	// NoScript turns JavaScript off for the whole context.
-	NoScript bool
-	// Clipboard grants the page clipboard-read and clipboard-write.
-	Clipboard bool
-}
-
-// newPageWith is newPage with context options. The test fails if the page logs
-// a console error, throws, has a same-origin request fail or return a 4xx/5xx
-// status, or violates the CSP.
-func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
-	t.Helper()
-	contextOptions := playwright.BrowserNewContextOptions{
-		Viewport: &playwright.Size{Width: opts.Viewport.Width, Height: opts.Viewport.Height},
-		// Fix the locale so Intl output does not depend on the machine.
-		Locale: playwright.String("en-US"),
-	}
-	if opts.Timezone != "" {
-		contextOptions.TimezoneId = playwright.String(opts.Timezone)
-	}
-	if opts.NoScript {
-		contextOptions.JavaScriptEnabled = playwright.Bool(false)
-	}
-	if opts.Clipboard {
-		contextOptions.Permissions = []string{"clipboard-read", "clipboard-write"}
-	}
-	browserContext, err := browser.NewContext(contextOptions)
-	if err != nil {
-		t.Fatalf("new browser context: %v", err)
-	}
-	if err := browserContext.AddInitScript(playwright.Script{Content: playwright.String(cspReporter)}); err != nil {
-		t.Fatalf("add CSP init script: %v", err)
-	}
-	stubClubLogos(t, browserContext)
-	traceDir := os.Getenv(traceDirEnv)
-	if traceDir != "" {
-		if err := browserContext.Tracing().Start(playwright.TracingStartOptions{Snapshots: playwright.Bool(true)}); err != nil {
-			t.Fatalf("start tracing: %v", err)
-		}
-	}
-	page, err := browserContext.NewPage()
-	if err != nil {
-		t.Fatalf("new page: %v", err)
-	}
-
-	var (
-		mu       sync.Mutex
-		problems []string
-	)
-	record := func(format string, args ...any) {
-		mu.Lock()
-		defer mu.Unlock()
-		problems = append(problems, fmt.Sprintf(format, args...))
-	}
-	page.On("console", func(message playwright.ConsoleMessage) {
-		if message.Type() == "error" {
-			record("console error: %s", message.Text())
-		}
-	})
-	page.On("pageerror", func(err error) { record("page error: %v", err) })
-	page.On("requestfailed", func(request playwright.Request) {
-		if sameOrigin(page, request.URL()) {
-			record("request failed: %s %s: %v", request.Method(), request.URL(), request.Failure())
-		}
-	})
-	page.On("response", func(response playwright.Response) {
-		if sameOrigin(page, response.URL()) && response.Status() >= 400 {
-			record("bad response: %s %s: %d", response.Request().Method(), response.URL(), response.Status())
-		}
-	})
-	t.Cleanup(func() {
-		if !opts.NoScript {
-			// With JavaScript off, page.Evaluate never returns.
-			_ = settle(page)
-		}
-		mu.Lock()
-		for _, problem := range problems {
-			t.Errorf("%s viewport: %s", opts.Viewport.Name, problem)
-		}
-		mu.Unlock()
-		switch {
-		case traceDir == "":
-		case t.Failed():
-			if err := os.MkdirAll(traceDir, 0o750); err != nil { //nolint:gosec // G703: traceDir is the developer-set trace directory, not request input
-				t.Logf("create trace directory: %v", err)
-			} else if err := browserContext.Tracing().Stop(filepath.Join(traceDir, traceName(t, opts.Viewport)+".zip")); err != nil {
-				t.Logf("save trace: %v", err)
-			}
-		default:
-			if err := browserContext.Tracing().Stop(); err != nil {
-				t.Logf("stop tracing: %v", err)
-			}
-		}
-		if err := browserContext.Close(); err != nil {
-			t.Logf("close browser context: %v", err)
-		}
-	})
-	return page
-}
 
 // visitStatic loads rawURL in a page whose JavaScript is off and requires a
 // 2xx status and a visible heading. visit cannot be used there: it settles the

@@ -805,9 +805,9 @@ active):
   also present.
 
 `-metric xg|goals` picks the metric in the printed URL, and `-no-script` sends a
-preview-only Content Security Policy that blocks page scripts so you can verify
-native links, season forms, and disclosures. This does not change application
-CSP.
+second, preview-only Content Security Policy that blocks page scripts so you
+can verify native links, season forms, and disclosures. Both policies are
+enforced, so the application's other CSP restrictions remain in effect.
 
 The same scenarios are available to Go code as `apptest.Seed(t, db, scenario)`
 (cache-backed) and `apptest.Scenario(t, scenario)` (in-memory archive). The
