@@ -9,6 +9,7 @@ import (
 )
 
 func TestMigrationTenCreatesAuditStateTablesAndConstraints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 
@@ -57,6 +58,7 @@ func TestMigrationTenCreatesAuditStateTablesAndConstraints(t *testing.T) {
 }
 
 func TestMigrationTenBackfillsLegacySuccessStateAndPreservesRows(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	db, err := Open(ctx, path)
@@ -174,6 +176,7 @@ func TestMigrationTenBackfillsLegacySuccessStateAndPreservesRows(t *testing.T) {
 }
 
 func TestRecordSourceRefreshFullStateAndMonotonicity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	finished := testSourceRefreshTime(2026, 7, 1, 12)
@@ -224,6 +227,7 @@ func TestRecordSourceRefreshFullStateAndMonotonicity(t *testing.T) {
 }
 
 func TestRecordSourceRefreshSameSecondSuccessDoesNotRegressState(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	firstFinished := testSourceRefreshTime(2026, 7, 1, 12).Add(900 * time.Millisecond)
@@ -253,6 +257,7 @@ func TestRecordSourceRefreshSameSecondSuccessDoesNotRegressState(t *testing.T) {
 }
 
 func TestRecordSourceRefreshNonFullAuditsDoNotChangeState(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	finished := testSourceRefreshTime(2026, 7, 1, 12)
@@ -283,6 +288,7 @@ func TestRecordSourceRefreshNonFullAuditsDoNotChangeState(t *testing.T) {
 }
 
 func TestRecordSourceRefreshRejectsInvalidInputBeforeWriting(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	base := testSourceRefreshAudit(SourceResourceGames, "2026", "Regular Season", SourceRefreshFull, SourceRefreshSuccess, testSourceRefreshTime(2026, 7, 1, 12))
@@ -329,6 +335,7 @@ func TestRecordSourceRefreshRejectsInvalidInputBeforeWriting(t *testing.T) {
 }
 
 func TestRecordSourceRefreshRejectsInvalidRawSubsecondOrdering(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	second := testSourceRefreshTime(2026, 7, 1, 12)
@@ -348,6 +355,7 @@ func TestRecordSourceRefreshRejectsInvalidRawSubsecondOrdering(t *testing.T) {
 }
 
 func TestPrepareSourceRefreshNormalizesAndCopiesDueTime(t *testing.T) {
+	t.Parallel()
 	finished := testSourceRefreshTime(2026, 7, 1, 12).Add(900 * time.Millisecond)
 	due := finished.Add(time.Hour)
 	audit, copiedDue, err := prepareSourceRefresh(testSourceRefreshAudit(SourceResourceGames, "2026", "Regular Season", SourceRefreshFull, SourceRefreshSuccess, finished), &due)
@@ -364,6 +372,7 @@ func TestPrepareSourceRefreshNormalizesAndCopiesDueTime(t *testing.T) {
 }
 
 func TestSourceRefreshReadOrderingFilteringScannersAndPointers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	base := testSourceRefreshTime(2026, 7, 1, 12)
@@ -446,6 +455,7 @@ func TestSourceRefreshReadOrderingFilteringScannersAndPointers(t *testing.T) {
 }
 
 func TestSourceRefreshMetadataDoesNotChangeSourceScopes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceRefreshTestDB(t)
 	now := testSourceRefreshTime(2026, 7, 1, 12)

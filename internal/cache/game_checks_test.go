@@ -20,6 +20,7 @@ func checkRequest(id string, hour int) CheckedGameRequest {
 }
 
 func TestUpsertCheckedGamesAcceleratesIncompleteActiveBracketDiscovery(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
@@ -57,6 +58,7 @@ func TestUpsertCheckedGamesAcceleratesIncompleteActiveBracketDiscovery(t *testin
 }
 
 func TestIncompleteActiveBracketDiscoveryEligibility(t *testing.T) {
+	t.Parallel()
 	entry, found := competition.Lookup("2026", "Playoffs")
 	if !found {
 		t.Fatal("missing playoff catalog entry")
@@ -91,6 +93,7 @@ func TestIncompleteActiveBracketDiscoveryEligibility(t *testing.T) {
 }
 
 func TestIncompleteBracketDiscoveryDoesNotMoveFullDueForIneligiblePersistedScopes(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		season, stage string
 		gameCount     int
@@ -143,6 +146,7 @@ func TestIncompleteBracketDiscoveryDoesNotMoveFullDueForIneligiblePersistedScope
 }
 
 func TestTargetedXGDoesNotAccelerateBracketDiscovery(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
@@ -166,6 +170,7 @@ func TestTargetedXGDoesNotAccelerateBracketDiscovery(t *testing.T) {
 }
 
 func TestUpsertCheckedGamesAccelerationRollsBackWithCatalogedBracket(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
@@ -199,6 +204,7 @@ func TestUpsertCheckedGamesAccelerationRollsBackWithCatalogedBracket(t *testing.
 }
 
 func TestUpsertCheckedGamesOmissionStateAuditAndLineage(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	one := inventoryGame("one", "PreMatch", 0, 0)
 	two := inventoryGame("two", "PreMatch", 0, 0)
@@ -239,6 +245,7 @@ func TestUpsertCheckedGamesOmissionStateAuditAndLineage(t *testing.T) {
 }
 
 func TestUpsertCheckedGamesPreferenceAndMonotonicState(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata()); err != nil {
@@ -279,6 +286,7 @@ func TestUpsertCheckedGamesPreferenceAndMonotonicState(t *testing.T) {
 }
 
 func TestTargetedPreferenceCountersAndIndependentStateTimes(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	g := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{g}, nil, inventoryMetadata()); err != nil {
@@ -353,6 +361,7 @@ func TestTargetedPreferenceCountersAndIndependentStateTimes(t *testing.T) {
 }
 
 func TestTargetedMaterialTimeCanAdvanceWithoutCheckDueRegression(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	g := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{g}, nil, inventoryMetadata()); err != nil {
@@ -376,6 +385,7 @@ func TestTargetedMaterialTimeCanAdvanceWithoutCheckDueRegression(t *testing.T) {
 }
 
 func TestUpsertCheckedGamesRejectsIdentityWithoutWrites(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata()); err != nil {
@@ -400,6 +410,7 @@ func TestUpsertCheckedGamesRejectsIdentityWithoutWrites(t *testing.T) {
 }
 
 func TestGameResultCheckReadDefensiveAndCascade(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata()); err != nil {
@@ -431,6 +442,7 @@ func TestGameResultCheckReadDefensiveAndCascade(t *testing.T) {
 }
 
 func TestUpsertCheckedGamesValidationAndPartialCounts(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	one := inventoryGame("one", "PreMatch", 0, 0)
 	two := inventoryGame("two", "PreMatch", 0, 0)
@@ -460,6 +472,7 @@ func TestUpsertCheckedGamesValidationAndPartialCounts(t *testing.T) {
 }
 
 func TestTargetedValidationFailuresLeaveAllPersistenceUntouched(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	g := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{g}, nil, inventoryMetadata()); err != nil {
@@ -495,6 +508,7 @@ func TestTargetedValidationFailuresLeaveAllPersistenceUntouched(t *testing.T) {
 }
 
 func TestGameResultCheckReadValidationScopeAndMalformedStorage(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	if _, _, err := db.GameResultCheckState(ctx, " one"); err == nil {
 		t.Fatal("padded ID accepted")
@@ -535,6 +549,7 @@ func TestGameResultCheckReadValidationScopeAndMalformedStorage(t *testing.T) {
 }
 
 func TestGameResultCheckReadsAreScopedSortedAndDefensive(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	one := inventoryGame("z", "FullTime", 1, 0)
 	two := inventoryGame("a", "PreMatch", 0, 0)
@@ -578,6 +593,7 @@ func TestGameResultCheckReadsAreScopedSortedAndDefensive(t *testing.T) {
 }
 
 func TestUpsertCheckedGamesVenueAndRollback(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"game_result_checks", "venue_summaries", "sync_runs", "source_refresh_audits"} {
 		t.Run(target, func(t *testing.T) {
 			db, ctx := inventoryDB(t)
@@ -625,6 +641,7 @@ func TestUpsertCheckedGamesVenueAndRollback(t *testing.T) {
 }
 
 func TestTargetedVenueFullTimeAndAbandonedPermutations(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	g := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{g}, nil, inventoryMetadata()); err != nil {
@@ -681,6 +698,7 @@ func TestTargetedVenueFullTimeAndAbandonedPermutations(t *testing.T) {
 }
 
 func TestTargetedVenueOmissionNoopKickoffMatchdayAndAbandoned(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	full := inventoryGame("one", "FullTime", 1, 0)
 	pending := inventoryGame("two", "PreMatch", 0, 0)
@@ -740,6 +758,7 @@ func TestTargetedVenueOmissionNoopKickoffMatchdayAndAbandoned(t *testing.T) {
 }
 
 func TestFullInventoryMaintainsGameCheckStateAndDue(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	g := inventoryGame("one", "PreMatch", 0, 0)
 	first, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{g}, nil, inventoryMetadata())
@@ -833,6 +852,7 @@ func TestFullInventoryMaintainsGameCheckStateAndDue(t *testing.T) {
 }
 
 func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	db, err := Open(ctx, path)
@@ -947,6 +967,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 }
 
 func TestMigrationElevenToleratesMinimalV10Fixture(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/minimal.sqlite"
 	raw, err := sql.Open("sqlite", path)

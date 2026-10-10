@@ -40,8 +40,10 @@ func scenarioPages(selection string) map[string][]pageExpectation {
 // xG reach the cache exactly and that the pages render scenario-specific
 // content from it.
 func TestSeedStoresEveryScenario(t *testing.T) {
+	t.Parallel()
 	for _, name := range apptest.ScenarioNames() {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			ctx := context.Background()
 			db, err := cache.Open(ctx, filepath.Join(t.TempDir(), "cache.sqlite"))
 			if err != nil {
@@ -144,6 +146,7 @@ func assertTeams(t *testing.T, year string, got []standings.Team, want cache.Sea
 }
 
 func TestScenarioNamesAreAllAccepted(t *testing.T) {
+	t.Parallel()
 	for _, name := range apptest.ScenarioNames() {
 		if archive, selection := apptest.Scenario(t, name); len(archive) == 0 || selection == "" {
 			t.Errorf("scenario %q = %d seasons, selection %q", name, len(archive), selection)

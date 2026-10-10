@@ -29,6 +29,10 @@ documentation-only or otherwise unrelated changes.
 When a change touches templates, JavaScript, CSS or `internal/app`, also run
 `make test-e2e` (headless Chromium; run `make e2e-install` once first).
 
+`make verify` runs `fmt`, `lint`, `vet`, `test` and `test-e2e` in that order,
+so one command covers the standard Go handoff checks; add the race suite and
+`govulncheck` when they apply.
+
 For new tests, build data with `internal/apptest` (seeded cache scenarios) and
 `internal/asatest` (a fake ASA server for sync journeys). A test must never
 call the real ASA API.

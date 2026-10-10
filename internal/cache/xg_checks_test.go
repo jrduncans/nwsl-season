@@ -41,6 +41,7 @@ func checkedXGFixture(t *testing.T) (context.Context, *DB, []Game, string) {
 }
 
 func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, path := checkedXGFixture(t)
 	available := xgValue("one")
 	if _, err := db.ReplaceStageXG(ctx, "2031", "Checks", []GameXG{available}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
@@ -93,6 +94,7 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 }
 
 func TestUpsertCheckedXGOmissionsOnlyAdvanceCheckState(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.ReplaceStageXG(ctx, "2031", "Checks", []GameXG{xgValue("one")}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
@@ -115,6 +117,7 @@ func TestUpsertCheckedXGOmissionsOnlyAdvanceCheckState(t *testing.T) {
 }
 
 func TestUpsertCheckedXGPreferenceClocksAndVenueReadiness(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, ok, err := db.SourceResourceScopeState(ctx, SourceResourceGameXG, "2031", "Checks"); err != nil || ok {
@@ -151,6 +154,7 @@ func TestUpsertCheckedXGPreferenceClocksAndVenueReadiness(t *testing.T) {
 }
 
 func TestGameXGCheckReadsAndTargetedValidationAreWriteFree(t *testing.T) {
+	t.Parallel()
 	ctx, db, games, _ := checkedXGFixture(t)
 	defer db.Close()
 	if state, ok, err := db.GameXGCheckState(ctx, "one"); err != nil || ok || state != (GameXGCheckState{}) {
@@ -224,6 +228,7 @@ func TestGameXGCheckReadsAndTargetedValidationAreWriteFree(t *testing.T) {
 }
 
 func TestFullStageXGPreservesTargetedDueAndParentInvalidation(t *testing.T) {
+	t.Parallel()
 	ctx, db, games, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.UpsertCheckedXG(ctx, "2031", "Checks", []CheckedXGRequest{xgCheckRequest("one", 4)}, []GameXG{xgValue("one")}, xgCheckMetadata(4)); err != nil {
@@ -262,6 +267,7 @@ func TestFullStageXGPreservesTargetedDueAndParentInvalidation(t *testing.T) {
 }
 
 func TestUpsertCheckedXGRollsBackEveryBoundary(t *testing.T) {
+	t.Parallel()
 	for _, target := range []struct {
 		name, trigger string
 	}{
@@ -307,6 +313,7 @@ func TestUpsertCheckedXGRollsBackEveryBoundary(t *testing.T) {
 }
 
 func TestGameXGCheckReadContract(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.UpsertCheckedXG(ctx, "2031", "Checks", []CheckedXGRequest{xgCheckRequest("one", 1)}, []GameXG{xgValue("one")}, xgCheckMetadata(1)); err != nil {
@@ -348,6 +355,7 @@ func TestGameXGCheckReadContract(t *testing.T) {
 }
 
 func TestUpsertCheckedXGOwnsInputsOrdersValuesAndPreservesReadyVenue(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.ReplaceStageXG(ctx, "2031", "Checks", []GameXG{xgValue("one")}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
@@ -372,6 +380,7 @@ func TestUpsertCheckedXGOwnsInputsOrdersValuesAndPreservesReadyVenue(t *testing.
 }
 
 func TestMigrationTwelveMinimalFixtureSkipsBackfill(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	legacy, err := sql.Open("sqlite", path)
@@ -404,6 +413,7 @@ func TestMigrationTwelveMinimalFixtureSkipsBackfill(t *testing.T) {
 }
 
 func TestUpsertCheckedXGPartialOmissionDoesNotFabricateOrTouchUnrequested(t *testing.T) {
+	t.Parallel()
 	ctx, db, games, _ := checkedXGFixture(t)
 	defer db.Close()
 	three := cachedGame("three", "2031", "Checks", "FullTime", "alpha", "bravo", sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Valid: true})
@@ -433,6 +443,7 @@ func TestUpsertCheckedXGPartialOmissionDoesNotFabricateOrTouchUnrequested(t *tes
 }
 
 func TestMigrationTwelveSchemaShapeAndIdempotence(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, _ := checkedXGFixture(t)
 	defer db.Close()
 	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(game_xg_checks)`)
@@ -481,6 +492,7 @@ func TestMigrationTwelveSchemaShapeAndIdempotence(t *testing.T) {
 }
 
 func TestUpsertCheckedXGPromotionMaterialAndDueMatrix(t *testing.T) {
+	t.Parallel()
 	ctx, db, _, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.ReplaceStageXG(ctx, "2031", "Checks", []GameXG{}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
@@ -520,6 +532,7 @@ func TestUpsertCheckedXGPromotionMaterialAndDueMatrix(t *testing.T) {
 }
 
 func TestParticipantChangeDeletesCheckOnlyStateAndLegacyLeavesChecksAlone(t *testing.T) {
+	t.Parallel()
 	ctx, db, games, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.UpsertCheckedXG(ctx, "2031", "Checks", []CheckedXGRequest{xgCheckRequest("one", 1)}, []GameXG{}, xgCheckMetadata(1)); err != nil {
@@ -553,6 +566,7 @@ func TestParticipantChangeDeletesCheckOnlyStateAndLegacyLeavesChecksAlone(t *tes
 }
 
 func TestReplaceStageXGRollsBackXGCheckMaintenance(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, event string
 		seed        bool
@@ -592,6 +606,7 @@ func TestReplaceStageXGRollsBackXGCheckMaintenance(t *testing.T) {
 }
 
 func TestUpsertCheckedXGRollsBackValueAndCheckInsert(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"game_xg", "game_xg_checks"} {
 		t.Run(target, func(t *testing.T) {
 			ctx, db, _, _ := checkedXGFixture(t)
@@ -620,6 +635,7 @@ func TestUpsertCheckedXGRollsBackValueAndCheckInsert(t *testing.T) {
 }
 
 func TestUpsertCheckedXGFinalValidationAndLineageCases(t *testing.T) {
+	t.Parallel()
 	ctx, db, games, _ := checkedXGFixture(t)
 	defer db.Close()
 	pre := cachedGame("pre", "2031", "Checks", "PreMatch", "alpha", "bravo", sql.NullInt64{}, sql.NullInt64{})
@@ -661,6 +677,7 @@ func TestUpsertCheckedXGFinalValidationAndLineageCases(t *testing.T) {
 }
 
 func TestUpsertCheckedXGVenueAndStateFinalCases(t *testing.T) {
+	t.Parallel()
 	ctx, db, games, _ := checkedXGFixture(t)
 	defer db.Close()
 	if _, err := db.db.ExecContext(ctx, `DELETE FROM venue_summaries WHERE season='2031' AND stage='Checks'`); err != nil {

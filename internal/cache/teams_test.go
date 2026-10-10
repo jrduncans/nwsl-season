@@ -9,6 +9,7 @@ import (
 )
 
 func TestUpsertTeamsRejectsInvalidInputBeforeWriting(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	finished := teamsTestTime(12)
 	valid := teamsTestMetadata(finished)
@@ -39,6 +40,7 @@ func TestUpsertTeamsRejectsInvalidInputBeforeWriting(t *testing.T) {
 }
 
 func TestUpsertTeamsInsertsNoopsAndUpdatesMetadata(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openTeamsTestDB(t)
 	firstFinished := teamsTestTime(12).Add(900 * time.Millisecond)
@@ -109,6 +111,7 @@ func TestUpsertTeamsInsertsNoopsAndUpdatesMetadata(t *testing.T) {
 }
 
 func TestUpsertTeamsRetainsOmittedTeamsAndDoesNotMutateOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openTeamsTestDB(t)
 	first := teamsTestCatalog()
@@ -155,6 +158,7 @@ func TestUpsertTeamsRetainsOmittedTeamsAndDoesNotMutateOrder(t *testing.T) {
 }
 
 func TestUpsertTeamsRetainsOlderAndEqualAuditsWithoutRegressingState(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openTeamsTestDB(t)
 	firstFinished := teamsTestTime(12).Add(900 * time.Millisecond)
@@ -190,6 +194,7 @@ func TestUpsertTeamsRetainsOlderAndEqualAuditsWithoutRegressingState(t *testing.
 }
 
 func TestUpsertTeamsRollsBackWhenAuditInsertFails(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openTeamsTestDB(t)
 	initial := []Team{teamsTestCatalog()[0]}
@@ -218,6 +223,7 @@ func TestUpsertTeamsRollsBackWhenAuditInsertFails(t *testing.T) {
 }
 
 func TestUpsertTeamsPreservesLegacyCacheAndReplaceSeasonDoesNotUseIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openTeamsTestDB(t)
 	teams := teamsTestCatalog()

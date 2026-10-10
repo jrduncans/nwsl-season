@@ -54,6 +54,7 @@ func xgRunHistory(t *testing.T, ctx context.Context, db *DB, season, stage strin
 }
 
 func TestReplaceStageXGFullCandidatesAuditAndProtectedOmission(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -86,6 +87,7 @@ func TestReplaceStageXGFullCandidatesAuditAndProtectedOmission(t *testing.T) {
 }
 
 func TestReplaceStageXGEmptyAndValidation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -105,6 +107,7 @@ func TestReplaceStageXGEmptyAndValidation(t *testing.T) {
 }
 
 func TestReplaceStageXGNoFullTimeCreatesReadyZeroVenue(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -132,6 +135,7 @@ func TestReplaceStageXGNoFullTimeCreatesReadyZeroVenue(t *testing.T) {
 }
 
 func TestReplaceStageXGDelayedAvailableDoesNotRegressCheck(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -162,6 +166,7 @@ func TestReplaceStageXGDelayedAvailableDoesNotRegressCheck(t *testing.T) {
 }
 
 func TestReplaceStageXGPreferenceAndMateriality(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -241,6 +246,7 @@ func TestReplaceStageXGPreferenceAndMateriality(t *testing.T) {
 }
 
 func TestReplaceStageXGRollsBackAllPersistenceSurfaces(t *testing.T) {
+	t.Parallel()
 	for _, target := range []struct {
 		name, table, event string
 	}{
@@ -322,6 +328,7 @@ func TestReplaceStageXGRollsBackAllPersistenceSurfaces(t *testing.T) {
 }
 
 func TestReplaceStageXGValidationAndIdentityAreWriteFree(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -445,6 +452,7 @@ func TestReplaceStageXGValidationAndIdentityAreWriteFree(t *testing.T) {
 }
 
 func TestGameXGReadsValidateAndAreScoped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -470,6 +478,7 @@ func TestGameXGReadsValidateAndAreScoped(t *testing.T) {
 }
 
 func TestGameXGReadOrderingUTCDefensiveAndMalformed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -507,6 +516,7 @@ func TestGameXGReadOrderingUTCDefensiveAndMalformed(t *testing.T) {
 }
 
 func TestGameXGReadsRejectCorruptStoredCoherence(t *testing.T) {
+	t.Parallel()
 	newFixture := func(t *testing.T) (context.Context, *DB) {
 		t.Helper()
 		ctx := context.Background()
@@ -571,6 +581,7 @@ func TestGameXGReadsRejectCorruptStoredCoherence(t *testing.T) {
 }
 
 func TestReplaceStageXGRollsBackCandidateCountReadFailure(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -611,6 +622,7 @@ func TestReplaceStageXGRollsBackCandidateCountReadFailure(t *testing.T) {
 }
 
 func TestReplaceStageXGOwnsCallerAndResultValues(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -642,6 +654,7 @@ func TestReplaceStageXGOwnsCallerAndResultValues(t *testing.T) {
 }
 
 func TestReplaceStageXGMixedCandidatesAndLineage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -712,6 +725,7 @@ func TestReplaceStageXGMixedCandidatesAndLineage(t *testing.T) {
 }
 
 func TestStageXGOmissionsDoNotDeleteAndFixtureAuthorityDoes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -756,6 +770,7 @@ func TestStageXGOmissionsDoNotDeleteAndFixtureAuthorityDoes(t *testing.T) {
 }
 
 func TestLegacyReplaceGameXGRemainsIsolatedFromStageAuditState(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -791,6 +806,7 @@ func TestLegacyReplaceGameXGRemainsIsolatedFromStageAuditState(t *testing.T) {
 }
 
 func TestStageXGHasNoSchemaArtifacts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {

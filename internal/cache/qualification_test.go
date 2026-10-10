@@ -12,6 +12,7 @@ import (
 )
 
 func TestFixtureSnapshotIDIsOrderIndependentAndScoreSensitive(t *testing.T) {
+	t.Parallel()
 	teams := []Team{{ASAID: "a"}, {ASAID: "b"}, {ASAID: "unused"}}
 	games := []Game{{ASAID: "two", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "a", KickoffUTC: "2026-02-02T00:00:00Z"}, {ASAID: "one", Status: "FullTime", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: "2026-02-01T00:00:00Z", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Valid: true}}}
 	first, err := FixtureSnapshotID(teams, games)
@@ -35,6 +36,7 @@ func TestFixtureSnapshotIDIsOrderIndependentAndScoreSensitive(t *testing.T) {
 }
 
 func TestScenarioRoundTripUsesExactCurrentQualificationSnapshot(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -64,6 +66,7 @@ func TestScenarioRoundTripUsesExactCurrentQualificationSnapshot(t *testing.T) {
 }
 
 func TestQualificationRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {

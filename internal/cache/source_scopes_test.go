@@ -11,6 +11,7 @@ import (
 )
 
 func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 
@@ -30,6 +31,7 @@ func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
 }
 
 func TestMigrationNineBackfillsObservedScopeIdentities(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	legacy, err := sql.Open("sqlite", path)
@@ -89,6 +91,7 @@ func TestMigrationNineBackfillsObservedScopeIdentities(t *testing.T) {
 }
 
 func TestEnsureSourceScopesSeedsAndMergesAtFixedClock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 	now := time.Date(2026, time.July, 1, 12, 0, 0, 0, time.FixedZone("test", -7*60*60))
@@ -120,6 +123,7 @@ func TestEnsureSourceScopesSeedsAndMergesAtFixedClock(t *testing.T) {
 }
 
 func TestEnsureSourceScopesRetainsStaleConfiguredScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 	scopes, err := db.EnsureSourceScopes(ctx, "1999", "Invented", time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
@@ -140,6 +144,7 @@ func TestEnsureSourceScopesRetainsStaleConfiguredScope(t *testing.T) {
 }
 
 func TestMergeSourceScopeRegistrationPrecedence(t *testing.T) {
+	t.Parallel()
 	registrations := []SourceScopeRegistration{SourceScopeCatalog, SourceScopeConfigured, SourceScopeProvisional, SourceScopeObserved}
 	for _, existing := range registrations {
 		for _, incoming := range registrations {
@@ -158,6 +163,7 @@ func TestMergeSourceScopeRegistrationPrecedence(t *testing.T) {
 }
 
 func TestEnsureSourceScopesIsIdempotentAndPreservesDiscovery(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 	firstNow := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -191,6 +197,7 @@ func TestEnsureSourceScopesIsIdempotentAndPreservesDiscovery(t *testing.T) {
 }
 
 func TestEnsureSourceScopesPromotesRetainedUpcomingScopesWithoutChangingCompleted(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)); err != nil {
@@ -217,6 +224,7 @@ func TestEnsureSourceScopesPromotesRetainedUpcomingScopesWithoutChangingComplete
 }
 
 func TestEnsureSourceScopesCompletesExistingPastCatalogScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 	stamp := "2025-01-01T00:00:00Z"
@@ -235,6 +243,7 @@ func TestEnsureSourceScopesCompletesExistingPastCatalogScope(t *testing.T) {
 }
 
 func TestEnsureSourceScopesValidationAndReadOrdering(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSourceScopeTestDB(t)
 	for _, call := range []struct {
