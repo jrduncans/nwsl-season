@@ -1,6 +1,7 @@
 # Test strategy plan
 
-Status: Complete (2026-10-09). This plan adds browser and end-to-end tests with
+Status: T1–T12 merged (2026-10-09); J6 failure reporting remains unresolved below.
+This plan adds browser and end-to-end tests with
 `playwright-go`, closes the gaps found in the October 2026 test assessment, and
 assigns each task to the cheapest model that can finish it reliably.
 
@@ -19,6 +20,20 @@ the layers (README), require `make test-e2e` for UI changes (`AGENTS.md`,
 `internal/app/AGENTS.md`) and keep only visual-judgment checks manual (History
 guide). Follow-ups #122, #123 (E2E time) and #125 are closed; see
 **Follow-ups from wave D**.
+
+### Open follow-up: J6 failure reporting
+
+PR #116 found that failed scheduler source operations are recorded in source
+refresh audits, while `/cache/status` reads legacy `sync_runs`. J6 verifies
+that pages retain good data and a subsequent check recovers; it does **not**
+verify the planned failed-attempt status response. Its `last_success` assertion
+must not be read as coverage of failure reporting.
+
+The remaining product decision is whether `/cache/status` should expose
+source-operation failures, and how those should relate to legacy sync runs.
+Resolve that contract before adding the missing HTTP assertion. The J6 row in
+T10 records the original, still-unmet requirement; it is not a description of
+current endpoint behavior.
 
 ## 1. Where the suite stands
 

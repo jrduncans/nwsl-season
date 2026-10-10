@@ -93,9 +93,38 @@ func stubClubLogos(t *testing.T, context playwright.BrowserContext) {
 // stub (see stubClubLogos), so the page never contacts the real logo host.
 func newPage(t *testing.T, vp viewport) playwright.Page {
 	t.Helper()
-	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
+	return newPageWith(t, pageOptions{Viewport: vp})
+}
+
+type pageOptions struct {
+	Viewport viewport
+	// Timezone is an IANA zone; empty keeps the machine's zone.
+	Timezone string
+	// NoScript disables JavaScript for the entire context.
+	NoScript bool
+	// Clipboard grants clipboard-read and clipboard-write permissions.
+	Clipboard bool
+}
+
+// newPageWith applies the same network guards, tracing, and cleanup to every
+// browser context, including contexts with JavaScript disabled.
+func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
+	t.Helper()
+	vp := opts.Viewport
+	contextOptions := playwright.BrowserNewContextOptions{
 		Viewport: &playwright.Size{Width: vp.Width, Height: vp.Height},
-	})
+		Locale:   playwright.String("en-US"),
+	}
+	if opts.Timezone != "" {
+		contextOptions.TimezoneId = playwright.String(opts.Timezone)
+	}
+	if opts.NoScript {
+		contextOptions.JavaScriptEnabled = playwright.Bool(false)
+	}
+	if opts.Clipboard {
+		contextOptions.Permissions = []string{"clipboard-read", "clipboard-write"}
+	}
+	context, err := browser.NewContext(contextOptions)
 	if err != nil {
 		t.Fatalf("new browser context: %v", err)
 	}
@@ -163,7 +192,9 @@ func newPage(t *testing.T, vp viewport) playwright.Page {
 		// Let late errors arrive before judging the page: assertions that ran
 		// after visit (such as the overflow check) may have triggered some.
 		// A failed settle just means the page is already gone.
-		_ = settle(page)
+		if !opts.NoScript {
+			_ = settle(page)
+		}
 		mu.Lock()
 		closed = true
 		for _, problem := range problems {
