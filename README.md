@@ -454,6 +454,9 @@ Browser tests need Chromium. Run `make e2e-install` once (and again after
 upgrading `playwright-go`), then `make test-e2e`. Set `NWSL_E2E_CHROMIUM` to use
 an existing browser. Seed data comes from `internal/apptest`; to look at a
 scenario by hand, run `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams`.
+The suite takes about 20s locally. Every top-level browser test runs in
+parallel, and test servers simulate 1,000 forecast seasons instead of 50,000;
+the `e2e` package comment explains both.
 
 `make build` creates host-platform server, sync, and back-test binaries in `bin/`.
 `make build-linux` creates Linux binaries; ARM64 is the default target and

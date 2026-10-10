@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,7 +21,6 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
-	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/server"
 )
 
@@ -32,14 +30,7 @@ import (
 // here can reach ASA.
 func exploreBase(t *testing.T, scenario string) string {
 	t.Helper()
-	// The data directory is set on the config rather than with t.Setenv, which
-	// parallel tests cannot use.
-	cfg, err := config.FromEnvironment()
-	if err != nil {
-		t.Fatalf("config.FromEnvironment: %v", err)
-	}
-	cfg.DataDir = t.TempDir()
-	cfg.DBPath = filepath.Join(cfg.DataDir, "nwsl-season.sqlite")
+	cfg := testConfig(t)
 	ctx := context.Background()
 	db, err := cache.Open(ctx, cfg.DBPath)
 	if err != nil {
@@ -50,9 +41,10 @@ func exploreBase(t *testing.T, scenario string) string {
 		t.Fatalf("close cache: %v", err)
 	}
 	srv, err := server.Build(ctx, cfg, server.Options{
-		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ASABaseURL:     "http://127.0.0.1:1",
-		StartScheduler: false,
+		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ASABaseURL:         "http://127.0.0.1:1",
+		ForecastIterations: e2eForecastIterations,
+		StartScheduler:     false,
 	})
 	if err != nil {
 		t.Fatalf("server.Build: %v", err)

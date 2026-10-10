@@ -27,7 +27,6 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
-	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/server"
 )
@@ -204,6 +203,7 @@ func seasonPath(rest string) string { return "seasons/" + currentSeason + "/" + 
 // TestPages browses the pages of one 16-team half-played season. The subtests
 // only read the shared fixture, so they run in parallel.
 func TestPages(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.ASA.ResetRequests()
 	// Parallel subtests finish before the parent's cleanups run.
@@ -1146,6 +1146,7 @@ func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 // page. The late-season arrangement (see lateSeason) gives team-0 and team-8
 // clinching and elimination scenarios grouped by result.
 func TestPagesClinching(t *testing.T) {
+	t.Parallel()
 	j := newJourney(t, lateSeason())
 	path := seasonPath("clinching")
 	forEachViewport(t, func(t *testing.T, vp viewport) {
@@ -1201,6 +1202,7 @@ func TestPagesClinching(t *testing.T) {
 // a result for team-0 that needs help has two disjoint outside alternatives.
 // The test asserts the page shows the disclosure, not the arithmetic.
 func TestPagesClinchingExactPaths(t *testing.T) {
+	t.Parallel()
 	order := []string{"team-1", "team-2", "team-3", "team-4", "team-5", "team-6",
 		"team-0", "team-8", "team-9", "team-7", "team-10", "team-11", "team-12", "team-13", "team-14", "team-15"}
 	rank := func(id string) int {
@@ -1262,16 +1264,7 @@ func TestPagesClinchingExactPaths(t *testing.T) {
 // only when it has at least one concrete pairing.
 func newBracketFixture(t *testing.T) *fixture {
 	t.Helper()
-	dir := t.TempDir()
-	t.Setenv("NWSL_DATA_DIR", dir)
-	t.Setenv("NWSL_SYNC_SEASON", currentSeason)
-	t.Setenv("NWSL_SYNC_STAGE", "Regular Season")
-	cfg, err := config.FromEnvironment()
-	if err != nil {
-		t.Fatalf("config.FromEnvironment: %v", err)
-	}
-	cfg.DataDir = dir
-	cfg.DBPath = filepath.Join(dir, "nwsl-season.sqlite")
+	cfg := testConfig(t)
 
 	ctx := context.Background()
 	db, err := cache.Open(ctx, cfg.DBPath)
@@ -1303,8 +1296,9 @@ func newBracketFixture(t *testing.T) *fixture {
 	}
 
 	srv, err := server.Build(ctx, cfg, server.Options{
-		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ASABaseURL: "http://127.0.0.1:1", // unroutable: nothing here may reach ASA
+		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ASABaseURL:         "http://127.0.0.1:1", // unroutable: nothing here may reach ASA
+		ForecastIterations: e2eForecastIterations,
 	})
 	if err != nil {
 		t.Fatalf("server.Build: %v", err)
@@ -1324,6 +1318,7 @@ func newBracketFixture(t *testing.T) *fixture {
 }
 
 func TestPagesBracket(t *testing.T) {
+	t.Parallel()
 	f := newBracketFixture(t)
 	path := "seasons/2024/playoffs"
 	forEachViewport(t, func(t *testing.T, vp viewport) {

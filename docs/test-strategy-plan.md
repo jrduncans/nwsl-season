@@ -17,8 +17,8 @@ fake-ASA journeys, and Explore's chart geometry lives in
 replaced by `internal/apptest` scenarios and `cmd/preview`. Docs now describe
 the layers (README), require `make test-e2e` for UI changes (`AGENTS.md`,
 `internal/app/AGENTS.md`) and keep only visual-judgment checks manual (History
-guide). Open follow-ups: #122 (product bug, skipped test), #123 (E2E under 4
-min in CI) and #125 (`apptest` season without xG).
+guide). Follow-ups #122, #123 (E2E time) and #125 are closed; see
+**Follow-ups from wave D**.
 
 ## 1. Where the suite stands
 
@@ -124,9 +124,11 @@ Merge each task before starting tasks that depend on it.
 - <https://github.com/jrduncans/nwsl-season/issues/124>: stub the S3 logo host
   in the shared `newPage`. Done in PR #128.
 - <https://github.com/jrduncans/nwsl-season/issues/125>: `apptest` season
-  without xG. Deferred.
+  without xG. Done in PR #132.
 - <https://github.com/jrduncans/nwsl-season/issues/123>: all of `e2e` under
-  4 min in CI. End of the plan.
+  4 min in CI. Done: forecast warming at 50,000 iterations dominated fixture
+  setup, so test servers use 1,000; every top-level test is parallel (enforced
+  by `paralleltest`); J2 folded into J1 and J1's redundant ASA-down pass removed.
 - <https://github.com/jrduncans/nwsl-season/issues/122>: fixture-view-toggle is
   visible without JavaScript. Fixed with a `[hidden]` rule; the no-script test is
   enabled.

@@ -78,8 +78,8 @@ type journeyConfig struct {
 	xg float64
 	// startScheduler makes the server start its scheduler (see journey.Server.Start).
 	startScheduler bool
-	// checkInterval, when set, is NWSL_SYNC_CHECK_INTERVAL.
-	checkInterval string
+	// checkInterval, when set, is the scheduler's check interval.
+	checkInterval time.Duration
 }
 
 // halfSeasonScore gives deterministic wins, draws and losses.
@@ -109,12 +109,9 @@ type journey struct {
 // newJourney builds the season, serves it, and fills the cache.
 func newJourney(t *testing.T, cfg journeyConfig) *journey {
 	t.Helper()
-	t.Setenv("NWSL_DATA_DIR", t.TempDir())
-	t.Setenv("NWSL_SYNC_SEASON", currentSeason)
-	t.Setenv("NWSL_SYNC_STAGE", "Regular Season")
-	t.Setenv("NWSL_SYNC_TIMEOUT", "30s")
-	if cfg.checkInterval != "" {
-		t.Setenv("NWSL_SYNC_CHECK_INTERVAL", cfg.checkInterval)
+	appConfig := testConfig(t)
+	if cfg.checkInterval != 0 {
+		appConfig.SyncCheckInterval = cfg.checkInterval
 	}
 
 	// The planner clock starts three days in the past and is only ever moved
@@ -157,15 +154,12 @@ func newJourney(t *testing.T, cfg journeyConfig) *journey {
 	fake := asatest.New(t)
 	fake.Load(scenario)
 
-	appConfig, err := config.FromEnvironment()
-	if err != nil {
-		t.Fatalf("config.FromEnvironment: %v", err)
-	}
 	srv, err := server.Build(context.Background(), appConfig, server.Options{
-		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ASABaseURL:     fake.URL(),
-		StartScheduler: cfg.startScheduler,
-		Now:            clock.Now,
+		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ASABaseURL:         fake.URL(),
+		StartScheduler:     cfg.startScheduler,
+		Now:                clock.Now,
+		ForecastIterations: e2eForecastIterations,
 	})
 	if err != nil {
 		t.Fatalf("server.Build: %v", err)
@@ -625,48 +619,13 @@ func assertLateSeasonArithmetic(t *testing.T, j *journey) {
 	}
 }
 
-// TestJ2FirstSync is journey J2: after the first sync of a half-played season,
-// the standings show the table computed from the fake's results.
-func TestJ2FirstSync(t *testing.T) {
-	j := newJourney(t, journeyConfig{
-		playedRounds:   fixtureTeams - 1,
-		firstPendingIn: 24 * time.Hour,
-		xg:             1,
-	})
-	want := expectedTable(j.Teams, j.Games)
-	var played int
-	for _, row := range want {
-		played += row.Played
-	}
-	if played != 2*fixturePlayedGames {
-		t.Fatalf("the scenario has %d played team-games, want %d", played, 2*fixturePlayedGames)
-	}
-
-	for _, vp := range []viewport{Desktop, Mobile} {
-		t.Run(vp.Name, func(t *testing.T) {
-			page := newPage(t, vp)
-			visit(t, page, j.URL(""))
-			rows := readStandings(t, page)
-			assertRecords(t, rows, want)
-			// Every team has played the same number of games, so the table is
-			// ordered by points.
-			for i := 1; i < len(rows); i++ {
-				if rows[i].Points > rows[i-1].Points {
-					t.Errorf("row %d (%s, %d points) is ranked below %s with %d points", i, rows[i].ID, rows[i].Points, rows[i-1].ID, rows[i-1].Points)
-				}
-			}
-			assertNoHorizontalOverflow(t, page)
-		})
-	}
-}
-
-// checkTeamZero visits the standings and clinching pages at both viewports and
+// checkTeamZero visits the standings and clinching pages at each viewport and
 // checks team-0's playoff indicator against wantClinched. It returns the
 // standings rows from the desktop viewport.
-func checkTeamZero(t *testing.T, j *journey, wantClinched bool) []tableRow {
+func checkTeamZero(t *testing.T, j *journey, wantClinched bool, viewports ...viewport) []tableRow {
 	t.Helper()
 	var desktop []tableRow
-	for _, vp := range []viewport{Desktop, Mobile} {
+	for _, vp := range viewports {
 		t.Run(vp.Name, func(t *testing.T) {
 			page := newPage(t, vp)
 			visit(t, page, j.URL(""))
@@ -694,13 +653,14 @@ func checkTeamZero(t *testing.T, j *journey, wantClinched bool) []tableRow {
 // changes the standings, and the team the arrangement says it clinches shows
 // the clinched indicator on the standings and clinching pages.
 func TestJ3Matchday(t *testing.T) {
+	t.Parallel()
 	j := newJourney(t, lateSeason())
 	assertLateSeasonArithmetic(t, j)
 	before := expectedTable(j.Teams, j.Games)
 
 	var beforeRows []tableRow
 	t.Run("before the result", func(t *testing.T) {
-		beforeRows = checkTeamZero(t, j, false)
+		beforeRows = checkTeamZero(t, j, false, Desktop)
 		assertRecords(t, beforeRows, before)
 	})
 
@@ -714,7 +674,8 @@ func TestJ3Matchday(t *testing.T) {
 		t.Fatalf("test bug: the result should add 3 points, %d -> %d", before[teamZero].Points, after[teamZero].Points)
 	}
 	t.Run("after the result", func(t *testing.T) {
-		rows := checkTeamZero(t, j, true)
+		// Mobile too: the clinched badges are the widest standings rows.
+		rows := checkTeamZero(t, j, true, Desktop, Mobile)
 		assertRecords(t, rows, after)
 		if got := rowOf(t, rows, teamZero).Points; got == rowOf(t, beforeRows, teamZero).Points {
 			t.Errorf("team-0 points did not change from %d", got)
@@ -775,6 +736,7 @@ func (j *journey) runMaintenanceSync(t *testing.T) (cache.SyncRun, error) {
 // earlier 240-fixture list is kept, and no clinch indicator is published from
 // the incomplete data.
 func TestJ4IncompleteInventory(t *testing.T) {
+	t.Parallel()
 	j := newJourney(t, lateSeason())
 	assertLateSeasonArithmetic(t, j)
 	before := expectedTable(j.Teams, j.Games)
@@ -827,7 +789,8 @@ func TestJ4IncompleteInventory(t *testing.T) {
 		t.Fatalf("the maintenance sync never requested the full games inventory: %v", j.ASA.Requests())
 	}
 
-	for _, vp := range []viewport{Desktop, Mobile} {
+	// Desktop only: the invariant is the data, and J1 checks every page on a phone.
+	for _, vp := range []viewport{Desktop} {
 		t.Run(vp.Name, func(t *testing.T) {
 			page := newPage(t, vp)
 			visit(t, page, j.URL("seasons/"+currentSeason+"/fixtures"))
@@ -883,6 +846,7 @@ func readCacheStatus(t *testing.T, f *fixture) cacheStatus {
 // Pages keep the last good data, /cache/status reports the failed attempt, and
 // the next check recovers.
 func TestJ6ASAErrors(t *testing.T) {
+	t.Parallel()
 	j := newJourney(t, lateSeason())
 	before := expectedTable(j.Teams, j.Games)
 	good := readCacheStatus(t, j.fixture)
@@ -914,7 +878,8 @@ func TestJ6ASAErrors(t *testing.T) {
 		t.Errorf("/cache/status last_success = %+v, want it unchanged at %+v", failed.LastSuccess, good.LastSuccess)
 	}
 
-	for _, vp := range []viewport{Desktop, Mobile} {
+	// Desktop only: the invariant is the data, and J1 checks every page on a phone.
+	for _, vp := range []viewport{Desktop} {
 		t.Run("after failure "+vp.Name, func(t *testing.T) {
 			page := newPage(t, vp)
 			visit(t, page, j.URL(""))
@@ -948,7 +913,7 @@ func TestJ6ASAErrors(t *testing.T) {
 		t.Errorf("after recovery /cache/status last_attempt = %+v, want success", recovered.LastAttempt)
 	}
 	t.Run("after recovery", func(t *testing.T) {
-		checkTeamZero(t, j, true)
+		checkTeamZero(t, j, true, Desktop)
 	})
 }
 
@@ -956,9 +921,10 @@ func TestJ6ASAErrors(t *testing.T) {
 // interval and an injected clock, a result that becomes due is picked up without
 // CheckNow.
 func TestJ7SchedulerPath(t *testing.T) {
+	t.Parallel()
 	cfg := lateSeason()
 	cfg.startScheduler = true
-	cfg.checkInterval = "20ms"
+	cfg.checkInterval = 20 * time.Millisecond
 	j := newJourney(t, cfg)
 	assertLateSeasonArithmetic(t, j)
 
@@ -999,6 +965,7 @@ func TestJ7SchedulerPath(t *testing.T) {
 // Explore labels the teams' xG as incomplete, the season and forecast pages say
 // how much xG is missing, and no page errors.
 func TestJ5MissingXG(t *testing.T) {
+	t.Parallel()
 	j := newJourney(t, journeyConfig{
 		playedRounds:   fixtureTeams - 1,
 		firstPendingIn: 24 * time.Hour,
@@ -1006,7 +973,9 @@ func TestJ5MissingXG(t *testing.T) {
 	})
 	const withXG, completed = fixturePlayedGames / 2, fixturePlayedGames
 	expect := playwright.NewPlaywrightAssertions()
-	for _, vp := range []viewport{Desktop, Mobile} {
+	// Phone only: the text is the same at both widths, the long notices are
+	// likelier to overflow here, and the Explore tests cover partial xG on desktop.
+	for _, vp := range []viewport{Mobile} {
 		t.Run(vp.Name, func(t *testing.T) {
 			page := newPage(t, vp)
 			main := page.Locator("main")

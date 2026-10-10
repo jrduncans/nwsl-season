@@ -8,12 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/asatest"
 	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/server"
@@ -43,20 +43,41 @@ type fixture struct {
 	// BaseURL is the app's root, including the mount prefix and a trailing
 	// slash.
 	BaseURL string
+	// Season is what newFixture loaded into the fake. Fixtures seeded without
+	// a fake leave it nil, and journeys track their own changing copy.
+	Season *asatest.Scenario
 }
 
 // URL returns the absolute URL for an app path such as "seasons".
 func (f *fixture) URL(path string) string { return f.BaseURL + path }
 
+// e2eForecastIterations is the number of simulated seasons per forecast.
+// server.Build and every sync that changes forecast inputs warm every catalog
+// model; at the production default (50,000) that warming dominated fixture
+// setup. Simulations are seeded, so the pages stay deterministic.
+const e2eForecastIterations = 1000
+
+// testConfig returns a configuration for the current season's Regular Season
+// with a fresh data directory. It sets fields rather than environment
+// variables, because parallel tests cannot use t.Setenv.
+func testConfig(t *testing.T) config.Config {
+	t.Helper()
+	cfg, err := config.FromEnvironment()
+	if err != nil {
+		t.Fatalf("config.FromEnvironment: %v", err)
+	}
+	cfg.DataDir = t.TempDir()
+	cfg.DBPath = filepath.Join(cfg.DataDir, "nwsl-season.sqlite")
+	cfg.SyncSeason = currentSeason
+	cfg.SyncStage = "Regular Season"
+	cfg.SyncTimeout = 30 * time.Second
+	return cfg
+}
+
 // newFixture builds a 16-team season with half of its games played, fills the
 // cache with repeated CheckNow calls (see fillCache), and serves the handler under /nwsl-season/.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	t.Setenv("NWSL_DATA_DIR", t.TempDir())
-	t.Setenv("NWSL_SYNC_SEASON", currentSeason)
-	t.Setenv("NWSL_SYNC_STAGE", "Regular Season")
-	t.Setenv("NWSL_SYNC_TIMEOUT", "30s")
-
 	// The 2026 Regular Season rules require a full inventory (16 teams, 240
 	// games), so the fixture is a 16-team double round robin: 30 rounds a week
 	// apart. Kickoffs are relative to the wall clock because the syncer stamps
@@ -69,30 +90,15 @@ func newFixture(t *testing.T) *fixture {
 		// Season names the games after start's year, which may differ.
 		season.Games[i].SeasonName = currentSeason
 	}
-	fake.Load(season.
-		PlayThrough(start.AddDate(0, 0, 105), func(game asa.Game) (int, int) {
-			// Deterministic results with wins, draws and losses.
-			switch game.GameID[len(game.GameID)-1] % 3 {
-			case 0:
-				return 2, 1
-			case 1:
-				return 1, 1
-			default:
-				return 0, 1
-			}
-		}).
-		WithXG(1))
+	fake.Load(season.PlayThrough(start.AddDate(0, 0, 105), halfSeasonScore).WithXG(1))
 
-	cfg, err := config.FromEnvironment()
-	if err != nil {
-		t.Fatalf("config.FromEnvironment: %v", err)
-	}
 	now := start.AddDate(0, 0, 22)
-	srv, err := server.Build(context.Background(), cfg, server.Options{
-		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ASABaseURL:     fake.URL(),
-		StartScheduler: false,
-		Now:            func() time.Time { return now },
+	srv, err := server.Build(context.Background(), testConfig(t), server.Options{
+		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ASABaseURL:         fake.URL(),
+		StartScheduler:     false,
+		Now:                func() time.Time { return now },
+		ForecastIterations: e2eForecastIterations,
 	})
 	if err != nil {
 		t.Fatalf("server.Build: %v", err)
@@ -111,7 +117,7 @@ func newFixture(t *testing.T) *fixture {
 	web := httptest.NewServer(mux)
 	t.Cleanup(web.Close)
 
-	f := &fixture{ASA: fake, Server: srv, BaseURL: web.URL + mountPrefix + "/"}
+	f := &fixture{ASA: fake, Server: srv, BaseURL: web.URL + mountPrefix + "/", Season: season}
 	assertXGCoverage(t, f)
 	return f
 }
