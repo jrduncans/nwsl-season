@@ -61,3 +61,17 @@ func TestPreviewNoScriptPreservesResponseAndRestrictsCSP(t *testing.T) {
 		})
 	}
 }
+
+func TestPreviewNoScriptAppliesToImplicitResponse(t *testing.T) {
+	empty := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	recorder := httptest.NewRecorder()
+	previewHandler(empty, true).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, mountPrefix+"/", nil))
+	response := recorder.Result()
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	if got := response.Header.Values("Content-Security-Policy"); !slices.Equal(got, []string{"script-src 'none'"}) {
+		t.Errorf("no-script CSP = %v", got)
+	}
+}

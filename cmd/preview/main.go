@@ -181,7 +181,13 @@ func previewHandler(application http.Handler, noScript bool) http.Handler {
 		return mux
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mux.ServeHTTP(&scriptBlockingWriter{ResponseWriter: w}, r)
+		writer := &scriptBlockingWriter{ResponseWriter: w}
+		mux.ServeHTTP(writer, r)
+		// A handler that writes nothing gets net/http's implicit 200, which
+		// would bypass the wrapper; commit it here so the policy still applies.
+		if !writer.wroteHeader {
+			writer.WriteHeader(http.StatusOK)
+		}
 	})
 }
 
@@ -207,3 +213,6 @@ func (w *scriptBlockingWriter) Write(body []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(body)
 }
+
+// Unwrap lets http.NewResponseController reach the underlying writer.
+func (w *scriptBlockingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

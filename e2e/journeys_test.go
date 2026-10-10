@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -61,7 +62,11 @@ func (c *journeyClock) Now() time.Time {
 	now := time.Unix(0, c.nanos.Load()).UTC()
 	c.mu.Lock()
 	hook := c.nextRead
-	c.nextRead = nil
+	if hook != nil && calledFromPlanner() {
+		c.nextRead = nil
+	} else {
+		hook = nil
+	}
 	c.mu.Unlock()
 	if hook != nil {
 		hook()
@@ -69,8 +74,27 @@ func (c *journeyClock) Now() time.Time {
 	return now
 }
 
-// holdNextRead lets a test change source data while the next planner holds
-// the old clock value. No sleep or count of scheduler clock calls is needed.
+// calledFromPlanner reports whether the clock is being read by the
+// scheduler's tick planning (runCheck), not by job execution or a lease stamp.
+func calledFromPlanner() bool {
+	pcs := make([]uintptr, 8)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
+	for {
+		frame, more := frames.Next()
+		// Skip Now itself and the method-value wrapper the scheduler calls.
+		if !strings.Contains(frame.Function, "journeyClock") {
+			return strings.HasSuffix(frame.Function, "scheduler.(*Scheduler).runCheck")
+		}
+		if !more {
+			return false
+		}
+	}
+}
+
+// holdNextRead holds the next planning read of the clock (the first runCheck
+// after it is called) at the old value, so a test can change source data
+// without that tick seeing it as due. Other clock reads pass through. No sleep
+// or count of scheduler clock calls is needed.
 func (c *journeyClock) holdNextRead(t *testing.T) (<-chan struct{}, func()) {
 	t.Helper()
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -964,10 +988,10 @@ func TestJ7SchedulerPath(t *testing.T) {
 	// CheckNow.
 	startupPlanning, resumeStartup := j.Clock.holdNextRead(t)
 	j.Server.Start()
-	select {
-	case <-startupPlanning:
 	// Startup recalculates cached clinching before reading the planning clock;
 	// allow the same budget as publishing below, including under the race detector.
+	select {
+	case <-startupPlanning:
 	case <-time.After(60 * time.Second):
 		t.Fatal("scheduler did not reach startup planning")
 	}
@@ -975,6 +999,9 @@ func TestJ7SchedulerPath(t *testing.T) {
 	// The result is at ASA, but the game is not due until the clock passes its
 	// kickoff plus the 2h completion grace. Startup already captured the old
 	// time, so it cannot fetch this result; a periodic tick must pick it up.
+	// This relies on fillCache having drained every due job: a games job due
+	// at the old time would still fetch the result, which the audit check
+	// below reports as a startup fetch.
 	j.upsert(winFor(j.pendingGameOf(t, teamZero), teamZero))
 	j.Clock.Advance(lateRoundsDue)
 	resumeStartup()
@@ -1005,7 +1032,13 @@ func TestJ7SchedulerPath(t *testing.T) {
 	}
 	var scheduledResult bool
 	for _, audit := range audits {
-		if audit.Trigger == cache.SourceTriggerScheduler && audit.Outcome == cache.SourceRefreshSuccess && audit.DownstreamInputsChanged {
+		if !audit.DownstreamInputsChanged || audit.Outcome != cache.SourceRefreshSuccess {
+			continue
+		}
+		switch audit.Trigger {
+		case cache.SourceTriggerStartup:
+			t.Fatal("startup fetched the result: fillCache left a games job due at the held clock")
+		case cache.SourceTriggerScheduler:
 			scheduledResult = true
 		}
 	}

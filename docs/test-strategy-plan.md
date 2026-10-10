@@ -1,9 +1,9 @@
 # Test strategy plan
 
-Status: T1–T12 merged (2026-10-09); J6 failure reporting remains unresolved below.
-This plan adds browser and end-to-end tests with
-`playwright-go`, closes the gaps found in the October 2026 test assessment, and
-assigns each task to the cheapest model that can finish it reliably.
+Status: T1–T12 merged (2026-10-09); J6 failure reporting remains unresolved
+below. This plan adds browser and end-to-end tests with `playwright-go`, closes
+the gaps found in the October 2026 test assessment, and assigns each task to
+the cheapest model that can finish it reliably.
 
 Each task below is self-contained, so you can start each one in a fresh
 session. Read **Conventions for every task** (§5) before starting any task.

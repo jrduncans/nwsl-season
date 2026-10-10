@@ -596,14 +596,6 @@ func mustNumbers(t *testing.T, cells []string) []float64 {
 	return values
 }
 
-// noScriptPage returns a page whose browser context has JavaScript disabled, so
-// only the server-rendered HTML, native links and GET forms are in play. Failed
-// or error responses from the app fail the test.
-func noScriptPage(t *testing.T, vp viewport) playwright.Page {
-	t.Helper()
-	return newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
-}
-
 // inspection is a chart's keyboard and pointer inspection state.
 type inspection struct {
 	Active []struct {
@@ -1765,7 +1757,7 @@ func historyTableSeasons(t *testing.T, page playwright.Page) []string {
 func TestExploreWorksWithoutJavaScript(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := noScriptPage(t, Desktop)
+	page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
 	goTo := func(path string) {
 		t.Helper()
 		if _, err := page.Goto(base + path); err != nil {

@@ -113,7 +113,8 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	vp := opts.Viewport
 	contextOptions := playwright.BrowserNewContextOptions{
 		Viewport: &playwright.Size{Width: vp.Width, Height: vp.Height},
-		Locale:   playwright.String("en-US"),
+		// Fix the locale so Intl output does not depend on the machine.
+		Locale: playwright.String("en-US"),
 	}
 	if opts.Timezone != "" {
 		contextOptions.TimezoneId = playwright.String(opts.Timezone)
@@ -191,7 +192,8 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	t.Cleanup(func() {
 		// Let late errors arrive before judging the page: assertions that ran
 		// after visit (such as the overflow check) may have triggered some.
-		// A failed settle just means the page is already gone.
+		// A failed settle just means the page is already gone. With JavaScript
+		// off, page.Evaluate never returns, so those pages are not settled.
 		if !opts.NoScript {
 			_ = settle(page)
 		}
