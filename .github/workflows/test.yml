@@ -35,16 +35,31 @@ jobs:
       - name: All packages
         run: make test
 
+  # The race suite is CPU-bound on one 4-vCPU runner, and the SQLite-heavy
+  # cache and apptest packages take about half of it, so they get their own
+  # runner. The other shard excludes them by name, so a new or renamed package
+  # always runs in at least one shard.
   race:
-    name: Race
+    name: Race (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [sqlite, other]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Race suite
-        run: make race
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          if [ "$SHARD" = sqlite ]; then
+            make race RACE_PACKAGES="./internal/cache ./internal/apptest"
+          else
+            make race RACE_PACKAGES="$(go list ./... | grep -vE '/internal/(cache|apptest)$' | tr '\n' ' ')"
+          fi
 
   e2e:
     name: E2E
