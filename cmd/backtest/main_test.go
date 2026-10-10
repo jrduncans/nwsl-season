@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/forecast"
 )
 
 func TestRunWritesReportsFromCache(t *testing.T) {
@@ -93,6 +94,44 @@ func TestRunRejectsFilteredHeldoutScoringBeforeOpeningCache(t *testing.T) {
 	}, "", &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "requires -comparison-window development") {
 		t.Fatalf("filtered held-out scoring error = %v", err)
+	}
+}
+
+func TestRunRestrictsDevelopmentCandidatesBeforeOpeningCache(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "unfiltered run", args: []string{"-candidates", "candidate-v1"}, want: "require -score-seasons"},
+		{name: "unknown candidate", args: []string{"-candidates", "not-a-model", "-score-seasons", "2024", "-comparison-window", "development"}, want: "unknown development candidate not-a-model"},
+		{name: "held-out target", args: []string{"-candidates", "candidate-v1", "-score-seasons", "2024,2025", "-comparison-window", "development"}, want: "cannot score non-development season 2025"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := append([]string{"-db", filepath.Join(t.TempDir(), "must-not-open.sqlite")}, test.args...)
+			err := run(context.Background(), args, "", &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestDevelopmentCandidatesResolveInCatalogOrder(t *testing.T) {
+	catalog := []forecast.CatalogEntry{
+		{Model: forecast.NewXGPoissonRecentFormV1()},
+		{Model: forecast.NewCurrentPaceV1()},
+	}
+	recentForm, currentPace := catalog[0].Model.Info().ID, catalog[1].Model.Info().ID
+	models, err := developmentCandidates(map[string]bool{currentPace: true, recentForm: true}, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 2 || models[0].Info().ID != recentForm || models[1].Info().ID != currentPace {
+		t.Fatalf("models = %v, want %s then %s", models, recentForm, currentPace)
+	}
+	if models, err := developmentCandidates(nil, catalog); err != nil || len(models) != 0 {
+		t.Fatalf("no requested candidates = %v, %v", models, err)
 	}
 }
 

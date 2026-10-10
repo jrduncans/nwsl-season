@@ -40,6 +40,22 @@ func TestEvaluationCatalogAddsEvaluationOnlyCandidates(t *testing.T) {
 	}
 }
 
+func TestDevelopmentCandidatesStayOutOfStandardCatalogs(t *testing.T) {
+	standard := map[string]bool{}
+	for _, entry := range EvaluationCatalog() {
+		standard[entry.Model.Info().ID] = true
+	}
+	for _, entry := range DevelopmentCandidates() {
+		id := entry.Model.Info().ID
+		if standard[id] {
+			t.Errorf("development candidate %q is in the standard evaluation catalog", id)
+		}
+		if _, ok := Lookup(id); ok {
+			t.Errorf("development candidate %q is available to Forecast Lab", id)
+		}
+	}
+}
+
 func TestCanonicalIDUpgradesLegacyVenueModels(t *testing.T) {
 	for legacy, want := range map[string]string{
 		resultsPoissonID: resultsPoissonHomeTwoSeasonsID,

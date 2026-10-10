@@ -403,6 +403,11 @@ NWSL_CONFIG_FILE=/dev/null go run ./cmd/backtest \
   -markdown /tmp/model-development.md
 ```
 
+To score an experimental model beside the standard catalog, register it in
+`forecast.DevelopmentCandidates` and pass its ID with `-candidates`
+(comma-separated). The flag is accepted only for filtered runs whose
+scored seasons are all development seasons.
+
 Unselected seasons are audited and may supply only information that existed
 before a scored cutoff; they do not generate model metrics. A filtered run
 is restricted to the development window, cannot replace the checked-in

@@ -69,6 +69,7 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	heldout := flags.String("held-out", defaultHeldoutSeasons, "final-test seasons held out from model design")
 	scoreSeasonsValue := flags.String("score-seasons", "", "diagnostic-only comma-separated target seasons to score while retaining all requested seasons as chronological history")
 	comparisonWindow := flags.String("comparison-window", "", "diagnostic paired-comparison window; filtered runs require development")
+	candidateList := flags.String("candidates", "", "comma-separated development candidate model IDs; requires -score-seasons")
 	iterations := flags.Int("iterations", 20000, "season simulations per daily cutoff")
 	resamples := flags.Int("bootstrap-resamples", 10000, "paired bootstrap resamples")
 	seed := flags.Int64("bootstrap-seed", 20251109, "paired bootstrap seed")
@@ -113,6 +114,25 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	if len(scoreSeasons) > 0 && *comparisonWindow != backtest.DevelopmentWindow {
 		return fmt.Errorf("filtered diagnostic scoring requires -comparison-window %s", backtest.DevelopmentWindow)
 	}
+	var candidateIDs map[string]bool
+	if *candidateList != "" {
+		candidateIDs, err = csvSet(*candidateList)
+		if err != nil {
+			return fmt.Errorf("candidates: %w", err)
+		}
+		if len(scoreSeasons) == 0 {
+			return fmt.Errorf("development candidates require -score-seasons and -comparison-window %s", backtest.DevelopmentWindow)
+		}
+		for _, id := range setKeys(scoreSeasons) {
+			if !developmentSet[id] {
+				return fmt.Errorf("development candidates cannot score non-development season %s", id)
+			}
+		}
+	}
+	candidates, err := developmentCandidates(candidateIDs, forecast.DevelopmentCandidates())
+	if err != nil {
+		return fmt.Errorf("candidates: %w", err)
+	}
 	for id := range developmentSet {
 		if heldoutSet[id] {
 			return fmt.Errorf("season %s appears in both evaluation windows", id)
@@ -156,6 +176,7 @@ func run(ctx context.Context, args []string, defaultDB string, stdout io.Writer)
 	for _, entry := range catalog {
 		models = append(models, entry.Model)
 	}
+	models = append(models, candidates...)
 	report, err := backtest.Evaluate(ctx, seasons, backtest.Config{
 		Models: models, IncumbentModelID: *incumbent, Iterations: *iterations,
 		ReferenceModelIDs:  map[string]bool{"straight-line-pace-v1": true},
@@ -231,6 +252,26 @@ func evaluationSeason(id, window string, playoffPlaces int, data cache.SeasonDat
 		}
 	}
 	return backtest.Season{ID: id, Window: window, PlayoffPlaces: playoffPlaces, Teams: data.Teams, Games: games, XGoals: xg}, nil
+}
+
+// developmentCandidates resolves requested IDs in catalog order, so report
+// rows do not depend on the flag's ordering.
+func developmentCandidates(ids map[string]bool, catalog []forecast.CatalogEntry) ([]forecast.Model, error) {
+	remaining := make(map[string]bool, len(ids))
+	for id := range ids {
+		remaining[id] = true
+	}
+	models := []forecast.Model{}
+	for _, entry := range catalog {
+		if remaining[entry.Model.Info().ID] {
+			models = append(models, entry.Model)
+			delete(remaining, entry.Model.Info().ID)
+		}
+	}
+	if len(remaining) > 0 {
+		return nil, fmt.Errorf("unknown development candidate %s", strings.Join(setKeys(remaining), ", "))
+	}
+	return models, nil
 }
 
 func csvSet(value string) (map[string]bool, error) {
