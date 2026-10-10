@@ -966,7 +966,9 @@ func TestJ7SchedulerPath(t *testing.T) {
 	j.Server.Start()
 	select {
 	case <-startupPlanning:
-	case <-time.After(10 * time.Second):
+	// Startup recalculates cached clinching before reading the planning clock;
+	// allow the same budget as publishing below, including under the race detector.
+	case <-time.After(60 * time.Second):
 		t.Fatal("scheduler did not reach startup planning")
 	}
 
