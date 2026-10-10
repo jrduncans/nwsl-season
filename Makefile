@@ -19,7 +19,9 @@ TELEMETRY_DIFF_OUTPUT ?= ./work/telemetry-schema-diff
 
 .PHONY: verify test fmt vet lint race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated telemetry-diff telemetry-mcp telemetry-emit-local telemetry-live-check backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
-verify: fmt lint vet test
+# The full pre-handoff check from AGENTS.md, in order (run `make e2e-install` once first).
+# Add `make race` when a change touches concurrency.
+verify: fmt lint vet test test-e2e
 
 test:
 	go test ./...
@@ -52,7 +54,7 @@ test-e2e:
 	go test -tags e2e -count=1 ./e2e/...
 
 # Installs the Playwright driver and Chromium that match the playwright-go version in go.mod.
-# Honors PLAYWRIGHT_BROWSERS_PATH and PLAYWRIGHT_DRIVER_PATH. CI adds --with-deps.
+# Honors PLAYWRIGHT_BROWSERS_PATH and PLAYWRIGHT_DRIVER_PATH. CI installs only the headless shell.
 .PHONY: e2e-install
 e2e-install:
 	go run github.com/mxschmitt/playwright-go/cmd/playwright install chromium

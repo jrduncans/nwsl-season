@@ -35,6 +35,7 @@ func inventoryDB(t *testing.T) (*DB, context.Context) {
 }
 
 func TestReplaceGameInventoryEmptyDiscoveryAndPopulatedProtection(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	result, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{}, &competition.InventoryExpectation{Teams: 2, GamesPerTeam: 1, Games: 1}, inventoryMetadata())
 	if err != nil || result.SyncRun != nil || result.Teams == nil || result.Games == nil || result.Audit.ReturnedRows != 0 || result.Audit.DownstreamInputsChanged {
@@ -67,6 +68,7 @@ func TestReplaceGameInventoryEmptyDiscoveryAndPopulatedProtection(t *testing.T) 
 }
 
 func TestReplaceGameInventoryUnknownTeamsAndValidationAreWriteFree(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "PreMatch", 0, 0)
 	game.HomeTeamID = "zulu"
@@ -86,6 +88,7 @@ func TestReplaceGameInventoryUnknownTeamsAndValidationAreWriteFree(t *testing.T)
 }
 
 func TestPlayoffGameFieldsAreValidatedAndMaterial(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("playoff", "FullTime", 1, 0)
 	game.Season, game.Stage = "2026", "Playoffs"
@@ -111,6 +114,7 @@ func TestPlayoffGameFieldsAreValidatedAndMaterial(t *testing.T) {
 }
 
 func TestKnockoutSourceFactsRoundTripAndRejectInvalidPairs(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("knockout", "FullTime", 1, 0)
 	game.ExtraTime = sql.NullBool{Bool: false, Valid: true}
@@ -177,6 +181,7 @@ func TestKnockoutSourceFactsRoundTripAndRejectInvalidPairs(t *testing.T) {
 }
 
 func TestReplaceGameInventoryLineagePreferenceAndMateriality(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	first := inventoryGame("one", "PreMatch", 0, 0)
 	result, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{first}, &competition.InventoryExpectation{Teams: 2, GamesPerTeam: 1}, inventoryMetadata())
@@ -225,6 +230,7 @@ func TestReplaceGameInventoryLineagePreferenceAndMateriality(t *testing.T) {
 }
 
 func TestReplaceGameInventoryAcceptsEarlierPreMatchReschedule(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	original := inventoryGame("rescheduled", "PreMatch", 0, 0)
 	original.KickoffUTC = "2030-01-01T16:00:00Z"
@@ -249,6 +255,7 @@ func TestReplaceGameInventoryAcceptsEarlierPreMatchReschedule(t *testing.T) {
 }
 
 func TestReplaceGameInventoryRawOnlyPreservesVenueXG(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "FullTime", 2, 1)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata()); err != nil {
@@ -274,6 +281,7 @@ func TestReplaceGameInventoryRawOnlyPreservesVenueXG(t *testing.T) {
 }
 
 func TestReplaceGameInventoryValidationMatrixIsWriteFree(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	valid := inventoryGame("one", "PreMatch", 0, 0)
 	cases := []struct {
@@ -330,6 +338,7 @@ func TestReplaceGameInventoryValidationMatrixIsWriteFree(t *testing.T) {
 }
 
 func TestReplaceGameInventoryExpectationDeletionAndDefensiveOrdering(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	second := inventoryGame("two", "PreMatch", 0, 0)
 	second.KickoffUTC = "2030-01-02T12:00:00Z"
@@ -362,6 +371,7 @@ func TestReplaceGameInventoryExpectationDeletionAndDefensiveOrdering(t *testing.
 }
 
 func TestReplaceGameInventoryCrossScopeAuditAndLegacyLineage(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "PreMatch", 0, 0)
 	result, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata())
@@ -387,6 +397,7 @@ func TestReplaceGameInventoryCrossScopeAuditAndLegacyLineage(t *testing.T) {
 }
 
 func TestReplaceGameInventoryInventoryExpectationFormsAndParticipants(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	first := inventoryGame("one", "PreMatch", 0, 0)
 	second := inventoryGame("two", "PreMatch", 0, 0)
@@ -417,6 +428,7 @@ func TestReplaceGameInventoryInventoryExpectationFormsAndParticipants(t *testing
 }
 
 func TestReplaceGameInventoryRollsBackOnLegacyAuditAndVenueTriggers(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"sync_runs", "source_refresh_audits", "venue_summaries"} {
 		t.Run(target, func(t *testing.T) {
 			db, ctx := inventoryDB(t)
@@ -461,6 +473,7 @@ func TestReplaceGameInventoryRollsBackOnLegacyAuditAndVenueTriggers(t *testing.T
 }
 
 func TestReplaceGameInventorySourcePreferenceProtectsTerminalAndStaleRows(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	terminal := inventoryGame("one", "FullTime", 2, 1)
 	terminal.LastUpdatedUTC = "2030-01-01T12:00:00Z"
@@ -495,6 +508,7 @@ func TestReplaceGameInventorySourcePreferenceProtectsTerminalAndStaleRows(t *tes
 }
 
 func TestReplaceGameInventoryVenueFixtureAndXGInvalidationRules(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	if _, err := db.UpsertTeams(ctx, []Team{{ASAID: "charlie", Name: "Charlie"}}, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), FinishedAt: time.Date(2026, 2, 1, 0, 1, 0, 0, time.UTC)}); err != nil {
 		t.Fatal(err)
@@ -550,6 +564,7 @@ func TestReplaceGameInventoryVenueFixtureAndXGInvalidationRules(t *testing.T) {
 }
 
 func TestReplaceGameInventoryFullTimeEligibilityControlsXGInvalidation(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	full := inventoryGame("one", "FullTime", 1, 0)
 	full.LastUpdatedUTC = "2030-01-01T12:00:00Z"
@@ -600,6 +615,7 @@ func TestReplaceGameInventoryFullTimeEligibilityControlsXGInvalidation(t *testin
 }
 
 func TestReplaceGameInventoryKeepsLegacyReplaceSeasonCompatible(t *testing.T) {
+	t.Parallel()
 	db, ctx := inventoryDB(t)
 	game := inventoryGame("one", "PreMatch", 0, 0)
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{game}, nil, inventoryMetadata()); err != nil {

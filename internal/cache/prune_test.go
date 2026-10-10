@@ -7,6 +7,7 @@ import (
 )
 
 func TestPruneHistoryRetainsCurrentRowsAndRequiredLineage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {

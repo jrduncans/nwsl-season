@@ -14,6 +14,7 @@ import (
 var readinessTestTime = time.Date(2026, time.July, 1, 12, 0, 0, 0, time.UTC)
 
 func TestSeasonReadinessMissingAndBlankScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 
@@ -29,6 +30,7 @@ func TestSeasonReadinessMissingAndBlankScope(t *testing.T) {
 }
 
 func TestSeasonReadinessMapsPersistedDiscoveryWithoutGames(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	for _, test := range []struct {
@@ -49,6 +51,7 @@ func TestSeasonReadinessMapsPersistedDiscoveryWithoutGames(t *testing.T) {
 }
 
 func TestSeasonReadinessObservedGamesOverrideStaleDiscoveryWithoutMutation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	for _, discovery := range []SourceScopeDiscovery{SourceScopeUnknown, SourceScopeNotPublished} {
@@ -71,6 +74,7 @@ func TestSeasonReadinessObservedGamesOverrideStaleDiscoveryWithoutMutation(t *te
 }
 
 func TestSeasonReadinessObservedInventoryIsExactlyScoped(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	insertReadinessScope(t, db, "2099", "Target", SourceScopeUnknown)
@@ -90,6 +94,7 @@ func TestSeasonReadinessObservedInventoryIsExactlyScoped(t *testing.T) {
 }
 
 func TestSeasonReadinessUncatalogedInventoryIsAlwaysUnknown(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	for _, test := range []struct {
@@ -110,6 +115,7 @@ func TestSeasonReadinessUncatalogedInventoryIsAlwaysUnknown(t *testing.T) {
 }
 
 func TestEvaluateSeasonReadinessChecksEveryInventoryDimension(t *testing.T) {
+	t.Parallel()
 	scope := readinessScope(SourceScopeAvailable)
 	expected := &competition.InventoryExpectation{Teams: 2, GamesPerTeam: 2, Games: 2}
 	complete := observedInventory{teams: 2, games: 2, appearances: map[string]int{"alpha": 2, "bravo": 2}}
@@ -130,6 +136,7 @@ func TestEvaluateSeasonReadinessChecksEveryInventoryDimension(t *testing.T) {
 }
 
 func TestEvaluateSeasonReadinessUsesExplicitInventedPastInventory(t *testing.T) {
+	t.Parallel()
 	appearances := make(map[string]int, 14)
 	for i := 0; i < 14; i++ {
 		appearances[string(rune('a'+i))] = 26
@@ -147,6 +154,7 @@ func TestEvaluateSeasonReadinessUsesExplicitInventedPastInventory(t *testing.T) 
 }
 
 func TestSeasonReadinessesListsPersistedScopesInSourceOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	empty, err := db.SeasonReadinesses(ctx)
@@ -171,6 +179,7 @@ func TestSeasonReadinessesListsPersistedScopesInSourceOrder(t *testing.T) {
 }
 
 func TestSeasonReadinessExpectedInventoryIsDefensive(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	insertReadinessScope(t, db, "2026", "Regular Season", SourceScopeUnknown)
@@ -190,6 +199,7 @@ func TestSeasonReadinessExpectedInventoryIsDefensive(t *testing.T) {
 }
 
 func TestEvaluateSeasonReadinessRejectsInvalidPersistedEnums(t *testing.T) {
+	t.Parallel()
 	base := readinessScope(SourceScopeUnknown)
 	for name, mutate := range map[string]func(*SourceScope){
 		"registration": func(scope *SourceScope) { scope.Registration = "bad" },
@@ -207,6 +217,7 @@ func TestEvaluateSeasonReadinessRejectsInvalidPersistedEnums(t *testing.T) {
 }
 
 func TestSeasonReadinessReadsDoNotMutateCache(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openSeasonReadinessTestDB(t)
 	insertReadinessScope(t, db, "2099", "Scope", SourceScopeNotPublished)

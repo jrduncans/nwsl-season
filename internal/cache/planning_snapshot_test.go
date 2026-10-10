@@ -8,6 +8,7 @@ import (
 )
 
 func TestPlanningSnapshotIsConsistentAndDefensive(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/planning.sqlite")
 	if err != nil {

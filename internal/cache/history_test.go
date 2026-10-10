@@ -11,6 +11,7 @@ import (
 )
 
 func TestHistoricalRegularSeasonsEmptyCatalogRows(t *testing.T) {
+	t.Parallel()
 	db := openHistoryTestDB(t)
 	seasons, err := db.HistoricalRegularSeasons(context.Background())
 	if err != nil {
@@ -28,6 +29,7 @@ func TestHistoricalRegularSeasonsEmptyCatalogRows(t *testing.T) {
 }
 
 func TestHistoricalRegularSeasonsReturnsOnlyExactRegularSeasonData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openHistoryTestDB(t)
 	putHistorySeason(t, db, "2024", "Regular Season", "regular")
@@ -50,6 +52,7 @@ func TestHistoricalRegularSeasonsReturnsOnlyExactRegularSeasonData(t *testing.T)
 }
 
 func TestHistoricalRegularSeasonsPreservesReadinessAndNullableXG(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openHistoryTestDB(t)
 	putHistoryScope(t, db, "2016", SourceScopeCompleted, SourceScopeAvailable)
@@ -97,6 +100,7 @@ func TestHistoricalRegularSeasonsPreservesReadinessAndNullableXG(t *testing.T) {
 }
 
 func TestHistoricalRegularSeasonsReflectsCorrectionsAndDoesNotWrite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db := openHistoryTestDB(t)
 	putHistorySeason(t, db, "2024", "Regular Season", "regular")
@@ -126,6 +130,7 @@ func TestHistoricalRegularSeasonsReflectsCorrectionsAndDoesNotWrite(t *testing.T
 }
 
 func TestHistoricalRegularSeasonsErrorsAreNotPartial(t *testing.T) {
+	t.Parallel()
 	t.Run("cancelled", func(t *testing.T) {
 		db := openHistoryTestDB(t)
 		ctx, cancel := context.WithCancel(context.Background())

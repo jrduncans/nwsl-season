@@ -8,6 +8,7 @@ import (
 )
 
 func TestCheckedWritesSelectMaterialDueAtomically(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/due.sqlite")
 	if err != nil {

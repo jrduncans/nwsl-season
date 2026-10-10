@@ -31,6 +31,7 @@ func (q *refreshAfterFirstQuery) QueryContext(ctx context.Context, query string,
 }
 
 func TestOpenConfiguresEverySQLiteConnection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -60,6 +61,7 @@ func TestOpenConfiguresEverySQLiteConnection(t *testing.T) {
 }
 
 func TestMigrationFourteenAddsOnlyKnockoutSourceColumns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -100,6 +102,7 @@ func TestMigrationFourteenAddsOnlyKnockoutSourceColumns(t *testing.T) {
 }
 
 func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	db, err := Open(ctx, path)
@@ -174,6 +177,7 @@ func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *test
 }
 
 func TestMigrationFourteenBackfillsKnockoutSourceFactsAndRejectsAmbiguity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	db, err := Open(ctx, path)
@@ -390,6 +394,7 @@ func TestMigrationFourteenBackfillsKnockoutSourceFactsAndRejectsAmbiguity(t *tes
 }
 
 func TestMigrationFourteenIsIdempotentWithExistingColumns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, retained := range [][]string{
 		{"extra_time", "penalties"},
@@ -440,6 +445,7 @@ func TestMigrationFourteenIsIdempotentWithExistingColumns(t *testing.T) {
 }
 
 func TestReplaceSeasonRejectsInvalidKnockoutFactsWithoutMutation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -512,6 +518,7 @@ func TestReplaceSeasonRejectsInvalidKnockoutFactsWithoutMutation(t *testing.T) {
 }
 
 func TestSQLiteForeignKeyCascadeOnNewPooledConnection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -557,6 +564,7 @@ func TestSQLiteForeignKeyCascadeOnNewPooledConnection(t *testing.T) {
 }
 
 func TestSQLiteBusyTimeoutWaitsForConcurrentWriter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -615,6 +623,7 @@ func sqlitePragmaInt(t *testing.T, ctx context.Context, conn *sql.Conn, name str
 }
 
 func TestMigrationsCreateFreshDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -635,6 +644,7 @@ func TestMigrationsCreateFreshDatabase(t *testing.T) {
 }
 
 func TestGameXGExpectedPointsPersist(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -664,6 +674,7 @@ func TestGameXGExpectedPointsPersist(t *testing.T) {
 }
 
 func TestReplaceGameXGRejectsOutOfRangeExpectedPoints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -687,6 +698,7 @@ func TestReplaceGameXGRejectsOutOfRangeExpectedPoints(t *testing.T) {
 }
 
 func TestVenueSummaryIsPersistedAcrossFixtureAndXGWrites(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -723,6 +735,7 @@ func TestVenueSummaryIsPersistedAcrossFixtureAndXGWrites(t *testing.T) {
 }
 
 func TestMigrationSevenAddsExpectedPointsColumns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	legacy, err := sql.Open("sqlite", path)
@@ -775,6 +788,7 @@ func TestMigrationSevenAddsExpectedPointsColumns(t *testing.T) {
 }
 
 func TestStandingsInputsLoadSeasonStageValues(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -830,6 +844,7 @@ func TestStandingsInputsLoadSeasonStageValues(t *testing.T) {
 }
 
 func TestSeasonLoadsFixturesAndFreshness(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -865,6 +880,7 @@ func TestSeasonLoadsFixturesAndFreshness(t *testing.T) {
 }
 
 func TestSeasonReadUsesOneSnapshotDuringRefresh(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -922,6 +938,7 @@ func TestSeasonReadUsesOneSnapshotDuringRefresh(t *testing.T) {
 }
 
 func TestSeasonRejectsMismatchedFixtureSnapshot(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -947,6 +964,7 @@ func TestSeasonRejectsMismatchedFixtureSnapshot(t *testing.T) {
 }
 
 func TestReplaceSeasonTracksRowChanges(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -987,6 +1005,7 @@ func TestReplaceSeasonTracksRowChanges(t *testing.T) {
 }
 
 func TestSyncLeaseExcludesConcurrentHolder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	db, err := Open(ctx, t.TempDir()+"/cache.sqlite")
 	if err != nil {
@@ -1013,6 +1032,7 @@ func TestSyncLeaseExcludesConcurrentHolder(t *testing.T) {
 }
 
 func TestMigrateVersionOneDatabase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	path := t.TempDir() + "/cache.sqlite"
 	legacy, err := sql.Open("sqlite", path)

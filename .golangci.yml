@@ -35,8 +35,10 @@ linters:
           - errcheck
           - noctx
       # Go runs parallel tests only after every sequential top-level test, so
-      # one sequential browser test delays the whole e2e suite.
-      - path-except: ^e2e/
+      # one sequential browser test delays the whole e2e suite. The cache and
+      # apptest packages open SQLite per test and dominate the race suite when
+      # their tests run sequentially.
+      - path-except: ^(e2e|internal/cache|internal/apptest)/
         linters:
           - paralleltest
 
