@@ -5,7 +5,6 @@ package e2e
 import (
 	"regexp"
 	"strconv"
-	"sync"
 	"testing"
 
 	playwright "github.com/mxschmitt/playwright-go"
@@ -34,6 +33,8 @@ type cachePage struct {
 	// attached are selectors that must match at least one element after the
 	// page's scripts have run.
 	attached []string
+	// check, when set, makes further assertions about the loaded page.
+	check func(t *testing.T, page playwright.Page, f *fixture)
 }
 
 // cachePages lists the pages that must render from the local cache alone.
@@ -43,6 +44,7 @@ func cachePages() []cachePage {
 	standings := cachePage{
 		heading: "Standings",
 		counts:  []selectorCount{{"table.standings tbody tr", fixtureTeams}},
+		check:   assertStandingsMatchFake,
 	}
 	home, seasonHome := standings, standings
 	home.path = ""
@@ -119,65 +121,40 @@ func assertRendersData(t *testing.T, page playwright.Page, want cachePage) {
 	}
 }
 
-// identity is what a page shows as its headline: the h1 and the document title.
-type identity struct{ heading, title string }
-
-func pageIdentity(t *testing.T, page playwright.Page) identity {
+// assertStandingsMatchFake checks that the first sync's standings equal the
+// table computed in the test from the fake's results, ordered by points.
+func assertStandingsMatchFake(t *testing.T, page playwright.Page, f *fixture) {
 	t.Helper()
-	heading, err := page.Locator("h1").First().TextContent()
-	if err != nil {
-		t.Fatalf("read h1 of %s: %v", page.URL(), err)
+	want := expectedTable(f.Season.Teams, f.Season.Games)
+	var played int
+	for _, row := range want {
+		played += row.Played
 	}
-	title, err := page.Title()
-	if err != nil {
-		t.Fatalf("read title of %s: %v", page.URL(), err)
+	if played != 2*fixturePlayedGames {
+		t.Fatalf("the scenario has %d played team-games, want %d", played, 2*fixturePlayedGames)
 	}
-	return identity{heading, title}
-}
-
-// visitCachePages visits every cache page at every viewport in parallel, each
-// in its own browser context. It returns after all of them finish, because a
-// parent test waits for its parallel subtests. Subtests must only read the
-// shared fixture. Each page's identity is stored in seen; when compare is
-// true it must equal what an earlier phase stored.
-func visitCachePages(t *testing.T, f *fixture, seen *sync.Map, compare bool) {
-	t.Helper()
-	for _, vp := range []viewport{Desktop, Mobile} {
-		for _, want := range cachePages() {
-			t.Run(vp.Name+" /"+want.path, func(t *testing.T) {
-				t.Parallel()
-				page := newPage(t, vp)
-				visit(t, page, f.URL(want.path))
-				assertRendersData(t, page, want)
-				assertNoHorizontalOverflow(t, page)
-
-				key := vp.Name + " " + want.path
-				got := pageIdentity(t, page)
-				if !compare {
-					seen.Store(key, got)
-					return
-				}
-				before, ok := seen.Load(key)
-				if !ok {
-					t.Fatalf("no ASA-up identity recorded for %s", key)
-				}
-				if before != any(got) {
-					t.Errorf("page changed while ASA was down: up %+v, down %+v", before, got)
-				}
-			})
+	rows := readStandings(t, page)
+	assertRecords(t, rows, want)
+	// Every team has played the same number of games, so the table is
+	// ordered by points.
+	for i := 1; i < len(rows); i++ {
+		if rows[i].Points > rows[i-1].Points {
+			t.Errorf("row %d (%s, %d points) is ranked below %s with %d points", i, rows[i].ID, rows[i].Points, rows[i-1].ID, rows[i-1].Points)
 		}
 	}
 }
 
-// TestJ1CacheOnlyPages is journey J1: every page loads real data from the
-// cache with no browser errors or overflow and without contacting ASA, and
-// looks the same while ASA is down.
+// TestJ1CacheOnlyPages is journeys J1 and J2: after the first sync, every page
+// loads real data from the cache with no browser errors or overflow and
+// without contacting ASA, and the standings equal the table computed from the
+// fake's results. Pages run in parallel, each in its own browser context, and
+// only read the shared fixture.
 //
-// The two phases run one after the other on a shared fixture: SetDown and
-// Requests are fixture-wide, so the phase that asserts zero ASA requests must
-// not overlap the phase that takes ASA down. Pages within a phase run in
-// parallel.
+// The fake records every request, so "no requests while browsing" already
+// proves the pages work with ASA down; a second pass with the fake down would
+// load every page again to show nothing new.
 func TestJ1CacheOnlyPages(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 
 	// The fixture's CheckNow must have reached the fake, or "no requests
@@ -186,12 +163,21 @@ func TestJ1CacheOnlyPages(t *testing.T) {
 		t.Fatal("CheckNow made no requests to the fake ASA; the cache was not filled from it")
 	}
 	f.ASA.ResetRequests()
+	// Parallel subtests finish before the parent's cleanups run.
+	t.Cleanup(func() { assertNoASARequests(t, f.ASA) })
 
-	var seen sync.Map
-	t.Run("ASA up", func(t *testing.T) { visitCachePages(t, f, &seen, false) })
-	assertNoASARequests(t, f.ASA)
-
-	f.ASA.SetDown(true)
-	t.Run("ASA down", func(t *testing.T) { visitCachePages(t, f, &seen, true) })
-	assertNoASARequests(t, f.ASA)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		for _, want := range cachePages() {
+			t.Run(vp.Name+" /"+want.path, func(t *testing.T) {
+				t.Parallel()
+				page := newPage(t, vp)
+				visit(t, page, f.URL(want.path))
+				assertRendersData(t, page, want)
+				if want.check != nil {
+					want.check(t, page, f)
+				}
+				assertNoHorizontalOverflow(t, page)
+			})
+		}
+	}
 }

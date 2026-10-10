@@ -40,6 +40,10 @@ type Options struct {
 	StartScheduler bool
 	// Now overrides the scheduler's planning clock. Nil uses time.Now.
 	Now func() time.Time
+	// ForecastIterations overrides the number of simulated seasons per
+	// forecast. Zero uses the application default. Tests lower it because the
+	// server warms every forecast model after each sync that changes inputs.
+	ForecastIterations int
 }
 
 // Server is a built, not yet serving, composition of the application. The
@@ -116,6 +120,7 @@ func build(ctx context.Context, db *cache.DB, cfg config.Config, opts Options, l
 		Stage:         cfg.SyncStage, Rules: rules,
 		ForecastConcurrency: cfg.ForecastConcurrency,
 		ForecastTimeout:     cfg.ForecastTimeout,
+		ForecastIterations:  opts.ForecastIterations,
 	})
 	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger, currentSeason: cfg.SyncSeason, currentStage: cfg.SyncStage}, scheduler.Config{
 		Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: rules.ExpectedTeams, GamesPerTeam: rules.GamesPerTeam, CheckInterval: cfg.SyncCheckInterval,

@@ -13,6 +13,7 @@ linters:
     - unconvert
     - usestdlibvars
     - depguard
+    - paralleltest
   settings:
     depguard:
       rules:
@@ -23,6 +24,9 @@ linters:
           deny:
             - pkg: github.com/jrduncans/nwsl-season/internal/asa
               desc: Page requests must read the local SQLite cache; only the scheduler and cmd/sync may call ASA.
+    paralleltest:
+      # Subtests that share one browser page run in order on purpose.
+      ignore-missing-subtests: true
   exclusions:
     rules:
       # Test fixtures commonly discard cleanup errors and use context-free test helpers.
@@ -30,6 +34,11 @@ linters:
         linters:
           - errcheck
           - noctx
+      # Go runs parallel tests only after every sequential top-level test, so
+      # one sequential browser test delays the whole e2e suite.
+      - path-except: ^e2e/
+        linters:
+          - paralleltest
 
 formatters:
   enable:

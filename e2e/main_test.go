@@ -3,6 +3,12 @@
 // Package e2e drives the real server in a headless Chromium. Run it with
 // `make test-e2e`; a plain `go test ./...` never builds it. Install the
 // browser first with `make e2e-install`. Tests never download anything.
+//
+// Every top-level test calls t.Parallel (the paralleltest linter enforces
+// it): Go starts parallel tests only after every sequential one has finished,
+// so a single sequential test delays the whole suite. Build server
+// configuration with testConfig rather than t.Setenv, which parallel tests
+// cannot use, and pass e2eForecastIterations to server.Build.
 package e2e
 
 import (
