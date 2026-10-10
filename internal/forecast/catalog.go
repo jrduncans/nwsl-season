@@ -22,6 +22,15 @@ func EvaluationCatalog() []CatalogEntry {
 		{Model: NewStraightLinePaceV1()},
 	}, Catalog()...)
 }
+
+// DevelopmentCandidates are experimental models that may be scored only by
+// filtered development-window diagnostics. A candidate joins
+// EvaluationCatalog only after its frozen final-test run is authorized. Add a
+// model here while it is under development.
+func DevelopmentCandidates() []CatalogEntry {
+	return nil
+}
+
 func Lookup(id string) (CatalogEntry, bool) {
 	for _, entry := range Catalog() {
 		if entry.Model.Info().ID == id {
