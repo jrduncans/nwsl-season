@@ -441,17 +441,12 @@ share a cache.
 
 ## Build and verify
 
-`make verify` (fmt, lint, vet, test, test-e2e) is the check required after the
-final edit to Go, templates, JavaScript or CSS; run `make e2e-install` once
-first. Narrower targets such as `make test-clinching` and `make test-explore`
-suit iteration. `make lint` includes `gosec`; keep each suppression narrow and
-justified. `make build` creates the binaries.
-
-| Change | Also run |
-| --- | --- |
-| Goroutines, channels, locks, shared mutable state, the scheduler, or cache/HTTP concurrency | `make race` |
-| `go.mod`/`go.sum`, or release work | `make vuln`. If its database is unreachable, report the scan as skipped, not clean. |
-| `telemetry/registry` | `make telemetry-check-generated` and `make telemetry-live-check` (see the [telemetry guide](docs/telemetry/README.md)) |
+`make verify` runs fmt, lint (including `gosec`), vet, test and test-e2e; run
+`make e2e-install` once first. Narrower targets such as `make test-clinching`
+and `make test-explore` suit iteration. `make race` runs the tests with the race
+detector, `make vuln` scans dependencies for known vulnerabilities, and the
+[telemetry guide](docs/telemetry/README.md) covers the telemetry checks.
+`make build` creates the binaries.
 
 ### Test layers
 
