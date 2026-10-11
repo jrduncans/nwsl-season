@@ -129,6 +129,29 @@ failed source observations do not create derived work.
 | Games | Fetches the authoritative season/stage collection and replaces that scope's inventory. | Fetches requested game IDs and updates only those checked games. |
 | Game xG | Fetches authoritative stage xG after fixture inventory exists. | Fetches xG for requested game IDs and updates only those checked values. |
 
+The game xG operation also carries ASA's penalty-pattern breakdown, so the
+standings can show non-penalty xG (NPxG). After `/nwsl/games/xgoals` returns at
+least one row, the same operation makes one more request,
+`/nwsl/teams/xgoals?split_by_games=true&shot_pattern=Penalty`. Full mode filters
+by season and stage. Targeted mode filters by stage and a `start_date`/`end_date`
+window spanning the returned games' UTC dates plus one day on each side, because
+ASA's date-filter time zone is unverified; it never sends `game_id`, which that
+endpoint answers with HTTP 500. The syncer accepts a game's split only when it
+has exactly two rows for the game's home and away teams, the two rows mirror each
+other (xG within 0.0001), all values are finite and non-negative, and each side's
+penalty xG does not exceed that side's game xG. A rejected or missing split
+leaves the stored split unchanged. A failed penalty request is absorbed: the xG
+write proceeds, the operation succeeds, `-require-xg` is unaffected, and a WARN
+exception with `nwsl.error.code` `sync.penalty_xg` is recorded. The source
+operation span reports `nwsl.sync.penalty_games_accepted` and
+`nwsl.sync.penalty_games_rejected`. The cache stores the split on `game_xg`
+(schema 15); a nil split means "not observed" and never erases a stored one, and a
+penalty-only difference updates the row without counting as a material xG change,
+so forecasts, venue summaries, and correction cadence are unaffected. Penalty
+data adds no scheduler job, cadence, or check table. Existing caches gain splits
+as xG rows are re-observed (for example `cmd/sync -backfill-catalog` or normal
+correction polling).
+
 The operation validates and maps the one ASA response before invoking its
 resource-specific cache API. Full game inventory replacement retains a prior
 complete inventory when an incoming known inventory is incomplete or uneven.

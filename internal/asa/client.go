@@ -27,6 +27,9 @@ const (
 	maxTeamRows                  = 64
 	maxGameRows                  = 512
 	maxXGoalRows                 = 512
+
+	maxPenaltyXGoalsResponseBytes int64 = 2 << 20 // 2 MiB
+	maxPenaltyXGoalRows                 = 2 * maxXGoalRows
 )
 
 var errResponseBodyTooLarge = errors.New("response body exceeds size limit")
@@ -69,6 +72,7 @@ type XGoalsFilters struct {
 // from the live endpoint; RawJSON preserves the complete source object.
 type GameXGoals struct {
 	GameID         string   `json:"game_id"`
+	DateTimeUTC    string   `json:"date_time_utc"`
 	HomeTeamID     string   `json:"home_team_id"`
 	AwayTeamID     string   `json:"away_team_id"`
 	HomeTeamXGoals float64  `json:"home_team_xgoals"`
@@ -76,6 +80,26 @@ type GameXGoals struct {
 	HomeXPoints    *float64 `json:"home_xpoints"`
 	AwayXPoints    *float64 `json:"away_xpoints"`
 	RawJSON        string   `json:"-"`
+}
+
+// PenaltyXGoalsFilters selects ASA's per-game penalty-pattern team xG.
+// Use either SeasonName or a StartDate/EndDate window (YYYY-MM-DD), never both.
+type PenaltyXGoalsFilters struct {
+	SeasonName, StageName, StartDate, EndDate string
+}
+
+// TeamGamePenaltyXGoals is one team's penalty-pattern row for one game from
+// /nwsl/teams/xgoals?split_by_games=true&shot_pattern=Penalty.
+type TeamGamePenaltyXGoals struct {
+	TeamID        string  `json:"team_id"`
+	GameID        string  `json:"game_id"`
+	ShotsFor      int     `json:"shots_for"`
+	ShotsAgainst  int     `json:"shots_against"`
+	GoalsFor      int     `json:"goals_for"`
+	GoalsAgainst  int     `json:"goals_against"`
+	XGoalsFor     float64 `json:"xgoals_for"`
+	XGoalsAgainst float64 `json:"xgoals_against"`
+	RawJSON       string  `json:"-"`
 }
 
 // Game is the ASA /nwsl/games wire representation.
@@ -159,6 +183,27 @@ func (c Client) GameXGoals(ctx context.Context, filters XGoalsFilters) ([]GameXG
 		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
 	}
 	return fetchArray(ctx, c, endpoint, op, decodeXGoals)
+}
+
+// GamePenaltyXGoals fetches ASA's per-game penalty-pattern team xG. It never
+// sends game_id: the real endpoint answers HTTP 500 for it.
+func (c Client) GamePenaltyXGoals(ctx context.Context, filters PenaltyXGoalsFilters) ([]TeamGamePenaltyXGoals, error) {
+	const op = "asa game penalty xgoals"
+	if filters.SeasonName != "" && (filters.StartDate != "" || filters.EndDate != "") {
+		return nil, fmt.Errorf("%s: season_name and start_date/end_date are mutually exclusive", op)
+	}
+	endpoint, err := c.resourceURL("/nwsl/teams/xgoals", func(query url.Values) {
+		query.Set("split_by_games", "true")
+		query.Set("shot_pattern", "Penalty")
+		addQuery(query, "season_name", filters.SeasonName)
+		addQuery(query, "stage_name", filters.StageName)
+		addQuery(query, "start_date", filters.StartDate)
+		addQuery(query, "end_date", filters.EndDate)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: build request URL: %w", op, err)
+	}
+	return fetchArray(ctx, c, endpoint, op, decodePenaltyXGoals)
 }
 
 func fetchArray[T any](ctx context.Context, c Client, endpoint, op string, decode func(io.Reader) ([]T, error)) ([]T, error) {
@@ -250,6 +295,12 @@ func decodeTeams(body io.Reader) ([]Team, error) {
 
 func decodeXGoals(body io.Reader) ([]GameXGoals, error) {
 	return decodeArray(body, maxXGoalsResponseBytes, maxXGoalRows, func(value *GameXGoals, raw string) {
+		value.RawJSON = raw
+	})
+}
+
+func decodePenaltyXGoals(body io.Reader) ([]TeamGamePenaltyXGoals, error) {
+	return decodeArray(body, maxPenaltyXGoalsResponseBytes, maxPenaltyXGoalRows, func(value *TeamGamePenaltyXGoals, raw string) {
 		value.RawJSON = raw
 	})
 }

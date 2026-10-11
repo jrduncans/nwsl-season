@@ -240,6 +240,93 @@ func TestGameXGoalsSendsGameIDFilter(t *testing.T) {
 	}
 }
 
+func TestGamePenaltyXGoalsDecodesFixtureAndSendsQuery(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/game_penalty_xgoals.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		filters PenaltyXGoalsFilters
+		want    map[string]string
+		absent  []string
+	}{
+		{
+			name:    "season",
+			filters: PenaltyXGoalsFilters{SeasonName: "2025", StageName: "Regular Season"},
+			want:    map[string]string{"season_name": "2025", "stage_name": "Regular Season"},
+			absent:  []string{"game_id", "start_date", "end_date"},
+		},
+		{
+			name:    "date window",
+			filters: PenaltyXGoalsFilters{StageName: "Regular Season", StartDate: "2025-11-01", EndDate: "2025-11-03"},
+			want:    map[string]string{"stage_name": "Regular Season", "start_date": "2025-11-01", "end_date": "2025-11-03"},
+			absent:  []string{"game_id", "season_name"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/nwsl/teams/xgoals" {
+					t.Errorf("path = %q, want /nwsl/teams/xgoals", r.URL.Path)
+				}
+				query := r.URL.Query()
+				if query.Get("split_by_games") != "true" || query.Get("shot_pattern") != "Penalty" {
+					t.Errorf("query = %v, want split_by_games=true and shot_pattern=Penalty", query)
+				}
+				for name, want := range test.want {
+					if got := query.Get(name); got != want {
+						t.Errorf("%s = %q, want %q", name, got, want)
+					}
+				}
+				for _, name := range test.absent {
+					if query.Has(name) {
+						t.Errorf("query unexpectedly has %s", name)
+					}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(fixture)
+			}))
+			defer server.Close()
+
+			rows, err := (Client{BaseURL: server.URL, HTTPClient: server.Client()}).GamePenaltyXGoals(context.Background(), test.filters)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 2 || rows[0].TeamID != "Pk5LeeNqOW" || rows[0].GoalsFor != 1 || rows[0].XGoalsFor != 0.7599 ||
+				rows[1].ShotsAgainst != 1 || rows[1].XGoalsAgainst != 0.7599 || rows[0].RawJSON == "" {
+				t.Fatalf("rows = %+v, want decoded penalty fixture", rows)
+			}
+		})
+	}
+}
+
+func TestGamePenaltyXGoalsRejectsSeasonWithDates(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests.Add(1)
+	}))
+	defer server.Close()
+
+	_, err := (Client{BaseURL: server.URL, HTTPClient: server.Client()}).GamePenaltyXGoals(context.Background(), PenaltyXGoalsFilters{
+		SeasonName: "2025", StartDate: "2025-11-01",
+	})
+	if err == nil || requests.Load() != 0 {
+		t.Fatalf("err = %v, requests = %d, want rejection before any request", err, requests.Load())
+	}
+}
+
+func TestGameXGoalsDecodesDateTimeUTC(t *testing.T) {
+	values, err := decodeXGoals(strings.NewReader(`[{"game_id":"g","date_time_utc":"2025-11-02 22:15:00 UTC"}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 1 || values[0].DateTimeUTC != "2025-11-02 22:15:00 UTC" {
+		t.Fatalf("values = %+v, want date_time_utc decoded", values)
+	}
+}
+
 func TestTeamsReturnsErrorForNon2xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad upstream", http.StatusBadGateway)
@@ -589,6 +676,7 @@ func TestCheckedInFixturesFitResponseLimits(t *testing.T) {
 		{path: "testdata/teams.json", limit: maxTeamsResponseBytes},
 		{path: "testdata/games.json", limit: maxGamesResponseBytes},
 		{path: "testdata/game_xgoals.json", limit: maxXGoalsResponseBytes},
+		{path: "testdata/game_penalty_xgoals.json", limit: maxPenaltyXGoalsResponseBytes},
 	}
 
 	for _, test := range tests {

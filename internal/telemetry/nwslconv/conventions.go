@@ -20,6 +20,7 @@ const (
 	EventScenarioGenerateTeamException      = "nwsl.scenario.generate_team.exception"
 	EventScenarioRefreshException           = "nwsl.scenario.refresh.exception"
 	EventSchedulerPlanningSnapshotException = "nwsl.scheduler.planning_snapshot.exception"
+	EventSyncPenaltyXGException             = "nwsl.sync.penalty_xg.exception"
 	EventSyncRecalculateException           = "nwsl.sync.recalculate.exception"
 	EventSyncRunException                   = "nwsl.sync.run.exception"
 	EventSyncVenueHistoryException          = "nwsl.sync.venue_history.exception"
@@ -74,6 +75,8 @@ func ExceptionEventName(code string) string {
 		return EventScenarioRefreshException
 	case ErrorCodeSchedulerPlanningSnapshot:
 		return EventSchedulerPlanningSnapshotException
+	case ErrorCodeSyncPenaltyXG:
+		return EventSyncPenaltyXGException
 	case ErrorCodeSyncRecalculate:
 		return EventSyncRecalculateException
 	case ErrorCodeSyncRun:
@@ -351,6 +354,8 @@ const (
 	SyncOperationOutcomeKey                                  = attribute.Key("nwsl.sync.operation.outcome")
 	SyncOutcomeKey                                           = attribute.Key("nwsl.sync.outcome")
 	SyncPartialFailureKey                                    = attribute.Key("nwsl.sync.partial_failure")
+	SyncPenaltyGamesAcceptedKey                              = attribute.Key("nwsl.sync.penalty_games_accepted")
+	SyncPenaltyGamesRejectedKey                              = attribute.Key("nwsl.sync.penalty_games_rejected")
 	SyncQualificationOutcomeKey                              = attribute.Key("nwsl.sync.qualification.outcome")
 	SyncQualificationRefreshReasonKey                        = attribute.Key("nwsl.sync.qualification.refresh_reason")
 	SyncQualificationRefreshRequiredKey                      = attribute.Key("nwsl.sync.qualification.refresh_required")
@@ -459,6 +464,7 @@ const (
 	ErrorCodeScenarioGenerateTeam      = "scenario.generate_team"
 	ErrorCodeScenarioRefresh           = "scenario.refresh"
 	ErrorCodeSchedulerPlanningSnapshot = "scheduler.planning_snapshot"
+	ErrorCodeSyncPenaltyXG             = "sync.penalty_xg"
 	ErrorCodeSyncRecalculate           = "sync.recalculate"
 	ErrorCodeSyncRun                   = "sync.run"
 	ErrorCodeSyncVenueHistory          = "sync.venue_history"
@@ -1848,6 +1854,16 @@ const (
 // SyncPartialFailure returns an attribute value for nwsl.sync.partial_failure.
 func SyncPartialFailure(value bool) attribute.KeyValue {
 	return SyncPartialFailureKey.Bool(value)
+}
+
+// SyncPenaltyGamesAccepted returns an attribute value for nwsl.sync.penalty_games_accepted.
+func SyncPenaltyGamesAccepted(value int) attribute.KeyValue {
+	return SyncPenaltyGamesAcceptedKey.Int(value)
+}
+
+// SyncPenaltyGamesRejected returns an attribute value for nwsl.sync.penalty_games_rejected.
+func SyncPenaltyGamesRejected(value int) attribute.KeyValue {
+	return SyncPenaltyGamesRejectedKey.Int(value)
 }
 
 // SyncQualificationOutcome returns an attribute value for nwsl.sync.qualification.outcome.

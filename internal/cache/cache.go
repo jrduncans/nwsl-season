@@ -26,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 14
+const schemaVersion = 15
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -154,8 +154,12 @@ type GameXG struct {
 	HomeXG, AwayXG           sql.NullFloat64
 	HomeXPoints, AwayXPoints sql.NullFloat64
 	RawJSON                  string
-	FirstObservedAt          *time.Time
-	LastCheckedAt            time.Time
+	// Penalties is ASA's penalty-pattern split. Nil on a value being written
+	// means "not observed" and preserves any stored split.
+	Penalties       *PenaltySplit
+	PenaltyRawJSON  string
+	FirstObservedAt *time.Time
+	LastCheckedAt   time.Time
 }
 type XGSyncRun struct {
 	ID, RowsSeen, AvailableGames, UnavailableGames int64
@@ -717,6 +721,38 @@ func (c *DB) Migrate(ctx context.Context) error {
 			}
 		}
 		if err := recordMigration(ctx, tx, 14); err != nil {
+			return err
+		}
+		version = 14
+	}
+	if version < 15 {
+		xgOK, err := tableHasColumns(ctx, tx, "game_xg", "asa_game_id")
+		if err != nil {
+			return err
+		}
+		if xgOK {
+			for _, change := range []struct{ column, statement string }{
+				{"home_penalty_xg", `ALTER TABLE game_xg ADD COLUMN home_penalty_xg REAL`},
+				{"away_penalty_xg", `ALTER TABLE game_xg ADD COLUMN away_penalty_xg REAL`},
+				{"home_penalty_goals", `ALTER TABLE game_xg ADD COLUMN home_penalty_goals INTEGER`},
+				{"away_penalty_goals", `ALTER TABLE game_xg ADD COLUMN away_penalty_goals INTEGER`},
+				{"home_penalty_shots", `ALTER TABLE game_xg ADD COLUMN home_penalty_shots INTEGER`},
+				{"away_penalty_shots", `ALTER TABLE game_xg ADD COLUMN away_penalty_shots INTEGER`},
+				{"penalty_raw_json", `ALTER TABLE game_xg ADD COLUMN penalty_raw_json TEXT NOT NULL DEFAULT ''`},
+			} {
+				exists, err := tableHasColumns(ctx, tx, "game_xg", change.column)
+				if err != nil {
+					return err
+				}
+				if exists {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx, change.statement); err != nil {
+					return fmt.Errorf("apply migration 15: %w", err)
+				}
+			}
+		}
+		if err := recordMigration(ctx, tx, 15); err != nil {
 			return err
 		}
 	}
@@ -1642,7 +1678,9 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 	var old GameXG
 	var first sql.NullString
 	var checked string
-	err := tx.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at FROM game_xg WHERE asa_game_id=?`, value.GameID).Scan(&old.Availability, &old.HomeTeamID, &old.AwayTeamID, &old.HomeXG, &old.AwayXG, &old.HomeXPoints, &old.AwayXPoints, &old.RawJSON, &first, &checked)
+	var oldPenalty penaltyScan
+	dests := append([]any{&old.Availability, &old.HomeTeamID, &old.AwayTeamID, &old.HomeXG, &old.AwayXG, &old.HomeXPoints, &old.AwayXPoints, &old.RawJSON, &first, &checked}, oldPenalty.dests()...)
+	err := tx.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at,`+penaltyXGColumns+` FROM game_xg WHERE asa_game_id=?`, value.GameID).Scan(dests...)
 	if first.Valid {
 		parsed, e := time.Parse(time.RFC3339, first.String)
 		if e != nil {
@@ -1650,10 +1688,14 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 		}
 		old.FirstObservedAt = &parsed
 	}
+	if value.Penalties != nil && (value.Availability != XGAvailable || !validPenaltySplit(value.Penalties)) {
+		return 0, fmt.Errorf("xG %q has an invalid penalty split", value.GameID)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		firstValue := any(nil)
 		home, away, homePoints, awayPoints := any(nil), any(nil), any(nil), any(nil)
 		raw := ""
+		penalty := penaltyArgs(nil, "")
 		if value.Availability == XGAvailable {
 			firstValue = formatTime(now)
 			home = value.HomeXG.Float64
@@ -1661,8 +1703,10 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 			homePoints = nullableFloat(value.HomeXPoints)
 			awayPoints = nullableFloat(value.AwayXPoints)
 			raw = value.RawJSON
+			penalty = penaltyArgs(value.Penalties, value.PenaltyRawJSON)
 		}
-		_, e := tx.ExecContext(ctx, `INSERT INTO game_xg (asa_game_id,availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, value.GameID, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, homePoints, awayPoints, raw, firstValue, formatTime(now))
+		args := append([]any{value.GameID, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, homePoints, awayPoints, raw, firstValue, formatTime(now)}, penalty...)
+		_, e := tx.ExecContext(ctx, `INSERT INTO game_xg (asa_game_id,availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at,`+penaltyXGColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
 		if e != nil {
 			return 0, fmt.Errorf("insert xG %q: %w", value.GameID, e)
 		}
@@ -1671,10 +1715,14 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 	if err != nil {
 		return 0, fmt.Errorf("load xG %q: %w", value.GameID, err)
 	}
-	material := old.Availability != value.Availability || old.HomeTeamID != value.HomeTeamID || old.AwayTeamID != value.AwayTeamID || old.HomeXG != value.HomeXG || old.AwayXG != value.AwayXG || old.HomeXPoints != value.HomeXPoints || old.AwayXPoints != value.AwayXPoints || (value.Availability == XGAvailable && old.RawJSON != value.RawJSON)
+	if e := oldPenalty.apply(&old); e != nil {
+		return 0, fmt.Errorf("load xG %q: %w", value.GameID, e)
+	}
+	material := old.Availability != value.Availability || old.HomeTeamID != value.HomeTeamID || old.AwayTeamID != value.AwayTeamID || old.HomeXG != value.HomeXG || old.AwayXG != value.AwayXG || old.HomeXPoints != value.HomeXPoints || old.AwayXPoints != value.AwayXPoints || (value.Availability == XGAvailable && (old.RawJSON != value.RawJSON || !penaltiesCompatible(old, value)))
 	firstValue := any(nil)
 	home, away, homePoints, awayPoints := any(nil), any(nil), any(nil), any(nil)
 	raw := ""
+	penalty := penaltyArgs(nil, "")
 	if value.Availability == XGAvailable {
 		if old.FirstObservedAt != nil {
 			firstValue = formatTime(*old.FirstObservedAt)
@@ -1686,8 +1734,16 @@ func writeGameXG(ctx context.Context, tx *sql.Tx, value GameXG, now time.Time) (
 		homePoints = nullableFloat(value.HomeXPoints)
 		awayPoints = nullableFloat(value.AwayXPoints)
 		raw = value.RawJSON
+		// A nil split is "not observed": never erase a stored split.
+		if value.Penalties != nil {
+			penalty = penaltyArgs(value.Penalties, value.PenaltyRawJSON)
+		} else {
+			penalty = penaltyArgs(old.Penalties, old.PenaltyRawJSON)
+		}
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE game_xg SET availability=?,home_team_id=?,away_team_id=?,home_xg=?,away_xg=?,home_xpoints=?,away_xpoints=?,raw_json=?,first_observed_at=?,last_checked_at=? WHERE asa_game_id=?`, value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, homePoints, awayPoints, raw, firstValue, formatTime(now), value.GameID)
+	args := append([]any{value.Availability, value.HomeTeamID, value.AwayTeamID, home, away, homePoints, awayPoints, raw, firstValue, formatTime(now)}, penalty...)
+	args = append(args, value.GameID)
+	_, err = tx.ExecContext(ctx, `UPDATE game_xg SET availability=?,home_team_id=?,away_team_id=?,home_xg=?,away_xg=?,home_xpoints=?,away_xpoints=?,raw_json=?,first_observed_at=?,last_checked_at=?,home_penalty_xg=?,away_penalty_xg=?,home_penalty_goals=?,away_penalty_goals=?,home_penalty_shots=?,away_penalty_shots=?,penalty_raw_json=? WHERE asa_game_id=?`, args...)
 	if err != nil {
 		return 0, fmt.Errorf("update xG %q: %w", value.GameID, err)
 	}
@@ -1761,7 +1817,7 @@ func latestXGRun(ctx context.Context, dbq queryer, outcome, season, stage string
 }
 
 func seasonXGoals(ctx context.Context, dbq queryer, season, stage string) ([]GameXG, error) {
-	rows, err := dbq.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
+	rows, err := dbq.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at,`+penaltyXGColumnsFor("x")+` FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY g.kickoff_utc,g.asa_game_id`, season, stage)
 	if err != nil {
 		return nil, fmt.Errorf("load xG: %w", err)
 	}
@@ -1771,8 +1827,12 @@ func seasonXGoals(ctx context.Context, dbq queryer, season, stage string) ([]Gam
 		var v GameXG
 		var first sql.NullString
 		var checked string
-		if err := rows.Scan(&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked); err != nil {
+		var penalty penaltyScan
+		if err := rows.Scan(append([]any{&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked}, penalty.dests()...)...); err != nil {
 			return nil, err
+		}
+		if err := penalty.apply(&v); err != nil {
+			return nil, fmt.Errorf("load xG %q: %w", v.GameID, err)
 		}
 		if first.Valid {
 			t, e := time.Parse(time.RFC3339, first.String)

@@ -822,7 +822,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	var standingsView []tableRowView
 	var totalTable []standings.TableRow
 	var scheduleView strengthView
-	completedMatches, xgAvailable := 0, 0
+	var coverage xgCoverage
 	domainGames := standingsGames(data.Games)
 	showScheduleDifficulty := scope.scheduleDifficultyAvailable() && phaseSupportsRemainingFeatures(presentation.Phase)
 	if showScheduleDifficulty {
@@ -843,7 +843,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 			standingsView = addScheduleIndicators(standingsView, scheduleView)
 		}
 		if scope.xgAvailable() {
-			standingsView, xgAvailable, completedMatches = addXGValues(standingsView, data)
+			standingsView, coverage = addXGValues(standingsView, data)
 		}
 	}
 	var outlooks map[string]fixtureOutlookView
@@ -864,6 +864,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 	standingsCaption := seasonLabel
 	standingsXGCaption := seasonLabel + " xG, ordered by xPts"
+	standingsNPXGCaption := seasonLabel + " non-penalty xG, ordered by NPxGD"
 	standingsCaptionSuffix := ""
 	standingsMode := "per-game"
 	if presentation.Phase == seasonPhaseComplete {
@@ -871,14 +872,17 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		if presentation.FinalStandingsSafe {
 			standingsCaption = seasonLabel + " final standings"
 			standingsXGCaption = seasonLabel + " final xG standings, ordered by xPts"
+			standingsNPXGCaption = seasonLabel + " final non-penalty xG standings, ordered by NPxGD"
 		} else {
 			standingsCaption = seasonLabel + " standings"
 			standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
+			standingsNPXGCaption = seasonLabel + " non-penalty xG standings, ordered by NPxGD"
 		}
 	} else if presentation.Historical && !hasUpcoming {
 		standingsMode = "total"
 		standingsCaption = seasonLabel + " standings"
 		standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
+		standingsNPXGCaption = seasonLabel + " non-penalty xG standings, ordered by NPxGD"
 	} else if through, ok := latestCompletedMatchDate(data.Games, a.options.Location); ok {
 		standingsCaptionSuffix = "through " + through
 	}
@@ -904,6 +908,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		HasStandings:           showStandings,
 		HasFixtures:            scope.fixturesAvailable(),
 		HasXG:                  scope.xgAvailable(),
+		HasNPXG:                showStandings && scope.xgAvailable() && coverage.NPAvailable > 0,
 		HasScheduleDifficulty:  showScheduleDifficulty,
 		HasForecast:            scope.forecastAvailable(rules, rulesVerified) && phaseSupportsRemainingFeatures(presentation.Phase),
 		HasResults:             hasResults,
@@ -913,6 +918,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		FixturesHeading:        fixturesHeading,
 		StandingsCaption:       standingsCaption,
 		StandingsXGCaption:     standingsXGCaption,
+		StandingsNPXGCaption:   standingsNPXGCaption,
 		StandingsCaptionSuffix: standingsCaptionSuffix,
 		StandingsMode:          standingsMode,
 		Phase:                  presentation.Phase,
@@ -931,8 +937,11 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
 		HasFixtureOutlooks:     !retrospective && scope.forecastCapabilityAvailable() && len(outlooks) > 0,
 	}
-	if scope.xgAvailable() && completedMatches > 0 && xgAvailable < completedMatches {
-		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)
+	if scope.xgAvailable() && coverage.Completed > 0 && coverage.Available < coverage.Completed {
+		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", coverage.Completed-coverage.Available, coverage.Completed)
+	}
+	if page.HasNPXG && coverage.NPAvailable < coverage.Available {
+		page.NPXGWarning = fmt.Sprintf("Non-penalty xG is unavailable for %d of %d completed matches, so the NPxG columns are incomplete.", coverage.Completed-coverage.NPAvailable, coverage.Completed)
 	}
 	page.Navigation = seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, rulesVerified, presentation)
 	for _, game := range data.Games {

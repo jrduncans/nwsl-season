@@ -70,6 +70,7 @@ packets may run concurrently only when their allowed file lists do not overlap.
 | [P8-05b Bracket HTTP and responsive UI](phase-8/p8-05b-bracket-http-and-responsive-ui.md) | Complete | Luna | Terra | P8-05a |
 | [P8-06 Integration rehearsal and final gate](phase-8/p8-06-integration-rehearsal-and-final-gate.md) | Complete | Terra | Sol | P8-05b |
 | [P8-07 Startup catalog bootstrap drain](phase-8/p8-07-startup-bootstrap-drain.md) | Review | Terra | Sol | P8-06 |
+| [P9-01 Non-penalty xG source data and standings view](phase-9/p9-01-non-penalty-xg-standings.md) | Review | Sonnet | Opus | None |
 
 Phase 1 and P2-01 through P2-06 are complete. Game persistence now provides
 authoritative inventory replacement, non-deleting requested-ID checks, omission

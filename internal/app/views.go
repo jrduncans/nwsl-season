@@ -45,10 +45,12 @@ type seasonPage struct {
 	FreshnessFallback      string
 	ScheduleNote           string
 	XGWarning              string
+	NPXGWarning            string
 	FormatNotice           string
 	HasStandings           bool
 	HasFixtures            bool
 	HasXG                  bool
+	HasNPXG                bool
 	HasScheduleDifficulty  bool
 	HasForecast            bool
 	HasResults             bool
@@ -59,6 +61,7 @@ type seasonPage struct {
 	FixturesHeading        string
 	StandingsCaption       string
 	StandingsXGCaption     string
+	StandingsNPXGCaption   string
 	StandingsCaptionSuffix string
 	StandingsMode          string
 	Phase                  seasonPhase
@@ -420,6 +423,14 @@ type tableRowView struct {
 	XGDifferencePerGame   string
 	XPoints               string
 	XPointsPerGame        string
+	// Non-penalty xG (xG minus ASA penalty-pattern xG). The sort values are plain
+	// numbers, or empty when the team's NPxG is incomplete.
+	NPXGForAgainst        string
+	NPXGForAgainstPerGame string
+	NPXGDifference        string
+	NPXGDifferencePerGame string
+	NPXGSortTotal         string
+	NPXGSortPerGame       string
 	PlayoffLine           bool
 	TotalPosition         int
 	TotalPlayoffLine      bool
@@ -583,15 +594,26 @@ func tableViews(table []standings.TableRow, playoffPlaces int) []tableRowView {
 	return rows
 }
 
+// xgCoverage counts completed matches by the xG data they carry. NPAvailable
+// counts xG-available matches that also have a penalty-pattern split.
+type xgCoverage struct {
+	Available, NPAvailable, Completed int
+}
+
 // addXGValues adds team-model xG only for completed fixtures. A partial xG
-// refresh must never make an incomplete total look like a complete one.
-func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, int, int) {
+// refresh must never make an incomplete total look like a complete one. The
+// same pass derives non-penalty xG (xG minus penalty xG), which a team shows
+// only when every one of its xG-covered matches has a penalty split.
+func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, xgCoverage) {
 	type total struct {
 		matches        int
 		goalsFor       float64
 		goalsAgainst   float64
 		xPoints        float64
 		xPointsMatches int
+		npMatches      int
+		npFor          float64
+		npAgainst      float64
 	}
 
 	completed := make(map[string]cache.Game)
@@ -604,7 +626,7 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 	for _, team := range data.Teams {
 		totals[team.ID] = &total{}
 	}
-	available := 0
+	available, npAvailable := 0, 0
 	seen := make(map[string]bool)
 	for _, xg := range data.XGoals {
 		game, completedGame := completed[xg.GameID]
@@ -629,6 +651,18 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 			away.xPoints += xg.AwayXPoints.Float64
 			away.xPointsMatches++
 		}
+		if split := xg.Penalties; split != nil {
+			// Rounding tolerance can leave a penalty a hair above its game xG.
+			homeNP := math.Max(0, xg.HomeXG.Float64-split.HomeXG)
+			awayNP := math.Max(0, xg.AwayXG.Float64-split.AwayXG)
+			npAvailable++
+			home.npMatches++
+			home.npFor += homeNP
+			home.npAgainst += awayNP
+			away.npMatches++
+			away.npFor += awayNP
+			away.npAgainst += homeNP
+		}
 	}
 	for index := range rows {
 		value := totals[rows[index].TeamID]
@@ -636,6 +670,7 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 			rows[index].XGForAgainst, rows[index].XGForAgainstPerGame = "—", "—"
 			rows[index].XGDifference, rows[index].XGDifferencePerGame = "—", "—"
 			rows[index].XPoints, rows[index].XPointsPerGame = "—", "—"
+			setNPXGUnavailable(&rows[index])
 			continue
 		}
 		difference := value.goalsFor - value.goalsAgainst
@@ -649,8 +684,26 @@ func addXGValues(rows []tableRowView, data cache.SeasonData) ([]tableRowView, in
 		} else {
 			rows[index].XPoints, rows[index].XPointsPerGame = "—", "—"
 		}
+		if value.npMatches == value.matches {
+			npDifference := value.npFor - value.npAgainst
+			games := float64(value.matches)
+			rows[index].NPXGForAgainst = fmt.Sprintf("%.2f/%.2f", value.npFor, value.npAgainst)
+			rows[index].NPXGForAgainstPerGame = fmt.Sprintf("%.2f/%.2f", value.npFor/games, value.npAgainst/games)
+			rows[index].NPXGDifference = signedFloatText(npDifference)
+			rows[index].NPXGDifferencePerGame = signedFloatText(npDifference / games)
+			rows[index].NPXGSortTotal = fmt.Sprintf("%.4f", npDifference)
+			rows[index].NPXGSortPerGame = fmt.Sprintf("%.4f", npDifference/games)
+		} else {
+			setNPXGUnavailable(&rows[index])
+		}
 	}
-	return rows, available, len(completed)
+	return rows, xgCoverage{Available: available, NPAvailable: npAvailable, Completed: len(completed)}
+}
+
+func setNPXGUnavailable(row *tableRowView) {
+	row.NPXGForAgainst, row.NPXGForAgainstPerGame = "—", "—"
+	row.NPXGDifference, row.NPXGDifferencePerGame = "—", "—"
+	row.NPXGSortTotal, row.NPXGSortPerGame = "", ""
 }
 
 func strengthViewFrom(result strength.Result) strengthView {

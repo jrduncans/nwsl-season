@@ -20,6 +20,9 @@ from the cached fixtures when a season page or CLI report is requested.
   extra-time and shootout facts, xG, and chronological fixture fallbacks.
 - Season overview with results, upcoming fixtures, model-based match outlooks, standings, goals, and xG.
 - Per-game and total standings views for seasons with uneven schedules.
+- Standings stat toggle with Goals, xG (ordered by xPts), and NPxG (non-penalty
+  xG for/against and difference, ordered by NPxGD; the points column keeps the
+  official Pts).
 - Phase-aware presentation: upcoming seasons emphasize the schedule, active
   seasons retain the full explorer, and completed or historical seasons focus
   on standings and results without empty remaining-schedule controls.

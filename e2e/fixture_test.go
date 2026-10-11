@@ -90,7 +90,7 @@ func newFixture(t *testing.T) *fixture {
 		// Season names the games after start's year, which may differ.
 		season.Games[i].SeasonName = currentSeason
 	}
-	fake.Load(season.PlayThrough(start.AddDate(0, 0, 105), halfSeasonScore).WithXG(1))
+	fake.Load(seedPenalties(season.PlayThrough(start.AddDate(0, 0, 105), halfSeasonScore).WithXG(1)))
 
 	now := start.AddDate(0, 0, 22)
 	srv, err := server.Build(context.Background(), testConfig(t), server.Options{
@@ -120,6 +120,23 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{ASA: fake, Server: srv, BaseURL: web.URL + mountPrefix + "/", Season: season}
 	assertXGCoverage(t, f)
 	return f
+}
+
+// seedPenalties gives some completed games a converted penalty so the NPxG
+// order of the standings differs from the xG order.
+func seedPenalties(season *asatest.Scenario) *asatest.Scenario {
+	for i, game := range season.Games {
+		if game.Status != "FullTime" || game.HomeScore == nil || game.AwayScore == nil {
+			continue
+		}
+		switch {
+		case i%5 == 0 && *game.HomeScore > 0:
+			season.WithPenalty(game.GameID, asatest.PenaltyPattern{HomeXG: .76, HomeGoals: 1, HomeShots: 1})
+		case i%7 == 3 && *game.AwayScore > 0:
+			season.WithPenalty(game.GameID, asatest.PenaltyPattern{AwayXG: .76, AwayGoals: 1, AwayShots: 1})
+		}
+	}
+	return season
 }
 
 // maxFillChecks bounds fillCache. The fixture needs about ten checks.

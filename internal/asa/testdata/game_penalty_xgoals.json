@@ -1,0 +1,4 @@
+[
+  {"team_id":"Pk5LeeNqOW","game_id":"0x5gjnorM7","shots_for":1,"shots_against":0,"goals_for":1,"goals_against":0,"goal_difference":1,"xgoals_for":0.7599,"xgoals_against":0,"xgoal_difference":0.7599,"goal_difference_minus_xgoal_difference":0.2401,"points":3,"xpoints":2.47},
+  {"team_id":"4JMAk47qKg","game_id":"0x5gjnorM7","shots_for":0,"shots_against":1,"goals_for":0,"goals_against":1,"goal_difference":-1,"xgoals_for":0,"xgoals_against":0.7599,"xgoal_difference":-0.7599,"goal_difference_minus_xgoal_difference":-0.2401,"points":0,"xpoints":0.367}
+]

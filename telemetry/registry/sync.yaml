@@ -283,6 +283,14 @@ groups:
         type: int
         stability: development
         brief: Number of source responses rejected because their source version was stale.
+      - id: nwsl.sync.penalty_games_accepted
+        type: int
+        stability: development
+        brief: Number of games whose ASA penalty-pattern xG split passed validation.
+      - id: nwsl.sync.penalty_games_rejected
+        type: int
+        stability: development
+        brief: Number of games whose ASA penalty-pattern xG split was rejected by validation.
       - id: nwsl.sync.venue_history_requested_season_count
         type: int
         stability: development
@@ -731,6 +739,8 @@ groups:
       - ref: nwsl.sync.source_response_rejected
       - ref: nwsl.sync.source_response_rejected_count
       - ref: nwsl.sync.source_stale_response_count
+      - ref: nwsl.sync.penalty_games_accepted
+      - ref: nwsl.sync.penalty_games_rejected
       - ref: error.type
         requirement_level:
           conditionally_required: Present when the source operation failed.

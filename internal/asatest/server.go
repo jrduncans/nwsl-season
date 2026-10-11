@@ -22,10 +22,13 @@ import (
 )
 
 const (
-	// PathTeams, PathGames and PathXGoals are the endpoints the fake serves.
-	PathTeams  = "/nwsl/teams"
-	PathGames  = "/nwsl/games"
-	PathXGoals = "/nwsl/games/xgoals"
+	// PathTeams, PathGames, PathXGoals and PathTeamXGoals are the endpoints the
+	// fake serves. PathTeamXGoals models only the penalty-pattern, per-game
+	// variant (split_by_games=true&shot_pattern=Penalty) the app uses.
+	PathTeams      = "/nwsl/teams"
+	PathGames      = "/nwsl/games"
+	PathXGoals     = "/nwsl/games/xgoals"
+	PathTeamXGoals = "/nwsl/teams/xgoals"
 
 	// DefaultStage is the stage of every game unless SetStage says otherwise.
 	// The games wire type carries no stage, so the fake tracks it separately.
@@ -55,6 +58,7 @@ type Server struct {
 	teams    []asa.Team
 	games    []asa.Game
 	xgoals   []asa.GameXGoals
+	penalty  []asa.TeamGamePenaltyXGoals
 	stages   map[string]string
 	failures map[string][]*failure
 	down     bool
@@ -100,6 +104,16 @@ func (s *Server) SetXGoals(xgoals []asa.GameXGoals) {
 	s.xgoals = slices.Clone(xgoals)
 }
 
+// SetPenaltyXGoals replaces the explicit penalty-pattern team rows. A served
+// xG game without explicit rows gets an all-zero row for each team, as the
+// real API returns when no penalty was taken. Explicit rows are served as given,
+// so tests can make them inconsistent.
+func (s *Server) SetPenaltyXGoals(rows []asa.TeamGamePenaltyXGoals) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.penalty = slices.Clone(rows)
+}
+
 // SetStage sets the stage name the stage_name filter matches for a game.
 func (s *Server) SetStage(gameID, stage string) {
 	s.mu.Lock()
@@ -125,6 +139,7 @@ func (s *Server) Load(scenario *Scenario) {
 	s.teams = slices.Clone(scenario.Teams)
 	s.games = slices.Clone(scenario.Games)
 	s.xgoals = slices.Clone(scenario.XGoals)
+	s.penalty = slices.Clone(scenario.PenaltyXGoals)
 	s.stages = map[string]string{}
 	for id, stage := range scenario.Stages {
 		s.stages[id] = stage
@@ -202,7 +217,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "asatest: injected failure", injected)
 		return
 	}
-	if path != PathTeams && path != PathGames && path != PathXGoals {
+	if path != PathTeams && path != PathGames && path != PathXGoals && path != PathTeamXGoals {
 		http.NotFound(w, r)
 		return
 	}
@@ -222,6 +237,17 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		body, err = s.filterGames(query)
 	case PathXGoals:
 		body, err = s.filterXGoals(query)
+	case PathTeamXGoals:
+		if query.Has("game_id") {
+			// The real endpoint has no game_id parameter and answers HTTP 500.
+			http.Error(w, "asatest: /nwsl/teams/xgoals does not support game_id", http.StatusInternalServerError)
+			return
+		}
+		if query.Get("split_by_games") != "true" || query.Get("shot_pattern") != "Penalty" {
+			http.Error(w, "asatest: only split_by_games=true&shot_pattern=Penalty is modeled", http.StatusBadRequest)
+			return
+		}
+		body, err = s.filterPenaltyXGoals(query)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -380,7 +406,45 @@ func (s *Server) filterXGoals(query url.Values) ([]asa.GameXGoals, error) {
 				continue
 			}
 		}
+		if game, ok := games[xg.GameID]; ok && xg.DateTimeUTC == "" {
+			xg.DateTimeUTC = game.DateTimeUTC
+		}
 		out = append(out, xg)
+	}
+	return out, nil
+}
+
+// filterPenaltyXGoals serves per-team, per-game penalty rows for every served
+// xG game that passes the season, stage and UTC-date filters.
+func (s *Server) filterPenaltyXGoals(query url.Values) ([]asa.TeamGamePenaltyXGoals, error) {
+	f, err := parseGameFilter(query, false)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	games := make(map[string]asa.Game, len(s.games))
+	for _, game := range s.games {
+		games[game.GameID] = game
+	}
+	explicit := map[string][]asa.TeamGamePenaltyXGoals{}
+	for _, row := range s.penalty {
+		explicit[row.GameID] = append(explicit[row.GameID], row)
+	}
+	out := []asa.TeamGamePenaltyXGoals{}
+	for _, xg := range s.xgoals {
+		game, ok := games[xg.GameID]
+		if !ok || !f.match(game, s.stageLocked(game.GameID)) {
+			continue
+		}
+		if rows, ok := explicit[xg.GameID]; ok {
+			out = append(out, rows...)
+			continue
+		}
+		out = append(out,
+			asa.TeamGamePenaltyXGoals{TeamID: xg.HomeTeamID, GameID: xg.GameID},
+			asa.TeamGamePenaltyXGoals{TeamID: xg.AwayTeamID, GameID: xg.GameID},
+		)
 	}
 	return out, nil
 }

@@ -460,7 +460,7 @@ func TestGameXGReadsValidateAndAreScoped(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 14 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 15 {
 		t.Fatalf("schema=%d,%v", version, err)
 	}
 	if _, ok, err := db.GameXGState(ctx, "missing"); err != nil || ok {
@@ -814,7 +814,7 @@ func TestStageXGHasNoSchemaArtifacts(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || schemaVersion != 14 || version != 14 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || schemaVersion != 15 || version != 15 {
 		t.Fatalf("schema version=%d const=%d err=%v", version, schemaVersion, err)
 	}
 	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(game_xg)`)
@@ -835,7 +835,7 @@ func TestStageXGHasNoSchemaArtifacts(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"asa_game_id", "availability", "home_team_id", "away_team_id", "home_xg", "away_xg", "raw_json", "first_observed_at", "last_checked_at", "home_xpoints", "away_xpoints"}; !reflect.DeepEqual(columns, want) {
+	if want := []string{"asa_game_id", "availability", "home_team_id", "away_team_id", "home_xg", "away_xg", "raw_json", "first_observed_at", "last_checked_at", "home_xpoints", "away_xpoints", "home_penalty_xg", "away_penalty_xg", "home_penalty_goals", "away_penalty_goals", "home_penalty_shots", "away_penalty_shots", "penalty_raw_json"}; !reflect.DeepEqual(columns, want) {
 		t.Fatalf("game_xg columns=%v want=%v", columns, want)
 	}
 	var artifacts int
