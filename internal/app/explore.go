@@ -25,6 +25,23 @@ type explorePage struct {
 	GeometryPath string
 }
 
+// PointsNoteShown reports whether the current view shows official points or
+// ASA xPts beside the non-penalty basis, so it must carry the points note.
+func (p explorePage) PointsNoteShown(panel string) bool {
+	if !p.NonPenalty {
+		return false
+	}
+	switch panel {
+	case "teams":
+		return p.View == "teams" && (p.TeamDisplay == "table" || (p.TeamDisplay != "quadrant" && p.TeamMeasure == "points"))
+	case "team-history":
+		return p.View == "team-history"
+	case "season-trend":
+		return p.View == "season-trend" && (p.TrendView == "points" || (p.TrendView == "relative" && (p.TrendAverageSeries == "points" || p.TrendAverageSeries == "xpoints")))
+	}
+	return false
+}
+
 // exploreViewLabels holds each Explore tab's visible name, keyed by view, or by
 // "teams-" and display for Compare teams. Tabs and page titles share them.
 var exploreViewLabels = map[string]string{
@@ -67,7 +84,7 @@ type exploreRecord struct {
 	Goals, XG, Gap *float64
 }
 
-func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) {
+func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason, basis history.ScoringBasis) {
 	view := r.URL.Query().Get("view")
 	if view == "" {
 		view = "teams"
@@ -85,7 +102,12 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
-	page := explorePage{historyPage: historyPageForMetric(r.URL.Path, summaries, "", historyMetricCompare), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
+	page := explorePage{historyPage: historyPageForBasis(r.URL.Path, summaries, "", historyMetricCompare, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
+	// The Explore workspace keeps its own selection in the query, so the basis
+	// links change only the penalties parameter.
+	for index, choice := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {
+		page.PenaltyLinks[index].Path = "?" + withPenalties(r.URL.Query(), choice).Encode()
+	}
 	page.exploreDistributionView, err = exploreDistribution(r.URL.Query(), page.Distributions)
 	if err != nil {
 		a.renderHistoryBadRequest(w, r, err)

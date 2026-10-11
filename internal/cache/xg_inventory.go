@@ -55,9 +55,14 @@ func loadGameXG(ctx context.Context, q queryer, id string) (GameXG, error) {
 	var v GameXG
 	var first sql.NullString
 	var checked string
-	err := q.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at FROM game_xg WHERE asa_game_id=?`, id).Scan(&v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked)
+	var penalty penaltyScan
+	dests := append([]any{&v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked}, penalty.dests()...)
+	err := q.QueryRowContext(ctx, `SELECT availability,home_team_id,away_team_id,home_xg,away_xg,home_xpoints,away_xpoints,raw_json,first_observed_at,last_checked_at,`+penaltyXGColumns+` FROM game_xg WHERE asa_game_id=?`, id).Scan(dests...)
 	if err != nil {
 		return GameXG{}, err
+	}
+	if err := penalty.apply(&v); err != nil {
+		return GameXG{}, fmt.Errorf("invalid stored xG %q: %w", id, err)
 	}
 	v.GameID = id
 	if first.Valid {
@@ -237,7 +242,7 @@ func xGFreshness(id, kickoffUTC string, old GameXG, oldFound bool, incoming Game
 	return freshness
 }
 func validateStageXG(v GameXG) error {
-	if invalidTrimmed(v.GameID) || invalidTrimmed(v.HomeTeamID) || invalidTrimmed(v.AwayTeamID) || v.HomeTeamID == v.AwayTeamID || v.Availability != XGAvailable || !v.HomeXG.Valid || !v.AwayXG.Valid || !finiteNonnegative(v.HomeXG.Float64) || !finiteNonnegative(v.AwayXG.Float64) || v.HomeXPoints.Valid != v.AwayXPoints.Valid || (v.HomeXPoints.Valid && (!validGameExpectedPoints(v.HomeXPoints.Float64) || !validGameExpectedPoints(v.AwayXPoints.Float64))) || v.FirstObservedAt != nil || !v.LastCheckedAt.IsZero() {
+	if invalidTrimmed(v.GameID) || invalidTrimmed(v.HomeTeamID) || invalidTrimmed(v.AwayTeamID) || v.HomeTeamID == v.AwayTeamID || v.Availability != XGAvailable || !v.HomeXG.Valid || !v.AwayXG.Valid || !finiteNonnegative(v.HomeXG.Float64) || !finiteNonnegative(v.AwayXG.Float64) || v.HomeXPoints.Valid != v.AwayXPoints.Valid || (v.HomeXPoints.Valid && (!validGameExpectedPoints(v.HomeXPoints.Float64) || !validGameExpectedPoints(v.AwayXPoints.Float64))) || v.FirstObservedAt != nil || !v.LastCheckedAt.IsZero() || !validPenaltySplit(v.Penalties) || (v.Penalties == nil && v.PenaltyRawJSON != "") {
 		return errors.New("invalid stage xG value")
 	}
 	return nil
@@ -287,7 +292,7 @@ func writeAvailableStageXG(ctx context.Context, tx *sql.Tx, v GameXG, at time.Ti
 }
 
 func sameAvailableXG(old, incoming GameXG) bool {
-	return old.Availability == incoming.Availability && old.HomeTeamID == incoming.HomeTeamID && old.AwayTeamID == incoming.AwayTeamID && old.HomeXG == incoming.HomeXG && old.AwayXG == incoming.AwayXG && old.HomeXPoints == incoming.HomeXPoints && old.AwayXPoints == incoming.AwayXPoints && old.RawJSON == incoming.RawJSON
+	return old.Availability == incoming.Availability && old.HomeTeamID == incoming.HomeTeamID && old.AwayTeamID == incoming.AwayTeamID && old.HomeXG == incoming.HomeXG && old.AwayXG == incoming.AwayXG && old.HomeXPoints == incoming.HomeXPoints && old.AwayXPoints == incoming.AwayXPoints && old.RawJSON == incoming.RawJSON && penaltiesCompatible(old, incoming)
 }
 
 func availableXGMaterialChange(old, incoming GameXG) bool {
@@ -295,7 +300,7 @@ func availableXGMaterialChange(old, incoming GameXG) bool {
 }
 
 func stageXGStates(ctx context.Context, q queryer, season, stage string) ([]GameXG, error) {
-	rows, err := q.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY x.asa_game_id`, season, stage)
+	rows, err := q.QueryContext(ctx, `SELECT x.asa_game_id,x.availability,x.home_team_id,x.away_team_id,x.home_xg,x.away_xg,x.home_xpoints,x.away_xpoints,x.raw_json,x.first_observed_at,x.last_checked_at,`+penaltyXGColumnsFor("x")+` FROM game_xg x JOIN games g ON g.asa_game_id=x.asa_game_id WHERE g.season=? AND g.stage=? ORDER BY x.asa_game_id`, season, stage)
 	if err != nil {
 		return nil, err
 	}
@@ -305,8 +310,12 @@ func stageXGStates(ctx context.Context, q queryer, season, stage string) ([]Game
 		var v GameXG
 		var first sql.NullString
 		var checked string
-		if err := rows.Scan(&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked); err != nil {
+		var penalty penaltyScan
+		if err := rows.Scan(append([]any{&v.GameID, &v.Availability, &v.HomeTeamID, &v.AwayTeamID, &v.HomeXG, &v.AwayXG, &v.HomeXPoints, &v.AwayXPoints, &v.RawJSON, &first, &checked}, penalty.dests()...)...); err != nil {
 			return nil, err
+		}
+		if err := penalty.apply(&v); err != nil {
+			return nil, fmt.Errorf("invalid stored xG %q: %w", v.GameID, err)
 		}
 		if first.Valid {
 			t, e := time.Parse(time.RFC3339, first.String)
@@ -347,6 +356,12 @@ func validateStoredXG(v GameXG) error {
 	}
 	if v.Availability == XGAvailable && (!v.HomeXG.Valid || !v.AwayXG.Valid || !finiteNonnegative(v.HomeXG.Float64) || !finiteNonnegative(v.AwayXG.Float64) || v.FirstObservedAt == nil) {
 		return errors.New("available values")
+	}
+	if !validPenaltySplit(v.Penalties) || (v.Penalties == nil && v.PenaltyRawJSON != "") {
+		return errors.New("penalty values")
+	}
+	if v.Availability == XGUnavailable && (v.Penalties != nil || v.PenaltyRawJSON != "") {
+		return errors.New("unavailable penalty values")
 	}
 	if v.Availability == XGUnavailable && (v.HomeXG.Valid || v.AwayXG.Valid || v.HomeXPoints.Valid || v.AwayXPoints.Valid || v.FirstObservedAt != nil || v.RawJSON != "") {
 		return errors.New("unavailable values")

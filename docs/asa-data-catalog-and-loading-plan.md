@@ -120,6 +120,30 @@ The response also contains the final score, player-model xG, and difference
 fields. Those are not normalized or used. Team-model xG is deliberately the
 current forecasting input.
 
+#### Penalty-pattern team xG
+
+Source: `/nwsl/teams/xgoals?split_by_games=true&shot_pattern=Penalty`
+
+This endpoint returns one row per team per game. Without `shot_pattern`, its
+`xgoals_for` and `xgoals_against` equal the game-level `home_team_xgoals` and
+`away_team_xgoals` (the same team model). With `shot_pattern=Penalty` every count
+is restricted to penalty shots, and the response contains a row for every
+team-game, with zeros when no penalty was taken; `xpoints` and `points` are not
+filtered. The endpoint has no `game_id` parameter (it answers HTTP 500), but
+`start_date`/`end_date` with `stage_name` and without `season_name` return the
+same rows as the season query. Penalty data exists for 2016 through 2025, and
+penalty xG is roughly 6-9% of season xG. `/nwsl/games/shots` `shot_xg` sums to
+the player model, not the team model, and is not used.
+
+| ASA field | Stored form | Current consumers |
+| --- | --- | --- |
+| `xgoals_for` of the home / away team row | `game_xg.home_penalty_xg`, `away_penalty_xg` | Standings npxG (xG minus penalty xG) |
+| `goals_for` of the home / away team row | `home_penalty_goals`, `away_penalty_goals` | Stored only |
+| `shots_for` of the home / away team row | `home_penalty_shots`, `away_penalty_shots` | Stored only |
+| The two accepted source objects, home first | `game_xg.penalty_raw_json` | Diagnostics and source provenance |
+
+The columns are nullable and all-or-none; null means no split has been observed.
+
 The cache represents a completed game omitted from a successful full xG
 response as explicitly unavailable. It records `first_observed_at` and
 `last_checked_at`, but it has no per-game retry schedule. A previously available

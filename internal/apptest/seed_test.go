@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -81,6 +82,21 @@ func TestSeedStoresEveryScenario(t *testing.T) {
 				}
 				if gotXG != wantXG {
 					t.Errorf("%s available xG = %d, want %d", year, gotXG, wantXG)
+				}
+
+				wantSplits, gotSplits := map[string]cache.PenaltySplit{}, map[string]cache.PenaltySplit{}
+				for _, observation := range season.Data.XGoals {
+					if observation.Penalties != nil && observation.HomeXG.Valid && observation.AwayXG.Valid {
+						wantSplits[observation.GameID] = *observation.Penalties
+					}
+				}
+				for _, observation := range got.XGoals {
+					if observation.Penalties != nil {
+						gotSplits[observation.GameID] = *observation.Penalties
+					}
+				}
+				if !reflect.DeepEqual(gotSplits, wantSplits) {
+					t.Errorf("%s penalty splits = %v, want %v", year, gotSplits, wantSplits)
 				}
 			}
 

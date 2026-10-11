@@ -154,6 +154,13 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 				HomeXPoints: sql.NullFloat64{Float64: 1.3 + float64(j%5)*.12, Valid: true},
 				AwayXPoints: sql.NullFloat64{Float64: 1.3 - float64(j%5)*.08, Valid: true},
 			}
+			// Every observed game carries ASA's penalty-pattern split; some
+			// games include a converted penalty so non-penalty xG differs. A
+			// converted penalty is one of the home side's goals.
+			observation.Penalties, observation.PenaltyRawJSON = &cache.PenaltySplit{}, "[]"
+			if j%9 == 0 && game.HomeScore.Int64 > 0 {
+				observation.Penalties = &cache.PenaltySplit{HomeXG: .3, HomeGoals: 1, HomeShots: 1}
+			}
 			if scenario == ScenarioNoXG && j > 0 {
 				// Only the first game has xG, so every team misses some and
 				// none has complete xG while the season still has xG data.

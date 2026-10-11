@@ -5,6 +5,61 @@ The History views are calculated only from the coherent SQLite snapshot read by
 records the delivered definitions for the first league-trends calculation and
 applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
 
+## Penalties basis
+
+Explore (every view) and the league history page accept `penalties=include`
+(the default, and the same as omitting the parameter) or `penalties=exclude`.
+Any other value, or a repeated one, is rejected like an invalid `measure`: a
+400 "Invalid history selection" page. The choice is a server-rendered
+**Penalties** select (Included / Excluded), which works without JavaScript
+(a noscript link applies the other choice). It is a data control, last in each
+view's control row beside Season, Team, Compare or Values, and on the history
+page it sits in the season selector; it is never in the navigation. Data
+controls always render on their own row(s) below the view heading
+(`.explore-heading` stacks the h2 above its controls), so a row never moves
+between bases or displays. Text inside a data-control `<option>` and the label
+before a select never change with the basis (the Penalties select states it);
+titles, legends, axes, captions, table headers and accessible names do. Its help text is the select's title, and "Penalty kicks excluded."
+joins a view's data note when the basis is excluded. Every Explore and history
+link and form that keeps selection state also keeps `penalties`, and
+default-basis URLs never name it. Changing the select navigates to a hidden
+destination link, like the season selector, because the server computes each
+figure on the chosen basis;
+the script keeps the control's links in step with in-place view changes.
+
+`history.ScoringBasis` (`AllShots`, the zero value, or `NonPenalty`) selects the
+arithmetic, so every consumer inherits it. `history.SummarizeScoringBasis`
+counts, per completed game and per side:
+
+- non-penalty goals = goals − penalty goals;
+- non-penalty xG = max(0, xG − penalty xG).
+
+A game contributes goal and xG measures only when its xG is available and
+`cache.GameXG.Penalties` (ASA's penalty split) is present and consistent
+(penalty goals cannot exceed the side's goals). Without a split, non-penalty
+goals are unknown, so goals lose coverage with xG. `SeasonScoring.GoalsCovered`
+and `TeamScoring.GoalsCovered` count the covered games; `XGCovered` counts the
+same games on this basis. Rates, goal totals and goal bins use only covered
+games. A season with any played game outside that coverage is not plotted and
+not offered for team comparison: it carries the `incomplete_non_penalty_data`
+exclusion, shown as "incomplete non-penalty data". Team match records keep the
+official score (`ScoreFor`/`ScoreAgainst`) beside the basis goals.
+
+Official points, ASA xPts, standings-derived benchmark groups, the Forecast Lab
+and the forecast benchmarks do not change with the basis; ASA publishes no
+non-penalty expected points and the app never derives one. Wherever a points or
+xPts measure is shown on the non-penalty basis (Compare teams with the Points
+measure or the Table, Season by season, and Match by match's points views) a
+note reads "Points include penalties; ASA publishes no non-penalty expected
+points." In this mode labels follow the basis: `xG` becomes `npxG`, `Goals`
+becomes `Non-penalty goals`, `xGD` becomes `npxGD`, and Goal distribution bins
+count non-penalty goals per match. `basisText` (Go) and `T` (`explore.js`) apply
+the same one-pass label rules.
+
+Fixture results add an `npxG home–away` line below the xG line when the match's
+penalty split shows penalty xG above zero for either side (title "Non-penalty
+expected goals"); other matches are unchanged.
+
 ## Explore workspace
 
 `GET /explore` reuses the same coherent archive read and scoring calculations.
@@ -769,7 +824,8 @@ season is excluded.
 
 The stable exclusion codes, in display-independent order, are
 `source_unavailable`, `lifecycle_unknown`, `upcoming`, `inventory_incomplete`,
-`historical_results_incomplete`, `invalid_completed_results`, and
+`historical_results_incomplete`, `invalid_completed_results`,
+`incomplete_non_penalty_data` (non-penalty basis only), and
 `below_minimum_matches`. Partial xG is deliberately not a scoring-chart
 exclusion: goals data can still qualify, while a later xG view requires both a
 plot-eligible season and complete xG coverage.

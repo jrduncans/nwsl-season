@@ -78,6 +78,8 @@ type OperationResult struct {
 	// incomplete active bracket; it never causes another request in this
 	// operation.
 	FullGamesDiscoveryAccelerated bool
+
+	penalties penaltyOutcome
 }
 
 // GameFreshnessSummary counts normalized fixture changes separately from
@@ -231,6 +233,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		if err != nil {
 			return result, err
 		}
+		penalties := s.attachPenaltySplits(ctx, operation, values, mapped)
 		operation.FinishedAt = s.now()
 		var xgResult cache.XGRefreshResult
 		if operation.Mode == OperationFull {
@@ -242,6 +245,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 			return result, err
 		}
 		result.XG = &xgResult
+		result.penalties = penalties
 		result.XGInputsChanged = xgResult.Audit.DownstreamInputsChanged
 		recordXGFreshnessEvents(trace.SpanFromContext(ctx), operation, xgResult.Freshness)
 		return result, nil
@@ -303,6 +307,9 @@ func operationResultAttributes(result OperationResult, err error) []attribute.Ke
 			}
 		}
 		attributes = append(attributes, nwslconv.SyncSourceValueChanged(changed > 0), nwslconv.SyncSourceValueChangedCount(changed), nwslconv.SyncSourceValueInitializedCount(initialized), nwslconv.SyncSourceMetadataChangedCount(metadata), nwslconv.SyncSourceValueMissingCount(missing), nwslconv.SyncSourceResponseRejected(rejected > 0), nwslconv.SyncSourceResponseRejectedCount(rejected), nwslconv.SyncSourceStaleResponseCount(staleRejected))
+		if result.penalties.Requested {
+			attributes = append(attributes, nwslconv.SyncPenaltyGamesAccepted(result.penalties.Accepted), nwslconv.SyncPenaltyGamesRejected(result.penalties.Rejected))
+		}
 	}
 	return attributes
 }

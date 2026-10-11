@@ -19,8 +19,8 @@ func TestMigrationTenPreservesSourceScopeTableAndConstraints(t *testing.T) {
 	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if schemaVersion != 14 || version != schemaVersion {
-		t.Fatalf("schema version = %d, want 14", version)
+	if schemaVersion != 15 || version != schemaVersion {
+		t.Fatalf("schema version = %d, want 15", version)
 	}
 	_, err := db.db.ExecContext(ctx, `INSERT INTO source_scopes (
 		season, stage, registration, lifecycle, discovery, registered_at, updated_at

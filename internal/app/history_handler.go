@@ -30,6 +30,11 @@ func (a *application) history(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *application) historyScoring(w http.ResponseWriter, r *http.Request) {
+	basis, err := penaltiesBasisRaw(r.URL.RawQuery)
+	if err != nil {
+		a.renderHistoryBadRequest(w, r, err)
+		return
+	}
 	store, ok := a.store.(historicalStore)
 	if !ok {
 		a.renderHistoryError(w, r, http.StatusServiceUnavailable, "History unavailable", "The local archive cannot provide historical scoring data.")
@@ -41,14 +46,14 @@ func (a *application) historyScoring(w http.ResponseWriter, r *http.Request) {
 		a.renderHistoryError(w, r, http.StatusInternalServerError, "History unavailable", "Historical scoring data could not be loaded.")
 		return
 	}
-	summaries, err := history.SummarizeScoring(inputs)
+	summaries, err := history.SummarizeScoringBasis(inputs, basis)
 	if err != nil {
 		a.renderHistoryError(w, r, http.StatusInternalServerError, "History unavailable", "Historical scoring data could not be summarized.")
 		return
 	}
 
 	if r.URL.Path == "/explore" {
-		a.renderExplore(w, r, summaries, inputs)
+		a.renderExplore(w, r, summaries, inputs, basis)
 		return
 	}
 
@@ -57,7 +62,7 @@ func (a *application) historyScoring(w http.ResponseWriter, r *http.Request) {
 		a.renderHistoryBadRequest(w, r, err)
 		return
 	}
-	a.render(w, "history", historyPageForMetric(r.URL.Path, summaries, selected, metric))
+	a.render(w, "history", historyPageForBasis(r.URL.Path, summaries, selected, metric, basis))
 }
 
 func historySelection(requestURL *url.URL, summaries []history.SeasonScoring) (string, error) {
@@ -191,18 +196,19 @@ func (a *application) renderHistoryError(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-func historyURL(fromPath, season string, metric historyMetric) string {
+// historyURL links to the league history page for a season and metric on a
+// scoring basis. The default basis adds no parameter, so existing links are
+// unchanged.
+func historyURL(fromPath, season string, metric historyMetric, basis history.ScoringBasis) string {
 	target := &url.URL{Path: "/history/scoring"}
+	query := url.Values{}
 	if season != "" {
-		query := url.Values{}
 		query.Set("season", season)
-		if metric != historyMetricGoals {
-			query.Set("metric", string(metric))
-		}
-		target.RawQuery = query.Encode()
-	} else if metric != historyMetricGoals {
-		target.RawQuery = url.Values{"metric": []string{string(metric)}}.Encode()
 	}
+	if metric != historyMetricGoals {
+		query.Set("metric", string(metric))
+	}
+	target.RawQuery = withPenalties(query, basis).Encode()
 	result := relativeURL(fromPath, target.Path)
 	if target.RawQuery != "" {
 		result += "?" + target.RawQuery
@@ -226,6 +232,8 @@ func exclusionText(exclusions []string) string {
 			labels = append(labels, "historical results incomplete")
 		case "invalid_completed_results":
 			labels = append(labels, "invalid completed results")
+		case "incomplete_non_penalty_data":
+			labels = append(labels, "incomplete non-penalty data")
 		case "below_minimum_matches":
 			labels = append(labels, fmt.Sprintf("fewer than %d completed, valid matches", history.MinimumSeasonMatches))
 		}

@@ -18,6 +18,21 @@ import (
 // plotted in the league scoring comparison.
 const MinimumSeasonMatches = 20
 
+// ScoringBasis selects which goals and expected goals the summaries count.
+// The zero value counts every shot.
+type ScoringBasis int
+
+const (
+	// AllShots counts official goals and total xG, including penalty kicks.
+	AllShots ScoringBasis = iota
+	// NonPenalty removes ASA's penalty goals and penalty xG from each side.
+	// Points, xPoints and all official results are unaffected.
+	NonPenalty
+)
+
+// ExcludesPenalties reports whether the basis removes penalty kicks.
+func (b ScoringBasis) ExcludesPenalties() bool { return b == NonPenalty }
+
 // SeasonScoring is one season's cache-derived scoring and coverage summary.
 // Rates can be available for supporting data even when PlotEligible is false.
 type SeasonScoring struct {
@@ -28,16 +43,32 @@ type SeasonScoring struct {
 	InventoryGames, Played, Pending, Abandoned, InvalidCompleted int
 	TotalGoals                                                   int64
 	GoalBins                                                     [5]int
-	XGCovered, XPointsCovered                                    int
-	GoalsPerMatch, XGPerMatch, GoalsMinusXGPerMatch              *float64
-	PlotEligible                                                 bool
-	Exclusions                                                   []string
-	Teams                                                        []TeamScoring
+	// Basis is the scoring basis of every goal and xG field. GoalsCovered is
+	// the number of played matches that contribute to TotalGoals, GoalBins and
+	// GoalsPerMatch: every played match for AllShots, and only matches with a
+	// penalty split for NonPenalty. Under NonPenalty, XGCovered counts the same
+	// split-covered matches.
+	Basis                                           ScoringBasis
+	GoalsCovered                                    int
+	XGCovered, XPointsCovered                       int
+	GoalsPerMatch, XGPerMatch, GoalsMinusXGPerMatch *float64
+	PlotEligible                                    bool
+	Exclusions                                      []string
+	Teams                                           []TeamScoring
 }
 
 // SummarizeScoring calculates deterministic league-level scoring summaries
-// from one historical cache snapshot. It never changes the supplied snapshot.
+// from one historical cache snapshot, counting every shot. It never changes
+// the supplied snapshot.
 func SummarizeScoring(inputs []cache.HistoricalSeason) ([]SeasonScoring, error) {
+	return SummarizeScoringBasis(inputs, AllShots)
+}
+
+// SummarizeScoringBasis is SummarizeScoring on the chosen basis. Under
+// NonPenalty a match contributes goals and xG only when its xG is available and
+// ASA supplied a penalty split; any other played match leaves the season
+// incomplete, with the "incomplete_non_penalty_data" exclusion.
+func SummarizeScoringBasis(inputs []cache.HistoricalSeason, basis ScoringBasis) ([]SeasonScoring, error) {
 	seasons := append([]cache.HistoricalSeason(nil), inputs...)
 	seenSeasons := make(map[string]struct{}, len(seasons))
 	for _, input := range seasons {
@@ -58,7 +89,7 @@ func SummarizeScoring(inputs []cache.HistoricalSeason) ([]SeasonScoring, error) 
 
 	summaries := make([]SeasonScoring, 0, len(seasons))
 	for _, input := range seasons {
-		summary, err := summarizeSeason(input)
+		summary, err := summarizeSeason(input, basis)
 		if err != nil {
 			return nil, err
 		}
@@ -109,8 +140,9 @@ func validateInput(input cache.HistoricalSeason) error {
 	return nil
 }
 
-func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
+func summarizeSeason(input cache.HistoricalSeason, basis ScoringBasis) (SeasonScoring, error) {
 	summary := SeasonScoring{
+		Basis:     basis,
 		Season:    input.Entry.Season,
 		Readiness: cache.SourceReadinessUnknown,
 		Inventory: cache.InventoryCompletenessUnknown,
@@ -144,42 +176,62 @@ func summarizeSeason(input cache.HistoricalSeason) (SeasonScoring, error) {
 			continue
 		}
 
-		combined, err := combinedGoals(game)
-		if err != nil {
+		if _, err := combinedGoals(game); err != nil {
 			return SeasonScoring{}, fmt.Errorf("historical season %s fixture %q: %w", input.Entry.Season, game.ASAID, err)
 		}
-		if summary.TotalGoals > math.MaxInt64-combined {
-			return SeasonScoring{}, fmt.Errorf("historical season %s total goals overflow", input.Entry.Season)
-		}
-		summary.TotalGoals += combined
 		summary.Played++
-		summary.GoalBins[goalBin(combined)]++
-		teams.addResult(game)
 
-		if !input.Entry.Supports(competition.CapabilityXG) {
-			continue
+		var observation cache.GameXG
+		xgFound := false
+		if input.Entry.Supports(competition.CapabilityXG) {
+			observation, xgFound = xgByGame[game.ASAID]
+			xgFound = xgFound && observation.Availability == cache.XGAvailable && observation.HomeTeamID == game.HomeTeamID && observation.AwayTeamID == game.AwayTeamID
 		}
-		observation, found := xgByGame[game.ASAID]
-		if !found || observation.Availability != cache.XGAvailable || observation.HomeTeamID != game.HomeTeamID || observation.AwayTeamID != game.AwayTeamID {
-			continue
+		xgValid := xgFound && validXGPair(observation)
+
+		homeGoals, awayGoals := game.HomeScore.Int64, game.AwayScore.Int64
+		homeXG, awayXG := observation.HomeXG.Float64, observation.AwayXG.Float64
+		covered := true
+		xgCovered := xgValid
+		if basis == NonPenalty {
+			split := observation.Penalties
+			covered = xgValid && split != nil && validNonPenaltySplit(game, split)
+			xgCovered = covered
+			if covered {
+				homeGoals -= int64(split.HomeGoals)
+				awayGoals -= int64(split.AwayGoals)
+				homeXG = math.Max(0, homeXG-split.HomeXG)
+				awayXG = math.Max(0, awayXG-split.AwayXG)
+			}
 		}
-		if validXGPair(observation) {
+		teams.addResult(game, homeGoals, awayGoals, covered)
+		if covered {
+			combined := homeGoals + awayGoals
+			if summary.TotalGoals > math.MaxInt64-combined {
+				return SeasonScoring{}, fmt.Errorf("historical season %s total goals overflow", input.Entry.Season)
+			}
+			summary.TotalGoals += combined
+			summary.GoalsCovered++
+			summary.GoalBins[goalBin(combined)]++
+		}
+
+		if xgCovered {
 			summary.XGCovered++
-			pairTotal := observation.HomeXG.Float64 + observation.AwayXG.Float64
+			pairTotal := homeXG + awayXG
 			if !isFinite(pairTotal) || !isFinite(totalXG+pairTotal) {
 				return SeasonScoring{}, fmt.Errorf("historical season %s xG total is not finite", input.Entry.Season)
 			}
 			totalXG += pairTotal
-			teams.addXG(game, observation)
+			teams.addXG(game, homeXG, awayXG)
 		}
-		if validXPointsPair(observation) {
+		if xgFound && validXPointsPair(observation) {
 			summary.XPointsCovered++
 			teams.addXPoints(game, observation)
 		}
 	}
 
-	if summary.Played > 0 {
-		goalsPerMatch := float64(summary.TotalGoals) / float64(summary.Played)
+	if summary.Played > 0 && summary.GoalsCovered > 0 {
+		goalsPerMatch := float64(summary.TotalGoals) / float64(summary.GoalsCovered)
 		summary.GoalsPerMatch = &goalsPerMatch
 		if summary.XGCovered == summary.Played {
 			xgPerMatch := totalXG / float64(summary.Played)
@@ -215,6 +267,14 @@ func goalBin(goals int64) int {
 	}
 }
 
+// validNonPenaltySplit rejects a split that removes more goals than a side
+// scored, which would make non-penalty goals negative.
+func validNonPenaltySplit(game cache.Game, split *cache.PenaltySplit) bool {
+	return split.HomeGoals >= 0 && split.AwayGoals >= 0 &&
+		int64(split.HomeGoals) <= game.HomeScore.Int64 && int64(split.AwayGoals) <= game.AwayScore.Int64 &&
+		finiteNonnegative(split.HomeXG) && finiteNonnegative(split.AwayXG)
+}
+
 func validXGPair(observation cache.GameXG) bool {
 	return observation.HomeXG.Valid && observation.AwayXG.Valid &&
 		finiteNonnegative(observation.HomeXG.Float64) && finiteNonnegative(observation.AwayXG.Float64)
@@ -238,7 +298,7 @@ func isFinite(value float64) bool {
 }
 
 func scoringExclusions(summary SeasonScoring) []string {
-	exclusions := make([]string, 0, 7)
+	exclusions := make([]string, 0, 8)
 	if summary.Readiness != cache.SourceReadinessAvailable {
 		exclusions = append(exclusions, "source_unavailable")
 	}
@@ -256,6 +316,9 @@ func scoringExclusions(summary SeasonScoring) []string {
 	}
 	if summary.InvalidCompleted > 0 {
 		exclusions = append(exclusions, "invalid_completed_results")
+	}
+	if summary.Basis == NonPenalty && summary.GoalsCovered < summary.Played {
+		exclusions = append(exclusions, "incomplete_non_penalty_data")
 	}
 	if summary.Played < MinimumSeasonMatches {
 		exclusions = append(exclusions, "below_minimum_matches")

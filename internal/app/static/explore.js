@@ -1,6 +1,16 @@
 (() => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
+  // Switching the penalties basis is a full server render: follow the hidden
+  // link that carries the current page state with the chosen basis. The capture
+  // phase keeps the view forms' in-page change handlers from also reacting.
+  document.addEventListener('change', event => {
+    const select = event.target.closest?.('[data-penalties-selector]');
+    if (!select) return;
+    event.stopPropagation();
+    const links = [...(select.closest('label')?.parentElement?.querySelectorAll('a[data-penalties-choice]') ?? [])];
+    links.find(link => link.dataset.penaltiesChoice === select.value)?.click();
+  }, true);
   // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
   const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
@@ -30,20 +40,36 @@
   const styles = getComputedStyle(root);
   const color = name => styles.getPropertyValue(name).trim();
   const goalsColor = color('--chart-actual'), xgColor = color('--chart-expected');
+  // The server renders every figure on the chosen penalties basis. This script
+  // only has to name that basis: the same label rules as basisText in Go.
+  const nonPenalty = root.dataset.penalties === 'exclude';
+  const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Total goals|Goals)\b/g;
+  const basisReplacement = match => ({
+    'Expected goals': 'Non-penalty expected goals', 'expected goals': 'non-penalty expected goals',
+    xGD: 'npxGD', xG: 'npxG', 'Goal differential': 'Non-penalty goal differential',
+    'Total goals': 'Total non-penalty goals', Goals: 'Non-penalty goals',
+  })[match] || match.replace(' ', ' non-penalty ');
+  const T = text => nonPenalty && !/npxG|on-penalty/.test(text) ? text.replace(basisPattern, basisReplacement) : text;
+  const goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
   const binColors = ['#44504a', '#526d61', color('--green'), color('--hypo'), '#372858'];
-  const binLabels = ['0 goals', '1 goal', '2 goals', '3 goals', '4+ goals'];
+  const binLabels = ['0 goals', '1 goal', '2 goals', '3 goals', '4+ goals'].map(T);
   const teamMeasures = {
-    for: {index: 0, actual: 'Goals', expected: 'xG'},
-    against: {index: 1, actual: 'Goals allowed', expected: 'xG allowed'},
-    difference: {index: 2, actual: 'Goal differential', expected: 'xG differential'},
+    for: {index: 0, actual: T('Goals'), expected: T('xG')},
+    against: {index: 1, actual: T('Goals allowed'), expected: T('xG allowed')},
+    difference: {index: 2, actual: T('Goal differential'), expected: T('xG differential')},
     points: {index: 3, actual: 'Points', expected: 'xPts'},
   };
   const tableMeasures = [teamMeasures.difference, teamMeasures.for, teamMeasures.against, teamMeasures.points];
   const scatterMeaning = {
-    for: 'Above: more goals scored than xG; below: fewer.',
-    against: 'Above: more goals conceded than xG allowed; below: fewer.',
-    difference: 'Above: higher goal differential than xG differential; below: lower.',
+    for: T('Above: more goals scored than xG; below: fewer.'),
+    against: T('Above: more goals conceded than xG allowed; below: fewer.'),
+    difference: T('Above: higher goal differential than xG differential; below: lower.'),
     points: 'Above: more points earned than xPts; below: fewer.',
+  };
+  // Official points and ASA xPts keep penalties; say so wherever they appear.
+  const setPointsNote = (panel, shown) => {
+    const note = root.querySelector(`[data-points-note="${panel}"]`);
+    if (note) note.hidden = !(nonPenalty && shown);
   };
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
@@ -81,7 +107,7 @@
       grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
       // The symmetric limits are padding, not meaningful values to label.
       ticks: {maxTicksLimit: 7, includeBounds: false, callback: value => signed(value)},
-      title: {display: true, text: 'Goals − xG per match'}};
+      title: {display: true, text: T('Goals − xG per match')}};
   }
   const clearChart = chart => {
     chart.setActiveElements([]);
@@ -168,8 +194,8 @@
     const chart = new Chart(canvas, {
       type: 'line', options, plugins,
       data: {labels: [], datasets: [
-        {label: 'Goals', key: 'goals', borderColor: goalsColor, backgroundColor: goalsColor, pointStyle: 'circle'},
-        {label: 'xG', key: 'xg', borderColor: xgColor, backgroundColor: xgColor, pointStyle: 'rectRot'},
+        {label: T('Goals'), key: 'goals', borderColor: goalsColor, backgroundColor: goalsColor, pointStyle: 'circle'},
+        {label: T('xG'), key: 'xg', borderColor: xgColor, backgroundColor: xgColor, pointStyle: 'rectRot'},
       ].map(series => ({
         ...series, data: [],
         spanGaps: false, borderWidth: 2.5, pointRadius: 5, pointHitRadius: 4,
@@ -184,7 +210,7 @@
   function createLeagueTrend(canvas) {
     const chart = createTrend(canvas);
     chart.data.datasets.push({
-      type: 'bar', label: 'Goals − xG', key: 'gap', hidden: true,
+      type: 'bar', label: T('Goals − xG'), key: 'gap', hidden: true,
       data: chart.data.labels.map(year => chart.scoringRecords.get(year)?.gap ?? null),
       backgroundColor: context => context.raw > 0 ? goalsColor : context.raw < 0 ? xgColor : color('--muted'),
       borderRadius: 2, maxBarThickness: 36, barPercentage: .7, categoryPercentage: .9, minBarLength: 3,
@@ -416,7 +442,7 @@
           chart.teamRows.forEach((row, index) => {
             const gap = teamValue(row, chart.teamMeasure, 'gap', chart.teamUnits);
             if (gap === null || Math.abs(gap) < .005) {
-              ctx.fillText(gap === null ? (chart.teamMeasure.index === 3 ? 'xPts incomplete' : 'xG incomplete') : '0.00',
+              ctx.fillText(gap === null ? (chart.teamMeasure.index === 3 ? 'xPts incomplete' : T('xG incomplete')) : '0.00',
                 gap === null ? chart.chartArea.left + 8 : zero + 8, chart.scales.y.getPixelForValue(index));
             }
           });
@@ -719,8 +745,8 @@
   function quadrantDescription(chart, index) {
     const row = chart.teamRows[index], suffix = chart.teamUnits === 'total' ? ' total' : ' per match';
     return [false, true].map(expected => {
-      const point = quadrantPoint(row, expected, chart.teamUnits), label = expected ? 'xG' : 'Goals';
-      return point ? `${label} scored: ${fixed(point.y)} · allowed: ${fixed(point.x)}${suffix}` : 'xG unavailable (incomplete coverage)';
+      const point = quadrantPoint(row, expected, chart.teamUnits), label = expected ? T('xG') : T('Goals');
+      return point ? `${label} scored: ${fixed(point.y)} · allowed: ${fixed(point.x)}${suffix}` : T('xG unavailable (incomplete coverage)');
     }).concat(`${row.played} played${chart.quadrantActive ? ' · In progress' : ''}`);
   }
   function clearQuadrantSelection(chart, update = true) {
@@ -768,8 +794,8 @@
     };
     const chart = new Chart(canvas, {
       type: 'scatter', options, data: {labels: [], datasets: [
-        {label: 'Goals', pointStyle: 'circle', backgroundColor: goalsColor},
-        {label: 'xG', pointStyle: 'rectRot', backgroundColor: xgColor},
+        {label: T('Goals'), pointStyle: 'circle', backgroundColor: goalsColor},
+        {label: T('xG'), pointStyle: 'rectRot', backgroundColor: xgColor},
       ].map(series => ({...series, data: [], borderColor: color('--panel'), borderWidth: 1.5,
         pointRadius: context => context.chart.scatterPointRadius || 6, pointHitRadius: 4,
         pointHoverRadius: context => (context.chart.scatterPointRadius || 6) + 3,
@@ -828,7 +854,7 @@
     const missing = rows.filter(row => quadrantPoint(row, true, units) === null).map(row => row.name);
     const note = root.querySelector('[data-team-quadrant-missing]');
     note.hidden = mode === 'goals' || !missing.length;
-    note.textContent = `Incomplete xG for ${missing.join(', ')}; ${expectedOnly ? 'these teams have no xG point' : 'their goals remain visible, without an xG point or connecting line'}.`;
+    note.textContent = T(`Incomplete xG for ${missing.join(', ')}; ${expectedOnly ? 'these teams have no xG point' : 'their goals remain visible, without an xG point or connecting line'}.`);
     if (empty) return;
     const canvas = root.querySelector('[data-chart="team-quadrant"]');
     const chart = charts.teamQuadrant || (charts.teamQuadrant = createTeamQuadrant(canvas));
@@ -847,14 +873,14 @@
       chart.options.scales[axis].min = domain.min;
       chart.options.scales[axis].max = domain.max;
     }
-    const label = expectedOnly ? 'xG' : mode === 'both' ? 'Goals / xG' : 'Goals';
+    const label = T(expectedOnly ? 'xG' : mode === 'both' ? 'Goals / xG' : 'Goals');
     chart.options.scales.x.title.text = `${label} allowed ${suffix} · fewer →`;
     chart.options.scales.y.title.text = `${label} scored ${suffix} · more →`;
     root.querySelector('[data-team-quadrant-average]').textContent =
-      `Dashed lines: ${expectedOnly ? 'covered teams’ xG' : 'league goals'} average — ${fixed(average.y)} scored, ${fixed(average.x)} allowed ${suffix}. ` +
+      T(`Dashed lines: ${expectedOnly ? 'covered teams’ xG' : 'league goals'} average — ${fixed(average.y)} scored, ${fixed(average.x)} allowed ${suffix}. ` +
       (units === 'total' ? 'Average team totals; teams may have played different numbers of matches.' : 'Weighted by played matches.') +
-      (mode === 'both' ? ' Both series use the goals average as a shared reference.' : '');
-    canvas.setAttribute('aria-label', `${season.season} regular season${season.active ? ' (in progress)' : ''}: ${label} scored versus allowed ${suffix}. Up means more scored; right means fewer allowed. Dashed lines show ${expectedOnly ? 'covered teams’ xG' : 'league goals'} averages.`);
+      (mode === 'both' ? ' Both series use the goals average as a shared reference.' : ''));
+    canvas.setAttribute('aria-label', T(`${season.season} regular season${season.active ? ' (in progress)' : ''}: ${label} scored versus allowed ${suffix}. Up means more scored; right means fewer allowed. Dashed lines show ${expectedOnly ? 'covered teams’ xG' : 'league goals'} averages.`));
     chart.resize(); chart.update('none');
   }
   function showTeams(params) {
@@ -888,9 +914,10 @@
     root.querySelector('[data-team-measure-control]').hidden = display === 'table' || display === 'quadrant';
     root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
-      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}`;
+      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
+    setPointsNote('teams', display === 'table' || (display !== 'quadrant' && measure.index === 3));
     root.querySelector('[data-team-plot]').hidden = display !== 'chart';
     root.querySelector('[data-team-gap-plot]').hidden = display !== 'gap';
     root.querySelector('[data-team-scatter-plot]').hidden = display !== 'scatter';
@@ -899,12 +926,12 @@
     const missingXG = rows.some(row => row.values[0].expected === null);
     const missingXPoints = rows.some(row => row.values[3].expected === null);
     const warningTypes = display === 'quadrant' ? [] : display === 'table'
-      ? [missingXG && 'xG', missingXPoints && 'xPts'].filter(Boolean)
-      : [measure.index === 3 ? missingXPoints && 'xPts' : missingXG && 'xG'].filter(Boolean);
+      ? [missingXG && T('xG'), missingXPoints && 'xPts'].filter(Boolean)
+      : [measure.index === 3 ? missingXPoints && 'xPts' : missingXG && T('xG')].filter(Boolean);
     const warning = root.querySelector('[data-team-warning]');
     warning.hidden = warningTypes.length === 0;
     warning.textContent = warningTypes.length === 0 ? '' : warningTypes.length === 2
-      ? 'Some match xG and xPts data is missing. Affected comparisons are unavailable.'
+      ? T('Some match xG and xPts data is missing. Affected comparisons are unavailable.')
       : `Some match ${warningTypes[0]} data is missing. Affected teams have no ${warningTypes[0]} comparison yet.`;
     root.querySelectorAll('[data-team-actual-label]').forEach(label => { label.textContent = measure.actual; });
     root.querySelectorAll('[data-team-xg-label]').forEach(label => { label.textContent = measure.expected; });
@@ -952,7 +979,7 @@
       root.querySelector('[data-team-gap-chart-wrap]').hidden = gapEmpty;
       root.querySelector('[data-team-gap-hint]').hidden = gapEmpty;
       root.querySelector('[data-team-gap-note]').textContent = measure.index === 1
-        ? `Bars show goals allowed minus xG allowed ${unitLabel}, from most negative to most positive. Negative means fewer goals conceded than expected.`
+        ? T(`Bars show goals allowed minus xG allowed ${unitLabel}, from most negative to most positive. Negative means fewer goals conceded than expected.`)
         : `Bars show ${measure.actual.toLowerCase()} minus ${measure.expected} ${unitLabel}, from largest positive gap to largest negative gap.`;
       if (gapEmpty) return;
       const canvas = root.querySelector('[data-chart="team-gap"]');
@@ -1229,13 +1256,14 @@
     choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
     choices[2].textContent = isPoints ? 'xPts' : 'xG';
+    setPointsNote('team-history', true);
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
     root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
     root.querySelector('[data-history-context-legend]').hidden = !contextEnabled;
     root.querySelector('[data-history-context-note]').hidden = !contextEnabled;
     showHistoryContextDetails(visible.map(key => context[key]));
     const notes = visible.map(key => context[key].since ? `${context[key].label} records since ${context[key].since}` : `${context[key].label}: no completed-season records`);
-    if (visible.includes('xg') && context.xg.partial) notes.push(`Some season ${isPoints ? 'xPts' : 'xG'} ranges are unavailable because team coverage is incomplete`);
+    if (visible.includes('xg') && context.xg.partial) notes.push(`Some season ${isPoints ? 'xPts' : T('xG')} ranges are unavailable because team coverage is incomplete`);
     root.querySelector('[data-history-context-note]').textContent = notes.join('. ') + '.';
     const rows = teamSeasons.flatMap(season => {
       const team = (season.teams || []).find(row => row.id === historyTeam.value);
@@ -1248,10 +1276,10 @@
     const warning = root.querySelector('[data-team-history-warning]');
     warning.hidden = !missingXG && !missingXPoints;
     warning.textContent = missingXG && missingXPoints
-      ? 'Some seasons have incomplete xG and xPts for this team; actual values remain available.'
+      ? T('Some seasons have incomplete xG and xPts for this team; actual values remain available.')
       : missingXPoints
         ? 'Some seasons have incomplete xPts for this team; earned points remain available.'
-        : 'Some seasons have incomplete xG for this team; goals remain available.';
+        : T('Some seasons have incomplete xG for this team; goals remain available.');
     root.querySelector('[data-history-team-name]').replaceChildren(...(rows.length ? [teamName(rows[0])] : []));
     root.querySelector('[data-history-actual-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-label]').textContent = measure.expected;
@@ -1493,7 +1521,7 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
-    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}`;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
     comparison.replaceChildren(...[{key: 'team', label: 'None (team average only)'}, ...(selectedSeason?.benchmarks || [])].map(reference => {
@@ -1508,13 +1536,14 @@
     root.querySelector('[data-trend-team-name]').replaceChildren(teamName(team));
     root.querySelector('[data-trend-season-status]').textContent = `${season}${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
     const pointsMetric = points || ['points', 'xpoints'].includes(effectiveSeries);
+    setPointsNote('season-trend', pointsMetric);
     root.querySelector('[data-trend-warning]').hidden = pointsMetric || effectiveSeries === 'goals' || !matches.some(match => match.values[0].expected == null);
     root.querySelector('[data-trend-points-warning]').hidden = !pointsMetric || effectiveSeries === 'points' || !matches.some(match => match.values[3].expected == null);
     root.querySelector('[data-trend-venue-unknown]').hidden = !matches.some(match => match.venueDateUnavailable);
     root.querySelector('[data-trend-undated]').hidden = !matches.some(match => match.undated);
     const measures = pointsMetric ? [3] : difference ? [2] : [0, 1];
     const visible = (effectiveSeries === 'both' ? [false, true] : [['xg', 'xpoints'].includes(effectiveSeries)]).flatMap(expected => measures.map(measure => {
-      const label = expected ? ['xG scored', 'xG allowed', 'xG differential', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal differential', 'Points'][measure];
+      const label = T(expected ? ['xG scored', 'xG allowed', 'xG differential', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal differential', 'Points'][measure]);
       const references = relative ? trendReferences(selectedSeason, matches, measure, expected, averageReference) : [];
       return {expected, measure, label, references,
         data: matches.map((_, index) => seasonTrendValue(matches, index, measure, window, expected, rolling)),
@@ -1548,7 +1577,7 @@
       {className: 'explore-season-allowed-key', label: '━ □ Allowed'},
     ] : [
       {className: 'explore-actual-key', label: '━ ● Actual'},
-      {className: 'explore-expected-key', label: pointsMetric ? '━ ◇ xPoints' : '━ ◇ xG'},
+      {className: 'explore-expected-key', label: pointsMetric ? '━ ◇ xPoints' : T('━ ◇ xG')},
     ];
     if (rolling) legend.push({className: 'explore-season-raw-key', label: 'Averages before full window'});
     root.querySelector('[data-trend-legend]').replaceChildren(...legend.map(entry => {
@@ -1561,8 +1590,8 @@
     // Reuse two chart slots: basis panels for balance, metric panels for
     // actual/xG comparison, and one combined panel for differential.
     const panels = balance ? [
-      {prefix: 'goals', label: 'Goals', datasets: visible.filter(dataset => !dataset.expected)},
-      {prefix: 'xg', label: 'Expected goals (xG)', datasets: visible.filter(dataset => dataset.expected)},
+      {prefix: 'goals', label: T('Goals'), datasets: visible.filter(dataset => !dataset.expected)},
+      {prefix: 'xg', label: T('Expected goals (xG)'), datasets: visible.filter(dataset => dataset.expected)},
     ] : difference || pointsMetric ? [
       {prefix: 'goals', label: pointsMetric ? 'Points' : 'Differential', datasets: visible},
       {prefix: 'xg', label: '', datasets: []},
@@ -1579,7 +1608,7 @@
       root.querySelector(`[data-trend-${prefix}-relative-note]`).textContent = pointsMetric ? 'Higher points per match means more points earned.' : `Above a reference: more ${prefix === 'goals' ? 'scored' : 'conceded'}. Below: fewer.`;
       root.querySelector(`[data-trend-${prefix}-wrap]`).hidden = !hasMarks;
       const empty = root.querySelector(`[data-trend-${prefix}-empty]`); empty.hidden = hasMarks;
-      empty.textContent = `No ${pointsMetric ? 'xPoints' : 'xG'} is available for these matches or fully covered rolling windows.`;
+      empty.textContent = `No ${pointsMetric ? 'xPoints' : T('xG')} is available for these matches or fully covered rolling windows.`;
       if (!hasMarks) continue;
       const canvas = root.querySelector(`[data-chart="${prefix === 'xg' ? 'season-trend-xg' : 'season-trend'}"]`);
       const key = prefix === 'xg' ? 'seasonTrendXG' : 'seasonTrend';
@@ -1601,8 +1630,8 @@
       chart.options.scales.y = {min: signedValues ? -limit : 0, max: limit, border: {display: false},
         grid: {display: !relative, color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
         ticks: {maxTicksLimit: 6, includeBounds: false, ...(signedValues ? {callback: value => signed(value)} : {})},
-        title: {display: true, text: pointsMetric ? 'Points per match' : relative ? effectiveSeries === 'xg' ? 'xG per match' : effectiveSeries === 'goals' ? 'Goals per match' : 'Goals / xG per match' : balance ? `${prefix === 'xg' ? 'xG' : 'Goals'} per match` : difference ? 'Differential per match' : 'Goals / xG per match'}};
-      const dataDescription = pointsMetric ? relative ? effectiveSeries === 'points' ? 'actual points' : 'xPoints' : 'points and xPoints' : balance ? 'scored and allowed' : relative ? effectiveSeries === 'goals' ? 'actual goals' : 'xG' : 'actual goals and xG';
+        title: {display: true, text: pointsMetric ? 'Points per match' : T(relative ? effectiveSeries === 'xg' ? 'xG per match' : effectiveSeries === 'goals' ? 'Goals per match' : 'Goals / xG per match' : balance ? `${prefix === 'xg' ? 'xG' : 'Goals'} per match` : difference ? 'Differential per match' : 'Goals / xG per match')}};
+      const dataDescription = pointsMetric ? relative ? effectiveSeries === 'points' ? 'actual points' : 'xPoints' : 'points and xPoints' : balance ? 'scored and allowed' : relative ? effectiveSeries === 'goals' ? `actual ${goalsWord}` : T('xG') : `actual ${goalsWord} and ${T('xG')}`;
       canvas.setAttribute('aria-label', `${team.name}, ${season}: ${panelLabel}, ${dataDescription}, ${rolling ? `${window}-match rolling averages using all matches played so far before the first full window` : 'per-match values'}${relative ? `, original values with team and selected benchmark references` : ''}`);
       chart.resize(); chart.update('none');
     }
@@ -1622,7 +1651,7 @@
     const count = selectedSeason.teams.length;
     root.querySelector('[data-rankings-team]').replaceChildren(teamName(team));
     root.querySelector('[data-rankings-summary]').textContent = `${season} · ${team.played} played · ${count} teams${selectedSeason.active ? ' · In progress' : ''}`;
-    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. Lower goals allowed and xG allowed rank better; higher is better for the other stats.`;
+    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-rankings-warning]').hidden = !selectedSeason.teams.some(row => row.values[0].expected === null);
     root.querySelector('[data-rankings-cards]').replaceChildren(...team.rankings[units === 'total' ? 1 : 0].map(row => {
       const card = document.createElement('article'); card.className = 'explore-rank-card';
@@ -1669,11 +1698,18 @@
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
+    // Switching the basis reloads the page, because the server computes every
+    // figure; the links keep whatever the URL currently selects.
+    root.querySelectorAll('[data-penalties-choice]').forEach(link => {
+      const selection = new URLSearchParams(params);
+      if (link.dataset.penaltiesChoice === 'exclude') selection.set('penalties', 'exclude'); else selection.delete('penalties');
+      link.href = `?${selection}`;
+    });
     const currentTab = root.querySelector('[data-group-views]:not([hidden]) [aria-current]');
     if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
     metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
     root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
-      ? 'Goals − xG per match (regular-season)' : 'Goals and chances per match (regular-season)';
+      ? T('Goals − xG per match (regular-season)') : T('Goals and chances per match (regular-season)');
     root.querySelectorAll('[data-series]').forEach(series => {
       series.hidden = metric.value === 'gap' || (metric.value !== 'compare' && series.dataset.series !== metric.value);
     });
@@ -1681,7 +1717,7 @@
       distributionBin.value = ['all', '0', '1', '2', '3', '4'].includes(params.get('distribution-bin'))
         ? params.get('distribution-bin') : 'all';
       root.querySelector('#explore-distribution-title').textContent = distributionBin.value === 'all'
-        ? 'Share of regular-season matches by total goals'
+        ? `Share of regular-season matches by total ${goalsWord}`
         : `Share of regular-season matches with ${binLabels[Number(distributionBin.value)]}`;
       root.querySelector('[data-distribution-stacked-panel]').hidden = distributionBin.value !== 'all';
       root.querySelector('[data-distribution-trend-panel]').hidden = distributionBin.value === 'all';
@@ -1717,10 +1753,10 @@
       chart.options.scales.x.offset = metric.value === 'gap';
       chart.options.scales.y = trendYAxis(metric.value === 'gap' ? gaps : null);
       chart.canvas.setAttribute('aria-label', {
-        compare: 'Goals and expected goals per regular-season match, by season',
-        goals: 'Goals per regular-season match, by season',
-        xg: 'Expected goals per regular-season match, by season',
-        gap: 'Goals minus expected goals per regular-season match, by season; positive bars are above xG and negative bars are below xG',
+        compare: T('Goals and expected goals per regular-season match, by season'),
+        goals: T('Goals per regular-season match, by season'),
+        xg: T('Expected goals per regular-season match, by season'),
+        gap: T('Goals minus expected goals per regular-season match, by season; positive bars are above xG and negative bars are below xG'),
       }[metric.value]);
       root.querySelector('[data-trend-gap-legend]').hidden = metric.value !== 'gap' || gapEmpty;
       root.querySelector('[data-trend-gap-note]').hidden = metric.value !== 'gap' || gapEmpty;

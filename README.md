@@ -20,6 +20,9 @@ from the cached fixtures when a season page or CLI report is requested.
   extra-time and shootout facts, xG, and chronological fixture fallbacks.
 - Season overview with results, upcoming fixtures, model-based match outlooks, standings, goals, and xG.
 - Per-game and total standings views for seasons with uneven schedules.
+- Standings stat toggle with Goals, xG (ordered by xPts), and npxG (non-penalty
+  xG for/against and difference, ordered by npxGD; the points column keeps the
+  official Pts).
 - Phase-aware presentation: upcoming seasons emphasize the schedule, active
   seasons retain the full explorer, and completed or historical seasons focus
   on standings and results without empty remaining-schedule controls.
@@ -91,7 +94,11 @@ by season charts one team's goals, xG, points, and xPoints per match across regu
 seasons, with a sortable season table. Optional league context shows seasonal
 ranges and completed-season records with inspectable holders. Explore's xPoints
 describe recorded matches; they are distinct from Forecast Lab's projected
-final points. The older `/history/scoring` route remains available.
+final points. A Penalties control (Included or Excluded) switches Explore and
+the league history page between official goals and xG and non-penalty goals and
+npxG; points and xPts always include penalties. Completed-match results with a
+penalty add an npxG line beside their xG. The older `/history/scoring` route
+remains available.
 Match by match follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
 Actual vs xG pairs actual and expected values in separate Scored and Allowed

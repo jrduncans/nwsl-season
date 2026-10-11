@@ -39,6 +39,8 @@ Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounde
 | `nwsl.sync.operation.outcome` | enum | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of one source operation. |
 | `nwsl.sync.outcome` | enum | Recommended | development | `["complete","conflict","failure"]` | The low-cardinality terminal outcome of the compatibility synchronization run. |
 | `nwsl.sync.partial_failure` | boolean | Recommended | development | — | Whether source work succeeded but one or more optional downstream components failed. |
+| `nwsl.sync.penalty_games_accepted` | int | Recommended | development | — | Number of games whose ASA penalty-pattern xG split passed validation. |
+| `nwsl.sync.penalty_games_rejected` | int | Recommended | development | — | Number of games whose ASA penalty-pattern xG split was rejected by validation. |
 | `nwsl.sync.qualification.outcome` | enum | Recommended | development | `["complete","current","failure","not_run","not_configured"]` | The low-cardinality outcome of the downstream qualification component. |
 | `nwsl.sync.qualification.refresh_reason` | string | Recommended | development | `["snapshot_current","snapshot_missing","forced","compute_budget_retry","not_evaluated"]` | The bounded qualification refresh or no-op reason. |
 | `nwsl.sync.qualification.refresh_required` | boolean | Recommended | development | — | Whether the qualification refresher determined that work was required. |
@@ -224,6 +226,23 @@ A point-in-time explanation of an individual fixture acceptance, rejection, or n
 | `nwsl.sync.update_kind` | string | Recommended | development | The bounded category of normalized source change. |
 
 
+### `nwsl.sync.penalty_xg.exception`
+
+- Convention: `event.nwsl.sync.penalty_xg.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for an absorbed ASA penalty-pattern xG failure.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `nwsl.sync.recalculate.exception`
 
 - Convention: `event.nwsl.sync.recalculate.exception`
@@ -387,6 +406,8 @@ One ASA resource request and its corresponding cache mutation.
 | `nwsl.sync.downstream_inputs_changed` | boolean | Recommended | development | Whether one source operation changed inputs consumed by derived calculations. |
 | `nwsl.sync.mode` | string | Required | development | Whether one source operation is authoritative or targeted. |
 | `nwsl.sync.operation.outcome` | enum | Required | development | The low-cardinality terminal outcome of one source operation. |
+| `nwsl.sync.penalty_games_accepted` | int | Recommended | development | Number of games whose ASA penalty-pattern xG split passed validation. |
+| `nwsl.sync.penalty_games_rejected` | int | Recommended | development | Number of games whose ASA penalty-pattern xG split was rejected by validation. |
 | `nwsl.sync.requested_rows` | int | Recommended | development | Number of source identities requested by one source operation. |
 | `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
 | `nwsl.sync.returned_rows` | int | Recommended | development | Number of source rows returned by one source operation. |

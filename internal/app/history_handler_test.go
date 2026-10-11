@@ -403,7 +403,7 @@ func assertHistoryCatalogRows(t *testing.T, body string) {
 		}
 	}
 	sort.Strings(seasons)
-	if got := strings.Count(body, `<option value="`); got != len(seasons) {
+	if got := strings.Count(body, `<option value="20`); got != len(seasons) {
 		t.Fatalf("season selector options = %d, want %d supported catalog years", got, len(seasons))
 	}
 	start := strings.Index(body, `<table class="history-table">`)

@@ -236,6 +236,8 @@ type standingsRow struct {
 	Total      string `json:"total"`
 	XGPerGame  string `json:"xgPerGame"`
 	XGTotal    string `json:"xgTotal"`
+	NPPerGame  string `json:"npPerGame"`
+	NPTotal    string `json:"npTotal"`
 	PerGamePos string `json:"perGamePos"`
 	TotalPos   string `json:"totalPos"`
 }
@@ -252,6 +254,8 @@ const readStandingsScript = `() => Array.from(document.querySelectorAll("table.s
 		total: points.dataset.total,
 		xgPerGame: points.dataset.xgPerGame,
 		xgTotal: points.dataset.xgTotal,
+		npPerGame: row.querySelector("[data-standings-np-difference]")?.dataset.npSortPerGame ?? "",
+		npTotal: row.querySelector("[data-standings-np-difference]")?.dataset.npSortTotal ?? "",
 		perGamePos: position.dataset.perGame,
 		totalPos: position.dataset.total,
 	};
@@ -320,6 +324,7 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	totals := page.Locator("[data-standings-mode-value=total]")
 	goals := page.Locator("[data-standings-stat-value=goals]")
 	xg := page.Locator("[data-standings-stat-value=xg]")
+	npxg := page.Locator("[data-standings-stat-value=npxg]")
 	pressed := func(button playwright.Locator, want bool) {
 		t.Helper()
 		if err := expect.Locator(button).ToHaveAttribute("aria-pressed", strconv.FormatBool(want)); err != nil {
@@ -404,9 +409,76 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	assertSequentialPositions(t, "xG totals", byXGTotal)
 	assertXGOrder(t, "xG totals", byXGTotal, func(r standingsRow) string { return r.XGTotal })
 
-	// Back to goals and per game restores the server's order.
+	// npxG: non-penalty xG difference orders the rows while the points column
+	// keeps the official Pts.
+	wantPlayoffPosition := officialPlayoffPosition(t, page)
+	click(t, npxg)
+	pressed(npxg, true)
+	pressed(xg, false)
+	pressed(goals, false)
+	if err := expect.Locator(pointsHeader).ToHaveText("Pts"); err != nil {
+		t.Error(err)
+	}
+	if err := expect.Locator(pointsHeader).ToHaveAttribute("title", "Official standings points"); err != nil {
+		t.Error(err)
+	}
+	if err := expect.Locator(caption).ToHaveText(attributeOf(t, page.Locator("[data-standings-caption]"), "data-npxg-label")); err != nil {
+		t.Error(err)
+	}
+	if text, err := caption.TextContent(); err != nil || !strings.Contains(text, "non-penalty xG, ordered by npxGD") {
+		t.Errorf("npxG caption = %q (%v), want non-penalty xG ordered by npxGD", text, err)
+	}
+	if err := expect.Locator(page.Locator("th[data-standings-header]")).ToHaveText([]string{"npxG +/-", "npxGD"}); err != nil {
+		t.Error(err)
+	}
+	if got := attributeOf(t, page.Locator("th[data-standings-header]").Nth(0), "title"); got != "Non-penalty expected goals for / against" {
+		t.Errorf("npxG +/- title = %q", got)
+	}
+	if got := attributeOf(t, page.Locator("th[data-standings-header]").Nth(1), "title"); got != "Non-penalty expected-goal difference" {
+		t.Errorf("npxGD title = %q", got)
+	}
+	byNPTotal := readStandingsRows(t, page)
+	assertSequentialPositions(t, "npxG totals", byNPTotal)
+	assertXGOrder(t, "npxG totals", byNPTotal, func(r standingsRow) string { return r.NPTotal })
+	for _, row := range byNPTotal {
+		if row.Points != row.Total {
+			t.Errorf("npxG totals: %s shows %q in the points column, want official %q", row.Name, row.Points, row.Total)
+		}
+	}
+	if sameStrings(ids(byNPTotal), ids(byXGTotal)) {
+		t.Error("npxG order equals the xG order, so the fixture cannot show that the npxG sort ran")
+	}
+	if got := officialPlayoffPosition(t, page); got != wantPlayoffPosition {
+		t.Errorf("npxG playoff line after position %q, want the official cutoff %q", got, wantPlayoffPosition)
+	}
+	shown, err := page.Locator("[data-standings-np-difference] [data-standings-value]").AllTextContents()
+	if err != nil || len(shown) != fixtureTeams {
+		t.Fatalf("read npxGD cells: %v (%d cells)", err, len(shown))
+	}
+	for i, text := range shown {
+		if strings.TrimSpace(text) == "—" || strings.TrimSpace(text) == "" {
+			t.Errorf("npxGD cell %d shows %q, want a value", i, text)
+		}
+	}
+	click(t, perGame)
+	pressed(perGame, true)
+	byNPPerGame := readStandingsRows(t, page)
+	assertSequentialPositions(t, "npxG per game", byNPPerGame)
+	assertXGOrder(t, "npxG per game", byNPPerGame, func(r standingsRow) string { return r.NPPerGame })
+	for _, row := range byNPPerGame {
+		if row.Points != row.PerGame {
+			t.Errorf("npxG per game: %s shows %q in the points column, want official %q", row.Name, row.Points, row.PerGame)
+		}
+	}
+	// The fixture has complete npxG coverage, so no warning is rendered.
+	if err := expect.Locator(page.Locator("[data-standings-stat-warning=npxg]")).ToHaveCount(0); err != nil {
+		t.Error(err)
+	}
+
+	// Back to goals and per game restores the server's order and headers.
 	click(t, goals)
 	pressed(goals, true)
+	pressed(npxg, false)
 	click(t, perGame)
 	pressed(perGame, true)
 	if err := expect.Locator(pointsHeader).ToHaveText("Pts"); err != nil {
@@ -415,7 +487,48 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	if got := ids(readStandingsRows(t, page)); !sameStrings(got, ids(initial)) {
 		t.Errorf("goals per game again: order = %v, want the initial %v", got, ids(initial))
 	}
+	click(t, xg)
+	if err := expect.Locator(page.Locator("th[data-standings-header]")).ToHaveText([]string{"xG +/-", "xGD"}); err != nil {
+		t.Error(err)
+	}
+	if err := expect.Locator(pointsHeader).ToHaveText("xPts"); err != nil {
+		t.Error(err)
+	}
 	assertNoHorizontalOverflow(t, page)
+
+	// The three-button toggle fits a 390px phone without horizontal overflow.
+	mobile := newPageWith(t, pageOptions{Viewport: Mobile})
+	visit(t, mobile, f.URL(""))
+	click(t, mobile.Locator("[data-standings-stat-value=npxg]"))
+	if err := expect.Locator(mobile.Locator("[data-standings-stat-value=npxg]")).ToHaveAttribute("aria-pressed", "true"); err != nil {
+		t.Error(err)
+	}
+	assertNoHorizontalOverflow(t, mobile)
+	fits, err := mobile.Evaluate(`() => {
+		const toggle = document.querySelector("[data-standings-stat-value=goals]").closest(".standings-toggle").getBoundingClientRect();
+		return toggle.left >= 0 && toggle.right <= document.documentElement.clientWidth;
+	}`)
+	if err != nil || fits != true {
+		t.Errorf("stat toggle fits a 390px viewport = %v (%v)", fits, err)
+	}
+}
+
+// officialPlayoffPosition returns the position text of the row carrying the
+// playoff line, or "" when no row has it.
+func officialPlayoffPosition(t *testing.T, page playwright.Page) string {
+	t.Helper()
+	var position string
+	evalInto(t, page, `() => document.querySelector("table.standings tbody tr.playoff-line [data-standings-position]")?.textContent.trim() ?? ""`, nil, &position)
+	return position
+}
+
+func attributeOf(t *testing.T, locator playwright.Locator, name string) string {
+	t.Helper()
+	value, err := locator.GetAttribute(name)
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	return value
 }
 
 func initialCaption(t *testing.T, page playwright.Page, xg bool) string {

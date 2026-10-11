@@ -3,6 +3,7 @@ package asatest
 import (
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/asa"
@@ -13,6 +14,9 @@ type Scenario struct {
 	Teams  []asa.Team
 	Games  []asa.Game
 	XGoals []asa.GameXGoals
+	// PenaltyXGoals holds explicit penalty-pattern team rows; served xG games
+	// without rows get all-zero rows.
+	PenaltyXGoals []asa.TeamGamePenaltyXGoals
 	// Stages maps game_id to stage name; absent games use DefaultStage.
 	Stages map[string]string
 }
@@ -146,5 +150,29 @@ func (s *Scenario) WithXG(fraction float64) *Scenario {
 			AwayXPoints:    &awayXP,
 		})
 	}
+	return s
+}
+
+// PenaltyPattern describes one game's penalty-pattern totals from each side.
+type PenaltyPattern struct {
+	HomeXG, AwayXG       float64
+	HomeGoals, AwayGoals int
+	HomeShots, AwayShots int
+}
+
+// WithPenalty sets the penalty-pattern rows for a game already in the
+// scenario's games, replacing earlier rows for it. Both teams' rows mirror each
+// other, so the pair is consistent. It panics for an unknown game.
+func (s *Scenario) WithPenalty(gameID string, p PenaltyPattern) *Scenario {
+	i := slices.IndexFunc(s.Games, func(g asa.Game) bool { return g.GameID == gameID })
+	if i < 0 {
+		panic("asatest: WithPenalty for unknown game " + gameID)
+	}
+	game := s.Games[i]
+	s.PenaltyXGoals = slices.DeleteFunc(s.PenaltyXGoals, func(r asa.TeamGamePenaltyXGoals) bool { return r.GameID == gameID })
+	s.PenaltyXGoals = append(s.PenaltyXGoals,
+		asa.TeamGamePenaltyXGoals{TeamID: game.HomeTeamID, GameID: gameID, ShotsFor: p.HomeShots, ShotsAgainst: p.AwayShots, GoalsFor: p.HomeGoals, GoalsAgainst: p.AwayGoals, XGoalsFor: p.HomeXG, XGoalsAgainst: p.AwayXG},
+		asa.TeamGamePenaltyXGoals{TeamID: game.AwayTeamID, GameID: gameID, ShotsFor: p.AwayShots, ShotsAgainst: p.HomeShots, GoalsFor: p.AwayGoals, GoalsAgainst: p.HomeGoals, XGoalsFor: p.AwayXG, XGoalsAgainst: p.HomeXG},
+	)
 	return s
 }

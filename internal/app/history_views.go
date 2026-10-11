@@ -30,7 +30,26 @@ type historyPage struct {
 	Chart                                                 historyChartView
 	ComparisonChart                                       historyChartView
 	Compare                                               bool
+	// Basis is the scoring basis of every figure on the page. PenaltyLinks are
+	// the Included/Excluded choices; each keeps the rest of the selection.
+	Basis        history.ScoringBasis
+	NonPenalty   bool
+	PenaltyLinks []historyMetricView
 }
+
+// PointsNote says that official points and ASA xPts keep penalties.
+func (historyPage) PointsNote() string { return pointsBasisNote }
+
+// GoalsWord names the goals being counted: "goals" or "non-penalty goals".
+func (p historyPage) GoalsWord() string {
+	if p.NonPenalty {
+		return "non-penalty goals"
+	}
+	return "goals"
+}
+
+// T rewrites a label for the page's scoring basis.
+func (p historyPage) T(text string) string { return basisText(p.Basis, text) }
 
 type historyMetricView struct {
 	Label, Path string
@@ -89,6 +108,7 @@ type historyChartMarkView struct {
 
 type historyDistributionView struct {
 	Season, Path, AccessibleName string
+	GoalsName                    string
 	Total                        int
 	GoalsEligible                bool
 	Selected                     bool
@@ -117,24 +137,35 @@ func historyPageFor(fromPath string, summaries []history.SeasonScoring, selected
 }
 
 func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, selectedSeason string, metric historyMetric) historyPage {
+	return historyPageForBasis(fromPath, summaries, selectedSeason, metric, history.AllShots)
+}
+
+func historyPageForBasis(fromPath string, summaries []history.SeasonScoring, selectedSeason string, metric historyMetric, basis history.ScoringBasis) historyPage {
+	t := func(text string) string { return basisText(basis, text) }
 	page := historyPage{
+		Basis:      basis,
+		NonPenalty: basis.ExcludesPenalties(),
+		PenaltyLinks: []historyMetricView{
+			{Label: "Included", Path: historyURL(fromPath, selectedSeason, metric, history.AllShots), Selected: !basis.ExcludesPenalties()},
+			{Label: "Excluded", Path: historyURL(fromPath, selectedSeason, metric, history.NonPenalty), Selected: basis.ExcludesPenalties()},
+		},
 		Title:          "Scoring by season",
 		HomePath:       relativeURL(fromPath, "/"),
 		StylesheetPath: staticURL(fromPath, "site.css"),
 		ScriptPath:     staticURL(fromPath, "standings.js"),
-		FormPath:       historyURL(fromPath, "", metric),
+		FormPath:       historyURL(fromPath, "", metric, basis),
 		CatalogPage:    true,
 		Metric:         metric,
-		MetricName:     map[historyMetric]string{historyMetricGoals: "Goals", historyMetricXG: "xG", historyMetricCompare: "Goals and xG"}[metric],
-		GoalsPath:      historyURL(fromPath, selectedSeason, historyMetricGoals),
+		MetricName:     t(map[historyMetric]string{historyMetricGoals: "Goals", historyMetricXG: "xG", historyMetricCompare: "Goals and xG"}[metric]),
+		GoalsPath:      historyURL(fromPath, selectedSeason, historyMetricGoals, basis),
 		Navigation: []navigationItem{
 			{Label: "Seasons", Path: relativeURL(fromPath, "/seasons")},
-			{Label: "History", Path: historyURL(fromPath, selectedSeason, metric), Current: true},
+			{Label: "History", Path: historyURL(fromPath, selectedSeason, metric, basis), Current: true},
 		},
 		MetricLinks: []historyMetricView{
-			{Label: "Goals", Path: historyURL(fromPath, selectedSeason, historyMetricGoals), Selected: metric == historyMetricGoals},
-			{Label: "Expected goals (xG)", Path: historyURL(fromPath, selectedSeason, historyMetricXG), Selected: metric == historyMetricXG},
-			{Label: "Compare", Path: historyURL(fromPath, selectedSeason, historyMetricCompare), Selected: metric == historyMetricCompare},
+			{Label: t("Goals"), Path: historyURL(fromPath, selectedSeason, historyMetricGoals, basis), Selected: metric == historyMetricGoals},
+			{Label: t("Expected goals (xG)"), Path: historyURL(fromPath, selectedSeason, historyMetricXG, basis), Selected: metric == historyMetricXG},
+			{Label: "Compare", Path: historyURL(fromPath, selectedSeason, historyMetricCompare, basis), Selected: metric == historyMetricCompare},
 		},
 		Years:                 make([]historyYearView, 0, len(summaries)),
 		Rows:                  make([]historyRowView, 0, len(summaries)),
@@ -168,26 +199,26 @@ func historyPageForMetric(fromPath string, summaries []history.SeasonScoring, se
 	}
 	if len(eligible) == 0 {
 		if metric == historyMetricXG {
-			page.EligibleYears = "No seasons currently meet the xG comparison requirements."
+			page.EligibleYears = t("No seasons currently meet the xG comparison requirements.")
 		} else {
 			page.EligibleYears = "No seasons currently meet the comparison requirements."
 		}
 	} else {
 		label := "comparison"
 		if metric == historyMetricXG {
-			label = "xG comparison"
+			label = t("xG comparison")
 		}
 		page.EligibleYears = "Currently eligible for " + label + ": " + strings.Join(eligible, ", ") + "."
 	}
-	page.Chart = historyChartForMetric(fromPath, summaries, selectedSeason, metric)
+	page.Chart = historyChartForBasis(fromPath, summaries, selectedSeason, metric, basis)
 	if metric == historyMetricCompare {
 		page.Compare = true
-		page.ComparisonChart = historyChartForMetric(fromPath, summaries, selectedSeason, historyMetricXG)
-		page.Chart.Title = "Goals and expected goals per completed match by season"
-		page.Chart.AxisTitle = "Goals and xG per match"
-		page.Chart.Description += " Expected goals are shown as a separate series on the same scale; only seasons with complete xG coverage appear in that series."
+		page.ComparisonChart = historyChartForBasis(fromPath, summaries, selectedSeason, historyMetricXG, basis)
+		page.Chart.Title = t("Goals and expected goals per completed match by season")
+		page.Chart.AxisTitle = t("Goals and xG per match")
+		page.Chart.Description += t(" Expected goals are shown as a separate series on the same scale; only seasons with complete xG coverage appear in that series.")
 		for i := range page.ComparisonChart.Marks {
-			page.ComparisonChart.Marks[i].Path = historyURL(fromPath, page.ComparisonChart.Marks[i].Season, metric)
+			page.ComparisonChart.Marks[i].Path = historyURL(fromPath, page.ComparisonChart.Marks[i].Season, metric, basis)
 		}
 	}
 	return page
@@ -198,11 +229,19 @@ func historyChartFor(fromPath string, summaries []history.SeasonScoring, selecte
 }
 
 func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, selectedSeason string, metric historyMetric) historyChartView {
-	metricName := "Goals"
+	return historyChartForBasis(fromPath, summaries, selectedSeason, metric, history.AllShots)
+}
+
+func historyChartForBasis(fromPath string, summaries []history.SeasonScoring, selectedSeason string, metric historyMetric, basis history.ScoringBasis) historyChartView {
+	t := func(text string) string { return basisText(basis, text) }
+	metricName := t("Goals")
 	rateName := "goals"
+	if basis.ExcludesPenalties() {
+		rateName = "non-penalty goals"
+	}
 	if metric == historyMetricXG {
-		metricName = "Expected goals"
-		rateName = "expected goals"
+		metricName = t("Expected goals")
+		rateName = t("expected goals")
 	}
 	chart := historyChartView{
 		ViewBox:       "0 0 720 360",
@@ -301,7 +340,7 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 		unknown := summary.Inventory != cache.InventoryCompletenessComplete
 		points = append(points, chartPoint{season: season, x: x, y: y, selected: summary.Season == selectedSeason, active: active, unknown: unknown})
 		mark := historyChartMarkView{
-			Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric),
+			Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric, basis),
 			AccessibleName: historyChartAccessibleName(summary, metric),
 			X:              formatChartNumber(x), Y: formatChartNumber(y),
 			HitX: formatChartNumber(x - historyChartHitSize/2), HitY: formatChartNumber(y - historyChartHitSize/2),
@@ -334,7 +373,7 @@ func historyChartForMetric(fromPath string, summaries []history.SeasonScoring, s
 	}
 
 	chart.HasData = true
-	chart.Status = fmt.Sprintf("Both teams combined. Select a point to view a season. Shared Goals/xG scale: %s–%s per match.", formatChartNumber(yMin), formatChartNumber(yMax))
+	chart.Status = t(fmt.Sprintf("Both teams combined. Select a point to view a season. Shared Goals/xG scale: %s–%s per match.", formatChartNumber(yMin), formatChartNumber(yMax)))
 	return chart
 }
 
@@ -359,6 +398,10 @@ func historyChartAccessibleName(summary history.SeasonScoring, metric historyMet
 	rateName := "goals"
 	if metric == historyMetricXG {
 		rateName = "expected goals"
+	}
+	rateName = basisText(summary.Basis, rateName)
+	if summary.Basis.ExcludesPenalties() && metric != historyMetricXG {
+		rateName = "non-penalty goals"
 	}
 	name := fmt.Sprintf("%s: %s %s per completed match, %d completed matches, %s", summary.Season, rate, rateName, summary.Played, coverage)
 	if summary.Lifecycle == cache.SourceScopeActive {
@@ -400,7 +443,7 @@ func formatChartNumber(value float64) string {
 
 func historyRow(summary history.SeasonScoring, fromPath, selectedSeason string, metric historyMetric) historyRowView {
 	return historyRowView{
-		Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric), Selected: summary.Season == selectedSeason,
+		Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric, summary.Basis), Selected: summary.Season == selectedSeason,
 		Played: summary.Played, TotalGoals: summary.TotalGoals,
 		GoalsPerMatch: historyRateText(summary.GoalsPerMatch), XGPerMatch: historyRateText(summary.XGPerMatch),
 		GoalsMinusXGPerMatch: historyRateText(summary.GoalsMinusXGPerMatch),
@@ -426,6 +469,10 @@ func historyRateText(value *float64) string {
 }
 
 func historyMetricStatus(summary history.SeasonScoring, metric historyMetric) string {
+	return basisText(summary.Basis, historyMetricStatusText(summary, metric))
+}
+
+func historyMetricStatusText(summary history.SeasonScoring, metric historyMetric) string {
 	if summary.Played == 0 {
 		return "No completed matches are available for an xG average."
 	}
@@ -452,26 +499,42 @@ func historyDistribution(summary history.SeasonScoring, fromPath, selectedSeason
 	segments := make([]historyDistributionSegmentView, 0, len(summary.GoalBins))
 	parts := make([]string, 0, len(summary.GoalBins))
 	position := 0.0
+	// Non-penalty bins count only matches with a penalty breakdown.
+	covered := historyGoalsCovered(summary)
+	goalsName := "goals"
+	if summary.Basis.ExcludesPenalties() {
+		goalsName = "non-penalty goals"
+	}
 	for index, count := range summary.GoalBins {
 		label := historyGoalBinLabel(index)
-		percent := historyBinPercent(count, summary.Played)
+		percent := historyBinPercent(count, covered)
 		width := "0"
 		hasWidth := count > 0
-		if summary.Played > 0 {
-			width = formatChartNumber(float64(count) / float64(summary.Played) * 100)
+		if covered > 0 {
+			width = formatChartNumber(float64(count) / float64(covered) * 100)
 		}
 		segments = append(segments, historyDistributionSegmentView{Index: index, Label: label, Count: count, Percent: percent, X: formatChartNumber(position), Width: width, HasWidth: hasWidth})
-		parts = append(parts, fmt.Sprintf("%s goals: %d matches (%s)", label, count, percent))
-		if summary.Played > 0 {
-			position += float64(count) / float64(summary.Played) * 100
+		parts = append(parts, fmt.Sprintf("%s %s: %d matches (%s)", label, goalsName, count, percent))
+		if covered > 0 {
+			position += float64(count) / float64(covered) * 100
 		}
 	}
 	return historyDistributionView{
-		Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric),
-		AccessibleName: fmt.Sprintf("%s: %s; %d completed matches total", summary.Season, strings.Join(parts, ", "), summary.Played),
+		Season: summary.Season, Path: historyURL(fromPath, summary.Season, metric, summary.Basis),
+		AccessibleName: fmt.Sprintf("%s: %s; %d completed matches total", summary.Season, strings.Join(parts, ", "), covered),
 		Selected:       summary.Season == selectedSeason,
-		Total:          summary.Played, GoalsEligible: summary.PlotEligible && summary.Played > 0, Segments: segments,
+		Total:          covered, GoalsEligible: summary.PlotEligible && covered > 0, Segments: segments,
+		GoalsName: goalsName,
 	}
+}
+
+// historyGoalsCovered is the number of played matches behind the goal bins: all
+// of them unless the non-penalty basis lacks a penalty breakdown for some.
+func historyGoalsCovered(summary history.SeasonScoring) int {
+	if summary.Basis.ExcludesPenalties() {
+		return summary.GoalsCovered
+	}
+	return summary.Played
 }
 
 func historyGoalBinLabel(index int) string {

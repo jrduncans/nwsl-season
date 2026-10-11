@@ -30,6 +30,7 @@ groups:
             - {id: scenario_generate_team, value: scenario.generate_team, stability: development, brief: Scenario generation for one team failed.}
             - {id: scenario_refresh, value: scenario.refresh, stability: development, brief: Scenario refresh or calculation failed.}
             - {id: scheduler_planning_snapshot, value: scheduler.planning_snapshot, stability: development, brief: Reading the scheduler planning snapshot failed.}
+            - {id: sync_penalty_xg, value: sync.penalty_xg, stability: development, brief: Fetching or validating ASA penalty-pattern xG failed and was absorbed.}
             - {id: sync_recalculate, value: sync.recalculate, stability: development, brief: Cache-only derived-data recalculation failed.}
             - {id: sync_run, value: sync.run, stability: development, brief: A synchronization run failed.}
             - {id: sync_venue_history, value: sync.venue_history, stability: development, brief: Historical venue refresh failed.}
@@ -220,6 +221,21 @@ groups:
     name: nwsl.sync.run.exception
     stability: development
     brief: A correlated exception log for a failed synchronization run.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.sync.penalty_xg.exception
+    type: event
+    name: nwsl.sync.penalty_xg.exception
+    stability: development
+    brief: A correlated exception log for an absorbed ASA penalty-pattern xG failure.
     attributes:
       - ref: exception.type
         requirement_level: required
