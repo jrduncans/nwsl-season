@@ -2,9 +2,6 @@ name: Test
 
 on:
   pull_request:
-    # Markdown changes cannot affect Go, templates, or scripts.
-    paths-ignore:
-      - "**/*.md"
   push:
     branches:
       - main
@@ -22,8 +19,36 @@ permissions:
 # cached. Pull requests restore main's latest cache and save only when none
 # matched, so agent fix-up pushes don't evict main's entries.
 jobs:
+  # Markdown changes cannot affect Go, templates, or scripts, so docs-only pull
+  # requests skip the suites here rather than through a paths-ignore trigger: a
+  # workflow that never starts never reports the required Test check, and the
+  # pull request stays blocked. A job skipped by its if condition reports
+  # success. If this job fails, the suites run anyway.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Check for non-Markdown changes
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          # HEAD is the pull request's merge commit; its first parent is the base.
+          if [ "$EVENT" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -qv '\.md$'; then
+            echo code=true >> "$GITHUB_OUTPUT"
+          else
+            echo code=false >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     name: Test
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -65,6 +90,8 @@ jobs:
   # always runs in at least one shard.
   race:
     name: Race (${{ matrix.shard }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -107,6 +134,8 @@ jobs:
 
   e2e:
     name: E2E
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
