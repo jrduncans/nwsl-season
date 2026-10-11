@@ -736,7 +736,7 @@ func TestModelEvaluationPageRendersInteractiveChart(t *testing.T) {
 	requireElements(t, body, "[data-season-selector]", "[data-stage-selector]")
 	requireExact(t, body, "main h1", "Forecast model evaluation")
 	requireText(t, body, "main", "Final points error", "Relative to the simple baseline")
-	requireAttrContains(t, body, "[data-evaluation-chart]", "data-evaluation", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1")
+	requireAttrContains(t, body, "[data-evaluation-chart]", "data-evaluation", "Straight-line pace", "xG Poisson (schedule load)", "xg-poisson-schedule-load-v1", "xG Poisson (npxG strength, schedule load)", "xg-poisson-npxg-strength-v1")
 	requireText(t, body, "title", "Model evaluation")
 }
 
@@ -1541,6 +1541,29 @@ func TestForecastAcceptsScheduleLoadComparison(t *testing.T) {
 	requireText(t, response.Body.String(), ".forecast-comparison", "Model comparison", "xG Poisson (schedule load) vs xG Poisson")
 }
 
+func TestForecastAcceptsNPXGStrengthComparison(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-npxg-strength-v1&c=xg-poisson-schedule-load-v1", nil)
+	response := httptest.NewRecorder()
+
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	requireElements(t, response.Body.String(), "#forecast-model option[value=xg-poisson-npxg-strength-v1][selected]")
+	requireText(t, response.Body.String(), ".forecast-comparison", "Model comparison", "xG Poisson (npxG strength, schedule load) vs xG Poisson (schedule load)")
+}
+
+func TestForecastDefaultsToScheduleLoadNotNPXGStrength(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	requireElements(t, response.Body.String(), "#forecast-model option[value=xg-poisson-schedule-load-v1][selected]", "#forecast-model option[value=xg-poisson-npxg-strength-v1]")
+}
+
 func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 	data := testSeasonData()
 	data.XGoals = []cache.GameXG{{
@@ -1557,6 +1580,7 @@ func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
 		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-v1", want: true},
 		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-recent-form-v1", want: true},
 		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-schedule-load-v1", want: true},
+		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-npxg-strength-v1", want: true},
 	} {
 		response := httptest.NewRecorder()
 		NewHandlerWithOptions(fakeStore{season: data}, options).ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
@@ -1622,6 +1646,25 @@ func TestForecastResultKeyChangesWithKickoff(t *testing.T) {
 		if second := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); second == first {
 			t.Errorf("%s result key did not change with fixture kickoff", modelID)
 		}
+	}
+}
+
+func TestForecastResultKeyChangesWithPenaltySplits(t *testing.T) {
+	valid := func(value float64) sql.NullFloat64 { return sql.NullFloat64{Float64: value, Valid: true} }
+	data := cache.SeasonData{
+		XGoals:       []cache.GameXG{{GameID: "completed", Availability: cache.XGAvailable, HomeXG: valid(1.7), AwayXG: valid(.8)}},
+		VenueHistory: []cache.VenueSummary{{Season: "2025", XGReady: true, XGMatches: 1, HomeXG: 1.7, AwayXG: .8}},
+	}
+	modelID := "xg-poisson-npxg-strength-v1"
+	unsplit := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+	data.XGoals[0].Penalties = &cache.PenaltySplit{HomeXG: .79}
+	split := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+	if split == unsplit {
+		t.Fatal("result key did not change when a penalty split arrived")
+	}
+	data.VenueHistory[0].NPXGMatches, data.VenueHistory[0].HomeNPXG, data.VenueHistory[0].AwayNPXG = 1, .91, .8
+	if venue := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); venue == split {
+		t.Fatal("result key did not change with prior-season npxG totals")
 	}
 }
 

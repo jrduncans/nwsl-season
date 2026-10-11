@@ -12,17 +12,16 @@ func Catalog() []CatalogEntry {
 		{Model: NewXGPoissonHomeTwoSeasonsV1()},
 		{Model: NewXGPoissonRecentFormV1()},
 		{Model: NewXGPoissonScheduleLoadV1(), Default: true},
+		{Model: NewNPXGStrengthScheduleLoadV1()},
 	}
 }
 
-// EvaluationCatalog surrounds the user-facing Forecast Lab catalog with
-// historical-evaluation-only models: a reference model first and frozen
-// candidates last.
+// EvaluationCatalog prepends historical-evaluation-only reference models to
+// the user-facing Forecast Lab catalog.
 func EvaluationCatalog() []CatalogEntry {
-	entries := append([]CatalogEntry{
+	return append([]CatalogEntry{
 		{Model: NewStraightLinePaceV1()},
 	}, Catalog()...)
-	return append(entries, CatalogEntry{Model: NewNPXGStrengthScheduleLoadV1()})
 }
 
 // DevelopmentCandidates are experimental models that may be scored only by

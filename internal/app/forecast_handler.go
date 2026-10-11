@@ -313,12 +313,20 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 	for _, id := range ids {
 		value := xgoals[id]
 		parts = append(parts, id, strconv.FormatFloat(value.Home, 'g', -1, 64), strconv.FormatFloat(value.Away, 'g', -1, 64))
+		// A penalty-only update leaves the xG values unchanged but changes
+		// npxG-based forecasts.
+		if value.Penalties != nil {
+			parts = append(parts, strconv.FormatFloat(value.Penalties.Home, 'g', -1, 64), strconv.FormatFloat(value.Penalties.Away, 'g', -1, 64))
+		} else {
+			parts = append(parts, "", "")
+		}
 	}
 	for _, summary := range data.VenueHistory {
 		parts = append(parts, summary.Season, strconv.FormatBool(summary.FixtureReady), strconv.FormatBool(summary.XGReady),
 			strconv.Itoa(summary.Matches), strconv.Itoa(summary.HomeGoals), strconv.Itoa(summary.AwayGoals),
 			strconv.Itoa(summary.HomePoints), strconv.Itoa(summary.AwayPoints), strconv.Itoa(summary.XGMatches),
-			strconv.FormatFloat(summary.HomeXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayXG, 'g', -1, 64))
+			strconv.FormatFloat(summary.HomeXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayXG, 'g', -1, 64),
+			strconv.Itoa(summary.NPXGMatches), strconv.FormatFloat(summary.HomeNPXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayNPXG, 'g', -1, 64))
 	}
 	encoded, _ := json.Marshal(parts) // Marshaling a []string cannot fail.
 	sum := sha256.Sum256(encoded)

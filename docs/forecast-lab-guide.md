@@ -101,8 +101,9 @@ ID, so a shared URL always says which model produced its outlook.
 | xG Poisson | `xg-poisson-home-two-seasons-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
 | xG Poisson (recent form) | `xg-poisson-recent-form-v1` | Available ASA team-model xG and kickoff dates | An experimental alternative: each team's xG attack and defence discount older current-season matches exponentially, while the two-season league home-field baseline stays unchanged. |
 | xG Poisson (schedule load) | `xg-poisson-schedule-load-v1` | Available ASA team-model xG, fixture kickoffs, and the two previous regular seasons | The selected xG Poisson model adjusts relative team strength for short recovery and a third match within nine elapsed days. |
+| xG Poisson (npxG strength, schedule load) | `xg-poisson-npxg-strength-v1` | Available ASA team-model xG and penalty splits, fixture kickoffs, and the two previous regular seasons | The schedule-load model with team attack and defence rated on non-penalty xG; league scoring rates still include penalties. Available for comparison, not the default. |
 
-All five models turn a fixture into independent home and away Poisson score
+All six models turn a fixture into independent home and away Poisson score
 distributions. Their scoring rates are bounded between `0.20` and `4.50` goals
 per side, which keeps sparse early-season data from producing implausibly
 extreme scorelines.
@@ -206,10 +207,10 @@ when the evaluated team is more loaded, easier when its opponent is more
 loaded, and unchanged when their load is equal. The venue-only and raw PPG
 measures remain visible as comparisons.
 
-### xG Poisson (npxG strength, schedule load) — evaluation-only candidate
+### xG Poisson (npxG strength, schedule load)
 
-`xg-poisson-npxg-strength-v1` is in `forecast.EvaluationCatalog` but not in
-Forecast Lab. It is `xg-poisson-schedule-load-v1` with team attack and defence
+`xg-poisson-npxg-strength-v1` is offered in Forecast Lab and the model
+evaluation but is not the default. It is `xg-poisson-schedule-load-v1` with team attack and defence
 rated on non-penalty xG: ASA's penalty-kick xG is subtracted from each side of
 every current and historical match, and the multipliers are measured against
 the league npxG mean so they stay centred on one. The league home and away
@@ -231,11 +232,13 @@ loss was 0.0018 lower than the default, but the paired interval
 slightly worse. `xg-poisson-schedule-load-v1` remains the default. See
 [the model evaluation](model-evaluation-v1.md).
 
-If it is offered in Forecast Lab, live forecasts take the league npxG venue rate
-from the prior-season venue summaries, which derive npxG totals from stored
-penalty splits when read; the npxG totals are used only when every prior-season
-xG match has a split. Backtests pool the rate from cutoff-safe historical
-fixtures.
+Live forecasts take the league npxG venue rate from the prior-season venue
+summaries, which derive npxG totals from stored penalty splits when read; the
+npxG totals are used only when every prior-season xG match has a split.
+Otherwise the npxG league rate comes from the current season alone. Backtests
+pool the rate from cutoff-safe historical fixtures. Penalty splits and npxG
+totals are part of the forecast result key, so a split that arrives after its
+xG refreshes cached forecasts.
 
 ### Current pace
 
@@ -449,12 +452,14 @@ probabilities never replace those badges or conditions.
 ## Where to look in the code
 
 - [`internal/forecast/catalog.go`](../internal/forecast/catalog.go) defines the
-  five-model catalog and its current default.
+  six-model catalog and its current default.
 - [`internal/forecast/current_pace.go`](../internal/forecast/current_pace.go),
   [`results_poisson.go`](../internal/forecast/results_poisson.go), and
   [`xg_poisson.go`](../internal/forecast/xg_poisson.go) fit the base score
   models. [`xg_poisson_schedule_load.go`](../internal/forecast/xg_poisson_schedule_load.go)
-  adds the selected schedule adjustment.
+  adds the selected schedule adjustment, and
+  [`xg_poisson_npxg_strength.go`](../internal/forecast/xg_poisson_npxg_strength.go)
+  rates team strengths on non-penalty xG.
 - [`internal/simulation/simulation.go`](../internal/simulation/simulation.go)
   prepares complete seasons, conditionally samples fixed outcomes, handles
   unresolved ties, and aggregates results. [`internal/simulation/playoffs.go`](../internal/simulation/playoffs.go)
