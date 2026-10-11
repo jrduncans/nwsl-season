@@ -74,6 +74,7 @@ func TestRunStartsSchedulerAndShutsDownOnCancel(t *testing.T) {
 	t.Setenv("NWSL_ASA_BASE_URL", "http://127.0.0.1:1/api/v1")
 	t.Setenv("NWSL_HTTP_ADDR", "127.0.0.1:0")
 	t.Setenv("NWSL_SYNC_TIMEOUT", "1m")
+	t.Setenv("NWSL_SYNC_SCHEDULER", "")
 	cfg, err := config.FromEnvironment()
 	if err != nil {
 		t.Fatal(err)
@@ -105,6 +106,77 @@ func TestRunStartsSchedulerAndShutsDownOnCancel(t *testing.T) {
 	if transport.requests.Load() == 0 {
 		t.Fatal("transport saw no ASA requests")
 	}
+}
+
+// TestRunWithSchedulerDisabledMakesNoASARequests covers the development mode
+// that serves a copied cache: the server answers requests while the scheduler,
+// its only ASA caller, never starts.
+func TestRunWithSchedulerDisabledMakesNoASARequests(t *testing.T) {
+	transport := &lingeringASATransport{requested: make(chan struct{})}
+	originalOptions := serverOptions
+	serverOptions = func(logger *slog.Logger) server.Options {
+		options := originalOptions(logger)
+		options.ASAHTTPClient = &http.Client{Transport: transport}
+		return options
+	}
+	t.Cleanup(func() { serverOptions = originalOptions })
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NWSL_DATA_DIR", t.TempDir())
+	t.Setenv("NWSL_ASA_BASE_URL", "http://127.0.0.1:1/api/v1")
+	t.Setenv("NWSL_HTTP_ADDR", address)
+	t.Setenv("NWSL_SYNC_SCHEDULER", "false")
+	cfg, err := config.FromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
+	waitForHealthy(t, "http://"+address+"/healthz", done)
+	// A started scheduler requests ASA immediately; allow it time to show up.
+	select {
+	case <-transport.requested:
+		t.Fatal("disabled scheduler requested ASA")
+	case <-time.After(200 * time.Millisecond):
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("run error = %v, want clean shutdown", err)
+	}
+	if requests := transport.requests.Load(); requests != 0 {
+		t.Fatalf("ASA requests = %d, want 0", requests)
+	}
+}
+
+func waitForHealthy(t *testing.T, url string, done <-chan error) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-done:
+			t.Fatalf("run returned before serving: %v", err)
+		default:
+		}
+		response, err := http.Get(url) // #nosec G107 -- url is this test's loopback server.
+		if err == nil {
+			_ = response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("server did not become healthy")
 }
 
 func TestNewHTTPServerAppliesConnectionLimits(t *testing.T) {

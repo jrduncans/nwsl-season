@@ -1,0 +1,54 @@
+#!/bin/sh
+# Seeds a linked worktree's cache with a snapshot of the primary checkout's
+# long-lived cache, so worktree servers never bootstrap from ASA.
+#
+#   scripts/dev-data            seed only when the worktree has no cache
+#   scripts/dev-data --refresh  replace the worktree cache (stop its server first)
+#
+# Snapshots go through one staging copy in the primary checkout, refreshed at
+# most hourly, and are cloned from it; on APFS every worktree shares its blocks.
+set -eu
+
+refresh=false
+case "${1:-}" in
+"") ;;
+--refresh) refresh=true ;;
+*)
+	echo "usage: scripts/dev-data [--refresh]" >&2
+	exit 2
+	;;
+esac
+
+git_dir=$(git rev-parse --absolute-git-dir)
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
+if [ "$git_dir" = "$common_dir" ]; then
+	echo "dev-data: the primary checkout owns its cache; run this in a linked worktree" >&2
+	exit 1
+fi
+primary=$(dirname "$common_dir")
+source="$primary/data/nwsl-season.sqlite"
+staging="$primary/data/snapshot/nwsl-season.sqlite"
+data_dir=${NWSL_DATA_DIR:-data}
+target="$data_dir/nwsl-season.sqlite"
+
+if [ -e "$target" ] && [ "$refresh" = false ]; then
+	exit 0
+fi
+if [ ! -f "$source" ]; then
+	echo "dev-data: no primary cache at $source; start the primary checkout's server first" >&2
+	exit 1
+fi
+
+if [ "$refresh" = true ] || [ ! -f "$staging" ] || [ -n "$(find "$staging" -mmin +60)" ]; then
+	mkdir -p "$(dirname "$staging")"
+	partial="$staging.$$.partial"
+	trap 'rm -f "$partial"' EXIT
+	# The backup API yields a consistent copy while the primary server writes.
+	sqlite3 -readonly "$source" ".backup '$partial'"
+	mv -f "$partial" "$staging"
+fi
+
+mkdir -p "$data_dir"
+rm -f "$target" "$target-wal" "$target-shm"
+cp -c "$staging" "$target" 2>/dev/null || cp "$staging" "$target"
+echo "dev-data: seeded $target from $source"

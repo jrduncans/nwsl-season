@@ -68,7 +68,12 @@ var serverOptions = func(logger *slog.Logger) server.Options {
 }
 
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
-	srv, err := server.Build(ctx, cfg, serverOptions(logger))
+	options := serverOptions(logger)
+	if !cfg.SyncScheduler {
+		options.StartScheduler = false
+		logger.Info("scheduler disabled; serving the existing cache without ASA requests", "db", cfg.DBPath)
+	}
+	srv, err := server.Build(ctx, cfg, options)
 	if err != nil {
 		return err
 	}

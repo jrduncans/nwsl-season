@@ -47,6 +47,10 @@ type Config struct {
 	// refreshes. Tests point it at a local fake; production keeps the default.
 	ASABaseURL string
 
+	// SyncScheduler starts the background scheduler, the server's only ASA
+	// caller. Development servers that read a copied cache turn it off.
+	SyncScheduler bool
+
 	SyncSeason          string
 	SyncStage           string
 	SyncCheckInterval   time.Duration
@@ -63,6 +67,10 @@ type Config struct {
 func FromEnvironment() (Config, error) {
 	dataDir := valueOrDefault("NWSL_DATA_DIR", defaultDataDir)
 	asaBaseURL, err := absoluteHTTPURLFromEnvironment("NWSL_ASA_BASE_URL", asa.DefaultBaseURL)
+	if err != nil {
+		return Config{}, err
+	}
+	syncScheduler, err := boolFromEnvironment("NWSL_SYNC_SCHEDULER", true)
 	if err != nil {
 		return Config{}, err
 	}
@@ -106,6 +114,8 @@ func FromEnvironment() (Config, error) {
 
 		ASABaseURL: asaBaseURL,
 
+		SyncScheduler: syncScheduler,
+
 		SyncSeason:          valueOrDefault("NWSL_SYNC_SEASON", defaultSyncSeason),
 		SyncStage:           valueOrDefault("NWSL_SYNC_STAGE", defaultSyncStage),
 		SyncCheckInterval:   checkInterval,
@@ -132,6 +142,18 @@ func absoluteHTTPURLFromEnvironment(name, fallback string) (string, error) {
 		return "", fmt.Errorf("%s must be an absolute http or https URL, got %q", name, value)
 	}
 	return value, nil
+}
+
+func boolFromEnvironment(name string, fallback bool) (bool, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false, got %q", name, value)
+	}
+	return parsed, nil
 }
 
 func positiveIntFromEnvironment(name string, fallback int) (int, error) {

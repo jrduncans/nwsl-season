@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs the development server for Pitchfork. The primary checkout serves its
+# long-lived cache with the scheduler on. A linked worktree serves a snapshot of
+# that cache (see scripts/dev-data) with the scheduler, the server's only ASA
+# caller, off unless NWSL_SYNC_SCHEDULER is set explicitly.
+set -eu
+
+if [ "$(git rev-parse --absolute-git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
+	scripts/dev-data
+	NWSL_SYNC_SCHEDULER=${NWSL_SYNC_SCHEDULER:-false}
+	export NWSL_SYNC_SCHEDULER
+fi
+exec go run ./cmd/server

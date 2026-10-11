@@ -1,5 +1,5 @@
 [daemons.server]
-run = "exec env NWSL_HTTP_ADDR=127.0.0.1:$PORT go run ./cmd/server"
+run = "exec env NWSL_HTTP_ADDR=127.0.0.1:$PORT scripts/dev-server"
 port = { expect = [8080], bump = 10 }
 mise = true
-watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]
+watch = ["scripts/dev-*", "internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]
