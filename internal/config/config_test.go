@@ -23,6 +23,7 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "")
 	t.Setenv("NWSL_ASA_BASE_URL", "")
+	t.Setenv("NWSL_SYNC_SCHEDULER", "")
 
 	got, err := FromEnvironment()
 	if err != nil {
@@ -53,6 +54,9 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	if got.HistoryRetention != defaultHistoryRetention {
 		t.Errorf("history retention = %s, want %s", got.HistoryRetention, defaultHistoryRetention)
 	}
+	if !got.SyncScheduler {
+		t.Error("SyncScheduler = false, want the scheduler on by default")
+	}
 	if got.ScenarioBudget != defaultScenarioBudget {
 		t.Errorf("ScenarioBudget = %s, want %s", got.ScenarioBudget, defaultScenarioBudget)
 	}
@@ -75,6 +79,7 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "3")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "40s")
 	t.Setenv("NWSL_ASA_BASE_URL", "http://127.0.0.1:9999/api/v1")
+	t.Setenv("NWSL_SYNC_SCHEDULER", "false")
 
 	got, err := FromEnvironment()
 	if err != nil {
@@ -105,6 +110,9 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	}
 	if got.ScenarioBudget != 75*time.Second {
 		t.Errorf("ScenarioBudget = %s, want 75s", got.ScenarioBudget)
+	}
+	if got.SyncScheduler {
+		t.Error("SyncScheduler = true, want the configured false")
 	}
 	if got.QualificationBudget != 12*time.Second {
 		t.Errorf("QualificationBudget = %s, want 12s", got.QualificationBudget)
@@ -164,6 +172,13 @@ func TestFromEnvironmentRejectsInvalidSyncDuration(t *testing.T) {
 				t.Fatal("FromEnvironment error = nil, want validation error")
 			}
 		})
+	}
+}
+
+func TestFromEnvironmentRejectsInvalidSyncScheduler(t *testing.T) {
+	t.Setenv("NWSL_SYNC_SCHEDULER", "off")
+	if _, err := FromEnvironment(); err == nil {
+		t.Fatal("FromEnvironment error = nil, want validation error")
 	}
 }
 

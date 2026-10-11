@@ -167,6 +167,23 @@ CA, then reload the URL. The proxy slug is stored in the user-level Pitchfork
 config; the repository’s `pitchfork.toml` contains the shared port, readiness,
 retry, watching, and proxy settings.
 
+### Linked worktrees
+
+The daemon runs `scripts/dev-server`. In the primary checkout it serves the
+long-lived `data/` cache with the scheduler on. In a linked Git worktree it
+first runs `scripts/dev-data`, which seeds the worktree's own `data/` with a
+snapshot of the primary cache, and then starts with `NWSL_SYNC_SCHEDULER=false`,
+so any number of worktree servers make no ASA requests. Pitchfork gives each
+worktree its own namespace, a bumped port, and a proxy hostname that
+`pitchfork status server` prints.
+
+`scripts/dev-data` refreshes a shared staging copy in the primary checkout's
+`data/snapshot/` at most hourly and clones it into each worktree; on APFS the
+clones share disk blocks until written. To pick up newer primary data, stop the
+worktree server, run `scripts/dev-data --refresh`, and start it again. A
+worktree server never recalculates derived data such as clinching scenarios,
+because that repair runs inside the scheduler.
+
 ## Configuration
 
 | Environment variable | Default | Purpose |
@@ -176,6 +193,7 @@ retry, watching, and proxy settings.
 | `PORT` | `8080` | Port used when `NWSL_HTTP_ADDR` is unset. |
 | `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache. |
 | `NWSL_ASA_BASE_URL` | `https://app.americansocceranalysis.com/api/v1` | ASA API root used by the server's scheduler and as the `sync -base-url` default. Must be an absolute `http` or `https` URL with a host name and no user information, query string, or fragment; override it only to point at a local fake ASA in tests. |
+| `NWSL_SYNC_SCHEDULER` | `true` | Set to `false` to serve the existing cache without starting the scheduler, which is the server's only ASA caller. Development worktrees do this automatically. |
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the scheduler checks cache freshness. |

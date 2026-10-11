@@ -238,7 +238,11 @@ source sequence; it never bypasses source validation.
 
 `NWSL_SYNC_TIMEOUT` defaults to `2m` and bounds one scheduler source operation
 or one explicit selected-scope sync. `NWSL_SYNC_CHECK_INTERVAL` defaults to
-`5m`; `NWSL_SYNC_COMPLETION_GRACE` defaults to `2h`. The public configuration
+`5m`; `NWSL_SYNC_COMPLETION_GRACE` defaults to `2h`. `NWSL_SYNC_SCHEDULER=false`
+keeps the server from starting the scheduler at all, so it makes no ASA
+requests and runs no derived repair; startup forecast warming, which reads only
+the cache, still runs. Development worktrees use it to serve a copied cache.
+The public configuration
 table in [README.md](../README.md#configuration) is authoritative for
 environment-variable defaults.
 
