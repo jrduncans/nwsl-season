@@ -17,7 +17,7 @@ import (
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=team-rankings&team=alpha", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=teams&display=scatter", "/nwsl-season/explore?view=team-history&team=alpha"} {
 		t.Run(path, func(t *testing.T) {
-			store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+			store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 				"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19},
 				"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 20},
 			})}
@@ -97,7 +97,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 }
 
 func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2019": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 0},
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 4},
@@ -126,11 +126,11 @@ func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
 }
 
 func TestExploreDistributionSortUsesExactShareAndNativeLinks(t *testing.T) {
-	rows := []historyDistributionView{
-		{Season: "2023", Total: 4, GoalsEligible: true, Segments: []historyDistributionSegmentView{{Count: 1}}},
-		{Season: "2024", Total: 3, GoalsEligible: true, Segments: []historyDistributionSegmentView{{Count: 1}}},
-		{Season: "2025", Total: 1000, GoalsEligible: true, Segments: []historyDistributionSegmentView{{Count: 333}}},
-		{Season: "2026", Total: 3, GoalsEligible: false, Segments: []historyDistributionSegmentView{{Count: 3}}},
+	rows := []exploreDistributionSeason{
+		{Season: "2023", Total: 4, GoalsEligible: true, Segments: []exploreDistributionSegment{{Count: 1}}},
+		{Season: "2024", Total: 3, GoalsEligible: true, Segments: []exploreDistributionSegment{{Count: 1}}},
+		{Season: "2025", Total: 1000, GoalsEligible: true, Segments: []exploreDistributionSegment{{Count: 333}}},
+		{Season: "2026", Total: 3, GoalsEligible: false, Segments: []exploreDistributionSegment{{Count: 3}}},
 	}
 	for _, tc := range []struct {
 		column, order string
@@ -170,7 +170,7 @@ func TestExploreDistributionSortUsesExactShareAndNativeLinks(t *testing.T) {
 }
 
 func TestExploreDistributionBinSelection(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})}
 	for _, bin := range []string{"all", "0", "1", "2", "3", "4"} {
@@ -193,7 +193,7 @@ func TestExploreDistributionBinSelection(t *testing.T) {
 		})
 	}
 
-	rows := []historyDistributionView{{Season: "2025", Total: 20, GoalsEligible: true}}
+	rows := []exploreDistributionSeason{{Season: "2025", Total: 20, GoalsEligible: true}}
 	defaultPage, err := exploreDistribution(nil, rows)
 	if err != nil || defaultPage.DistributionBin != "all" || defaultPage.DistributionExpanded {
 		t.Fatalf("default selection = %+v, error = %v", defaultPage, err)
@@ -211,7 +211,7 @@ func TestExploreDistributionBinSelection(t *testing.T) {
 }
 
 func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 4},
 	})}
@@ -234,7 +234,7 @@ func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
 }
 
 func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 4},
 	})}
@@ -295,7 +295,7 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 }
 
 func TestExploreRouteValidation(t *testing.T) {
-	handler := NewHandler(&historyHTTPStore{})
+	handler := NewHandler(&archiveHTTPStore{})
 	for _, tc := range []struct {
 		path     string
 		status   int
@@ -370,7 +370,7 @@ func TestExploreTeamTableSortsUnroundedValuesAndKeepsMissingLast(t *testing.T) {
 }
 
 func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 	})
 	for index := range archive[0].Data.XGoals {
@@ -416,7 +416,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`<option value="points" selected>Points</option>`, `<option value="total" selected>Totals</option>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
 		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`<option value="points" selected>Points</option>`, `<option value="xg" selected>xPts</option>`, `data-history-sort="points-expected"`, `<h4>xPts</h4>`}},
 	} {
-		store := &historyHTTPStore{archive: archive}
+		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()
 		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
 		if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
@@ -428,7 +428,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 			}
 		}
 	}
-	missingPoints := historyArchive(t, map[string]historyArchiveState{
+	missingPoints := testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 	})
 	for index := range missingPoints[0].Data.XGoals {
@@ -477,7 +477,7 @@ func TestExploreTeamTotalSortUsesTotalsAndKeepsMissingLast(t *testing.T) {
 }
 
 func TestExploreTeamViewsKeepSelectionAndWarnOnlyForMissingXG(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19},
 	})
@@ -514,7 +514,7 @@ func TestExploreTeamViewsKeepSelectionAndWarnOnlyForMissingXG(t *testing.T) {
 }
 
 func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19},
 	})
@@ -557,7 +557,7 @@ func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
 }
 
 func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19},
 	})}
@@ -595,7 +595,7 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 	for _, mode := range []string{"goals", "xg", "both"} {
 		for _, units := range []string{"per-match", "total"} {
 			t.Run(mode+"/"+units, func(t *testing.T) {
-				store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+				store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 					"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 					"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19},
 				})}
@@ -651,7 +651,7 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 }
 
 func TestExploreUnifiedTableIsIndependentOfChartMeasure(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 	})
 	summaries, err := history.SummarizeScoring(archive)

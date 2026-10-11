@@ -27,12 +27,10 @@ func ScenarioNames() []string {
 	return []string{ScenarioDefault, ScenarioTeams, ScenarioNoXG, ScenarioTeamHistory, ScenarioSeasonTrend, ScenarioOverview, ScenarioEmpty, ScenarioSingle}
 }
 
-// Scenario returns the in-memory historical seasons for a named scenario and
-// the season that the history scoring page should preselect. An empty name
-// means ScenarioDefault. An unknown name fails the test.
-func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason, selection string) {
+// Scenario returns the in-memory historical seasons for a named scenario. An
+// empty name means ScenarioDefault. An unknown name fails the test.
+func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 	t.Helper()
-	selection = "2022"
 	switch name {
 	case "", ScenarioDefault:
 		archive = Archive(t, map[string]ArchiveState{
@@ -60,18 +58,15 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason, sele
 				archive[i].Data.XGoals[j].AwayXG.Float64 = 1.1
 			}
 		}
-		selection = "2025"
 	case ScenarioEmpty:
 		archive = Archive(t, map[string]ArchiveState{"2024": {Lifecycle: cache.SourceScopeActive, Goals: 1}})
 		archive[0].Data.Games = Games("2024", 19, 1)
-		selection = "2024"
 	case ScenarioSingle:
 		archive = Archive(t, map[string]ArchiveState{"2024": {Lifecycle: cache.SourceScopeCompleted, Goals: 1}})
-		selection = "2024"
 	default:
 		t.Fatalf("unknown scenario %q; want one of %v", name, ScenarioNames())
 	}
-	return archive, selection
+	return archive
 }
 
 // previewTeams are the sixteen 2026 clubs used by the teams, team-history and

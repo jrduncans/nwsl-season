@@ -72,7 +72,7 @@ func exploreBenchmarkArchive(t *testing.T, year string, active bool) []cache.His
 	if active {
 		lifecycle = cache.SourceScopeActive
 	}
-	archive := historyArchive(t, map[string]historyArchiveState{year: {Lifecycle: lifecycle}})
+	archive := testArchive(t, map[string]archiveState{year: {Lifecycle: lifecycle}})
 	data := &archive[0].Data
 	data.Games = nil
 	for i := range 10 {
@@ -130,7 +130,7 @@ func TestExploreTrendBenchmarksSeasonGroupsAndFallback(t *testing.T) {
 			for _, mode := range []string{"match", "rolling"} {
 				query.Set("trend-mode", mode)
 				response := httptest.NewRecorder()
-				store := &historyHTTPStore{archive: archive}
+				store := &archiveHTTPStore{archive: archive}
 				NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&season="+year+"&team=team-9&"+query.Encode(), nil))
 				body := response.Body.String()
 				if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
@@ -229,7 +229,7 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 		t.Fatalf("xPoints benchmark must honor independent coverage and selection: %+v, %v", page, err)
 	}
 	response := httptest.NewRecorder()
-	NewHandler(&historyHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&season=2026&team=team-0&trend-view=points&trend-mode=match", nil))
+	NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&season=2026&team=team-0&trend-view=points&trend-mode=match", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `<th scope="col">xPoints</th>`) || !strings.Contains(response.Body.String(), `data-trend-points-warning>`) || !strings.Contains(response.Body.String(), `data-trend-warning hidden`) {
 		t.Fatal("points fallback must render points and its own coverage warning")
 	}

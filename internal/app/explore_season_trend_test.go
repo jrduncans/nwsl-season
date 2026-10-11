@@ -17,7 +17,7 @@ import (
 )
 
 func TestExploreSeasonTrendChronologyVenueAndPartialXG(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19}})
+	archive := testArchive(t, map[string]archiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19}})
 	season := &archive[0]
 	season.Data.Teams = []standings.Team{{ID: "alpha", Name: "Alpha"}, {ID: "bravo", Name: "Bravo"}}
 	for index := range season.Data.Games {
@@ -111,7 +111,7 @@ func TestExploreSeasonTrendVenueDates(t *testing.T) {
 }
 
 func TestExploreSeasonTrendUnknownVenuePreservesOrder(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3}})
+	archive := testArchive(t, map[string]archiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3}})
 	for index := range archive[0].Data.Games {
 		game := &archive[0].Data.Games[index]
 		game.KickoffUTC = time.Date(2026, 3, index+1, 1, 0, 0, 0, time.UTC).Format("2006-01-02 15:04:05 MST")
@@ -186,7 +186,7 @@ func TestExploreSeasonTrendRollingWindows(t *testing.T) {
 }
 
 func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2024": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 3},
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
@@ -203,7 +203,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&average-reference=league&average-series=xg",
 		"/explore?view=season-trend&season=2024&team=alpha",
 	} {
-		store := &historyHTTPStore{archive: archive}
+		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()
 		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		body := response.Body.String()
@@ -288,20 +288,20 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"series=", "series=xg&series=goals", "team=", "team=unknown", "team=alpha&team=bravo", "season=2000",
 	} {
 		response := httptest.NewRecorder()
-		NewHandler(&historyHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&"+query, nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&"+query, nil))
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("invalid %s returned %d", query, response.Code)
 		}
 	}
 	response := httptest.NewRecorder()
-	NewHandler(&historyHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend", nil))
+	NewHandler(&archiveHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `data-season-trend-empty>No eligible`) {
 		t.Fatal("empty archive should have an explicit empty state")
 	}
 }
 
 func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19}})
+	archive := testArchive(t, map[string]archiveState{"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19}})
 	for index := range archive[0].Data.Games {
 		archive[0].Data.Games[index].HomeScore.Int64 = int64(index % 4)
 		archive[0].Data.Games[index].AwayScore.Int64 = int64(index % 3)

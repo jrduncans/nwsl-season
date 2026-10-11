@@ -16,7 +16,7 @@ import (
 
 func penaltyArchive(t *testing.T, splits int) []cache.HistoricalSeason {
 	t.Helper()
-	return historyArchive(t, map[string]historyArchiveState{
+	return testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20, PenaltySplits: splits},
 	})
 }
@@ -24,7 +24,7 @@ func penaltyArchive(t *testing.T, splits int) []cache.HistoricalSeason {
 func getPage(t *testing.T, archive []cache.HistoricalSeason, target string) (int, string) {
 	t.Helper()
 	response := httptest.NewRecorder()
-	NewHandler(&historyHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
 	return response.Code, response.Body.String()
 }
 
@@ -32,7 +32,7 @@ func TestPenaltiesParameterIsRejectedLikeAnInvalidMeasure(t *testing.T) {
 	archive := penaltyArchive(t, 20)
 	for _, target := range []string{
 		"/explore?view=teams&penalties=bogus", "/explore?penalties=", "/explore?penalties=include&penalties=exclude",
-		"/explore?view=trend&penalties=Exclude", "/history/scoring?penalties=bogus", "/history/scoring?penalties=exclude&penalties=exclude",
+		"/explore?view=trend&penalties=Exclude",
 	} {
 		code, body := getPage(t, archive, target)
 		if code != http.StatusBadRequest {
@@ -44,9 +44,9 @@ func TestPenaltiesParameterIsRejectedLikeAnInvalidMeasure(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Fatalf("invalid measure status = %d", code)
 	}
-	requireExact(t, body, "main h1", "Invalid history selection")
+	requireExact(t, body, "main h1", "Invalid Explore selection")
 	_, penalties := getPage(t, archive, "/explore?penalties=bogus")
-	requireExact(t, penalties, "main h1", "Invalid history selection")
+	requireExact(t, penalties, "main h1", "Invalid Explore selection")
 }
 
 func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
@@ -240,45 +240,12 @@ func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *te
 		t.Fatalf("status = %d", code)
 	}
 	requireText(t, body, "[data-panel=table]", "No seasons currently have enough complete results to compare.")
-	_, histPage := getPage(t, archive, "/history/scoring?penalties=exclude")
-	requireText(t, histPage, "main", "2025 — incomplete non-penalty data")
 	_, teams := getPage(t, archive, "/explore?view=teams&penalties=exclude")
 	requireElements(t, teams, `[data-team-empty]`)
 	forbidRaw(t, teams, `"alpha"`)
 	// The default basis is unaffected by the missing split.
 	_, defaults := getPage(t, archive, "/explore?view=table")
 	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00")
-}
-
-func TestHistoryPagePenaltiesControlLabelsAndLinks(t *testing.T) {
-	archive := penaltyArchive(t, 20)
-	_, plain := getPage(t, archive, "/history/scoring?season=2025&metric=xg")
-	requireAttr(t, plain, `a[data-penalties-choice=exclude]`, "href", "scoring?metric=xg&penalties=exclude&season=2025")
-	requireText(t, plain, "form.history-selector", "Season", "Penalties", "Included", "Excluded")
-	forbidRaw(t, plain, "data-penalties-control", "history-penalties")
-	requireAttr(t, plain, `a[data-penalties-choice=include]`, "href", "scoring?metric=xg&season=2025")
-	forbidRaw(t, plain, `name="penalties"`, "Non-penalty")
-	if got := len(find(t, plain, `a[data-penalties-choice=exclude]`)); got != 1 {
-		t.Errorf("default history page has %d Excluded destinations, want 1", got)
-	}
-
-	code, body := getPage(t, archive, "/history/scoring?season=2025&metric=compare&penalties=exclude")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d", code)
-	}
-	requireText(t, body, "main", "Penalties", "Included", "Excluded", "Excluded removes penalty kicks from both goals and xG.")
-	requireAttr(t, body, `select[data-penalties-selector] option[selected]`, "value", "exclude")
-	requireElements(t, body, `form.history-selector input[name=penalties][value=exclude]`, `form.history-selector input[name=metric][value=compare]`)
-	requireText(t, body, ".history-metric-choice", "Non-penalty goals", "Non-penalty expected goals (npxG)")
-	requireText(t, body, ".history-primary-metrics", "Non-penalty goals per match", "npxG per match", "2.00", "0.24")
-	requireText(t, body, ".history-difference", "Non-penalty goals minus npxG per match", "1.76")
-	requireText(t, body, "section.history-distribution", "Share of matches by total non-penalty goals", "2 non-penalty goals")
-	for _, link := range find(t, body, `a.history-metric-link, a.history-chart-point-link, .history-distribution-row a`) {
-		if href := attr(link, "href"); !strings.Contains(href, "penalties=exclude") && attr(link, "data-penalties-choice") != "include" {
-			t.Errorf("history link %q lost the basis", href)
-		}
-	}
-	requireText(t, body, "table.history-table thead", "Total non-penalty goals", "Non-penalty goals per match", "npxG per match")
 }
 
 // npxgSeasonData has two completed alpha-bravo games with xG. Alpha has 3.00

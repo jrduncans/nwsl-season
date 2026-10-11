@@ -37,7 +37,7 @@ const (
 func Seed(t testing.TB, db *cache.DB, scenario string) {
 	t.Helper()
 	ctx := context.Background()
-	archive, _ := Scenario(t, scenario)
+	archive := Scenario(t, scenario)
 	now := time.Now().UTC()
 	// The scheduler and server seed the same registry; doing it here lets a
 	// bare database serve the history pages.

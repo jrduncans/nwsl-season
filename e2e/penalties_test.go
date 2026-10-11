@@ -164,46 +164,6 @@ func hrefs(t *testing.T, page playwright.Page, selector string) []string {
 	return links
 }
 
-func TestHistoryPenaltiesToggleSwitchesBasis(t *testing.T) {
-	t.Parallel()
-	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := explorePage(t, base, Desktop, "history/scoring?season=2025&metric=compare")
-	before := textOf(t, page, ".history-primary-metrics")
-	if strings.Contains(before, "Non-penalty") {
-		t.Fatalf("default history page already uses the non-penalty basis: %q", before)
-	}
-	choosePenalties(t, page, "exclude")
-	if got := queryOf(t, page); got.Get("penalties") != "exclude" || got.Get("season") != "2025" || got.Get("metric") != "compare" {
-		t.Fatalf("URL after excluding penalties = %v", got)
-	}
-	if got := textOf(t, page, "form.history-selector"); !strings.Contains(got, "Season") || !strings.Contains(got, "Penalties") {
-		t.Errorf("history selector row = %q", got)
-	}
-	after := textOf(t, page, ".history-primary-metrics")
-	if !strings.Contains(after, "Non-penalty goals per match") || !strings.Contains(after, "npxG per match") || after == before {
-		t.Errorf("primary metrics did not switch: %q -> %q", before, after)
-	}
-	if got := textOf(t, page, ".history-metric-choice"); !strings.Contains(got, "Non-penalty goals") || !strings.Contains(got, "Non-penalty expected goals (npxG)") {
-		t.Errorf("metric choices = %q", got)
-	}
-	if got := textOf(t, page, ".history-distribution"); !strings.Contains(got, "non-penalty goals") {
-		t.Errorf("distribution section = %q", got)
-	}
-	// Selecting another season keeps the basis.
-	chooseOption(t, page, "#history-season", "2026")
-	if err := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Show season"}).Click(); err != nil {
-		t.Fatalf("show season: %v", err)
-	}
-	if got := queryOf(t, page); got.Get("penalties") != "exclude" || got.Get("season") != "2026" {
-		t.Errorf("season form dropped the basis: %v", got)
-	}
-	for _, href := range hrefs(t, page, "a.history-metric-link, a.history-chart-point-link") {
-		if !strings.Contains(href, "penalties=exclude") {
-			t.Errorf("link %q lost the basis", href)
-		}
-	}
-}
-
 // fixtureNPxG matches the non-penalty line under a fixture result's xG line.
 var fixtureNPxG = regexp.MustCompile(`^npxG \d+\.\d\d–\d+\.\d\d$`)
 
@@ -279,8 +239,6 @@ func TestExplorePenaltiesControlFitsAPhone(t *testing.T) {
 		gotoInPage(t, page, "explore?"+tab.query+"&penalties=exclude")
 		assertNoHorizontalOverflow(t, page)
 	}
-	history := explorePage(t, base, Mobile, "history/scoring?penalties=exclude")
-	assertNoHorizontalOverflow(t, history)
 }
 
 // controlBox is the page-relative bounding box of an element.
@@ -298,10 +256,8 @@ type controlGeometry struct {
 
 type controlLayout struct {
 	// AnchorY is the page offset the controls are compared against: the view
-	// heading's bottom on Explore, whose heading text changes with the basis
-	// and can wrap onto another line on a narrow window, and the selector
-	// form's top on the history page, which follows a chart whose captions
-	// change too.
+	// heading's bottom, because heading text changes with the basis and can
+	// wrap onto another line on a narrow window.
 	AnchorY       float64
 	HeadingBottom float64
 	Controls      []controlGeometry
@@ -309,16 +265,15 @@ type controlLayout struct {
 
 // controlLayoutScript measures every visible select in the page's current
 // view, keyed by its position and name so the two bases compare like for like.
-const controlLayoutScript = `([headingSelector, anchorSelector]) => {
+const controlLayoutScript = `(headingSelector) => {
 	const box = (el) => { const r = el.getBoundingClientRect(); return {X: r.left + scrollX, Y: r.top + scrollY, W: r.width, H: r.height}; };
 	const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 	const heading = document.querySelector(headingSelector);
 	const controls = [...document.querySelectorAll('main select, .explore select, form select')]
 		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
 		.map((el, index) => ({Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: box(el), Label: box(el.closest('label') || el)}));
-	const anchor = anchorSelector ? document.querySelector(anchorSelector) : null;
 	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
-	return {AnchorY: anchor ? box(anchor).Y : headingBottom, HeadingBottom: headingBottom, Controls: controls};
+	return {AnchorY: headingBottom, HeadingBottom: headingBottom, Controls: controls};
 }`
 
 func closeEnough(a, b float64) bool { return a-b <= 1 && b-a <= 1 }
@@ -328,19 +283,18 @@ func sameBox(a, b controlBox) bool {
 }
 
 // TestDataControlsKeepTheirGeometryAcrossBases checks that, in every Explore
-// view and display and on the history page, the data controls sit below the
+// view and display, the data controls sit below the
 // view heading and occupy exactly the same boxes, relative to that heading,
 // whether penalties are included or excluded, at three window sizes. Option text never changes with
 // the basis, so no select may resize.
 func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	type target struct{ name, query, heading, anchor string }
-	targets := make([]target, 0, len(exploreTabs)+1)
+	type target struct{ name, query, heading string }
+	targets := make([]target, 0, len(exploreTabs))
 	for _, tab := range exploreTabs {
-		targets = append(targets, target{tab.tab, "explore?" + tab.query, ".explore [data-panel]:not([hidden]) h2", ""})
+		targets = append(targets, target{tab.tab, "explore?" + tab.query, ".explore [data-panel]:not([hidden]) h2"})
 	}
-	targets = append(targets, target{"History", "history/scoring", "#history-chart-heading", ".history-selector"})
 	viewports := []viewport{
 		{Name: "1280x900", Width: 1280, Height: 900},
 		{Name: "1024x768", Width: 1024, Height: 768},
@@ -360,7 +314,7 @@ func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
 						t.Fatalf("settle %s: %v", tg.name, err)
 					}
 					var layout controlLayout
-					evalJSON(t, page, controlLayoutScript, []string{tg.heading, tg.anchor}, &layout)
+					evalJSON(t, page, controlLayoutScript, tg.heading, &layout)
 					return layout
 				}
 				included := measure("")

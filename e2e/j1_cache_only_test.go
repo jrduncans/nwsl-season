@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"regexp"
 	"strconv"
 	"testing"
 
@@ -56,8 +55,9 @@ func cachePages() []cachePage {
 			text: []any{"Current season", "Loaded"},
 		},
 		{
-			path: "history", heading: "Scoring by season",
-			text: []any{regexp.MustCompile(`Selected ` + currentSeason + `: [0-9.]+ goals per match`)},
+			// The retired History page redirects to Explore's Scoring trend.
+			path: "history", heading: "Explore",
+			text: []any{currentSeason + ": in progress through " + strconv.Itoa(fixturePlayedGames) + " matches"},
 		},
 		{
 			path: "explore", heading: "Explore",

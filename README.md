@@ -95,11 +95,10 @@ by season charts one team's goals, xG, points, and xPoints per match across regu
 seasons, with a sortable season table. Optional league context shows seasonal
 ranges and completed-season records with inspectable holders. Explore's xPoints
 describe recorded matches; they are distinct from Forecast Lab's projected
-final points. A Penalties control (Included or Excluded) switches Explore and
-the league history page between official goals and xG and non-penalty goals and
-npxG; points and xPts always include penalties. Completed-match results with a
-penalty add an npxG line beside their xG. The older `/history/scoring` route
-remains available.
+final points. A Penalties control (Included or Excluded) switches Explore
+between official goals and xG and non-penalty goals and npxG; points and xPts
+always include penalties. Completed-match results with a penalty add an npxG
+line beside their xG.
 Match by match follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
 Actual vs xG pairs actual and expected values in separate Scored and Allowed
@@ -128,7 +127,7 @@ Useful endpoints:
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
 - `/explore` — league scoring charts, sortable season table, team performance
   vs xG or xPoints, and team history.
-- `/history/scoring` — legacy scoring page, retained for existing links.
+- `/history` and `/history/scoring` — redirect to Explore's Scoring trend.
 
 ## Pitchfork development server
 

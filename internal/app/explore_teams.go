@@ -166,7 +166,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		page.TeamSeason = page.TeamSeasons[0].Season
 	}
 	if values, present := query["season"]; present {
-		if len(values) != 1 || !historySeasonPattern.MatchString(values[0]) {
+		if len(values) != 1 || !seasonYearPattern.MatchString(values[0]) {
 			return page, fmt.Errorf("season must be one supported four-digit year")
 		}
 		found := false
