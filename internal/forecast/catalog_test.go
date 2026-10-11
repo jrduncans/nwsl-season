@@ -33,6 +33,7 @@ func TestEvaluationCatalogAddsEvaluationOnlyCandidates(t *testing.T) {
 		xgPoissonHomeTwoSeasonsID,
 		xgPoissonRecentFormID,
 		xgPoissonScheduleLoadID,
+		npxgStrengthScheduleLoadID,
 	} {
 		if got := entries[index].Model.Info().ID; got != want {
 			t.Fatalf("evaluation model %d = %q, want %q", index, got, want)

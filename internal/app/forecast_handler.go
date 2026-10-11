@@ -313,12 +313,20 @@ func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID
 	for _, id := range ids {
 		value := xgoals[id]
 		parts = append(parts, id, strconv.FormatFloat(value.Home, 'g', -1, 64), strconv.FormatFloat(value.Away, 'g', -1, 64))
+		// A penalty-only update leaves the xG values unchanged but changes
+		// npxG-based forecasts.
+		if value.Penalties != nil {
+			parts = append(parts, strconv.FormatFloat(value.Penalties.Home, 'g', -1, 64), strconv.FormatFloat(value.Penalties.Away, 'g', -1, 64))
+		} else {
+			parts = append(parts, "", "")
+		}
 	}
 	for _, summary := range data.VenueHistory {
 		parts = append(parts, summary.Season, strconv.FormatBool(summary.FixtureReady), strconv.FormatBool(summary.XGReady),
 			strconv.Itoa(summary.Matches), strconv.Itoa(summary.HomeGoals), strconv.Itoa(summary.AwayGoals),
 			strconv.Itoa(summary.HomePoints), strconv.Itoa(summary.AwayPoints), strconv.Itoa(summary.XGMatches),
-			strconv.FormatFloat(summary.HomeXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayXG, 'g', -1, 64))
+			strconv.FormatFloat(summary.HomeXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayXG, 'g', -1, 64),
+			strconv.Itoa(summary.NPXGMatches), strconv.FormatFloat(summary.HomeNPXG, 'g', -1, 64), strconv.FormatFloat(summary.AwayNPXG, 'g', -1, 64))
 	}
 	encoded, _ := json.Marshal(parts) // Marshaling a []string cannot fail.
 	sum := sha256.Sum256(encoded)
@@ -418,7 +426,11 @@ func forecastXGoals(data cache.SeasonData) map[string]forecast.ExpectedGoals {
 	values := map[string]forecast.ExpectedGoals{}
 	for _, value := range data.XGoals {
 		if value.Availability == cache.XGAvailable && value.HomeXG.Valid && value.AwayXG.Valid {
-			values[value.GameID] = forecast.ExpectedGoals{GameID: value.GameID, Home: value.HomeXG.Float64, Away: value.AwayXG.Float64}
+			observation := forecast.ExpectedGoals{GameID: value.GameID, Home: value.HomeXG.Float64, Away: value.AwayXG.Float64}
+			if value.Penalties != nil {
+				observation.Penalties = &forecast.PenaltyXG{Home: value.Penalties.HomeXG, Away: value.Penalties.AwayXG}
+			}
+			values[value.GameID] = observation
 		}
 	}
 	return values
@@ -441,7 +453,25 @@ func forecastVenueSample(data cache.SeasonData) forecast.VenueSample {
 			sample.AwayXG += summary.AwayXG
 		}
 	}
+	if xgReady && historicalNPXGReady(data) {
+		for _, summary := range data.VenueHistory {
+			sample.NPXGMatches += summary.NPXGMatches
+			sample.HomeNPXG += summary.HomeNPXG
+			sample.AwayNPXG += summary.AwayNPXG
+		}
+	}
 	return sample
+}
+
+// historicalNPXGReady reports whether every prior-season xG match has a
+// penalty split, so the npxG venue sample covers the same matches as xG.
+func historicalNPXGReady(data cache.SeasonData) bool {
+	for _, summary := range data.VenueHistory {
+		if summary.NPXGMatches != summary.XGMatches {
+			return false
+		}
+	}
+	return true
 }
 
 func historicalVenueReady(data cache.SeasonData, requireXG bool) bool {

@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/jrduncans/nwsl-season/internal/backtest"
+	"github.com/jrduncans/nwsl-season/internal/forecast"
 )
 
 const evaluationBaselineID = "straight-line-pace-v1"
@@ -16,6 +17,8 @@ type modelEvaluationPage struct {
 	SelectedModel string
 	ChartData     string
 	Models        []evaluationModelView
+	// ChartLibraryPath loads Chart.js before EvaluationScriptPath.
+	ChartLibraryPath, EvaluationScriptPath string
 }
 
 type evaluationModelView struct {
@@ -25,6 +28,7 @@ type evaluationModelView struct {
 
 type evaluationChartData struct {
 	BaselineID string                 `json:"baseline_id"`
+	DefaultID  string                 `json:"default_id"`
 	Models     []evaluationChartModel `json:"models"`
 }
 
@@ -46,7 +50,7 @@ type evaluationChartStage struct {
 }
 
 func evaluationView(report backtest.Report) (modelEvaluationPage, error) {
-	data := evaluationChartData{BaselineID: evaluationBaselineID}
+	data := evaluationChartData{BaselineID: evaluationBaselineID, DefaultID: forecast.Default().Model.Info().ID}
 	view := modelEvaluationPage{Status: report.Status, SelectedModel: report.SelectedModel, Models: []evaluationModelView{}}
 	for _, model := range report.Models {
 		view.Models = append(view.Models, evaluationModelView{ID: model.ID, Name: model.Name})

@@ -80,7 +80,7 @@ func cachePages() []cachePage {
 		{
 			path: season + "model-evaluation", heading: "Forecast model evaluation",
 			// The chart is drawn by script; a failed draw replaces it with a warning.
-			attached: []string{"[data-evaluation-svg] path"},
+			attached: []string{"[data-evaluation-legend] button"},
 			counts:   []selectorCount{{"[data-evaluation-chart] .data-warning", 0}},
 		},
 		{

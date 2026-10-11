@@ -197,7 +197,14 @@ type VenueSummary struct {
 	HomePoints, AwayPoints        int
 	XGMatches                     int
 	HomeXG, AwayXG                float64
-	UpdatedAt                     time.Time
+	// NPXGMatches, HomeNPXG and AwayNPXG total non-penalty xG over the
+	// season's available xG matches that have a stored penalty split. They are
+	// derived from game_xg when the summary is read, because a penalty-only
+	// update deliberately leaves the persisted summary unchanged. NPXGMatches
+	// equals XGMatches only when every xG match has a split.
+	NPXGMatches        int
+	HomeNPXG, AwayNPXG float64
+	UpdatedAt          time.Time
 }
 
 // CalculationInputs is the last successfully synced fixture snapshot in the
@@ -1663,6 +1670,15 @@ func venueSummaries(ctx context.Context, dbq queryer, seasons []string, stage st
 		value.UpdatedAt, err = time.Parse(time.RFC3339, updated)
 		if err != nil {
 			return nil, fmt.Errorf("parse venue summary timestamp: %w", err)
+		}
+		if value.XGReady {
+			err = dbq.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(MAX(0,x.home_xg-x.home_penalty_xg)),0),COALESCE(SUM(MAX(0,x.away_xg-x.away_penalty_xg)),0)
+				FROM games g JOIN game_xg x ON x.asa_game_id=g.asa_game_id
+				WHERE g.season=? AND g.stage=? AND g.status='FullTime' AND x.availability='available' AND x.home_penalty_xg IS NOT NULL AND x.away_penalty_xg IS NOT NULL`, season, stage).Scan(
+				&value.NPXGMatches, &value.HomeNPXG, &value.AwayNPXG)
+			if err != nil {
+				return nil, fmt.Errorf("load venue npxG for %s %s: %w", season, stage, err)
+			}
 		}
 		values = append(values, value)
 	}

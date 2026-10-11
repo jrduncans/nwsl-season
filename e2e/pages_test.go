@@ -963,15 +963,83 @@ func testModelEvaluationPage(t *testing.T, f *fixture) {
 		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("model-evaluation")))
 		expect := playwright.NewPlaywrightAssertions()
-		svg := page.Locator("[data-evaluation-svg]")
-		if err := expect.Locator(svg.Locator("path").First()).ToBeAttached(); err != nil {
-			t.Error(err)
+		canvas := page.Locator("[data-evaluation-canvas]")
+		legend := page.Locator("[data-evaluation-legend] button")
+		if err := expect.Locator(legend.First()).ToBeAttached(); err != nil {
+			t.Fatal(err)
 		}
-		if err := expect.Locator(svg.Locator("title")).ToHaveText("Final-points forecast error through the season"); err != nil {
+		type chartState struct {
+			Datasets int      `json:"datasets"`
+			Legend   int      `json:"legend"`
+			Inks     []string `json:"inks"`
+			Hidden   []bool   `json:"hidden"`
+			Status   string   `json:"status"`
+		}
+		read := func() chartState {
+			var state chartState
+			evalJSON(t, page, `() => {
+				const chart = Chart.getChart(document.querySelector('[data-evaluation-canvas]'));
+				return {
+					datasets: chart.data.datasets.length,
+					legend: document.querySelectorAll('[data-evaluation-legend] button').length,
+					inks: chart.data.datasets.map(dataset => dataset.borderColor),
+					hidden: chart.data.datasets.map((_, index) => !chart.isDatasetVisible(index)),
+					status: document.querySelector('[data-evaluation-status]').textContent,
+				};
+			}`, nil, &state)
+			return state
+		}
+		state := read()
+		if state.Datasets < 7 || state.Legend != state.Datasets {
+			t.Fatalf("chart has %d datasets and %d legend items, want at least 7 of each", state.Datasets, state.Legend)
+		}
+		seen := map[string]bool{}
+		for _, ink := range state.Inks {
+			if seen[ink] {
+				t.Errorf("two models share line colour %s: %v", ink, state.Inks)
+			}
+			seen[ink] = true
+		}
+		if err := expect.Locator(canvas).ToHaveAttribute("aria-label", "Final-points forecast error through the season, final test seasons"); err != nil {
 			t.Error(err)
 		}
 		selectValue(t, page.Locator("[data-evaluation-metric]"), "position")
-		if err := expect.Locator(svg.Locator("title")).ToHaveText("Final table-position forecast error through the season"); err != nil {
+		if err := expect.Locator(canvas).ToHaveAttribute("aria-label", "Final table-position forecast error through the season, final test seasons"); err != nil {
+			t.Error(err)
+		}
+
+		// The keyboard inspects every model at one stage of the season.
+		if err := canvas.Focus(); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.Keyboard().Press("ArrowRight"); err != nil {
+			t.Fatal(err)
+		}
+		if status := read().Status; !strings.HasPrefix(status, "0–20% of the regular season played.") || !strings.Contains(status, "xG Poisson (npxG strength, schedule load)") {
+			t.Errorf("keyboard status = %q, want the first stage with every model", status)
+		}
+
+		// A legend item hides and restores its line.
+		toggle := page.Locator(`[data-evaluation-legend] button[data-model="xg-poisson-npxg-strength-v1"]`)
+		if err := toggle.Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(toggle).ToHaveAttribute("aria-pressed", "false"); err != nil {
+			t.Error(err)
+		}
+		hiddenCount := 0
+		for _, hidden := range read().Hidden {
+			if hidden {
+				hiddenCount++
+			}
+		}
+		if hiddenCount != 1 {
+			t.Errorf("hidden datasets = %d, want 1 after hiding a model", hiddenCount)
+		}
+		if err := toggle.Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(toggle).ToHaveAttribute("aria-pressed", "true"); err != nil {
 			t.Error(err)
 		}
 		assertNoHorizontalOverflow(t, page)

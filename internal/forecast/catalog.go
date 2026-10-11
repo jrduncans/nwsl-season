@@ -12,6 +12,7 @@ func Catalog() []CatalogEntry {
 		{Model: NewXGPoissonHomeTwoSeasonsV1()},
 		{Model: NewXGPoissonRecentFormV1()},
 		{Model: NewXGPoissonScheduleLoadV1(), Default: true},
+		{Model: NewNPXGStrengthScheduleLoadV1()},
 	}
 }
 

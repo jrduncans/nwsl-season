@@ -248,7 +248,11 @@ func evaluationSeason(id, window string, playoffPlaces int, data cache.SeasonDat
 	xg := map[string]forecast.ExpectedGoals{}
 	for _, value := range data.XGoals {
 		if value.Availability == cache.XGAvailable && value.HomeXG.Valid && value.AwayXG.Valid {
-			xg[value.GameID] = forecast.ExpectedGoals{GameID: value.GameID, Home: value.HomeXG.Float64, Away: value.AwayXG.Float64}
+			observation := forecast.ExpectedGoals{GameID: value.GameID, Home: value.HomeXG.Float64, Away: value.AwayXG.Float64}
+			if value.Penalties != nil {
+				observation.Penalties = &forecast.PenaltyXG{Home: value.Penalties.HomeXG, Away: value.Penalties.AwayXG}
+			}
+			xg[value.GameID] = observation
 		}
 	}
 	return backtest.Season{ID: id, Window: window, PlayoffPlaces: playoffPlaces, Teams: data.Teams, Games: games, XGoals: xg}, nil

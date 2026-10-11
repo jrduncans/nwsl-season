@@ -2,9 +2,9 @@
 
 Status: **complete**. Selected model: **xg-poisson-schedule-load-v1**.
 
-Generated: 2026-08-23T19:10:49Z. Simulations: 20,000 iterations per cutoff; 10,000 paired bootstrap resamples.
+Generated: 2026-10-11T18:27:29Z. Simulations: 20,000 iterations per cutoff; 10,000 paired bootstrap resamples.
 
-Git commit: `a650711c7c9d0d5a1913e766e4ce094d35403e36`.
+Git commit: `a5e7210f4fdc7df7a593fb74397461d050a31408`.
 
 ## Data audit
 
@@ -44,6 +44,7 @@ Lower is better for every metric.
 | xG Poisson (`xg-poisson-home-two-seasons-v1`) | 1.0121 | 0.1112 | 0.0497 | 4.785 | 3.409 | 1.455 | 0.0907 |
 | xG Poisson (recent form) (`xg-poisson-recent-form-v1`) | 1.0169 | 0.1099 | 0.0509 | 4.841 | 3.461 | 1.463 | 0.0913 |
 | xG Poisson (schedule load) (`xg-poisson-schedule-load-v1`) | 1.0119 | 0.1095 | 0.0505 | 4.772 | 3.399 | 1.449 | 0.0902 |
+| xG Poisson (npxG strength, schedule load) (`xg-poisson-npxg-strength-v1`) | 1.0097 | 0.1076 | 0.0487 | 4.715 | 3.369 | 1.431 | 0.0892 |
 
 ### Final-test results
 
@@ -55,6 +56,7 @@ Lower is better for every metric.
 | xG Poisson (`xg-poisson-home-two-seasons-v1`) | 1.0478 | 0.1177 | 0.0421 | 3.998 | 2.842 | 1.530 | 0.1010 |
 | xG Poisson (recent form) (`xg-poisson-recent-form-v1`) | 1.0499 | 0.1191 | 0.0417 | 4.027 | 2.864 | 1.545 | 0.1013 |
 | xG Poisson (schedule load) (`xg-poisson-schedule-load-v1`) | 1.0467 | 0.1175 | 0.0419 | 3.994 | 2.838 | 1.528 | 0.1009 |
+| xG Poisson (npxG strength, schedule load) (`xg-poisson-npxg-strength-v1`) | 1.0459 | 0.1168 | 0.0422 | 3.984 | 2.834 | 1.539 | 0.1015 |
 
 ### Pooled results (descriptive only)
 
@@ -66,6 +68,7 @@ Lower is better for every metric.
 | xG Poisson (`xg-poisson-home-two-seasons-v1`) | 1.0314 | 0.1147 | 0.0457 | 4.366 | 3.107 | 1.495 | 0.0962 |
 | xG Poisson (recent form) (`xg-poisson-recent-form-v1`) | 1.0348 | 0.1148 | 0.0460 | 4.408 | 3.143 | 1.507 | 0.0967 |
 | xG Poisson (schedule load) (`xg-poisson-schedule-load-v1`) | 1.0307 | 0.1138 | 0.0459 | 4.358 | 3.101 | 1.491 | 0.0959 |
+| xG Poisson (npxG strength, schedule load) (`xg-poisson-npxg-strength-v1`) | 1.0293 | 0.1125 | 0.0452 | 4.326 | 3.084 | 1.489 | 0.0957 |
 
 ## Paired final-test comparisons
 
@@ -73,43 +76,49 @@ Differences are candidate minus incumbent; negative values favor the candidate.
 
 | Candidate | Metric | Difference | 95% interval | Date blocks |
 | --- | --- | ---: | ---: | ---: |
-| `straight-line-pace-v1` | match_log_loss | +0.0132 | [-0.0071, +0.0333] | 296 |
-| `straight-line-pace-v1` | playoff_brier | +0.0034 | [+0.0008, +0.0059] | 296 |
-| `straight-line-pace-v1` | shield_brier | +0.0037 | [+0.0018, +0.0057] | 296 |
-| `straight-line-pace-v1` | points_crps | +0.1023 | [+0.0636, +0.1422] | 296 |
-| `straight-line-pace-v1` | position_rps | +0.0054 | [+0.0040, +0.0069] | 296 |
-| `current-pace-v1` | match_log_loss | +0.0133 | [-0.0030, +0.0296] | 296 |
-| `current-pace-v1` | playoff_brier | +0.0028 | [+0.0003, +0.0055] | 296 |
-| `current-pace-v1` | shield_brier | +0.0027 | [+0.0006, +0.0049] | 296 |
-| `current-pace-v1` | points_crps | +0.0989 | [+0.0613, +0.1375] | 296 |
-| `current-pace-v1` | position_rps | +0.0052 | [+0.0039, +0.0066] | 296 |
-| `results-poisson-home-two-seasons-v1` | match_log_loss | +0.0160 | [-0.0014, +0.0340] | 296 |
-| `results-poisson-home-two-seasons-v1` | playoff_brier | +0.0061 | [+0.0033, +0.0091] | 296 |
-| `results-poisson-home-two-seasons-v1` | shield_brier | +0.0034 | [+0.0018, +0.0051] | 296 |
-| `results-poisson-home-two-seasons-v1` | points_crps | +0.2222 | [+0.1753, +0.2699] | 296 |
-| `results-poisson-home-two-seasons-v1` | position_rps | +0.0081 | [+0.0067, +0.0097] | 296 |
-| `xg-poisson-recent-form-v1` | match_log_loss | +0.0014 | [-0.0036, +0.0064] | 296 |
-| `xg-poisson-recent-form-v1` | playoff_brier | +0.0009 | [+0.0003, +0.0015] | 296 |
-| `xg-poisson-recent-form-v1` | shield_brier | -0.0003 | [-0.0008, +0.0002] | 296 |
-| `xg-poisson-recent-form-v1` | points_crps | +0.0223 | [+0.0092, +0.0356] | 296 |
-| `xg-poisson-recent-form-v1` | position_rps | +0.0003 | [-0.0000, +0.0005] | 296 |
-| `xg-poisson-schedule-load-v1` | match_log_loss | -0.0019 | [-0.0035, -0.0004] | 296 |
-| `xg-poisson-schedule-load-v1` | playoff_brier | -0.0002 | [-0.0004, -0.0001] | 296 |
-| `xg-poisson-schedule-load-v1` | shield_brier | -0.0002 | [-0.0003, -0.0001] | 296 |
-| `xg-poisson-schedule-load-v1` | points_crps | -0.0043 | [-0.0061, -0.0026] | 296 |
-| `xg-poisson-schedule-load-v1` | position_rps | -0.0001 | [-0.0002, -0.0001] | 296 |
+| `straight-line-pace-v1` | match_log_loss | +0.0151 | [-0.0055, +0.0355] | 296 |
+| `straight-line-pace-v1` | playoff_brier | +0.0036 | [+0.0010, +0.0062] | 296 |
+| `straight-line-pace-v1` | shield_brier | +0.0039 | [+0.0020, +0.0059] | 296 |
+| `straight-line-pace-v1` | points_crps | +0.1066 | [+0.0683, +0.1463] | 296 |
+| `straight-line-pace-v1` | position_rps | +0.0056 | [+0.0042, +0.0070] | 296 |
+| `current-pace-v1` | match_log_loss | +0.0151 | [-0.0014, +0.0317] | 296 |
+| `current-pace-v1` | playoff_brier | +0.0031 | [+0.0005, +0.0058] | 296 |
+| `current-pace-v1` | shield_brier | +0.0029 | [+0.0009, +0.0051] | 296 |
+| `current-pace-v1` | points_crps | +0.1032 | [+0.0658, +0.1418] | 296 |
+| `current-pace-v1` | position_rps | +0.0053 | [+0.0040, +0.0067] | 296 |
+| `results-poisson-home-two-seasons-v1` | match_log_loss | +0.0179 | [+0.0004, +0.0361] | 296 |
+| `results-poisson-home-two-seasons-v1` | playoff_brier | +0.0064 | [+0.0035, +0.0094] | 296 |
+| `results-poisson-home-two-seasons-v1` | shield_brier | +0.0036 | [+0.0020, +0.0053] | 296 |
+| `results-poisson-home-two-seasons-v1` | points_crps | +0.2265 | [+0.1800, +0.2741] | 296 |
+| `results-poisson-home-two-seasons-v1` | position_rps | +0.0083 | [+0.0068, +0.0098] | 296 |
+| `xg-poisson-home-two-seasons-v1` | match_log_loss | +0.0019 | [+0.0004, +0.0035] | 296 |
+| `xg-poisson-home-two-seasons-v1` | playoff_brier | +0.0002 | [+0.0001, +0.0004] | 296 |
+| `xg-poisson-home-two-seasons-v1` | shield_brier | +0.0002 | [+0.0001, +0.0003] | 296 |
+| `xg-poisson-home-two-seasons-v1` | points_crps | +0.0043 | [+0.0026, +0.0061] | 296 |
+| `xg-poisson-home-two-seasons-v1` | position_rps | +0.0001 | [+0.0001, +0.0002] | 296 |
+| `xg-poisson-recent-form-v1` | match_log_loss | +0.0033 | [-0.0020, +0.0084] | 296 |
+| `xg-poisson-recent-form-v1` | playoff_brier | +0.0011 | [+0.0005, +0.0017] | 296 |
+| `xg-poisson-recent-form-v1` | shield_brier | -0.0001 | [-0.0006, +0.0004] | 296 |
+| `xg-poisson-recent-form-v1` | points_crps | +0.0266 | [+0.0136, +0.0399] | 296 |
+| `xg-poisson-recent-form-v1` | position_rps | +0.0004 | [+0.0001, +0.0007] | 296 |
+| `xg-poisson-npxg-strength-v1` | match_log_loss | -0.0018 | [-0.0061, +0.0025] | 296 |
+| `xg-poisson-npxg-strength-v1` | playoff_brier | -0.0003 | [-0.0011, +0.0005] | 296 |
+| `xg-poisson-npxg-strength-v1` | shield_brier | +0.0004 | [+0.0000, +0.0007] | 296 |
+| `xg-poisson-npxg-strength-v1` | points_crps | -0.0016 | [-0.0155, +0.0124] | 296 |
+| `xg-poisson-npxg-strength-v1` | position_rps | +0.0005 | [+0.0001, +0.0010] | 296 |
 
 The JSON artifact is the machine-readable source for all development/final-test stage buckets and fixed-decile calibration tables.
 
 ## Selection
 
-`xg-poisson-schedule-load-v1` met the precommitted replacement rule and had the lowest qualifying final-test match log loss.
+No candidate met the precommitted replacement rule, so `xg-poisson-schedule-load-v1` remains selected.
 
 - `straight-line-pace-v1` did not qualify: evaluation-only reference model; excluded from selection.
 - `current-pace-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero; Shield Brier guardrail failed.
 - `results-poisson-home-two-seasons-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero; playoff Brier guardrail failed; Shield Brier guardrail failed.
+- `xg-poisson-home-two-seasons-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero.
 - `xg-poisson-recent-form-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero.
-- `xg-poisson-schedule-load-v1` qualified: passed the precommitted bootstrap and guardrail rule.
+- `xg-poisson-npxg-strength-v1` did not qualify: final-test log-loss bootstrap interval was not entirely below zero.
 
 ## Limitations
 
