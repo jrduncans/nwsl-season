@@ -4,3 +4,8 @@ default_permissions = "go-web"
 
 [permissions.workspace]
 extends = "go-web"
+
+# Agent shells never start an ASA-calling server; Pitchfork daemons do not
+# inherit this, so the primary checkout's server keeps its scheduler.
+[shell_environment_policy]
+set = { NWSL_SYNC_SCHEDULER = "false" }
