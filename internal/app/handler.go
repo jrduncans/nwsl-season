@@ -786,6 +786,8 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 	}
 	view.seasonPage = page
 	view.Title = "Model evaluation"
+	view.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
+	view.EvaluationScriptPath = staticURL(r.URL.Path, "model-evaluation.js")
 	a.render(w, "model-evaluation", view)
 }
 
