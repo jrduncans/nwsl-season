@@ -441,12 +441,12 @@ share a cache.
 
 ## Build and verify
 
-```sh
-make test
-make fmt
-make vet
-make build
-```
+`make verify` runs fmt, lint (including `gosec`), vet, test and test-e2e; run
+`make e2e-install` once first. Narrower targets such as `make test-clinching`
+and `make test-explore` suit iteration. `make race` runs the tests with the race
+detector, `make vuln` scans dependencies for known vulnerabilities, and the
+[telemetry guide](docs/telemetry/README.md) covers the telemetry checks.
+`make build` creates the binaries.
 
 ### Test layers
 
@@ -457,6 +457,9 @@ make build
 | JS geometry units | Pure chart geometry in `explore-geometry.js`, run in the browser | `make test-e2e` |
 | Browser tests | What a user sees after JavaScript runs: interactions, URL state, keyboard, 1280px and 390px, no console errors | `make test-e2e` |
 | Fake-ASA journeys | Sync to page, against `internal/asatest` | `make test-e2e` |
+
+Build test data with `internal/apptest` (seeded cache scenarios) and
+`internal/asatest` (fake ASA server).
 
 Choose the layer by the assertion: what the server sends is a Go test; what a
 user sees after JavaScript runs is a browser test. Domain logic never moves
@@ -531,6 +534,13 @@ directory even though the current season data can be rebuilt from ASA.
 - [Standings and schedule difficulty](docs/standings-and-schedule-guide.md)
   explains table ordering, tiebreaks, and the remaining-schedule measures.
 - [How clinching works](docs/clinching-logic-guide.md) explains qualification
-  proofs, conservative tiebreak handling, no-help paths, and slate scenarios.
+  proofs, conservative tiebreak handling, no-help paths, and slate scenarios;
+  its "Scenario presentation" section is the contract for summaries and
+  alternatives.
 - [How Forecast Lab works](docs/forecast-lab-guide.md) explains model presets,
   simulation behavior, fixed outcomes, and shareable scenarios.
+- The [telemetry guide](docs/telemetry/README.md) covers the telemetry
+  registry, generated catalog, and Honeycomb queries.
+- Forecast model evaluation follows the protocol under "Command-line tools"
+  above; the checked-in evidence is in
+  [model-evaluation-v1](docs/model-evaluation-v1.md).

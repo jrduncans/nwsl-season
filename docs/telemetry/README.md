@@ -15,6 +15,9 @@ one observability product.
 
 ## Developer workflow
 
+After any change under `telemetry/registry`, run `make telemetry-check-generated`
+and `make telemetry-live-check` before handoff.
+
 Install [Mise](https://mise.jdx.dev/), then run:
 
 ```sh

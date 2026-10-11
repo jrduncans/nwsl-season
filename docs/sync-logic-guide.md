@@ -2,6 +2,7 @@
 
 Ordinary web requests read the local SQLite cache only. ASA requests are made
 by the background scheduler or an explicit `cmd/sync` maintenance command.
+`cmd/sync` shares the server's `NWSL_DATA_DIR` and sync lease.
 The scheduler does not run the former season-wide concurrent `Service.Run`
 flow. Its immediate startup check also bootstraps missing public source-backed
 catalog scopes, while keeping current-season work ahead of that low-priority
