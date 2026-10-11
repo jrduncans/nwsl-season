@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"maps"
+	"math"
 	"net/url"
 	"regexp"
 	"slices"
@@ -218,17 +219,25 @@ func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 				t.Fatal("no fixture shows xG")
 			}
 			// Each npxG line sits directly after its match's xG line, on a line of
-			// its own below it.
+			// its own below it, with the values left-aligned in one column. The
+			// line wrappers use display: contents, so measure the value spans.
 			var npLines []struct {
 				Text     string  `json:"text"`
 				AfterXG  bool    `json:"afterXG"`
 				Top      float64 `json:"top"`
+				Left     float64 `json:"left"`
+				Width    float64 `json:"width"`
 				XGBottom float64 `json:"xgBottom"`
+				XGLeft   float64 `json:"xgLeft"`
+				SameLen  bool    `json:"sameLen"`
 			}
 			evalJSON(t, page, `() => [...document.querySelectorAll('.fixture-npxg')].map((el) => {
 				const xg = el.previousElementSibling;
 				const afterXG = !!xg && xg.classList.contains('fixture-xg');
-				return { text: el.textContent.trim(), afterXG, top: el.getBoundingClientRect().top, xgBottom: afterXG ? xg.getBoundingClientRect().bottom : 0 };
+				const value = el.lastElementChild.getBoundingClientRect();
+				const xgValue = afterXG ? xg.lastElementChild.getBoundingClientRect() : { bottom: 0, left: 0 };
+				const sameLen = afterXG && xg.lastElementChild.textContent.trim().length === el.lastElementChild.textContent.trim().length;
+				return { text: el.textContent.trim(), afterXG, top: value.top, left: value.left, width: value.width, xgBottom: xgValue.bottom, xgLeft: xgValue.left, sameLen };
 			})`, nil, &npLines)
 			if len(npLines) == 0 || len(npLines) == xgLines {
 				t.Errorf("%d of %d matches show npxG, want only the matches with a penalty", len(npLines), xgLines)
@@ -241,6 +250,12 @@ func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 					t.Errorf("npxG line %q does not follow an xG line", line.Text)
 				} else if line.Top < line.XGBottom-1 {
 					t.Errorf("npxG line %q shares a line with its xG (top %.1f, xG bottom %.1f)", line.Text, line.Top, line.XGBottom)
+				}
+				if line.Width == 0 {
+					t.Errorf("npxG value for %q has no rendered box", line.Text)
+				}
+				if line.SameLen && math.Abs(line.Left-line.XGLeft) > 1 {
+					t.Errorf("npxG value for %q starts at x=%.1f, xG value at x=%.1f; want them aligned", line.Text, line.Left, line.XGLeft)
 				}
 			}
 			var titles []string
