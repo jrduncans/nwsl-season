@@ -182,7 +182,17 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 	requireText(t, table, "[data-panel=table] thead", "Non-penalty goals/match", "npxG/match", "Non-penalty goals − npxG/match")
 	requireRowText(t, table, "[data-panel=table] tbody tr", "2025", "20", "2.00", "0.24", "1.76")
 	_, trend := getPage(t, archive, "/explore?view=trend&penalties=exclude")
-	requireText(t, trend, "[data-panel=trend]", "Non-penalty goals and chances per match", "Non-penalty expected goals (npxG)", "Non-penalty goals − npxG")
+	requireText(t, trend, "[data-panel=trend]", "Non-penalty goals and chances per match", "Non-penalty expected goals (npxG)", "Above npxG")
+	// Data-control option labels never change with the basis; the adjacent
+	// Penalties select states it.
+	for _, view := range []string{"trend", "distribution", "teams", "team-history", "season-trend", "team-rankings", "table"} {
+		_, body := getPage(t, archive, "/explore?view="+view+"&penalties=exclude")
+		for _, option := range find(t, body, `select option`) {
+			if label := strings.TrimSpace(text(option)); strings.Contains(label, "on-penalty") || strings.Contains(label, "npxG") {
+				t.Errorf("%s: option label %q changed with the basis", view, label)
+			}
+		}
+	}
 	_, distribution := getPage(t, archive, "/explore?view=distribution&penalties=exclude")
 	requireText(t, distribution, "[data-panel=distribution]", "by total non-penalty goals", "2 non-penalty goals", "Bins count non-penalty goals per match")
 	requireText(t, distribution, "[data-panel=distribution] table thead", "2 non-penalty goals")

@@ -1253,9 +1253,9 @@
     root.querySelector('#explore-team-history-title').textContent =
       `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
     const choices = historySeries.options;
-    choices[0].textContent = isPoints ? 'Points and xPts' : T('Goals and xG');
-    choices[1].textContent = isPoints ? 'Points' : T('Goals');
-    choices[2].textContent = isPoints ? 'xPts' : T('xG');
+    choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
+    choices[1].textContent = isPoints ? 'Points' : 'Goals';
+    choices[2].textContent = isPoints ? 'xPts' : 'xG';
     setPointsNote('team-history', true);
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
     root.querySelector('[data-history-context-details]').hidden = !contextEnabled;

@@ -138,8 +138,12 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 		t.Errorf("distribution title = %q", got)
 	}
 	gotoInPage(t, page, "explore?view=team-history&penalties=exclude&measure=for")
-	if got := textOf(t, page, "[data-history-series]"); !strings.Contains(got, "Non-penalty goals and npxG") {
+	// Option text is basis-independent: the Penalties select states the basis.
+	if got := textOf(t, page, "[data-history-series]"); got != "Goals and xG\nGoals\nxG" {
 		t.Errorf("history series choices = %q", got)
+	}
+	if got := textOf(t, page, "[data-history-measure]"); !strings.Contains(got, "Goal differential") || strings.Contains(got, "on-penalty") {
+		t.Errorf("history measure choices = %q", got)
 	}
 
 	// Included returns to the default basis and drops the parameter.
@@ -248,4 +252,125 @@ func TestExplorePenaltiesControlFitsAPhone(t *testing.T) {
 	}
 	history := explorePage(t, base, Mobile, "history/scoring?penalties=exclude")
 	assertNoHorizontalOverflow(t, history)
+}
+
+// controlBox is the page-relative bounding box of an element.
+type controlBox struct {
+	X, Y, W, H float64
+}
+
+// controlGeometry is one visible data-control select and its label, plus the
+// bottom of the view's heading.
+type controlGeometry struct {
+	Key    string
+	Select controlBox
+	Label  controlBox
+}
+
+type controlLayout struct {
+	// AnchorY is the page offset the controls are compared against: zero for
+	// Explore, whose content above the controls does not depend on the basis,
+	// and the selector form's top on the history page, which follows a chart
+	// whose captions do.
+	AnchorY       float64
+	HeadingBottom float64
+	Controls      []controlGeometry
+}
+
+// controlLayoutScript measures every visible select in the page's current
+// view, keyed by its position and name so the two bases compare like for like.
+const controlLayoutScript = `([headingSelector, anchorSelector]) => {
+	const box = (el) => { const r = el.getBoundingClientRect(); return {X: r.left + scrollX, Y: r.top + scrollY, W: r.width, H: r.height}; };
+	const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+	const heading = document.querySelector(headingSelector);
+	const controls = [...document.querySelectorAll('main select, .explore select, form select')]
+		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
+		.map((el, index) => ({Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: box(el), Label: box(el.closest('label') || el)}));
+	const anchor = anchorSelector ? document.querySelector(anchorSelector) : null;
+	return {AnchorY: anchor ? box(anchor).Y : 0, HeadingBottom: heading ? box(heading).Y + box(heading).H : -1, Controls: controls};
+}`
+
+func closeEnough(a, b float64) bool { return a-b <= 1 && b-a <= 1 }
+
+func sameBox(a, b controlBox) bool {
+	return closeEnough(a.X, b.X) && closeEnough(a.Y, b.Y) && closeEnough(a.W, b.W) && closeEnough(a.H, b.H)
+}
+
+// TestDataControlsKeepTheirGeometryAcrossBases checks that, in every Explore
+// view and display and on the history page, the data controls sit below the
+// view heading and occupy exactly the same boxes whether penalties are
+// included or excluded, at three window sizes. Option text never changes with
+// the basis, so no select may resize.
+func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	type target struct{ name, query, heading, anchor string }
+	targets := make([]target, 0, len(exploreTabs)+1)
+	for _, tab := range exploreTabs {
+		targets = append(targets, target{tab.tab, "explore?" + tab.query, ".explore [data-panel]:not([hidden]) h2", ""})
+	}
+	targets = append(targets, target{"History", "history/scoring", "#history-chart-heading", ".history-selector"})
+	viewports := []viewport{
+		{Name: "1280x900", Width: 1280, Height: 900},
+		{Name: "1024x768", Width: 1024, Height: 768},
+		{Name: "390x844", Width: 390, Height: 844},
+	}
+	for _, vp := range viewports {
+		t.Run(vp.Name, func(t *testing.T) {
+			t.Parallel()
+			page := newPage(t, vp)
+			// gaps records, per Compare teams display, the distance from the heading
+			// to the first control so a display switch cannot move the row.
+			gaps := map[string]float64{}
+			for _, tg := range targets {
+				measure := func(suffix string) controlLayout {
+					visit(t, page, base+tg.query+suffix)
+					if err := settle(page); err != nil {
+						t.Fatalf("settle %s: %v", tg.name, err)
+					}
+					var layout controlLayout
+					evalJSON(t, page, controlLayoutScript, []string{tg.heading, tg.anchor}, &layout)
+					return layout
+				}
+				included := measure("")
+				excluded := measure(map[bool]string{true: "&", false: "?"}[strings.Contains(tg.query, "?")] + "penalties=exclude")
+				if len(included.Controls) == 0 {
+					t.Fatalf("%s: no visible data controls", tg.name)
+				}
+				if len(included.Controls) != len(excluded.Controls) {
+					t.Fatalf("%s: %d controls included, %d excluded", tg.name, len(included.Controls), len(excluded.Controls))
+				}
+				if included.HeadingBottom < 0 {
+					t.Fatalf("%s: heading %q not found", tg.name, tg.heading)
+				}
+				for i, a := range included.Controls {
+					b := excluded.Controls[i]
+					if a.Key != b.Key {
+						t.Errorf("%s: control %d is %q included but %q excluded", tg.name, i, a.Key, b.Key)
+					}
+					a.Select.Y, a.Label.Y = a.Select.Y-included.AnchorY, a.Label.Y-included.AnchorY
+					b.Select.Y, b.Label.Y = b.Select.Y-excluded.AnchorY, b.Label.Y-excluded.AnchorY
+					if !sameBox(a.Select, b.Select) || !sameBox(a.Label, b.Label) {
+						t.Errorf("%s %s: control %s moved or resized with the basis: select %+v -> %+v, label %+v -> %+v", vp.Name, tg.name, a.Key, a.Select, b.Select, a.Label, b.Label)
+					}
+					if a.Label.Y+included.AnchorY < included.HeadingBottom-1 {
+						t.Errorf("%s %s: control %s (top %.0f) is not below the heading (bottom %.0f)", vp.Name, tg.name, a.Key, a.Label.Y+included.AnchorY, included.HeadingBottom)
+					}
+				}
+				if strings.Contains(tg.query, "view=teams") {
+					gaps[tg.name] = included.Controls[0].Label.Y - included.HeadingBottom
+				}
+			}
+			var first float64
+			seen := false
+			for name, gap := range gaps {
+				if !seen {
+					first, seen = gap, true
+				}
+				if !closeEnough(gap, first) {
+					t.Errorf("%s: Compare teams %s controls sit %.1fpx below the heading, other displays %.1fpx", vp.Name, name, gap, first)
+				}
+			}
+		})
+	}
 }

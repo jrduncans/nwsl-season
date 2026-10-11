@@ -13,10 +13,13 @@ Any other value, or a repeated one, is rejected like an invalid `measure`: a
 400 "Invalid history selection" page. The choice is a server-rendered
 **Penalties** select (Included / Excluded), which works without JavaScript
 (a noscript link applies the other choice). It is a data control, last in each
-view's control row beside Season, Team, Compare or Values (the Scoring trend,
-Goal distribution and Scoring table views put it in their heading controls),
-and on the history page it sits in the season selector; it is never in the
-navigation. Its help text is the select's title, and "Penalty kicks excluded."
+view's control row beside Season, Team, Compare or Values, and on the history
+page it sits in the season selector; it is never in the navigation. Data
+controls always render on their own row(s) below the view heading
+(`.explore-heading` stacks the h2 above its controls), so a row never moves
+between bases or displays. Text inside a data-control `<option>` and the label
+before a select never change with the basis (the Penalties select states it);
+titles, legends, axes, captions, table headers and accessible names do. Its help text is the select's title, and "Penalty kicks excluded."
 joins a view's data note when the basis is excluded. Every Explore and history
 link and form that keeps selection state also keeps `penalties`, and
 default-basis URLs never name it. Changing the select navigates to a hidden
