@@ -56,7 +56,7 @@ becomes `Non-penalty goals`, `xGD` becomes `npxGD`, and Goal distribution bins
 count non-penalty goals per match. `basisText` (Go) and `T` (`explore.js`) apply
 the same one-pass label rules.
 
-Fixture results append ` · npxG home–away` after the xG text when the match's
+Fixture results add an `npxG home–away` line below the xG line when the match's
 penalty split shows penalty xG above zero for either side (title "Non-penalty
 expected goals"); other matches are unchanged.
 

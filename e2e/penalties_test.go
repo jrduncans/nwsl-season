@@ -203,8 +203,8 @@ func TestHistoryPenaltiesToggleSwitchesBasis(t *testing.T) {
 	}
 }
 
-// fixtureNPxG matches the appended non-penalty line of a fixture result.
-var fixtureNPxG = regexp.MustCompile(`xG \d+\.\d\d–\d+\.\d\d · npxG \d+\.\d\d–\d+\.\d\d`)
+// fixtureNPxG matches the non-penalty line under a fixture result's xG line.
+var fixtureNPxG = regexp.MustCompile(`^npxG \d+\.\d\d–\d+\.\d\d$`)
 
 func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 	t.Parallel()
@@ -212,22 +212,36 @@ func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 	for _, vp := range []viewport{Desktop, Mobile} {
 		t.Run(vp.Name, func(t *testing.T) {
 			page := explorePage(t, base, vp, "seasons/2025/regular-season/fixtures")
-			var lines []string
-			evalJSON(t, page, `() => [...document.querySelectorAll('.fixture-xg')].map((el) => el.textContent.trim())`, nil, &lines)
-			if len(lines) == 0 {
+			var xgLines int
+			evalJSON(t, page, `() => document.querySelectorAll('.fixture-xg').length`, nil, &xgLines)
+			if xgLines == 0 {
 				t.Fatal("no fixture shows xG")
 			}
-			withNP := 0
-			for _, line := range lines {
-				if strings.Contains(line, "npxG") {
-					withNP++
-					if !fixtureNPxG.MatchString(line) {
-						t.Errorf("npxG line %q does not follow the xG text", line)
-					}
-				}
+			// Each npxG line sits directly after its match's xG line, on a line of
+			// its own below it.
+			var npLines []struct {
+				Text     string  `json:"text"`
+				AfterXG  bool    `json:"afterXG"`
+				Top      float64 `json:"top"`
+				XGBottom float64 `json:"xgBottom"`
 			}
-			if withNP == 0 || withNP == len(lines) {
-				t.Errorf("%d of %d xG lines carry npxG, want only the matches with a penalty", withNP, len(lines))
+			evalJSON(t, page, `() => [...document.querySelectorAll('.fixture-npxg')].map((el) => {
+				const xg = el.previousElementSibling;
+				const afterXG = !!xg && xg.classList.contains('fixture-xg');
+				return { text: el.textContent.trim(), afterXG, top: el.getBoundingClientRect().top, xgBottom: afterXG ? xg.getBoundingClientRect().bottom : 0 };
+			})`, nil, &npLines)
+			if len(npLines) == 0 || len(npLines) == xgLines {
+				t.Errorf("%d of %d matches show npxG, want only the matches with a penalty", len(npLines), xgLines)
+			}
+			for _, line := range npLines {
+				if !fixtureNPxG.MatchString(line.Text) {
+					t.Errorf("npxG line %q, want %q", line.Text, fixtureNPxG)
+				}
+				if !line.AfterXG {
+					t.Errorf("npxG line %q does not follow an xG line", line.Text)
+				} else if line.Top < line.XGBottom-1 {
+					t.Errorf("npxG line %q shares a line with its xG (top %.1f, xG bottom %.1f)", line.Text, line.Top, line.XGBottom)
+				}
 			}
 			var titles []string
 			evalJSON(t, page, `() => [...document.querySelectorAll('.fixture-npxg')].map((el) => el.title)`, nil, &titles)
