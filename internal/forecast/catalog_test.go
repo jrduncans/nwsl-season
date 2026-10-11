@@ -19,7 +19,7 @@ func TestCatalogDefaultMatchesModelEvaluationV1(t *testing.T) {
 }
 
 func TestEvaluationCatalogAddsEvaluationOnlyCandidates(t *testing.T) {
-	evaluationOnly := map[string]bool{straightLinePaceID: true}
+	evaluationOnly := map[string]bool{straightLinePaceID: true, npxgStrengthScheduleLoadID: true}
 	for _, entry := range Catalog() {
 		if evaluationOnly[entry.Model.Info().ID] {
 			t.Fatal("Forecast Lab catalog includes an evaluation-only candidate")
@@ -33,6 +33,7 @@ func TestEvaluationCatalogAddsEvaluationOnlyCandidates(t *testing.T) {
 		xgPoissonHomeTwoSeasonsID,
 		xgPoissonRecentFormID,
 		xgPoissonScheduleLoadID,
+		npxgStrengthScheduleLoadID,
 	} {
 		if got := entries[index].Model.Info().ID; got != want {
 			t.Fatalf("evaluation model %d = %q, want %q", index, got, want)

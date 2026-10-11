@@ -15,12 +15,14 @@ func Catalog() []CatalogEntry {
 	}
 }
 
-// EvaluationCatalog prepends historical-evaluation-only reference models to
-// the user-facing Forecast Lab catalog.
+// EvaluationCatalog surrounds the user-facing Forecast Lab catalog with
+// historical-evaluation-only models: a reference model first and frozen
+// candidates last.
 func EvaluationCatalog() []CatalogEntry {
-	return append([]CatalogEntry{
+	entries := append([]CatalogEntry{
 		{Model: NewStraightLinePaceV1()},
 	}, Catalog()...)
+	return append(entries, CatalogEntry{Model: NewNPXGStrengthScheduleLoadV1()})
 }
 
 // DevelopmentCandidates are experimental models that may be scored only by

@@ -24,7 +24,13 @@ type Info struct {
 type ExpectedGoals struct {
 	GameID     string
 	Home, Away float64
+	// Penalties is the penalty-kick share of Home and Away. Nil means the
+	// split was not observed, not that the game had no penalty xG.
+	Penalties *PenaltyXG
 }
+
+// PenaltyXG is the penalty-kick xG included in one game's team-model xG.
+type PenaltyXG struct{ Home, Away float64 }
 
 // HistoricalSeason contains only fixtures and xG observations that were
 // available before a forecast cutoff. It lets candidates select a bounded
@@ -45,6 +51,10 @@ type VenueSample struct {
 	XGMatches              int
 	HomeXG, AwayXG         float64
 	HomePoints, AwayPoints int
+	// NPXGMatches counts matches whose non-penalty xG is in HomeNPXG and
+	// AwayNPXG. It is zero when any prior-season xG match lacks a penalty split.
+	NPXGMatches        int
+	HomeNPXG, AwayNPXG float64
 }
 
 // FitInput keeps forecast-only inputs distinct from official standings.

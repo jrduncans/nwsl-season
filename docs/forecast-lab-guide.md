@@ -206,6 +206,28 @@ when the evaluated team is more loaded, easier when its opponent is more
 loaded, and unchanged when their load is equal. The venue-only and raw PPG
 measures remain visible as comparisons.
 
+### xG Poisson (npxG strength, schedule load) — evaluation-only candidate
+
+`xg-poisson-npxg-strength-v1` is in `forecast.EvaluationCatalog` but not in
+Forecast Lab. It is `xg-poisson-schedule-load-v1` with team attack and defence
+rated on non-penalty xG: ASA's penalty-kick xG is subtracted from each side of
+every current and historical match, and the multipliers are measured against
+the league npxG mean so they stay centred on one. The league home and away
+scoring rates stay on all-shots xG, so simulated scorelines still include the
+league's usual penalty goals. Priors, the two-season venue window, the clamp
+and the schedule-load adjustment are unchanged. A match without an observed
+penalty split is left out of team strengths, as a match without xG is.
+
+The design was frozen after one development comparison. Two alternatives were
+dropped: fitting the venue rates on npxG as well (which removes penalty goals
+from simulated scorelines and was worse on match log loss), and keeping 25% of
+penalty xG in team strengths (no better than 0%). First-half penalty xG
+correlates only about 0.07 with second-half penalty xG across 2016–2025, against
+about 0.55 for npxG.
+
+Live forecasts read the league npxG venue rate from the persisted prior-season
+summary. Backtests pool it from cutoff-safe historical fixtures.
+
 ### Current pace
 
 Current pace uses the same home-goal, away-goal, and 20-match priors to

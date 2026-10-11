@@ -64,13 +64,19 @@ func (p xgPoissonScheduleLoadV1) Fit(input FitInput) (Predictor, error) {
 	if !ok {
 		return nil, fmt.Errorf("schedule-load base predictor has type %T", base)
 	}
-	loads, err := scheduleLoads(input.Games)
+	return withScheduleLoad(venue, input.Games)
+}
+
+// withScheduleLoad applies the recovery and accumulated-load adjustment to a
+// fitted xG venue predictor.
+func withScheduleLoad(venue xgPredictor, games []standings.Game) (scheduleLoadXGPredictor, error) {
+	loads, err := scheduleLoads(games)
 	if err != nil {
-		return nil, err
+		return scheduleLoadXGPredictor{}, err
 	}
 	return scheduleLoadXGPredictor{
 		base: venue, fixtures: loads,
-		material: appendScheduleLoadMaterial(venue.material, input.Games),
+		material: appendScheduleLoadMaterial(venue.material, games),
 	}, nil
 }
 
