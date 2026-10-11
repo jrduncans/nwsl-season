@@ -22,14 +22,12 @@ type pageExpectation struct {
 	text string
 }
 
-func scenarioPages(selection string) map[string][]pageExpectation {
-	selected := `<h2 id="selected-season-heading">` + selection + `</h2>`
-	scoring := "/history/scoring?metric=xg&season=" + selection
+func scenarioPages() map[string][]pageExpectation {
 	return map[string][]pageExpectation{
-		apptest.ScenarioDefault:     {{scoring, selected}, {scoring, "<strong>Selected 2022:</strong> 1.00 goals per match"}},
-		apptest.ScenarioOverview:    {{scoring, selected}},
-		apptest.ScenarioSingle:      {{scoring, selected}, {scoring, "xG available for 0 of 20 completed matches"}},
-		apptest.ScenarioEmpty:       {{scoring, selected}, {scoring, "No eligible seasons currently have complete xG coverage to plot."}},
+		apptest.ScenarioDefault:     {{"/explore?view=table", `<th scope="row" data-value="2018">`}, {"/explore?view=table", `<th scope="row" data-value="2021">`}},
+		apptest.ScenarioOverview:    {{"/explore?view=table", `<th scope="row" data-value="2016">`}},
+		apptest.ScenarioSingle:      {{"/explore?view=table", `<th scope="row" data-value="2024">`}, {"/explore?view=trend", "Some seasons have no complete xG average"}},
+		apptest.ScenarioEmpty:       {{"/explore?view=teams&season=2024&display=table", `title="Alpha"`}},
 		apptest.ScenarioTeams:       {{"/explore", "Angel City FC"}},
 		apptest.ScenarioNoXG:        {{"/explore", "Angel City FC"}},
 		apptest.ScenarioTeamHistory: {{"/explore?view=team-history", "Angel City FC"}},
@@ -53,7 +51,7 @@ func TestSeedStoresEveryScenario(t *testing.T) {
 			t.Cleanup(func() { _ = db.Close() })
 			apptest.Seed(t, db, name)
 
-			want, selection := apptest.Scenario(t, name)
+			want := apptest.Scenario(t, name)
 			stored, err := db.HistoricalRegularSeasons(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -101,7 +99,7 @@ func TestSeedStoresEveryScenario(t *testing.T) {
 			}
 
 			handler := app.NewHandler(db)
-			for _, page := range scenarioPages(selection)[name] {
+			for _, page := range scenarioPages()[name] {
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, page.path, nil))
 				if response.Code != http.StatusOK {
@@ -164,8 +162,8 @@ func assertTeams(t *testing.T, year string, got []standings.Team, want cache.Sea
 func TestScenarioNamesAreAllAccepted(t *testing.T) {
 	t.Parallel()
 	for _, name := range apptest.ScenarioNames() {
-		if archive, selection := apptest.Scenario(t, name); len(archive) == 0 || selection == "" {
-			t.Errorf("scenario %q = %d seasons, selection %q", name, len(archive), selection)
+		if archive := apptest.Scenario(t, name); len(archive) == 0 {
+			t.Errorf("scenario %q has no seasons", name)
 		}
 	}
 }

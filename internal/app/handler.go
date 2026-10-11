@@ -105,9 +105,9 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", application.root)
 	mux.HandleFunc("GET /seasons", application.seasons)
-	mux.HandleFunc("GET /history", application.history)
-	mux.HandleFunc("GET /history/scoring", application.historyScoring)
-	mux.HandleFunc("GET /explore", application.historyScoring)
+	mux.HandleFunc("GET /history", application.legacyHistory)
+	mux.HandleFunc("GET /history/scoring", application.legacyHistory)
+	mux.HandleFunc("GET /explore", application.explore)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
 	mux.HandleFunc("GET /seasons/{season}", application.season)

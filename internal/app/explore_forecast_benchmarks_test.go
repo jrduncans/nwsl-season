@@ -24,7 +24,7 @@ func TestExploreForecastBenchmarksUseDefaultProjectionAndSharedCache(t *testing.
 	data := &archive[0].Data
 	data.Games = append(data.Games, cache.Game{ASAID: "future", Season: "2026", Stage: "Regular Season", Status: fixtures.PreMatchStatus, HomeTeamID: "team-0", AwayTeamID: "team-1"})
 	data.VenueHistory = []cache.VenueSummary{{Season: "2025", FixtureReady: true, XGReady: true, Matches: 20, XGMatches: 20, HomeXG: 30}, {Season: "2024", FixtureReady: true, XGReady: true, Matches: 20, XGMatches: 20, AwayXG: 20}}
-	store := &historyHTTPStore{archive: archive}
+	store := &archiveHTTPStore{archive: archive}
 	executor := newForecastExecutor(1, time.Second)
 	calls := 0
 	executor.run = func(_ context.Context, request simulation.Request) (simulation.Result, error) {
@@ -94,7 +94,7 @@ func TestExploreForecastBenchmarksWithRealDefaultModel(t *testing.T) {
 	for index := range archive[0].Data.Games {
 		archive[0].Data.Games[index].KickoffUTC = time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(index) * 24 * time.Hour).Format(time.RFC3339)
 	}
-	app := NewApplication(&historyHTTPStore{archive: archive}, Options{ForecastIterations: 20})
+	app := NewApplication(&archiveHTTPStore{archive: archive}, Options{ForecastIterations: 20})
 	response := httptest.NewRecorder()
 	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&team=team-0&trend-view=relative&average-reference=shield", nil))
 	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "Shield favorite unavailable") || !strings.Contains(response.Body.String(), forecast.Default().Model.Info().Name) {
@@ -125,7 +125,7 @@ func TestExploreForecastBenchmarksUnavailableNeverUsesCurrentStandings(t *testin
 			if condition == "overloaded" {
 				executor.slots <- struct{}{}
 			}
-			app := newApplicationWithForecastExecutor(&historyHTTPStore{archive: archive}, Options{}, executor)
+			app := newApplicationWithForecastExecutor(&archiveHTTPStore{archive: archive}, Options{}, executor)
 			response := httptest.NewRecorder()
 			selection := "/explore?view=season-trend&trend-view=relative&average-reference=shield"
 			if condition != "incomplete" {

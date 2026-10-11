@@ -42,7 +42,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	scenario := flags.String("scenario", apptest.ScenarioDefault, "cache scenario: "+strings.Join(apptest.ScenarioNames(), ", "))
 	addr := flags.String("addr", "127.0.0.1:0", "loopback listen address")
-	metric := flags.String("metric", "xg", "history scoring metric in the printed URL")
+	metric := flags.String("metric", "xg", "Scoring trend metric in the printed URL")
 	noScript := flags.Bool("no-script", false, "send a Content-Security-Policy that blocks page scripts")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -79,8 +79,7 @@ func serve(scenario, addr, metric string, noScript bool, stdout, stderr io.Write
 	cfg.DataDir = dir
 	cfg.DBPath = filepath.Join(dir, "nwsl-season.sqlite")
 
-	selection, err := seed(cfg.DBPath, scenario)
-	if err != nil {
+	if err := seed(cfg.DBPath, scenario); err != nil {
 		return err
 	}
 
@@ -106,8 +105,7 @@ func serve(scenario, addr, metric string, noScript bool, stdout, stderr io.Write
 	}
 	httpServer := &http.Server{Handler: previewHandler(srv.Handler(), noScript), ReadHeaderTimeout: 10 * time.Second}
 
-	query := url.Values{"metric": {metric}, "season": {selection}}
-	_, _ = fmt.Fprintf(stdout, "http://%s%s/history/scoring?%s\n", listener.Addr(), mountPrefix, query.Encode())
+	_, _ = fmt.Fprintf(stdout, "http://%s%s/explore?%s\n", listener.Addr(), mountPrefix, previewQuery(scenario, metric).Encode())
 	_, _ = fmt.Fprintf(stderr, "preview: scenario %q; press Ctrl-C to stop\n", scenario)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -138,11 +136,23 @@ func validScenario(name string) bool {
 
 // seed fills a new cache at path with the scenario and returns the season the
 // history scoring page should preselect.
-func seed(path, scenario string) (selection string, err error) {
+// previewQuery opens the Explore view each scenario was built to exercise.
+func previewQuery(scenario, metric string) url.Values {
+	switch scenario {
+	case apptest.ScenarioTeams, apptest.ScenarioNoXG:
+		return url.Values{"view": {"teams"}}
+	case apptest.ScenarioTeamHistory, apptest.ScenarioSeasonTrend:
+		return url.Values{"view": {scenario}}
+	default:
+		return url.Values{"view": {"trend"}, "metric": {metric}}
+	}
+}
+
+func seed(path, scenario string) (err error) {
 	ctx := context.Background()
 	db, err := cache.Open(ctx, path)
 	if err != nil {
-		return "", fmt.Errorf("open cache: %w", err)
+		return fmt.Errorf("open cache: %w", err)
 	}
 	defer func() { err = errors.Join(err, db.Close()) }()
 	reporter := &reporter{}
@@ -156,8 +166,7 @@ func seed(path, scenario string) (selection string, err error) {
 		}
 	}()
 	apptest.Seed(reporter, db, scenario)
-	_, selection = apptest.Scenario(reporter, scenario)
-	return selection, nil
+	return nil
 }
 
 // fatalError carries a failed test-helper message out of apptest.

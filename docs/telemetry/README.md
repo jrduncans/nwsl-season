@@ -49,6 +49,14 @@ and the target fails on contract violations or when Weaver receives no trace,
 metric, or correlated exception-log samples. It does not need Honeycomb
 credentials or contact ASA.
 
+## Error classification
+
+Classify every failure with one of the established `error.type` values (see
+[resources and errors](catalog/resources-and-errors.md)) plus a specific,
+low-cardinality `nwsl.error.code` for the detection site. Severity follows the
+outcome: terminal failures are `ERROR`, absorbed, retryable or partial failures
+are `WARN`, and expected cancellation is `DEBUG`.
+
 ## Schema review
 
 Pull requests that change `telemetry/registry/**` run Weaver's registry diff

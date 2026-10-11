@@ -7,8 +7,9 @@ flow. Its immediate startup check also bootstraps missing public source-backed
 catalog scopes, while keeping current-season work ahead of that low-priority
 archive loading.
 
-The [ASA loading packet index](asa-loading/README.md) is the implementation
-plan and change history. This guide summarizes the delivered operational model.
+[ASA source data](asa-source-data.md) lists the fields stored from each
+endpoint and what uses them. [Competitions](competitions-guide.md) covers the
+catalog of public season/stage scopes this guide loads.
 
 ## Source data and derived data
 
@@ -162,6 +163,23 @@ complete inventory when an incoming known inventory is incomplete or uneven.
 Targeted operations do not delete unrequested records. If a game write finds
 unknown teams, the service refreshes the catalog once and retries the same
 validated write without refetching games.
+
+When a response disagrees with the cache, these rules decide which copy wins:
+
+- **Games**: a terminal game (`Abandoned`, or `FullTime` with both scores)
+  replaces a nonterminal one and is never replaced by one. Two pre-match copies
+  with different fixture details take the incoming copy, because ASA can omit
+  `last_updated_utc` before kickoff. Otherwise the incoming row wins only with a
+  strictly later `last_updated_utc`.
+- **Empty inventory**: an empty full response is recorded as an observation but
+  never deletes cached games or publishes a scope.
+- **xG**: an available value replaces an unavailable marker. A differing
+  available value replaces a cached one only when its observation finished
+  strictly later than the cached check. Omission never erases an available
+  value, and xG rows are deleted only with their parent game.
+- **Materiality**: availability, xG, and expected-points changes are material;
+  `raw_json`-only and timestamp-only changes are stored but trigger no
+  downstream work.
 
 Each operation persists its own success or failure audit and due state. A
 failed request does not advance a successful observation or replace a durable

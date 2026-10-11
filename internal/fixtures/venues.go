@@ -9,7 +9,7 @@ import (
 // VenueLocation resolves cached ASA stadium IDs without contacting the source.
 // Unknown venues stay unknown; a home team's usual venue is not a safe fallback.
 // Catalog provenance and the two fixture-specific corrections are documented in
-// docs/history-logic-guide.md. IANA rules account for historical daylight saving.
+// docs/explore-guide.md. IANA rules account for historical daylight saving.
 func VenueLocation(stadiumID, gameID string) (*time.Location, error) {
 	if stadiumID == "" {
 		switch gameID {

@@ -33,7 +33,7 @@ test-coverage:
 	go test -coverpkg=./... -coverprofile=work/coverage.out ./...
 	go tool cover -func=work/coverage.out
 
-# Explore checks: see the Explore workspace section of docs/history-logic-guide.md.
+# Explore checks: see docs/explore-guide.md.
 .PHONY: test-explore
 test-explore:
 	go test ./internal/fixtures

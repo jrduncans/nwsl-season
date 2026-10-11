@@ -8,14 +8,14 @@ import (
 )
 
 type exploreDistributionView struct {
-	DistributionRows                    []historyDistributionView
+	DistributionRows                    []exploreDistributionSeason
 	DistributionColumns                 []exploreTeamColumn
 	DistributionSort, DistributionOrder string
 	DistributionBin                     string
 	DistributionExpanded                bool
 }
 
-func exploreDistribution(query url.Values, distributions []historyDistributionView) (exploreDistributionView, error) {
+func exploreDistribution(query url.Values, distributions []exploreDistributionSeason) (exploreDistributionView, error) {
 	basis, err := penaltiesBasis(query)
 	if err != nil {
 		return exploreDistributionView{}, err
@@ -77,7 +77,7 @@ func exploreDistribution(query url.Values, distributions []historyDistributionVi
 	return page, nil
 }
 
-func sortExploreDistributions(rows []historyDistributionView, column, order string) {
+func sortExploreDistributions(rows []exploreDistributionSeason, column, order string) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
 		compare := 0

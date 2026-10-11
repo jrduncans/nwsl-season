@@ -9,7 +9,7 @@ import (
 )
 
 type explorePage struct {
-	historyPage
+	exploreScoringPage
 	exploreDistributionView
 	exploreTeamsView
 	exploreTeamHistoryView
@@ -80,8 +80,10 @@ type exploreChartRecord struct {
 }
 
 type exploreRecord struct {
-	historyRowView
-	Goals, XG, Gap *float64
+	Season                                          string
+	Played                                          int
+	GoalsPerMatch, XGPerMatch, GoalsMinusXGPerMatch string
+	Goals, XG, Gap                                  *float64
 }
 
 func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason, basis history.ScoringBasis) {
@@ -94,15 +96,15 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		}
 	}
 	if view != "trend" && view != "distribution" && view != "table" && view != "teams" && view != "team-history" && view != "season-trend" && view != "team-rankings" {
-		a.renderHistoryBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, team-history, season-trend, or team-rankings"))
+		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, table, teams, team-history, season-trend, or team-rankings"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
 	if err != nil {
-		a.renderHistoryBadRequest(w, r, err)
+		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	page := explorePage{historyPage: historyPageForBasis(r.URL.Path, summaries, "", historyMetricCompare, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
+	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
 	// The Explore workspace keeps its own selection in the query, so the basis
 	// links change only the penalties parameter.
 	for index, choice := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {
@@ -110,17 +112,17 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	}
 	page.exploreDistributionView, err = exploreDistribution(r.URL.Query(), page.Distributions)
 	if err != nil {
-		a.renderHistoryBadRequest(w, r, err)
+		a.renderExploreBadRequest(w, r, err)
 		return
 	}
 	page.exploreTeamHistoryView, err = exploreTeamHistory(r.URL.Query(), teams.TeamSeasons)
 	if err != nil {
-		a.renderHistoryBadRequest(w, r, err)
+		a.renderExploreBadRequest(w, r, err)
 		return
 	}
 	page.exploreSeasonTrendView, err = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	if err != nil {
-		a.renderHistoryBadRequest(w, r, err)
+		a.renderExploreBadRequest(w, r, err)
 		return
 	}
 	// Validate selections before spending forecast capacity. Populate every
@@ -157,8 +159,10 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			continue
 		}
 		page.Records = append(page.Records, exploreRecord{
-			historyRowView: historyRow(summary, r.URL.Path, "", historyMetricCompare),
-			Goals:          summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch,
+			Season: summary.Season, Played: summary.Played,
+			GoalsPerMatch: scoringRateText(summary.GoalsPerMatch), XGPerMatch: scoringRateText(summary.XGPerMatch),
+			GoalsMinusXGPerMatch: scoringRateText(summary.GoalsMinusXGPerMatch),
+			Goals:                summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch,
 		})
 		page.ChartData = append(page.ChartData, exploreChartRecord{
 			Season: summary.Season, Played: summary.Played, Active: summary.Lifecycle == cache.SourceScopeActive,

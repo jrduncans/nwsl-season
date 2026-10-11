@@ -17,4 +17,4 @@ Archive integrity: `sha512-14ZU30lH7n89oq+A4bWaJPnAG8a7ZTk7dKf48YAzMvJjQtjrgg5Dp
 
 To update, select an explicit release, verify its archive integrity against npm metadata,
 copy these same build/license files, update the paths in `explore.go`, and run the
-Explore browser checks described in `docs/history-logic-guide.md`.
+Explore browser checks (`make test-e2e`) described in `docs/explore-guide.md`.

@@ -4,9 +4,7 @@ This guide describes the current **Forecast Lab** implementation at
 `/seasons/{season}/forecast`. It follows a forecast from the cached fixture
 snapshot through a complete simulated season, explains what a fixed result
 does, and draws a clear line between an outlook and a mathematical clinching
-proof. The phase documents retain the design history:
-[forecast-first simulator](phases/10-forecast-simulator.md) and
-[xG and model comparison](phases/11-xg-and-models.md).
+proof.
 
 ## The short version
 
@@ -87,7 +85,7 @@ match averages. Explore uses its existing cached archive snapshot and shares
 Forecast Lab's executor and result cache. Projection failures leave comparisons
 unavailable while preserving the rest of Explore; there is no current-standings
 fallback. Completed-season groups and the Shield winner use factual standings.
-See [the History guide](history-logic-guide.md) for coverage and membership rules.
+See [the Explore guide](explore-guide.md#match-by-match) for coverage and membership rules.
 
 ## The model catalog
 

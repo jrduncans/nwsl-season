@@ -5,7 +5,7 @@ description: Investigate NWSL Season missing fixtures or xG, "recalculation pend
 
 # NWSL sync investigation
 
-Diagnose the local SQLite-backed synchronization pipeline without changing production state by default. Read `README.md`, `docs/sync-logic-guide.md`, and `docs/asa-loading/README.md` before drawing conclusions; inspect the implementation named by those guides when a claim needs code-level proof.
+Diagnose the local SQLite-backed synchronization pipeline without changing production state by default. Read `docs/sync-logic-guide.md` before drawing conclusions; inspect the implementation it names when a claim needs code-level proof.
 
 ## Investigation workflow
 

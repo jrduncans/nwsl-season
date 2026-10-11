@@ -25,7 +25,7 @@ func TestPreviewNoScriptPreservesResponseAndRestrictsCSP(t *testing.T) {
 		path   string
 		status int
 	}{
-		{"/history/scoring", http.StatusOK},
+		{"/explore", http.StatusOK},
 		{"/static/site.css", http.StatusOK},
 		{"/seasons/2026", http.StatusSeeOther},
 		{"/not-a-route", http.StatusNotFound},

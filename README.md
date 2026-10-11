@@ -95,11 +95,10 @@ by season charts one team's goals, xG, points, and xPoints per match across regu
 seasons, with a sortable season table. Optional league context shows seasonal
 ranges and completed-season records with inspectable holders. Explore's xPoints
 describe recorded matches; they are distinct from Forecast Lab's projected
-final points. A Penalties control (Included or Excluded) switches Explore and
-the league history page between official goals and xG and non-penalty goals and
-npxG; points and xPts always include penalties. Completed-match results with a
-penalty add an npxG line beside their xG. The older `/history/scoring` route
-remains available.
+final points. A Penalties control (Included or Excluded) switches Explore
+between official goals and xG and non-penalty goals and npxG; points and xPts
+always include penalties. Completed-match results with a penalty add an npxG
+line beside their xG.
 Match by match follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
 Actual vs xG pairs actual and expected values in separate Scored and Allowed
@@ -128,7 +127,7 @@ Useful endpoints:
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
 - `/explore` — league scoring charts, sortable season table, team performance
   vs xG or xPoints, and team history.
-- `/history/scoring` — legacy scoring page, retained for existing links.
+- `/history` and `/history/scoring` — redirect to Explore's Scoring trend.
 
 ## Pitchfork development server
 
@@ -520,12 +519,17 @@ directory even though the current season data can be rebuilt from ASA.
 
 ## Documentation
 
-- [ASA data catalog and loading plan](docs/asa-data-catalog-and-loading-plan.md)
-  records current source fields and consumers, freshness requirements, known
-  historical/playoff gaps, and the proposed targeted-loading redesign.
+- [ASA source data](docs/asa-source-data.md) lists the stored ASA fields and
+  what uses each one.
+- [Competitions](docs/competitions-guide.md) explains the season/stage catalog,
+  capabilities, readiness, season phases, and knockout brackets.
 - [How synchronization works](docs/sync-logic-guide.md) diagrams scheduler
   eligibility, ASA requests, targeted result reconciliation, validation, and
   durable cache replacement.
+- [How Explore works](docs/explore-guide.md) explains each Explore view's
+  calculations, eligibility, and parameters.
+- [Standings and schedule difficulty](docs/standings-and-schedule-guide.md)
+  explains table ordering, tiebreaks, and the remaining-schedule measures.
 - [How clinching works](docs/clinching-logic-guide.md) explains qualification
   proofs, conservative tiebreak handling, no-help paths, and slate scenarios.
 - [How Forecast Lab works](docs/forecast-lab-guide.md) explains model presets,

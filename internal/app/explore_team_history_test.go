@@ -14,7 +14,7 @@ import (
 )
 
 func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 		"2021": {Lifecycle: cache.SourceScopeCompleted, Goals: 4, XGCovered: 19},
 		"2022": {Lifecycle: cache.SourceScopeCompleted, Inventory: cache.InventoryCompletenessIncomplete, Goals: 9},
@@ -48,7 +48,7 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 		t.Fatalf("history rates, coverage, or eligibility changed: %+v", page)
 	}
 	// The HTML fallback contains every measure, even when the chart shows one.
-	store := &historyHTTPStore{archive: archive}
+	store := &archiveHTTPStore{archive: archive}
 	response := httptest.NewRecorder()
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=team-history&team=alpha&measure=against", nil))
 	body := response.Body.String()
@@ -63,7 +63,7 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 }
 
 func TestExploreTeamHistoryUsesIDsAcrossNameChanges(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 2},
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})
@@ -104,7 +104,7 @@ func TestExploreDefaultTeamPrefersPortlandThorns(t *testing.T) {
 		{"Thorns recorded", portlandThornsTeamID, portlandThornsTeamID},
 		{"Thorns absent", "bravo", "alpha"},
 	} {
-		archive := historyArchive(t, map[string]historyArchiveState{
+		archive := testArchive(t, map[string]archiveState{
 			"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 		})
 		for i := range archive {
@@ -133,7 +133,7 @@ func TestExploreDefaultTeamPrefersPortlandThorns(t *testing.T) {
 }
 
 func TestExploreTeamHistoryHeadingNamesTheView(t *testing.T) {
-	store := &historyHTTPStore{archive: historyArchive(t, map[string]historyArchiveState{
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})}
 	for query, heading := range map[string]string{
@@ -154,7 +154,7 @@ func TestExploreTeamHistoryEmptyArchive(t *testing.T) {
 		t.Fatalf("empty archive: %+v, %v", page, err)
 	}
 	response := httptest.NewRecorder()
-	NewHandler(&historyHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-history", nil))
+	NewHandler(&archiveHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-history", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `data-team-history-empty>No team history`) {
 		t.Fatalf("empty history: %d %s", response.Code, response.Body.String())
 	}
@@ -223,12 +223,12 @@ func TestExploreTeamHistorySortsEveryColumnBeforeRounding(t *testing.T) {
 }
 
 func TestExploreTeamHistorySortURLsAndFallback(t *testing.T) {
-	archive := historyArchive(t, map[string]historyArchiveState{
+	archive := testArchive(t, map[string]archiveState{
 		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 5, XGCovered: 20},
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20},
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
-	handler := NewHandler(&historyHTTPStore{archive: archive})
+	handler := NewHandler(&archiveHTTPStore{archive: archive})
 	path := "/nwsl-season/explore?view=team-history&team=alpha&measure=against&history-sort=for-actual&history-order=desc"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))

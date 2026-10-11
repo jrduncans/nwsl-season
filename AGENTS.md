@@ -1,124 +1,52 @@
-# AI contribution guidelines
+# Agent guide
 
-For every AI-authored Go change, run both checks before handing work back:
+## Handoff checks
 
-```sh
-golangci-lint fmt ./...
-make lint
-```
+After the final edit to Go, templates, JavaScript or CSS, run `make verify`
+(fmt, lint, vet, test, test-e2e; run `make e2e-install` once first). Iterate
+with the narrowest package test or a focused target such as
+`make test-clinching` or `make test-explore`.
 
-`golangci-lint fmt` applies the repository's configured formatters, including
-`goimports`. `make lint` must finish without issues. Run these after the final
-Go edit, so the reported result reflects the delivered tree.
+Add these when they apply:
 
-For Go changes, also run `make vet` and `make test`. Run the narrowest relevant
-tests while iterating, then run the full commands before handoff.
+- Goroutines, channels, locks, shared mutable state, the scheduler, or
+  cache/HTTP concurrency: `make race`.
+- `go.mod`/`go.sum` changes or release work: `make vuln`. If its database is
+  unreachable, report the scan as skipped, not clean.
+- `telemetry/registry` changes: `make telemetry-check-generated` and
+  `make telemetry-live-check`.
 
-When a change touches goroutines, channels, locks, shared mutable state, the
-scheduler, cache concurrency, HTTP concurrency, or concurrency-sensitive tests,
-also run the full race suite:
+`make lint` includes `gosec`; keep each suppression narrow and justified.
 
-```sh
-go test -race ./...
-```
+Build test data with `internal/apptest` (seeded cache scenarios) and
+`internal/asatest` (fake ASA server). Tests run against these fakes, never the
+real ASA API.
 
-The race suite passed in roughly 30 seconds in the development environment, so
-it is appropriate as a targeted pre-handoff check without requiring it for
-documentation-only or otherwise unrelated changes.
+## Invariants
 
-When a change touches templates, JavaScript, CSS or `internal/app`, also run
-`make test-e2e` (headless Chromium; run `make e2e-install` once first).
+- Page requests read only the local SQLite cache. The scheduler and `cmd/sync`
+  own ASA refreshes; `cmd/sync` is maintenance work sharing the server's
+  `NWSL_DATA_DIR` and sync lease.
+- When an incoming known fixture inventory is incomplete or uneven, keep the
+  prior complete inventory, and publish qualification indicators only from a
+  complete one.
+- `config.env` may be a 1Password-backed FIFO: never read, display, copy or
+  diff it. Set `NWSL_CONFIG_FILE=/dev/null` for isolated local runs. Document
+  configuration shape in `config.env.example`; secrets and real telemetry
+  configuration stay out of source, tests and docs.
 
-`make verify` runs `fmt`, `lint`, `vet`, `test` and `test-e2e` in that order,
-so one command covers the standard Go handoff checks; add the race suite and
-`govulncheck` when they apply.
+## Read before changing
 
-For new tests, build data with `internal/apptest` (seeded cache scenarios) and
-`internal/asatest` (a fake ASA server for sync journeys). A test must never
-call the real ASA API.
+| Area | Guide |
+| --- | --- |
+| Sync, cache, scheduler, ASA loading | [sync guide](docs/sync-logic-guide.md) |
+| Seasons, stages, capabilities, brackets | [competitions guide](docs/competitions-guide.md) |
+| Standings, tiebreaks, schedule difficulty | [standings and schedule guide](docs/standings-and-schedule-guide.md) |
+| Qualification, clinching, scenarios | [clinching guide](docs/clinching-logic-guide.md); its presentation section is the contract for summaries and alternatives |
+| Forecast Lab | [Forecast Lab guide](docs/forecast-lab-guide.md) |
+| Forecast models and evaluation | The evaluation protocol under "Command-line tools" in [README.md](README.md). Final-test seasons alone decide the recommended model, and checked-in evidence is replaced only by a complete run; `-allow-incomplete` output is diagnostic. |
+| Explore charts and calculations | [Explore guide](docs/explore-guide.md); its Views table maps tab names to `view` keys |
+| Telemetry | [telemetry guide](docs/telemetry/README.md) |
 
-For every AI-authored Go change, run the Go vulnerability scan when network
-access is available:
-
-```sh
-govulncheck ./...
-```
-
-If the vulnerability database cannot be reached, report that the scan was
-skipped rather than treating it as a clean result. Run it after dependency
-changes and before release work even when the code change appears unrelated.
-
-`make lint` includes `gosec`. Keep suppressions narrow and justified; do not
-add blanket exclusions. Run `golangci-lint run --enable-only gosec ./...` only
-for focused diagnosis.
-
-## Architecture and data integrity
-
-- Page requests must read the local SQLite cache; they must not contact ASA.
-  The scheduler and `cmd/sync` own ASA refreshes.
-- Preserve a prior complete fixture inventory when an incoming known inventory
-  is incomplete or uneven. Do not publish qualification indicators from an
-  incomplete fixture inventory.
-- The server and `cmd/sync` share the same persistent `NWSL_DATA_DIR` and sync
-  lease. Treat the sync command as maintenance work, not a second service.
-- Read [README.md](README.md) and the relevant guide in `docs/` before changing
-  synchronization, qualification/clinching, or Forecast Lab behavior.
-
-## Documentation routing
-
-- For Explore (Compare teams, Team profile, League trends) charts or calculations, read [the History guide](docs/history-logic-guide.md); its Explore workspace table maps tab names to `view` keys such as `season-trend` (Match by match) and `team-history` (Season by season).
-  Run `make test-explore` for Explore checks; the Explore workspace section of the History guide lists what they cover.
-- For sync, cache, scheduler, and ASA-loading work, read the current
-  [synchronization guide](docs/sync-logic-guide.md) and
-  [ASA-loading index](docs/asa-loading/README.md).
-- For qualification and scenarios, read
-  [the clinching guide](docs/clinching-logic-guide.md). For Forecast behavior,
-  read [the Forecast Lab guide](docs/forecast-lab-guide.md). For model changes,
-  follow the evaluation protocol in [README.md](README.md) and its checked-in
-  evaluation evidence.
-- `docs/phases/` and completed work packets are design history unless they
-  explicitly identify current behavior. Verify their historical claims against
-  the current code.
-- Clinching presentation must group own-team and repeated outside-match results,
-  order equal-size alternatives by displayed result, keep visible summaries
-  bounded, and preserve the exact union of confirmed
-  outcomes and partial-result notices. Summaries may overlap when factoring
-  makes them shorter; subtract
-  overlap between expandable exact paths within the presentation's expansion
-  and work limits. Retain the original certified union when those limits are
-  reached. Verify logical rewrites with exhaustive outcome-equivalence and
-  disjoint detailed-alternative tests. Verify future-fixture elimination proofs
-  against exhaustive small-season outcomes. Use `make test-clinching` for focused
-  checks; the full `make test` also includes these regressions.
-- When behavior or required checks change, update the active guide; update
-  `AGENTS.md`, `Makefile` and CI only when a command or required check changes.
-
-## Observability and configuration
-
-- Keep telemetry error classification low-cardinality: use the established
-  `error.type` values and a specific `nwsl.error.code`. Preserve the existing
-  severity semantics: terminal failures are `ERROR`, absorbed/retryable or
-  partial failures are `WARN`, and expected cancellation is `DEBUG`.
-- For telemetry registry changes, run `make telemetry-check-generated` and
-  `make telemetry-live-check`. Keep free-form `nwsl.*` string dimensions
-  compliant with the custom example and cardinality policies, and review the
-  pull request's Weaver Markdown schema diff alongside the source diff.
-- Run Weaver's synthetic registry examples only through
-  `make telemetry-emit-local`, with a development receiver on loopback. Never
-  send catalog examples to Honeycomb or another shared telemetry backend.
-- Never commit secrets. `config.env` is intentionally ignored; use
-  `config.env.example` for documented configuration shape. Do not put API keys,
-  tokens, or real telemetry configuration in source, tests, or documentation.
-- `config.env` may be a 1Password-backed FIFO. Never read, display, copy, or
-  diff it. For isolated local runs that must not load user secrets, set
-  `NWSL_CONFIG_FILE=/dev/null`.
-
-## Forecast model changes
-
-- Preserve the historical evaluation protocol: daily UTC cutoffs prevent
-  same-day data leakage; development seasons may guide model changes, while
-  final-test seasons alone decide the recommended model.
-- Do not replace checked-in evaluation evidence with partial data. The standard
-  runner requires every requested season to pass its audit and every final-test
-  season to reach 95% xG coverage. Use `-allow-incomplete` only for clearly
-  labeled diagnostic output.
+When behavior changes, update the guide that owns it. Change this file, the
+`Makefile` and CI only when a command or required check changes.
