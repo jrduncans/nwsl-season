@@ -3,7 +3,7 @@
 The History views are calculated only from the coherent SQLite snapshot read by
 `cache.DB.HistoricalRegularSeasons`; they do not refresh ASA data. This guide
 records the delivered definitions for the first league-trends calculation and
-applies the historical-data boundaries in [IDEAS.md](../IDEAS.md).
+applies the historical-data boundaries in [IDEAS.md](IDEAS.md).
 
 ## Penalties basis
 
@@ -165,6 +165,30 @@ including an eligible in-progress year and its match count.
 
 Future analyses must fit broader groups with data/metric sub-controls rather
 than adding a top-level tab per metric.
+
+### Rules for every view
+
+- Compare actual results and expected values over the same selected matches;
+  a chart and its table use the same values and population.
+- An xG aggregate needs complete xG and an xPoints aggregate needs complete
+  xPoints; neither implies the other. Missing values are null, never zero, and
+  actual results stay visible when expected data is absent.
+- Never derive expected points from xG, and keep ASA's retrospective xPoints
+  separate from Forecast Lab projections.
+- Each view owns its eligibility rule; there is no global sample threshold. An
+  active season is legitimate data, shown with matches played and per-match
+  values.
+- A maximum or minimum names its eligible population. Ties are decided before
+  display rounding, one rule serves chart and table, and the limited archive
+  never supports "all-time" claims.
+- Official outcomes such as Shield winners come from verified history, not
+  today's ranking code. Earned points are `3 × wins + draws`, kept apart from
+  sanctions.
+
+A new view needs an entry in `exploreViewLabels` and the group table above, a
+pure calculation over the coherent archive read, canonical URL state that
+survives reload and Back/Forward, and `make test-explore` plus browser checks
+at desktop width and 390px. It adds no top-level navigation.
 
 ### Compare teams
 
@@ -713,7 +737,7 @@ season pages. `GET /history` redirects to the canonical route. An optional
 supported regular-season catalog year remains visible, including unloaded or
 excluded entries. `metric=goals|xg|compare` selects the chart metric; omitted metric is
 Goals, and generated URLs omit the default `goals` value. Metric selection is
-independent of season selection: with no explicit season, the page uses H03's
+independent of season selection: with no explicit season, the page uses the
 newest plot-eligible completed season, then eligible active season, then newest
 season with scored matches even in xG mode. Blank, repeated, or other explicit
 metric values are invalid.
@@ -753,7 +777,7 @@ The metric choice is a Goals / Expected goals (xG) / Compare link group.
 Compare overlays goals and xG on the same axes, retaining independently eligible
 series: partial xG coverage never removes a valid goals point. Point and season
 links preserve the chosen metric, and the native GET season form carries it as
-an explicit hidden field. The selected season does not filter the chart. xG chart points require both the H02 `PlotEligible` flag and a non-nil `XGPerMatch`; complete xG coverage
+an explicit hidden field. The selected season does not filter the chart. xG chart points require both the `history` package's `PlotEligible` flag and a non-nil `XGPerMatch`; complete xG coverage
 is required for the displayed season average, while xPoints coverage remains an
 independent reported count and never gates either chart. The selected season
 remains selected when its xG is partial or unavailable, with coverage stated as
@@ -811,7 +835,7 @@ retrospective xPoints for each team's recorded regular-season matches and derive
 the per-match rate when that team's xPoints coverage is complete. Coverage of
 xPoints does not require complete xG, and incomplete xPoints do not hide actual
 points. Fixture inventory and expected-value coverage remain separate
-dimensions, as required by [IDEAS.md](../IDEAS.md).
+dimensions, as required by [IDEAS.md](IDEAS.md).
 
 ## Chart eligibility
 

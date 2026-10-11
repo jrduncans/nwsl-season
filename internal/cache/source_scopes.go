@@ -38,7 +38,7 @@ const (
 	SourceScopeAvailable    SourceScopeDiscovery = "available"
 )
 
-// SourceScope is a durable source identity retained by the loading plan.
+// SourceScope is a durable season/stage source identity.
 type SourceScope struct {
 	Season       string
 	Stage        string

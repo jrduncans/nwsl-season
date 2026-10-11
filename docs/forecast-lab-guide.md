@@ -4,9 +4,7 @@ This guide describes the current **Forecast Lab** implementation at
 `/seasons/{season}/forecast`. It follows a forecast from the cached fixture
 snapshot through a complete simulated season, explains what a fixed result
 does, and draws a clear line between an outlook and a mathematical clinching
-proof. The phase documents retain the design history:
-[forecast-first simulator](phases/10-forecast-simulator.md) and
-[xG and model comparison](phases/11-xg-and-models.md).
+proof.
 
 ## The short version
 

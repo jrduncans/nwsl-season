@@ -899,7 +899,7 @@ func readCacheStatus(t *testing.T, f *fixture) cacheStatus {
 
 // TestJ6ASAErrors is journey J6: ASA answers 503 to a later games request.
 // Pages keep the last good data and the next check recovers. Failure reporting
-// through /cache/status remains an open follow-up in docs/test-strategy-plan.md.
+// through /cache/status remains an open question in docs/IDEAS.md.
 func TestJ6ASAErrors(t *testing.T) {
 	t.Parallel()
 	j := newJourney(t, lateSeason())

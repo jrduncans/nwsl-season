@@ -354,10 +354,6 @@ historical franchise identity, while retaining the name shown in the season.
 
 ## Suggested delivery order
 
-Detailed implementation packets for the first scoring-by-season release are in
-[History implementation packets](history/README.md). They define the initial
-scope, dependencies, fixed decisions, tests, and handoffs for smaller models.
-
 ### First shippable view: scoring by season
 
 View 5 remains the smallest useful vertical slice. It needs no historical
@@ -425,3 +421,21 @@ If the source data expands, revisit player-era records, goal timing, comeback
 probability, lineup continuity, travel effects, and true pre-match upsets. Keep
 these out of the first implementation unless their historical inputs are
 persisted and coverage can be shown honestly.
+
+## Open questions
+
+- Should `/cache/status` report failed source operations? Failures are recorded
+  in source-refresh audits, but the endpoint reads legacy `sync_runs`, so e2e
+  journey J6 checks only that pages keep good data and recover.
+- Is the two-hour completion grace right for ASA's actual post-match
+  publication delay?
+- How do official tiebreak rules differ by season? Historical seasons currently
+  get only a verified cut line, not rules.
+- Can a maintainable source supply disciplinary points, the first official
+  tiebreaker missing from the cache?
+- Is the dedicated Schedule difficulty page still useful now that the
+  standings `SD` column carries the main signal?
+- When should the forecast recommendation be re-evaluated as new completed
+  seasons arrive?
+- Should validated team-strength estimates appear as a separately named power
+  rating? It must never replace or adjust official standings.

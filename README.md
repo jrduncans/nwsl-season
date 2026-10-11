@@ -520,12 +520,15 @@ directory even though the current season data can be rebuilt from ASA.
 
 ## Documentation
 
-- [ASA data catalog and loading plan](docs/asa-data-catalog-and-loading-plan.md)
-  records current source fields and consumers, freshness requirements, known
-  historical/playoff gaps, and the proposed targeted-loading redesign.
+- [ASA source data](docs/asa-source-data.md) lists the stored ASA fields and
+  what uses each one.
+- [Competitions](docs/competitions-guide.md) explains the season/stage catalog,
+  capabilities, readiness, season phases, and knockout brackets.
 - [How synchronization works](docs/sync-logic-guide.md) diagrams scheduler
   eligibility, ASA requests, targeted result reconciliation, validation, and
   durable cache replacement.
+- [Standings and schedule difficulty](docs/standings-and-schedule-guide.md)
+  explains table ordering, tiebreaks, and the remaining-schedule measures.
 - [How clinching works](docs/clinching-logic-guide.md) explains qualification
   proofs, conservative tiebreak handling, no-help paths, and slate scenarios.
 - [How Forecast Lab works](docs/forecast-lab-guide.md) explains model presets,
