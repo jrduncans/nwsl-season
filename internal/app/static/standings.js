@@ -62,7 +62,7 @@ document.addEventListener("click", (event) => {
 
   const display = button.closest("[data-standings]");
   const stat = button.dataset.standingsStatValue;
-  if (!display || !["goals", "xg", "npxg"].includes(stat) || display.dataset.standingsStat === stat) return;
+  if (!display || !["goals", "xg"].includes(stat) || display.dataset.standingsStat === stat) return;
 
   display.dataset.standingsStat = stat;
   display.querySelectorAll("[data-standings-stat-button]").forEach((candidate) => {
@@ -73,15 +73,7 @@ document.addEventListener("click", (event) => {
     label.title = stat === "xg" ? "Expected points from ASA's game xG model" : "Official standings points";
   });
   display.querySelectorAll("[data-standings-caption]").forEach((caption) => {
-    caption.textContent = stat === "xg" ? caption.dataset.xgLabel : stat === "npxg" ? caption.dataset.npxgLabel : caption.dataset.goalsLabel;
-  });
-  display.querySelectorAll("[data-standings-header]").forEach((header) => {
-    const nonPenalty = stat === "npxg";
-    header.textContent = nonPenalty ? header.dataset.npxgLabel : header.dataset.xgLabel;
-    header.title = nonPenalty ? header.dataset.npxgTitle : header.dataset.xgTitle;
-  });
-  display.querySelectorAll("[data-standings-stat-warning]").forEach((warning) => {
-    warning.hidden = warning.dataset.standingsStatWarning !== stat;
+    caption.textContent = stat === "xg" ? caption.dataset.xgLabel : caption.dataset.goalsLabel;
   });
   updateStandingsValues(display, display.dataset.standingsMode);
   sortStandings(display, display.dataset.standingsMode, stat);
@@ -91,13 +83,9 @@ function updateStandingsValues(display, mode) {
   const stat = display.dataset.standingsStat;
   display.querySelectorAll("[data-standings-value]").forEach((value) => {
     const cell = value.parentElement;
-    // In npxG mode the points column keeps the official values: ASA provides
-    // no non-penalty expected points.
     const key = cell.hasAttribute("data-standings-points") && stat === "xg"
       ? mode === "per-game" ? "xgPerGame" : "xgTotal"
-      : stat === "npxg" && cell.dataset.standingsStatColumn === "xg"
-        ? mode === "per-game" ? "npPerGame" : "npTotal"
-        : mode === "per-game" ? "perGame" : "total";
+      : mode === "per-game" ? "perGame" : "total";
     value.textContent = cell.dataset[key];
   });
 }
@@ -496,25 +484,16 @@ function sortStandings(display, mode, stat) {
 
   const rows = Array.from(tbody.rows);
   let playoffCutoff;
-  const reordered = stat === "xg" || stat === "npxg";
-  if (reordered) {
-    // xG mode orders by expected points; npxG mode by non-penalty xG difference.
-    // A value that is missing or not a number sorts last.
+  if (stat === "xg") {
     const dataKey = mode === "per-game" ? "xgPerGame" : "xgTotal";
-    const sortKey = mode === "per-game" ? "npSortPerGame" : "npSortTotal";
-    const sortValue = (row) => {
-      const raw = stat === "npxg"
-        ? row.querySelector("[data-standings-np-difference]")?.dataset[sortKey]
-        : row.querySelector("[data-standings-points]").dataset[dataKey];
-      const value = raw === undefined || raw === "" ? NaN : Number(raw);
-      return Number.isNaN(value) ? -Infinity : value;
-    };
     const officialDataKey = mode === "per-game" ? "perGame" : "total";
     const officialCutoffRow = rows.find((row) => row.dataset[`${officialDataKey}PlayoffLine`] === "true");
     playoffCutoff = Number(officialCutoffRow?.querySelector("[data-standings-position]")?.dataset[officialDataKey]);
     rows.sort((left, right) => {
-      const leftValue = sortValue(left);
-      const rightValue = sortValue(right);
+      const leftPoints = Number(left.querySelector("[data-standings-points]").dataset[dataKey]);
+      const rightPoints = Number(right.querySelector("[data-standings-points]").dataset[dataKey]);
+      const leftValue = Number.isNaN(leftPoints) ? -Infinity : leftPoints;
+      const rightValue = Number.isNaN(rightPoints) ? -Infinity : rightPoints;
       if (leftValue !== rightValue) return rightValue - leftValue;
       const byName = left.dataset.teamName.localeCompare(right.dataset.teamName);
       if (byName !== 0) return byName;
@@ -527,7 +506,7 @@ function sortStandings(display, mode, stat) {
   rows.forEach((row) => tbody.append(row));
   rows.forEach((row, index) => {
     const position = row.querySelector("[data-standings-position]");
-    if (reordered) {
+    if (stat === "xg") {
       position.textContent = index + 1;
       row.classList.toggle("playoff-line", index + 1 === playoffCutoff);
     } else {

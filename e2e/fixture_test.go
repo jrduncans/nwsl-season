@@ -122,8 +122,9 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// seedPenalties gives some completed games a converted penalty so the npxG
-// order of the standings differs from the xG order.
+// seedPenalties gives some completed games a converted penalty so the
+// non-penalty basis in Explore and history, and the fixture npxG lines, differ
+// from their all-shots values.
 func seedPenalties(season *asatest.Scenario) *asatest.Scenario {
 	for i, game := range season.Games {
 		if game.Status != "FullTime" || game.HomeScore == nil || game.AwayScore == nil {

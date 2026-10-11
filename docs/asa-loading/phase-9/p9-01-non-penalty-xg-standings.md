@@ -1,5 +1,10 @@
 # P9-01: Non-penalty xG source data and standings view
 
+> The standings npxG toggle described here was removed after release: an npxGD
+> ordering cannot stand in for standings without non-penalty xPts. The source
+> data work remains current; npxG is shown in Explore, league history, and
+> match results (P9-02).
+
 ## Control
 
 - Status: Review

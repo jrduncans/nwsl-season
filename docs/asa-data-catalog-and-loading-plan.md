@@ -137,8 +137,8 @@ the player model, not the team model, and is not used.
 
 | ASA field | Stored form | Current consumers |
 | --- | --- | --- |
-| `xgoals_for` of the home / away team row | `game_xg.home_penalty_xg`, `away_penalty_xg` | Standings npxG (xG minus penalty xG) |
-| `goals_for` of the home / away team row | `home_penalty_goals`, `away_penalty_goals` | Stored only |
+| `xgoals_for` of the home / away team row | `game_xg.home_penalty_xg`, `away_penalty_xg` | npxG (xG minus penalty xG) in Explore, league history, and match results |
+| `goals_for` of the home / away team row | `home_penalty_goals`, `away_penalty_goals` | Non-penalty goals in Explore and league history |
 | `shots_for` of the home / away team row | `home_penalty_shots`, `away_penalty_shots` | Stored only |
 | The two accepted source objects, home first | `game_xg.penalty_raw_json` | Diagnostics and source provenance |
 
