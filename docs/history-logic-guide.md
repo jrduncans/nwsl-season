@@ -2,8 +2,8 @@
 
 The History views are calculated only from the coherent SQLite snapshot read by
 `cache.DB.HistoricalRegularSeasons`; they do not refresh ASA data. This guide
-records the delivered definitions for the first league-trends calculation and
-applies the historical-data boundaries in [IDEAS.md](IDEAS.md).
+records the delivered definitions for the league-trends and Explore
+calculations.
 
 ## Penalties basis
 
@@ -166,7 +166,13 @@ including an eligible in-progress year and its match count.
 Future analyses must fit broader groups with data/metric sub-controls rather
 than adding a top-level tab per metric.
 
-### Rules for every view
+### Principles for every view
+
+Explore exists so visitors can notice patterns, unusual team-seasons and
+comparisons for themselves. Views show the data and leave the conclusion to the
+reader.
+
+Data:
 
 - Compare actual results and expected values over the same selected matches;
   a chart and its table use the same values and population.
@@ -176,14 +182,38 @@ than adding a top-level tab per metric.
 - Never derive expected points from xG, and keep ASA's retrospective xPoints
   separate from Forecast Lab projections.
 - Each view owns its eligibility rule; there is no global sample threshold. An
-  active season is legitimate data, shown with matches played and per-match
-  values.
+  active season is legitimate data, shown as a current pace with its matches
+  played, and is never presented as its final place in history.
+- Per-match rates adjust for games played, not for opponents or scoring era,
+  so a statistical extreme is not a judgment of the best team.
+- Regular season, playoffs and cups stay separate unless a view explains why
+  it combines them.
 - A maximum or minimum names its eligible population. Ties are decided before
-  display rounding, one rule serves chart and table, and the limited archive
-  never supports "all-time" claims.
+  display rounding, one rule serves chart and table, and selecting a team never
+  changes the population. The archive starts in 2016, so claims say "since
+  2016" or "in the available archive", never "all-time".
 - Official outcomes such as Shield winners come from verified history, not
   today's ranking code. Earned points are `3 × wins + draws`, kept apart from
-  sanctions.
+  sanctions. Distinct ASA team IDs stay separate; franchise lineage is not
+  inferred.
+- Ideas that need data the cache lacks (event timing, lineups, minutes,
+  pre-match odds) wait for that data rather than approximating it.
+
+Presentation:
+
+- Curate a few useful views with a good default, and add a control only when
+  it reveals a meaningful alternative. Explore is not a chart builder.
+- Lead with a chart, keep an exact-value table available, and give each chart
+  an accessible description.
+- Label values, units and reference lines directly. Over-performance views use
+  a zero line and a consistent favorable direction. Color is never the only
+  signal; no dual axes, unexplained composite scores, or one line per team.
+- Describe gaps as above or below expected, not luck; finishing, goalkeeping,
+  game state, model error and randomness all contribute.
+- Put coverage and sample notes next to the result they qualify.
+- Essential detail works by touch and keyboard without hover; on narrow screens
+  selected detail goes below the chart.
+- URLs share the view and its selections, not a frozen answer; data may update.
 
 A new view needs an entry in `exploreViewLabels` and the group table above, a
 pure calculation over the coherent archive read, canonical URL state that
@@ -835,7 +865,7 @@ retrospective xPoints for each team's recorded regular-season matches and derive
 the per-match rate when that team's xPoints coverage is complete. Coverage of
 xPoints does not require complete xG, and incomplete xPoints do not hide actual
 points. Fixture inventory and expected-value coverage remain separate
-dimensions, as required by [IDEAS.md](IDEAS.md).
+dimensions.
 
 ## Chart eligibility
 
