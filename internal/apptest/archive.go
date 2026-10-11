@@ -24,6 +24,9 @@ type ArchiveState struct {
 	Goals int64
 	// XGCovered is how many of the season's first games carry xG.
 	XGCovered int
+	// PenaltySplits is how many of the xG games also carry ASA's penalty
+	// breakdown: one converted home penalty worth 0.76 xG.
+	PenaltySplits int
 }
 
 // Archive returns the in-memory historical seasons that the app's history and
@@ -46,10 +49,14 @@ func Archive(t testing.TB, states map[string]ArchiveState) []cache.HistoricalSea
 			if index >= state.XGCovered {
 				break
 			}
-			data.XGoals = append(data.XGoals, cache.GameXG{
+			observation := cache.GameXG{
 				GameID: game.ASAID, Availability: cache.XGAvailable, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID,
 				HomeXG: sql.NullFloat64{Float64: 1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 0, Valid: true},
-			})
+			}
+			if index < state.PenaltySplits {
+				observation.Penalties = &cache.PenaltySplit{HomeXG: .76, HomeGoals: 1, HomeShots: 1}
+			}
+			data.XGoals = append(data.XGoals, observation)
 		}
 		archive = append(archive, cache.HistoricalSeason{Entry: entry, Readiness: &cache.SeasonReadinessSnapshot{
 			Scope:     cache.SourceScope{Season: season, Stage: "Regular Season", Lifecycle: state.Lifecycle, Discovery: cache.SourceScopeAvailable},

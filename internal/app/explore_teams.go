@@ -91,6 +91,11 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		}
 		page.TeamMeasure = values[0]
 	}
+	basis, err := penaltiesBasis(query)
+	if err != nil {
+		return page, err
+	}
+	t := func(text string) string { return basisText(basis, text) }
 	// Preserve links to the former metric-specific table. New links name their
 	// metric explicitly so chart selection cannot change table ordering.
 	if slices.Contains([]string{"actual", "expected", "gap"}, page.TeamSort) {
@@ -139,6 +144,16 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 			}
 		}
 		populateExploreTeamRanks(season.Teams)
+		if basis.ExcludesPenalties() {
+			for teamIndex := range season.Teams {
+				for unit := range season.Teams[teamIndex].Rankings {
+					for rank := range season.Teams[teamIndex].Rankings[unit] {
+						label := &season.Teams[teamIndex].Rankings[unit][rank].Label
+						*label = t(*label)
+					}
+				}
+			}
+		}
 		for _, input := range archive {
 			if input.Entry.Season == summary.Season {
 				season.Benchmarks = exploreTrendBenchmarks(season, input)
@@ -172,7 +187,11 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	case "points":
 		page.TeamActualLabel, page.TeamXGLabel = "Points", "xPts"
 	}
+	page.TeamActualLabel, page.TeamXGLabel = t(page.TeamActualLabel), t(page.TeamXGLabel)
 	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}, "units": {page.TeamUnits}, "quadrant-data": {page.TeamQuadrantData}}
+	if basis.ExcludesPenalties() {
+		selection.Set(penaltiesParam, penaltiesExclude)
+	}
 	page.TeamChartURL = exploreTeamURL(selection, map[string]string{"display": "chart"})
 	page.TeamGapURL = exploreTeamURL(selection, map[string]string{"display": "gap"})
 	page.TeamScatterURL = exploreTeamURL(selection, map[string]string{"display": "scatter"})
@@ -184,7 +203,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 			if group.key == "points" && value.key == "expected" {
 				value.label = "xPts"
 			}
-			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: value.label, Description: group.label + ": " + value.label})
+			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: t(value.label), Description: t(group.label + ": " + value.label)})
 		}
 	}
 	for _, column := range columns {
@@ -246,6 +265,10 @@ func exploreTeamURL(selection url.Values, changes map[string]string) string {
 	}
 	for key, value := range changes {
 		values.Set(key, value)
+	}
+	// The default basis is never spelled out, so existing links are unchanged.
+	if values.Get(penaltiesParam) == penaltiesInclude {
+		values.Del(penaltiesParam)
 	}
 	return "?" + values.Encode()
 }

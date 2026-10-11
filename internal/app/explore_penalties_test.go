@@ -1,0 +1,326 @@
+package app
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/history"
+)
+
+func penaltyArchive(t *testing.T, splits int) []cache.HistoricalSeason {
+	t.Helper()
+	return historyArchive(t, map[string]historyArchiveState{
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20, PenaltySplits: splits},
+	})
+}
+
+func getPage(t *testing.T, archive []cache.HistoricalSeason, target string) (int, string) {
+	t.Helper()
+	response := httptest.NewRecorder()
+	NewHandler(&historyHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	return response.Code, response.Body.String()
+}
+
+func TestPenaltiesParameterIsRejectedLikeAnInvalidMeasure(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	for _, target := range []string{
+		"/explore?view=teams&penalties=bogus", "/explore?penalties=", "/explore?penalties=include&penalties=exclude",
+		"/explore?view=trend&penalties=Exclude", "/history/scoring?penalties=bogus", "/history/scoring?penalties=exclude&penalties=exclude",
+	} {
+		code, body := getPage(t, archive, target)
+		if code != http.StatusBadRequest {
+			t.Errorf("%s status = %d, want 400", target, code)
+		}
+		requireText(t, body, "main", "penalties must be include or exclude")
+	}
+	code, body := getPage(t, archive, "/explore?view=teams&measure=bogus")
+	if code != http.StatusBadRequest {
+		t.Fatalf("invalid measure status = %d", code)
+	}
+	requireExact(t, body, "main h1", "Invalid history selection")
+	_, penalties := getPage(t, archive, "/explore?penalties=bogus")
+	requireExact(t, penalties, "main h1", "Invalid history selection")
+}
+
+func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	_, plain := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025")
+	_, included := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025&penalties=include")
+	// The explicit default differs only in the echoed selection state.
+	if !strings.Contains(plain, `data-penalties-choice="include" aria-current="true"`) || !strings.Contains(included, `data-penalties-choice="include" aria-current="true"`) {
+		t.Fatal("Included is not the current choice by default")
+	}
+	if plain != included {
+		t.Error("penalties=include must render exactly as an absent parameter")
+	}
+	forbidRaw(t, plain, "npxG", "Non-penalty", `name="penalties"`, `data-points-note`, `data-penalties="exclude"`)
+	// Only the Excluded choice names the parameter; default links omit it.
+	if got := linksNaming(t, plain, "penalties"); got != 1 {
+		t.Errorf("default page has %d links naming penalties, want only the Excluded choice", got)
+	}
+	requireAttr(t, plain, `a[data-penalties-choice=exclude]`, "href", "?penalties=exclude&season=2025&team=alpha&view=team-history")
+	requireAttr(t, plain, `a[data-penalties-choice=include]`, "href", "?season=2025&team=alpha&view=team-history")
+	requireElements(t, plain, `.explore-penalties .explore-penalties-label`)
+	requireText(t, plain, ".explore-penalties", "Penalties", "Included", "Excluded", "Excluded removes penalty kicks from both goals and xG.")
+}
+
+func TestExplorePenaltiesExcludedComputesAndLabelsNonPenaltyBasis(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	all, err := history.SummarizeScoring(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	np, err := history.SummarizeScoringBasis(archive, history.NonPenalty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	basic, err := exploreTeams(nil, all, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := exploreTeams(url.Values{"penalties": {"exclude"}}, np, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var alpha, official exploreTeamRecord
+	for _, team := range page.TeamSeasons[0].Teams {
+		if team.ID == "alpha" {
+			alpha = team
+		}
+	}
+	for _, team := range basic.TeamSeasons[0].Teams {
+		if team.ID == "alpha" {
+			official = team
+		}
+	}
+	// Alpha hosts every game: 1 goal (a penalty) and 1.00 xG (0.76 penalty).
+	if official.Totals[0].Actual != 20 || *official.Totals[0].Expected != 20 {
+		t.Fatalf("default totals = %+v", official.Totals[0])
+	}
+	if alpha.Totals[0].Actual != 0 || alpha.Totals[1].Actual != 40 || alpha.Totals[2].Actual != -40 {
+		t.Fatalf("non-penalty goal totals = %+v", alpha.Totals)
+	}
+	if got := *alpha.Totals[0].Expected; got < 4.79 || got > 4.81 {
+		t.Fatalf("non-penalty xG for = %v, want 20 x 0.24", got)
+	}
+	if alpha.Totals[3] != official.Totals[3] || alpha.Values[3] != official.Values[3] {
+		t.Fatalf("points and xPts changed with the basis: %+v vs %+v", alpha.Totals[3], official.Totals[3])
+	}
+	if page.TeamActualLabel != "Non-penalty goal differential" || page.TeamXGLabel != "npxG differential" {
+		t.Fatalf("labels = %q / %q", page.TeamActualLabel, page.TeamXGLabel)
+	}
+	if !strings.Contains(page.TeamChartURL, "penalties=exclude") || !strings.Contains(page.TeamTableURL, "penalties=exclude") {
+		t.Fatalf("selection links lost the basis: %s %s", page.TeamChartURL, page.TeamTableURL)
+	}
+	for _, column := range page.TeamColumns {
+		if !strings.Contains(column.URL, "penalties=exclude") {
+			t.Errorf("sort link %q lost the basis: %s", column.Key, column.URL)
+		}
+	}
+	for _, rank := range alpha.Rankings[0] {
+		if strings.Contains(rank.Label, "Goals") || strings.Contains(rank.Label, "xG ") && !strings.Contains(rank.Label, "npxG") {
+			t.Errorf("ranking label %q was not switched", rank.Label)
+		}
+	}
+}
+
+func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	for _, view := range []string{
+		"view=teams&display=chart", "view=teams&display=gap", "view=teams&display=scatter", "view=teams&display=quadrant", "view=teams&display=table",
+		"view=team-rankings", "view=season-trend", "view=team-history", "view=trend", "view=distribution", "view=table",
+	} {
+		t.Run(view, func(t *testing.T) {
+			code, body := getPage(t, archive, "/explore?"+view+"&team=alpha&penalties=exclude")
+			if code != http.StatusOK {
+				t.Fatalf("status = %d", code)
+			}
+			requireElements(t, body, `[data-explore][data-penalties=exclude]`)
+			requireAttr(t, body, `a[data-penalties-choice=exclude]`, "aria-current", "true")
+			// Every state-preserving link and form carries the basis.
+			for _, link := range find(t, body, `nav.explore-views a, nav.explore-subviews a`) {
+				if !strings.Contains(attr(link, "href"), "penalties=exclude") {
+					t.Errorf("link %q lost penalties=exclude: %s", attr(link, "href"), view)
+				}
+			}
+			forms := find(t, body, `form.explore-team-controls`)
+			inputs := find(t, body, `form.explore-team-controls input[name=penalties][value=exclude]`)
+			// Every selection form that is rendered carries the basis.
+			if len(forms) == 0 || len(inputs) != len(forms) {
+				t.Errorf("%d selection forms, %d with the hidden penalties input", len(forms), len(inputs))
+			}
+		})
+	}
+
+	// Labels switch on the server-rendered markup.
+	_, table := getPage(t, archive, "/explore?view=table&penalties=exclude")
+	requireText(t, table, "[data-panel=table] thead", "Non-penalty goals/match", "npxG/match", "Non-penalty goals − npxG/match")
+	requireRowText(t, table, "[data-panel=table] tbody tr", "2025", "20", "2.00", "0.24", "1.76")
+	_, trend := getPage(t, archive, "/explore?view=trend&penalties=exclude")
+	requireText(t, trend, "[data-panel=trend]", "Non-penalty goals and chances per match", "Non-penalty expected goals (npxG)", "Non-penalty goals − npxG")
+	_, distribution := getPage(t, archive, "/explore?view=distribution&penalties=exclude")
+	requireText(t, distribution, "[data-panel=distribution]", "by total non-penalty goals", "2 non-penalty goals", "Bins count non-penalty goals per match")
+	requireText(t, distribution, "[data-panel=distribution] table thead", "2 non-penalty goals")
+	_, defaults := getPage(t, archive, "/explore?view=table")
+	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00", "2.00")
+
+	// The points note appears wherever points or xPts are shown, only on the
+	// non-penalty basis, and never changes the values.
+	shown := func(target string) bool {
+		_, body := getPage(t, archive, target)
+		notes := find(t, body, `[data-points-note]`)
+		for _, note := range notes {
+			if _, hidden := lookupAttr(note, "hidden"); !hidden {
+				return true
+			}
+		}
+		return false
+	}
+	for target, want := range map[string]bool{
+		"/explore?view=teams&display=chart&measure=points&penalties=exclude":                      true,
+		"/explore?view=teams&display=table&penalties=exclude":                                     true,
+		"/explore?view=teams&display=chart&measure=for&penalties=exclude":                         false,
+		"/explore?view=teams&display=quadrant&measure=points&penalties=exclude":                   false,
+		"/explore?view=team-history&penalties=exclude":                                            true,
+		"/explore?view=season-trend&trend-view=points&penalties=exclude":                          true,
+		"/explore?view=season-trend&trend-view=relative&average-series=xpoints&penalties=exclude": true,
+		"/explore?view=season-trend&trend-view=compare&penalties=exclude":                         false,
+		"/explore?view=teams&display=chart&measure=points":                                        false,
+		"/explore?view=team-history":                                                              false,
+	} {
+		if got := shown(target); got != want {
+			t.Errorf("%s: points note shown = %v, want %v", target, got, want)
+		}
+	}
+	_, body := getPage(t, archive, "/explore?view=team-history&penalties=exclude")
+	requireText(t, body, "[data-points-note=team-history]", pointsBasisNote)
+}
+
+func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *testing.T) {
+	archive := penaltyArchive(t, 19)
+	code, body := getPage(t, archive, "/explore?view=table&penalties=exclude")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	requireText(t, body, "[data-panel=table]", "No seasons currently have enough complete results to compare.")
+	_, histPage := getPage(t, archive, "/history/scoring?penalties=exclude")
+	requireText(t, histPage, "main", "2025 — incomplete non-penalty data")
+	_, teams := getPage(t, archive, "/explore?view=teams&penalties=exclude")
+	requireElements(t, teams, `[data-team-empty]`)
+	forbidRaw(t, teams, `"alpha"`)
+	// The default basis is unaffected by the missing split.
+	_, defaults := getPage(t, archive, "/explore?view=table")
+	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00")
+}
+
+func TestHistoryPagePenaltiesControlLabelsAndLinks(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	_, plain := getPage(t, archive, "/history/scoring?season=2025&metric=xg")
+	requireAttr(t, plain, `a[data-penalties-choice=exclude]`, "href", "scoring?metric=xg&penalties=exclude&season=2025")
+	requireAttr(t, plain, `a[data-penalties-choice=include]`, "href", "scoring?metric=xg&season=2025")
+	forbidRaw(t, plain, `name="penalties"`, "Non-penalty")
+	if got := linksNaming(t, plain, "penalties"); got != 1 {
+		t.Errorf("default history page has %d links naming penalties, want 1", got)
+	}
+
+	code, body := getPage(t, archive, "/history/scoring?season=2025&metric=compare&penalties=exclude")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	requireText(t, body, "main", "Penalties", "Included", "Excluded", "Excluded removes penalty kicks from both goals and xG.")
+	requireAttr(t, body, `a[data-penalties-choice=exclude]`, "aria-current", "page")
+	requireElements(t, body, `form.history-selector input[name=penalties][value=exclude]`, `form.history-selector input[name=metric][value=compare]`)
+	requireText(t, body, ".history-metric-choice", "Non-penalty goals", "Non-penalty expected goals (npxG)")
+	requireText(t, body, ".history-primary-metrics", "Non-penalty goals per match", "npxG per match", "2.00", "0.24")
+	requireText(t, body, ".history-difference", "Non-penalty goals minus npxG per match", "1.76")
+	requireText(t, body, "section.history-distribution", "Share of matches by total non-penalty goals", "2 non-penalty goals")
+	for _, link := range find(t, body, `a.history-metric-link, a.history-chart-point-link, .history-distribution-row a`) {
+		if href := attr(link, "href"); !strings.Contains(href, "penalties=exclude") && attr(link, "data-penalties-choice") != "include" {
+			t.Errorf("history link %q lost the basis", href)
+		}
+	}
+	requireText(t, body, "table.history-table thead", "Total non-penalty goals", "Non-penalty goals per match", "npxG per match")
+}
+
+func TestFixtureResultsShowNonPenaltyXGOnlyWhenAPenaltyHadXG(t *testing.T) {
+	data := npxgSeasonData(&cache.PenaltySplit{HomeXG: .76, HomeGoals: 1, HomeShots: 1}, &cache.PenaltySplit{AwayXG: 0, HomeXG: 0, AwayShots: 1})
+	groups := fixtureGroups(data, time.UTC)
+	byID := map[string]fixtureView{}
+	for _, group := range groups {
+		for _, game := range group.Games {
+			byID[game.ID] = game
+		}
+	}
+	if got := byID["completed"].NPXG; got != "1.60–1.11" {
+		t.Errorf("penalty match NPXG = %q, want 1.60–1.11", got)
+	}
+	if byID["completed-2"].NPXG != "" || byID["completed-2"].XG == "" {
+		t.Errorf("a split with zero penalty xG must not show npxG: %+v", byID["completed-2"])
+	}
+	noSplit := fixtureGroups(npxgSeasonData(nil, nil), time.UTC)
+	for _, group := range noSplit {
+		for _, game := range group.Games {
+			if game.NPXG != "" {
+				t.Errorf("match without a split shows npxG %q", game.NPXG)
+			}
+		}
+	}
+
+	body := renderFixturesPage(t, data)
+	requireText(t, body, ".fixture-xg", "xG 2.36–1.11 · npxG 1.60–1.11", "xG 1.00–0.64")
+	requireAttr(t, body, ".fixture-npxg", "title", "Non-penalty expected goals")
+	if got := len(find(t, body, ".fixture-npxg")); got != 1 {
+		t.Errorf("%d npxG lines, want one", got)
+	}
+}
+
+func renderFixturesPage(t *testing.T, data cache.SeasonData) string {
+	t.Helper()
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/fixtures", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("fixtures status = %d", response.Code)
+	}
+	return response.Body.String()
+}
+
+func linksNaming(t *testing.T, body, name string) int {
+	t.Helper()
+	count := 0
+	for _, link := range find(t, body, "a") {
+		if strings.Contains(attr(link, "href"), name) {
+			count++
+		}
+	}
+	return count
+}
+
+func TestBasisTextRewritesLabelsOncePerBasis(t *testing.T) {
+	for _, test := range []struct{ in, want string }{
+		{"Goals and xG", "Non-penalty goals and npxG"},
+		{"Goal differential: Goals", "Non-penalty goal differential: Non-penalty goals"},
+		{"Expected goals (xG)", "Non-penalty expected goals (npxG)"},
+		{"Goals minus expected goals per match", "Non-penalty goals minus non-penalty expected goals per match"},
+		{"4+ goals", "4+ non-penalty goals"},
+		{"1 goal", "1 non-penalty goal"},
+		{"Total goals", "Total non-penalty goals"},
+		{"xG differential", "npxG differential"},
+		{"Points", "Points"},
+		{"xPts", "xPts"},
+	} {
+		if got := basisText(history.NonPenalty, test.in); got != test.want {
+			t.Errorf("basisText(%q) = %q, want %q", test.in, got, test.want)
+		}
+		if got := basisText(history.AllShots, test.in); got != test.in {
+			t.Errorf("default basis rewrote %q to %q", test.in, got)
+		}
+		if again := basisText(history.NonPenalty, test.want); again != test.want {
+			t.Errorf("basisText is not idempotent on %q: %q", test.want, again)
+		}
+	}
+}

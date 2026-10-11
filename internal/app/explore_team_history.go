@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+
+	"github.com/jrduncans/nwsl-season/internal/history"
 )
 
 // portlandThornsTeamID is the ASA ID of Portland Thorns FC, the site owner's
@@ -40,7 +42,11 @@ type exploreTeamHistoryView struct {
 // Reuse the eligible team-season rates so history and season comparisons have
 // identical coverage rules. Identity is ASA's team ID, never a name match.
 func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreTeamHistoryView, error) {
-	page := exploreTeamHistoryView{HistorySort: "season", HistoryOrder: "desc", HistoryColumns: exploreTeamHistoryColumns(), HistorySeries: "both", HistoryContext: "off"}
+	basis, err := penaltiesBasis(query)
+	if err != nil {
+		return exploreTeamHistoryView{}, err
+	}
+	page := exploreTeamHistoryView{HistorySort: "season", HistoryOrder: "desc", HistoryColumns: exploreTeamHistoryColumns(basis), HistorySeries: "both", HistoryContext: "off"}
 	keys := make([]string, 0, len(page.HistoryColumns))
 	for _, column := range page.HistoryColumns {
 		keys = append(keys, column.Key)
@@ -63,6 +69,10 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 		}
 	}
 	page.HistoryContextData = exploreTeamContext(seasons)
+	for index := range page.HistoryContextData {
+		page.HistoryContextData[index].Goals.Label = basisText(basis, page.HistoryContextData[index].Goals.Label)
+		page.HistoryContextData[index].XG.Label = basisText(basis, page.HistoryContextData[index].XG.Label)
+	}
 	measure, _ := exploreTeamSortMetric(query.Get("measure") + "-actual")
 	metric := page.HistoryContextData[measure]
 	if page.HistorySeries != "xg" {
@@ -151,7 +161,7 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 	return page, nil
 }
 
-func exploreTeamHistoryColumns() []exploreTeamColumn {
+func exploreTeamHistoryColumns(basis history.ScoringBasis) []exploreTeamColumn {
 	columns := []exploreTeamColumn{{Key: "season", Label: "Season", Description: "Season", Leading: true}, {Key: "played", Label: "Played", Description: "Played", Leading: true}}
 	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}, {"points", "Points"}} {
 		for _, value := range []struct{ key, label string }{{"actual", "Goals"}, {"expected", "xG"}} {
@@ -162,7 +172,7 @@ func exploreTeamHistoryColumns() []exploreTeamColumn {
 					value.label = "xPts"
 				}
 			}
-			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: value.label, Description: group.label + ": " + value.label})
+			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: basisText(basis, value.label), Description: basisText(basis, group.label+": "+value.label)})
 		}
 	}
 	return columns

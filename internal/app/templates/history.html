@@ -10,6 +10,12 @@
   {{range .MetricLinks}}<a class="history-metric-link{{if .Selected}} history-metric-link-selected{{end}}" href="{{.Path}}"{{if .Selected}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
 </fieldset>
 
+<fieldset class="history-metric-choice history-penalties-choice" data-penalties-control>
+  <legend>Penalties</legend>
+  {{range .PenaltyLinks}}<a class="history-metric-link{{if .Selected}} history-metric-link-selected{{end}}" href="{{.Path}}"{{if .Selected}} aria-current="page"{{end}} data-penalties-choice="{{if eq .Label "Included"}}include{{else}}exclude{{end}}">{{.Label}}</a>{{end}}
+  <p class="note history-penalties-help">Excluded removes penalty kicks from both goals and xG.</p>
+</fieldset>
+
 <section class="history-chart-section" aria-labelledby="history-chart-heading">
   <h2 id="history-chart-heading">{{.Chart.AxisTitle}}</h2>
   <p class="history-chart-status">{{.Chart.Status}}</p>
@@ -42,12 +48,12 @@
     </svg>
   </div>
   <p class="history-chart-scroll-hint">Swipe horizontally to read the full chart.</p>
-  {{if .Selected}}<p class="history-chart-selected-label"><strong>Selected {{.Selected.Season}}:</strong> {{.Selected.GoalsPerMatch}} goals per match · {{.Selected.XGPerMatch}} expected goals (xG) per match</p>{{end}}
+  {{if .Selected}}<p class="history-chart-selected-label"><strong>Selected {{.Selected.Season}}:</strong> {{.Selected.GoalsPerMatch}} {{$.GoalsWord}} per match · {{.Selected.XGPerMatch}} {{$.T "expected goals (xG)"}} per match</p>{{end}}
   <div class="history-chart-key" aria-label="Chart key">
     <span><i class="history-chart-key-circle"></i>Inventory verified</span>
     <span><i class="history-chart-key-circle history-chart-key-circle-hollow"></i>Inventory unverified</span>
     <span><i class="history-chart-key-diamond"></i>Active season</span>
-    {{if .Compare}}<span><i class="history-chart-key-goals"></i>Goals</span><span><i class="history-chart-key-series"></i>Expected goals (xG)</span>{{end}}
+    {{if .Compare}}<span><i class="history-chart-key-goals"></i>{{$.T "Goals"}}</span><span><i class="history-chart-key-series"></i>{{$.T "Expected goals (xG)"}}</span>{{end}}
   </div>
   {{if .Chart.ActiveStatus}}<p class="history-chart-active-status">{{.Chart.ActiveStatus}}</p>{{end}}
 
@@ -61,31 +67,31 @@
   <form class="history-selector" method="get" action="{{.FormPath}}">
     <label for="history-season">Season</label>
     <select id="history-season" name="season">{{range .Years}}<option value="{{.Season}}"{{if .Selected}} selected{{end}}>{{.Season}}</option>{{end}}</select>
-    {{if ne .Metric "goals"}}<input type="hidden" name="metric" value="{{.Metric}}">{{end}}
+    {{if ne .Metric "goals"}}<input type="hidden" name="metric" value="{{.Metric}}">{{end}}{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
     <button class="button" type="submit">Show season</button>
   </form>
 {{if .Selected}}
   <p class="eyebrow">Selected season</p>
   <h2 id="selected-season-heading">{{.Selected.Season}}</h2>
   <dl class="history-primary-metrics">
-    <div><dt>Goals per match</dt><dd>{{.Selected.GoalsPerMatch}}</dd></div>
-    <div><dt>xG per match</dt><dd>{{.Selected.XGPerMatch}}</dd></div>
+    <div><dt>{{$.T "Goals per match"}}</dt><dd>{{.Selected.GoalsPerMatch}}</dd></div>
+    <div><dt>{{$.T "xG per match"}}</dt><dd>{{.Selected.XGPerMatch}}</dd></div>
     <div><dt>Played matches</dt><dd>{{.Selected.Played}}</dd></div>
   </dl>
-  <p class="history-difference">Goals minus xG per match: <strong>{{.Selected.GoalsMinusXGPerMatch}}</strong><br><span class="note">Calculated before rounding; subtracting the displayed averages may differ by 0.01.</span></p>
+  <p class="history-difference">{{$.T "Goals minus xG per match"}}: <strong>{{.Selected.GoalsMinusXGPerMatch}}</strong><br><span class="note">Calculated before rounding; subtracting the displayed averages may differ by 0.01.</span></p>
   <p class="history-selected-status"><strong>Status:</strong> {{.Selected.Status}}</p>
   <details class="history-completeness"><summary>Data completeness and context</summary>
-    <dl><div><dt>Fixture inventory</dt><dd>{{.Selected.Inventory}}</dd></div><div><dt>xG coverage</dt><dd>{{.Selected.XGCoverage}}</dd></div><div><dt>Expected-value note</dt><dd>{{.Selected.XGStatus}}</dd></div><div><dt>Comparison exclusions</dt><dd>{{if .Selected.Exclusions}}{{.Selected.Exclusions}}{{else}}None{{end}}</dd></div></dl>
-    <p class="note">Inventory describes how complete the season's fixture list is; xG coverage describes how many completed matches have expected-goals observations. Complete xG coverage of recorded matches does not verify that the fixture list is complete.</p>
+    <dl><div><dt>Fixture inventory</dt><dd>{{.Selected.Inventory}}</dd></div><div><dt>{{$.T "xG coverage"}}</dt><dd>{{.Selected.XGCoverage}}</dd></div><div><dt>Expected-value note</dt><dd>{{.Selected.XGStatus}}</dd></div><div><dt>Comparison exclusions</dt><dd>{{if .Selected.Exclusions}}{{.Selected.Exclusions}}{{else}}None{{end}}</dd></div></dl>
+    <p class="note">Inventory describes how complete the season's fixture list is; xG coverage describes how many completed matches have expected-goals observations. Complete xG coverage of recorded matches does not verify that the fixture list is complete.{{if .NonPenalty}} On the non-penalty basis, a match counts only when ASA supplied its penalty breakdown.{{end}}</p>
   </details>
 {{else}}<h2 id="selected-season-heading">Season details</h2><p class="history-empty">No regular-season scoring data is available in this archive yet. Supported years remain listed below with their current status.</p>{{end}}
 </section>
 
 <section class="history-distribution" aria-labelledby="history-distribution-heading">
-  <h2 id="history-distribution-heading">Share of matches by total goals</h2>
-  <p>Both teams combined. Each bar represents 100% of that season’s completed matches and always uses actual goals.</p>
-  <div class="history-distribution-legend" aria-label="Goal bins legend"><span><i class="history-distribution-swatch history-distribution-swatch-0"></i>0 goals</span><span><i class="history-distribution-swatch history-distribution-swatch-1"></i>1 goal</span><span><i class="history-distribution-swatch history-distribution-swatch-2"></i>2 goals</span><span><i class="history-distribution-swatch history-distribution-swatch-3"></i>3 goals</span><span><i class="history-distribution-swatch history-distribution-swatch-4"></i>4 or more goals</span></div>
-  {{if .HasDistributionBars}}<div class="history-distribution-scale" aria-hidden="true"><div><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div><div class="history-distribution-bars">{{range .Distributions}}{{if .GoalsEligible}}<div class="history-distribution-row{{if .Selected}} history-distribution-row-selected{{end}}"><a href="{{.Path}}">{{.Season}}</a><div class="history-distribution-bar-wrap"><svg class="history-distribution-bar" viewBox="0 0 100 24" role="img" aria-label="{{.AccessibleName}}" preserveAspectRatio="none"><title>{{.AccessibleName}}</title>{{range .Segments}}{{if .HasWidth}}<rect class="history-distribution-segment history-distribution-segment-{{.Index}}" x="{{.X}}" y="0" width="{{.Width}}" height="24"></rect>{{end}}{{end}}</svg><details class="history-distribution-detail"><summary>Exact values<span class="sr-only"> for {{.Season}}</span></summary><ul>{{range .Segments}}<li>{{.Label}} goals: {{.Count}} matches ({{.Percent}})</li>{{end}}</ul></details></div><span class="history-distribution-total">{{.Total}} matches</span></div>{{end}}{{end}}</div>{{else}}<p>No goals-eligible seasons currently have a distribution to show.</p>{{end}}
+  <h2 id="history-distribution-heading">Share of matches by total {{$.GoalsWord}}</h2>
+  <p>Both teams combined. Each bar represents 100% of that season’s completed matches and always uses {{if .NonPenalty}}non-penalty goals (penalty kicks removed){{else}}actual goals{{end}}.</p>
+  <div class="history-distribution-legend" aria-label="Goal bins legend"><span><i class="history-distribution-swatch history-distribution-swatch-0"></i>{{$.T "0 goals"}}</span><span><i class="history-distribution-swatch history-distribution-swatch-1"></i>{{$.T "1 goal"}}</span><span><i class="history-distribution-swatch history-distribution-swatch-2"></i>{{$.T "2 goals"}}</span><span><i class="history-distribution-swatch history-distribution-swatch-3"></i>{{$.T "3 goals"}}</span><span><i class="history-distribution-swatch history-distribution-swatch-4"></i>{{if .NonPenalty}}4 or more non-penalty goals{{else}}4 or more goals{{end}}</span></div>
+  {{if .HasDistributionBars}}<div class="history-distribution-scale" aria-hidden="true"><div><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div><div class="history-distribution-bars">{{range .Distributions}}{{if .GoalsEligible}}<div class="history-distribution-row{{if .Selected}} history-distribution-row-selected{{end}}"><a href="{{.Path}}">{{.Season}}</a><div class="history-distribution-bar-wrap"><svg class="history-distribution-bar" viewBox="0 0 100 24" role="img" aria-label="{{.AccessibleName}}" preserveAspectRatio="none"><title>{{.AccessibleName}}</title>{{range .Segments}}{{if .HasWidth}}<rect class="history-distribution-segment history-distribution-segment-{{.Index}}" x="{{.X}}" y="0" width="{{.Width}}" height="24"></rect>{{end}}{{end}}</svg><details class="history-distribution-detail"><summary>Exact values<span class="sr-only"> for {{.Season}}</span></summary><ul>{{range .Segments}}<li>{{.Label}} {{$.GoalsWord}}: {{.Count}} matches ({{.Percent}})</li>{{end}}</ul></details></div><span class="history-distribution-total">{{.Total}} matches</span></div>{{end}}{{end}}</div>{{else}}<p>No goals-eligible seasons currently have a distribution to show.</p>{{end}}
 </section>
 
 
@@ -101,12 +107,12 @@
   <p class="note">Displayed rates are rounded to two decimals; percentages use one decimal and may not sum to exactly 100% because of rounding. Calculations retain full precision.</p>
   <div class="table-scroll"><table class="history-table">
     <caption>Regular-season scoring data in the available archive</caption>
-    <thead><tr><th scope="col">Season</th><th scope="col">Played matches</th><th scope="col">Total goals</th><th scope="col">Goals per match</th><th scope="col">xG covered / played</th><th scope="col">xPoints covered / played</th><th scope="col">xG per match</th><th scope="col">Goals minus xG per match</th><th scope="col">Status</th><th scope="col">Inventory</th><th scope="col">Comparison exclusions</th></tr></thead>
+    <thead><tr><th scope="col">Season</th><th scope="col">Played matches</th><th scope="col">{{$.T "Total goals"}}</th><th scope="col">{{$.T "Goals per match"}}</th><th scope="col">{{$.T "xG covered / played"}}</th><th scope="col">xPoints covered / played</th><th scope="col">{{$.T "xG per match"}}</th><th scope="col">{{$.T "Goals minus xG per match"}}</th><th scope="col">Status</th><th scope="col">Inventory</th><th scope="col">Comparison exclusions</th></tr></thead>
     <tbody>{{range .Rows}}<tr{{if .Selected}} class="history-row-selected"{{end}}><th scope="row"><a href="{{.Path}}">{{.Season}}</a></th><td>{{.Played}}</td><td>{{.TotalGoals}}</td><td>{{.GoalsPerMatch}}</td><td>{{.XGCoverage}}</td><td>{{.XPointsCoverage}}</td><td>{{.XGPerMatch}}</td><td>{{.GoalsMinusXGPerMatch}}</td><td>{{.Status}}</td><td>{{.Inventory}}</td><td>{{if .Exclusions}}{{.Exclusions}}{{else}}None{{end}}</td></tr>{{end}}</tbody>
   </table></div>
   <div class="table-scroll"><table class="history-distribution-table">
       <caption>Goal distribution counts and percentages for catalog seasons; bars show goals-eligible seasons</caption>
-      <thead><tr><th scope="col">Season</th><th scope="col">0 goals</th><th scope="col">1 goal</th><th scope="col">2 goals</th><th scope="col">3 goals</th><th scope="col">4+ goals</th></tr></thead>
+      <thead><tr><th scope="col">Season</th><th scope="col">{{$.T "0 goals"}}</th><th scope="col">{{$.T "1 goal"}}</th><th scope="col">{{$.T "2 goals"}}</th><th scope="col">{{$.T "3 goals"}}</th><th scope="col">{{$.T "4+ goals"}}</th></tr></thead>
       <tbody>{{range .Distributions}}<tr><th scope="row"><a href="{{.Path}}">{{.Season}}</a></th>{{range .Segments}}<td>{{.Count}} ({{.Percent}})</td>{{end}}</tr>{{end}}</tbody>
   </table></div>
 </details>

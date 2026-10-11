@@ -89,10 +89,10 @@ func TestAddXGValuesComputesNonPenaltyXG(t *testing.T) {
 				t.Fatalf("alpha xG = %q, want 3.00/2.11 (unchanged by penalties)", alpha.XGForAgainst)
 			}
 			if alpha.NPXGForAgainst != test.alphaNP || alpha.NPXGForAgainstPerGame != test.alphaNPPer || alpha.NPXGDifference != test.alphaDiff || alpha.NPXGDifferencePerGame != test.alphaPerD || alpha.NPXGSortTotal != test.alphaSortTotal {
-				t.Fatalf("alpha NPxG = %q (%q) diff %q (%q) sort %q", alpha.NPXGForAgainst, alpha.NPXGForAgainstPerGame, alpha.NPXGDifference, alpha.NPXGDifferencePerGame, alpha.NPXGSortTotal)
+				t.Fatalf("alpha npxG = %q (%q) diff %q (%q) sort %q", alpha.NPXGForAgainst, alpha.NPXGForAgainstPerGame, alpha.NPXGDifference, alpha.NPXGDifferencePerGame, alpha.NPXGSortTotal)
 			}
 			if bravo.NPXGForAgainst != test.bravoNP {
-				t.Fatalf("bravo NPxG = %q, want %q", bravo.NPXGForAgainst, test.bravoNP)
+				t.Fatalf("bravo npxG = %q, want %q", bravo.NPXGForAgainst, test.bravoNP)
 			}
 		})
 	}
@@ -102,7 +102,7 @@ func TestAddXGValuesClampsPenaltyXGAboveGameXG(t *testing.T) {
 	data := npxgSeasonData(&cache.PenaltySplit{HomeXG: 2.3601}, &cache.PenaltySplit{})
 	rows, _ := addXGValues([]tableRowView{{TeamID: "alpha"}, {TeamID: "bravo"}}, data)
 	if got := rowFor(rows, "alpha").NPXGForAgainst; got != "0.64/2.11" {
-		t.Fatalf("alpha NPxG = %q, want the over-penalized side clamped at zero", got)
+		t.Fatalf("alpha npxG = %q, want the over-penalized side clamped at zero", got)
 	}
 }
 
@@ -120,26 +120,26 @@ func TestStandingsRendersNPXGControlsAndAttributes(t *testing.T) {
 	body := renderStandings(t, npxgSeasonData(&cache.PenaltySplit{HomeXG: .76, HomeGoals: 1, HomeShots: 1}, &cache.PenaltySplit{}))
 
 	requireElements(t, body, `button[data-standings-stat-value=npxg][aria-pressed=false]`)
-	requireText(t, body, "button[data-standings-stat-value=npxg]", "NPxG")
-	requireAttr(t, body, "[data-standings-caption]", "data-npxg-label", "2026 Regular Season non-penalty xG, ordered by NPxGD")
+	requireText(t, body, "button[data-standings-stat-value=npxg]", "npxG")
+	requireAttr(t, body, "[data-standings-caption]", "data-npxg-label", "2026 Regular Season non-penalty xG, ordered by npxGD")
 	requireAttr(t, body, "[data-standings]", "data-standings-stat", "goals")
 	requireElements(t, body,
 		`td[data-standings-stat-column=xg][data-total="3.00/2.11"][data-np-total="2.24/2.11"][data-np-per-game="1.12/1.06"]`,
 		`td[data-standings-np-difference][data-np-total="+0.13"][data-np-per-game="+0.06"][data-np-sort-total="0.1300"]`,
-		`th[data-standings-header][data-npxg-label="NPxG +/-"][data-npxg-title="Non-penalty expected goals for / against"]`,
-		`th[data-standings-header][data-npxg-label=NPxGD][data-npxg-title="Non-penalty expected-goal difference"]`,
+		`th[data-standings-header][data-npxg-label="npxG +/-"][data-npxg-title="Non-penalty expected goals for / against"]`,
+		`th[data-standings-header][data-npxg-label=npxGD][data-npxg-title="Non-penalty expected-goal difference"]`,
 	)
-	// The points column keeps the official values for NPxG mode; only xG mode
+	// The points column keeps the official values for npxG mode; only xG mode
 	// swaps in xPts.
 	requireAttr(t, body, "th[data-standings-points-label]", "data-goals-label", "Pts")
-	forbidRaw(t, body, "Incomplete NPxG data", "data-standings-stat-warning")
+	forbidRaw(t, body, "Incomplete npxG data", "data-standings-stat-warning")
 }
 
 func TestStandingsWarnsWhenNPXGCoverageIsBelowXGCoverage(t *testing.T) {
 	body := renderStandings(t, npxgSeasonData(&cache.PenaltySplit{HomeXG: .76, HomeGoals: 1, HomeShots: 1}, nil))
 
 	requireElements(t, body, `p[data-standings-stat-warning=npxg][hidden]`)
-	requireText(t, body, "p[data-standings-stat-warning=npxg]", "Non-penalty xG is unavailable for 1 of 2 completed matches, so the NPxG columns are incomplete.")
+	requireText(t, body, "p[data-standings-stat-warning=npxg]", "Non-penalty xG is unavailable for 1 of 2 completed matches, so the npxG columns are incomplete.")
 	requireElements(t, body, `td[data-np-total="—"]`)
 	forbidRaw(t, body, "Incomplete xG data:")
 }
@@ -148,6 +148,6 @@ func TestStandingsHidesNPXGWithoutAnySplit(t *testing.T) {
 	body := renderStandings(t, npxgSeasonData(nil, nil))
 
 	forbidElements(t, body, `button[data-standings-stat-value=npxg]`, `[data-standings-stat-warning]`, `td[data-np-total]`, `th[data-npxg-label]`)
-	forbidRaw(t, body, "data-npxg-label", "NPxG")
+	forbidRaw(t, body, "data-npxg-label", "npxG")
 	requireElements(t, body, `button[data-standings-stat-value=xg]`)
 }

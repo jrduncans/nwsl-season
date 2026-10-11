@@ -424,7 +424,7 @@ type tableRowView struct {
 	XPoints               string
 	XPointsPerGame        string
 	// Non-penalty xG (xG minus ASA penalty-pattern xG). The sort values are plain
-	// numbers, or empty when the team's NPxG is incomplete.
+	// numbers, or empty when the team's npxG is incomplete.
 	NPXGForAgainst        string
 	NPXGForAgainstPerGame string
 	NPXGDifference        string
@@ -471,15 +471,17 @@ type fixtureGroupView struct {
 }
 
 type fixtureView struct {
-	ID              string
-	Kickoff         string
-	KickoffUTC      string
-	HomeTeam        teamNameView
-	AwayTeam        teamNameView
-	HomeCode        string
-	AwayCode        string
-	Score           string
-	XG              string
+	ID         string
+	Kickoff    string
+	KickoffUTC string
+	HomeTeam   teamNameView
+	AwayTeam   teamNameView
+	HomeCode   string
+	AwayCode   string
+	Score      string
+	XG         string
+	// NPXG is the match's non-penalty xG, set only when a penalty carried xG.
+	NPXG            string
 	Winner          string
 	Completed       bool
 	Remaining       bool
@@ -981,6 +983,9 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 			if includeXG {
 				if xg, ok := xgoals[game.ASAID]; ok {
 					view.XG = fmt.Sprintf("%.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+					if split := xg.Penalties; split != nil && (split.HomeXG > 0 || split.AwayXG > 0) {
+						view.NPXG = fmt.Sprintf("%.2f–%.2f", math.Max(0, xg.HomeXG.Float64-split.HomeXG), math.Max(0, xg.AwayXG.Float64-split.AwayXG))
+					}
 				}
 			}
 		}

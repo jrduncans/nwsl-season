@@ -11,12 +11,12 @@
 ## Goal
 
 Every cached game with available team-model xG can also carry ASA's
-penalty-pattern breakdown, and the standings page offers a third **NPxG** stat
+penalty-pattern breakdown, and the standings page offers a third **npxG** stat
 next to Goals and xG that shows non-penalty xG for/against and difference.
 
 ## Why this packet exists
 
-Analysts commonly prefer non-penalty xG (NPxG) because penalty awards are
+Analysts commonly prefer non-penalty xG (npxG) because penalty awards are
 noisy. ASA's `/nwsl/games/xgoals` endpoint, the app's only xG source, has no
 penalty breakdown. A live investigation (2026-10-10) established:
 
@@ -175,36 +175,36 @@ Read before editing:
 
 ### Standings presentation
 
-8. The existing stat toggle gains a third button, **NPxG**
+8. The existing stat toggle gains a third button, **npxG**
    (`data-standings-stat-value="npxg"`), after xG.
 
 9. Per team, non-penalty values are `xG − penalty xG` for each side,
    aggregated over the same completed, xG-available games that `addXGValues`
-   already uses. A team's NPxG cells show `—` unless every one of its
+   already uses. A team's npxG cells show `—` unless every one of its
    xG-covered games has a split.
 
-10. In NPxG mode:
-    - the two xG columns show `NPxG +/-` and `NPxGD`, with header titles
+10. In npxG mode:
+    - the two xG columns show `npxG +/-` and `npxGD`, with header titles
       "Non-penalty expected goals for / against" and "Non-penalty
       expected-goal difference";
     - the points column shows **official** `Pts`, labeled "Pts". ASA provides
       no non-penalty expected points, and the app must not invent one;
-    - rows are ordered by NPxGD (per game or total, matching the Values
+    - rows are ordered by npxGD (per game or total, matching the Values
       toggle) descending. A `—` sorts last, then ties break by team name and
       then team ID, matching xG mode. Positions renumber, and the playoff line
       sits at the official cutoff position, as in xG mode;
-    - the caption reads `<season label> non-penalty xG, ordered by NPxGD`,
+    - the caption reads `<season label> non-penalty xG, ordered by npxGD`,
       following the same final/in-progress wording variants as the xG
       caption.
 
-11. Show the NPxG button only when the scope supports xG and at least one
-    available game has a split (`HasNPXG`). When NPxG coverage is below xG
+11. Show the npxG button only when the scope supports xG and at least one
+    available game has a split (`HasNPXG`). When npxG coverage is below xG
     coverage, render a separate warning:
-    `Non-penalty xG is unavailable for N of M completed matches, so the NPxG
+    `Non-penalty xG is unavailable for N of M completed matches, so the npxG
     columns are incomplete.` Mark it `data-standings-stat-warning="npxg"` and
-    hide it unless NPxG mode is active.
+    hide it unless npxG mode is active.
 
-12. Non-JS rendering is unchanged: the default stat stays Goals. NPxG values
+12. Non-JS rendering is unchanged: the default stat stays Goals. npxG values
     live in `data-np-total` / `data-np-per-game` attributes on the existing xG
     cells, mirroring how xG mode swaps values today.
 
@@ -248,8 +248,8 @@ New files are allowed in those directories.
    `XGInputsChanged` / `DownstreamInputsChanged`.
 7. A cache migrated from schema 14 keeps all existing xG values, with null
    penalty columns.
-8. Standings NPxG math: a team with 3.00 xG for, including a 0.76 penalty,
-   shows 2.24 NPxG for in totals mode and the per-game equivalent in per-game
+8. Standings npxG math: a team with 3.00 xG for, including a 0.76 penalty,
+   shows 2.24 npxG for in totals mode and the per-game equivalent in per-game
    mode.
 9. Unchanged behavior: Goals and xG modes, xPts ordering, Explore, fixtures,
    forecasts, the scheduler plan, and the request budget accounting (still one
@@ -271,12 +271,12 @@ New files are allowed in those directories.
 - `internal/syncer`: required behaviors 1–6, against the fake ASA server.
 - `internal/app`: `addXGValues` NP math, `—` coverage, the warning text,
   `HasNPXG` false with no splits, and template attributes present.
-- `e2e`: extend `testStandingsSorting`. NPxG mode orders by NPxGD with
-  sequential positions, shows the NPxG headers and caption, shows official Pts
+- `e2e`: extend `testStandingsSorting`. npxG mode orders by npxGD with
+  sequential positions, shows the npxG headers and caption, shows official Pts
   in the points column, and switching back to Goals and xG restores both.
   Check the three-button toggle at 390px width for no horizontal overflow.
 - `internal/apptest`: seed at least one penalty split in the scenario the
-  standings e2e uses, so NPxG order differs from xG order.
+  standings e2e uses, so npxG order differs from xG order.
 
 ## Verification
 
@@ -310,7 +310,7 @@ Confirm against the investigation's figures for 2025 Regular Season:
 - 47 penalty shots and 34 penalty goals;
 - team `Pk5LeeNqOW` has 9 penalty shots for and 1 against.
 
-Start the server on that DB and inspect the standings NPxG view at desktop
+Start the server on that DB and inspect the standings npxG view at desktop
 width and 390px. Use `$SCRATCH` for a temporary directory outside the repo,
 and never point this at the real `NWSL_DATA_DIR`.
 

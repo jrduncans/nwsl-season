@@ -130,7 +130,7 @@ failed source observations do not create derived work.
 | Game xG | Fetches authoritative stage xG after fixture inventory exists. | Fetches xG for requested game IDs and updates only those checked values. |
 
 The game xG operation also carries ASA's penalty-pattern breakdown, so the
-standings can show non-penalty xG (NPxG). After `/nwsl/games/xgoals` returns at
+standings can show non-penalty xG (npxG). After `/nwsl/games/xgoals` returns at
 least one row, the same operation makes one more request,
 `/nwsl/teams/xgoals?split_by_games=true&shot_pattern=Penalty`. Full mode filters
 by season and stage. Targeted mode filters by stage and a `start_date`/`end_date`

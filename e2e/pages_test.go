@@ -409,7 +409,7 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	assertSequentialPositions(t, "xG totals", byXGTotal)
 	assertXGOrder(t, "xG totals", byXGTotal, func(r standingsRow) string { return r.XGTotal })
 
-	// NPxG: non-penalty xG difference orders the rows while the points column
+	// npxG: non-penalty xG difference orders the rows while the points column
 	// keeps the official Pts.
 	wantPlayoffPosition := officialPlayoffPosition(t, page)
 	click(t, npxg)
@@ -425,52 +425,52 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	if err := expect.Locator(caption).ToHaveText(attributeOf(t, page.Locator("[data-standings-caption]"), "data-npxg-label")); err != nil {
 		t.Error(err)
 	}
-	if text, err := caption.TextContent(); err != nil || !strings.Contains(text, "non-penalty xG, ordered by NPxGD") {
-		t.Errorf("NPxG caption = %q (%v), want non-penalty xG ordered by NPxGD", text, err)
+	if text, err := caption.TextContent(); err != nil || !strings.Contains(text, "non-penalty xG, ordered by npxGD") {
+		t.Errorf("npxG caption = %q (%v), want non-penalty xG ordered by npxGD", text, err)
 	}
-	if err := expect.Locator(page.Locator("th[data-standings-header]")).ToHaveText([]string{"NPxG +/-", "NPxGD"}); err != nil {
+	if err := expect.Locator(page.Locator("th[data-standings-header]")).ToHaveText([]string{"npxG +/-", "npxGD"}); err != nil {
 		t.Error(err)
 	}
 	if got := attributeOf(t, page.Locator("th[data-standings-header]").Nth(0), "title"); got != "Non-penalty expected goals for / against" {
-		t.Errorf("NPxG +/- title = %q", got)
+		t.Errorf("npxG +/- title = %q", got)
 	}
 	if got := attributeOf(t, page.Locator("th[data-standings-header]").Nth(1), "title"); got != "Non-penalty expected-goal difference" {
-		t.Errorf("NPxGD title = %q", got)
+		t.Errorf("npxGD title = %q", got)
 	}
 	byNPTotal := readStandingsRows(t, page)
-	assertSequentialPositions(t, "NPxG totals", byNPTotal)
-	assertXGOrder(t, "NPxG totals", byNPTotal, func(r standingsRow) string { return r.NPTotal })
+	assertSequentialPositions(t, "npxG totals", byNPTotal)
+	assertXGOrder(t, "npxG totals", byNPTotal, func(r standingsRow) string { return r.NPTotal })
 	for _, row := range byNPTotal {
 		if row.Points != row.Total {
-			t.Errorf("NPxG totals: %s shows %q in the points column, want official %q", row.Name, row.Points, row.Total)
+			t.Errorf("npxG totals: %s shows %q in the points column, want official %q", row.Name, row.Points, row.Total)
 		}
 	}
 	if sameStrings(ids(byNPTotal), ids(byXGTotal)) {
-		t.Error("NPxG order equals the xG order, so the fixture cannot show that the NPxG sort ran")
+		t.Error("npxG order equals the xG order, so the fixture cannot show that the npxG sort ran")
 	}
 	if got := officialPlayoffPosition(t, page); got != wantPlayoffPosition {
-		t.Errorf("NPxG playoff line after position %q, want the official cutoff %q", got, wantPlayoffPosition)
+		t.Errorf("npxG playoff line after position %q, want the official cutoff %q", got, wantPlayoffPosition)
 	}
 	shown, err := page.Locator("[data-standings-np-difference] [data-standings-value]").AllTextContents()
 	if err != nil || len(shown) != fixtureTeams {
-		t.Fatalf("read NPxGD cells: %v (%d cells)", err, len(shown))
+		t.Fatalf("read npxGD cells: %v (%d cells)", err, len(shown))
 	}
 	for i, text := range shown {
 		if strings.TrimSpace(text) == "—" || strings.TrimSpace(text) == "" {
-			t.Errorf("NPxGD cell %d shows %q, want a value", i, text)
+			t.Errorf("npxGD cell %d shows %q, want a value", i, text)
 		}
 	}
 	click(t, perGame)
 	pressed(perGame, true)
 	byNPPerGame := readStandingsRows(t, page)
-	assertSequentialPositions(t, "NPxG per game", byNPPerGame)
-	assertXGOrder(t, "NPxG per game", byNPPerGame, func(r standingsRow) string { return r.NPPerGame })
+	assertSequentialPositions(t, "npxG per game", byNPPerGame)
+	assertXGOrder(t, "npxG per game", byNPPerGame, func(r standingsRow) string { return r.NPPerGame })
 	for _, row := range byNPPerGame {
 		if row.Points != row.PerGame {
-			t.Errorf("NPxG per game: %s shows %q in the points column, want official %q", row.Name, row.Points, row.PerGame)
+			t.Errorf("npxG per game: %s shows %q in the points column, want official %q", row.Name, row.Points, row.PerGame)
 		}
 	}
-	// The fixture has complete NPxG coverage, so no warning is rendered.
+	// The fixture has complete npxG coverage, so no warning is rendered.
 	if err := expect.Locator(page.Locator("[data-standings-stat-warning=npxg]")).ToHaveCount(0); err != nil {
 		t.Error(err)
 	}

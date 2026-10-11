@@ -158,7 +158,7 @@ th:nth-child(2) { text-align: left; }
 }
 /* Fade the losing side lightly so a matchday scans by result; draws stay unmarked. */
 .fixtures li[data-winner="away"] > .team-name:nth-of-type(1), .fixtures li[data-winner="home"] > .team-name:nth-of-type(2) { opacity: .75; }
-.fixtures li:first-child { border-top: 0; }.fixtures li > .team-name:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.fixture-xg { margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }
+.fixtures li:first-child { border-top: 0; }.fixtures li > .team-name:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.fixture-xg:has(.fixture-npxg) { max-width: 100%; text-align: center; white-space: normal; }@media (max-width: 520px) { .fixture-xg:has(.fixture-npxg) { max-width: 7.5rem; } }.fixture-xg-main, .fixture-npxg { white-space: nowrap; }.fixture-npxg { font-weight: 600; }.fixture-xg { margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }
 .fixture-outlook-note { margin: .65rem 0 0; }
 .fixture-outlook { display: grid; grid-column: 2 / 5; gap: .25rem; min-width: 0; padding-top: .1rem; }
 .fixture-outlook-model { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
@@ -423,6 +423,12 @@ th:nth-child(2) { text-align: left; }
 .explore-views { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0 2rem; border-bottom: 1px solid var(--line); padding-bottom: .75rem; }
 .explore-views a { padding: .6rem .85rem; border-radius: .3rem; font-weight: 700; text-decoration: none; }
 .explore-views a[aria-current] { color: var(--ink); background: var(--green-soft); box-shadow: inset 0 -3px var(--green); }
+.explore-penalties { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; margin: 1rem 0 -.5rem; }
+.explore-penalties-label { color: var(--muted); font-weight: 700; }
+.explore-penalties a { display: inline-flex; min-height: 44px; align-items: center; padding: .35rem .7rem; border-radius: .3rem; font-weight: 700; text-decoration: none; }
+.explore-penalties a:hover, .explore-penalties a:focus-visible { background: var(--green-soft); }
+.explore-penalties a[aria-current] { color: var(--ink); background: var(--green-soft); box-shadow: inset 0 -3px var(--green); }
+.explore-penalties .note, .history-penalties-help { flex-basis: 100%; margin: 0; }
 .explore-subviews { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: -1rem 0 1.5rem; }
 .explore-subviews a { padding: .4rem 0; color: var(--muted); text-decoration: none; }
 .explore-subviews a[aria-current] { color: var(--green-deep); font-weight: 700; text-decoration: underline; text-underline-offset: .4rem; }

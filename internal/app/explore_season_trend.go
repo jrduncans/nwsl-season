@@ -50,7 +50,7 @@ type exploreSeasonTrendView struct {
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
 	rows := make([]exploreMatchRecord, 0, len(matches))
 	for _, match := range matches {
-		row := exploreMatchRecord{ID: match.ID, Date: "Date unavailable", Opponent: names[match.OpponentID], Venue: "Away", Score: fmt.Sprintf("%d–%d", match.GoalsFor, match.GoalsAgainst)}
+		row := exploreMatchRecord{ID: match.ID, Date: "Date unavailable", Opponent: names[match.OpponentID], Venue: "Away", Score: fmt.Sprintf("%d–%d", match.ScoreFor, match.ScoreAgainst)}
 		if row.Opponent == "" {
 			row.Opponent = match.OpponentID
 		}
@@ -79,6 +79,10 @@ func exploreMatches(matches []history.TeamMatch, names map[string]string) []expl
 }
 
 func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamNameView) (exploreSeasonTrendView, error) {
+	basis, err := penaltiesBasis(query)
+	if err != nil {
+		return exploreSeasonTrendView{}, err
+	}
 	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendAverageReference: "league", TrendTeam: selected}
 	page.TrendAverageSeries = "goals"
 	if query.Get("series") == "xg" {
@@ -130,7 +134,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			labels = []string{"xG scored", "xG allowed", "xG differential", "xPoints"}
 		}
 		for _, measure := range measures {
-			page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: labels[measure], Measure: measure, Expected: expected})
+			page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: basisText(basis, labels[measure]), Measure: measure, Expected: expected})
 		}
 	}
 	if page.TrendView == "compare" || page.TrendView == "relative" {

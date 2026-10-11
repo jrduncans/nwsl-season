@@ -122,7 +122,7 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// seedPenalties gives some completed games a converted penalty so the NPxG
+// seedPenalties gives some completed games a converted penalty so the npxG
 // order of the standings differs from the xG order.
 func seedPenalties(season *asatest.Scenario) *asatest.Scenario {
 	for i, game := range season.Games {

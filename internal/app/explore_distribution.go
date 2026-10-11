@@ -16,6 +16,10 @@ type exploreDistributionView struct {
 }
 
 func exploreDistribution(query url.Values, distributions []historyDistributionView) (exploreDistributionView, error) {
+	basis, err := penaltiesBasis(query)
+	if err != nil {
+		return exploreDistributionView{}, err
+	}
 	page := exploreDistributionView{DistributionSort: "season", DistributionOrder: "desc", DistributionBin: "all"}
 	if values, present := query["distribution-bin"]; present {
 		if len(values) != 1 || !slices.Contains([]string{"all", "0", "1", "2", "3", "4"}, values[0]) {
@@ -28,7 +32,7 @@ func exploreDistribution(query url.Values, distributions []historyDistributionVi
 		{Key: "matches", Label: "Matches", Description: "matches played"},
 	}
 	for index, label := range []string{"0 goals", "1 goal", "2 goals", "3 goals", "4+ goals"} {
-		columns = append(columns, exploreTeamColumn{Key: fmt.Sprintf("bin-%d", index), Label: label, Description: "share of matches with " + label})
+		columns = append(columns, exploreTeamColumn{Key: fmt.Sprintf("bin-%d", index), Label: basisText(basis, label), Description: basisText(basis, "share of matches with "+label)})
 	}
 	keys := make([]string, 0, len(columns))
 	for _, column := range columns {

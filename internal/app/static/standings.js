@@ -80,7 +80,7 @@ function updateStandingsValues(display, mode) {
   const stat = display.dataset.standingsStat;
   display.querySelectorAll("[data-standings-value]").forEach((value) => {
     const cell = value.parentElement;
-    // In NPxG mode the points column keeps the official values: ASA provides
+    // In npxG mode the points column keeps the official values: ASA provides
     // no non-penalty expected points.
     const key = cell.hasAttribute("data-standings-points") && stat === "xg"
       ? mode === "per-game" ? "xgPerGame" : "xgTotal"
@@ -487,7 +487,7 @@ function sortStandings(display, mode, stat) {
   let playoffCutoff;
   const reordered = stat === "xg" || stat === "npxg";
   if (reordered) {
-    // xG mode orders by expected points; NPxG mode by non-penalty xG difference.
+    // xG mode orders by expected points; npxG mode by non-penalty xG difference.
     // A value that is missing or not a number sorts last.
     const dataKey = mode === "per-game" ? "xgPerGame" : "xgTotal";
     const sortKey = mode === "per-game" ? "npSortPerGame" : "npSortTotal";
