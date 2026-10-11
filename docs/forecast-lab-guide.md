@@ -85,7 +85,7 @@ match averages. Explore uses its existing cached archive snapshot and shares
 Forecast Lab's executor and result cache. Projection failures leave comparisons
 unavailable while preserving the rest of Explore; there is no current-standings
 fallback. Completed-season groups and the Shield winner use factual standings.
-See [the History guide](history-logic-guide.md) for coverage and membership rules.
+See [the Explore guide](explore-guide.md#match-by-match) for coverage and membership rules.
 
 ## The model catalog
 

@@ -2,7 +2,7 @@
 
 Unbuilt ideas and open questions. Nothing here is committed or scheduled.
 Explore ideas follow the principles in the
-[History guide](history-logic-guide.md#principles-for-every-view).
+[Explore guide](explore-guide.md#principles-for-every-view).
 
 ## Explore: team-seasons across the archive
 

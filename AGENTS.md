@@ -45,7 +45,7 @@ real ASA API.
 | Qualification, clinching, scenarios | [clinching guide](docs/clinching-logic-guide.md); its presentation section is the contract for summaries and alternatives |
 | Forecast Lab | [Forecast Lab guide](docs/forecast-lab-guide.md) |
 | Forecast models and evaluation | The evaluation protocol under "Command-line tools" in [README.md](README.md). Final-test seasons alone decide the recommended model, and checked-in evidence is replaced only by a complete run; `-allow-incomplete` output is diagnostic. |
-| Explore charts and calculations | [History guide](docs/history-logic-guide.md); its Explore workspace table maps tab names to `view` keys |
+| Explore charts and calculations | [Explore guide](docs/explore-guide.md); its Views table maps tab names to `view` keys |
 | Telemetry | [telemetry guide](docs/telemetry/README.md) |
 
 When behavior changes, update the guide that owns it. Change this file, the

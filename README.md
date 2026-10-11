@@ -526,6 +526,8 @@ directory even though the current season data can be rebuilt from ASA.
 - [How synchronization works](docs/sync-logic-guide.md) diagrams scheduler
   eligibility, ASA requests, targeted result reconciliation, validation, and
   durable cache replacement.
+- [How Explore works](docs/explore-guide.md) explains each Explore view's
+  calculations, eligibility, and parameters.
 - [Standings and schedule difficulty](docs/standings-and-schedule-guide.md)
   explains table ordering, tiebreaks, and the remaining-schedule measures.
 - [How clinching works](docs/clinching-logic-guide.md) explains qualification
