@@ -297,10 +297,11 @@ type controlGeometry struct {
 }
 
 type controlLayout struct {
-	// AnchorY is the page offset the controls are compared against: zero for
-	// Explore, whose content above the controls does not depend on the basis,
-	// and the selector form's top on the history page, which follows a chart
-	// whose captions do.
+	// AnchorY is the page offset the controls are compared against: the view
+	// heading's bottom on Explore, whose heading text changes with the basis
+	// and can wrap onto another line on a narrow window, and the selector
+	// form's top on the history page, which follows a chart whose captions
+	// change too.
 	AnchorY       float64
 	HeadingBottom float64
 	Controls      []controlGeometry
@@ -316,7 +317,8 @@ const controlLayoutScript = `([headingSelector, anchorSelector]) => {
 		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
 		.map((el, index) => ({Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: box(el), Label: box(el.closest('label') || el)}));
 	const anchor = anchorSelector ? document.querySelector(anchorSelector) : null;
-	return {AnchorY: anchor ? box(anchor).Y : 0, HeadingBottom: heading ? box(heading).Y + box(heading).H : -1, Controls: controls};
+	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
+	return {AnchorY: anchor ? box(anchor).Y : headingBottom, HeadingBottom: headingBottom, Controls: controls};
 }`
 
 func closeEnough(a, b float64) bool { return a-b <= 1 && b-a <= 1 }
@@ -327,8 +329,8 @@ func sameBox(a, b controlBox) bool {
 
 // TestDataControlsKeepTheirGeometryAcrossBases checks that, in every Explore
 // view and display and on the history page, the data controls sit below the
-// view heading and occupy exactly the same boxes whether penalties are
-// included or excluded, at three window sizes. Option text never changes with
+// view heading and occupy exactly the same boxes, relative to that heading,
+// whether penalties are included or excluded, at three window sizes. Option text never changes with
 // the basis, so no select may resize.
 func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
 	t.Parallel()
