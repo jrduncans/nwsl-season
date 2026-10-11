@@ -257,3 +257,13 @@ Do not push. Report:
 - the rehearsal totals observed;
 - deviations from this packet;
 - follow-ups.
+
+## Revision: Penalties as a data-control select
+
+The first implementation rendered Penalties as pill links above the Explore
+group navigation and as a link fieldset on the history page, which read as
+navigation. It is now a labeled `<select>` ("Penalties": Included, Excluded)
+last in each view's data-control row, switching through hidden destination
+links (the season-selector pattern) with a noscript link fallback. The help
+text is the select's title; "Penalty kicks excluded." extends the view's data
+note when excluded.

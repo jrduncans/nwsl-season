@@ -52,21 +52,31 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	_, plain := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025")
 	_, included := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025&penalties=include")
 	// The explicit default differs only in the echoed selection state.
-	if !strings.Contains(plain, `data-penalties-choice="include" aria-current="true"`) || !strings.Contains(included, `data-penalties-choice="include" aria-current="true"`) {
-		t.Fatal("Included is not the current choice by default")
-	}
+	requireAttr(t, plain, `select[data-penalties-selector] option[selected]`, "value", "include")
+	requireAttr(t, included, `select[data-penalties-selector] option[selected]`, "value", "include")
 	if plain != included {
 		t.Error("penalties=include must render exactly as an absent parameter")
 	}
 	forbidRaw(t, plain, "npxG", "Non-penalty", `name="penalties"`, `data-points-note`, `data-penalties="exclude"`)
-	// Only the Excluded choice names the parameter; default links omit it.
-	if got := linksNaming(t, plain, "penalties"); got != 1 {
-		t.Errorf("default page has %d links naming penalties, want only the Excluded choice", got)
+	// Only the Excluded destination names the parameter; default links omit it.
+	// Every view carries its own select and destination links.
+	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `label.penalties-select`)); got != want || want != 7 {
+		t.Errorf("default page has %d Excluded destinations for %d selects, want 7 each", got, want)
+	}
+	for _, link := range find(t, plain, `a[href*=penalties]`) {
+		if attr(link, "data-penalties-choice") != "exclude" && attr(link, "class") != "button" {
+			t.Errorf("default page link %q names penalties", attr(link, "href"))
+		}
 	}
 	requireAttr(t, plain, `a[data-penalties-choice=exclude]`, "href", "?penalties=exclude&season=2025&team=alpha&view=team-history")
 	requireAttr(t, plain, `a[data-penalties-choice=include]`, "href", "?season=2025&team=alpha&view=team-history")
-	requireElements(t, plain, `.explore-penalties .explore-penalties-label`)
-	requireText(t, plain, ".explore-penalties", "Penalties", "Included", "Excluded", "Excluded removes penalty kicks from both goals and xG.")
+	// The control is a labeled select in the data-control row, never in navigation.
+	requireText(t, plain, "form[data-team-history-controls] label.penalties-select", "Penalties", "Included", "Excluded")
+	requireAttr(t, plain, `select[data-penalties-selector]`, "title", "Excluded removes penalty kicks from both goals and xG.")
+	forbidRaw(t, plain, "explore-penalties", "data-penalties-control", "Penalty kicks excluded.")
+	if got := len(find(t, plain, `nav a[data-penalties-choice], .explore header ~ a[data-penalties-choice]`)); got != 0 {
+		t.Errorf("%d penalties links in navigation", got)
+	}
 }
 
 func TestExplorePenaltiesExcludedComputesAndLabelsNonPenaltyBasis(t *testing.T) {
@@ -141,7 +151,17 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 				t.Fatalf("status = %d", code)
 			}
 			requireElements(t, body, `[data-explore][data-penalties=exclude]`)
-			requireAttr(t, body, `a[data-penalties-choice=exclude]`, "aria-current", "true")
+			requireAttr(t, body, `select[data-penalties-selector] option[selected]`, "value", "exclude")
+			panel := strings.TrimPrefix(strings.SplitN(view, "&", 2)[0], "view=")
+			if got := len(find(t, body, `section[data-panel=`+panel+`] label.penalties-select`)); got != 1 {
+				t.Errorf("the %s view offers %d Penalties selects, want 1", panel, got)
+			}
+			if panel != "trend" && panel != "table" {
+				requireText(t, body, "section[data-panel="+panel+"]", "Penalty kicks excluded.")
+			}
+			if got := len(find(t, body, `nav label.penalties-select, nav select`)); got != 0 {
+				t.Errorf("the Penalties select is inside navigation")
+			}
 			// Every state-preserving link and form carries the basis.
 			for _, link := range find(t, body, `nav.explore-views a, nav.explore-subviews a`) {
 				if !strings.Contains(attr(link, "href"), "penalties=exclude") {
@@ -222,10 +242,12 @@ func TestHistoryPagePenaltiesControlLabelsAndLinks(t *testing.T) {
 	archive := penaltyArchive(t, 20)
 	_, plain := getPage(t, archive, "/history/scoring?season=2025&metric=xg")
 	requireAttr(t, plain, `a[data-penalties-choice=exclude]`, "href", "scoring?metric=xg&penalties=exclude&season=2025")
+	requireText(t, plain, "form.history-selector", "Season", "Penalties", "Included", "Excluded")
+	forbidRaw(t, plain, "data-penalties-control", "history-penalties")
 	requireAttr(t, plain, `a[data-penalties-choice=include]`, "href", "scoring?metric=xg&season=2025")
 	forbidRaw(t, plain, `name="penalties"`, "Non-penalty")
-	if got := linksNaming(t, plain, "penalties"); got != 1 {
-		t.Errorf("default history page has %d links naming penalties, want 1", got)
+	if got := len(find(t, plain, `a[data-penalties-choice=exclude]`)); got != 1 {
+		t.Errorf("default history page has %d Excluded destinations, want 1", got)
 	}
 
 	code, body := getPage(t, archive, "/history/scoring?season=2025&metric=compare&penalties=exclude")
@@ -233,7 +255,7 @@ func TestHistoryPagePenaltiesControlLabelsAndLinks(t *testing.T) {
 		t.Fatalf("status = %d", code)
 	}
 	requireText(t, body, "main", "Penalties", "Included", "Excluded", "Excluded removes penalty kicks from both goals and xG.")
-	requireAttr(t, body, `a[data-penalties-choice=exclude]`, "aria-current", "page")
+	requireAttr(t, body, `select[data-penalties-selector] option[selected]`, "value", "exclude")
 	requireElements(t, body, `form.history-selector input[name=penalties][value=exclude]`, `form.history-selector input[name=metric][value=compare]`)
 	requireText(t, body, ".history-metric-choice", "Non-penalty goals", "Non-penalty expected goals (npxG)")
 	requireText(t, body, ".history-primary-metrics", "Non-penalty goals per match", "npxG per match", "2.00", "0.24")
@@ -287,17 +309,6 @@ func renderFixturesPage(t *testing.T, data cache.SeasonData) string {
 		t.Fatalf("fixtures status = %d", response.Code)
 	}
 	return response.Body.String()
-}
-
-func linksNaming(t *testing.T, body, name string) int {
-	t.Helper()
-	count := 0
-	for _, link := range find(t, body, "a") {
-		if strings.Contains(attr(link, "href"), name) {
-			count++
-		}
-	}
-	return count
 }
 
 func TestBasisTextRewritesLabelsOncePerBasis(t *testing.T) {

@@ -11,11 +11,17 @@ Explore (every view) and the league history page accept `penalties=include`
 (the default, and the same as omitting the parameter) or `penalties=exclude`.
 Any other value, or a repeated one, is rejected like an invalid `measure`: a
 400 "Invalid history selection" page. The choice is a server-rendered
-**Penalties: Included / Excluded** control, which works without JavaScript. It
-sits above the Explore group navigation and below the history page's Metric
-control. Every Explore and history link and form that keeps selection state
-also keeps `penalties`, and default-basis URLs never name it. Changing the basis
-reloads the page, because the server computes each figure on the chosen basis;
+**Penalties** select (Included / Excluded), which works without JavaScript
+(a noscript link applies the other choice). It is a data control, last in each
+view's control row beside Season, Team, Compare or Values (the Scoring trend,
+Goal distribution and Scoring table views put it in their heading controls),
+and on the history page it sits in the season selector; it is never in the
+navigation. Its help text is the select's title, and "Penalty kicks excluded."
+joins a view's data note when the basis is excluded. Every Explore and history
+link and form that keeps selection state also keeps `penalties`, and
+default-basis URLs never name it. Changing the select navigates to a hidden
+destination link, like the season selector, because the server computes each
+figure on the chosen basis;
 the script keeps the control's links in step with in-place view changes.
 
 `history.ScoringBasis` (`AllShots`, the zero value, or `NonPenalty`) selects the

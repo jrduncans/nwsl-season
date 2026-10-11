@@ -1,3 +1,14 @@
+// Switching the penalties basis is a full server render: follow the hidden
+// link that carries the current page state with the chosen basis applied. The
+// capture phase keeps Explore's in-page form handlers from also reacting.
+document.addEventListener("change", (event) => {
+  const select = event.target.closest?.("[data-penalties-selector]");
+  if (!select) return;
+  event.stopPropagation();
+  const links = Array.from(select.closest("label")?.parentElement?.querySelectorAll("a[data-penalties-choice]") ?? []);
+  links.find((link) => link.dataset.penaltiesChoice === select.value)?.click();
+}, true);
+
 document.addEventListener("change", (event) => {
   const season = event.target.closest("[data-season-selector]");
   if (season) {

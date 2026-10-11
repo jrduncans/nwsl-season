@@ -15,20 +15,23 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 )
 
-// clickPenalties follows the server-rendered Penalties choice and waits for the
-// reloaded page to render on the chosen basis.
-func clickPenalties(t *testing.T, page playwright.Page, choice string) {
+// penaltiesSelect is the visible Penalties select of the current view.
+const penaltiesSelect = "select[data-penalties-selector]:visible"
+
+// choosePenalties changes the Penalties select and waits for the full server
+// render on the chosen basis.
+func choosePenalties(t *testing.T, page playwright.Page, choice string) {
 	t.Helper()
-	if err := page.Locator("a[data-penalties-choice=" + choice + "]").Click(); err != nil {
-		t.Fatalf("choose penalties %s: %v", choice, err)
+	chooseOption(t, page, penaltiesSelect, choice)
+	if _, err := page.WaitForFunction(`(want) => (new URLSearchParams(location.search).get('penalties') === 'exclude') === (want === 'exclude')`, choice); err != nil {
+		t.Fatalf("penalties %s did not navigate: %v", choice, err)
+	}
+	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateLoad}); err != nil {
+		t.Fatalf("load after penalties %s: %v", choice, err)
 	}
 	expect := playwright.NewPlaywrightAssertions()
-	want := "true"
-	if err := expect.Locator(page.Locator("a[data-penalties-choice="+choice+"]")).ToHaveAttribute("aria-current", want); err != nil {
-		// The history page marks the choice with aria-current=page.
-		if err := expect.Locator(page.Locator("a[data-penalties-choice="+choice+"]")).ToHaveAttribute("aria-current", "page"); err != nil {
-			t.Fatalf("penalties %s is not current after the reload: %v", choice, err)
-		}
+	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue(choice); err != nil {
+		t.Fatalf("penalties %s is not selected after the reload: %v", choice, err)
 	}
 	if err := settle(page); err != nil {
 		t.Fatalf("settle: %v", err)
@@ -50,15 +53,20 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	page := explorePage(t, base, Desktop, "explore?view=teams&display=table&season=2025")
 	expect := playwright.NewPlaywrightAssertions()
 
-	if got := textOf(t, page, ".explore-penalties"); !strings.Contains(got, "Penalties") || !strings.Contains(got, "Included") || !strings.Contains(got, "Excluded") ||
-		!strings.Contains(got, "Excluded removes penalty kicks from both goals and xG.") {
+	if got := textOf(t, page, "label.penalties-select:visible"); !strings.Contains(got, "Penalties") || !strings.Contains(got, "Included") || !strings.Contains(got, "Excluded") {
 		t.Fatalf("Penalties control = %q", got)
 	}
-	// The control sits above the group navigation.
-	var order []string
-	evalJSON(t, page, `() => [...document.querySelector('[data-explore]').children].map((el) => el.className || el.tagName)`, nil, &order)
-	if slices.Index(order, "explore-penalties") < 0 || slices.Index(order, "explore-penalties") > slices.Index(order, "explore-views") {
-		t.Errorf("Penalties control is not above the navigation: %v", order)
+	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveAttribute("title", "Excluded removes penalty kicks from both goals and xG."); err != nil {
+		t.Errorf("Penalties help: %v", err)
+	}
+	// The control is a data control: last in the form row, never in navigation.
+	var last string
+	evalJSON(t, page, `() => { const form = document.querySelector('[data-team-controls]'); return [...form.children].filter((el) => !el.hidden && el.tagName === 'LABEL').pop().className; }`, nil, &last)
+	if last != "penalties-select" {
+		t.Errorf("last visible label in the row has class %q, want penalties-select", last)
+	}
+	if err := expect.Locator(page.Locator("nav select, nav .penalties-select, header .penalties-select")).ToHaveCount(0); err != nil {
+		t.Errorf("Penalties control found in navigation: %v", err)
 	}
 	defaultHeader := textOf(t, page, "table.explore-team-table thead")
 	if strings.Contains(defaultHeader, "npxG") || strings.Contains(defaultHeader, "Non-penalty") {
@@ -76,7 +84,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	}
 	defaultPoints := pointsByTeam()
 
-	clickPenalties(t, page, "exclude")
+	choosePenalties(t, page, "exclude")
 	if got := queryOf(t, page); got.Get("penalties") != "exclude" || got.Get("season") != "2025" || got.Get("display") != "table" {
 		t.Fatalf("URL after excluding penalties = %v", got)
 	}
@@ -99,7 +107,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 		t.Errorf("points note on the table: %v", err)
 	}
 
-	// Every analysis keeps the basis, and shows it in its labels.
+	// Every analysis keeps the basis, offers the control, and shows it in its labels.
 	for _, tab := range exploreTabs {
 		if err := page.Locator("a[data-group-choice]").Filter(playwright.LocatorFilterOptions{HasText: tab.group}).Click(); err != nil {
 			t.Fatalf("open group %s: %v", tab.group, err)
@@ -109,6 +117,9 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 		}
 		if got := queryOf(t, page).Get("penalties"); got != "exclude" {
 			t.Errorf("%s / %s dropped penalties: %s", tab.group, tab.tab, page.URL())
+		}
+		if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue("exclude"); err != nil {
+			t.Errorf("%s / %s does not offer Penalties = Excluded: %v", tab.group, tab.tab, err)
 		}
 		for _, href := range hrefs(t, page, "nav.explore-views a, nav.explore-subviews a") {
 			if parsed, err := url.Parse(href); err != nil || parsed.Query().Get("penalties") != "exclude" {
@@ -132,7 +143,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	}
 
 	// Included returns to the default basis and drops the parameter.
-	clickPenalties(t, page, "include")
+	choosePenalties(t, page, "include")
 	if got := queryOf(t, page); got.Has("penalties") || got.Get("view") != "team-history" || got.Get("measure") != "for" {
 		t.Errorf("URL after including penalties = %v", got)
 	}
@@ -156,9 +167,12 @@ func TestHistoryPenaltiesToggleSwitchesBasis(t *testing.T) {
 	if strings.Contains(before, "Non-penalty") {
 		t.Fatalf("default history page already uses the non-penalty basis: %q", before)
 	}
-	clickPenalties(t, page, "exclude")
+	choosePenalties(t, page, "exclude")
 	if got := queryOf(t, page); got.Get("penalties") != "exclude" || got.Get("season") != "2025" || got.Get("metric") != "compare" {
 		t.Fatalf("URL after excluding penalties = %v", got)
+	}
+	if got := textOf(t, page, "form.history-selector"); !strings.Contains(got, "Season") || !strings.Contains(got, "Penalties") {
+		t.Errorf("history selector row = %q", got)
 	}
 	after := textOf(t, page, ".history-primary-metrics")
 	if !strings.Contains(after, "Non-penalty goals per match") || !strings.Contains(after, "npxG per match") || after == before {
@@ -178,7 +192,7 @@ func TestHistoryPenaltiesToggleSwitchesBasis(t *testing.T) {
 	if got := queryOf(t, page); got.Get("penalties") != "exclude" || got.Get("season") != "2026" {
 		t.Errorf("season form dropped the basis: %v", got)
 	}
-	for _, href := range hrefs(t, page, "a.history-metric-link:not([data-penalties-choice=include]), a.history-chart-point-link") {
+	for _, href := range hrefs(t, page, "a.history-metric-link, a.history-chart-point-link") {
 		if !strings.Contains(href, "penalties=exclude") {
 			t.Errorf("link %q lost the basis", href)
 		}

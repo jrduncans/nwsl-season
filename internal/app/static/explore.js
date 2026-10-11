@@ -1,6 +1,16 @@
 (() => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
+  // Switching the penalties basis is a full server render: follow the hidden
+  // link that carries the current page state with the chosen basis. The capture
+  // phase keeps the view forms' in-page change handlers from also reacting.
+  document.addEventListener('change', event => {
+    const select = event.target.closest?.('[data-penalties-selector]');
+    if (!select) return;
+    event.stopPropagation();
+    const links = [...(select.closest('label')?.parentElement?.querySelectorAll('a[data-penalties-choice]') ?? [])];
+    links.find(link => link.dataset.penaltiesChoice === select.value)?.click();
+  }, true);
   // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
   const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
@@ -904,7 +914,7 @@
     root.querySelector('[data-team-measure-control]').hidden = display === 'table' || display === 'quadrant';
     root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
-      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}`;
+      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
     setPointsNote('teams', display === 'table' || (display !== 'quadrant' && measure.index === 3));
@@ -1511,7 +1521,7 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
-    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}`;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
     comparison.replaceChildren(...[{key: 'team', label: 'None (team average only)'}, ...(selectedSeason?.benchmarks || [])].map(reference => {
@@ -1641,7 +1651,7 @@
     const count = selectedSeason.teams.length;
     root.querySelector('[data-rankings-team]').replaceChildren(teamName(team));
     root.querySelector('[data-rankings-summary]').textContent = `${season} · ${team.played} played · ${count} teams${selectedSeason.active ? ' · In progress' : ''}`;
-    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}`;
+    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-rankings-warning]').hidden = !selectedSeason.teams.some(row => row.values[0].expected === null);
     root.querySelector('[data-rankings-cards]').replaceChildren(...team.rankings[units === 'total' ? 1 : 0].map(row => {
       const card = document.createElement('article'); card.className = 'explore-rank-card';

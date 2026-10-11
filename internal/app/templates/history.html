@@ -10,11 +10,7 @@
   {{range .MetricLinks}}<a class="history-metric-link{{if .Selected}} history-metric-link-selected{{end}}" href="{{.Path}}"{{if .Selected}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
 </fieldset>
 
-<fieldset class="history-metric-choice history-penalties-choice" data-penalties-control>
-  <legend>Penalties</legend>
-  {{range .PenaltyLinks}}<a class="history-metric-link{{if .Selected}} history-metric-link-selected{{end}}" href="{{.Path}}"{{if .Selected}} aria-current="page"{{end}} data-penalties-choice="{{if eq .Label "Included"}}include{{else}}exclude{{end}}">{{.Label}}</a>{{end}}
-  <p class="note history-penalties-help">Excluded removes penalty kicks from both goals and xG.</p>
-</fieldset>
+{{template "penaltiesHelp"}}
 
 <section class="history-chart-section" aria-labelledby="history-chart-heading">
   <h2 id="history-chart-heading">{{.Chart.AxisTitle}}</h2>
@@ -67,6 +63,7 @@
   <form class="history-selector" method="get" action="{{.FormPath}}">
     <label for="history-season">Season</label>
     <select id="history-season" name="season">{{range .Years}}<option value="{{.Season}}"{{if .Selected}} selected{{end}}>{{.Season}}</option>{{end}}</select>
+    {{template "penaltiesSelect" $}}
     {{if ne .Metric "goals"}}<input type="hidden" name="metric" value="{{.Metric}}">{{end}}{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
     <button class="button" type="submit">Show season</button>
   </form>
