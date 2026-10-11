@@ -114,7 +114,7 @@ h2 { margin-top: 3rem; }
 .standings-toggle-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 45%, white); outline-offset: 1px; }
 [data-standings-value] { transition: opacity .12s ease, transform .12s ease; }
 .standings-display.is-switching [data-standings-value] { opacity: .35; transform: translateY(1px); }
-[data-standings-stat="goals"] [data-standings-stat-column="xg"], :is([data-standings-stat="xg"], [data-standings-stat="npxg"]) [data-standings-stat-column="goals"] { display: none; }
+[data-standings-stat="goals"] [data-standings-stat-column="xg"], [data-standings-stat="xg"] [data-standings-stat-column="goals"] { display: none; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .standings { min-width: 47rem; table-layout: auto; font-size: .875rem; }
 .standings :is(th, td):first-child { width: 4rem; }

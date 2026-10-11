@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
+	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 func penaltyArchive(t *testing.T, splits int) []cache.HistoricalSeason {
@@ -277,6 +279,46 @@ func TestHistoryPagePenaltiesControlLabelsAndLinks(t *testing.T) {
 		}
 	}
 	requireText(t, body, "table.history-table thead", "Total non-penalty goals", "Non-penalty goals per match", "npxG per match")
+}
+
+// npxgSeasonData has two completed alpha-bravo games with xG. Alpha has 3.00
+// xG for across them, 0.76 of it from a first-game penalty.
+func npxgSeasonData(firstSplit, secondSplit *cache.PenaltySplit) cache.SeasonData {
+	data := testSeasonData()
+	data.Games = append(data.Games, cache.Game{
+		ASAID: "completed-2", Season: "2026", Stage: "Regular Season", KickoffUTC: "2026-07-05 19:00:00 UTC",
+		Status: standings.CompletedStatus, HomeTeamID: "bravo", AwayTeamID: "alpha",
+		HomeScore: sql.NullInt64{Int64: 0, Valid: true}, AwayScore: sql.NullInt64{Int64: 1, Valid: true}, Matchday: sql.NullInt64{Int64: 2, Valid: true},
+	})
+	xg := func(id, home, away string, homeXG, awayXG float64, split *cache.PenaltySplit) cache.GameXG {
+		return cache.GameXG{
+			GameID: id, Availability: cache.XGAvailable, HomeTeamID: home, AwayTeamID: away,
+			HomeXG: sql.NullFloat64{Float64: homeXG, Valid: true}, AwayXG: sql.NullFloat64{Float64: awayXG, Valid: true},
+			Penalties: split,
+		}
+	}
+	// Alpha: 2.36 + 0.64 = 3.00 xG for, 1.11 + 1.00 = 2.11 against.
+	data.XGoals = []cache.GameXG{
+		xg("completed", "alpha", "bravo", 2.36, 1.11, firstSplit),
+		xg("completed-2", "bravo", "alpha", 1.00, 0.64, secondSplit),
+	}
+	return data
+}
+
+// Standings stay on official results and team-model xG: a season-total npxG
+// difference cannot rank a table the way per-game points do, so non-penalty
+// xG lives in Explore and the fixture results instead.
+func TestStandingsDoNotOfferNonPenaltyXG(t *testing.T) {
+	response := httptest.NewRecorder()
+	data := npxgSeasonData(&cache.PenaltySplit{HomeXG: .76, HomeGoals: 1, HomeShots: 1}, &cache.PenaltySplit{})
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+	body := response.Body.String()
+	requireElements(t, body, "button[data-standings-stat-value=goals]", "button[data-standings-stat-value=xg]")
+	forbidElements(t, body, "button[data-standings-stat-value=npxg]", "[data-standings-stat-warning]")
+	forbidText(t, body, "table.standings", "npxG", "Non-penalty")
 }
 
 func TestFixtureResultsShowNonPenaltyXGOnlyWhenAPenaltyHadXG(t *testing.T) {
