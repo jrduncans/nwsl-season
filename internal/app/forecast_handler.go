@@ -418,7 +418,11 @@ func forecastXGoals(data cache.SeasonData) map[string]forecast.ExpectedGoals {
 	values := map[string]forecast.ExpectedGoals{}
 	for _, value := range data.XGoals {
 		if value.Availability == cache.XGAvailable && value.HomeXG.Valid && value.AwayXG.Valid {
-			values[value.GameID] = forecast.ExpectedGoals{GameID: value.GameID, Home: value.HomeXG.Float64, Away: value.AwayXG.Float64}
+			observation := forecast.ExpectedGoals{GameID: value.GameID, Home: value.HomeXG.Float64, Away: value.AwayXG.Float64}
+			if value.Penalties != nil {
+				observation.Penalties = &forecast.PenaltyXG{Home: value.Penalties.HomeXG, Away: value.Penalties.AwayXG}
+			}
+			values[value.GameID] = observation
 		}
 	}
 	return values
@@ -441,7 +445,25 @@ func forecastVenueSample(data cache.SeasonData) forecast.VenueSample {
 			sample.AwayXG += summary.AwayXG
 		}
 	}
+	if xgReady && historicalNPXGReady(data) {
+		for _, summary := range data.VenueHistory {
+			sample.NPXGMatches += summary.NPXGMatches
+			sample.HomeNPXG += summary.HomeNPXG
+			sample.AwayNPXG += summary.AwayNPXG
+		}
+	}
 	return sample
+}
+
+// historicalNPXGReady reports whether every prior-season xG match has a
+// penalty split, so the npxG venue sample covers the same matches as xG.
+func historicalNPXGReady(data cache.SeasonData) bool {
+	for _, summary := range data.VenueHistory {
+		if summary.NPXGMatches != summary.XGMatches {
+			return false
+		}
+	}
+	return true
 }
 
 func historicalVenueReady(data cache.SeasonData, requireXG bool) bool {

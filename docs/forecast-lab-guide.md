@@ -225,8 +225,17 @@ penalty xG in team strengths (no better than 0%). First-half penalty xG
 correlates only about 0.07 with second-half penalty xG across 2016–2025, against
 about 0.55 for npxG.
 
-Live forecasts read the league npxG venue rate from the persisted prior-season
-summary. Backtests pool it from cutoff-safe historical fixtures.
+Its one final-test run did not meet the replacement rule: final-test match log
+loss was 0.0018 lower than the default, but the paired interval
+[-0.0061, +0.0025] crossed zero, and Shield Brier and position RPS were
+slightly worse. `xg-poisson-schedule-load-v1` remains the default. See
+[the model evaluation](model-evaluation-v1.md).
+
+If it is offered in Forecast Lab, live forecasts take the league npxG venue rate
+from the prior-season venue summaries, which derive npxG totals from stored
+penalty splits when read; the npxG totals are used only when every prior-season
+xG match has a split. Backtests pool the rate from cutoff-safe historical
+fixtures.
 
 ### Current pace
 

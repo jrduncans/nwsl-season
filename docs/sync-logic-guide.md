@@ -148,7 +148,10 @@ operation span reports `nwsl.sync.penalty_games_accepted` and
 `nwsl.sync.penalty_games_rejected`. The cache stores the split on `game_xg`
 (schema 15); a nil split means "not observed" and never erases a stored one, and a
 penalty-only difference updates the row without counting as a material xG change,
-so forecasts, venue summaries, and correction cadence are unaffected. Penalty
+so forecasts, persisted venue summaries, and correction cadence are unaffected.
+The league npxG venue totals used by forecasts are not persisted: reading a
+venue summary derives them from the season's stored splits, so a split that
+arrives after its xG is reflected without touching the summary row. Penalty
 data adds no scheduler job, cadence, or check table. Existing caches gain splits
 as xG rows are re-observed (for example `cmd/sync -backfill-catalog` or normal
 correction polling).
