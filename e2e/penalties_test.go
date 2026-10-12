@@ -108,7 +108,8 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 		t.Errorf("points note on the table: %v", err)
 	}
 
-	// Every analysis keeps the basis, offers the control, and shows it in its labels.
+	// Every analysis keeps the carried basis. Team-seasons on Points explains
+	// that it ignores the basis and hides its control.
 	for _, tab := range exploreTabs {
 		if err := page.Locator("a[data-group-choice]").Filter(playwright.LocatorFilterOptions{HasText: tab.group}).Click(); err != nil {
 			t.Fatalf("open group %s: %v", tab.group, err)
@@ -119,7 +120,14 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 		if got := queryOf(t, page).Get("penalties"); got != "exclude" {
 			t.Errorf("%s / %s dropped penalties: %s", tab.group, tab.tab, page.URL())
 		}
-		if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue("exclude"); err != nil {
+		if tab.tab == "Team-seasons" {
+			if err := expect.Locator(page.Locator("[data-team-seasons-penalties]")).ToBeHidden(); err != nil {
+				t.Error(err)
+			}
+			if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToContainText("Points include penalties"); err != nil {
+				t.Error(err)
+			}
+		} else if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue("exclude"); err != nil {
 			t.Errorf("%s / %s does not offer Penalties = Excluded: %v", tab.group, tab.tab, err)
 		}
 		for _, href := range hrefs(t, page, "nav.explore-views a, nav.explore-subviews a") {

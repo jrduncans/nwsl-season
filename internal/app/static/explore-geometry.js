@@ -99,5 +99,19 @@
     return rows;
   }
 
-  window.NWSLGeometry = Object.freeze({gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
+  // One numeric scale for signed/unsigned ranked bars and companion markers.
+  // Both series participate in the domain, so a marker can never be clipped.
+  function rankingDomain(values, signed, points = false) {
+    const extent = Math.max(.5, ...values.map(value => Math.abs(value) * 1.05));
+    const unit = 10 ** Math.floor(Math.log10(extent));
+    const rounded = points ? 3 : Number(([1, 2, 2.5, 3, 4, 5, 6, 8, 10].find(step => step * unit >= extent) * unit).toPrecision(12));
+    return {min: signed ? -rounded : 0, max: rounded};
+  }
+  function rankingBar(value, companion, domain) {
+    const position = v => (v - domain.min) / (domain.max - domain.min) * 100;
+    const zero = position(0), end = position(value);
+    return {zero, left: Math.min(zero, end), width: Math.abs(end - zero), marker: companion === null ? null : position(companion)};
+  }
+
+  window.NWSLGeometry = Object.freeze({rankingDomain, rankingBar, gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

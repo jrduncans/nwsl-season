@@ -2013,10 +2013,157 @@
       return card;
     }));
   }
+  const archivePayload = JSON.parse(root.querySelector('#explore-team-seasons-data').textContent);
+  const archiveControls = root.querySelector('[data-team-seasons-controls]');
+  const archiveMeasure = root.querySelector('[data-team-seasons-measure]');
+  const archiveRankBy = root.querySelector('[data-team-seasons-rank-by]');
+  const archivePenalties = root.querySelector('[data-team-seasons-penalties]');
+  archiveControls.querySelector('[data-team-seasons-submit]').hidden = true;
+  const archiveMeasures = ['for', 'against', 'difference', 'points'];
+  const archiveRankBys = ['actual', 'expected', 'gap'];
+  const archiveLabels = ['Goals scored', 'Goals allowed', 'Goal differential', 'Points'];
+  const archiveText = (text, np) => np ? text.replace(basisPattern, basisReplacement) : text;
+  const archiveTie = (a, b) => a.season !== b.season ? (a.season > b.season ? -1 : 1) : a.name !== b.name ? (a.name < b.name ? -1 : 1) : a.id < b.id ? -1 : a.id === b.id ? 0 : 1;
+  const archiveMissing = (measure, np) => measure === 3 ? 'xPts incomplete' : archiveText('xG incomplete', np);
+  const archiveLink = (params, changes) => {
+    const target = new URLSearchParams(params);
+    Object.entries(changes).forEach(([key, value]) => target.set(key, value));
+    const measure = target.get('team-seasons-measure') || 'points';
+    if (measure === 'points' || target.get('penalties') === 'include') target.delete('penalties');
+    return `?${target}`;
+  };
+  function archiveElement(tag, text, className) {
+    const element = document.createElement(tag);
+    if (text !== undefined) element.textContent = text;
+    if (className) element.className = className;
+    return element;
+  }
+  function showTeamSeasons(params) {
+    const measureKey = params.get('team-seasons-measure') || 'points', measure = archiveMeasures.indexOf(measureKey);
+    const byKey = params.get('team-seasons-rank-by') || 'actual', by = archiveRankBys.indexOf(byKey);
+    const np = measureKey !== 'points' && params.get('penalties') === 'exclude';
+    const records = np ? archivePayload.nonPenalty : archivePayload.all;
+    const rows = records.filter(row => row.values[measure].eligible);
+    const rank = row => row.values[measure].ranks[by];
+    const ranked = rows.filter(row => rank(row)).sort((a, b) => rank(a) - rank(b) || archiveTie(a, b));
+    const missing = rows.filter(row => !rank(row));
+    const missingLabel = archiveMissing(measure, np);
+    archiveMeasure.value = measureKey; archiveRankBy.value = byKey;
+    archivePenalties.disabled = measureKey === 'points'; archivePenalties.value = np ? 'exclude' : 'include';
+    root.querySelector('[data-team-seasons-penalties-control]').hidden = measureKey === 'points';
+    root.querySelector('[data-team-seasons-points-note]').hidden = measureKey !== 'points' || params.get('penalties') !== 'exclude';
+    const actualLabel = archiveText(archiveLabels[measure], np), expectedLabel = archiveText(['xG', 'xG allowed', 'xGD', 'xPts'][measure], np);
+    const companionLabel = by === 1 ? actualLabel : expectedLabel;
+    const headingMeasure = by === 1 ? `Expected ${actualLabel.toLowerCase()}` : by === 2 ? `${actualLabel} compared with expected,` : actualLabel;
+    const heading = `${headingMeasure} per match, since 2016`;
+    root.querySelector('[data-team-seasons-title]').textContent = heading;
+    root.querySelector('[data-team-seasons-chart]').setAttribute('aria-label', `${heading}, ranked ${byKey} values with comparisons`);
+    const legend = root.querySelector('[data-team-seasons-legend]');
+    legend.textContent = by === 2 ? 'Bar: actual − expected' : `Bar: ${byKey} · `;
+    if (by !== 2) {
+      const swatch = archiveElement('span', undefined, 'explore-archive-marker-swatch'); swatch.setAttribute('aria-hidden', 'true');
+      legend.append(swatch, document.createTextNode(` ${companionLabel}`));
+    }
+    const note = root.querySelector('[data-team-seasons-missing]');
+    note.hidden = !missing.length;
+    note.textContent = missing.length ? `${missing.length} team-seasons have ${missingLabel} and are not ranked. Their actual values appear last in the table.` : '';
+    const gapHelp = root.querySelector('[data-team-seasons-gap-help]');
+    gapHelp.hidden = by !== 2;
+    gapHelp.textContent = `Gap is actual − expected. Positive means above expected; negative means below expected.${measure === 1 ? ' Fewer goals allowed than expected rank first.' : ''}`;
+    let high = ['Most goals scored per match', 'Fewest goals allowed per match', 'Highest goal differential per match', 'Highest points per match'][measure];
+    let low = ['Fewest goals scored per match', 'Most goals allowed per match', 'Lowest goal differential per match', 'Lowest points per match'][measure];
+    if (by === 1) { high = `Expected: ${high}`; low = `Expected: ${low}`; }
+    if (by === 2) {
+      high = measure === 1 ? 'Fewest goals allowed relative to expected' : 'Most above expected';
+      low = measure === 1 ? 'Most goals allowed relative to expected' : 'Most below expected';
+    }
+    const endText = text => archiveText(np ? text.replaceAll('goals', 'non-penalty goals') : text, np);
+    root.querySelector('[data-team-seasons-high]').textContent = endText(high);
+    const numbers = ranked.flatMap(row => by === 2 ? [row.values[measure].gap] : [row.values[measure].actual, row.values[measure].expected]).filter(value => value !== null);
+    const domain = window.NWSLGeometry.rankingDomain(numbers, by === 2 || measure === 2, measure === 3 && by !== 2);
+    const axis = root.querySelector('[data-team-seasons-axis]');
+    axis.replaceChildren(archiveElement('span', domain.min), archiveElement('span', `Per match · ${domain.min === 0 ? 'starts at 0' : '0 at center'}`), archiveElement('span', domain.max));
+    root.querySelector('[data-team-seasons-low]').textContent = endText(low);
+    const visible = ranked.length > 20 ? [...ranked.slice(0, 10), ...ranked.slice(-10)] : ranked;
+    const bars = visible.map(row => {
+      const v = row.values[measure], value = v[byKey], companion = by === 2 ? null : by === 1 ? v.actual : v.expected;
+      const geometry = window.NWSLGeometry.rankingBar(value, companion, domain);
+      const item = archiveElement('li', undefined, `explore-archive-bar${value < 0 ? ' is-negative' : ''}${row.active ? ' is-active' : ''}${value === 0 ? ' is-zero' : ''}`);
+      item.dataset.teamSeasonsRow = ''; item.dataset.teamId = row.id; item.dataset.season = row.season;
+      const label = archiveElement('span', undefined, 'explore-archive-label');
+      const identity = archiveElement('span', undefined, 'explore-archive-identity');
+      identity.append(teamName(row), archiveElement('span', `· ${row.season}`));
+      label.append(archiveElement('span', `${rank(row)}.`, 'explore-archive-rank'), identity);
+      if (row.active) label.append(archiveElement('small', `in progress through ${row.played} matches`));
+      const track = archiveElement('span', undefined, 'explore-archive-track'); track.setAttribute('aria-hidden', 'true');
+      const zero = archiveElement('span', undefined, 'explore-archive-zero'); zero.style.left = `${geometry.zero}%`;
+      const bar = archiveElement('i'); bar.style.left = `${geometry.left}%`; bar.style.width = `${geometry.width}%`; track.append(zero, bar);
+      if (companion !== null) { const marker = archiveElement('b', undefined, 'explore-archive-marker'); marker.style.left = `${geometry.marker}%`; track.append(marker); }
+      const values = archiveElement('span', undefined, 'explore-archive-numbers'); values.append(archiveElement('strong', by === 2 ? signed(value) : fixed(value)));
+      if (by !== 2) values.append(archiveElement('small', companion === null ? missingLabel : `${companionLabel} ${fixed(companion)}`));
+      item.append(label, track, values); return item;
+    });
+    const split = Math.min(10, Math.ceil(bars.length / 2));
+    root.querySelector('[data-team-seasons-bars="high"]').replaceChildren(...bars.slice(0, split));
+    root.querySelector('[data-team-seasons-bars="low"]').replaceChildren(...bars.slice(split));
+    const more = Math.max(0, ranked.length - 20), breakRow = root.querySelector('[data-team-seasons-break]');
+    breakRow.hidden = !more;
+    const breakButton = archiveElement('button', `${more} more team-seasons in the table`); breakButton.type = 'button';
+    breakButton.addEventListener('click', () => {
+      root.querySelector('[data-team-seasons-values]').open = true;
+      const table = root.querySelector('[data-team-seasons-table]'); table.focus(); table.scrollIntoView({block: 'start'});
+    });
+    breakRow.replaceChildren(breakButton);
+    root.querySelector('[data-team-seasons-chart-empty]').hidden = !!ranked.length;
+    root.querySelector('[data-team-seasons-summary]').textContent = `Table: all ${rows.length} team-seasons`;
+    const expanded = params.has('team-seasons-sort') || params.has('team-seasons-order');
+    root.querySelector('[data-team-seasons-values]').open = expanded;
+    const column = params.get('team-seasons-sort') || 'rank', order = params.get('team-seasons-order') || 'asc';
+    for (const [key, value] of [['team-seasons-sort', column], ['team-seasons-order', order]]) {
+      const input = archiveControls.elements.namedItem(key); input.value = value; input.disabled = !expanded;
+    }
+    root.querySelectorAll('[data-team-seasons-sort]').forEach(link => {
+      const active = link.dataset.teamSeasonsSort === column;
+      link.parentElement.setAttribute('aria-sort', active ? (order === 'asc' ? 'ascending' : 'descending') : 'none');
+      link.href = archiveLink(params, {view: 'team-seasons', 'team-seasons-sort': link.dataset.teamSeasonsSort, 'team-seasons-order': active && order === 'asc' ? 'desc' : 'asc'});
+    });
+    const value = row => column === 'rank' ? rank(row) : column === 'team' ? row.name : ['season', 'played'].includes(column) ? row[column] : row.values[measure][column];
+    rows.sort((a, b) => {
+      if (!!rank(a) !== !!rank(b)) return rank(a) ? -1 : 1;
+      const x = value(a), y = value(b);
+      if ((x === null) !== (y === null)) return x === null ? 1 : -1;
+      if (x !== null && x !== y) return (x < y ? -1 : 1) * (order === 'asc' ? 1 : -1);
+      return archiveTie(a, b);
+    });
+    root.querySelector('[data-team-seasons-table-caption]').textContent = `${actualLabel} per match. Expected: ${expectedLabel}. Gap: actual − expected. Tied rows share a competition rank.`;
+    const tableBody = root.querySelector('[data-team-seasons-rows]');
+    tableBody.replaceChildren(...rows.map(row => {
+      const v = row.values[measure], tr = archiveElement('tr'); tr.dataset.teamId = row.id; tr.dataset.season = row.season;
+      tr.append(archiveElement('td', rank(row) || missingLabel));
+      const th = archiveElement('th'); th.scope = 'row'; th.append(teamName(row)); tr.append(th);
+      tr.append(archiveElement('td', `${row.season}${row.active ? ` (in progress through ${row.played} matches)` : ''}`), archiveElement('td', row.played));
+      for (const key of ['actual', 'expected', 'gap']) tr.append(archiveElement('td', v[key] === null ? key === 'actual' ? 'Unavailable' : missingLabel : key === 'gap' ? signed(v[key]) : fixed(v[key])));
+      return tr;
+    }));
+
+  }
+  const changeArchive = event => {
+    const measure = archiveMeasure.value;
+    const changes = {view: 'team-seasons', 'team-seasons-measure': measure, 'team-seasons-rank-by': archiveRankBy.value};
+    // A measure change resets the basis; a penalties change owns its own value.
+    changes.penalties = measure === 'points' || event.target === archiveMeasure || archivePenalties.value === 'include' ? null : 'exclude';
+    update(changes);
+  };
+  archiveControls.addEventListener('submit', event => { event.preventDefault(); changeArchive(event); });
+  archiveMeasure.addEventListener('change', changeArchive);
+  archiveRankBy.addEventListener('change', changeArchive);
+  archivePenalties.addEventListener('change', changeArchive);
+
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
-    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
+    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'team-seasons', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
+    if (view !== 'team-seasons' && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
@@ -2074,6 +2221,7 @@
     }
     if (view === 'home-advantage') showHomeAdvantage();
     if (view === 'parity') showParity(params);
+    if (view === 'team-seasons') showTeamSeasons(params);
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     if (view === 'season-trend') showSeasonTrend(params);
@@ -2114,11 +2262,17 @@
   }
   function update(changes) {
     const url = new URL(location.href);
-    Object.entries(changes).forEach(([key, value]) => url.searchParams.set(key, value));
+    Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
     history.pushState(null, '', url);
     applyURL();
   }
   root.addEventListener('click', event => {
+    const archiveSort = event.target.closest('[data-team-seasons-sort]');
+    if (archiveSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const params = new URL(archiveSort.href).searchParams;
+      update({view: 'team-seasons', 'team-seasons-sort': params.get('team-seasons-sort'), 'team-seasons-order': params.get('team-seasons-order')});
+    }
     const paritySort = event.target.closest('[data-parity-sort]');
     if (paritySort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();

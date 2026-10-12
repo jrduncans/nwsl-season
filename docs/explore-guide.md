@@ -26,6 +26,7 @@ page, redirect to the Scoring trend.
 | | | Goal distribution | `view=distribution` |
 | | | Home advantage | `view=home-advantage` |
 | | | Parity | `view=parity` |
+| | | Team-seasons (four measures, ranked by actual, expected or gap) | `view=team-seasons` |
 | | | Scoring table | `view=table` |
 
 An omitted view opens Actual vs expected; a view-less link that carries
@@ -37,8 +38,8 @@ Every selection lives in the URL and restores through reload and Back/Forward.
 The server renders each view with GET forms, sortable header links and native
 disclosures, so everything works without JavaScript; the script switches views
 and selections in place from the same payload, without another data request.
-Blank, repeated, or unsupported parameter values return a 400 "Invalid Explore
-selection" page. Chart.js and its datalabels plugin are vendored under
+Validated view-specific parameters return a 400 "Invalid Explore selection"
+page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
 `internal/app/static/vendor`.
 
 ### Principles for every view
@@ -134,8 +135,11 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. It is a server-rendered Penalties select, last in each
-view's data-control row and never in the navigation; links and forms carry it.
+`penalties=exclude`. The exception is Team-seasons on Points: the control is
+absent, the basis is ignored, and a carried `exclude` shows the points note
+only on the Points measure.
+Otherwise it is a server-rendered Penalties select, last in each view's
+data-control row and never in the navigation; links and forms carry it.
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and
@@ -223,6 +227,94 @@ Quartiles use linear interpolation between closest ranks (`history.Quantile`,
 R and NumPy's default), and the chart receives them from the server. Points
 never change with `penalties`; that basis keeps its eligibility rule and the
 standard points note. The calculation is `history.SummarizeParity`.
+
+### Team-seasons
+
+`view=team-seasons` ranks every eligible ASA team-season since 2016 on Points,
+Goals scored, Goals allowed or Goal differential, by Actual, Expected or Gap.
+The default is actual points per match. Bars and table rows are plain content:
+there is no selection, highlighting, detail panel, Team select or Season select.
+
+The heading follows Rank by: "Points per match, since 2016" for Actual,
+"Expected points per match, since 2016" for Expected, and "Points compared with
+expected, per match, since 2016" for Gap. The same wording applies to the three
+goals measures and their non-penalty labels, including the chart's accessible
+label.
+
+A horizontal list shows the ten highest and ten lowest team-seasons. Both end
+labels always appear, including for populations of twenty or fewer, where the
+rows are split between the two ends without duplicating a team-season. Above
+twenty, a labelled "N more team-seasons in the table" break separates the ends.
+With JavaScript that break is a button that opens the table and moves focus to
+it; without JavaScript it is plain text. Chart identities show rank, then the
+logo beside the team name. The rank has a fixed-width gutter with right-aligned,
+tabular figures, so logos and names line up even for in-progress rows. The logo
+also accompanies the left-aligned, plain-text table name, using `teamName` and
+`clubLogoURL`, with decorative `alt=""`. ASA's image for that ID is shared across
+seasons, including folded clubs; no historic-logo lineage is inferred.
+
+Actual and Expected use the ranked value as the bar and the other value as a
+labelled thin tick on the same scale. The legend uses the same purple tick;
+its narrow outline leaves close bar ends visible. Gap uses one diverging bar;
+gap and goal differential have a labelled zero line. The scale starts at zero
+(or centers on zero for signed values), with round bounds; points per match
+uses 0–3. Narrow rows place identity and values together, with the bar beneath.
+Gap always means actual − expected, with positive above expected and negative
+below expected. Rank 1 is favorable-first: highest for points, goals scored
+and differential, lowest for goals allowed (including gap), matching Compare
+teams' Gap to expected. End labels name the measure, never best/worst.
+
+`history.SummarizeTeamSeasons(inputs, basis)` reuses `SummarizeScoringBasis`
+and `TeamComparisonEligible()` integrity checks. Completed seasons need no
+extra minimum. An active season enters only once **every team has played at
+least ten valid matches**, including roster teams without results. This gate
+applies in all modes. Active bars are hollow and rows say "in progress through
+N matches". Distinct ASA IDs remain separate, with names from that season's
+team list; franchise lineage is not inferred.
+
+Points per match are earned points divided by played matches; expected points
+use ASA xPoints divided by the same count. All measures use unrounded values
+for competition ranks and sorting. Ties order newest season first, then team
+name, then ID. Actual rankings require no expected data. Expected and Gap
+require complete coverage of their own metric: xPoints for Points, xG for
+goals. These are independent. Unrankable team-seasons appear last in the table
+for every sort, labelled `xPts incomplete` or `xG incomplete`; their actual
+values remain visible. The coverage note above the chart gives only the count,
+since the table names those rows. The only other notes above the chart are gap
+direction (when ranking by Gap) and the standard points note (Points with a
+carried exclusion). One short note below the chart combines the standing
+qualifications: per-match rates do not adjust for opponents or era and do not
+judge the best team, and active seasons use the ten-match rule.
+
+The table is a `<details>` disclosure, collapsed by default, whose summary is
+"Table: all N team-seasons". N counts every eligible row for the current measure
+and basis, including rows missing expected values. A sort or order parameter
+opens it, matching Parity. Columns are Rank, Team (logo and text), Season,
+Matches and the current measure's Actual, Expected and Gap. Only the column
+headers are links; sorting keeps unrankable rows last in either direction.
+
+| Parameter | Values | Default |
+|---|---|---|
+| `team-seasons-measure` | `points`, `for`, `against`, `difference` | `points` |
+| `team-seasons-rank-by` | `actual`, `expected`, `gap` | `actual` |
+| `team-seasons-sort` | `rank`, `team`, `season`, `played`, `actual`, `expected`, `gap` | `rank` |
+| `team-seasons-order` | `asc`, `desc` | `asc` |
+| `penalties` | `include`, `exclude` (goals measures only) | `include` |
+
+The sort keys refer to the current measure. Blank, repeated or unsupported
+values for these parameters return the standard 400; this view adds no change
+to existing `view` validation. Controls, basis and sorting switch in place
+from the same payload (which includes logo URLs), with no data request, and
+restore through reload and Back/Forward. Server-rendered bars, a native
+collapsed disclosure, sort links and a GET form work without JavaScript.
+
+For goals measures, `penalties=exclude` switches to non-penalty goals and npxG
+through `basisText`, including `incomplete_non_penalty_data` season eligibility.
+For Points the select is absent and penalties never change values or the
+population. A carried `exclude` is accepted, ignored and explained by the
+standard points note; that note is absent on goals measures. Changing measure
+drops stale penalties from forms and links. This exception differs from
+Parity's basis eligibility rule. The scatter remains a follow-up.
 
 **Scoring table** lists eligible seasons with matches, goals/match, xG/match,
 and goals − xG/match, sorted from unrounded values.
@@ -392,5 +484,13 @@ and the current year is active.
 | `single` | 2024 with 20 matches of one goal each and no xG |
 | `teams` | 2025 and 2026, 64 matches among the 16 real clubs; 2026 has one match without xPts and one without xG; 2024 has no fixtures |
 | `no-xg` | Like `season-trend`, but only each season's first match has xG, so no team has complete xG |
-| `team-history` | `teams` plus 2016–2023 (no 2020) with scores varying by year |
+| `team-history` | `teams` plus 2016–2023 (no 2020), 96 played matches per loaded season (12 per club), scores varying by year; 2026 adds 144 pending fixtures to complete its inventory. 144 team-seasons; missing xPoints with complete xG and the reverse, plus an active season above the ten-match gate. `TeamHistoryBelowGate` marks its last four played rounds pending to test the same scenario at eight matches per club. `TeamHistorySmall` retains only 2025, giving 16 ranked rows for both end labels without a break. The reverse coverage case is in-memory only: SQLite requires both valid xG values to retain an observation, including its xPoints |
 | `season-trend` | 2025 and 2026 as 240-match double round robins; the last eight 2026 matches are unplayed; 2024 has no fixtures |
+
+For a Team-seasons chart with twenty or fewer rows, run
+`NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams` and open
+`/nwsl-season/explore?view=team-seasons` on its printed loopback address. Its
+completed 2025 season supplies sixteen ranked rows; 2026 has only eight played
+matches per team and stays below the active-season gate. Both end labels appear,
+with no break and no duplicated team-season. Use `-no-script` to inspect the
+native disclosure and submit controls with page scripts blocked.

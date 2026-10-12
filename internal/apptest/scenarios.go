@@ -176,6 +176,12 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 		}
 		season.Data.Teams = previewTeams()
 		count := 64
+		if scenario == ScenarioTeamHistory {
+			count = 96
+			if season.Entry.Season == "2026" {
+				count = 240
+			}
+		}
 		if scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG {
 			count = 240
 		}
@@ -203,7 +209,7 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 				year := int(season.Entry.Season[3] - '0')
 				game.HomeScore.Int64, game.AwayScore.Int64 = int64((j+year)%5), int64((j/3+year)%3)
 			}
-			if (scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG) && season.Entry.Season == "2026" && j >= count-8 {
+			if season.Entry.Season == "2026" && (((scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG) && j >= count-8) || (scenario == ScenarioTeamHistory && j >= 96)) {
 				game.Status = "PreMatch"
 				game.HomeScore, game.AwayScore = sql.NullInt64{}, sql.NullInt64{}
 				continue
@@ -239,4 +245,50 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 		}
 	}
 	return archive
+}
+
+// TeamHistoryBelowGate is the team-history scenario at an earlier checkpoint:
+// every active team has eight results, with its full fixture inventory retained.
+func TeamHistoryBelowGate(t testing.TB) []cache.HistoricalSeason {
+	t.Helper()
+	archive := Scenario(t, ScenarioTeamHistory)
+	for i := range archive {
+		season := &archive[i]
+		if season.Entry.Season != "2026" {
+			continue
+		}
+		for j := 64; j < len(season.Data.Games); j++ {
+			game := &season.Data.Games[j]
+			game.Status = "PreMatch"
+			game.HomeScore, game.AwayScore = sql.NullInt64{}, sql.NullInt64{}
+		}
+		played := map[string]bool{}
+		for _, game := range season.Data.Games {
+			if game.Status == standings.CompletedStatus {
+				played[game.ASAID] = true
+			}
+		}
+		xg := season.Data.XGoals[:0]
+		for _, value := range season.Data.XGoals {
+			if played[value.GameID] {
+				xg = append(xg, value)
+			}
+		}
+		season.Data.XGoals = xg
+	}
+	return archive
+}
+
+// TeamHistorySmall keeps one completed season from team-history, for a
+// sixteen-row chart with both end labels and no omitted middle population.
+func TeamHistorySmall(t testing.TB) []cache.HistoricalSeason {
+	t.Helper()
+	archive := Scenario(t, ScenarioTeamHistory)
+	for _, season := range archive {
+		if season.Entry.Season == "2025" {
+			return []cache.HistoricalSeason{season}
+		}
+	}
+	t.Fatal("team-history has no completed 2025 season")
+	return nil
 }

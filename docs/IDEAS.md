@@ -7,16 +7,12 @@ Explore ideas follow the principles in the
 ## Explore: team-seasons across the archive
 
 Explore compares teams within one season (Compare teams) and one team across
-seasons (Season by season), but never every team-season in the archive at once.
+seasons (Season by season), and Team-seasons ranks every eligible team-season
+across the archive.
 
-- **Results vs expected across history.** A scatter of xPPG against PPG with
-  every team-season as a mark, an equality line, and the selected team-season
-  highlighted. A ranked view of historical extremes (PPG, xGD/G) could sit
-  beside it, with score-only extremes still available without xG.
-- **Over-performance rankings.** Diverging bars ranking team-seasons by points
-  minus xPoints per match. Selecting one shows points−xPts, goals−xG and
-  xGA−GA separately, which are not additive. Gap to expected already does this
-  within one season.
+- **Results vs expected across history.** A scatter of actual against expected
+  for the chosen measure, with every team-season as a mark and an equality
+  line. Clicking a dot would identify its team, season and values in one line.
 - **Trajectories against history.** Match number on the x-axis (not date), with
   the historical median and middle-50% band through the same match count, and
   at most two comparators (the record pace and the closest historical pace).
