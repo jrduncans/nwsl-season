@@ -172,7 +172,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	page.exploreHeadToHeadView, err = exploreHeadToHead(r.URL.Query(), allSummaries, archive, officialProfile.HistoryTeam, officialProfile.HistoryTeamOptions)
+	page.exploreHeadToHeadView, err = exploreHeadToHead(r.URL.Query(), allSummaries, npSummaries, archive, officialProfile.HistoryTeam, officialProfile.HistoryTeamOptions)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return

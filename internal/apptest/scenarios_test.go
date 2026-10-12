@@ -22,7 +22,7 @@ func TestTeamHistoryKickoffsStayInSeason(t *testing.T) {
 			}
 		}
 	}
-	pair, err := history.SummarizeHeadToHead(archive, "Pk5LeeNqOW", "7vQ7BBzqD1")
+	pair, err := history.SummarizeHeadToHead(archive, "Pk5LeeNqOW", "7vQ7BBzqD1", history.AllShots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,5 +31,23 @@ func TestTeamHistoryKickoffsStayInSeason(t *testing.T) {
 	}
 	if pair.Meetings[0].Season != "2016" || pair.Meetings[len(pair.Meetings)-1].Season != "2026" {
 		t.Fatal("chronological meetings must start in 2016 and end in 2026")
+	}
+}
+
+func TestHeadToHeadScenarioHasMixedCoverage(t *testing.T) {
+	t.Parallel()
+	archive := apptest.Scenario(t, apptest.ScenarioTeams)
+	pair, err := history.SummarizeHeadToHead(archive, "315VnJ759x", "4JMAk47qKg", history.AllShots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingXG, missingPoints, complete := false, false, false
+	for _, m := range pair.Meetings {
+		missingXG = missingXG || m.XGFor == nil && m.XPoints != nil
+		missingPoints = missingPoints || m.XGFor != nil && m.XPoints == nil
+		complete = complete || m.XGFor != nil && m.XPoints != nil
+	}
+	if !missingXG || !missingPoints || !complete {
+		t.Fatal("teams must seed a pairing with independent missing expected observations and complete meetings")
 	}
 }

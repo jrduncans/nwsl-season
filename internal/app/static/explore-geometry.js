@@ -116,7 +116,7 @@
   // One meeting per slot, with a symmetric integer goal axis. No server copy:
   // without JavaScript the chart is a chronological, accessible results list.
   function headToHeadGeometry(margins, width, height = 260) {
-    const largest = Math.max(1, ...margins.map(Math.abs));
+    const largest = Math.max(1, ...margins.filter(v => v !== null).map(Math.abs));
     const magnitude = 10 ** Math.floor(Math.log10(largest));
     const extent = [1, 2, 5, 10].map(n => n * magnitude).find(n => n >= largest);
     const left = 34, right = Math.max(left, width - 6), top = 20, bottom = height - 44;
@@ -129,6 +129,16 @@
       center: left + slot * (index + .5),
     }));
     return {extent, left, right, top, bottom, zero, columns};
+  }
+  // Missing values retain their meeting slot. Each view requires only its
+  // own inputs: goals, xG, or both for the comparison.
+  function headToHeadValue(goals, xg, series) {
+    const expected = xg.some(v => v === null) ? null : xg[0] - xg[1];
+    if (series === 'expected') return expected;
+    if (goals.some(v => v === null)) return null;
+    const margin = goals[0] - goals[1];
+    if (series === 'actual') return margin;
+    return expected === null ? null : margin - expected;
   }
   // Nearest column across the full plot height; ties choose the earlier meeting.
   function headToHeadHit(columns, area, point) {
@@ -160,5 +170,5 @@
     }
     return [...labels, last];
   }
-  window.NWSLGeometry = Object.freeze({headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
+  window.NWSLGeometry = Object.freeze({headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

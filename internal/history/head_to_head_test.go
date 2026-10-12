@@ -24,7 +24,7 @@ func TestHeadToHeadOfficialRecordSanity(t *testing.T) {
 		games = append(games, game)
 	}
 	input := h2hTestSeason("2026", games, nil, availableReadiness(cache.SourceScopeActive, cache.InventoryCompletenessUnknown))
-	summary, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away")
+	summary, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away", AllShots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestHeadToHeadOfficialRecordSanity(t *testing.T) {
 	if len(summary.Meetings) != 26 || !summary.Meetings[0].Active {
 		t.Fatal("active season facts must be retained")
 	}
-	reverse, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "away", "home")
+	reverse, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "away", "home", AllShots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestHeadToHeadGapsOrderingAndOpponents(t *testing.T) {
 		}
 		inputs = append([]cache.HistoricalSeason{input}, inputs...)
 	}
-	summary, err := SummarizeHeadToHead(inputs, "home", "away")
+	summary, err := SummarizeHeadToHead(inputs, "home", "away", AllShots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestHeadToHeadGapsOrderingAndOpponents(t *testing.T) {
 	if len(opponents) != 1 || opponents[0] != (HeadToHeadOpponent{"away", "Newest opponent", 4}) {
 		t.Fatalf("opponents: %+v", opponents)
 	}
-	empty, err := SummarizeHeadToHead(inputs, "home", "distinct-ASA-ID")
+	empty, err := SummarizeHeadToHead(inputs, "home", "distinct-ASA-ID", AllShots)
 	if err != nil || empty.All.Played != 0 {
 		t.Fatal("no franchise inference")
 	}
@@ -91,7 +91,7 @@ func TestHeadToHeadOneMeetingAndIntegrity(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := h2hTestSeason("2026", tc.games, nil, availableReadiness(cache.SourceScopeActive, cache.InventoryCompletenessUnknown))
-			summary, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away")
+			summary, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away", AllShots)
 			if err != nil || summary.All.Played != tc.want {
 				t.Fatalf("got %+v, %v", summary, err)
 			}
@@ -104,7 +104,7 @@ func TestHeadToHeadOneMeetingAndIntegrity(t *testing.T) {
 	c := testGame("c", fixtures.CompletedStatus, 1, 0)
 	c.KickoffUTC = "2026-05-01T19:30:00Z"
 	input := h2hTestSeason("2026", []cache.Game{a, b, c}, nil, availableReadiness(cache.SourceScopeActive, cache.InventoryCompletenessUnknown))
-	summary, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away")
+	summary, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away", AllShots)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,4 +119,90 @@ func h2hTestSeason(year string, games []cache.Game, xg []cache.GameXG, readiness
 		games[i].Season = year
 	}
 	return testSeason(year, games, xg, readiness)
+}
+
+func TestHeadToHeadExpectedCoverage(t *testing.T) {
+	t.Parallel()
+	games := []cache.Game{testGame("a", fixtures.CompletedStatus, 2, 1), testGame("b", fixtures.CompletedStatus, 0, 0)}
+	for _, tc := range []struct {
+		name                     string
+		missingXG, missingPoints bool
+	}{
+		{"complete", false, false}, {"only xG missing", true, false}, {"only xPoints missing", false, true}, {"mixed", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			xg := []cache.GameXG{testXG(games[0], 1.5, .5, true, 2.1, .4), testXG(games[1], 0, 0, true, 1, 1)}
+			if tc.missingXG {
+				xg[0].HomeXG.Valid = false
+			}
+			if tc.missingPoints {
+				xg[1].HomeXPoints.Valid = false
+			}
+			input := h2hTestSeason("2026", games, xg, availableReadiness(cache.SourceScopeActive, cache.InventoryCompletenessUnknown))
+			got, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away", AllShots)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e := got.AllExpected
+			if got.All.Points != 4 || got.All.GoalsFor != 2 || e.GoalsCovered != 2 || e.GoalsFor != 2 || len(got.Meetings) != 2 {
+				t.Fatalf("actual: %+v", got)
+			}
+			if (e.XGFor == nil) != tc.missingXG || (e.XPoints == nil) != tc.missingPoints {
+				t.Fatalf("independent coverage: %+v", e)
+			}
+			if !tc.missingXG {
+				assertFloat(t, e.XGFor, 1.5)
+				assertFloat(t, e.XGAgainst, .5)
+			}
+			if !tc.missingPoints {
+				assertFloat(t, e.XPoints, 3.1)
+			}
+			if got.Meetings[1].XGFor == nil || *got.Meetings[1].XGFor != 0 {
+				t.Fatal("zero per-meeting xG must survive incomplete totals")
+			}
+		})
+	}
+}
+
+func TestHeadToHeadNonPenaltyKeepsMeetingsAndPoints(t *testing.T) {
+	t.Parallel()
+	games := []cache.Game{testGame("a", fixtures.CompletedStatus, 2, 1), testGame("b", fixtures.CompletedStatus, 0, 0)}
+	xg := []cache.GameXG{withSplit(testXG(games[0], 1.5, .5, true, 2.1, .4), cache.PenaltySplit{HomeGoals: 1, HomeXG: .76, HomeShots: 1}), testXG(games[1], 0, 0, true, 1, 1)}
+	input := h2hTestSeason("2026", games, xg, availableReadiness(cache.SourceScopeActive, cache.InventoryCompletenessUnknown))
+	archive := []cache.HistoricalSeason{input}
+	all, err := SummarizeHeadToHead(archive, "home", "away", AllShots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	np, err := SummarizeHeadToHead(archive, "home", "away", NonPenalty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.All != np.All || len(np.Meetings) != len(all.Meetings) {
+		t.Fatal("basis changed official record or meeting list")
+	}
+	for i, m := range np.Meetings {
+		if m.ID != all.Meetings[i].ID || m.Points != all.Meetings[i].Points {
+			t.Fatal("basis changed meeting")
+		}
+	}
+	if np.AllExpected.GoalsCovered != 1 || np.AllExpected.XGCovered != 1 || np.AllExpected.GoalsFor != 1 || np.AllExpected.GoalsAgainst != 1 || np.Meetings[1].GoalsCovered || np.Meetings[1].XGFor != nil {
+		t.Fatalf("split coverage: %+v", np)
+	}
+	assertFloat(t, np.AllExpected.XGFor, .74)
+	assertFloat(t, np.AllExpected.XPoints, 3.1)
+	reverse, err := SummarizeHeadToHead(archive, "away", "home", NonPenalty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFloat(t, reverse.AllExpected.XGFor, .5)
+	assertFloat(t, reverse.AllExpected.XGAgainst, .74)
+	assertFloat(t, reverse.AllExpected.XPoints, 1.4)
+	// With both splits the comparison covers both meetings; no global gate.
+	xg[1].Penalties = &cache.PenaltySplit{}
+	input.Data.XGoals = xg
+	complete, err := SummarizeHeadToHead([]cache.HistoricalSeason{input}, "home", "away", NonPenalty)
+	if err != nil || complete.AllExpected.GoalsCovered != 2 {
+		t.Fatalf("complete split: %+v %v", complete, err)
+	}
 }
