@@ -113,5 +113,52 @@
     return {zero, left: Math.min(zero, end), width: Math.abs(end - zero), marker: companion === null ? null : position(companion)};
   }
 
-  window.NWSLGeometry = Object.freeze({rankingDomain, rankingBar, gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
+  // One meeting per slot, with a symmetric integer goal axis. No server copy:
+  // without JavaScript the chart is a chronological, accessible results list.
+  function headToHeadGeometry(margins, width, height = 260) {
+    const largest = Math.max(1, ...margins.map(Math.abs));
+    const magnitude = 10 ** Math.floor(Math.log10(largest));
+    const extent = [1, 2, 5, 10].map(n => n * magnitude).find(n => n >= largest);
+    const left = 34, right = Math.max(left, width - 6), top = 20, bottom = height - 44;
+    const zero = (top + bottom) / 2, scale = (bottom - top) / (2 * extent);
+    const slot = (right - left) / Math.max(1, margins.length);
+    const columns = margins.map((margin, index) => ({
+      x: left + slot * (index + .15), width: slot * .7,
+      y: margin > 0 ? zero - margin * scale : zero,
+      height: Math.abs(margin) * scale,
+      center: left + slot * (index + .5),
+    }));
+    return {extent, left, right, top, bottom, zero, columns};
+  }
+  // Nearest column across the full plot height; ties choose the earlier meeting.
+  function headToHeadHit(columns, area, point) {
+    if (point.x < area.left || point.x > area.right || point.y < area.top || point.y > area.bottom || !columns.length) return null;
+    let nearest = 0;
+    columns.forEach((column, index) => { if (Math.abs(column.center - point.x) < Math.abs(columns[nearest].center - point.x)) nearest = index; });
+    return nearest;
+  }
+  // Labels stay at the first meeting of each season. Skip labels that cannot
+  // fit, rather than shifting them to a different meeting. Widths are measured
+  // by the caller in its actual font; no browser or Go geometry copy.
+  function headToHeadLabels(candidates, area, gap = 8) {
+    if (!candidates.length) return [];
+    // Edge years define the scope. Move them inside the plot and reserve their
+    // space before admitting intermediate years under their first meeting.
+    const fit = label => ({...label, center: Math.max(area.left + label.width / 2, Math.min(area.right - label.width / 2, label.center))});
+    const first = fit(candidates[0]);
+    if (candidates.length === 1) return [first];
+    const last = fit(candidates.at(-1));
+    // A one-meeting first season can put both edge years in adjacent slots.
+    // Keep both readable even then, moving their labels apart inside the plot.
+    first.center = Math.min(first.center, area.right - last.width - gap - first.width / 2);
+    last.center = Math.max(last.center, first.center + first.width / 2 + gap + last.width / 2);
+    let end = first.center + first.width / 2;
+    const limit = last.center - last.width / 2 - gap, labels = [first];
+    for (const label of candidates.slice(1, -1)) {
+      const left = label.center - label.width / 2, right = label.center + label.width / 2;
+      if (left >= end + gap && right <= limit) { labels.push(label); end = right; }
+    }
+    return [...labels, last];
+  }
+  window.NWSLGeometry = Object.freeze({headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

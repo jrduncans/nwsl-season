@@ -591,3 +591,32 @@ th:nth-child(2) { text-align: left; }
  .explore-archive-numbers small { font-size: .625rem; line-height: 1.2; }
  .explore-archive-axis { margin: 0 .25rem; font-size: .7rem; }
 }
+
+/* Venue is encoded by both color and pattern; result comes from direction. */
+.explore-h2h-record { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; max-width: 40rem; margin: 1rem 0; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.explore-h2h-record[hidden] { display: none; }
+.explore-h2h-tile { min-width: 0; padding: .65rem .75rem; background: var(--panel); border: 1px solid var(--line); border-radius: .35rem; white-space: nowrap; }
+.explore-h2h-tile-label { display: flex; align-items: center; gap: .35rem; font-weight: 700; }
+.explore-h2h-wdl { display: block; margin: .2rem 0; font-size: 1.6rem; }
+.explore-h2h-tile-label i { flex: 0 0 1rem; height: .8rem; background: #1F6FA8; }
+.explore-h2h-tile-label [data-h2h-encoding="away"] { background: repeating-linear-gradient(45deg, #CF7424 0 1.5px, var(--paper) 1.5px 3.4px); border: 1px solid #CF7424; }
+.explore-h2h-chart { width: 100%; min-width: 0; height: 280px; position: relative; }
+.explore-h2h-direction { color: var(--muted); font-size: .75rem; white-space: nowrap; }
+[data-panel="head-to-head"] .explore-heading { margin-top: 1.5rem; }
+@media (max-width: 450px) {
+ .explore-h2h-record { font-size: .7rem; }
+ .explore-h2h-tile { padding: .5rem .25rem; }
+ .explore-h2h-wdl { font-size: 1.25rem; }
+ .explore-h2h-direction { font-size: .7rem; }
+}
+@media (max-width: 360px) {
+ .explore-h2h-tile { padding-inline: .125rem; }
+ .explore-h2h-tile > div:not(.explore-h2h-tile-label) { font-size: .625rem; }
+ .explore-h2h-wdl { font-size: 1.125rem; }
+}
+.explore-h2h-table td:nth-child(-n+4), .explore-h2h-table th:nth-child(-n+4), .explore-h2h-table td:nth-child(6), .explore-h2h-table th:nth-child(6) { text-align: left; }
+[data-h2h-title] { display: flex; align-items: center; flex-wrap: wrap; gap: .35em; }
+[data-h2h-controls] select { max-width: 100%; }
+
+.explore-h2h-controls { display: flex; flex-wrap: wrap; gap: .75rem; }
+.explore-h2h-controls form { min-width: 0; max-width: 100%; }

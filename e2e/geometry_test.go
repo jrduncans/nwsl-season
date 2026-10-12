@@ -60,6 +60,8 @@ func TestGeometry(t *testing.T) {
 		{"ExposesOneGlobal", testGeometryExposesOneGlobal},
 		{"GapExtent", testGeometryGapExtent},
 		{"RankingBars", testGeometryRankingBars},
+		{"HeadToHead", testGeometryHeadToHead},
+		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
 		{"PlotDomain", testGeometryPlotDomain},
 		{"PointRadius", testGeometryPointRadius},
 		{"LogoPlacement", testGeometryLogoPlacement},
@@ -73,7 +75,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "stripRows"}
+	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "stripRows"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -454,5 +456,112 @@ func testGeometryRankingBars(t *testing.T, page playwright.Page) {
 		if !near(got.Zero, tc.zero) || !near(got.Left, tc.left) || !near(got.Width, tc.width) || !near(got.Marker, tc.marker) {
 			t.Fatalf("geometry %+v: %+v", tc, got)
 		}
+	}
+}
+
+func testGeometryHeadToHead(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		margins []int
+		extent  float64
+	}{
+		{[]int{}, 1}, {[]int{0}, 1}, {[]int{1}, 1}, {[]int{-3, 2, 0}, 5}, {[]int{10}, 10}, {[]int{11}, 20},
+	} {
+		var got struct {
+			Extent  float64
+			Columns []struct{ X, Width, Y, Height, Center float64 }
+			Zero    float64
+		}
+		callGeometry(t, page, "headToHeadGeometry", []any{tc.margins, 350}, &got)
+		if got.Extent != tc.extent || len(got.Columns) != len(tc.margins) {
+			t.Fatalf("geometry: %+v", got)
+		}
+		for i, c := range got.Columns {
+			if c.X < 34 || c.X+c.Width > 344 || c.Width <= 0 || !near(c.Height, math.Abs(float64(tc.margins[i]))*98/tc.extent) {
+				t.Fatalf("column: %+v", c)
+			}
+			if tc.margins[i] <= 0 && c.Y != got.Zero || tc.margins[i] > 0 && !near(c.Y+c.Height, got.Zero) {
+				t.Fatal("orientation")
+			}
+		}
+	}
+	for _, n := range []int{1, 26, 40} {
+		var got struct{ Columns []struct{ X, Width float64 } }
+		callGeometry(t, page, "headToHeadGeometry", []any{make([]int, n), 350}, &got)
+		for i, c := range got.Columns {
+			if c.Width <= 0 || c.X+c.Width > 344 || i > 0 && c.X <= got.Columns[i-1].X+got.Columns[i-1].Width {
+				t.Fatalf("%d columns must fit separately: %+v", n, got)
+			}
+		}
+	}
+}
+
+func testGeometryHeadToHeadHitAndLabels(t *testing.T, page playwright.Page) {
+	columns := []map[string]float64{{"center": 10}, {"center": 20}, {"center": 30}}
+	area := pixelArea{Left: 0, Right: 40, Top: 0, Bottom: 200}
+	for _, tc := range []struct {
+		point pixel
+		want  *int
+	}{
+		{pixel{0, 0}, playwright.Int(0)}, {pixel{40, 200}, playwright.Int(2)}, {pixel{15, 100}, playwright.Int(0)}, {pixel{16, 199}, playwright.Int(1)}, {pixel{25, 1}, playwright.Int(1)}, {pixel{-1, 100}, nil}, {pixel{10, 201}, nil},
+	} {
+		var got *int
+		callGeometry(t, page, "headToHeadHit", []any{columns, area, tc.point}, &got)
+		if (got == nil) != (tc.want == nil) || got != nil && *got != *tc.want {
+			t.Fatalf("hit %+v = %v, want %v", tc.point, got, tc.want)
+		}
+	}
+	var empty *int
+	callGeometry(t, page, "headToHeadHit", []any{[]any{}, area, pixel{20, 100}}, &empty)
+	if empty != nil {
+		t.Fatal("empty hit")
+	}
+	for _, width := range []float64{350, 1000} {
+		// First meetings 2022–2026 have only two slots between them at 390px.
+		candidates := []map[string]any{}
+		for i, center := range []float64{40, 100, 150, 200, 223, 246, 269, 292} {
+			candidates = append(candidates, map[string]any{"text": string(rune('A' + i)), "center": center * width / 350, "width": 28})
+		}
+		var labels []struct {
+			Text          string
+			Center, Width float64
+		}
+		callGeometry(t, page, "headToHeadLabels", []any{candidates, pixelArea{Left: 34, Right: width - 6}, 8}, &labels)
+		if len(labels) == 0 || width == 350 && len(labels) >= len(candidates) {
+			t.Fatal("must retain readable labels and skip collisions")
+		}
+		if labels[0].Text != "A" || labels[len(labels)-1].Text != "H" {
+			t.Fatalf("must retain edge years before intermediate labels: %+v", labels)
+		}
+		for i, label := range labels {
+			if label.Center-label.Width/2 < 34 || label.Center+label.Width/2 > width-6 || i > 0 && label.Center-label.Width/2 < labels[i-1].Center+labels[i-1].Width/2+8 {
+				t.Fatalf("overlap: %+v", labels)
+			}
+		}
+	}
+	for _, tc := range []struct {
+		name       string
+		candidates []map[string]any
+		want       []string
+	}{
+		{"empty", []map[string]any{}, nil},
+		{"one year", []map[string]any{{"text": "2026", "center": 5, "width": 28}}, []string{"2026"}},
+		{"adjacent edge years", []map[string]any{{"text": "2016", "center": 5, "width": 28}, {"text": "2026", "center": 15, "width": 28}}, []string{"2016", "2026"}},
+		{"edge years before middle", []map[string]any{{"text": "2016", "center": 5, "width": 28}, {"text": "2025", "center": 77, "width": 28}, {"text": "2026", "center": 95, "width": 28}}, []string{"2016", "2026"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var labels []struct {
+				Text          string
+				Center, Width float64
+			}
+			callGeometry(t, page, "headToHeadLabels", []any{tc.candidates, pixelArea{Left: 0, Right: 100}, 8}, &labels)
+			if len(labels) != len(tc.want) {
+				t.Fatalf("labels %+v, want %v", labels, tc.want)
+			}
+			for i, label := range labels {
+				if label.Text != tc.want[i] || label.Center-label.Width/2 < 0 || label.Center+label.Width/2 > 100 || i > 0 && label.Center-label.Width/2 < labels[i-1].Center+labels[i-1].Width/2+8 {
+					t.Fatalf("edge label: %+v", label)
+				}
+			}
+		})
 	}
 }
