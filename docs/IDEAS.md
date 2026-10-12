@@ -28,11 +28,8 @@ seasons (Season by season), but never every team-season in the archive at once.
 
 ## Explore: league trends
 
-Scoring trend and Goal distribution exist. Not built:
+Scoring trend, Goal distribution and Home advantage exist. Not built:
 
-- **Home advantage over time**: home-minus-away goals, xG and points per match
-  as aligned small multiples with a zero line. Venue summaries may already hold
-  the inputs.
 - **Parity over time**: standard deviation of team PPG (headline), top-to-bottom
   PPG gap, and xGD/G interquartile range. Default to completed seasons, because
   an active season's spread reflects fewer matches.

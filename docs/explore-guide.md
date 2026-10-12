@@ -24,6 +24,7 @@ page, redirect to the Scoring trend.
 | | | Season by season | `view=team-history` |
 | League trends | League, across seasons | Scoring trend | `view=trend` |
 | | | Goal distribution | `view=distribution` |
+| | | Home advantage | `view=home-advantage` |
 | | | Scoring table | `view=table` |
 
 An omitted view opens Actual vs expected; a view-less link that carries
@@ -165,6 +166,27 @@ stacked bar per season; `distribution-bin=0|1|2|3|4` instead plots one bin's
 share by season on a shared percentage axis. A collapsed values table gives
 counts and one-decimal shares, sorted by exact share with newest season first
 on ties.
+
+**Home advantage** plots, per eligible season, how much better home sides did
+than away sides per played match: goals against xG and points against xPts, as
+two small multiples that share the season axis. Each mark is home minus away,
+so above the labeled zero line the home side did better. There are no dual
+axes, and missing calendar years, including 2020, are gaps. Each panel's
+expected mark needs complete coverage of its own metric (xG for goals, xPoints
+for points), so one can be missing while the other and the actual values remain;
+a note names the seasons without each. An eligible active season is plotted and
+noted as in progress through N matches. The table lists season, matches,
+home-minus-away goals, xG, points and xPts per match, and the home win, draw and
+loss share, sorted from unrounded values (`home-sort=season|matches|goals|xg|points|xpoints|results`,
+`home-order=asc|desc`, default season descending, with unavailable values last). `penalties=exclude` switches the goals panel to
+non-penalty goals against npxG; points and xPts never change and carry the
+standard points note. Eligibility is the Scoring trend's, including the
+non-penalty coverage rule. The calculation is `history.SummarizeHomeAdvantage`,
+which reads the scoring summaries, not `venue_summaries` (those cover only the
+seasons Forecast Lab needs and have no xPoints). "Home" is ASA's home
+designation: ASA has no neutral-site flag, so alternate-venue and neutral
+matches count as home matches. The view describes a home-minus-away gap, not its
+cause.
 
 **Scoring table** lists eligible seasons with matches, goals/match, xG/match,
 and goals − xG/match, sorted from unrounded values.
@@ -329,7 +351,7 @@ and the current year is active.
 | Scenario | Data |
 |---|---|
 | `default` | 2018, 2019, 2021, 2022 with 20 matches each; xG complete for 2018 and 2021, 19 of 20 for 2019, none for 2022 |
-| `overview` | 2016–2026 (no 2020), 20 matches each covering all five goal bins, full xG |
+| `overview` | 2016–2026 (no 2020), 20 matches each covering all five goal bins, a varying home edge, full xG and xPts |
 | `empty` | 2024 with 19 matches and no xG, below the 20-match minimum |
 | `single` | 2024 with 20 matches of one goal each and no xG |
 | `teams` | 2025 and 2026, 64 matches among the 16 real clubs; 2026 has one match without xPts and one without xG; 2024 has no fixtures |

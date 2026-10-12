@@ -327,6 +327,7 @@ var exploreTabs = []struct{ group, tab, query string }{
 	{"Team profile", "Season by season", "view=team-history"},
 	{"League trends", "Scoring trend", "view=trend"},
 	{"League trends", "Goal distribution", "view=distribution"},
+	{"League trends", "Home advantage", "view=home-advantage"},
 	{"League trends", "Scoring table", "view=table"},
 }
 
@@ -1627,6 +1628,8 @@ func TestExploreChartsInspectWithTheKeyboard(t *testing.T) {
 	page := explorePage(t, base, Desktop, "explore?view=trend")
 	for _, chart := range []struct{ name, path, canvas, text string }{
 		{"scoring trend", "explore?view=trend", `[data-chart="trend"]`, "per match"},
+		{"home advantage goals", "explore?view=home-advantage", `[data-chart="home-goals"]`, "home minus away"},
+		{"home advantage points", "explore?view=home-advantage", `[data-chart="home-points"]`, "home minus away"},
 		{"actual vs expected", "explore?view=teams&display=chart&season=2025", `[data-chart="teams"]`, "played"},
 		{"gap to expected", "explore?view=teams&display=gap&season=2025", `[data-chart="team-gap"]`, "Gap:"},
 		{"match by match", "explore?view=season-trend&season=2025", `[data-chart="season-trend"]`, ""},
@@ -1857,4 +1860,92 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 			t.Errorf("match values table rows: %v", err)
 		}
 	})
+}
+
+// homeAdvantageSeasons returns the Season column of the Home advantage table.
+func homeAdvantageSeasons(t *testing.T, page playwright.Page) []string {
+	t.Helper()
+	var seasons []string
+	evalJSON(t, page, `() => [...document.querySelectorAll('[data-home-rows] tr')].map((row) => row.cells[0].textContent.trim())`, nil, &seasons)
+	return seasons
+}
+
+// TestExploreHomeAdvantageShowsAlignedPanelsAndSortsInPlace checks the two
+// small multiples against the table, the zero line, the gap for 2020, and the
+// table's in-place sorting with Back and Forward.
+func TestExploreHomeAdvantageShowsAlignedPanelsAndSortsInPlace(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioOverview)
+	page := explorePage(t, base, Desktop, "explore?view=home-advantage")
+
+	var state struct {
+		Labels []string
+		Panels map[string]struct{ Min, Max float64 }
+		Data   map[string][][]*float64
+		Series map[string][]string
+	}
+	evalJSON(t, page, `() => {
+		const state = {labels: null, panels: {}, data: {}, series: {}};
+		for (const name of ['home-goals', 'home-points']) {
+			const chart = Chart.getChart(document.querySelector('[data-chart="' + name + '"]'));
+			state.labels ??= chart.data.labels;
+			if (JSON.stringify(state.labels) !== JSON.stringify(chart.data.labels)) throw new Error('panels do not share an x axis');
+			state.panels[name] = {min: chart.scales.y.min, max: chart.scales.y.max};
+			state.data[name] = chart.data.datasets.map((dataset) => dataset.data);
+			state.series[name] = chart.data.datasets.map((dataset) => dataset.label);
+		}
+		return {Labels: state.labels, Panels: state.panels, Data: state.data, Series: state.series};
+	}`, nil, &state)
+	// The seeded cache derives 2026's inventory from the catalog, which these 20
+	// matches do not meet, so the active season is not plotted here; the Go
+	// tests cover it.
+	if len(state.Labels) != 10 || state.Labels[0] != "2016" || state.Labels[9] != "2025" {
+		t.Fatalf("shared x axis = %v, want every year from 2016 to 2025", state.Labels)
+	}
+	for name, panel := range state.Panels {
+		if panel.Min > 0 || panel.Max < 0 {
+			t.Errorf("%s axis runs %v to %v, want the zero line inside it", name, panel.Min, panel.Max)
+		}
+		// 2020 has no season, so each series has a gap there and nowhere else.
+		for index, series := range state.Data[name] {
+			for position, value := range series {
+				if (state.Labels[position] == "2020") != (value == nil) {
+					t.Errorf("%s series %d at %s = %v, want a gap only in 2020", name, index, state.Labels[position], value)
+				}
+			}
+		}
+	}
+	if fmt.Sprint(state.Series["home-goals"]) != "[Goals xG]" || fmt.Sprint(state.Series["home-points"]) != "[Points xPts]" {
+		t.Errorf("series = %v", state.Series)
+	}
+	if rows := homeAdvantageSeasons(t, page); len(rows) != 9 || rows[0] != "2025" || rows[8] != "2016" {
+		t.Errorf("table seasons = %v, want nine seasons, newest first", rows)
+	}
+
+	defer expectInPlace(t, page, "sorting Home advantage")()
+	column := func(index int) []string {
+		var cells []string
+		evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-home-rows] tr')].map((row) => row.cells[index].textContent.trim())`, index, &cells)
+		return cells
+	}
+	if err := page.Locator(`details[data-home-values] summary`).Click(); err != nil {
+		t.Fatalf("open values: %v", err)
+	}
+	for _, descending := range []bool{true, false} {
+		if err := page.Locator(`[data-home-sort="goals"]`).Click(); err != nil {
+			t.Fatalf("click Goals header: %v", err)
+		}
+		assertSorted(t, "goals gap", mustNumbers(t, column(2)), descending)
+	}
+	if got := queryOf(t, page); got.Get("home-sort") != "goals" || got.Get("home-order") != "asc" {
+		t.Errorf("URL after two clicks = %v, want home-sort=goals&home-order=asc", got)
+	}
+	if _, err := page.GoBack(); err != nil {
+		t.Fatalf("back: %v", err)
+	}
+	assertSorted(t, "goals gap after Back", mustNumbers(t, column(2)), true)
+	if _, err := page.GoForward(); err != nil {
+		t.Fatalf("forward: %v", err)
+	}
+	assertSorted(t, "goals gap after Forward", mustNumbers(t, column(2)), false)
 }

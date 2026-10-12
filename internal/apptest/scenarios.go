@@ -52,10 +52,19 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 			for j := range archive[i].Data.Games {
 				game := &archive[i].Data.Games[j]
 				// Include all five bins while varying each season deterministically.
-				total := int64((j + int(archive[i].Entry.Season[len(archive[i].Entry.Season)-1])) % 6)
-				game.HomeScore.Int64, game.AwayScore.Int64 = total/2, total-total/2
+				digit := int(archive[i].Entry.Season[len(archive[i].Entry.Season)-1])
+				total := int64((j + digit) % 6)
+				// An odd total goes to the home side in most matches, and to the
+				// away side in the rest, so each season has a different home edge.
+				home, away := total/2, total-total/2
+				if total%2 == 1 && (j/2+digit)%3 != 0 {
+					home, away = away, home
+				}
+				game.HomeScore.Int64, game.AwayScore.Int64 = home, away
 				archive[i].Data.XGoals[j].HomeXG.Float64 = 1.2 + float64(j%3)*0.1
 				archive[i].Data.XGoals[j].AwayXG.Float64 = 1.1
+				archive[i].Data.XGoals[j].HomeXPoints = sql.NullFloat64{Float64: 1.4 + float64(j%3)*0.1, Valid: true}
+				archive[i].Data.XGoals[j].AwayXPoints = sql.NullFloat64{Float64: 1.1, Valid: true}
 			}
 		}
 	case ScenarioEmpty:
