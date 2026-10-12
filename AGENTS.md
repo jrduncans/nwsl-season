@@ -19,7 +19,12 @@ Page requests read only the local SQLite cache; only the scheduler and
 
 Pitchfork already runs the primary checkout's server in watch mode at
 <https://nwsl.localhost:7777>; it restarts on edits, so never start another
-there. In a linked worktree, run `pitchfork start server`: it serves a snapshot
+there. The server restarts on every edit and can be briefly unreachable after
+one. If it doesn't answer, wait and retry for up to about 30 seconds, then run
+`pitchfork status server` and `pitchfork logs server --tail`: a failed build
+from your own edit is the usual cause, and it is yours to fix. Use
+`cmd/preview` only if Pitchfork stays down for a reason unrelated to your
+edits, and say so in your report. In a linked worktree, run `pitchfork start server`: it serves a snapshot
 of the primary cache with the scheduler off, and `pitchfork status server`
 prints its URL. Never start a server with the scheduler on, run `cmd/sync`, or
 run `make backfill-evaluation-data` outside the primary checkout unless asked.
