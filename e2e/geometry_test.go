@@ -59,6 +59,7 @@ func TestGeometry(t *testing.T) {
 	}{
 		{"ExposesOneGlobal", testGeometryExposesOneGlobal},
 		{"GapExtent", testGeometryGapExtent},
+		{"RankingBars", testGeometryRankingBars},
 		{"PlotDomain", testGeometryPlotDomain},
 		{"PointRadius", testGeometryPointRadius},
 		{"LogoPlacement", testGeometryLogoPlacement},
@@ -72,7 +73,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "stripRows"}
+	want := []string{"gapExtent", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "stripRows"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -421,5 +422,37 @@ func testGeometryStripRows(t *testing.T, page playwright.Page) {
 				}
 			}
 		})
+	}
+}
+
+func testGeometryRankingBars(t *testing.T, page playwright.Page) {
+	// These rankingDomain cases and internal/app's TestExploreTeamSeasonsExtent
+	// must change together: server and browser chart bounds must agree.
+	for _, tc := range []struct {
+		values   []float64
+		signed   bool
+		min, max float64
+	}{
+		{[]float64{}, false, 0, .5}, {[]float64{0, 0}, true, -.5, .5}, {[]float64{1, 2}, false, 0, 2.5}, {[]float64{-2, 1}, true, -2.5, 2.5}, {[]float64{2.5, 2.37}, false, 0, 3}, {[]float64{1e9}, false, 0, 2e9},
+	} {
+		var domain struct{ Min, Max float64 }
+		callGeometry(t, page, "rankingDomain", []any{tc.values, tc.signed}, &domain)
+		if !near(domain.Min, tc.min) || !near(domain.Max, tc.max) {
+			t.Fatalf("domain %+v", domain)
+		}
+	}
+	var bounded struct{ Min, Max float64 }
+	callGeometry(t, page, "rankingDomain", []any{[]float64{3, 2.9}, false, true}, &bounded)
+	if bounded.Min != 0 || bounded.Max != 3 {
+		t.Fatalf("points bounds: %+v", bounded)
+	}
+	for _, tc := range []struct{ value, companion, min, max, zero, left, width, marker float64 }{
+		{2, 3, 0, 4, 0, 0, 50, 75}, {-.5, .5, -1, 1, 50, 25, 25, 75}, {0, 0, -.115, .115, 50, 50, 0, 50},
+	} {
+		var got struct{ Zero, Left, Width, Marker float64 }
+		callGeometry(t, page, "rankingBar", []any{tc.value, tc.companion, map[string]float64{"min": tc.min, "max": tc.max}}, &got)
+		if !near(got.Zero, tc.zero) || !near(got.Left, tc.left) || !near(got.Width, tc.width) || !near(got.Marker, tc.marker) {
+			t.Fatalf("geometry %+v: %+v", tc, got)
+		}
 	}
 }

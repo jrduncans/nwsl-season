@@ -32,13 +32,18 @@ import (
 // here can reach ASA.
 func exploreBase(t *testing.T, scenario string) string {
 	t.Helper()
+	return exploreBaseArchive(t, apptest.Scenario(t, scenario))
+}
+
+func exploreBaseArchive(t *testing.T, archive []cache.HistoricalSeason) string {
+	t.Helper()
 	cfg := testConfig(t)
 	ctx := context.Background()
 	db, err := cache.Open(ctx, cfg.DBPath)
 	if err != nil {
 		t.Fatalf("open cache: %v", err)
 	}
-	apptest.Seed(t, db, scenario)
+	apptest.SeedArchive(t, db, archive)
 	if err := db.Close(); err != nil {
 		t.Fatalf("close cache: %v", err)
 	}
@@ -172,6 +177,16 @@ const (
 
 func exploreViews() []exploreView {
 	return []exploreView{
+		{
+			name: "team-seasons", scenario: apptest.ScenarioTeamHistory,
+			path:     "explore?view=team-seasons",
+			controls: []string{"[data-team-seasons-measure]", "[data-team-seasons-rank-by]"},
+			steps: []exploreStep{
+				{selector: "[data-team-seasons-measure]", value: "for", param: "team-seasons-measure"},
+				{selector: "[data-team-seasons-rank-by]", value: "expected", param: "team-seasons-rank-by"},
+				{selector: "[data-team-seasons-measure]", value: "points", param: "team-seasons-measure"},
+			},
+		},
 		{
 			name: "team-quadrants", scenario: apptest.ScenarioSeasonTrend,
 			path:     "explore?view=teams&display=quadrant",
@@ -331,6 +346,7 @@ var exploreTabs = []struct{ group, tab, query string }{
 	{"League trends", "Goal distribution", "view=distribution"},
 	{"League trends", "Home advantage", "view=home-advantage"},
 	{"League trends", "Parity", "view=parity"},
+	{"League trends", "Team-seasons", "view=team-seasons"},
 	{"League trends", "Scoring table", "view=table"},
 }
 

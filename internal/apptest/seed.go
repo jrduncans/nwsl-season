@@ -36,8 +36,14 @@ const (
 // active beyond the year this was written for.
 func Seed(t testing.TB, db *cache.DB, scenario string) {
 	t.Helper()
+	SeedArchive(t, db, Scenario(t, scenario))
+}
+
+// SeedArchive stores a scenario variant through the same cache validation as Seed.
+// Lifecycle and expected-coverage constraints remain the cache's own rules.
+func SeedArchive(t testing.TB, db *cache.DB, archive []cache.HistoricalSeason) {
+	t.Helper()
 	ctx := context.Background()
-	archive := Scenario(t, scenario)
 	now := time.Now().UTC()
 	// The scheduler and server seed the same registry; doing it here lets a
 	// bare database serve the history pages.

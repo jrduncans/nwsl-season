@@ -14,6 +14,7 @@ type explorePage struct {
 	exploreDistributionView
 	exploreHomeAdvantageView
 	exploreParityView
+	exploreTeamSeasonsView
 	exploreTeamsView
 	exploreTeamHistoryView
 	exploreSeasonTrendView
@@ -51,7 +52,7 @@ var exploreViewLabels = map[string]string{
 	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
 	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
 	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season",
-	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "table": "Scoring table",
+	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "team-seasons": "Team-seasons", "table": "Scoring table",
 }
 
 // ViewLabel returns the visible name of an Explore tab.
@@ -98,8 +99,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			view = "trend"
 		}
 	}
-	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "table", "teams", "team-history", "season-trend", "team-rankings"}, view) {
-		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, table, teams, team-history, season-trend, or team-rankings"))
+	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "team-seasons", "table", "teams", "team-history", "season-trend", "team-rankings"}, view) {
+		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, team-seasons, table, teams, team-history, season-trend, or team-rankings"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -129,6 +130,23 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page.exploreTeamHistoryView, err = exploreTeamHistory(r.URL.Query(), teams.TeamSeasons)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	// Both bases share this archive snapshot, allowing Team-seasons to switch
+	// penalties in place. Points always keep all-shots eligibility.
+	allSummaries, npSummaries := summaries, summaries
+	if basis.ExcludesPenalties() {
+		allSummaries, err = history.SummarizeScoringBasis(archive, history.AllShots)
+	} else {
+		npSummaries, err = history.SummarizeScoringBasis(archive, history.NonPenalty)
+	}
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	page.exploreTeamSeasonsView, err = exploreTeamSeasons(r.URL.Query(), history.TeamSeasons(allSummaries, allSummaries, archive), history.TeamSeasons(allSummaries, npSummaries, archive))
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return

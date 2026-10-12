@@ -59,10 +59,10 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	if plain != included {
 		t.Error("penalties=include must render exactly as an absent parameter")
 	}
-	forbidRaw(t, plain, "npxG", "Non-penalty", `name="penalties"`, `data-points-note`, `data-penalties="exclude"`)
+	forbidRaw(t, plain, "npxG", "Non-penalty", `data-points-note`, `data-penalties="exclude"`)
 	// Only the Excluded destination names the parameter; default links omit it.
 	// Every view carries its own select and destination links.
-	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `label.penalties-select`)); got != want || want != 9 {
+	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `select[data-penalties-selector]`)); got != want || want != 9 {
 		t.Errorf("default page has %d Excluded destinations for %d selects, want 9 each", got, want)
 	}
 	for _, link := range find(t, plain, `a[href*=penalties]`) {
@@ -172,8 +172,8 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 			}
 			forms := find(t, body, `form.explore-team-controls`)
 			inputs := find(t, body, `form.explore-team-controls input[name=penalties][value=exclude]`)
-			// Every selection form that is rendered carries the basis.
-			if len(forms) == 0 || len(inputs) != len(forms) {
+			// Team-seasons owns a conditional select; the other forms carry the basis.
+			if len(forms) == 0 || len(inputs) != len(forms)-1 {
 				t.Errorf("%d selection forms, %d with the hidden penalties input", len(forms), len(inputs))
 			}
 		})
@@ -242,7 +242,7 @@ func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *te
 	requireText(t, body, "[data-panel=table]", "No seasons currently have enough complete results to compare.")
 	_, teams := getPage(t, archive, "/explore?view=teams&penalties=exclude")
 	requireElements(t, teams, `[data-team-empty]`)
-	forbidRaw(t, teams, `"alpha"`)
+	forbidText(t, teams, "#explore-team-data", `"alpha"`)
 	// The default basis is unaffected by the missing split.
 	_, defaults := getPage(t, archive, "/explore?view=table")
 	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00")

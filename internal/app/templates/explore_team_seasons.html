@@ -1,0 +1,40 @@
+{{define "exploreTeamSeasonBar"}}
+<li class="explore-archive-bar{{if .Negative}} is-negative{{end}}{{if .Active}} is-active{{end}}{{if .Zero}} is-zero{{end}}" data-team-seasons-row data-team-id="{{.TeamID}}" data-season="{{.Season}}">
+<span class="explore-archive-label"><span class="explore-archive-rank">{{.Rank}}.</span><span class="explore-archive-identity">{{template "teamName" .Team}} <span>· {{.Season}}</span></span>{{if .Active}}<small>in progress through {{.Played}} matches</small>{{end}}</span>
+<span class="explore-archive-track" aria-hidden="true"><span class="explore-archive-zero" style="left:{{.ZeroPosition}}"></span><i style="left:{{.Left}};width:{{.Width}}"></i>{{if .Companion}}<b class="explore-archive-marker" style="left:{{.Marker}}"></b>{{end}}</span>
+<span class="explore-archive-numbers"><strong>{{.DisplayValue}}</strong>{{if .ShowCompanion}}<small>{{.CompanionValue}}</small>{{end}}</span>
+</li>
+{{end}}
+
+{{define "exploreTeamSeasons"}}
+<section data-panel="team-seasons"{{if ne .View "team-seasons"}} hidden{{end}} aria-labelledby="explore-team-seasons-title">
+<div class="explore-heading"><h2 id="explore-team-seasons-title" data-team-seasons-title>{{.TeamSeasonsHeading}}</h2></div>
+<form method="get" class="explore-team-controls" data-team-seasons-controls>
+<input type="hidden" name="view" value="team-seasons">
+<input type="hidden" name="team-seasons-sort" value="{{.TeamSeasonsSort}}"{{if not .TeamSeasonsExpanded}} disabled{{end}}><input type="hidden" name="team-seasons-order" value="{{.TeamSeasonsOrder}}"{{if not .TeamSeasonsExpanded}} disabled{{end}}>
+<label>Measure <select name="team-seasons-measure" data-team-seasons-measure><option value="points"{{if eq .TeamSeasonsMeasure "points"}} selected{{end}}>Points</option><option value="for"{{if eq .TeamSeasonsMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamSeasonsMeasure "against"}} selected{{end}}>Goals allowed</option><option value="difference"{{if eq .TeamSeasonsMeasure "difference"}} selected{{end}}>Goal differential</option></select></label>
+<label>Rank by <select name="team-seasons-rank-by" data-team-seasons-rank-by><option value="actual"{{if eq .TeamSeasonsRankBy "actual"}} selected{{end}}>Actual</option><option value="expected"{{if eq .TeamSeasonsRankBy "expected"}} selected{{end}}>Expected</option><option value="gap"{{if eq .TeamSeasonsRankBy "gap"}} selected{{end}}>Gap</option></select></label>
+<label class="penalties-select" data-team-seasons-penalties-control{{if not .TeamSeasonsGoals}} hidden{{end}}>Penalties <select name="penalties" data-team-seasons-penalties{{if not .TeamSeasonsGoals}} disabled{{end}} aria-describedby="penalties-help"><option value="include"{{if not .TeamSeasonsNonPenalty}} selected{{end}}>Included</option><option value="exclude"{{if .TeamSeasonsNonPenalty}} selected{{end}}>Excluded</option></select></label>
+<button class="button" type="submit" data-team-seasons-submit>Show rankings</button>
+</form>
+<p class="note" data-team-seasons-points-note{{if not .TeamSeasonsPointsNote}} hidden{{end}}>{{.PointsNote}}</p>
+<p class="note" data-team-seasons-missing{{if not .TeamSeasonsMissing}} hidden{{end}}>{{.TeamSeasonsMissing}}</p>
+<p class="note" data-team-seasons-gap-help{{if ne .TeamSeasonsRankBy "gap"}} hidden{{end}}>Gap is actual − expected. Positive means above expected; negative means below expected.{{if eq .TeamSeasonsMeasure "against"}} Fewer goals allowed than expected rank first.{{end}}</p>
+<div class="explore-archive-bars" data-team-seasons-chart aria-label="{{.TeamSeasonsHeading}}, ranked {{.TeamSeasonsRankBy}} values with comparisons">
+<p class="explore-archive-legend" data-team-seasons-legend>{{if eq .TeamSeasonsRankBy "gap"}}Bar: actual − expected{{else}}Bar: {{.TeamSeasonsRankBy}} · <span class="explore-archive-marker-swatch" aria-hidden="true"></span> {{.TeamSeasonsCompanionLabel}}{{end}}</p>
+<div class="explore-archive-axis" data-team-seasons-axis><span>{{printf "%g" .TeamSeasonsScaleMin}}</span><span>Per match · {{if eq .TeamSeasonsZero "0.0000%"}}starts at 0{{else}}0 at center{{end}}</span><span>{{printf "%g" .TeamSeasonsScaleMax}}</span></div>
+<p class="explore-archive-end" data-team-seasons-high>{{.TeamSeasonsHigh}}</p>
+<ol data-team-seasons-bars="high">{{range .TeamSeasonsTop}}{{template "exploreTeamSeasonBar" .}}{{end}}</ol>
+<p class="explore-archive-break" data-team-seasons-break{{if not .TeamSeasonsMore}} hidden{{end}}>{{.TeamSeasonsMore}} more team-seasons in the table</p>
+<p class="explore-archive-end" data-team-seasons-low>{{.TeamSeasonsLow}}</p>
+<ol data-team-seasons-bars="low">{{range .TeamSeasonsBottom}}{{template "exploreTeamSeasonBar" .}}{{end}}</ol>
+<p data-team-seasons-chart-empty{{if .TeamSeasonsBars}} hidden{{end}}>No ranked team-seasons are available in this mode.</p>
+</div>
+<p class="note" data-team-seasons-standing-note>Rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow bars are in progress.</p>
+<details class="explore-context-details" data-team-seasons-values{{if .TeamSeasonsExpanded}} open{{end}}><summary data-team-seasons-summary>Table: all {{len .TeamSeasonsRows}} team-seasons</summary>
+<p class="explore-table-scroll-hint">Scroll for more columns →</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Team-seasons values" data-team-seasons-table><table class="explore-table explore-archive-table"><caption data-team-seasons-table-caption>{{.TeamSeasonsActualLabel}} per match. Expected: {{.TeamSeasonsExpectedLabel}}. Gap: actual − expected. Tied rows share a competition rank.</caption>
+<thead><tr>{{range .TeamSeasonsColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-team-seasons-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
+<tbody data-team-seasons-rows>{{range .TeamSeasonsRows}}<tr data-team-id="{{.TeamID}}" data-season="{{.Season}}"><td>{{if .Rank}}{{.Rank}}{{else}}{{.Reason}}{{end}}</td><th scope="row">{{template "teamName" .Team}}</th><td>{{.Season}}{{if .Active}} (in progress through {{.Played}} matches){{end}}</td><td>{{.Played}}</td><td>{{$.TeamSeasonsValue .Actual "Unavailable"}}</td><td>{{$.TeamSeasonsValue .Expected $.TeamSeasonsMissingLabel}}</td><td>{{$.TeamSeasonsSigned .Gap $.TeamSeasonsMissingLabel}}</td></tr>{{end}}</tbody></table></div></details>
+</section>
+{{end}}

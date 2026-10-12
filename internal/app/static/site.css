@@ -455,7 +455,7 @@ th:nth-child(2) { text-align: left; }
 .explore-table { --line: #dfe1e3; width: 100%; font-variant-numeric: tabular-nums; border-collapse: separate; border-spacing: 0; }
 .explore-table td, .explore-table th { text-align: right; white-space: nowrap; padding: .9rem 1.1rem; }
 .explore-table thead th { color: var(--muted); font-size: .85rem; background: var(--green-soft); border-bottom: 2px solid var(--line); }
-.explore-table th:first-child { text-align: left; }
+.explore-table th:first-child, .explore-archive-table th:nth-child(2) { text-align: left; }
 .explore-table tbody th { font-size: 1.05rem; font-weight: 750; border-left: 3px solid var(--line); }
 .explore-table tbody tr { background: #fff; }
 .explore-table tbody tr:nth-child(even) { background: #fafafa; }
@@ -553,3 +553,41 @@ th:nth-child(2) { text-align: left; }
 .explore-parity-table caption, .explore-parity-team-table caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
 .explore-parity-team-table { font-size: .875rem; }
 .explore-parity-table a[aria-current] { font-weight: 800; }
+
+.explore-archive-bars { margin: 1rem 0; }
+.explore-archive-bars ol { list-style: none; padding: 0; margin: .4rem 0; }
+.explore-archive-axis { display: flex; justify-content: space-between; gap: .5rem; margin: 0 10.5rem 0 22.5rem; color: var(--muted); font-size: .75rem; text-align: center; }
+.explore-archive-bar { display: grid; grid-template-columns: 22rem minmax(0, 1fr) 10rem; gap: .5rem; align-items: center; padding: .4rem 0; color: var(--ink); }
+.explore-archive-label { display: grid; grid-template-columns: 4ch minmax(0, 1fr); column-gap: .25rem; align-items: start; padding-left: .25rem; font-size: .875rem; min-width: 0; }
+.explore-archive-rank { width: 4ch; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.5rem; }
+.explore-archive-identity { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
+.explore-archive-identity > span:last-child { white-space: nowrap; }
+.explore-archive-label small, .explore-archive-numbers small { display: block; color: var(--muted); font-size: .75rem; }
+.explore-archive-label small { grid-column: 2; }
+.explore-archive-numbers { text-align: right; padding-right: .25rem; font-size: .875rem; }
+.explore-archive-track { position: relative; height: .85rem; }
+.explore-archive-zero { position: absolute; top: -.35rem; bottom: -.35rem; border-left: 1px solid var(--muted); }
+.explore-archive-track i { position: absolute; height: 100%; background: var(--chart-actual); border: 2px solid var(--chart-actual); box-sizing: border-box; }
+.is-negative .explore-archive-track i { background: var(--chart-expected); border-color: var(--chart-expected); }
+.is-active .explore-archive-track i { background: var(--panel); border-style: dashed; }
+.is-zero .explore-archive-track i { display: none; }
+.explore-archive-marker { position: absolute; top: -.3rem; bottom: -.3rem; border-left: 2px solid var(--chart-expected); outline: 1px solid var(--panel); transform: translateX(-1px); }
+.explore-archive-marker-swatch { display: inline-block; height: .9rem; border-left: 2px solid var(--chart-expected); vertical-align: middle; margin: 0 .2rem; }
+.explore-archive-break { margin: .6rem 0; padding: .5rem; text-align: center; color: var(--muted); border-block: 1px dashed var(--line); }
+.explore-archive-break button { background: none; border: none; padding: .25rem; color: var(--chart-actual); font: inherit; text-decoration: underline; cursor: pointer; }
+.explore-archive-end { font-weight: 700; padding: .3rem .25rem; margin: .5rem 0; }
+.explore-archive-legend { color: var(--muted); font-size: .875rem; }
+.explore-archive-table { min-width: 55rem; font-size: .875rem; }
+@media (max-width: 800px) {
+ .explore-archive-bar { grid-template-columns: minmax(0, 1fr) 6.5rem; gap: .2rem .4rem; padding: .35rem 0; }
+ .explore-archive-label { font-size: .75rem; line-height: 1.25; }
+ .explore-archive-label .team-name { gap: .25rem; }
+ .explore-archive-label .team-logo { width: 1.1rem; height: 1.1rem; flex-basis: 1.1rem; }
+ .explore-archive-rank { line-height: 1.1rem; }
+ .explore-archive-label small { font-size: .625rem; }
+ .explore-archive-identity { gap: .1rem .25rem; }
+ .explore-archive-track { grid-column: 1 / -1; height: .5rem; margin: .15rem .25rem; }
+ .explore-archive-numbers { grid-column: 2; grid-row: 1; font-size: .75rem; }
+ .explore-archive-numbers small { font-size: .625rem; line-height: 1.2; }
+ .explore-archive-axis { margin: 0 .25rem; font-size: .7rem; }
+}
