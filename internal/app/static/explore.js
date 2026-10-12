@@ -16,6 +16,7 @@
   const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
   const teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
   const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
+  const homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
   const historySeries = root.querySelector('[data-history-series]');
   const historyContext = root.querySelector('[data-history-context]');
   const teamSeason = root.querySelector('[data-team-season]');
@@ -314,6 +315,99 @@
     chart.data.datasets[0].pointBackgroundColor = binColors[bin];
     chart.canvas.setAttribute('aria-label', `Share of regular-season matches with ${binLabels[bin]}, by season`);
     chart.resize(); chart.update();
+  }
+  // Home advantage: one panel per measure, sharing a season axis. Every mark is
+  // home minus away per played match, so zero means the sides did equally well.
+  const homeYears = homeRecords.length
+    ? Array.from({length: Number(homeRecords.at(-1).season) - Number(homeRecords[0].season) + 1}, (_, index) => String(Number(homeRecords[0].season) + index))
+    : [];
+  const homeByYear = new Map(homeRecords.map(row => [row.season, row]));
+  const homeZeroLabel = {
+    id: 'homeZeroLabel',
+    afterDatasetsDraw(chart) {
+      const {ctx, chartArea, scales} = chart;
+      const y = scales.y.getPixelForValue(0);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+      ctx.save();
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = color('--paper');
+      ctx.fillStyle = color('--muted');
+      const label = 'Zero: home and away equal';
+      const x = chartArea.left + 6, top = y - 4 < chartArea.top + 14 ? y + 16 : y - 4;
+      ctx.strokeText(label, x, top);
+      ctx.fillText(label, x, top);
+      ctx.restore();
+    },
+  };
+  function homeYAxis(keys, title) {
+    const values = homeRecords.flatMap(row => keys.map(key => row[key])).filter(value => value != null);
+    const low = Math.min(0, ...values), high = Math.max(0, ...values);
+    const pad = Math.max(.05, (high - low) * .15);
+    return {
+      min: low < 0 ? low - pad : 0, max: high > 0 ? high + pad : 0,
+      afterFit: scale => { scale.width = 76; },
+      grid: {color: context => context.tick.value === 0 ? color('--muted') : color('--line'), lineWidth: context => context.tick.value === 0 ? 2 : 1},
+      border: {display: false},
+      // The padded limits are headroom, not values to label.
+      ticks: {maxTicksLimit: 6, includeBounds: false, callback: value => signed(value)},
+      title: {display: true, text: title},
+    };
+  }
+  function createHomePanel(canvas, series, title) {
+    const options = commonOptions();
+    options.scales = {
+      x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
+      y: homeYAxis(series.map(item => item.key), title),
+    };
+    options.layout = {padding: {top: 8}};
+    options.plugins.tooltip.callbacks = {
+      title: items => {
+        const item = items[0];
+        return item ? `${item.label}${homeByYear.get(item.label)?.active ? ' (in progress)' : ''}` : '';
+      },
+      label: item => `${item.dataset.label}: ${signed(item.parsed.y)} per match`,
+      afterLabel: item => {
+        const row = homeByYear.get(item.label);
+        return `${row.played} played · home W–D–L ${row.homeWins}–${row.draws}–${row.awayWins}`;
+      },
+    };
+    const chart = new Chart(canvas, {
+      type: 'line', options, plugins: [homeZeroLabel],
+      data: {labels: homeYears, datasets: series.map(item => ({
+        label: item.label, key: item.key, data: homeYears.map(year => homeByYear.get(year)?.[item.key] ?? null),
+        borderColor: item.color, backgroundColor: item.color, pointStyle: item.pointStyle,
+        spanGaps: false, borderWidth: 2.5, pointRadius: 5, pointHitRadius: 4,
+        pointHoverRadius: 8, pointHoverBorderWidth: 2, pointHoverBorderColor: color('--panel'),
+      }))},
+    });
+    keyboardAccess(chart, mark => {
+      const year = chart.data.labels[mark.index], row = homeByYear.get(year);
+      const dataset = chart.data.datasets[mark.datasetIndex];
+      return `${year}${row.active ? ' (in progress)' : ''}, ${dataset.label}: ${signed(dataset.data[mark.index])} per match, home minus away, ${row.played} played`;
+    });
+    return chart;
+  }
+  function showHomeAdvantage() {
+    const panels = [
+      ['home-goals', 'homeGoals', [
+        {key: 'goals', label: T('Goals'), color: goalsColor, pointStyle: 'circle'},
+        {key: 'xg', label: T('xG'), color: xgColor, pointStyle: 'rectRot'},
+      ], T('Goals, home − away per match')],
+      ['home-points', 'homePoints', [
+        {key: 'points', label: 'Points', color: goalsColor, pointStyle: 'circle'},
+        {key: 'xpoints', label: 'xPts', color: xgColor, pointStyle: 'rectRot'},
+      ], 'Points, home − away per match'],
+    ];
+    panels.forEach(([name, key, series, title]) => {
+      const canvas = root.querySelector(`[data-chart="${name}"]`);
+      if (!canvas) return;
+      const chart = charts[key] || (charts[key] = createHomePanel(canvas, series, title));
+      chart.resize(); chart.update('none');
+    });
   }
   function teamDescription(chart, index) {
     const row = chart.teamRows[index], measure = chart.teamMeasure;
@@ -1389,6 +1483,30 @@
       link.href = `?${selection}`;
     });
   }
+  function sortHomeTable(params) {
+    const body = root.querySelector('[data-home-rows]');
+    if (!body) return;
+    const links = [...root.querySelectorAll('[data-home-sort]')];
+    const column = Math.max(0, links.findIndex(link => link.dataset.homeSort === params.get('home-sort')));
+    const direction = params.get('home-order') === 'asc' ? 'asc' : 'desc';
+    const rows = [...body.rows];
+    rows.sort((a, b) => {
+      const x = a.cells[column].dataset.value, y = b.cells[column].dataset.value;
+      if (x === '' || y === '') return (x === '') - (y === '');
+      return (Number(x) - Number(y)) * (direction === 'asc' ? 1 : -1)
+        || Number(b.cells[0].dataset.value) - Number(a.cells[0].dataset.value);
+    });
+    body.append(...rows);
+    links.forEach((link, index) => {
+      const selected = index === column;
+      link.parentElement.setAttribute('aria-sort', selected ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
+      const selection = new URLSearchParams(params);
+      selection.set('view', 'home-advantage');
+      selection.set('home-sort', link.dataset.homeSort);
+      selection.set('home-order', selected && direction === 'desc' ? 'asc' : 'desc');
+      link.href = `?${selection}`;
+    });
+  }
   function rollingMatchValue(matches, end, measure, window, expected) {
     window = Math.min(end + 1, window);
     let average = 0;
@@ -1678,7 +1796,7 @@
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
-    const view = ['trend', 'distribution', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
+    const view = ['trend', 'distribution', 'home-advantage', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
@@ -1734,6 +1852,7 @@
         showBinTrend(chart, Number(distributionBin.value));
       }
     }
+    if (view === 'home-advantage') showHomeAdvantage();
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     if (view === 'season-trend') showSeasonTrend(params);
@@ -1769,6 +1888,7 @@
     const column = Number(params.get('sort') || 0);
     sortTable(Number.isInteger(column) && column >= 0 && column <= 4 ? column : 0, params.get('order') === 'asc' ? 'asc' : 'desc');
     sortDistributionTable(params);
+    sortHomeTable(params);
   }
   function update(changes) {
     const url = new URL(location.href);
@@ -1777,6 +1897,12 @@
     applyURL();
   }
   root.addEventListener('click', event => {
+    const homeLink = event.target.closest('[data-home-sort]');
+    if (homeLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const params = new URL(homeLink.href).searchParams;
+      update({view: 'home-advantage', 'home-sort': params.get('home-sort'), 'home-order': params.get('home-order')});
+    }
     const distributionLink = event.target.closest('[data-distribution-sort]');
     if (distributionLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();

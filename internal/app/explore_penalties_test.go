@@ -62,8 +62,8 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	forbidRaw(t, plain, "npxG", "Non-penalty", `name="penalties"`, `data-points-note`, `data-penalties="exclude"`)
 	// Only the Excluded destination names the parameter; default links omit it.
 	// Every view carries its own select and destination links.
-	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `label.penalties-select`)); got != want || want != 7 {
-		t.Errorf("default page has %d Excluded destinations for %d selects, want 7 each", got, want)
+	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `label.penalties-select`)); got != want || want != 8 {
+		t.Errorf("default page has %d Excluded destinations for %d selects, want 8 each", got, want)
 	}
 	for _, link := range find(t, plain, `a[href*=penalties]`) {
 		if attr(link, "data-penalties-choice") != "exclude" && attr(link, "class") != "button" {

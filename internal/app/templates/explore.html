@@ -22,6 +22,7 @@
 <nav class="explore-subviews" data-group-views="league" aria-label="League trends views"{{if ne .ViewGroup "league"}} hidden{{end}}>
 <a href="?view=trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>{{.ViewLabel "trend"}}</a>
 <a href="?view=distribution{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>{{.ViewLabel "distribution"}}</a>
+<a href="?view=home-advantage{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="home-advantage"{{if eq .View "home-advantage"}} aria-current="page"{{end}}>{{.ViewLabel "home-advantage"}}</a>
 <a href="?view=table{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>{{.ViewLabel "table"}}</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
@@ -67,6 +68,38 @@
 </details>
 {{end}}
 {{if not .HasDistributionBars}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
+</section>
+<section data-panel="home-advantage"{{if ne .View "home-advantage"}} hidden{{end}} aria-labelledby="explore-home-title">
+<div class="explore-heading"><h2 id="explore-home-title">Home advantage per match (regular-season)</h2><div class="explore-team-controls">{{template "penaltiesSelect" $}}</div></div>
+{{if .HomeAdvantageData}}
+<p class="note">Each mark is the home side minus the away side, per played match. Above the zero line the home side did better; below it, the away side did.</p>
+<section data-home-panel="goals">
+<h3 class="explore-context-heading">{{$.T "Goals vs xG"}}</h3>
+<div class="explore-legend"><span data-series="goals">● {{$.T "Goals"}}</span><span data-series="xg">◆ {{$.T "xG"}}</span></div>
+<div class="explore-chart-wrap explore-season-balance-wrap"><canvas data-chart="home-goals" tabindex="0" role="img" aria-label="{{$.T "Home minus away goals and xG per regular-season match, by season; above zero means the home side did better"}}" aria-describedby="explore-chart-help"></canvas></div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
+</section>
+<section data-home-panel="points">
+<h3 class="explore-context-heading">Points vs xPts</h3>
+<div class="explore-legend"><span data-series="goals">● Points</span><span data-series="xg">◆ xPts</span></div>
+<div class="explore-chart-wrap explore-season-balance-wrap"><canvas data-chart="home-points" tabindex="0" role="img" aria-label="Home minus away points and expected points per regular-season match, by season; above zero means the home side did better" aria-describedby="explore-chart-help"></canvas></div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
+</section>
+{{if .NonPenalty}}<p class="note">{{$.PointsNote}}</p>{{end}}
+{{if .HomeAdvantageXGMissing}}<p class="note" data-home-xg-note>{{$.T "xG"}} is incomplete in {{.HomeAdvantageXGMissing}}, so those seasons have no {{$.T "xG"}} mark.</p>{{end}}
+{{if .HomeAdvantageXPointsMissing}}<p class="note" data-home-xpoints-note>xPts is incomplete in {{.HomeAdvantageXPointsMissing}}, so those seasons have no xPts mark.</p>{{end}}
+{{if .HomeAdvantageActiveStatus}}<p class="note">{{.HomeAdvantageActiveStatus}}</p>{{end}}
+<p class="note">Home is ASA's home designation. ASA has no neutral-site flag, so alternate-venue and neutral matches count as home matches. The gap describes results, not a cause.</p>
+<details class="explore-context-details" data-home-values{{if .HomeAdvantageExpanded}} open{{end}}>
+<summary>Home advantage values</summary>
+<p class="explore-table-scroll-hint">Scroll for more columns →</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Home advantage values"><table class="explore-table explore-home-table">
+<caption><span>Home minus away, per match. Home W–D–L is each result's share of played matches.</span></caption>
+<thead><tr>{{range .HomeAdvantageColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-home-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
+<tbody data-home-rows>{{range .HomeAdvantageRows}}<tr><th scope="row" data-value="{{.Season}}">{{.Season}}</th><td data-value="{{.Played}}">{{.Played}}</td><td data-value="{{if .GoalsValue}}{{.GoalsValue}}{{end}}">{{.Goals}}</td><td data-value="{{if .XGValue}}{{.XGValue}}{{end}}">{{.XG}}</td><td data-value="{{if .PointsValue}}{{.PointsValue}}{{end}}">{{.Points}}</td><td data-value="{{if .XPointsValue}}{{.XPointsValue}}{{end}}">{{.XPoints}}</td><td data-value="{{.HomeWinShare}}">{{.Results}}</td></tr>{{end}}</tbody>
+</table></div>
+</details>
+{{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="table"{{if ne .View "table"}} hidden{{end}} aria-labelledby="explore-table-title">
 <div class="explore-heading"><h2 id="explore-table-title">Scoring by season (regular-season)</h2><div class="explore-team-controls">{{template "penaltiesSelect" $}}</div></div>
@@ -270,6 +303,7 @@
 <script type="application/json" id="explore-data">{{.ChartData}}</script>
 <script type="application/json" id="explore-team-data">{{.TeamSeasons}}</script>
 <script type="application/json" id="explore-context-data">{{.HistoryContextData}}</script>
+<script type="application/json" id="explore-home-data">{{.HomeAdvantageData}}</script>
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>
 <script src="{{.ChartLabelsPath}}" defer></script>
