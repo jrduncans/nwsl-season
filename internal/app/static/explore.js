@@ -147,7 +147,7 @@
       for (let index = 0; index < chart.data.labels.length; index++) {
         chart.data.datasets.forEach((dataset, datasetIndex) => {
           const value = dataset.data[index];
-          if (chart.isDatasetVisible(datasetIndex) && value != null && !chart.getDatasetMeta(datasetIndex).data[index]?.skip && (!dataset.keyboardOnce || index === 0) && (!chart.keyboardByIndex || marks.at(-1)?.index !== index)) marks.push({datasetIndex, index});
+          if (chart.isDatasetVisible(datasetIndex) && (chart.keyboardIncludeMissing || value != null && !chart.getDatasetMeta(datasetIndex).data[index]?.skip) && (!dataset.keyboardOnce || index === 0) && (!chart.keyboardByIndex || marks.at(-1)?.index !== index)) marks.push({datasetIndex, index});
         });
       }
       if (!marks.length) return;
@@ -2165,8 +2165,24 @@
 
   const h2hTeam = root.querySelector('[data-h2h-team]');
   const h2hOpponent = root.querySelector('[data-h2h-opponent]');
+  const h2hSeries = root.querySelector('[data-h2h-series]');
+  const h2hPenalties = root.querySelector('[data-h2h-penalties]');
   function showHeadToHead(params) {
     if (!h2hData.teams?.length) return;
+    const series = ['expected', 'both'].includes(params.get('h2h-series')) ? params.get('h2h-series') : 'actual';
+    const both = series === 'both', expectedOnly = series === 'expected', showExpected = series !== 'actual', np = params.get('penalties') === 'exclude';
+    const label = text => np ? text.replace(basisPattern, basisReplacement) : text;
+    const xgLabel = label('xG');
+    h2hSeries.value = series;
+    h2hPenalties.value = params.get('penalties') === 'exclude' ? 'exclude' : 'include';
+    const carriedSeries = root.querySelector('[data-h2h-carried-series]'); carriedSeries.disabled = !showExpected; carriedSeries.value = h2hSeries.value;
+    root.querySelector('[data-h2h-venues]').hidden = !showExpected;
+    root.querySelector('[data-h2h-venue-direction]').hidden = !both;
+    root.querySelector('[data-h2h-direction]').textContent = both ? label('Goal margin − xG margin · zero: matched expected') : expectedOnly ? label('xG margin · up: more xG for · zero: level · down: more xG against') : np ? 'Non-penalty goal margin · zero: level' : 'Goal margin · up: win · zero: draw · down: loss';
+    root.querySelector('th[data-h2h-basis-column]').hidden = !np;
+    root.querySelector('[data-h2h-points-note]').hidden = !np || !showExpected;
+    const headers = root.querySelectorAll('th[data-h2h-expected-column]');
+    [xgLabel + ' for', xgLabel + ' against', 'xPts', both ? 'Margin gap' : xgLabel + ' margin'].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = !showExpected; });
     const teamIndex = h2hData.teams.findIndex(t => t.ID === (params.get('team') || root.dataset.defaultH2hTeam));
     if (teamIndex < 0) return;
     const data = {team: h2hData.teams[teamIndex]};
@@ -2189,8 +2205,12 @@
     if (!pair) return;
     const rows = h2hData.fixtures.filter(f => (f.home === teamIndex && f.away === pair.index) || (f.away === teamIndex && f.home === pair.index)).map((f, position) => {
       const home = f.home === teamIndex, season = h2hData.seasons[f.season];
-      const score = home ? f.score : [f.score[1], f.score[0]], margin = score[0] - score[1];
+      const orient = values => home ? values : [values[1], values[0]];
+      const score = orient(f.score), margin = score[0] - score[1];
+      const goals = np ? f.npGoals ? orient(f.npGoals) : [null, null] : score;
+      const xg = orient(np ? f.npxg : f.xg), xpoints = f.xpoints[home ? 0 : 1];
       return {...f, season: season.year, active: !!season.active, position, venue: home ? 'Home' : 'Away', opponent: season.names[pair.opponent.ID] || pair.opponent.ID,
+        both, showExpected, np, xgLabel, basisGoals: goals, xg, xpoints, expectedMargin: xg.every(v => v !== null) ? xg[0] - xg[1] : null,
         score: score.join('–'), goalsFor: score[0], goalsAgainst: score[1], margin, result: margin > 0 ? 'Win' : margin < 0 ? 'Loss' : 'Draw', points: margin > 0 ? 3 : margin < 0 ? 0 : 1};
     });
     const years = [...new Set(rows.map(r => r.season))].sort();
@@ -2202,12 +2222,12 @@
     }));
     h2hOpponent.value = pair.opponent.ID;
     const title = root.querySelector('[data-h2h-title]');
-    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)));
+    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)), ...(showExpected ? [document.createTextNode(both ? ' · actual vs expected' : ' · expected')] : []));
     for (const key of ['scope', 'warning']) {
       const element = root.querySelector(`[data-h2h-${key}]`); element.textContent = pair[key];
       if (key === 'warning') element.hidden = !pair.warning;
     }
-    const record = root.querySelector('[data-h2h-record]'); record.hidden = !rows.length;
+    const record = root.querySelector('[data-h2h-record]'); record.hidden = showExpected || !rows.length;
     record.setAttribute('aria-label', `Official regular-season record from ${data.team.Name}’s side`);
     record.replaceChildren(...['All', 'Home', 'Away'].map(venue => {
       const meetings = rows.filter(r => venue === 'All' || r.venue === venue), n = meetings.length;
@@ -2221,10 +2241,44 @@
       label.append(document.createTextNode(venue)); tile.append(label);
       const wdl = archiveElement('strong', `${count('Win')}–${count('Draw')}–${count('Loss')}`); wdl.className = 'explore-h2h-wdl';
       wdl.setAttribute('aria-label', `${count('Win')} wins, ${count('Draw')} draws, ${count('Loss')} losses`); tile.append(wdl);
+      const covered = meetings.filter(r => r.basisGoals[0] !== null);
+      const goals = covered.length ? covered.reduce((total, r) => total.map((v, i) => v + r.basisGoals[i]), [0, 0]).join('–') + (np ? ' np goals' : ' goals') : np ? 'Goals unavailable' : '0–0 goals';
       tile.append(archiveElement('div', `${n ? fixed(sum('points') / n) : '—'} pts/match`),
-        archiveElement('div', `${sum('goalsFor')}–${sum('goalsAgainst')} goals`), archiveElement('div', `${n} ${n === 1 ? 'match' : 'matches'}`)); return tile;
+        archiveElement('div', goals), archiveElement('div', `${n} ${n === 1 ? 'match' : 'matches'}`));
+      if (np && covered.length < n) tile.append(archiveElement('div', `${covered.length}/${n} with split`)); return tile;
     }));
-    root.querySelector('[data-h2h-official]').hidden = params.get('penalties') !== 'exclude';
+    const comparison = root.querySelector('[data-h2h-comparison]'); comparison.hidden = !both || !rows.length;
+    const expectedTiles = root.querySelector('[data-h2h-expected]'); expectedTiles.hidden = !expectedOnly || !rows.length;
+    const goalsCovered = rows.filter(r => r.basisGoals[0] !== null), xgCovered = rows.filter(r => r.xg[0] !== null), pointsCovered = rows.filter(r => r.xpoints !== null);
+    const sum = (meetings, value) => meetings.reduce((total, row) => total + value(row), 0);
+    const metrics = [
+      {label: label('Goals for'), expectedLabel: `${xgLabel} for`, actual: sum(goalsCovered, r => r.basisGoals[0]), expected: xgCovered.length === goalsCovered.length && goalsCovered.length ? sum(xgCovered, r => r.xg[0]) : null, n: goalsCovered.length, expectedCount: xgCovered.length, missing: `${xgLabel} incomplete`},
+      {label: label('Goals against'), expectedLabel: `${xgLabel} against`, actual: sum(goalsCovered, r => r.basisGoals[1]), expected: xgCovered.length === goalsCovered.length && goalsCovered.length ? sum(xgCovered, r => r.xg[1]) : null, n: goalsCovered.length, expectedCount: xgCovered.length, missing: `${xgLabel} incomplete`},
+      {label: 'Points', expectedLabel: 'xPts', actual: sum(rows, r => r.points), expected: pointsCovered.length === rows.length && rows.length ? sum(rows, r => r.xpoints) : null, n: rows.length, expectedCount: pointsCovered.length, missing: 'xPts incomplete'},
+    ];
+    comparison.replaceChildren(...metrics.map(metric => {
+      const tile = archiveElement('div'); tile.className = 'explore-h2h-comparison-tile'; tile.append(archiveElement('h3', metric.label));
+      const total = archiveElement('p', metric.n ? fixed(metric.actual) + ' ' : 'Unavailable '); total.className = 'explore-h2h-total';
+      total.append(archiveElement('span', `vs ${metric.expected === null ? metric.missing : fixed(metric.expected)} ${metric.expectedLabel}`)); tile.append(total);
+      const gap = metric.expected === null ? null : metric.actual - metric.expected;
+      tile.append(archiveElement('p', gap === null ? metric.missing : `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected`));
+      tile.append(archiveElement('p', !metric.n ? 'Unavailable' : metric.expected === null ? `${fixed(metric.actual / metric.n)} per meeting` : `${fixed(metric.actual / metric.n)} vs ${fixed(metric.expected / metric.n)} per meeting`));
+      const count = archiveElement('p', `${metric.n} of ${rows.length} meetings`); count.className = 'note'; tile.append(count); return tile;
+    }));
+    expectedTiles.replaceChildren(...metrics.map(metric => {
+      const tile = archiveElement('div'); tile.className = 'explore-h2h-comparison-tile';
+      tile.append(archiveElement('h3', metric.expectedLabel));
+      const total = archiveElement('p', metric.expected === null ? metric.missing : fixed(metric.expected)); total.className = 'explore-h2h-total'; tile.append(total);
+      tile.append(archiveElement('p', metric.expected === null || !metric.expectedCount ? 'Unavailable' : `${fixed(metric.expected / metric.expectedCount)} per meeting`));
+      const count = archiveElement('p', `${metric.expectedCount} of ${rows.length} meetings`); count.className = 'note'; tile.append(count); return tile;
+    }));
+    const coverage = root.querySelector('[data-h2h-coverage]'), notes = [];
+    const missingNote = (n, metric) => `${n} ${n === 1 ? 'meeting lacks' : 'meetings lack'} ${metric}.`;
+    if (showExpected && xgCovered.length < rows.length) notes.push(missingNote(rows.length - xgCovered.length, xgLabel));
+    if (showExpected && pointsCovered.length < rows.length) notes.push(missingNote(rows.length - pointsCovered.length, 'xPts'));
+    if (np && goalsCovered.length < rows.length) notes.push(`Non-penalty goals and npxG cover ${goalsCovered.length} of ${rows.length} meetings with a penalty split.`);
+    coverage.textContent = notes.join(' '); coverage.hidden = !notes.length;
+    root.querySelector('[data-h2h-official]').hidden = showExpected || !np;
     const empty = root.querySelector('[data-h2h-empty]'); empty.hidden = pair.all.Played > 0;
     empty.textContent = `${data.team.Name} and ${pair.opponent.Name} have not met in a regular-season match.`;
     root.querySelector('[data-h2h-chart-wrap]').hidden = !pair.all.Played;
@@ -2245,6 +2299,9 @@
     root.querySelector('[data-h2h-rows]').replaceChildren(...sorted.map(row => {
       const tr = archiveElement('tr'); tr.dataset.matchId = row.id;
       for (const text of [row.date, `${row.season}${row.active ? ' (season in progress)' : ''}`, row.venue, row.opponent, row.score, row.result, row.points]) tr.append(archiveElement('td', text));
+      const basisCell = archiveElement('td', row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')); basisCell.dataset.h2hBasisColumn = ''; basisCell.hidden = !np; tr.append(basisCell);
+      for (const value of [...row.xg, row.xpoints]) { const td = archiveElement('td', value === null ? 'Unavailable' : fixed(value)); td.dataset.h2hExpectedColumn = ''; td.hidden = !showExpected; tr.append(td); }
+      const gapCell = archiveElement('td', row.expectedMargin === null || both && row.basisGoals[0] === null ? 'Unavailable' : signed(both ? row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin : row.expectedMargin)); gapCell.dataset.h2hExpectedColumn = ''; gapCell.hidden = !showExpected; tr.append(gapCell);
       return tr;
     }));
     root.querySelectorAll('[data-h2h-sort]').forEach(link => {
@@ -2268,17 +2325,22 @@
     const wrap = root.querySelector('[data-h2h-chart]'); wrap.hidden = !rows.length;
     if (!rows.length) return;
     const canvas = wrap.querySelector('canvas');
-    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: chronological goal margins; home solid blue, away striped orange; up means win, zero means draw, down means loss`);
+    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${both ? label('goal margin minus xG margin; above zero: above expected; below zero: below expected') : expectedOnly ? label('xG margins; above zero: more xG for; below zero: more xG against') : np ? 'non-penalty goal margins; zero means level' : 'goal margins; up means win, zero means draw, down means loss'}; home solid blue, away striped orange`);
     if (!charts.headToHead) charts.headToHead = createHeadToHead(canvas);
     const chart = charts.headToHead;
     chart.meetings = rows;
     chart.data.labels = rows.map(row => row.id);
-    chart.data.datasets[0].data = rows.map(row => row.margin);
-    const extent = window.NWSLGeometry.headToHeadGeometry(rows.map(row => row.margin), chart.width).extent;
+    chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.headToHeadValue(row.basisGoals, row.xg, series));
+    chart.data.datasets[0].label = both ? label('Goal margin − xG margin') : expectedOnly ? label('xG margin') : np ? 'Non-penalty goal margin' : 'Goal margin';
+    const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data.filter(v => v !== null), chart.width, chart.height).extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
     chart.update('none');
   }
-  const headToHeadDescription = row => `${row.date}${row.active ? ' · season in progress' : ''} · ${row.venue} · ${row.opponent} · ${row.score} · ${row.result}`;
+  const headToHeadExpectedDescription = row => [
+    ...(row.np ? [`Non-penalty goals: ${row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')}`] : []),
+    ...(row.showExpected ? [`${row.xgLabel} for: ${row.xg[0] === null ? 'Unavailable' : fixed(row.xg[0])}`, `${row.xgLabel} against: ${row.xg[1] === null ? 'Unavailable' : fixed(row.xg[1])}`, `xPts: ${row.xpoints === null ? 'Unavailable' : fixed(row.xpoints)}`, row.both ? `Margin gap: ${row.basisGoals[0] === null || row.expectedMargin === null ? 'Unavailable' : signed(row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin)}` : `${row.xgLabel} margin: ${row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)}`] : []),
+  ];
+  const headToHeadDescription = row => [`${row.date}${row.active ? ' · season in progress' : ''} · ${row.venue} · ${row.opponent} · ${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)].join(' · ');
   // Use Chart.js's event and tooltip lifecycle, with the full-height nearest
   // column geometry shared by pointer, touch and geometry tests.
   Chart.Interaction.modes.headToHead = (chart, event) => {
@@ -2315,7 +2377,7 @@
     options.plugins.tooltip.titleFont = {size: 11}; options.plugins.tooltip.bodyFont = {size: 11};
     options.plugins.tooltip.callbacks = {
       title: items => items.length ? items[0].chart.meetings[items[0].dataIndex].date : '',
-      label: item => { const r = item.chart.meetings[item.dataIndex]; return [...(r.active ? ['season in progress'] : []), r.venue, r.opponent, `${r.score} · ${r.result}`]; },
+      label: item => { const r = item.chart.meetings[item.dataIndex]; return [...(r.active ? ['season in progress'] : []), r.venue, r.opponent, `${r.score} · ${r.result}`, ...headToHeadExpectedDescription(r)]; },
     };
     const years = {id: 'headToHeadYears', afterDraw(chart) {
       const rows = chart.meetings || [], seen = new Set(), ctx = chart.ctx;
@@ -2330,13 +2392,21 @@
     const outline = context => context.chart.meetings?.[context.dataIndex]?.venue === 'Away' ? 1 : 0;
     const chart = new Chart(canvas, {type: 'bar', options, plugins: [years], data: {labels: [], datasets: [{label: 'Goal margin', data: [], backgroundColor: fill, hoverBackgroundColor: fill, borderColor: '#CF7424', hoverBorderColor: '#CF7424', borderWidth: outline, hoverBorderWidth: outline, borderSkipped: false, barPercentage: .7, categoryPercentage: 1, minBarLength: 3}]}});
     chart.meetings = [];
+    // Every meeting has an inspectable slot, including those without xG or splits.
+    chart.keyboardIncludeMissing = true;
     keyboardAccess(chart, mark => headToHeadDescription(chart.meetings[mark.index]), true);
     return chart;
   }
-  const changeHeadToHead = event => update({view: 'head-to-head', team: h2hTeam.value, opponent: event.target === h2hTeam || event.target.hasAttribute('data-h2h-team-form') ? null : h2hOpponent.value});
+  const changeHeadToHead = event => {
+    const changes = {view: 'head-to-head', team: h2hTeam.value, opponent: event.target === h2hTeam || event.target.hasAttribute('data-h2h-team-form') ? null : h2hOpponent.value, 'h2h-series': h2hSeries.value === 'actual' ? null : h2hSeries.value};
+    if (event.target === h2hPenalties) changes.penalties = h2hPenalties.value === 'include' ? null : 'exclude';
+    update(changes);
+  };
   root.querySelectorAll('[data-h2h-controls]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); changeHeadToHead(event); }));
   h2hTeam.addEventListener('change', changeHeadToHead);
   h2hOpponent.addEventListener('change', changeHeadToHead);
+  h2hSeries.addEventListener('change', changeHeadToHead);
+  h2hPenalties.addEventListener('change', changeHeadToHead);
 
 
   function applyURL() {

@@ -267,10 +267,10 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 				// none has complete xG while the season still has xG data.
 				observation.HomeXG.Valid = false
 			}
-			if season.Entry.Season == "2026" && j == 1 {
+			if (season.Entry.Season == "2026" || scenario == ScenarioTeams) && j == 1 {
 				observation.HomeXPoints.Valid = false // xG covered, xPts missing.
 			}
-			if season.Entry.Season == "2026" && j == 2 {
+			if season.Entry.Season == "2026" && j == 2 || scenario == ScenarioTeams && j == 17 {
 				observation.HomeXG.Valid = false // xPts covered, xG missing.
 			}
 			season.Data.XGoals = append(season.Data.XGoals, observation)

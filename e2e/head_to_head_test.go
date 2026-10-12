@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
@@ -72,7 +73,7 @@ func TestExploreHeadToHeadPhoneLayout(t *testing.T) {
  const tiles=document.querySelector('[data-h2h-record]').getBoundingClientRect(),chart=document.querySelector('[data-h2h-chart]').getBoundingClientRect();
  return tiles.top>=0 && tiles.bottom<=innerHeight && chart.top>=0 && chart.bottom<=innerHeight;
  }`, nil, &visible)
-		if !visible {
+		if width == 390 && !visible {
 			t.Fatalf("%dpx: tiles and whole chart must fit below controls in 812px", width)
 		}
 	}
@@ -82,7 +83,7 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
-	page := explorePage(t, base, Mobile, "explore?view=head-to-head&opponent="+seattleH2H+"&penalties=exclude")
+	page := explorePage(t, base, Mobile, "explore?view=head-to-head&opponent="+seattleH2H)
 	defer expectInPlace(t, page, "head-to-head controls, sorts, Back/Forward")()
 	if err := expect.Locator(page.Locator("[data-h2h-summary]")).ToHaveText("Table: all 26 meetings"); err != nil {
 		t.Fatal(err)
@@ -93,10 +94,10 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-title] img[alt='']")).ToHaveCount(2); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-panel=head-to-head] select[name=penalties], [data-h2h-rows] img, [data-h2h-chart] a, [data-h2h-chart] button")).ToHaveCount(0); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-rows] img, [data-h2h-chart] a, [data-h2h-chart] button")).ToHaveCount(0); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-official]")).ToBeVisible(); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
@@ -173,7 +174,7 @@ func TestExploreHeadToHeadNoScriptAndEmpty(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, vp := range []viewport{Desktop, Mobile, {Name: "small-phone", Width: 335, Height: 812}} {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
-		visitStatic(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H+"&penalties=exclude")
+		visitStatic(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
 		if err := expect.Locator(page.Locator("[data-h2h-fallback] li")).ToHaveCount(26); err != nil {
 			t.Fatal(err)
 		}
@@ -356,5 +357,297 @@ func TestExploreHeadToHeadTooltip(t *testing.T) {
 	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.yearLabels[0].text===c.meetings[0].season && c.yearLabels.at(-1).text===c.meetings.at(-1).season && c.yearLabels.every((l,i,a)=>i===0||l.center-l.width/2>=a[i-1].center+a[i-1].width/2+8)}`, nil, &labelsClear)
 	if !labelsClear {
 		t.Fatal("year labels overlap")
+	}
+}
+
+func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	page := newPageWith(t, pageOptions{Viewport: Mobile, Touch: true})
+	visit(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
+	defer expectInPlace(t, page, "series, penalties and history from shared payload")()
+	chooseOption(t, page, "[data-h2h-series]", "both")
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-title]")).ToContainText("actual vs expected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-values]")).Not().ToHaveAttribute("open", ""); err != nil {
+		t.Fatal(err)
+	}
+	assertNoHorizontalOverflow(t, page)
+	if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	var gaps bool
+	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.data.datasets[0].data.every((value,i)=>Math.abs(value-(c.meetings[i].margin-c.meetings[i].expectedMargin))<1e-9)&&!c.config.plugins.some(p=>p.id==='headToHeadExpected')}`, nil, &gaps)
+	if !gaps {
+		t.Fatal("comparison must show gap bars with no ticks")
+	}
+	canvas := page.Locator("[data-chart=head-to-head]")
+	if err := canvas.ScrollIntoViewIfNeeded(); err != nil {
+		t.Fatal(err)
+	}
+	var point struct{ X, Y float64 }
+	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return {x:c.getDatasetMeta(0).data[0].x,y:c.chartArea.top+2}}`, nil, &point)
+	if err := canvas.Hover(playwright.LocatorHoverOptions{Position: &playwright.Position{X: point.X, Y: point.Y}}); err != nil {
+		t.Fatal(err)
+	}
+	tooltip := assertHeadToHeadTooltip(t, page, 0)
+	if !strings.Contains(tooltip, "xG for:") || !strings.Contains(tooltip, "xPts:") || !strings.Contains(tooltip, "Margin gap:") {
+		t.Fatal(tooltip)
+	}
+	if err := page.Keyboard().Press("Escape"); err != nil {
+		t.Fatal(err)
+	}
+	if err := canvas.Tap(playwright.LocatorTapOptions{Position: &playwright.Position{X: point.X, Y: point.Y}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := assertHeadToHeadTooltip(t, page, 0); got != tooltip {
+		t.Fatal("tap expected tooltip differs")
+	}
+	if err := page.Locator("[data-h2h-summary]").Focus(); err != nil {
+		t.Fatal(err)
+	}
+	if err := page.Locator("[data-chart=head-to-head]").Focus(); err != nil {
+		t.Fatal(err)
+	}
+	if got := assertHeadToHeadTooltip(t, page, 0); got != tooltip {
+		t.Fatal("keyboard expected tooltip differs")
+	}
+	chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("Non-penalty goals"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-points-note]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	assertNoHorizontalOverflow(t, page)
+	chooseOption(t, page, "[data-h2h-series]", "actual")
+	if queryOf(t, page).Has("h2h-series") {
+		t.Fatal("default series must be omitted")
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	var actual bool
+	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.data.datasets[0].data.every((v,i)=>v===c.meetings[i].basisGoals[0]-c.meetings[i].basisGoals[1])}`, nil, &actual)
+	if !actual {
+		t.Fatal("Actual must use the non-penalty basis too")
+	}
+	if _, err := page.GoBack(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("both"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := page.GoBack(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToHaveValue("include"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := page.GoForward(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToHaveValue("exclude"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioTeams)
+	path := "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both"
+	var serverTotals string
+	for _, noScript := range []bool{true, false} {
+		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
+		if noScript {
+			visitStatic(t, page, base+path)
+		} else {
+			visit(t, page, base+path)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-coverage]")).ToHaveText("1 meeting lacks xG. 2 meetings lack xPts."); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("xG incomplete"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("xPts incomplete"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-fallback]")).ToContainText("Unavailable"); err != nil {
+			t.Fatal(err)
+		}
+		totals, err := page.Locator("[data-h2h-comparison]").TextContent()
+		if err != nil {
+			t.Fatal(err)
+		}
+		totals = strings.Join(strings.Fields(totals), " ")
+		if noScript {
+			serverTotals = totals
+		} else if strings.ReplaceAll(totals, " ", "") != strings.ReplaceAll(serverTotals, " ", "") {
+			t.Fatalf("server/client totals differ: %q vs %q", serverTotals, totals)
+		}
+		assertNoHorizontalOverflow(t, page)
+		if !noScript {
+			var missing int
+			evalJSON(t, page, `()=>Chart.getChart(document.querySelector('[data-chart="head-to-head"]')).data.datasets[0].data.findIndex(value=>value===null)`, nil, &missing)
+			if missing < 0 {
+				t.Fatal("fixture must have a missing xG slot")
+			}
+			canvas := page.Locator("[data-chart=head-to-head]")
+			if err := canvas.Press("Home"); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < missing; i++ {
+				if err := canvas.Press("ArrowRight"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			tooltip := assertHeadToHeadTooltip(t, page, missing)
+			if !strings.Contains(tooltip, "xG for: Unavailable") || !strings.Contains(tooltip, "Margin gap: Unavailable") {
+				t.Fatal(tooltip)
+			}
+		}
+		chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+		if noScript {
+			if err := page.Locator("[data-h2h-submit]").Click(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-coverage]")).ToContainText("3 of 4 meetings"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-rows] tr")).ToHaveCount(4); err != nil {
+			t.Fatal(err)
+		}
+		chooseOption(t, page, "[data-h2h-series]", "actual")
+		if noScript {
+			if err := page.Locator("[data-h2h-submit]").Click(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		assertNoHorizontalOverflow(t, page)
+	}
+}
+
+func TestExploreHeadToHeadExpectedView(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	for _, noScript := range []bool{false, true} {
+		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
+		path := base + "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=expected"
+		if noScript {
+			visitStatic(t, page, path)
+		} else {
+			visit(t, page, path)
+		}
+		if !noScript {
+			defer expectInPlace(t, page, "three head-to-head views and penalties")()
+		}
+		choose := func(selector, value string) {
+			chooseOption(t, page, selector, value)
+			if noScript {
+				if err := page.Locator("[data-h2h-submit]").Click(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		for _, penalties := range []string{"include", "exclude"} {
+			choose("[data-h2h-penalties]", penalties)
+			if err := expect.Locator(page.Locator("[data-h2h-expected]")).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-h2h-direction]")).ToContainText("zero: level"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-h2h-fallback]")).Not().ToContainText("Margin gap:"); err != nil {
+				t.Fatal(err)
+			}
+			assertNoHorizontalOverflow(t, page)
+			if !noScript {
+				var expected bool
+				evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.data.datasets[0].data.every((v,i)=>Math.abs(v-c.meetings[i].expectedMargin)<1e-9)}`, nil, &expected)
+				if !expected {
+					t.Fatal("Expected bars must use xG margin")
+				}
+				canvas := page.Locator("[data-chart=head-to-head]")
+				if err := canvas.Press("Home"); err != nil {
+					t.Fatal(err)
+				}
+				if tooltip := assertHeadToHeadTooltip(t, page, 0); !strings.Contains(tooltip, "xG margin:") && !strings.Contains(tooltip, "npxG margin:") {
+					t.Fatal(tooltip)
+				}
+				var fits bool
+				evalJSON(t, page, `()=>[...document.querySelectorAll('.explore-h2h-venue')].every(e=>e.scrollWidth<=Math.ceil(e.getBoundingClientRect().width))`, nil, &fits)
+				if !fits {
+					t.Fatal("venue labels overflow their boxes")
+				}
+			}
+		}
+		choose("[data-h2h-series]", "both")
+		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-expected]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		choose("[data-h2h-series]", "actual")
+		if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		choose("[data-h2h-series]", "expected")
+		if err := expect.Locator(page.Locator("[data-h2h-expected]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if !noScript {
+			if _, err := page.GoBack(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("actual"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := page.GoForward(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("expected"); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }

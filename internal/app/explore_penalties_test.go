@@ -59,7 +59,9 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	if plain != included {
 		t.Error("penalties=include must render exactly as an absent parameter")
 	}
-	forbidRaw(t, plain, "npxG", "Non-penalty", `data-points-note`, `data-penalties="exclude"`)
+	forbidRaw(t, plain, "npxG", `data-points-note`, `data-penalties="exclude"`)
+	forbidText(t, plain, `[data-panel="team-history"]`, "Non-penalty")
+	requireAttr(t, plain, `th[data-h2h-basis-column]`, "hidden", "")
 	// Only the Excluded destination names the parameter; default links omit it.
 	// Every view carries its own select and destination links.
 	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `select[data-penalties-selector]`)); got != want || want != 9 {
@@ -172,8 +174,8 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 			}
 			forms := find(t, body, `form.explore-team-controls`)
 			inputs := find(t, body, `form.explore-team-controls input[name=penalties][value=exclude]`)
-			// Team-seasons owns a conditional select; the other forms carry the basis.
-			if len(forms) == 0 || len(inputs) != len(forms)-1 {
+			// Team-seasons and Head to head own selects; other forms carry the basis.
+			if len(forms) == 0 || len(inputs) != len(forms)-2 {
 				t.Errorf("%d selection forms, %d with the hidden penalties input", len(forms), len(inputs))
 			}
 		})

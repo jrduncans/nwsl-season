@@ -62,6 +62,7 @@ func TestGeometry(t *testing.T) {
 		{"RankingBars", testGeometryRankingBars},
 		{"HeadToHead", testGeometryHeadToHead},
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
+		{"HeadToHeadExpected", testGeometryHeadToHeadExpected},
 		{"PlotDomain", testGeometryPlotDomain},
 		{"PointRadius", testGeometryPointRadius},
 		{"LogoPlacement", testGeometryLogoPlacement},
@@ -75,7 +76,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "stripRows"}
+	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "stripRows"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -565,3 +566,35 @@ func testGeometryHeadToHeadHitAndLabels(t *testing.T, page playwright.Page) {
 		})
 	}
 }
+
+func testGeometryHeadToHeadExpected(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		goals, xg []any
+		series    string
+		want      *float64
+	}{
+		{[]any{2, 1}, []any{1.5, .5}, "actual", ptrFloat(1)},
+		{[]any{2, 1}, []any{1.5, .5}, "both", ptrFloat(0)},
+		{[]any{1, 0}, []any{2, .5}, "both", ptrFloat(-.5)},
+		{[]any{1, 0}, []any{0, 0}, "both", ptrFloat(1)},
+		{[]any{2, 1}, []any{nil, nil}, "actual", ptrFloat(1)},
+		{[]any{2, 1}, []any{nil, nil}, "both", nil},
+		{[]any{nil, nil}, []any{nil, nil}, "actual", nil},
+		{[]any{2, 1}, []any{1.5, .5}, "expected", ptrFloat(1)},
+		{[]any{nil, nil}, []any{.5, 2}, "expected", ptrFloat(-1.5)},
+		{[]any{2, 1}, []any{nil, nil}, "expected", nil},
+	} {
+		var got *float64
+		callGeometry(t, page, "headToHeadValue", []any{tc.goals, tc.xg, tc.series}, &got)
+		if (got == nil) != (tc.want == nil) || got != nil && !near(*got, *tc.want) {
+			t.Fatalf("gap/actual value: %v, want %v", got, tc.want)
+		}
+	}
+	var bounds struct{ Extent float64 }
+	callGeometry(t, page, "headToHeadGeometry", []any{[]any{nil, .4, -6.2}, 390, 260}, &bounds)
+	if bounds.Extent != 10 {
+		t.Fatalf("gap margins must set extent: %+v", bounds)
+	}
+}
+
+func ptrFloat(value float64) *float64 { return &value }
