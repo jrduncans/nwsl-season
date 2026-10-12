@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -328,6 +330,7 @@ var exploreTabs = []struct{ group, tab, query string }{
 	{"League trends", "Scoring trend", "view=trend"},
 	{"League trends", "Goal distribution", "view=distribution"},
 	{"League trends", "Home advantage", "view=home-advantage"},
+	{"League trends", "Parity", "view=parity"},
 	{"League trends", "Scoring table", "view=table"},
 }
 
@@ -1630,6 +1633,7 @@ func TestExploreChartsInspectWithTheKeyboard(t *testing.T) {
 		{"scoring trend", "explore?view=trend", `[data-chart="trend"]`, "per match"},
 		{"home advantage goals", "explore?view=home-advantage", `[data-chart="home-goals"]`, "home minus away"},
 		{"home advantage points", "explore?view=home-advantage", `[data-chart="home-points"]`, "home minus away"},
+		{"parity", "explore?view=parity", `[data-chart="parity"]`, "chance level"},
 		{"actual vs expected", "explore?view=teams&display=chart&season=2025", `[data-chart="teams"]`, "played"},
 		{"gap to expected", "explore?view=teams&display=gap&season=2025", `[data-chart="team-gap"]`, "Gap:"},
 		{"match by match", "explore?view=season-trend&season=2025", `[data-chart="season-trend"]`, ""},
@@ -1847,6 +1851,39 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 		}
 	})
 
+	t.Run("parity selects a season with a GET form and links", func(t *testing.T) {
+		goTo("explore?view=parity")
+		if err := expect.Locator(page.Locator("[data-parity-strip-title]")).ToHaveText("Teams in 2025"); err != nil {
+			t.Fatalf("default strip: %v", err)
+		}
+		if err := expect.Locator(page.Locator(".explore-parity-list li")).ToHaveCount(fixtureTeams); err != nil {
+			t.Errorf("server-rendered strip: %v", err)
+		}
+		chooseOption(t, page, "[data-parity-season]", "2026")
+		chooseOption(t, page, "[data-parity-series]", "both")
+		if err := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Show season"}).Click(); err != nil {
+			t.Fatalf("submit: %v", err)
+		}
+		if got := queryOf(t, page); got.Get("season") != "2026" || got.Get("parity-series") != "both" || got.Get("view") != "parity" {
+			t.Errorf("submitted URL = %v", got)
+		}
+		if err := expect.Locator(page.Locator("[data-parity-strip-title]")).ToContainText("Teams in 2026 (in progress"); err != nil {
+			t.Errorf("strip after submitting: %v", err)
+		}
+		if err := expect.Locator(page.Locator(".explore-parity-list li").First()).ToContainText("xPPG"); err != nil {
+			t.Errorf("strip without xPPG after choosing both: %v", err)
+		}
+		if err := page.Locator("details[data-parity-values] summary").Click(); err != nil {
+			t.Fatalf("open values: %v", err)
+		}
+		if err := page.Locator(`[data-parity-season-link="2025"]`).Click(); err != nil {
+			t.Fatalf("click season link: %v", err)
+		}
+		if got := queryOf(t, page); got.Get("season") != "2025" || got.Get("parity-series") != "both" {
+			t.Errorf("season link URL = %v, want 2025 keeping the series", got)
+		}
+	})
+
 	t.Run("match by match form submits a GET", func(t *testing.T) {
 		goTo("explore?view=season-trend&season=2025")
 		chooseOption(t, page, "[data-trend-mode]", "match")
@@ -1948,4 +1985,119 @@ func TestExploreHomeAdvantageShowsAlignedPanelsAndSortsInPlace(t *testing.T) {
 		t.Fatalf("forward: %v", err)
 	}
 	assertSorted(t, "goals gap after Forward", mustNumbers(t, column(2)), false)
+}
+
+// paritySelection returns the strip's season heading.
+func paritySelection(t *testing.T, page playwright.Page) string {
+	t.Helper()
+	var title string
+	evalJSON(t, page, `() => document.querySelector('[data-parity-strip-title]').textContent`, nil, &title)
+	return title
+}
+
+// TestExploreParitySelectsSeasonsInPlace checks the trend against its table,
+// then selects seasons from the table, the select, the chart and the keyboard
+// without a data request, and restores each one with Back and Forward.
+func TestExploreParitySelectsSeasonsInPlace(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioOverview)
+	page := explorePage(t, base, Desktop, "explore?view=parity")
+
+	var state struct {
+		Labels  []string
+		Series  []string
+		Spread  []*float64
+		Chance  []*float64
+		Visible []bool
+	}
+	evalJSON(t, page, `() => {
+		const chart = Chart.getChart(document.querySelector('[data-chart="parity"]'));
+		return {Labels: chart.data.labels, Series: chart.data.datasets.map((d) => d.label),
+			Spread: chart.data.datasets[0].data, Chance: chart.data.datasets[2].data,
+			Visible: chart.data.datasets.map((_, i) => chart.isDatasetVisible(i))};
+	}`, nil, &state)
+	if len(state.Labels) != 10 || state.Labels[0] != "2016" || state.Labels[9] != "2025" {
+		t.Fatalf("x axis = %v, want every year from 2016 to 2025", state.Labels)
+	}
+	if fmt.Sprint(state.Series) != "[PPG spread xPPG spread Chance level]" || fmt.Sprint(state.Visible) != "[true false true]" {
+		t.Errorf("series = %v visible %v, want the xPPG spread hidden by default", state.Series, state.Visible)
+	}
+	for index, year := range state.Labels {
+		if (year == "2020") != (state.Spread[index] == nil) || (year == "2020") != (state.Chance[index] == nil) {
+			t.Errorf("%s spread %v chance %v, want a gap only in 2020", year, state.Spread[index], state.Chance[index])
+		}
+	}
+	// The overview's 2018 has two teams far behind: its spread clears chance.
+	if position := slices.Index(state.Labels, "2018"); *state.Spread[position] <= *state.Chance[position] {
+		t.Errorf("2018 spread %v is not above chance %v", *state.Spread[position], *state.Chance[position])
+	}
+	if got := paritySelection(t, page); got != "Teams in 2025" {
+		t.Errorf("default strip = %q, want the newest completed season", got)
+	}
+	var marks int
+	evalJSON(t, page, `() => document.querySelectorAll('[data-parity-strip] svg circle').length`, nil, &marks)
+	if marks != 6 {
+		t.Errorf("strip marks = %d, want one per team", marks)
+	}
+
+	defer expectInPlace(t, page, "selecting a Parity season")()
+	if err := page.Locator("details[data-parity-values] summary").Click(); err != nil {
+		t.Fatalf("open values: %v", err)
+	}
+	if err := page.Locator(`[data-parity-season-link="2018"]`).Click(); err != nil {
+		t.Fatalf("click 2018: %v", err)
+	}
+	if got := paritySelection(t, page); got != "Teams in 2018" || queryOf(t, page).Get("season") != "2018" {
+		t.Errorf("after the table link: %q, %v", got, queryOf(t, page))
+	}
+	chooseOption(t, page, "[data-parity-season]", "2024")
+	if got := paritySelection(t, page); got != "Teams in 2024" {
+		t.Errorf("after the select: %q", got)
+	}
+	// 2024 has two teams tied on the best PPG; the summary names both.
+	var summary string
+	evalJSON(t, page, `() => document.querySelector('[data-parity-summary]').textContent`, nil, &summary)
+	if !regexp.MustCompile(`from [^()]+, [^()]+ \(2\.00\) down to`).MatchString(summary) {
+		t.Errorf("2024 summary = %q, want both tied leaders", summary)
+	}
+
+	// Keyboard: Home inspects the first season and Enter selects it.
+	canvas := page.Locator(`[data-chart="parity"]`)
+	if err := canvas.Focus(); err != nil {
+		t.Fatalf("focus chart: %v", err)
+	}
+	for _, key := range []string{"Home", "Enter"} {
+		if err := canvas.Press(key); err != nil {
+			t.Fatalf("press %s: %v", key, err)
+		}
+	}
+	if got := paritySelection(t, page); got != "Teams in 2016" {
+		t.Errorf("after Home and Enter: %q", got)
+	}
+
+	chooseOption(t, page, "[data-parity-series]", "both")
+	evalJSON(t, page, `() => document.querySelectorAll('[data-parity-strip] svg .explore-parity-expected').length`, nil, &marks)
+	if marks != 6 {
+		t.Errorf("xPPG marks = %d, want one per team", marks)
+	}
+
+	for _, step := range []struct {
+		back bool
+		want string
+	}{
+		{true, "Teams in 2016"}, {true, "Teams in 2024"}, {true, "Teams in 2018"}, {false, "Teams in 2024"},
+	} {
+		var err error
+		if step.back {
+			_, err = page.GoBack()
+		} else {
+			_, err = page.GoForward()
+		}
+		if err != nil {
+			t.Fatalf("history: %v", err)
+		}
+		if got := paritySelection(t, page); got != step.want {
+			t.Errorf("after %s: %q, want %q", map[bool]string{true: "Back", false: "Forward"}[step.back], got, step.want)
+		}
+	}
 }

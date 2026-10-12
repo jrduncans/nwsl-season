@@ -17,6 +17,7 @@
   const teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
   const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
   const homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
+  const parityRecords = JSON.parse(root.querySelector('#explore-parity-data').textContent) || [];
   const historySeries = root.querySelector('[data-history-series]');
   const historyContext = root.querySelector('[data-history-context]');
   const teamSeason = root.querySelector('[data-team-season]');
@@ -75,7 +76,7 @@
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
   // Pure chart geometry lives in explore-geometry.js, which loads first.
-  const {gapExtent, plotDomain, pointRadius, layoutLogos} = window.NWSLGeometry;
+  const {gapExtent, plotDomain, pointRadius, layoutLogos, stripRows} = window.NWSLGeometry;
   const percent = value => `${value.toFixed(1)}%`;
   // Use the same fit rule for visible labels and tooltip content.
   const hasSegmentLabel = (chart, value) => chart.chartArea && chart.chartArea.width * value / 100 >= 58;
@@ -409,6 +410,193 @@
       chart.resize(); chart.update('none');
     });
   }
+  // Parity: the spread of team points per game in each season, drawn over the
+  // spread that chance alone would give, and one selected season's teams on a
+  // PPG strip. Every value, including the quartiles, comes from the server.
+  const parityYears = parityRecords.length
+    ? Array.from({length: Number(parityRecords.at(-1).season) - Number(parityRecords[0].season) + 1}, (_, index) => String(Number(parityRecords[0].season) + index))
+    : [];
+  const parityBySeason = new Map(parityRecords.map(row => [row.season, row]));
+  const paritySeasonSelect = root.querySelector('[data-parity-season]');
+  const paritySeriesSelect = root.querySelector('[data-parity-series]');
+  const paritySeason = params => parityBySeason.has(params.get('season')) ? params.get('season') : root.dataset.defaultParitySeason;
+  const paritySeries = params => params.get('parity-series') === 'both' ? 'both' : 'actual';
+  // The strip's season, which the chart's marks emphasize.
+  let paritySelected = '';
+  const ppg = value => value == null ? 'Unavailable' : value.toFixed(2);
+  const inProgress = row => row.active ? ` (in progress through ${row.played} matches)` : '';
+  // The same sentence as exploreParityRecord.Summary in Go.
+  const paritySummary = row => `Top-to-bottom gap: ${ppg(row.gap)} PPG, from ${row.top.join(', ')} (${ppg(row.teams[0].ppg)}) down to ${row.bottom.join(', ')} (${ppg(row.teams.at(-1).ppg)}). Middle half of teams: ${ppg(row.q1)} to ${ppg(row.q3)} PPG (interquartile range ${ppg(row.iqr)}).`;
+  function parityDescription(year) {
+    const row = parityBySeason.get(year);
+    if (!row) return `${year}: no season`;
+    const expected = row.xspread == null ? 'xPPG spread unavailable (xPts incomplete)' : `xPPG spread ${ppg(row.xspread)}`;
+    return `${year}${inProgress(row)}: PPG spread ${ppg(row.spread)}, ${row.spread > row.chance ? 'above' : 'within'} the chance level of ${ppg(row.chance)}; ${expected}; ${row.teams.length} teams, ${row.matches.toFixed(1)} matches each`;
+  }
+  function selectParitySeason(year) {
+    if (parityBySeason.has(year)) update({view: 'parity', season: year});
+  }
+  function createParity(canvas) {
+    const options = commonOptions();
+    options.interaction = {mode: 'index', axis: 'x', intersect: false};
+    options.scales = {
+      x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
+      y: {min: 0, grace: '10%', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6, callback: value => value.toFixed(2)},
+        title: {display: true, text: 'Spread of points per game'}},
+    };
+    options.layout = {padding: {top: 8}};
+    options.plugins.tooltip.filter = item => item.dataset.key !== 'chance' || item.parsed.y != null;
+    options.plugins.tooltip.callbacks = {
+      title: items => items[0] ? `${items[0].label}${parityBySeason.get(items[0].label)?.active ? ' (in progress)' : ''}` : '',
+      label: item => `${item.dataset.label}: ${ppg(item.parsed.y)}`,
+      footer: items => {
+        const row = items[0] && parityBySeason.get(items[0].label);
+        return row ? `${row.teams.length} teams, ${row.matches.toFixed(1)} matches each` : '';
+      },
+    };
+    options.onClick = (_, elements, chart) => { if (elements.length) selectParitySeason(chart.data.labels[elements[0].index]); };
+    options.onHover = (event, elements) => { event.native.target.style.cursor = elements.length ? 'pointer' : ''; };
+    const values = key => parityYears.map(year => parityBySeason.get(year)?.[key] ?? null);
+    const selected = context => parityYears[context.dataIndex] === paritySelected;
+    const active = context => parityBySeason.get(parityYears[context.dataIndex])?.active;
+    const mark = (base, hollow) => ({
+      borderColor: base, pointBorderColor: base,
+      // An active season is hollow, so it reads as a pace rather than a result.
+      pointBackgroundColor: context => active(context) ? hollow : base, backgroundColor: base,
+      pointRadius: context => selected(context) ? 8 : 5,
+      pointBorderWidth: context => selected(context) ? 3 : 2,
+      segment: {borderDash: context => parityBySeason.get(parityYears[context.p1DataIndex])?.active ? [5, 4] : undefined},
+      spanGaps: false, borderWidth: 2.5, pointHitRadius: 6, pointHoverRadius: 8,
+    });
+    const chart = new Chart(canvas, {
+      type: 'line', options,
+      data: {labels: parityYears, datasets: [
+        {label: 'PPG spread', key: 'spread', data: values('spread'), pointStyle: 'circle', order: 1, ...mark(goalsColor, color('--panel'))},
+        {label: 'xPPG spread', key: 'xspread', data: values('xspread'), pointStyle: 'rectRot', order: 2, ...mark(xgColor, color('--panel'))},
+        // Drawn first, behind both series: the region from zero to the chance level.
+        {label: 'Chance level', key: 'chance', data: values('chance'), order: 3, fill: 'origin', spanGaps: false,
+          backgroundColor: color('--chart-chance'), borderColor: color('--muted'), borderWidth: 1, borderDash: [4, 4],
+          pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0},
+      ]},
+    });
+    // Arrow keys step through seasons, not series; Enter shows that season.
+    chart.keyboardByIndex = true;
+    keyboardAccess(chart, mark => parityDescription(chart.data.labels[mark.index]));
+    canvas.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const mark = chart.getActiveElements()[0];
+      if (!mark) return;
+      event.preventDefault();
+      selectParitySeason(chart.data.labels[mark.index]);
+    });
+    return chart;
+  }
+  // Draws the selected season's teams on a fixed 0–3 PPG axis, so seasons
+  // compare at the same scale. Teams that would overlap stack into rows.
+  function drawParityStrip(row, both) {
+    const host = root.querySelector('[data-parity-strip]');
+    if (!host) return;
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const width = Math.max(280, host.clientWidth), left = 16, right = 16, radius = 11;
+    const x = value => left + Math.max(0, Math.min(3, value)) / 3 * (width - left - right);
+    const spans = row.teams.map(team => {
+      const ends = [x(team.ppg)].concat(both && team.xppg != null ? [x(team.xppg)] : []);
+      return {left: Math.min(...ends) - radius, right: Math.max(...ends) + radius};
+    });
+    const rows = stripRows(spans, 3);
+    const rowCount = Math.max(1, ...rows.map(index => index + 1));
+    const rowHeight = radius * 2 + 4, bracketTop = 14, plotTop = 58, plotBottom = plotTop + rowCount * rowHeight;
+    const height = plotBottom + 46;
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('width', width); svg.setAttribute('height', height);
+    svg.setAttribute('aria-hidden', 'true');
+    const add = (parent, name, attributes, text) => {
+      const element = document.createElementNS(svgNS, name);
+      Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+      if (text != null) element.textContent = text;
+      parent.append(element);
+      return element;
+    };
+    const label = (text, at, y, anchor = 'middle') => {
+      // Keep each label inside the strip, even at an axis end.
+      const clamped = anchor === 'middle' ? Math.max(left + text.length * 3.2, Math.min(width - right - text.length * 3.2, at)) : at;
+      return add(svg, 'text', {x: clamped, y, 'text-anchor': anchor, class: 'explore-parity-label'}, text);
+    };
+    // Middle half: the interquartile band behind the marks.
+    add(svg, 'rect', {x: x(row.q1), y: plotTop - 4, width: Math.max(1, x(row.q3) - x(row.q1)), height: plotBottom - plotTop + 8, class: 'explore-parity-iqr'});
+    label(`Middle half ${ppg(row.q1)}–${ppg(row.q3)}`, (x(row.q1) + x(row.q3)) / 2, plotTop - 8);
+    // Top-to-bottom gap: a bracket from the worst to the best PPG.
+    const low = x(row.teams.at(-1).ppg), high = x(row.teams[0].ppg), bracket = bracketTop + 8;
+    add(svg, 'path', {d: `M${low} ${bracket + 6}V${bracket}H${high}V${bracket + 6}`, class: 'explore-parity-bracket'});
+    label(`Top-to-bottom gap ${ppg(row.gap)}`, (low + high) / 2, bracketTop + 4);
+    // Axis.
+    add(svg, 'line', {x1: left, x2: width - right, y1: plotBottom + 4, y2: plotBottom + 4, class: 'explore-parity-axis'});
+    const step = width < 420 ? 1 : .5;
+    for (let tick = 0; tick <= 3; tick += step) {
+      add(svg, 'line', {x1: x(tick), x2: x(tick), y1: plotBottom + 4, y2: plotBottom + 8, class: 'explore-parity-axis'});
+      label(tick.toFixed(1), x(tick), plotBottom + 22, tick === 0 ? 'start' : tick === 3 ? 'end' : 'middle');
+    }
+    label('Points per game', width / 2, plotBottom + 40);
+    row.teams.forEach((team, index) => {
+      const y = plotTop + rows[index] * rowHeight + radius;
+      const group = add(svg, 'g', {class: 'explore-parity-team'});
+      add(group, 'title', {}, `${team.name}: ${ppg(team.ppg)} PPG${both ? `, ${ppg(team.xppg)} xPPG` : ''}, ${team.played} played`);
+      if (both && team.xppg != null) {
+        add(group, 'line', {x1: x(team.ppg), x2: x(team.xppg), y1: y, y2: y, class: 'explore-parity-link'});
+        const cx = x(team.xppg), size = radius - 1;
+        add(group, 'path', {d: `M${cx} ${y - size}L${cx + size} ${y}L${cx} ${y + size}L${cx - size} ${y}Z`, class: 'explore-parity-expected'});
+      }
+      add(group, 'circle', {cx: x(team.ppg), cy: y, r: radius, class: `explore-parity-actual${row.active ? ' is-active' : ''}${team.logo ? ' has-logo' : ''}`});
+      // A logo names the team; the ring under it keeps the mark if it fails to load.
+      if (team.logo) {
+        const logo = add(group, 'image', {href: team.logo, x: x(team.ppg) - radius + 3, y: y - radius + 3, width: radius * 2 - 6, height: radius * 2 - 6, class: 'explore-parity-logo'});
+        logo.addEventListener('error', () => logo.remove());
+      }
+    });
+    host.replaceChildren(svg);
+    host.setAttribute('aria-label', `${row.season}${inProgress(row)}: ${row.teams.length} teams on a points-per-game scale from 0 to 3. ${paritySummary(row)}`);
+  }
+  function showParity(params) {
+    const canvas = root.querySelector('[data-chart="parity"]');
+    if (!canvas) return;
+    const year = paritySeason(params), series = paritySeries(params), row = parityBySeason.get(year);
+    paritySelected = year;
+    const chart = charts.parity || (charts.parity = createParity(canvas));
+    chart.setDatasetVisibility(1, series === 'both');
+    chart.resize(); chart.update('none');
+    if (document.activeElement === canvas) {
+      const index = chart.data.labels.indexOf(year);
+      chart.setActiveElements([{datasetIndex: 0, index}]);
+      chart.update('none');
+    }
+    paritySeasonSelect.value = year;
+    paritySeriesSelect.value = series;
+    root.querySelector('[data-parity-expected-legend]').hidden = series !== 'both';
+    const requested = params.get('season');
+    const note = root.querySelector('[data-parity-season-note]');
+    note.hidden = !requested || requested === year;
+    note.textContent = note.hidden ? '' : `${requested} is not plotted, so the strip shows ${year}.`;
+    root.querySelector('[data-parity-strip-title]').textContent = `Teams in ${year}${inProgress(row)}`;
+    root.querySelector('[data-parity-summary]').textContent = paritySummary(row);
+    root.querySelector('[data-parity-team-caption]').textContent = `Points per game and expected points per game for each team in ${year}, highest PPG first.`;
+    root.querySelector('[data-parity-teams]').replaceChildren(...row.teams.map(team => {
+      const tr = document.createElement('tr');
+      const name = document.createElement('th'); name.scope = 'row'; name.textContent = team.name;
+      tr.append(name, ...[team.played, ppg(team.ppg), ppg(team.xppg)].map(value => {
+        const cell = document.createElement('td'); cell.textContent = value; return cell;
+      }));
+      return tr;
+    }));
+    drawParityStrip(row, series === 'both');
+  }
+  let parityResize = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(parityResize);
+    parityResize = requestAnimationFrame(() => {
+      if (!root.querySelector('[data-panel="parity"]')?.hidden) showParity(new URL(location.href).searchParams);
+    });
+  });
   function teamDescription(chart, index) {
     const row = chart.teamRows[index], measure = chart.teamMeasure;
     const units = chart.teamUnits || 'per-match';
@@ -1507,6 +1695,38 @@
       link.href = `?${selection}`;
     });
   }
+  function sortParityTable(params) {
+    const body = root.querySelector('[data-parity-rows]');
+    if (!body) return;
+    const links = [...root.querySelectorAll('[data-parity-sort]')];
+    const column = Math.max(0, links.findIndex(link => link.dataset.paritySort === params.get('parity-sort')));
+    const direction = params.get('parity-order') === 'asc' ? 'asc' : 'desc';
+    const rows = [...body.rows];
+    rows.sort((a, b) => {
+      const x = a.cells[column].dataset.value, y = b.cells[column].dataset.value;
+      if (x === '' || y === '') return (x === '') - (y === '');
+      return (Number(x) - Number(y)) * (direction === 'asc' ? 1 : -1)
+        || Number(b.cells[0].dataset.value) - Number(a.cells[0].dataset.value);
+    });
+    body.append(...rows);
+    const selection = new URLSearchParams(params);
+    selection.set('view', 'parity');
+    links.forEach((link, index) => {
+      const selected = index === column;
+      link.parentElement.setAttribute('aria-sort', selected ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
+      const target = new URLSearchParams(selection);
+      target.set('parity-sort', link.dataset.paritySort);
+      target.set('parity-order', selected && direction === 'desc' ? 'asc' : 'desc');
+      link.href = `?${target}`;
+    });
+    const year = paritySeason(params);
+    root.querySelectorAll('[data-parity-season-link]').forEach(link => {
+      const target = new URLSearchParams(selection);
+      target.set('season', link.dataset.paritySeasonLink);
+      link.href = `?${target}`;
+      if (link.dataset.paritySeasonLink === year) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
+    });
+  }
   function rollingMatchValue(matches, end, measure, window, expected) {
     window = Math.min(end + 1, window);
     let average = 0;
@@ -1796,7 +2016,7 @@
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
-    const view = ['trend', 'distribution', 'home-advantage', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
+    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
@@ -1853,6 +2073,7 @@
       }
     }
     if (view === 'home-advantage') showHomeAdvantage();
+    if (view === 'parity') showParity(params);
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     if (view === 'season-trend') showSeasonTrend(params);
@@ -1889,6 +2110,7 @@
     sortTable(Number.isInteger(column) && column >= 0 && column <= 4 ? column : 0, params.get('order') === 'asc' ? 'asc' : 'desc');
     sortDistributionTable(params);
     sortHomeTable(params);
+    sortParityTable(params);
   }
   function update(changes) {
     const url = new URL(location.href);
@@ -1897,6 +2119,17 @@
     applyURL();
   }
   root.addEventListener('click', event => {
+    const paritySort = event.target.closest('[data-parity-sort]');
+    if (paritySort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const params = new URL(paritySort.href).searchParams;
+      update({view: 'parity', 'parity-sort': params.get('parity-sort'), 'parity-order': params.get('parity-order')});
+    }
+    const parityLink = event.target.closest('[data-parity-season-link]');
+    if (parityLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      selectParitySeason(parityLink.dataset.paritySeasonLink);
+    }
     const homeLink = event.target.closest('[data-home-sort]');
     if (homeLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
@@ -1983,6 +2216,13 @@
   const updateRankings = () => update(Object.fromEntries(new FormData(rankingControls)));
   rankingControls.addEventListener('submit', event => { event.preventDefault(); updateRankings(); });
   rankingControls.addEventListener('change', updateRankings);
+  if (paritySeasonSelect) {
+    paritySeasonSelect.addEventListener('change', () => selectParitySeason(paritySeasonSelect.value));
+    paritySeriesSelect.addEventListener('change', () => update({view: 'parity', 'parity-series': paritySeriesSelect.value}));
+    root.querySelector('[data-parity-controls]').addEventListener('submit', event => {
+      event.preventDefault(); update({view: 'parity', season: paritySeasonSelect.value, 'parity-series': paritySeriesSelect.value});
+    });
+  }
   window.addEventListener('popstate', applyURL);
   styleTable();
   applyURL();

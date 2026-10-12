@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -87,9 +88,16 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if !strings.Contains(body, `href="explore" aria-current="page">Explore</a>`) {
 				t.Error("Explore is not the active navigation item")
 			}
-			for _, unwanted := range []string{"Current season", "All seasons", "data-close", "data-year-button", "data-readout", "data-bin=", "Inventory verified", "Inventory unverified", "No regular season", "selected-season-heading", "About this data", "?season="} {
+			for _, unwanted := range []string{"Current season", "All seasons", "data-close", "data-year-button", "data-readout", "data-bin=", "Inventory verified", "Inventory unverified", "No regular season", "selected-season-heading", "About this data"} {
 				if strings.Contains(body, unwanted) {
 					t.Errorf("unexpected %q", unwanted)
+				}
+			}
+			// Explore's season selections always name their view; a bare
+			// ?season= link would be the retired historical season selector.
+			for _, link := range regexp.MustCompile(`href="\?season=[^"]*"`).FindAllString(body, -1) {
+				if !strings.Contains(link, "view=") {
+					t.Errorf("season link without a view: %s", link)
 				}
 			}
 		})
@@ -247,6 +255,7 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		{"view=teams&metric=gap", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
 		{"view=distribution", "league", `data-view-choice="distribution" aria-current="page">Goal distribution</a>`},
 		{"view=home-advantage", "league", `data-view-choice="home-advantage" aria-current="page">Home advantage</a>`},
+		{"view=parity", "league", `data-view-choice="parity" aria-current="page">Parity</a>`},
 		{"view=table", "league", `data-view-choice="table" aria-current="page">Scoring table</a>`},
 		{"view=teams", "teams", `data-team-display="chart" aria-current="page">Actual vs expected</a>`},
 		{"view=teams&display=gap", "teams", `data-team-display="gap" aria-current="page">Gap to expected</a>`},
@@ -336,6 +345,13 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?view=home-advantage&home-sort=goals&home-sort=xg", http.StatusBadRequest, ""},
 		{"/explore?view=home-advantage&home-order=bad", http.StatusBadRequest, ""},
 		{"/explore?view=home-advantage&home-order=asc&home-order=desc", http.StatusBadRequest, ""},
+		{"/explore?view=parity&parity-sort=bad", http.StatusBadRequest, ""},
+		{"/explore?view=parity&parity-sort=", http.StatusBadRequest, ""},
+		{"/explore?view=parity&parity-order=bad", http.StatusBadRequest, ""},
+		{"/explore?view=parity&parity-series=xg", http.StatusBadRequest, ""},
+		{"/explore?view=parity&parity-series=actual&parity-series=both", http.StatusBadRequest, ""},
+		{"/explore?view=parity&season=1999", http.StatusBadRequest, ""},
+		{"/explore?view=parity&season=", http.StatusBadRequest, ""},
 		{"/explore/", http.StatusSeeOther, "../explore"},
 		{"/nwsl-season/explore/?view=table", http.StatusSeeOther, "../explore?view=table"},
 	} {
