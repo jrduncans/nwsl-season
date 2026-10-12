@@ -82,5 +82,22 @@
     return labels;
   }
 
-  window.NWSLGeometry = Object.freeze({gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos});
+  // Stacks horizontal spans into rows for a one-axis strip, so marks never
+  // overlap. spans are {left, right} in pixels; each takes the lowest row whose
+  // last span ends at least gap before it, visiting spans from left to right
+  // (input order breaks ties). Returns each span's row, in input order.
+  function stripRows(spans, gap = 0) {
+    const rows = new Array(spans.length), ends = [];
+    spans.map((span, index) => ({...span, index}))
+      .sort((a, b) => a.left - b.left || a.index - b.index)
+      .forEach(span => {
+        let row = ends.findIndex(end => end + gap <= span.left);
+        if (row === -1) row = ends.length;
+        ends[row] = span.right;
+        rows[span.index] = row;
+      });
+    return rows;
+  }
+
+  window.NWSLGeometry = Object.freeze({gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

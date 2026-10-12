@@ -25,6 +25,7 @@ page, redirect to the Scoring trend.
 | League trends | League, across seasons | Scoring trend | `view=trend` |
 | | | Goal distribution | `view=distribution` |
 | | | Home advantage | `view=home-advantage` |
+| | | Parity | `view=parity` |
 | | | Scoring table | `view=table` |
 
 An omitted view opens Actual vs expected; a view-less link that carries
@@ -187,6 +188,41 @@ seasons Forecast Lab needs and have no xPoints). "Home" is ASA's home
 designation: ASA has no neutral-site flag, so alternate-venue and neutral
 matches count as home matches. The view describes a home-minus-away gap, not its
 cause.
+
+**Parity** shows how evenly matched each eligible season was, and what made it
+so. The trend plots the spread of team points per game (PPG), measured as the
+population standard deviation across every team, over a shaded region from
+zero to the spread chance alone would give. That chance level assumes equally
+good teams: each match is a draw at the season's observed draw rate *d* and
+otherwise a 50/50 win or loss, so one match's points vary by
+σ² = 4.5(1 − *d*) + *d* − (1.5(1 − *d*) + *d*)², and the chance spread is
+σ / √*n* for *n* mean matches per team. Drawing it on the same axis replaces
+the Noll-Scully ratio (actual ÷ chance), which would be an unexplained
+composite. PPG is earned points (`3 × wins + draws`) over each team's played
+matches.
+
+Below the chart a strip places the selected season's teams on a fixed 0–3 PPG
+axis, with the top-to-bottom gap (best minus worst PPG) bracketed and the
+middle half (interquartile range) shaded; a sentence names every team tied at
+either end. Overlapping marks stack into rows using `stripRows` in
+`explore-geometry.js`. `season` selects the strip (default: the newest
+completed eligible season; the active season is selectable) and is shared with
+Compare teams, so an unknown year is a 400 but a catalog year without parity
+values falls back to the default with a note. Selecting a season on the chart
+(click, or arrow keys then Enter), the select or a table link updates the strip
+in place. `parity-series=actual|both` (default `actual`; not `series`, which
+Season by season already owns) adds the xPPG spread series and each team's
+xPPG mark. The xPPG spread needs every team's xPoints for every played match,
+otherwise that season has no xPPG mark and an `xPts incomplete` note. An active
+season is plotted hollow with a dashed segment and noted as in progress; its
+chance level uses matches played so far, so it is wider. The values table lists
+season, teams, matches per team, PPG spread, chance level, xPPG spread, gap and
+IQR, sorted from unrounded values (`parity-sort=season|teams|matches|spread|chance|xspread|gap|iqr`,
+`parity-order=asc|desc`, default season descending, unavailable values last).
+Quartiles use linear interpolation between closest ranks (`history.Quantile`,
+R and NumPy's default), and the chart receives them from the server. Points
+never change with `penalties`; that basis keeps its eligibility rule and the
+standard points note. The calculation is `history.SummarizeParity`.
 
 **Scoring table** lists eligible seasons with matches, goals/match, xG/match,
 and goals − xG/match, sorted from unrounded values.
@@ -351,7 +387,7 @@ and the current year is active.
 | Scenario | Data |
 |---|---|
 | `default` | 2018, 2019, 2021, 2022 with 20 matches each; xG complete for 2018 and 2021, 19 of 20 for 2019, none for 2022 |
-| `overview` | 2016–2026 (no 2020), 20 matches each covering all five goal bins, a varying home edge, full xG and xPts |
+| `overview` | 2016–2026 (no 2020), 20 matches each among six clubs covering all five goal bins, a varying home edge, full xG and xPts; 2018 has two teams far behind, 2024 a separate top three, 2025 one runaway leader |
 | `empty` | 2024 with 19 matches and no xG, below the 20-match minimum |
 | `single` | 2024 with 20 matches of one goal each and no xG |
 | `teams` | 2025 and 2026, 64 matches among the 16 real clubs; 2026 has one match without xPts and one without xG; 2024 has no fixtures |

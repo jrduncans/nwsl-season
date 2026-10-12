@@ -28,11 +28,8 @@ seasons (Season by season), but never every team-season in the archive at once.
 
 ## Explore: league trends
 
-Scoring trend, Goal distribution and Home advantage exist. Not built:
+Scoring trend, Goal distribution, Home advantage and Parity exist. Not built:
 
-- **Parity over time**: standard deviation of team PPG (headline), top-to-bottom
-  PPG gap, and xGD/G interquartile range. Default to completed seasons, because
-  an active season's spread reflects fewer matches.
 - **Shield and playoff thresholds**: Shield-winner and playoff-cut PPG by
   season, with the teams either side of the cut. Needs official historical
   finishing order and Shield winners; don't infer them from today's tiebreak

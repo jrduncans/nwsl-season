@@ -1,5 +1,5 @@
 {{define "explore"}}{{template "head" .}}
-<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}} data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-history-team="{{.HistoryTeam.ID}}">
+<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}} data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}">
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
@@ -23,6 +23,7 @@
 <a href="?view=trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>{{.ViewLabel "trend"}}</a>
 <a href="?view=distribution{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>{{.ViewLabel "distribution"}}</a>
 <a href="?view=home-advantage{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="home-advantage"{{if eq .View "home-advantage"}} aria-current="page"{{end}}>{{.ViewLabel "home-advantage"}}</a>
+<a href="?view=parity{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="parity"{{if eq .View "parity"}} aria-current="page"{{end}}>{{.ViewLabel "parity"}}</a>
 <a href="?view=table{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>{{.ViewLabel "table"}}</a>
 </nav>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
@@ -97,6 +98,47 @@
 <caption><span>Home minus away, per match. Home W–D–L is each result's share of played matches.</span></caption>
 <thead><tr>{{range .HomeAdvantageColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-home-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
 <tbody data-home-rows>{{range .HomeAdvantageRows}}<tr><th scope="row" data-value="{{.Season}}">{{.Season}}</th><td data-value="{{.Played}}">{{.Played}}</td><td data-value="{{if .GoalsValue}}{{.GoalsValue}}{{end}}">{{.Goals}}</td><td data-value="{{if .XGValue}}{{.XGValue}}{{end}}">{{.XG}}</td><td data-value="{{if .PointsValue}}{{.PointsValue}}{{end}}">{{.Points}}</td><td data-value="{{if .XPointsValue}}{{.XPointsValue}}{{end}}">{{.XPoints}}</td><td data-value="{{.HomeWinShare}}">{{.Results}}</td></tr>{{end}}</tbody>
+</table></div>
+</details>
+{{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
+</section>
+<section data-panel="parity"{{if ne .View "parity"}} hidden{{end}} aria-labelledby="explore-parity-title">
+<div class="explore-heading"><h2 id="explore-parity-title">How evenly matched teams were (regular-season)</h2>
+{{if .ParityData}}<form method="get" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label><label>Show <select name="parity-series" data-parity-series><option value="actual"{{if eq .ParitySeries "actual"}} selected{{end}}>Points</option><option value="both"{{if eq .ParitySeries "both"}} selected{{end}}>Points and xPts</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}<div class="explore-team-controls">{{template "penaltiesSelect" $}}</div>{{end}}</div>
+{{if .ParityData}}
+<p class="note">The spread is how far teams' points per game (PPG) sit from the league average, measured as a standard deviation. The bigger the spread, the less evenly matched the league.</p>
+<div class="explore-legend"><span class="explore-parity-actual-legend">● PPG spread</span><span class="explore-parity-expected-legend" data-parity-expected-legend{{if ne .ParitySeries "both"}} hidden{{end}}>◆ xPPG spread (expected points)</span><span class="explore-parity-chance-legend"><i class="explore-parity-chance-swatch" aria-hidden="true"></i>Spread from chance alone</span></div>
+<div class="explore-chart-wrap explore-parity-wrap"><canvas data-chart="parity" tabindex="0" role="img" aria-label="Spread of team points per game in each regular season, against the spread expected from chance alone" aria-describedby="explore-chart-help"></canvas></div>
+<p class="note">Shaded: how spread out teams would be from random results alone if every team were equally good, given that season's draw rate and matches per team. Above the shading, a season was more uneven than luck explains; inside it, about as even as coin flips would make it.</p>
+<p class="explore-keyboard-hint">Use arrow keys to inspect seasons and Enter to show one below. Escape clears the tooltip.</p>
+{{if .NonPenalty}}<p class="note">{{$.PointsNote}}</p>{{end}}
+{{if .ParityXPointsMissing}}<p class="note" data-parity-xpoints-note>xPts incomplete in {{.ParityXPointsMissing}}, so those seasons have no xPPG spread.</p>{{end}}
+{{if .ParityActiveStatus}}<p class="note">{{.ParityActiveStatus}}. Fewer matches widen the chance level.</p>{{end}}
+{{with .ParitySelected}}
+<section class="explore-parity-season" aria-labelledby="explore-parity-strip-title">
+<h3 class="explore-context-heading" id="explore-parity-strip-title" data-parity-strip-title>Teams in {{.Season}}{{if .Active}} (in progress through {{.Played}} matches){{end}}</h3>
+<p class="note" data-parity-season-note{{if not $.ParitySeasonNote}} hidden{{end}}>{{$.ParitySeasonNote}}</p>
+<p data-parity-summary>{{.Summary}}</p>
+<div class="explore-parity-strip" data-parity-strip role="img" aria-label="Each team's points per game in {{.Season}}">
+<ol class="explore-parity-list">{{range .Teams}}<li>{{.Name}}: {{$.ParityValue .PPG}} PPG{{if eq $.ParitySeries "both"}}, {{$.ParityValue .XPPG}} xPPG{{end}}</li>{{end}}</ol>
+</div>
+<details class="explore-context-details" data-parity-team-values>
+<summary>Team values</summary>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Team points per game"><table class="explore-table explore-parity-team-table">
+<caption><span data-parity-team-caption>Points per game and expected points per game for each team in {{.Season}}, highest PPG first.</span></caption>
+<thead><tr><th scope="col">Team</th><th scope="col">Played</th><th scope="col">PPG</th><th scope="col">xPPG</th></tr></thead>
+<tbody data-parity-teams>{{range .Teams}}<tr><th scope="row">{{.Name}}</th><td>{{.Played}}</td><td>{{$.ParityValue .PPG}}</td><td>{{$.ParityValue .XPPG}}</td></tr>{{end}}</tbody>
+</table></div>
+</details>
+</section>
+{{end}}
+<details class="explore-context-details" data-parity-values{{if .ParityExpanded}} open{{end}}>
+<summary>Parity values</summary>
+<p class="explore-table-scroll-hint">Scroll for more columns →</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Parity values"><table class="explore-table explore-parity-table">
+<caption><span>Points per game (PPG). Spreads are standard deviations across every team; the chance level is the spread from random results alone. Select a season to show its teams.</span></caption>
+<thead><tr>{{range .ParityColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-parity-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
+<tbody data-parity-rows>{{range .ParityRows}}<tr><th scope="row" data-value="{{.Season}}"><a href="{{.SeasonURL}}" data-parity-season-link="{{.Season}}"{{if .Selected}} aria-current="true"{{end}}>{{.Season}}</a>{{if .Active}} (in progress){{end}}</th><td data-value="{{len .Teams}}">{{len .Teams}}</td><td data-value="{{.Matches}}">{{printf "%.1f" .Matches}}</td><td data-value="{{.Spread}}">{{$.ParityValue .Spread}}</td><td data-value="{{.Chance}}">{{$.ParityValue .Chance}}</td><td data-value="{{if .XSpread}}{{.XSpread}}{{end}}">{{$.ParityValue .XSpread}}</td><td data-value="{{.Gap}}">{{$.ParityValue .Gap}}</td><td data-value="{{.IQR}}">{{$.ParityValue .IQR}}</td></tr>{{end}}</tbody>
 </table></div>
 </details>
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
@@ -304,6 +346,7 @@
 <script type="application/json" id="explore-team-data">{{.TeamSeasons}}</script>
 <script type="application/json" id="explore-context-data">{{.HistoryContextData}}</script>
 <script type="application/json" id="explore-home-data">{{.HomeAdvantageData}}</script>
+<script type="application/json" id="explore-parity-data">{{.ParityData}}</script>
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>
 <script src="{{.ChartLabelsPath}}" defer></script>

@@ -1,4 +1,4 @@
-:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --scoring-allowed: #a04e20; --chart-actual: #0b5136; --chart-expected: #9061c5; --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
+:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --scoring-allowed: #a04e20; --chart-actual: #0b5136; --chart-expected: #9061c5; --chart-chance: rgba(95, 110, 102, .16); --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.5 system-ui, sans-serif; }
 a { color: var(--green); }
@@ -529,3 +529,27 @@ th:nth-child(2) { text-align: left; }
 .explore-rank-track i { position: absolute; top: 50%; width: .8rem; height: .8rem; border: 2px solid var(--panel); border-radius: 50%; background: var(--green-deep); transform: translate(-50%, -50%); }
 .explore-rank-endpoints { display: flex; justify-content: space-between; margin-top: .5rem; color: var(--muted); font-size: .75rem; }
 @media (max-width: 700px) { .explore-rankings { grid-template-columns: 1fr; gap: .65rem; } .explore-rank-card { padding: .85rem 1rem; } .explore-rank-card h4 { margin-bottom: .4rem; } .explore-rank-number { font-size: 1.35rem; } .explore-rank-value { margin: .3rem 0 .9rem; } }
+
+.explore-parity-wrap { height: 320px; }
+@media (max-width: 600px) { .explore-parity-wrap { height: 260px; } }
+.explore-parity-actual-legend { color: var(--chart-actual); }
+.explore-parity-expected-legend { color: var(--chart-expected); }
+.explore-parity-chance-legend { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); }
+.explore-parity-chance-swatch { display: inline-block; width: .9rem; height: .8rem; border-top: 1px dashed var(--muted); background: var(--chart-chance); }
+.explore-parity-season { max-width: 58rem; margin-top: 1.5rem; }
+.explore-parity-strip { margin: .5rem 0 1rem; }
+.explore-parity-strip svg { display: block; max-width: 100%; overflow: visible; }
+.explore-parity-list { margin: 0; padding-left: 1.5rem; }
+.explore-parity-label { fill: var(--muted); font: 12px system-ui, sans-serif; }
+.explore-parity-axis, .explore-parity-bracket { fill: none; stroke: var(--muted); stroke-width: 1; }
+.explore-parity-iqr { fill: var(--chart-chance); }
+.explore-parity-actual { fill: var(--chart-actual); stroke: var(--panel); stroke-width: 1.5; }
+.explore-parity-actual.is-active { fill: var(--panel); stroke: var(--chart-actual); stroke-width: 2; }
+.explore-parity-actual.has-logo { fill: white; stroke: var(--chart-actual); stroke-width: 2; }
+.explore-parity-actual.has-logo.is-active { stroke-dasharray: 3 2; }
+.explore-parity-expected { fill: var(--chart-expected); stroke: var(--panel); stroke-width: 1; }
+.explore-parity-link { stroke: var(--muted); stroke-width: 1; }
+.explore-parity-table { min-width: 52rem; font-size: .875rem; }
+.explore-parity-table caption, .explore-parity-team-table caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
+.explore-parity-team-table { font-size: .875rem; }
+.explore-parity-table a[aria-current] { font-weight: 800; }

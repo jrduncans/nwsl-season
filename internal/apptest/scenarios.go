@@ -49,6 +49,7 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 		states["2026"] = ArchiveState{Lifecycle: cache.SourceScopeActive, Inventory: cache.InventoryCompletenessComplete, Goals: 3, XGCovered: 20}
 		archive = Archive(t, states)
 		for i := range archive {
+			archive[i].Data.Teams = previewTeams()[:6]
 			for j := range archive[i].Data.Games {
 				game := &archive[i].Data.Games[j]
 				// Include all five bins while varying each season deterministically.
@@ -61,6 +62,8 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 					home, away = away, home
 				}
 				game.HomeScore.Int64, game.AwayScore.Int64 = home, away
+				game.HomeTeamID, game.AwayTeamID = overviewSides(archive[i].Data.Teams, archive[i].Entry.Season, j, home, away)
+				archive[i].Data.XGoals[j].HomeTeamID, archive[i].Data.XGoals[j].AwayTeamID = game.HomeTeamID, game.AwayTeamID
 				archive[i].Data.XGoals[j].HomeXG.Float64 = 1.2 + float64(j%3)*0.1
 				archive[i].Data.XGoals[j].AwayXG.Float64 = 1.1
 				archive[i].Data.XGoals[j].HomeXPoints = sql.NullFloat64{Float64: 1.4 + float64(j%3)*0.1, Valid: true}
@@ -76,6 +79,62 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 		t.Fatalf("unknown scenario %q; want one of %v", name, ScenarioNames())
 	}
 	return archive
+}
+
+// overviewPairs lists every pairing of the overview's six teams.
+var overviewPairs = func() (pairs [][2]int) {
+	for a := range 6 {
+		for b := a + 1; b < 6; b++ {
+			pairs = append(pairs, [2]int{a, b})
+		}
+	}
+	return pairs
+}()
+
+// overviewSides names the home and away teams of overview match j. Only who
+// played changes, never the score, so league totals and the home edge stay the
+// same; the winner's side gives each season a different parity:
+// two teams far behind in 2018, a separate top three in 2024, one runaway
+// leader in 2025, and assigned pairings elsewhere.
+func overviewSides(teams []standings.Team, season string, j int, home, away int64) (string, string) {
+	digit := int(season[len(season)-1] - '0')
+	pair := overviewPairs[(j+digit)%len(overviewPairs)]
+	first, second := pair[0], pair[1]
+	strength := func(team int) int {
+		switch season {
+		case "2018":
+			if team >= 4 {
+				return 0
+			}
+			return 1
+		case "2024":
+			if team <= 2 {
+				return 1
+			}
+			return 0
+		case "2025":
+			if team == 0 {
+				return 1
+			}
+			return 0
+		}
+		return 0
+	}
+	// Put the stronger team on the winning side of a decisive result.
+	if home != away && strength(first) != strength(second) {
+		stronger, weaker := first, second
+		if strength(second) > strength(first) {
+			stronger, weaker = second, first
+		}
+		if home > away {
+			return teams[stronger].ID, teams[weaker].ID
+		}
+		return teams[weaker].ID, teams[stronger].ID
+	}
+	if j%2 == 1 {
+		first, second = second, first
+	}
+	return teams[first].ID, teams[second].ID
 }
 
 // previewTeams are the sixteen 2026 clubs used by the teams, team-history and

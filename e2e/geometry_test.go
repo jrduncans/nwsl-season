@@ -63,6 +63,7 @@ func TestGeometry(t *testing.T) {
 		{"PointRadius", testGeometryPointRadius},
 		{"LogoPlacement", testGeometryLogoPlacement},
 		{"LayoutLogos", testGeometryLayoutLogos},
+		{"StripRows", testGeometryStripRows},
 	} {
 		t.Run(tc.name, func(t *testing.T) { tc.run(t, page) })
 	}
@@ -71,7 +72,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius"}
+	want := []string{"gapExtent", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "stripRows"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -385,4 +386,40 @@ func testGeometryLayoutLogos(t *testing.T, page playwright.Page) {
 		}
 		assertLogosClear(t, placed, points, area, radius)
 	})
+}
+
+type span struct {
+	Left  float64 `json:"left"`
+	Right float64 `json:"right"`
+}
+
+func testGeometryStripRows(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		name  string
+		spans []span
+		gap   float64
+		want  []int
+	}{
+		{"no spans", []span{}, 2, []int{}},
+		{"apart spans share the first row", []span{{0, 10}, {20, 30}, {40, 50}}, 2, []int{0, 0, 0}},
+		{"touching spans need the gap", []span{{0, 10}, {11, 21}}, 2, []int{0, 1}},
+		{"exactly the gap apart share a row", []span{{0, 10}, {12, 22}}, 2, []int{0, 0}},
+		{"coincident spans stack", []span{{5, 15}, {5, 15}, {5, 15}}, 0, []int{0, 1, 2}},
+		{"a later span reuses the lowest free row", []span{{0, 10}, {5, 15}, {13, 23}}, 2, []int{0, 1, 0}},
+		{"input order does not change the layout", []span{{13, 23}, {5, 15}, {0, 10}}, 2, []int{0, 1, 0}},
+		{"a wide span blocks its row", []span{{0, 100}, {10, 20}, {30, 40}, {110, 120}}, 2, []int{0, 1, 1, 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []int
+			callGeometry(t, page, "stripRows", []any{tc.spans, tc.gap}, &got)
+			if len(got) != len(tc.want) {
+				t.Fatalf("stripRows(%v) = %v, want %v", tc.spans, got, tc.want)
+			}
+			for index := range got {
+				if got[index] != tc.want[index] {
+					t.Fatalf("stripRows(%v) = %v, want %v", tc.spans, got, tc.want)
+				}
+			}
+		})
+	}
 }

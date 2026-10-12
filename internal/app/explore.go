@@ -13,6 +13,7 @@ type explorePage struct {
 	exploreScoringPage
 	exploreDistributionView
 	exploreHomeAdvantageView
+	exploreParityView
 	exploreTeamsView
 	exploreTeamHistoryView
 	exploreSeasonTrendView
@@ -50,7 +51,7 @@ var exploreViewLabels = map[string]string{
 	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
 	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
 	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season",
-	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "table": "Scoring table",
+	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "table": "Scoring table",
 }
 
 // ViewLabel returns the visible name of an Explore tab.
@@ -97,8 +98,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			view = "trend"
 		}
 	}
-	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "table", "teams", "team-history", "season-trend", "team-rankings"}, view) {
-		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, table, teams, team-history, season-trend, or team-rankings"))
+	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "table", "teams", "team-history", "season-trend", "team-rankings"}, view) {
+		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, table, teams, team-history, season-trend, or team-rankings"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -118,6 +119,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page.exploreHomeAdvantageView, err = exploreHomeAdvantage(r.URL.Query(), history.HomeAdvantage(summaries), basis)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	page.exploreParityView, err = exploreParity(r.URL.Query(), history.Parity(summaries), teams.TeamSeasons)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return
