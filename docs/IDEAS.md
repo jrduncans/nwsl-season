@@ -42,9 +42,7 @@ Scoring trend, Goal distribution, Home advantage and Parity exist. Not built:
   a season, with a stated rule for odd match counts.
 - **Consistency**: spread of five-match rolling PPG or xGD/G within a
   team-season.
-- **Head-to-head**: chronological results and a home/away record for two clubs.
-  Needs a decision on how relocations, rebrands and folded clubs map to a
-  franchise.
+- **Head-to-head: playoff meetings**.
 
 ## Needs data the cache doesn't have
 

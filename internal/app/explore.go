@@ -15,6 +15,7 @@ type explorePage struct {
 	exploreHomeAdvantageView
 	exploreParityView
 	exploreTeamSeasonsView
+	exploreHeadToHeadView
 	exploreTeamsView
 	exploreTeamHistoryView
 	exploreSeasonTrendView
@@ -51,7 +52,7 @@ func (p explorePage) PointsNoteShown(panel string) bool {
 var exploreViewLabels = map[string]string{
 	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
 	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
-	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season",
+	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season", "head-to-head": "Head to head",
 	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "team-seasons": "Team-seasons", "table": "Scoring table",
 }
 
@@ -66,7 +67,7 @@ func exploreViewGroup(view string) string {
 	switch view {
 	case "teams":
 		return "teams"
-	case "team-rankings", "season-trend", "team-history":
+	case "team-rankings", "season-trend", "team-history", "head-to-head":
 		return "profile"
 	default:
 		return "league"
@@ -99,8 +100,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			view = "trend"
 		}
 	}
-	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "team-seasons", "table", "teams", "team-history", "season-trend", "team-rankings"}, view) {
-		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, team-seasons, table, teams, team-history, season-trend, or team-rankings"))
+	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "team-seasons", "table", "teams", "team-history", "season-trend", "team-rankings", "head-to-head"}, view) {
+		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, team-seasons, table, teams, team-history, season-trend, team-rankings, or head-to-head"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -129,7 +130,15 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	page.exploreTeamHistoryView, err = exploreTeamHistory(r.URL.Query(), teams.TeamSeasons)
+	// Head to head validates its shared team against official eligibility below.
+	// Keep the other views' payload on the requested basis, including when they
+	// are reached by an in-place tab switch from Head to head.
+	profileQuery := r.URL.Query()
+	if view == "head-to-head" {
+		profileQuery = cloneQuery(profileQuery)
+		profileQuery.Del("team")
+	}
+	page.exploreTeamHistoryView, err = exploreTeamHistory(profileQuery, teams.TeamSeasons)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return
@@ -147,6 +156,23 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page.exploreTeamSeasonsView, err = exploreTeamSeasons(r.URL.Query(), history.TeamSeasons(allSummaries, allSummaries, archive), history.TeamSeasons(allSummaries, npSummaries, archive))
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	officialQuery := cloneQuery(r.URL.Query())
+	officialQuery.Del("penalties")
+	officialTeams, err := exploreTeams(officialQuery, allSummaries, archive)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	officialProfile, err := exploreTeamHistory(officialQuery, officialTeams.TeamSeasons)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	page.exploreHeadToHeadView, err = exploreHeadToHead(r.URL.Query(), allSummaries, archive, officialProfile.HistoryTeam, officialProfile.HistoryTeamOptions)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return

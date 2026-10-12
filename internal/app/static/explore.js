@@ -15,6 +15,7 @@
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
   const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
   const teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
+  const h2hData = JSON.parse(root.querySelector('#explore-h2h-data').textContent) || [];
   const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
   const homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
   const parityRecords = JSON.parse(root.querySelector('#explore-parity-data').textContent) || [];
@@ -136,7 +137,7 @@
   }
   // Chart.js owns pointer/touch hit testing and tooltip placement. Its public
   // active-element API also lets keyboard users inspect the same marks.
-  function keyboardAccess(chart, describe) {
+  function keyboardAccess(chart, describe, inspectOnFocus = false) {
     const canvas = chart.canvas;
     canvas.addEventListener('keydown', event => {
       if (event.key === 'Escape') { dismiss(); return; }
@@ -161,6 +162,9 @@
       chart.tooltip.setActiveElements([mark], element.getCenterPoint());
       chart.update('none');
       status.textContent = describe(mark);
+    });
+    if (inspectOnFocus) canvas.addEventListener('focus', () => {
+      if (!chart.getActiveElements().length) canvas.dispatchEvent(new KeyboardEvent('keydown', {key: 'Home'}));
     });
     canvas.addEventListener('blur', () => { clearChart(chart); status.textContent = ''; });
   }
@@ -2159,15 +2163,191 @@
   archiveRankBy.addEventListener('change', changeArchive);
   archivePenalties.addEventListener('change', changeArchive);
 
+  const h2hTeam = root.querySelector('[data-h2h-team]');
+  const h2hOpponent = root.querySelector('[data-h2h-opponent]');
+  function showHeadToHead(params) {
+    if (!h2hData.teams?.length) return;
+    const teamIndex = h2hData.teams.findIndex(t => t.ID === (params.get('team') || root.dataset.defaultH2hTeam));
+    if (teamIndex < 0) return;
+    const data = {team: h2hData.teams[teamIndex]};
+    const identity = t => ({id: t.ID, name: t.Name, logo: t.LogoURL});
+    h2hTeam.value = data.team.ID;
+    root.querySelector('[data-h2h-controls] input[name="team"]').value = data.team.ID;
+    const counts = new Map();
+    h2hData.fixtures.forEach(f => {
+      const opponent = f.home === teamIndex ? f.away : f.away === teamIndex ? f.home : null;
+      if (opponent !== null) counts.set(opponent, (counts.get(opponent) || 0) + 1);
+    });
+    // The shared team list is already in newest-name / ID order.
+    const pairs = h2hData.teams.flatMap((opponent, index) => counts.has(index) ? [{opponent, all: {Played: counts.get(index)}, index}] : []);
+    let pair = pairs.find(p => p.opponent.ID === params.get('opponent'));
+    if (!pair && params.has('opponent')) {
+      const index = h2hData.teams.findIndex(t => t.ID === params.get('opponent'));
+      if (index >= 0) pair = {opponent: h2hData.teams[index], all: {Played: 0}, index};
+    }
+    if (!pair) pair = pairs.reduce((best, p) => !best || p.all.Played > best.all.Played ? p : best, null);
+    if (!pair) return;
+    const rows = h2hData.fixtures.filter(f => (f.home === teamIndex && f.away === pair.index) || (f.away === teamIndex && f.home === pair.index)).map((f, position) => {
+      const home = f.home === teamIndex, season = h2hData.seasons[f.season];
+      const score = home ? f.score : [f.score[1], f.score[0]], margin = score[0] - score[1];
+      return {...f, season: season.year, active: !!season.active, position, venue: home ? 'Home' : 'Away', opponent: season.names[pair.opponent.ID] || pair.opponent.ID,
+        score: score.join('–'), goalsFor: score[0], goalsAgainst: score[1], margin, result: margin > 0 ? 'Win' : margin < 0 ? 'Loss' : 'Draw', points: margin > 0 ? 3 : margin < 0 ? 0 : 1};
+    });
+    const years = [...new Set(rows.map(r => r.season))].sort();
+    pair.scope = rows.length ? `regular season, ${years[0]}${years.length > 1 ? '–' + years.at(-1) : ''} · ${rows.length} ${rows.length === 1 ? 'match' : 'matches'}${rows.some(r => r.active) ? ' · season in progress' : ''}` : 'regular season';
+    pair.warning = `${rows.some(r => r.undated) ? 'Undated matches appear last. ' : ''}${rows.some(r => r.venueDateUnavailable) ? 'Some venue-local dates are unavailable.' : ''}`.trim();
+    const choices = pairs.includes(pair) ? pairs : [...pairs, pair];
+    h2hOpponent.replaceChildren(...choices.map(p => {
+      const option = archiveElement('option', `${p.opponent.Name} (${p.all.Played})`); option.value = p.opponent.ID; return option;
+    }));
+    h2hOpponent.value = pair.opponent.ID;
+    const title = root.querySelector('[data-h2h-title]');
+    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)));
+    for (const key of ['scope', 'warning']) {
+      const element = root.querySelector(`[data-h2h-${key}]`); element.textContent = pair[key];
+      if (key === 'warning') element.hidden = !pair.warning;
+    }
+    const record = root.querySelector('[data-h2h-record]'); record.hidden = !rows.length;
+    record.setAttribute('aria-label', `Official regular-season record from ${data.team.Name}’s side`);
+    record.replaceChildren(...['All', 'Home', 'Away'].map(venue => {
+      const meetings = rows.filter(r => venue === 'All' || r.venue === venue), n = meetings.length;
+      const count = result => meetings.filter(r => r.result === result).length;
+      const sum = key => meetings.reduce((total, r) => total + r[key], 0);
+      const tile = archiveElement('div'); tile.className = 'explore-h2h-tile'; tile.dataset.h2hTile = venue;
+      const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
+      if (venue !== 'All') {
+        const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch);
+      }
+      label.append(document.createTextNode(venue)); tile.append(label);
+      const wdl = archiveElement('strong', `${count('Win')}–${count('Draw')}–${count('Loss')}`); wdl.className = 'explore-h2h-wdl';
+      wdl.setAttribute('aria-label', `${count('Win')} wins, ${count('Draw')} draws, ${count('Loss')} losses`); tile.append(wdl);
+      tile.append(archiveElement('div', `${n ? fixed(sum('points') / n) : '—'} pts/match`),
+        archiveElement('div', `${sum('goalsFor')}–${sum('goalsAgainst')} goals`), archiveElement('div', `${n} ${n === 1 ? 'match' : 'matches'}`)); return tile;
+    }));
+    root.querySelector('[data-h2h-official]').hidden = params.get('penalties') !== 'exclude';
+    const empty = root.querySelector('[data-h2h-empty]'); empty.hidden = pair.all.Played > 0;
+    empty.textContent = `${data.team.Name} and ${pair.opponent.Name} have not met in a regular-season match.`;
+    root.querySelector('[data-h2h-chart-wrap]').hidden = !pair.all.Played;
+    root.querySelector('[data-h2h-summary]').textContent = `Table: all ${pair.all.Played} meetings`;
+    const expanded = params.has('h2h-sort') || params.has('h2h-order');
+    root.querySelector('[data-h2h-values]').open = expanded;
+    root.querySelectorAll('[data-h2h-controls] input[name="h2h-sort"], [data-h2h-controls] input[name="h2h-order"]').forEach(input => {
+      input.disabled = !expanded; input.value = params.get(input.name) || (input.name === 'h2h-sort' ? 'date' : 'desc');
+    });
+    const column = params.get('h2h-sort') || 'date', order = params.get('h2h-order') || 'desc';
+    const value = row => column === 'date' ? row.position : column === 'result' ? row.points : row[column];
+    const sorted = [...rows].sort((a, b) => {
+      if (!!a.undated !== !!b.undated) return a.undated ? 1 : -1;
+      const x = value(a), y = value(b);
+      if (x !== y) return (x < y ? -1 : 1) * (order === 'asc' ? 1 : -1);
+      return b.position - a.position;
+    });
+    root.querySelector('[data-h2h-rows]').replaceChildren(...sorted.map(row => {
+      const tr = archiveElement('tr'); tr.dataset.matchId = row.id;
+      for (const text of [row.date, `${row.season}${row.active ? ' (season in progress)' : ''}`, row.venue, row.opponent, row.score, row.result, row.points]) tr.append(archiveElement('td', text));
+      return tr;
+    }));
+    root.querySelectorAll('[data-h2h-sort]').forEach(link => {
+      const active = link.dataset.h2hSort === column;
+      link.parentElement.setAttribute('aria-sort', active ? order === 'asc' ? 'ascending' : 'descending' : 'none');
+      const target = new URLSearchParams(params);
+      target.set('view', 'head-to-head'); target.set('team', data.team.ID); target.set('opponent', pair.opponent.ID);
+      target.set('h2h-sort', link.dataset.h2hSort); target.set('h2h-order', active && order === 'asc' ? 'desc' : 'asc');
+      link.href = `?${target}`;
+    });
+    // The same labels remain available to assistive technology and become the
+    // chronological chart fallback when JavaScript is off.
+    const fallback = root.querySelector('[data-h2h-fallback]');
+    fallback.classList.add('visually-hidden');
+    fallback.replaceChildren(...rows.map(row => {
+      const label = headToHeadDescription(row), li = archiveElement('li', label);
+      li.dataset.h2hMark = row.id; li.dataset.margin = row.margin;
+      li.dataset.venue = row.venue; li.dataset.encoding = row.venue === 'Home' ? 'solid-blue' : 'striped-orange';
+      li.setAttribute('aria-label', label); return li;
+    }));
+    const wrap = root.querySelector('[data-h2h-chart]'); wrap.hidden = !rows.length;
+    if (!rows.length) return;
+    const canvas = wrap.querySelector('canvas');
+    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: chronological goal margins; home solid blue, away striped orange; up means win, zero means draw, down means loss`);
+    if (!charts.headToHead) charts.headToHead = createHeadToHead(canvas);
+    const chart = charts.headToHead;
+    chart.meetings = rows;
+    chart.data.labels = rows.map(row => row.id);
+    chart.data.datasets[0].data = rows.map(row => row.margin);
+    const extent = window.NWSLGeometry.headToHeadGeometry(rows.map(row => row.margin), chart.width).extent;
+    chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
+    chart.update('none');
+  }
+  const headToHeadDescription = row => `${row.date}${row.active ? ' · season in progress' : ''} · ${row.venue} · ${row.opponent} · ${row.score} · ${row.result}`;
+  // Use Chart.js's event and tooltip lifecycle, with the full-height nearest
+  // column geometry shared by pointer, touch and geometry tests.
+  Chart.Interaction.modes.headToHead = (chart, event) => {
+    const columns = chart.getDatasetMeta(0).data.map(bar => ({center: bar.x}));
+    const index = window.NWSLGeometry.headToHeadHit(columns, chart.chartArea, event);
+    return index === null ? [] : [{element: chart.getDatasetMeta(0).data[index], datasetIndex: 0, index}];
+  };
+  Chart.Tooltip.positioners.headToHead = function(items) {
+    if (!items.length) return false;
+    const bar = items[0].element;
+    return {x: bar.x, y: bar.y, xAlign: bar.x < this.chart.width / 2 ? 'left' : 'right', yAlign: 'center'};
+  };
+  function createHeadToHead(canvas) {
+    // A high-resolution tile keeps the prescribed 3.4px spacing and 1.5px
+    // stripe width at 45 degrees at every device pixel ratio.
+    const tile = document.createElement('canvas'); tile.width = tile.height = Math.round(340 * Math.SQRT2);
+    const ctx = tile.getContext('2d');
+    ctx.fillStyle = color('--paper'); ctx.fillRect(0, 0, tile.width, tile.height);
+    ctx.strokeStyle = '#CF7424'; ctx.lineWidth = 150;
+    for (const offset of [-tile.width, 0, tile.width]) {
+      ctx.beginPath(); ctx.moveTo(offset - tile.width, -tile.height); ctx.lineTo(offset + 2 * tile.width, 2 * tile.height); ctx.stroke();
+    }
+    const stripes = canvas.getContext('2d').createPattern(tile, 'repeat'); stripes.setTransform(new DOMMatrix().scale(.01));
+    const fill = context => context.chart.meetings?.[context.dataIndex]?.venue === 'Away' ? stripes : '#1F6FA8';
+    const options = commonOptions();
+    options.interaction = {mode: 'headToHead', intersect: false};
+    options.layout = {padding: {top: 12, right: 8, bottom: 28}};
+    options.scales = {
+      x: {offset: true, grid: {display: false}, ticks: {display: false}},
+      y: {min: -1, max: 1, grid: {color: c => c.tick.value === 0 ? color('--muted') : color('--line')}, ticks: {maxTicksLimit: 5, precision: 0}},
+    };
+    options.plugins.tooltip.position = 'headToHead';
+    options.plugins.tooltip.padding = 8;
+    options.plugins.tooltip.titleFont = {size: 11}; options.plugins.tooltip.bodyFont = {size: 11};
+    options.plugins.tooltip.callbacks = {
+      title: items => items.length ? items[0].chart.meetings[items[0].dataIndex].date : '',
+      label: item => { const r = item.chart.meetings[item.dataIndex]; return [...(r.active ? ['season in progress'] : []), r.venue, r.opponent, `${r.score} · ${r.result}`]; },
+    };
+    const years = {id: 'headToHeadYears', afterDraw(chart) {
+      const rows = chart.meetings || [], seen = new Set(), ctx = chart.ctx;
+      ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = color('--muted'); ctx.textAlign = 'center';
+      const candidates = rows.flatMap((row, index) => {
+        if (seen.has(row.season)) return []; seen.add(row.season);
+        return [{text: row.season, center: chart.getDatasetMeta(0).data[index].x, width: ctx.measureText(row.season).width}];
+      });
+      chart.yearLabels = window.NWSLGeometry.headToHeadLabels(candidates, chart.chartArea);
+      chart.yearLabels.forEach(label => ctx.fillText(label.text, label.center, chart.chartArea.bottom + 20)); ctx.restore();
+    }};
+    const outline = context => context.chart.meetings?.[context.dataIndex]?.venue === 'Away' ? 1 : 0;
+    const chart = new Chart(canvas, {type: 'bar', options, plugins: [years], data: {labels: [], datasets: [{label: 'Goal margin', data: [], backgroundColor: fill, hoverBackgroundColor: fill, borderColor: '#CF7424', hoverBorderColor: '#CF7424', borderWidth: outline, hoverBorderWidth: outline, borderSkipped: false, barPercentage: .7, categoryPercentage: 1, minBarLength: 3}]}});
+    chart.meetings = [];
+    keyboardAccess(chart, mark => headToHeadDescription(chart.meetings[mark.index]), true);
+    return chart;
+  }
+  const changeHeadToHead = event => update({view: 'head-to-head', team: h2hTeam.value, opponent: event.target === h2hTeam || event.target.hasAttribute('data-h2h-team-form') ? null : h2hOpponent.value});
+  root.querySelectorAll('[data-h2h-controls]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); changeHeadToHead(event); }));
+  h2hTeam.addEventListener('change', changeHeadToHead);
+  h2hOpponent.addEventListener('change', changeHeadToHead);
+
+
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
-    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'team-seasons', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings'].includes(requested) ? requested : 'teams';
-    if (view !== 'team-seasons' && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
+    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'team-seasons', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings', 'head-to-head'].includes(requested) ? requested : 'teams';
+    if (!['team-seasons', 'head-to-head'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
-      : ['team-rankings', 'season-trend', 'team-history'].includes(view) ? 'profile' : 'league';
+      : ['team-rankings', 'season-trend', 'team-history', 'head-to-head'].includes(view) ? 'profile' : 'league';
     root.querySelectorAll('[data-group-views]').forEach(nav => { nav.hidden = nav.dataset.groupViews !== group; });
     root.querySelectorAll('[data-team-display]').forEach(link => {
       const selected = view === 'teams' && link.dataset.teamDisplay ===
@@ -2222,6 +2402,7 @@
     if (view === 'home-advantage') showHomeAdvantage();
     if (view === 'parity') showParity(params);
     if (view === 'team-seasons') showTeamSeasons(params);
+    if (view === 'head-to-head') showHeadToHead(params);
     if (view === 'teams') showTeams(params);
     if (view === 'team-history') showTeamHistory(params);
     if (view === 'season-trend') showSeasonTrend(params);
@@ -2267,6 +2448,12 @@
     applyURL();
   }
   root.addEventListener('click', event => {
+    const h2hSort = event.target.closest('[data-h2h-sort]');
+    if (h2hSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const params = new URL(h2hSort.href).searchParams;
+      update({view: 'head-to-head', 'h2h-sort': params.get('h2h-sort'), 'h2h-order': params.get('h2h-order')});
+    }
     const archiveSort = event.target.closest('[data-team-seasons-sort]');
     if (archiveSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();

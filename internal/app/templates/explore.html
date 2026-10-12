@@ -1,5 +1,5 @@
 {{define "explore"}}{{template "head" .}}
-<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}} data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}">
+<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}} data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}" data-default-h2h-team="{{.H2HTeam.ID}}">
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
@@ -18,6 +18,7 @@
 <a href="?view=team-rankings{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>{{.ViewLabel "team-rankings"}}</a>
 <a href="?view=season-trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>{{.ViewLabel "season-trend"}}</a>
 <a href="?view=team-history{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>{{.ViewLabel "team-history"}}</a>
+<a href="?view=head-to-head{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="head-to-head"{{if eq .View "head-to-head"}} aria-current="page"{{end}}>{{.ViewLabel "head-to-head"}}</a>
 </nav>
 <nav class="explore-subviews" data-group-views="league" aria-label="League trends views"{{if ne .ViewGroup "league"}} hidden{{end}}>
 <a href="?view=trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>{{.ViewLabel "trend"}}</a>
@@ -104,6 +105,7 @@
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 {{template "exploreTeamSeasons" .}}
+{{template "exploreHeadToHead" .}}
 <section data-panel="parity"{{if ne .View "parity"}} hidden{{end}} aria-labelledby="explore-parity-title">
 <div class="explore-heading"><h2 id="explore-parity-title">How evenly matched teams were (regular-season)</h2>
 {{if .ParityData}}<form method="get" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label><label>Show <select name="parity-series" data-parity-series><option value="actual"{{if eq .ParitySeries "actual"}} selected{{end}}>Points</option><option value="both"{{if eq .ParitySeries "both"}} selected{{end}}>Points and xPts</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}<div class="explore-team-controls">{{template "penaltiesSelect" $}}</div>{{end}}</div>
@@ -348,6 +350,7 @@
 <script type="application/json" id="explore-team-data">{{.TeamSeasons}}</script>
 <script type="application/json" id="explore-context-data">{{.HistoryContextData}}</script>
 <script type="application/json" id="explore-home-data">{{.HomeAdvantageData}}</script>
+<script type="application/json" id="explore-h2h-data">{{.H2HData}}</script>
 <script type="application/json" id="explore-team-seasons-data">{{.TeamSeasonsData}}</script>
 <script type="application/json" id="explore-parity-data">{{.ParityData}}</script>
 </div>

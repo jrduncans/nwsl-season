@@ -186,10 +186,20 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 			count = 240
 		}
 		season.Data.Games = Games(season.Entry.Season, count, 3)
+		kickoff := time.Date(2026, 3, 2, 1, 0, 0, 0, time.UTC)
+		if scenario == ScenarioTeamHistory {
+			year, err := time.Parse("2006", season.Entry.Season)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Cross-season meetings must remain chronological, rather than
+			// interleaving every season's fixtures on the same 2026 dates.
+			kickoff = kickoff.AddDate(year.Year()-2026, 0, 0)
+		}
 		for j := range season.Data.Games {
 			game := &season.Data.Games[j]
 			game.RawJSON = fmt.Sprintf(`{"stadium_id":%q}`, previewStadiums[j%16])
-			game.KickoffUTC = time.Date(2026, 3, 2, 1, 0, 0, 0, time.UTC).AddDate(0, 0, j/8*7).Format("2006-01-02 15:04:05 MST")
+			game.KickoffUTC = kickoff.AddDate(0, 0, j/8*7).Format("2006-01-02 15:04:05 MST")
 			game.HomeTeamID, game.AwayTeamID = season.Data.Teams[j%16].ID, season.Data.Teams[(j+5)%16].ID
 			if scenario == ScenarioSeasonTrend || scenario == ScenarioNoXG {
 				// Two round-robin legs keep every team at one fixture per
@@ -203,6 +213,28 @@ func teamsArchive(t testing.TB, scenario string) []cache.HistoricalSeason {
 					home, away = away, home
 				}
 				game.HomeTeamID, game.AwayTeamID = season.Data.Teams[home].ID, season.Data.Teams[away].ID
+			}
+			if scenario == ScenarioTeamHistory && j < 96 {
+				// Swap away assignments without changing any team's match count. Three
+				// meetings per year (two in 2026) give Portland–Seattle 26 meetings;
+				// alternating venues across years gives thirteen at either designation.
+				round := j / 16
+				limit := 3
+				if season.Entry.Season == "2026" {
+					limit = 2
+				}
+				if round < limit {
+					if j%16 == 10 {
+						game.AwayTeamID = season.Data.Teams[13].ID
+					}
+					if j%16 == 8 {
+						game.AwayTeamID = season.Data.Teams[15].ID
+					}
+					reverse := season.Entry.Season == "2017" || season.Entry.Season == "2019" || season.Entry.Season == "2022" || season.Entry.Season == "2025" || (season.Entry.Season == "2026" && round == 0)
+					if j%16 == 10 && reverse {
+						game.HomeTeamID, game.AwayTeamID = game.AwayTeamID, game.HomeTeamID
+					}
+				}
 			}
 			game.HomeScore.Int64, game.AwayScore.Int64 = int64(j%4), int64((j/3)%3)
 			if scenario == ScenarioTeamHistory {

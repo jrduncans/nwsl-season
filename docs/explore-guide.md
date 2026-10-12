@@ -22,6 +22,7 @@ page, redirect to the Scoring trend.
 | Team profile | One team | Rankings | `view=team-rankings` |
 | | | Match by match | `view=season-trend` |
 | | | Season by season | `view=team-history` |
+| | | Head to head | `view=head-to-head` |
 | League trends | League, across seasons | Scoring trend | `view=trend` |
 | | | Goal distribution | `view=distribution` |
 | | | Home advantage | `view=home-advantage` |
@@ -135,9 +136,10 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. The exception is Team-seasons on Points: the control is
-absent, the basis is ignored, and a carried `exclude` shows the points note
-only on the Points measure.
+`penalties=exclude`. The exceptions are Team-seasons on Points and Head to
+head: the control is absent and the basis is ignored. A carried `exclude`
+shows the points note on Team-seasons' Points measure, and "This view uses
+official results, which include penalties." on Head to head.
 Otherwise it is a server-rendered Penalties select, last in each view's
 data-control row and never in the navigation; links and forms carry it.
 
@@ -460,12 +462,106 @@ plus dotted record lines from completed seasons only, labeled with the archive
 start rather than claimed as all-time. Tied holders are all listed in the
 "League records and season ranges" details.
 
+### Head to head
+
+`view=head-to-head` follows two ASA team IDs across eligible regular seasons.
+The only controls are Team and Opponent. The opponent list includes only clubs
+met at least once, each as "Name (N)", sorted by each ID's newest name, then
+ID. The default is the most-met opponent, ties broken by newest name, then ID.
+A valid never-met pair remains selected with "X and Y have not met in a
+regular-season match." and a selected zero-meeting option. Blank, repeated,
+unknown or same-as-team opponents return the standard 400.
+
+The heading follows both controls, showing both clubs with decorative logos
+(`teamName` and `clubLogoURL`), followed by the regular-season scope, years and
+match count. Three equal stat tiles stay in one row, including at 335px:
+All, Home and Away, with official W–D–L large, then short lines for points per
+match, goals for–against and matches. The Home and Away tiles carry the chart's
+swatches, with no separate legend line. A one-line caption below explains
+"Goal margin · up: win · zero: draw · down: loss". Small samples remain visible,
+including a single meeting. Active-season
+meetings enter immediately and the scope and table mark "season in progress".
+
+`history.SummarizeHeadToHead` and `HeadToHeadOpponents` reuse
+`SummarizeScoringBasis` on the all-shots basis and `TeamComparisonEligible`.
+Meetings use `TeamMatch.ScoreFor`, `ScoreAgainst` and `Points`, so expected-data
+coverage never changes the record. Abandoned matches are excluded; malformed
+completed results exclude their season under the shared integrity checks.
+Distinct ASA IDs stay separate and no franchise lineage is inferred, including
+ASA's Utah Royals ID across its gap years. Playoff and cup meetings are excluded.
+
+The chart shows one column per meeting in kickoff-instant order, with fixture
+ID breaking ties and undated meetings last with a warning. Up means a win,
+down a loss and a short zero mark a draw. Home meetings are solid blue
+(`#1F6FA8`), away meetings orange (`#CF7424`) diagonal stripes on the page
+color (`#fbfcf8`), with a thin orange outline: 1.5px stripes every 3.4px at
+45 degrees. The tile swatches and draw marks use the same
+encoding. Orange has more than 3:1 contrast against the page; the stripes keep
+venues distinct in grayscale and red-green color-blind simulations. Hollow
+columns are reserved for Team-seasons' in-progress seasons.
+
+A symmetric, round integer goal-margin axis labels zero. Years sit under their
+first meeting; when labels would overlap, intermediate years are skipped first,
+preserving the first and last year (shifted inside the plot at its edges).
+Up to forty columns fit
+at 390px without page scrolling. Hover, tap or keyboard focus shows a transient
+Chart.js tooltip beside the column: venue-local date (including the year),
+"season in progress" when applicable, Home/Away, opponent's name that season, selected-team
+score and result. Each meeting's accessible label carries the same details.
+Hit testing chooses the nearest column across the full plot height; arrow keys,
+Home and End move between meetings. Escape, blur or tapping elsewhere dismisses
+the tooltip, leaving no highlight or URL state. There is no pinned selection or
+detail panel. This reuses Explore's Chart.js interaction and keyboard handling.
+Pure geometry for round bounds, hit testing and non-overlapping year labels
+lives only in `explore-geometry.js`, tested in `e2e/geometry_test.go`, with no
+Go copy. Without JavaScript the chart is a chronological results list.
+
+Only reading qualifications go above the chart: the empty state, unavailable
+dates, and the official-results note for a carried `penalties=exclude`. One
+short note below says records follow ASA team IDs and "home" follows ASA's
+designation, including alternate venues. No Penalties or Series select, xG or
+xPoints appears here; expected context is the next issue (#153).
+
+The values table is a native `<details>`, closed unless `h2h-sort` or
+`h2h-order` is present, with summary "Table: all N meetings". Columns are Date,
+Season, Venue, Opponent (that season's name), Score from the selected team's
+side, Result and Points. Text columns align left and rows have no logos or
+links. Sort links use underlying kickoff order, venue, result points or goal
+margin; ties use newest-first kickoff order and missing dates stay last.
+`exploreMatches` supplies venue-local dates and official scores, with
+`Venue date unavailable` rather than a UTC fallback. The table scrolls inside
+its own container on narrow screens, with a scroll hint.
+
+| Parameter | Values | Default |
+|---|---|---|
+| `team` | ASA team ID | Portland Thorns FC |
+| `opponent` | Different recorded ASA team ID | Most-met opponent |
+| `h2h-sort` | `date`, `venue`, `result`, `margin` | `date` |
+| `h2h-order` | `asc`, `desc` | `desc` |
+| `penalties` | `include`, `exclude` (accepted and ignored) | `include` |
+
+The Head to head payload stores each fixture once, with shared team identities
+and season-specific names. It carries only official scores and display metadata,
+with no xG or xPoints; the browser derives the other team’s orientation and
+records. An app test bounds the raw payload below 300 KB.
+
+Controls and sort links update the URL in place from that all-shots payload,
+with no data request, and restore through Back/Forward and reload. Separate
+GET forms allow changing Team without carrying the previous Opponent when
+JavaScript is off. Changing Team resets Opponent to that team's default.
+
 ## Testing and previews
 
 `make test-explore` runs the calculation and HTTP checks. `make test-e2e`
 drives the `internal/apptest` scenarios in headless Chromium, covering URL
 state, Back/Forward, no-request view switches, sorting, keyboard inspection,
 incomplete-data labels, plot geometry, and no horizontal overflow at 390px.
+Head to head also checks three equal tiles at 320–390px with at least 4px of
+line slack, the full tiles and chart
+below the controls at 390×812, tile swatches without a separate legend,
+first/last year labels, and hover, touch and keyboard tooltip parity. Tooltip
+checks wait for Chart.js's animation-frame event dispatch, including reopening
+the same column after Escape and an outside tap.
 Look at layouts, colors and touch behavior by eye.
 
 `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario <name>` serves a
@@ -484,7 +580,7 @@ and the current year is active.
 | `single` | 2024 with 20 matches of one goal each and no xG |
 | `teams` | 2025 and 2026, 64 matches among the 16 real clubs; 2026 has one match without xPts and one without xG; 2024 has no fixtures |
 | `no-xg` | Like `season-trend`, but only each season's first match has xG, so no team has complete xG |
-| `team-history` | `teams` plus 2016–2023 (no 2020), 96 played matches per loaded season (12 per club), scores varying by year; 2026 adds 144 pending fixtures to complete its inventory. 144 team-seasons; missing xPoints with complete xG and the reverse, plus an active season above the ten-match gate. `TeamHistoryBelowGate` marks its last four played rounds pending to test the same scenario at eight matches per club. `TeamHistorySmall` retains only 2025, giving 16 ranked rows for both end labels without a break. The reverse coverage case is in-memory only: SQLite requires both valid xG values to retain an observation, including its xPoints |
+| `team-history` | `teams` plus 2016–2023 (no 2020), 96 played matches per loaded season (12 per club), scores varying by year and fixtures dated within their season; 2026 adds 144 pending fixtures to complete its inventory. 144 team-seasons; Portland–Seattle has 26 meetings (13 home, 13 away), other pairs have several meetings, and Portland–Bay has never met. Fixture assignment swaps preserve all team match counts. Missing xPoints with complete xG and the reverse, plus an active season above the ten-match gate. `TeamHistoryBelowGate` marks its last four played rounds pending to test the same scenario at eight matches per club. `TeamHistorySmall` retains only 2025, giving 16 ranked rows for both end labels without a break. The reverse coverage case is in-memory only: SQLite requires both valid xG values to retain an observation, including its xPoints |
 | `season-trend` | 2025 and 2026 as 240-match double round robins; the last eight 2026 matches are unplayed; 2024 has no fixtures |
 
 For a Team-seasons chart with twenty or fewer rows, run

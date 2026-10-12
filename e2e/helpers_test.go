@@ -102,6 +102,8 @@ type pageOptions struct {
 	Timezone string
 	// NoScript disables JavaScript for the entire context.
 	NoScript bool
+	// Touch enables real touch events for tap interaction tests.
+	Touch bool
 	// Clipboard grants clipboard-read and clipboard-write permissions.
 	Clipboard bool
 }
@@ -118,6 +120,9 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	}
 	if opts.Timezone != "" {
 		contextOptions.TimezoneId = playwright.String(opts.Timezone)
+	}
+	if opts.Touch {
+		contextOptions.HasTouch = playwright.Bool(true)
 	}
 	if opts.NoScript {
 		contextOptions.JavaScriptEnabled = playwright.Bool(false)
