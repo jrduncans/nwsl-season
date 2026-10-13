@@ -270,6 +270,9 @@ func exploreTeamURL(selection url.Values, changes map[string]string) string {
 	if values.Get(penaltiesParam) == penaltiesInclude {
 		values.Del(penaltiesParam)
 	}
+	if values.Get("team-seasons-display") == "ranking" {
+		values.Del("team-seasons-display")
+	}
 	return "?" + values.Encode()
 }
 

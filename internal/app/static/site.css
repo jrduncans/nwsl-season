@@ -637,3 +637,7 @@ th:nth-child(2) { text-align: left; }
 @media (max-width: 450px) {
  .explore-h2h-controls [data-h2h-view-label], .explore-h2h-controls [data-h2h-penalties-label] { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; }
 }
+
+.explore-chart-wrap.explore-archive-scatter-wrap { width: min(100%, 46rem); height: auto; aspect-ratio: 1; }
+.explore-archive-scatter-wrap canvas { position: absolute; inset: 0; }
+.explore-archive-identification { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; margin: .4rem 0; font-variant-numeric: tabular-nums; }
