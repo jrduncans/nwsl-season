@@ -54,7 +54,9 @@ type exploreThresholdRecord struct {
 func exploreThresholds(query url.Values, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) (exploreThresholdView, error) {
 	page := exploreThresholdView{}
 	outcomes := history.Thresholds(summaries, archive)
-	page.ThresholdDefault = outcomes[len(outcomes)-1].Season
+	if len(outcomes) > 0 {
+		page.ThresholdDefault = outcomes[len(outcomes)-1].Season
+	}
 	page.ThresholdSelected = page.ThresholdDefault
 	if values, present := query["threshold-season"]; present {
 		if len(values) != 1 || !slices.ContainsFunc(outcomes, func(o history.SeasonThresholds) bool { return o.Season == values[0] }) {
@@ -87,18 +89,25 @@ func exploreThresholds(query url.Values, summaries []history.SeasonScoring, arch
 		})
 	}
 	outcomeKeys := []string{"shield", "home", "bye", "playoffs"}
-	page.ThresholdOutcome = query.Get("threshold-outcome")
-	if !slices.Contains(outcomeKeys, page.ThresholdOutcome) {
-		page.ThresholdOutcome = "playoffs"
-	}
 	keys := []string{"season", "team", "points", "played", "ppg"}
 	labels := []string{"Year", "Team", "Points", "Games", "PPG"}
-	sortKey, order := query.Get("threshold-sort"), query.Get("threshold-order")
-	if !slices.Contains(keys, sortKey) {
-		sortKey = "season"
-	}
-	if order != "asc" {
-		order = "desc"
+	page.ThresholdOutcome = "playoffs"
+	sortKey, order := "season", "desc"
+	for _, field := range []struct {
+		key     string
+		value   *string
+		allowed []string
+	}{
+		{"threshold-outcome", &page.ThresholdOutcome, outcomeKeys},
+		{"threshold-sort", &sortKey, keys},
+		{"threshold-order", &order, []string{"asc", "desc"}},
+	} {
+		if values, present := query[field.key]; present {
+			if len(values) != 1 || !slices.Contains(field.allowed, values[0]) {
+				return page, fmt.Errorf("invalid %s selection", field.key)
+			}
+			*field.value = values[0]
+		}
 	}
 	page.ThresholdSort, page.ThresholdOrder = sortKey, order
 	page.ThresholdTableEmpty = true

@@ -6,7 +6,7 @@
 <div class="explore-chart-wrap"><canvas data-chart="thresholds" tabindex="0" role="img" aria-label="Final regular-season points per game by outcome, since 2016" aria-describedby="threshold-chart-help"></canvas></div>
 <p class="explore-keyboard-hint" id="threshold-chart-help">Use arrow keys to inspect seasons, then Enter to show all cutoff details. Tap a season or use the links below. Escape clears the tooltip.</p>
 <noscript><p>Use the season links and exact-value table below to inspect thresholds.</p></noscript>
-<p class="note">2020: no regular season. Active seasons have no final mark; later seasons enter when cached regular-season and playoff results establish the cutoffs. Missing values are gaps. </p>
+<p class="note">2020: no regular season. Active seasons have no final mark; later seasons enter when cached regular-season and playoff results establish the cutoffs. Missing values are gaps.</p>
 <nav class="explore-subviews" aria-label="Threshold season details">{{range .ThresholdRows}}<a href="{{.URL}}" data-threshold-year="{{.Season}}"{{if .Selected}} aria-current="true"{{end}}>{{.Season}}</a>{{end}}</nav>
 {{range .ThresholdRows}}
 <section data-threshold-detail="{{.Season}}"{{if not .Selected}} hidden{{end}} aria-labelledby="threshold-detail-{{.Season}}">
@@ -26,7 +26,7 @@
 <p>Home-game entitlement through seed {{.Home}} ({{.Round}}). {{if .Bye}}Byes through seed {{.Bye}}; seeds 1–2 host semifinals and seeds 3–4 host quarterfinals.{{else}}Playoff byes: not applicable.{{end}} Hosting is earned by the seed, subject to venue exceptions; conditional hosting and a neutral-site final do not count.</p>
 {{if .Note}}<p class="note">{{.Note}}</p>{{end}}
 {{range .RecordNotes}}<p class="note">{{.Name}}: {{.Earned}} earned points / {{.Played}} played; official record {{.OfficialPoints}} points / {{.OfficialPlayed}} games.</p>{{end}}
-<p class="note"><a href="{{.OrderSource}}">ASA regular-season results</a> · <a href="{{.FormatSource}}">ASA playoff fixtures</a>{{range .AdditionalSources}} · <a href="{{.}}">Historical source</a>{{end}}</p>
+<p class="note"><a href="{{.OrderSource}}">ASA regular-season results</a> · <a href="{{.FormatSource}}">ASA playoff fixtures</a></p>
 </details>
 </section>
 {{end}}

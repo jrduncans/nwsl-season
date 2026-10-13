@@ -424,7 +424,6 @@
   let thresholdSelected = root.dataset.defaultThresholdSeason;
   function thresholdDescription(year) {
     const row = thresholdBySeason.get(year);
-    if (!row) return `${year}: no regular season`;
     return `${year}. ${row.values.map(value => value.ppg == null ? `${value.label}: ${value.reason}`
       : `${value.label}: ${value.cutoff.name}, place ${value.cutoff.place}, ${value.cutoff.officialPoints} points / ${value.cutoff.officialPlayed} games, ${value.ppg.toFixed(3)} PPG. Next: ${value.next.name}, place ${value.next.place}, ${value.next.officialPoints} points / ${value.next.officialPlayed} games, ${value.nextPPG.toFixed(3)} PPG${value.tied ? '. Equal-points tie across the boundary' : ''}`).join('. ')}`;
   }
@@ -524,6 +523,7 @@
     });
     if (params.has('threshold-outcome') || params.has('threshold-sort')) root.querySelector('[data-threshold-table]').open = true;
     const canvas = root.querySelector('[data-chart="thresholds"]');
+    if (!thresholdRecords.length) return;
     const chart = charts.thresholds || (charts.thresholds = createThresholds(canvas));
     chart.resize(); chart.update('none');
   }

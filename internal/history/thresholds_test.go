@@ -229,3 +229,32 @@ func TestThresholdRankingIncludesAwardedScoresAndRejectsComputedTieOverrides(t *
 		}
 	}
 }
+
+func TestThresholdsConflictWithholdsOnlyAffectedOutcomes(t *testing.T) {
+	archive := apptest.Scenario(t, apptest.ScenarioThresholds)
+	for i := range archive {
+		if archive[i].Entry.Season != "2023" {
+			continue
+		}
+		// A quarterfinal played at the lower seed's venue contradicts only the
+		// home-game entitlement; the other cutoffs rest on other evidence.
+		games := slices.Clone(archive[i].PlayoffGames)
+		first := slices.IndexFunc(games, func(g cache.Game) bool { return g.HomeTeamID != "" })
+		games[first].HomeTeamID, games[first].AwayTeamID = games[first].AwayTeamID, games[first].HomeTeamID
+		games[first].HomeScore, games[first].AwayScore = games[first].AwayScore, games[first].HomeScore
+		archive[i].PlayoffGames = games
+	}
+	summaries, err := SummarizeScoring(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := thresholdSeason(t, Thresholds(summaries, archive), "2023").Values
+	if values[1].PPG != nil || values[1].Reason == "" {
+		t.Fatalf("home-game conflict published: %+v", values[1])
+	}
+	for _, index := range []int{0, 2, 3} {
+		if values[index].PPG == nil {
+			t.Fatalf("%s withheld by an unrelated conflict: %s", values[index].Label, values[index].Reason)
+		}
+	}
+}

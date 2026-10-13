@@ -29,7 +29,7 @@ func TestExploreThresholdsUsesOneArchiveAndNativeDetails(t *testing.T) {
 	if strings.Contains(text(find(t, body, "[data-panel=thresholds]")[0]), "Penalties Include") {
 		t.Fatal("penalties control in points-only view")
 	}
-	for _, query := range []string{"threshold-season=", "threshold-season=2020", "threshold-season=2026", "threshold-season=2022&threshold-season=2023"} {
+	for _, query := range []string{"threshold-season=", "threshold-season=2020", "threshold-season=2026", "threshold-season=2022&threshold-season=2023", "threshold-outcome=bogus", "threshold-sort=bogus", "threshold-order=up"} {
 		status, _ := getPage(t, store.archive, "/explore?view=thresholds&"+query)
 		if status != http.StatusBadRequest {
 			t.Errorf("%s: %d", query, status)

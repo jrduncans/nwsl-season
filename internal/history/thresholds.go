@@ -41,7 +41,6 @@ type SeasonThresholds struct {
 	Round                     string
 	Note                      string
 	OrderSource, FormatSource string
-	AdditionalSources         []string
 	Values                    []Threshold
 }
 
@@ -105,8 +104,8 @@ func deriveThresholdSeason(entry competition.Entry, summary SeasonScoring, snaps
 	}
 	row.Home += row.Bye
 	row.Round = strings.TrimSuffix(format.Rounds[0].Label, "s")
-	finishes, candidates, reason := thresholdFinishes(summary, snapshot, format, row, override)
-	for _, spec := range []struct {
+	finishes, outcomeSeeds, reason := thresholdFinishes(summary, snapshot, format, row, override)
+	for index, spec := range []struct {
 		label string
 		place int
 	}{{"Shield", 1}, {"Home playoff game", row.Home}, {"Playoff bye", row.Bye}, {"Playoffs", row.Playoffs}} {
@@ -116,8 +115,10 @@ func deriveThresholdSeason(entry competition.Entry, summary SeasonScoring, snaps
 			value.Reason = "Not applicable"
 		case reason != "":
 			value.Reason = reason
+		case outcomeSeeds[index].reason != "":
+			value.Reason = outcomeSeeds[index].reason
 		default:
-			for id, seeds := range candidates {
+			for id, seeds := range outcomeSeeds[index].candidates {
 				if len(seeds) != 1 {
 					continue
 				}
@@ -141,35 +142,56 @@ func deriveThresholdSeason(entry competition.Entry, summary SeasonScoring, snaps
 		}
 		row.Values = append(row.Values, value)
 	}
+	// Notes explain only the adjustments behind a published cutoff.
+	shown := map[string]bool{}
+	for _, value := range row.Values {
+		if value.PPG != nil {
+			shown[value.Cutoff.ID], shown[value.Next.ID] = true, true
+		}
+	}
 	for _, award := range override.Awards {
-		row.AdditionalSources = append(row.AdditionalSources, award.Source)
+		if shown[award.Winner] || shown[award.Loser] {
+			row.Note = "Official points and games include awarded forfeits."
+		}
 	}
 	for _, deduction := range override.Deductions {
-		row.AdditionalSources = append(row.AdditionalSources, deduction.Source)
-	}
-	for _, tie := range override.Ties {
-		row.AdditionalSources = append(row.AdditionalSources, tie.Source)
-	}
-	if len(override.Awards) > 0 {
-		row.Note = "Official points and games include awarded forfeits. Played-match records remain available below."
-	}
-	for _, deduction := range override.Deductions {
-		row.Note += fmt.Sprintf(" %s: %d-point disciplinary deduction included in official points.", finishes[deduction.Team].Name, deduction.Points)
+		if shown[deduction.Team] {
+			row.Note = strings.TrimSpace(row.Note + fmt.Sprintf(" %s: %d-point disciplinary deduction included in official points.", finishes[deduction.Team].Name, deduction.Points))
+		}
 	}
 	return row
 }
 
-func thresholdFinishes(summary SeasonScoring, snapshot cache.HistoricalSeason, format competition.BracketFormat, season SeasonThresholds, override competition.OutcomeOverrides) (map[string]ThresholdFinish, map[string][]int, string) {
+// thresholdSeeds is the seed evidence behind one outcome's boundary. A reason
+// withholds only that outcome.
+type thresholdSeeds struct {
+	candidates map[string][]int
+	reason     string
+}
+
+const tieOverrideConflict = "Tied-order exception conflicts with cached results"
+
+// thresholdEvidence names the playoff facts a seed must agree with.
+type thresholdEvidence struct{ qualified, hosts, byes bool }
+
+// Each outcome keeps only the evidence about its own cutoff when the combined
+// evidence conflicts. Shield depends on the regular-season order alone.
+var thresholdOutcomeEvidence = [4]thresholdEvidence{{}, {hosts: true}, {byes: true}, {qualified: true}}
+
+// thresholdFinishes returns each outcome's seed candidates in the order
+// Shield, home game, bye, playoffs. The combined evidence is used while it is
+// consistent. A season-level reason withholds every outcome.
+func thresholdFinishes(summary SeasonScoring, snapshot cache.HistoricalSeason, format competition.BracketFormat, season SeasonThresholds, override competition.OutcomeOverrides) (map[string]ThresholdFinish, [4]thresholdSeeds, string) {
 	finishes := map[string]ThresholdFinish{}
-	candidates := map[string][]int{}
+	var none [4]thresholdSeeds
 	if summary.Readiness != cache.SourceReadinessAvailable || len(summary.Teams) <= season.Playoffs {
-		return finishes, candidates, "Regular-season records not loaded"
+		return finishes, none, "Regular-season records not loaded"
 	}
 	if summary.Lifecycle != cache.SourceScopeCompleted && !regularThresholdsComplete(summary) {
-		return finishes, candidates, "Regular season is not completed"
+		return finishes, none, "Regular season is not completed"
 	}
 	if summary.Basis != AllShots || summary.Pending > 0 || summary.InvalidCompleted > 0 || summary.Inventory == cache.InventoryCompletenessIncomplete {
-		return finishes, candidates, "Regular-season results are incomplete or invalid"
+		return finishes, none, "Regular-season results are incomplete or invalid"
 	}
 	for _, team := range summary.Teams {
 		finishes[team.TeamID] = ThresholdFinish{ID: team.TeamID, Name: team.TeamID, Played: team.Played, Earned: team.Points, OfficialPlayed: team.Played, OfficialPoints: team.Points}
@@ -181,29 +203,39 @@ func thresholdFinishes(summary SeasonScoring, snapshot cache.HistoricalSeason, f
 		}
 	}
 	if reason := applyThresholdAdjustments(finishes, override); reason != "" {
-		return finishes, candidates, reason
+		return finishes, none, reason
 	}
 	view := bracket.Build(format, snapshot.PlayoffGames)
 	if view.State != bracket.StateReady {
-		return finishes, candidates, "Complete, resolved playoff fixtures are required"
+		return finishes, none, "Complete, resolved playoff fixtures are required"
 	}
 	for _, game := range snapshot.PlayoffGames {
 		if game.Status != fixtures.CompletedStatus {
-			return finishes, candidates, "Playoffs are not completed"
+			return finishes, none, "Playoffs are not completed"
 		}
 		if _, found := finishes[game.HomeTeamID]; !found {
-			return finishes, candidates, "Playoff participants do not match regular-season records"
+			return finishes, none, "Playoff participants do not match regular-season records"
 		}
 		if _, found := finishes[game.AwayTeamID]; !found {
-			return finishes, candidates, "Playoff participants do not match regular-season records"
+			return finishes, none, "Playoff participants do not match regular-season records"
 		}
 	}
 	ranked := thresholdRanking(snapshot, finishes, override)
-	candidates = thresholdSeedCandidates(ranked, view, season)
-	if reason := resolveThresholdSeeds(candidates, finishes, view, format, override.Ties); reason != "" {
-		return finishes, candidates, reason
+	combined := thresholdSeedCandidates(ranked, view, season, thresholdEvidence{true, true, true})
+	reason := resolveThresholdSeeds(combined, finishes, view, format, override.Ties, true)
+	if reason == tieOverrideConflict {
+		return finishes, none, reason
 	}
-	return finishes, candidates, ""
+	var seeds [4]thresholdSeeds
+	for index, evidence := range thresholdOutcomeEvidence {
+		if reason == "" {
+			seeds[index].candidates = combined
+			continue
+		}
+		own := thresholdSeedCandidates(ranked, view, season, evidence)
+		seeds[index] = thresholdSeeds{own, resolveThresholdSeeds(own, finishes, view, format, override.Ties, false)}
+	}
+	return finishes, seeds, ""
 }
 
 // Awards fill observed game-count deficits only. If ASA later supplies the
@@ -294,7 +326,7 @@ func thresholdRanking(snapshot cache.HistoricalSeason, finishes map[string]Thres
 
 // Season-specific rules determine ranks. Unavailable final tiebreakers leave
 // intervals that postseason evidence can constrain. The neutral final supplies no hosts.
-func thresholdSeedCandidates(ranked []standings.TableRow, view bracket.View, season SeasonThresholds) map[string][]int {
+func thresholdSeedCandidates(ranked []standings.TableRow, view bracket.View, season SeasonThresholds, evidence thresholdEvidence) map[string][]int {
 	qualified, hosts, byes := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	seen := map[string]bool{}
 	for roundIndex, round := range view.Rounds {
@@ -326,7 +358,7 @@ func thresholdSeedCandidates(ranked []standings.TableRow, view bracket.View, sea
 			}
 		}
 		for seed := first; seed <= last; seed++ {
-			if (seed <= season.Playoffs) == qualified[id] && (seed <= season.Home) == hosts[id] && (seed <= season.Bye) == byes[id] {
+			if (!evidence.qualified || (seed <= season.Playoffs) == qualified[id]) && (!evidence.hosts || (seed <= season.Home) == hosts[id]) && (!evidence.byes || (seed <= season.Bye) == byes[id]) {
 				candidates[id] = append(candidates[id], seed)
 			}
 		}
@@ -334,12 +366,15 @@ func thresholdSeedCandidates(ranked []standings.TableRow, view bracket.View, sea
 	return candidates
 }
 
-func resolveThresholdSeeds(candidates map[string][]int, finishes map[string]ThresholdFinish, view bracket.View, format competition.BracketFormat, ties []competition.OutcomeTie) string {
+// resolveThresholdSeeds narrows candidates with tie exceptions and unique
+// seeds. With pairing, it also uses the opening-round matchups and rejects any
+// team without a consistent seed.
+func resolveThresholdSeeds(candidates map[string][]int, finishes map[string]ThresholdFinish, view bracket.View, format competition.BracketFormat, ties []competition.OutcomeTie, pairing bool) string {
 	for _, tie := range ties {
 		first := len(finishes) + 1
 		for _, id := range tie.Order {
 			if len(candidates[id]) < 2 {
-				return "Tied-order exception conflicts with cached results"
+				return tieOverrideConflict
 			}
 			first = min(first, slices.Min(candidates[id]))
 		}
@@ -347,7 +382,7 @@ func resolveThresholdSeeds(candidates map[string][]int, finishes map[string]Thre
 		for index, id := range tie.Order {
 			seed := first + index
 			if finishes[id].OfficialPoints != points || !slices.Contains(candidates[id], seed) {
-				return "Tied-order exception conflicts with cached results"
+				return tieOverrideConflict
 			}
 			candidates[id] = []int{seed}
 		}
@@ -369,7 +404,11 @@ func resolveThresholdSeeds(candidates map[string][]int, finishes map[string]Thre
 				}
 			}
 		}
-		for _, slot := range view.Rounds[0].Slots {
+		openingSlots := view.Rounds[0].Slots
+		if !pairing {
+			openingSlots = nil
+		}
+		for _, slot := range openingSlots {
 			pairs := [][2]int{}
 			for _, spec := range format.Slots {
 				if spec.RoundID != view.Rounds[0].ID || spec.SeedPair == nil || (spec.SourceOrder > 0 && spec.ID != slot.ID) {

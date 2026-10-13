@@ -264,9 +264,11 @@ records; deductions change official points before ranking. See the
 Completed playoff entrants, first-appearance hosts, byes and opening seed pairs
 corroborate computed ranks and constrain any remaining unavailable tiebreaker.
 Verified source order is used only where the bracket catalog explicitly supplies
-it. The neutral final never establishes home entitlement. Contradictory evidence
-withholds the season; an unresolved cutoff or adjacent finisher leaves that
-boundary as a gap. A tie override is accepted only for a still-unresolved rank,
+it. The neutral final never establishes home entitlement. Contradictory
+playoff evidence is retried per outcome: the Shield uses the regular-season
+order alone, and the home-game, bye and playoff cutoffs each use only their own
+evidence, so a conflict withholds just the outcomes it touches. An unresolved
+cutoff or adjacent finisher leaves that boundary as a gap. A tie override is accepted only for a still-unresolved rank,
 never to replace a result the season's computable rules already determine.
 
 A season needs loaded, terminal regular-season results, a complete resolved

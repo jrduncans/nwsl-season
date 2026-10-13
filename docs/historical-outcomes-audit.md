@@ -88,8 +88,8 @@ remain withheld until the inference can represent that fact; physical venue
 alone is not proof of seed entitlement.
 
 Known incomplete inventory, nonterminal games, unresolved postseason results,
-unexplained unequal game counts and conflicting seed evidence withhold values.
-An ambiguous boundary withholds that pair independently. Historical seasons
+unexplained unequal game counts withhold the whole season. Conflicting seed
+evidence and an ambiguous boundary withhold only the affected outcomes. Historical seasons
 without verified regular-season inventory use balanced game counts and completed
 postseason evidence; these checks cannot detect every uniformly missing set of
 regular-season fixtures. They must not be described as an independent fixture
