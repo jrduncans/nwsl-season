@@ -14,6 +14,7 @@ type explorePage struct {
 	exploreDistributionView
 	exploreHomeAdvantageView
 	exploreParityView
+	exploreThresholdView
 	exploreTeamSeasonsView
 	exploreHeadToHeadView
 	exploreTeamsView
@@ -53,7 +54,7 @@ var exploreViewLabels = map[string]string{
 	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
 	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
 	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season", "head-to-head": "Head to head",
-	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "team-seasons": "Team-seasons", "table": "Scoring table",
+	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "thresholds": "Shield and playoff thresholds", "team-seasons": "Team-seasons", "table": "Scoring table",
 }
 
 // ViewLabel returns the visible name of an Explore tab.
@@ -100,8 +101,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			view = "trend"
 		}
 	}
-	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "team-seasons", "table", "teams", "team-history", "season-trend", "team-rankings", "head-to-head"}, view) {
-		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, team-seasons, table, teams, team-history, season-trend, team-rankings, or head-to-head"))
+	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "thresholds", "team-seasons", "table", "teams", "team-history", "season-trend", "team-rankings", "head-to-head"}, view) {
+		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, thresholds, team-seasons, table, teams, team-history, season-trend, team-rankings, or head-to-head"))
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -155,6 +156,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
+	page.exploreThresholdView, err = exploreThresholds(r.URL.Query(), allSummaries, archive)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
 	page.exploreTeamSeasonsView, err = exploreTeamSeasons(r.URL.Query(), history.TeamSeasons(allSummaries, allSummaries, archive), history.TeamSeasons(allSummaries, npSummaries, archive))
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
@@ -184,7 +190,10 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	}
 	// Validate selections before spending forecast capacity. Populate every
 	// eligible active season once so browser selections retain one snapshot.
-	a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
+	// Historical thresholds never depend on forecast availability or capacity.
+	if view != "thresholds" {
+		a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
+	}
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)

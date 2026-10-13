@@ -641,3 +641,53 @@ th:nth-child(2) { text-align: left; }
 .explore-chart-wrap.explore-archive-scatter-wrap { width: min(100%, 46rem); height: auto; aspect-ratio: 1; }
 .explore-archive-scatter-wrap canvas { position: absolute; inset: 0; }
 .explore-archive-identification { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; margin: .4rem 0; font-variant-numeric: tabular-nums; }
+
+/* Threshold legends share the Chart.js series colors and marker patterns. */
+.threshold-series-0 { color: #136f4a; }
+.threshold-series-1 { color: #1f6fa8; }
+.threshold-series-2 { color: #5b3f96; }
+.threshold-series-3 { color: #a44b18; }
+.threshold-legend { flex-wrap: wrap; }
+[data-threshold-detail] { margin: 1rem 0 1.5rem; }
+.threshold-season-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; margin-bottom: .75rem; }
+.threshold-season-heading h3 { margin: 0; }
+.threshold-season-heading > span { color: var(--muted); font-size: .85rem; }
+.threshold-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.threshold-card { min-width: 0; border: 1px solid var(--line); border-radius: .5rem; padding: 1rem; background: var(--panel); }
+.threshold-card h4 { margin: 0 0 .75rem; font-size: .95rem; }
+.threshold-team-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; }
+.threshold-team { display: block; font-weight: 700; line-height: 1.35; }
+.threshold-record { display: block; color: var(--muted); font-size: .78rem; margin-top: .2rem; }
+.threshold-rate { font-size: 1.65rem; font-weight: 750; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.threshold-rate small { display: block; font-size: .65rem; font-weight: 500; color: var(--muted); }
+.threshold-next { border-top: 1px solid var(--line); margin-top: .75rem; padding-top: .6rem; }
+.threshold-next .threshold-team { font-size: .875rem; font-weight: 500; }
+.threshold-next .threshold-rate { font-size: 1.1rem; color: var(--muted); }
+.threshold-tie { display: inline-block; margin-top: .65rem; padding: .15rem .4rem; background: var(--green-soft); border-radius: .2rem; font-size: .75rem; }
+.threshold-context { margin-top: .75rem; font-size: .85rem; }
+.threshold-context summary { color: var(--muted); }
+.threshold-table-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.threshold-table { table-layout: fixed; border: 1px solid var(--line); border-radius: .5rem; overflow: hidden; }
+.threshold-table caption { text-align: left; padding: .5rem 0; color: var(--muted); font-size: .8rem; }
+.threshold-table :is(th, td) { white-space: normal; padding: .7rem .5rem; }
+.threshold-table th:first-child { width: 15%; }
+.threshold-table th:nth-child(2) { width: 40%; }
+.threshold-table td:nth-child(2), .threshold-table th:nth-child(2) { text-align: left; overflow-wrap: anywhere; }
+.threshold-table td small { display: block; color: var(--muted); font-size: .7rem; }
+.threshold-table td:last-child { font-weight: 700; }
+.threshold-table [hidden] { display: none; }
+.threshold-table tbody th { font-size: .9rem; }
+.threshold-table thead a::after { display: none; }
+.threshold-table [aria-sort="ascending"] a::after, .threshold-table [aria-sort="descending"] a::after { display: inline-block; width: auto; margin-left: .1em; }
+@media (max-width: 600px) {
+ .threshold-cards { grid-template-columns: 1fr; }
+ [data-panel="thresholds"] .explore-subviews { column-gap: .6rem; }
+ [data-panel="thresholds"] .explore-subviews a { display: inline-flex; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; padding: 0; }
+ .threshold-table { font-size: .75rem; }
+ .threshold-table :is(th, td) { padding: .65rem .2rem; }
+ .threshold-table thead th { font-size: .65rem; }
+ .threshold-table tbody th { font-size: .75rem; }
+ .threshold-table th:first-child { width: 14%; }
+ .threshold-table th:nth-child(2) { width: 35%; }
+}
+[data-threshold-detail] p { overflow-wrap: anywhere; }

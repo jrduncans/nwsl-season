@@ -9,9 +9,23 @@ schedule difficulty never changes the official standings.
 cached games into a table. Unplayed, postponed and abandoned games are ignored;
 every participating team appears, including teams with zero points.
 
-Ranking follows the 2026 NWSL regular-season rules: points, then goal
-differential, total wins, goals scored, head-to-head points among the tied
-teams, and head-to-head goals scored. Two orderings use those criteria:
+`RulesForSeason` selects the regular-season policy by year. Points come first:
+
+- **2013–2019 and 2021:** head-to-head win–loss record (mini-league PPG for
+  three or more clubs), overall goal difference, overall goals scored, then
+  the same three criteria for away games and for home games. If a multi-club
+  group shrinks to two, restart at the two-club head-to-head criterion.
+- **2022 onward:** goal difference, total wins, goals scored, head-to-head
+  points among tied teams, then head-to-head goals scored. Remaining subgroups
+  continue with the next criterion, without restarting.
+
+See the [historical rules audit](historical-outcomes-audit.md#season-specific-tiebreakers)
+for sources. This policy selection applies to season standings, the standings
+CLI and historical outcome derivation. It does not enable historical forecasts
+or clinching. Future seasons inherit the latest policy unless league rules change.
+There was no 2020 regular season.
+
+Two orderings use the selected criteria:
 
 - **Total** ranks by the raw values. It is the official final order, and the
   default for complete and historical seasons.
@@ -19,10 +33,11 @@ teams, and head-to-head goals scored. Two orderings use those criteria:
   fair while teams have played different numbers of games. It is the default
   for an active season.
 
-The next official tiebreaker, least disciplinary points, needs card data that
-ASA does not provide. Rows still tied at that point are marked undetermined,
-naming the rule and the tied teams, rather than separated by an invented
-fallback. The clinching guide explains how proofs treat that case.
+The modern next tiebreaker, least disciplinary points, needs card data that
+ASA does not provide. The earlier policy ends at a coin toss or drawing of lots.
+Rows still tied at the first unavailable criterion are marked undetermined,
+naming the rule and the tied teams. Alphabetical order stabilizes display only;
+it never certifies a rank. The clinching guide explains how proofs treat that case.
 
 A playoff line is drawn only when the catalog verifies the cut line (see the
 [competitions guide](competitions-guide.md)).

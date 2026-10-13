@@ -18,13 +18,14 @@ const (
 	ScenarioNoXG        = "no-xg"
 	ScenarioSeasonTrend = "season-trend"
 	ScenarioOverview    = "overview"
+	ScenarioThresholds  = "thresholds"
 	ScenarioEmpty       = "empty"
 	ScenarioSingle      = "single"
 )
 
 // ScenarioNames lists every scenario in the order cmd/preview documents them.
 func ScenarioNames() []string {
-	return []string{ScenarioDefault, ScenarioTeams, ScenarioNoXG, ScenarioTeamHistory, ScenarioSeasonTrend, ScenarioOverview, ScenarioEmpty, ScenarioSingle}
+	return []string{ScenarioDefault, ScenarioTeams, ScenarioNoXG, ScenarioTeamHistory, ScenarioSeasonTrend, ScenarioOverview, ScenarioThresholds, ScenarioEmpty, ScenarioSingle}
 }
 
 // Scenario returns the in-memory historical seasons for a named scenario. An
@@ -41,6 +42,8 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 		})
 	case ScenarioTeams, ScenarioNoXG, ScenarioTeamHistory, ScenarioSeasonTrend:
 		archive = teamsArchive(t, name)
+	case ScenarioThresholds:
+		archive = thresholdsArchive(t)
 	case ScenarioOverview:
 		states := make(map[string]ArchiveState)
 		for _, year := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {

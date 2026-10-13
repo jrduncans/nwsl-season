@@ -77,13 +77,13 @@ func exploreTrendBenchmarks(season exploreTeamSeason, input cache.HistoricalSeas
 		groupUnavailable = "Final standings are unavailable while fixtures remain unplayed."
 	}
 	if groupUnavailable == "" && !season.Active {
-		table := standings.Calculate(input.Data.Teams, standingsGames(input.Data.Games), standings.OfficialTotalRules())
+		table := standings.Calculate(input.Data.Teams, standingsGames(input.Data.Games), standings.RulesForSeason(input.Entry.Season, standings.OrderOfficialTotal))
 		for key, size := range map[string]int{"playoff": input.Entry.PlayoffPlaces, "top-four": 4, "shield": 1} {
 			if size <= 0 || size > len(table) {
 				continue
 			}
-			// Historical catalogs have no season-specific tiebreak rules. A
-			// points tie across their cut cannot certify a factual final group.
+			// Historical catalogs do not certify official record adjustments.
+			// Keep group membership conservative across a tied cut.
 			if input.Entry.Rules == nil && size < len(table) && table[size-1].Record.Points == table[size].Record.Points {
 				continue
 			}

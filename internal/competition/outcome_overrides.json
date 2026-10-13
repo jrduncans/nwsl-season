@@ -1,0 +1,31 @@
+{
+  "2021": {
+    "awards": [
+      {
+        "winner": "7vQ7BBzqD1",
+        "loser": "aDQ0lzvQEv",
+        "source": "https://www.nwslsoccer.com/news/washington-spirit-ol-reign-canceled",
+        "home": "aDQ0lzvQEv",
+        "winnerGoals": 3,
+        "loserGoals": 0
+      },
+      {
+        "winner": "Pk5LeeNqOW",
+        "loser": "aDQ0lzvQEv",
+        "source": "https://www.nwslsoccer.com/news/nwsl-announces-fines-to-washington-spirit",
+        "home": "Pk5LeeNqOW",
+        "winnerGoals": 3,
+        "loserGoals": 0
+      }
+    ]
+  },
+  "2024": {
+    "deductions": [
+      {
+        "team": "kRQa8JOqKZ",
+        "points": 3,
+        "source": "https://www.nwslsoccer.com/news/nwsl-announces-disciplinary-action-against-angel-city-fc-for-salary-cap-violation"
+      }
+    ]
+  }
+}

@@ -60,6 +60,11 @@ func SeedArchive(t testing.TB, db *cache.DB, archive []cache.HistoricalSeason) {
 				games[i].RawJSON = "{}"
 			}
 		}
+		if len(season.PlayoffGames) > 0 {
+			if _, err := db.ReplaceSeason(ctx, season.Entry.Season, "Playoffs", cacheTeams(season.Data.Teams), season.PlayoffGames, now); err != nil {
+				t.Fatalf("seed %s playoffs: %v", season.Entry.Season, err)
+			}
+		}
 		stage := season.Entry.Stage
 		if _, err := db.ReplaceSeason(ctx, season.Entry.Season, stage, cacheTeams(season.Data.Teams), games, now); err != nil {
 			t.Fatalf("seed %s fixtures: %v", season.Entry.Season, err)

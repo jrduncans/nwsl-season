@@ -21,12 +21,9 @@ across the archive.
 
 ## Explore: league trends
 
-Scoring trend, Goal distribution, Home advantage and Parity exist. Not built:
-
-- **Shield and playoff thresholds**: Shield-winner and playoff-cut PPG by
-  season, with the teams either side of the cut. Needs official historical
-  finishing order and Shield winners; don't infer them from today's tiebreak
-  code.
+Scoring trend, Goal distribution, Home advantage, Parity, and Shield and playoff
+thresholds exist. Current-team pace comparisons and prospective threshold
+targets remain future work.
 
 ## Explore: match records
 

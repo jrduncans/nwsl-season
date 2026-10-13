@@ -27,6 +27,7 @@ page, redirect to the Scoring trend.
 | | | Goal distribution | `view=distribution` |
 | | | Home advantage | `view=home-advantage` |
 | | | Parity | `view=parity` |
+| | | Shield and playoff thresholds | `view=thresholds` |
 | | | Team-seasons (ranking or actual-vs-expected scatter) | `view=team-seasons` |
 | | | Scoring table | `view=table` |
 
@@ -83,7 +84,11 @@ Presentation:
   analysis joins an existing group with sub-controls rather than adding a
   top-level tab.
 - Lead with a chart, keep an exact-value table available, and give each chart
-  an accessible description.
+  an accessible description. **Use the vendored Chart.js for Explore charts**,
+  with the shared options and interaction helpers in `explore.js`, so styling,
+  tooltips, touch and keyboard behavior stay consistent across views. Do not
+  add SVG trend charts or a separate chart engine. SVG is reserved for existing
+  supplementary geometry such as the Parity team strip, not new trend charts.
 - Label values, units and reference lines directly. Over-performance views use
   a zero line and a consistent favorable direction. Color is never the only
   signal; no dual axes, unexplained composite scores, or one line per team.
@@ -136,7 +141,8 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. The exception is Team-seasons on Points: the control is
+`penalties=exclude`. The exceptions are Shield and playoff thresholds (always points-only, ignoring
+carried penalties) and Team-seasons on Points: the control is
 absent and the basis is ignored, with the points note for a carried `exclude`.
 Head to head offers Penalties in Actual, Expected and Actual vs expected,
 changing goals and xG while official results and points stay fixed.
@@ -229,6 +235,100 @@ Quartiles use linear interpolation between closest ranks (`history.Quantile`,
 R and NumPy's default), and the chart receives them from the server. Points
 never change with `penalties`; that basis keeps its eligibility rule and the
 standard points note. The calculation is `history.SummarizeParity`.
+
+### Shield and playoff thresholds
+
+`view=thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
+Shield, Home playoff game, Playoff bye and Playoffs. The series use distinct
+line patterns and markers as well as color. The tooltip title shows the year,
+playoff places and bye count (or **No byes**). Each tooltip row is one line:
+outcome, team name and PPG; points and match counts live in the
+season cards and outcome-specific table. Missing values and 2020 split
+lines. Active seasons have no final mark.
+
+`history.Thresholds` derives records from all-shots summaries and playoff games
+in the same coherent SQLite archive read. Team names come from the cached ASA
+identities, as elsewhere in Explore. The existing competition catalog supplies
+qualification places and bracket topology; opening seed pairs supply home and
+bye cutoffs. No full standings, W–D–L records or season formats are duplicated in
+a threshold catalog, and no extra network request runs during page rendering.
+
+Official records are ranked with the shared season-specific standings policy:
+head-to-head first through 2021, goal difference first from 2022. The historical
+policy includes multi-team mini-league PPG, restart for a remaining pair, and
+away/home criteria. Awarded scores contribute to wins, goals and head-to-head
+records; deductions change official points before ranking. See the
+[standings guide](standings-and-schedule-guide.md) and
+[rules audit](historical-outcomes-audit.md#season-specific-tiebreakers).
+
+Completed playoff entrants, first-appearance hosts, byes and opening seed pairs
+corroborate computed ranks and constrain any remaining unavailable tiebreaker.
+Verified source order is used only where the bracket catalog explicitly supplies
+it. The neutral final never establishes home entitlement. Contradictory
+playoff evidence is retried per outcome: the Shield uses the regular-season
+order alone, and the home-game, bye and playoff cutoffs each use only their own
+evidence, so a conflict withholds just the outcomes it touches. An unresolved
+cutoff or adjacent finisher leaves that boundary as a gap. A tie override is accepted only for a still-unresolved rank,
+never to replace a result the season's computable rules already determine.
+
+A season needs loaded, terminal regular-season results, a complete resolved
+catalog playoff bracket and consistent official game counts across teams after
+awards. Known incomplete inventory withholds all cutoffs. Without verified
+regular-season inventory, equal game counts and a completed postseason are
+closure checks, not an independent audit of every fixture; a uniformly truncated
+archive cannot be ruled out by counts alone. An active scope can enter as soon
+as verified regular-season inventory is complete and its postseason is complete,
+without waiting for the calendar to change. Ordinary later seasons need only
+normal ASA synchronization and their normal competition catalog entry, not an
+outcome-specific manual record. An exceptional or ambiguous season may need a
+source-backed exception.
+
+[`outcome_overrides.json`](../internal/competition/outcome_overrides.json) contains
+only facts absent from ASA: awarded matches, deductions and otherwise unresolved
+tied orders. Awards fill observed game-count deficits; if ASA already counts an
+award, it is skipped. Asymmetric or unexplained deficits withhold the values.
+Deductions change official points while preserving the played-match record.
+Tie overrides must agree with equal points, unresolved computed ranks and the
+observed seed constraints.
+See [the exception audit](historical-outcomes-audit.md).
+
+PPG is **official points / official games**, including awarded forfeits and
+point deductions. Unrounded ratios are shared by chart, cards and table;
+three-decimal display does not break ties. Portland's 2021 Shield value is 44/24,
+not its played-match 41/23. Details explicitly label equal official points at a
+boundary and disclose differences from the cached played-match record.
+
+No xG, xPoints, penalty split or forecast is required; carried Penalties has no
+effect and there is no Penalties control. A thresholds request skips forecast
+benchmark warming; entering Match by match from that page reloads its normal
+payload so forecast controls remain available.
+
+Season links and Chart.js marks select details below the chart by touch or keyboard
+(`threshold-season`, default newest eligible season). JavaScript updates the URL
+and detail visibility in place, restoring reload and Back/Forward. Native
+links, the outcome form and sortable table headers work without scripts. The
+selected season uses compact outcome cards: cutoff team and PPG lead, with rank,
+official points and games underneath; the next official finisher forms a
+secondary comparison row. Equal-points boundaries have a visible badge. Outcomes
+that did not apply have no empty card; the season heading says **No byes**.
+Format explanations, earned/official record differences and primary sources live
+in a separate disclosure.
+
+The comparison table shows one outcome at a time (`threshold-outcome`: `shield`,
+`home`, `bye` or `playoffs`, default `playoffs`). Each row is one season's verified
+cutoff team, official points, official games and PPG. Non-applicable and unavailable
+cutoffs have no rows. A bye comparison therefore contains only bye seasons.
+Headers sort by `threshold-sort` (`season`, `team`, `points`, `played`, `ppg`)
+and `threshold-order` (`asc` or `desc`, default newest season first); PPG sorting
+uses the unrounded ratio, with newest season breaking ties. Outcome selection and
+sorting update the URL in place and restore on reload and Back/Forward. The five
+columns fit desktop and 390px without horizontal scrolling. Season links lead to
+the full adjacent-team comparison. Formats show qualification places, home-game
+cutoff and relevant round, and bye cutoff. Hosting means a seed's entitlement
+subject to venue exceptions, excluding neutral finals and hosting conditional on
+an earlier win.
+Historical cutoffs are observations, never future guarantees. PPG normalizes
+games played, not opponents or era.
 
 ### Team-seasons
 
@@ -423,8 +523,8 @@ season: the team's own mean, plus one comparison.
   match appearances.
 - Playoff-team and top-4 averages use the catalog's season-specific cut (four,
   six or eight). Completed seasons take membership from final total-points
-  standings; a tie across the cut withholds the comparison, because historical
-  tiebreak rules are not verified.
+  standings; a tie across the cut withholds the comparison, because that view does not
+  reconcile historical official record adjustments.
 - Shield winner is one team; Best team is the best full-season per-match mean
   for the chosen metric (lowest for Allowed), keeping tied holders, and needs
   complete expected coverage for every team.
@@ -629,6 +729,7 @@ and the current year is active.
 | Scenario | Data |
 |---|---|
 | `default` | 2018, 2019, 2021, 2022 with 20 matches each; xG complete for 2018 and 2021, 19 of 20 for 2019, none for 2022 |
+| `thresholds` | Recorded ASA regular-season score/identity tuples and postseason fixtures for 2016–2025 (no 2020), without xG or penalty splits. Regular-season dates and fixture IDs are synthetic; postseason chronology, shootouts and identities are recorded. Cutoffs derive from results and sparse exceptions, including official 2021 forfeits and inferred 2022/2023 equal-points boundaries |
 | `overview` | 2016–2026 (no 2020), 20 matches each among six clubs covering all five goal bins, a varying home edge, full xG and xPts; 2018 has two teams far behind, 2024 a separate top three, 2025 one runaway leader |
 | `empty` | 2024 with 19 matches and no xG, below the 20-match minimum |
 | `single` | 2024 with 20 matches of one goal each and no xG |

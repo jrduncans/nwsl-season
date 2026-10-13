@@ -837,8 +837,8 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 	showStandings := scope.standingsAvailable() && presentation.Phase != seasonPhaseUpcoming
 	if showStandings {
-		actualTable := standings.Calculate(data.Teams, domainGames, standings.PerGameRules())
-		totalTable = standings.Calculate(data.Teams, domainGames, standings.OfficialTotalRules())
+		actualTable := standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(scope.Entry.Season, standings.OrderOfficialPerGame))
+		totalTable = standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(scope.Entry.Season, standings.OrderOfficialTotal))
 		playoffLine := scope.Entry.PlayoffPlaces
 		standingsView = tableViews(actualTable, playoffLine)
 		if showScheduleDifficulty {

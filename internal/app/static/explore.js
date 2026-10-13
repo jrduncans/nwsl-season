@@ -18,6 +18,7 @@
   const h2hData = JSON.parse(root.querySelector('#explore-h2h-data').textContent) || [];
   const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
   const homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
+  const thresholdRecords = JSON.parse(root.querySelector('#explore-threshold-data').textContent) || [];
   const parityRecords = JSON.parse(root.querySelector('#explore-parity-data').textContent) || [];
   const historySeries = root.querySelector('[data-history-series]');
   const historyContext = root.querySelector('[data-history-context]');
@@ -414,6 +415,117 @@
       const chart = charts[key] || (charts[key] = createHomePanel(canvas, series, title));
       chart.resize(); chart.update('none');
     });
+  }
+  // Source-verified historical cutoffs. The same unrounded values drive the
+  // chart, native details and exact table; missing years never bridge lines.
+  const thresholdBySeason = new Map(thresholdRecords.map(row => [row.season, row]));
+  const thresholdYears = thresholdRecords.length
+    ? Array.from({length: Number(thresholdRecords.at(-1).season) - Number(thresholdRecords[0].season) + 1}, (_, i) => String(Number(thresholdRecords[0].season) + i)) : [];
+  let thresholdSelected = root.dataset.defaultThresholdSeason;
+  function thresholdDescription(year) {
+    const row = thresholdBySeason.get(year);
+    return `${year}. ${row.values.map(value => value.ppg == null ? `${value.label}: ${value.reason}`
+      : `${value.label}: ${value.cutoff.name}, place ${value.cutoff.place}, ${value.cutoff.officialPoints} points / ${value.cutoff.officialPlayed} games, ${value.ppg.toFixed(3)} PPG. Next: ${value.next.name}, place ${value.next.place}, ${value.next.officialPoints} points / ${value.next.officialPlayed} games, ${value.nextPPG.toFixed(3)} PPG${value.tied ? '. Equal-points tie across the boundary' : ''}`).join('. ')}`;
+  }
+  function selectThresholdSeason(year) {
+    if (thresholdBySeason.has(year)) update({view: 'thresholds', 'threshold-season': year});
+  }
+  function createThresholds(canvas) {
+    const options = commonOptions();
+    options.interaction = {mode: 'index', axis: 'x', intersect: false};
+    options.scales = {
+      x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkip: true, autoSkipPadding: 20, maxTicksLimit: 11}},
+      y: {min: 0, max: 3, grid: {color: color('--line')}, border: {display: false}, ticks: {stepSize: .5}, title: {display: true, text: 'Points per game'}},
+    };
+    // Every coincident series remains in the tooltip; the selected season's
+    // native details always preserve every boundary and adjacent identity.
+    options.plugins.tooltip.filter = item => item.parsed.y != null;
+    options.plugins.tooltip.callbacks = {
+      title: items => {
+        const year = items[0]?.label || '';
+        const row = thresholdBySeason.get(year);
+        return row ? `${year} · ${row.playoffs} playoff places · ${row.bye ? `${row.bye} byes` : 'No byes'}` : year;
+      },
+      label: item => {
+        const value = thresholdBySeason.get(item.label).values[item.datasetIndex];
+        return `${item.dataset.hoverLabel}: ${value.cutoff.name} · ${value.ppg.toFixed(3)} PPG`;
+      },
+    };
+    options.onClick = (_, elements, chart) => { if (elements.length) selectThresholdSeason(chart.data.labels[elements[0].index]); };
+    options.onHover = (event, elements) => { event.native.target.style.cursor = elements.length ? 'pointer' : ''; };
+    const styles = [
+      {color: '#136f4a', pointStyle: 'circle', borderDash: []},
+      {color: '#1f6fa8', pointStyle: 'rect', borderDash: [8, 4]},
+      {color: '#5b3f96', pointStyle: 'rectRot', borderDash: [2, 4]},
+      {color: '#a44b18', pointStyle: 'cross', borderDash: [8, 3, 2, 3]},
+    ];
+    const chart = new Chart(canvas, {type: 'line', options, data: {
+      labels: thresholdYears,
+      datasets: styles.map((style, index) => ({
+        label: thresholdRecords[0].values[index].label,
+        hoverLabel: ['Shield', 'Home game', 'Bye', 'Playoffs'][index],
+        data: thresholdYears.map(year => thresholdBySeason.get(year)?.values[index].ppg ?? null),
+        pointStyle: style.pointStyle, borderDash: style.borderDash, borderColor: style.color,
+        backgroundColor: style.color, pointBackgroundColor: color('--panel'),
+        spanGaps: false, borderWidth: 2.5, pointBorderWidth: 2,
+        pointRadius: context => thresholdYears[context.dataIndex] === thresholdSelected ? 8 : 5,
+        pointHitRadius: 6, pointHoverRadius: 8,
+      })),
+    }});
+    chart.keyboardByIndex = true;
+    keyboardAccess(chart, mark => thresholdDescription(chart.data.labels[mark.index]));
+    canvas.addEventListener('keydown', event => {
+      const mark = chart.getActiveElements()[0];
+      if (event.key === 'Enter' && mark) { event.preventDefault(); selectThresholdSeason(chart.data.labels[mark.index]); }
+    });
+    return chart;
+  }
+  function showThresholds(params) {
+    const requested = params.get('threshold-season');
+    thresholdSelected = thresholdBySeason.has(requested) ? requested : root.dataset.defaultThresholdSeason;
+    root.querySelectorAll('[data-threshold-detail]').forEach(panel => { panel.hidden = panel.dataset.thresholdDetail !== thresholdSelected; });
+    root.querySelectorAll('[data-threshold-year]').forEach(link => {
+      if (link.dataset.thresholdYear === thresholdSelected) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
+      const selection = new URLSearchParams(params);
+      selection.set('view', 'thresholds'); selection.set('threshold-season', link.dataset.thresholdYear);
+      link.href = `?${selection}`;
+    });
+    const outcomeKeys = ['shield', 'home', 'bye', 'playoffs'];
+    const outcome = outcomeKeys.includes(params.get('threshold-outcome')) ? params.get('threshold-outcome') : 'playoffs';
+    const sortKeys = ['season', 'team', 'points', 'played', 'ppg'];
+    const sort = sortKeys.includes(params.get('threshold-sort')) ? params.get('threshold-sort') : 'season';
+    const order = params.get('threshold-order') === 'asc' ? 'asc' : 'desc';
+    const controls = root.querySelector('[data-threshold-controls]');
+    controls.elements['threshold-season'].value = thresholdSelected;
+    controls.elements['threshold-outcome'].value = outcome;
+    controls.elements['threshold-sort'].value = sort;
+    controls.elements['threshold-order'].value = order;
+    controls.querySelector('button').hidden = true;
+    const body = root.querySelector('[data-threshold-table-rows]');
+    const rows = [...body.children];
+    rows.sort((a, b) => {
+      const comparison = sort === 'team' ? a.dataset.team.localeCompare(b.dataset.team)
+        : Number(a.dataset[sort]) - Number(b.dataset[sort]);
+      return comparison ? comparison * (order === 'asc' ? 1 : -1) : Number(b.dataset.season) - Number(a.dataset.season);
+    });
+    rows.forEach(row => { row.hidden = row.dataset.outcome !== outcome; });
+    body.replaceChildren(...rows);
+    root.querySelector('[data-threshold-table-empty]').hidden = rows.some(row => !row.hidden);
+    root.querySelector('[data-threshold-table-label]').textContent = {shield: 'Shield', home: 'home playoff game', bye: 'playoff bye', playoffs: 'playoff'}[outcome];
+    root.querySelectorAll('[data-threshold-sort]').forEach(link => {
+      const key = link.dataset.thresholdSort, selected = key === sort;
+      link.parentElement.setAttribute('aria-sort', selected ? (order === 'asc' ? 'ascending' : 'descending') : 'none');
+      const selection = new URLSearchParams(params);
+      selection.set('view', 'thresholds'); selection.set('threshold-season', thresholdSelected);
+      selection.set('threshold-outcome', outcome); selection.set('threshold-sort', key);
+      selection.set('threshold-order', selected ? (order === 'asc' ? 'desc' : 'asc') : key === 'team' ? 'asc' : 'desc');
+      link.href = `?${selection}`;
+    });
+    if (params.has('threshold-outcome') || params.has('threshold-sort')) root.querySelector('[data-threshold-table]').open = true;
+    const canvas = root.querySelector('[data-chart="thresholds"]');
+    if (!thresholdRecords.length) return;
+    const chart = charts.thresholds || (charts.thresholds = createThresholds(canvas));
+    chart.resize(); chart.update('none');
   }
   // Parity: the spread of team points per game in each season, drawn over the
   // spread that chance alone would give, and one selected season's teams on a
@@ -2523,8 +2635,11 @@
   function applyURL() {
     const params = new URL(location.href).searchParams;
     const requested = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
-    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'team-seasons', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings', 'head-to-head'].includes(requested) ? requested : 'teams';
-    if (!['team-seasons', 'head-to-head'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
+    const view = ['trend', 'distribution', 'home-advantage', 'parity', 'thresholds', 'team-seasons', 'table', 'teams', 'team-history', 'season-trend', 'team-rankings', 'head-to-head'].includes(requested) ? requested : 'teams';
+    // A thresholds request skips forecast work. Entering Match by match needs
+    // its forecast benchmark payload from a normal server render.
+    if (root.dataset.view === 'thresholds' && view === 'season-trend') { location.assign(location.href); return; }
+    if (!['team-seasons', 'head-to-head', 'thresholds'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     const group = view === 'teams' ? 'teams'
@@ -2582,6 +2697,7 @@
     }
     if (view === 'home-advantage') showHomeAdvantage();
     if (view === 'parity') showParity(params);
+    if (view === 'thresholds') showThresholds(params);
     if (view === 'team-seasons') showTeamSeasons(params);
     if (view === 'head-to-head') showHeadToHead(params);
     if (view === 'teams') showTeams(params);
@@ -2646,6 +2762,14 @@
       const params = new URL(archiveSort.href).searchParams;
       update({view: 'team-seasons', 'team-seasons-sort': params.get('team-seasons-sort'), 'team-seasons-order': params.get('team-seasons-order')});
     }
+    const thresholdLink = event.target.closest('[data-panel="thresholds"] a[href^="?view=thresholds"]');
+    if (thresholdLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const selection = new URL(thresholdLink.getAttribute('href'), location.href).searchParams;
+      if (thresholdLink.hasAttribute('data-threshold-sort')) {
+        update({view: 'thresholds', 'threshold-outcome': selection.get('threshold-outcome'), 'threshold-sort': selection.get('threshold-sort'), 'threshold-order': selection.get('threshold-order')});
+      } else update({view: 'thresholds', 'threshold-season': selection.get('threshold-season')});
+    }
     const paritySort = event.target.closest('[data-parity-sort]');
     if (paritySort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
@@ -2697,6 +2821,10 @@
   });
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-chart]')) dismiss(false); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') dismiss(); });
+  const thresholdControls = root.querySelector('[data-threshold-controls]');
+  const changeThresholdOutcome = () => update({view: 'thresholds', 'threshold-outcome': thresholdControls.elements['threshold-outcome'].value});
+  thresholdControls.addEventListener('change', changeThresholdOutcome);
+  thresholdControls.addEventListener('submit', event => { event.preventDefault(); changeThresholdOutcome(); });
   metric.addEventListener('change', () => update({view: 'trend', metric: metric.value}));
   if (distributionBin) {
     distributionBin.addEventListener('change', () => update({'distribution-bin': distributionBin.value}));

@@ -44,6 +44,9 @@ func TestHistoricalRegularSeasonsReturnsOnlyExactRegularSeasonData(t *testing.T)
 	if len(regular.Data.Games) != 1 || regular.Data.Games[0].ASAID != "regular" {
 		t.Fatalf("2024 regular season = %+v", regular)
 	}
+	if len(regular.PlayoffGames) != 1 || regular.PlayoffGames[0].ASAID != "playoffs" {
+		t.Fatalf("coherent playoff evidence = %+v", regular.PlayoffGames)
+	}
 	for _, season := range seasons {
 		if season.Entry.Season == "2020" {
 			t.Fatal("2020 challenge cup was returned as a regular season")

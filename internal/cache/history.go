@@ -17,6 +17,9 @@ type HistoricalSeason struct {
 	Entry     competition.Entry
 	Readiness *SeasonReadinessSnapshot
 	Data      SeasonData
+	// PlayoffGames is read in the same transaction as the regular season.
+	// It supplies observed qualification and seed evidence to Explore.
+	PlayoffGames []Game
 }
 
 // HistoricalRegularSeasons reads every public, source-backed, fixture-capable
@@ -41,6 +44,11 @@ func (c *DB) HistoricalRegularSeasons(ctx context.Context) ([]HistoricalSeason, 
 			return nil, fmt.Errorf("load historical season %s %s: %w", entry.Season, entry.Stage, err)
 		}
 		season := HistoricalSeason{Entry: entry, Data: data}
+		playoffs, err := seasonGames(ctx, tx, entry.Season, "Playoffs")
+		if err != nil {
+			return nil, fmt.Errorf("load historical playoffs %s: %w", entry.Season, err)
+		}
+		season.PlayoffGames = playoffs
 		if found {
 			readinessCopy := readiness
 			season.Readiness = &readinessCopy
