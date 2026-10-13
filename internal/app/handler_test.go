@@ -475,7 +475,8 @@ func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
 		} else {
 			requireText(t, body, "table.standings caption", "standings · totals")
 			requireElements(t, body, `[data-standings-mode="total"]`, `[data-standings-mode-value="per-game"]`, `[data-standings-mode-value="total"]`, `[data-per-game-playoff-line="true"]`, `[data-total-playoff-line="true"]`)
-			forbidRaw(t, body, "competition format", "playoff line")
+			forbidRaw(t, body, "competition format")
+			requireText(t, body, ".standings-note", "Ties: head-to-head", "playoff line")
 		}
 		forbidRaw(t, body, "All seasons", "2026 Regular Season", "2025 Regular Season", "Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8")
 	}
@@ -2018,4 +2019,16 @@ func catalogSeasonData() cache.SeasonData {
 		data.Teams = append(data.Teams, standings.Team{ID: fmt.Sprintf("team-%02d", index), Name: fmt.Sprintf("Team %02d", index)})
 	}
 	return data
+}
+
+// Results remain readable even when a partial snapshot lacks the teams needed
+// to reconcile a source-backed standings exception.
+func TestFixturesDoNotRequireOfficialStandingsAdjustments(t *testing.T) {
+	for _, season := range []string{"2021", "2024"} {
+		data := phaseTestData(standings.CompletedStatus, "PreMatch")
+		body := renderSeasonRequest(t, data, "/seasons/"+season+"/regular-season/fixtures")
+		requireText(t, body, "main", "2–1")
+		requireElements(t, body, ".fixtures")
+		forbidElements(t, body, "table.standings")
+	}
 }

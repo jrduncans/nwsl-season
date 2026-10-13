@@ -835,10 +835,30 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		scheduleView = strengthViewFrom(scheduleStrength)
 	}
+	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
 	showStandings := scope.standingsAvailable() && presentation.Phase != seasonPhaseUpcoming
+	adjustmentsUnavailable := false
 	if showStandings {
-		actualTable := standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(scope.Entry.Season, standings.OrderOfficialPerGame))
-		totalTable = standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(scope.Entry.Season, standings.OrderOfficialTotal))
+		// Fixtures display cached match facts. Their xG completeness warning
+		// needs raw team records, but not validated official standings.
+		// Partial cached data can fail official reconciliation; the page then
+		// shows the raw table with a note instead of failing to render.
+		calculateTable := func(order standings.Order) []standings.TableRow {
+			raw := func() []standings.TableRow {
+				return standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(season, order))
+			}
+			if featureSuffix == "/fixtures" {
+				return raw()
+			}
+			table, err := competition.OfficialStandings(season, data.Teams, domainGames, order)
+			if err != nil {
+				adjustmentsUnavailable = true
+				return raw()
+			}
+			return table
+		}
+		actualTable := calculateTable(standings.OrderOfficialPerGame)
+		totalTable = calculateTable(standings.OrderOfficialTotal)
 		playoffLine := scope.Entry.PlayoffPlaces
 		standingsView = tableViews(actualTable, playoffLine)
 		if showScheduleDifficulty {
@@ -857,6 +877,9 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	hasUpcoming := len(upcomingFixtureGroups) > 0
 	presentation.HasUpcoming = hasUpcoming
 	retrospective := presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming)
+	if retrospective && showStandings {
+		standingsView = addPlayoffSeeding(standingsView, totalTable, season)
+	}
 	// Captions name the season and how current the table is, so a cropped
 	// screenshot keeps its context. The template adds the per-game or totals
 	// mode, which the page script updates when the reader switches it.
@@ -884,13 +907,19 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	} else if through, ok := latestCompletedMatchDate(data.Games, a.options.Location); ok {
 		standingsCaptionSuffix = "through " + through
 	}
+	if standingsMode == "total" {
+		positions := map[string]int{}
+		for i, row := range totalTable {
+			positions[row.Team.ID] = i
+		}
+		sort.SliceStable(standingsView, func(i, j int) bool { return positions[standingsView[i].TeamID] < positions[standingsView[j].TeamID] })
+	}
 	fixturesHeading := "Results and fixtures"
 	if presentation.Phase == seasonPhaseUpcoming {
 		fixturesHeading = "Schedule"
 	} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming) {
 		fixturesHeading = "Results"
 	}
-	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
 	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, season, scope.Stage, season, scope.Entry.Slug, featureSuffix)
 	if err != nil {
 		return seasonPage{}, err
@@ -917,6 +946,8 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		StandingsXGCaption:     standingsXGCaption,
 		StandingsCaptionSuffix: standingsCaptionSuffix,
 		StandingsMode:          standingsMode,
+		StandingsNote:          officialStandingsNote(season, adjustmentsUnavailable),
+		StandingsSeeding:       retrospective,
 		Phase:                  presentation.Phase,
 		Standings:              addTotalPositions(standingsView, totalTable, scope.Entry.PlayoffPlaces),
 		Strength:               scheduleView,
