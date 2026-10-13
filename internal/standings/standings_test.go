@@ -329,3 +329,70 @@ func assertBefore(t *testing.T, table []TableRow, beforeID, afterID string) {
 		t.Fatalf("%s appears at %d, want before %s at %d in %+v", beforeID, before, afterID, after, teamIDs(table))
 	}
 }
+
+func TestSeasonRulesUseHistoricalHeadToHeadBeforeGoalDifference(t *testing.T) {
+	rows := []TableRow{{Team: Team{ID: "a"}, Record: Record{Points: 10, GoalsFor: 2}}, {Team: Team{ID: "b"}, Record: Record{Points: 10, GoalsFor: 20}}}
+	games := []Game{game("a", "b", CompletedStatus, 1, 0)}
+	for _, year := range []string{"2013", "2014", "2015", "2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {
+		t.Run(year, func(t *testing.T) {
+			table := Rank(rows, games, RulesForSeason(year, OrderOfficialTotal))
+			want := "a"
+			if year >= "2022" {
+				want = "b"
+			}
+			if table[0].Team.ID != want {
+				t.Fatalf("first=%s want=%s", table[0].Team.ID, want)
+			}
+		})
+	}
+}
+
+func TestHistoricalMultiTeamTieRestartsForRemainingPair(t *testing.T) {
+	// A's mini-league PPG is 3/2; B and C both have 4/3. B wins the
+	// two-team head-to-head despite C's better overall goal difference.
+	rows := []TableRow{
+		{Team: Team{ID: "a"}, Record: Record{Points: 20}},
+		{Team: Team{ID: "b"}, Record: Record{Points: 20}},
+		{Team: Team{ID: "c"}, Record: Record{Points: 20, GoalsFor: 10}},
+	}
+	games := []Game{game("a", "b", CompletedStatus, 1, 0), game("a", "c", CompletedStatus, 0, 1), game("b", "c", CompletedStatus, 1, 0), game("b", "c", CompletedStatus, 0, 0)}
+	got := Rank(rows, games, RulesForSeason("2019", OrderOfficialTotal))
+	if got[0].Team.ID != "a" || got[1].Team.ID != "b" || got[2].Team.ID != "c" {
+		t.Fatalf("restart order: %+v", got)
+	}
+}
+
+func TestHistoricalVenueCriteriaAndUnresolvedLastRule(t *testing.T) {
+	// Overall records are already accumulated (and can include official point
+	// adjustments). Keep their totals equal to exercise the later venue rules.
+	rows := []TableRow{{Team: Team{ID: "a"}, Record: Record{Points: 10}}, {Team: Team{ID: "b"}, Record: Record{Points: 10}}}
+	cases := []struct {
+		name  string
+		games []Game
+		want  string
+	}{
+		{"away head-to-head", []Game{game("a", "b", CompletedStatus, 0, 1), game("b", "a", CompletedStatus, 1, 0)}, "b"},
+		{"away goal difference", []Game{game("x", "a", CompletedStatus, 0, 2), game("x", "b", CompletedStatus, 0, 1)}, "a"},
+		{"away goals", []Game{game("x", "a", CompletedStatus, 1, 2), game("x", "b", CompletedStatus, 0, 1)}, "a"},
+		{"home goal difference", []Game{game("a", "x", CompletedStatus, 2, 0), game("b", "x", CompletedStatus, 1, 0)}, "a"},
+		{"home goals", []Game{game("a", "x", CompletedStatus, 2, 1), game("b", "x", CompletedStatus, 1, 0)}, "a"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Rank(rows, tc.games, RulesForSeason("2019", OrderOfficialTotal))
+			if got[0].Team.ID != tc.want || got[0].TieBreak.Undetermined {
+				t.Fatalf("order: %+v", got)
+			}
+		})
+	}
+	for _, year := range []string{"2019", "2022"} {
+		got := Rank(rows, nil, RulesForSeason(year, OrderOfficialTotal))
+		want := "coin toss or drawing of lots"
+		if year == "2022" {
+			want = "least disciplinary points"
+		}
+		if !got[0].TieBreak.Undetermined || got[0].TieBreak.Rule != want || len(got[0].TieBreak.TiedTeamIDs) != 2 {
+			t.Fatalf("%s unresolved: %+v", year, got)
+		}
+	}
+}

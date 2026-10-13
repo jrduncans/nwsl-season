@@ -54,6 +54,7 @@ func run() error {
 		return err
 	}
 
+	rules = standings.RulesForSeason(*season, rules.Order)
 	table := standings.Calculate(teams, games, rules)
 	return printTable(os.Stdout, table)
 }

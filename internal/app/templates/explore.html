@@ -1,5 +1,5 @@
 {{define "explore"}}{{template "head" .}}
-<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}} data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}" data-default-h2h-team="{{.H2HTeam.ID}}">
+<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}} data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-threshold-season="{{.ThresholdDefault}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}" data-default-h2h-team="{{.H2HTeam.ID}}">
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
@@ -25,6 +25,7 @@
 <a href="?view=distribution{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>{{.ViewLabel "distribution"}}</a>
 <a href="?view=home-advantage{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="home-advantage"{{if eq .View "home-advantage"}} aria-current="page"{{end}}>{{.ViewLabel "home-advantage"}}</a>
 <a href="?view=parity{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="parity"{{if eq .View "parity"}} aria-current="page"{{end}}>{{.ViewLabel "parity"}}</a>
+<a href="?view=thresholds{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="thresholds"{{if eq .View "thresholds"}} aria-current="page"{{end}}>{{.ViewLabel "thresholds"}}</a>
 <a href="?view=team-seasons{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="team-seasons"{{if eq .View "team-seasons"}} aria-current="page"{{end}}>{{.ViewLabel "team-seasons"}}</a>
 <a href="?view=table{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>{{.ViewLabel "table"}}</a>
 </nav>
@@ -104,6 +105,7 @@
 </details>
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
+{{template "exploreThresholds" .}}
 {{template "exploreTeamSeasons" .}}
 {{template "exploreHeadToHead" .}}
 <section data-panel="parity"{{if ne .View "parity"}} hidden{{end}} aria-labelledby="explore-parity-title">
@@ -352,6 +354,7 @@
 <script type="application/json" id="explore-home-data">{{.HomeAdvantageData}}</script>
 <script type="application/json" id="explore-h2h-data">{{.H2HData}}</script>
 <script type="application/json" id="explore-team-seasons-data">{{.TeamSeasonsData}}</script>
+<script type="application/json" id="explore-threshold-data">{{.ThresholdData}}</script>
 <script type="application/json" id="explore-parity-data">{{.ParityData}}</script>
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>

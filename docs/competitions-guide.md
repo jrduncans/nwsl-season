@@ -118,3 +118,23 @@ text.
 
 Group stages render chronological fixtures with date headings, never
 `Matchday` headings or a combined table.
+
+## Derived historical outcomes
+
+Explore thresholds derive official points and games from ASA results, and
+qualification and seed evidence from cached playoff fixtures. The historical
+regular-season archive includes playoff games read in the same SQLite
+transaction; they never contribute to regular-season scoring totals. The
+existing playoff catalog supplies topology, seed pairs and verified source order,
+so formats are not duplicated in a separate outcome catalog.
+
+[`outcome_overrides.json`](../internal/competition/outcome_overrides.json) supplies
+only facts ASA fixtures cannot establish: awarded matches, point deductions and
+otherwise ambiguous tied orders. Ordinary completed seasons require no entry.
+The [exception audit](historical-outcomes-audit.md) explains each current override
+and the evidence constraints. The shared standings module selects the historical policy for each season;
+unknown seed order after computable rules and playoff evidence remains a gap.
+
+This derivation does not enable historical forecasting or clinching capabilities
+and does not change catalog inventory or season-page finality. Existing normal
+catalog work still applies when a new season or bracket format is introduced.
