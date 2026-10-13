@@ -1192,10 +1192,13 @@ func addPlayoffSeeding(rows []tableRowView, table []standings.TableRow, season s
 	return rows
 }
 
-func officialStandingsNote(season string) string {
+func officialStandingsNote(season string, adjustmentsUnavailable bool) string {
 	note := "Ties: goal difference, wins, goals scored, head-to-head points, then head-to-head goals scored."
 	if season < "2022" {
 		note = "Ties: head-to-head, goal difference, goals scored, then away and home records."
+	}
+	if adjustmentsUnavailable {
+		return note + " Official forfeit and deduction adjustments are unavailable because cached games are incomplete."
 	}
 	override := competition.HistoricalOutcomeOverrides()[season]
 	if len(override.Awards) > 0 {

@@ -18,6 +18,8 @@ inconsistent counts instead of guessing. These adjustments never change cached
 fixtures, results pages or xG (which describes played matches). Results and
 fixtures remain readable when partial cached data cannot reconcile official
 standings adjustments; their xG completeness warnings use raw match records.
+Other pages fall back to the unadjusted table with a note when reconciliation
+fails, rather than failing to render. The standings CLI still reports the error.
 
 `RulesForSeason` selects the regular-season policy by year. Points come first:
 

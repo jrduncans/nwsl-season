@@ -30,7 +30,7 @@ func OfficialStandings(season string, teams []standings.Team, games []standings.
 		if winner == expected {
 			continue
 		}
-		if winner >= expected || loser >= expected {
+		if loser >= expected {
 			return nil, fmt.Errorf("awarded-match game counts do not reconcile")
 		}
 		home, away := award.Winner, award.Loser

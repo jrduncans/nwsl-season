@@ -837,23 +837,28 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
 	showStandings := scope.standingsAvailable() && presentation.Phase != seasonPhaseUpcoming
+	adjustmentsUnavailable := false
 	if showStandings {
 		// Fixtures display cached match facts. Their xG completeness warning
 		// needs raw team records, but not validated official standings.
-		calculateTable := func(order standings.Order) ([]standings.TableRow, error) {
-			if featureSuffix == "/fixtures" {
-				return standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(season, order)), nil
+		// Partial cached data can fail official reconciliation; the page then
+		// shows the raw table with a note instead of failing to render.
+		calculateTable := func(order standings.Order) []standings.TableRow {
+			raw := func() []standings.TableRow {
+				return standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(season, order))
 			}
-			return competition.OfficialStandings(season, data.Teams, domainGames, order)
+			if featureSuffix == "/fixtures" {
+				return raw()
+			}
+			table, err := competition.OfficialStandings(season, data.Teams, domainGames, order)
+			if err != nil {
+				adjustmentsUnavailable = true
+				return raw()
+			}
+			return table
 		}
-		actualTable, tableErr := calculateTable(standings.OrderOfficialPerGame)
-		if tableErr != nil {
-			return seasonPage{}, fmt.Errorf("calculate official standings: %w", tableErr)
-		}
-		totalTable, tableErr = calculateTable(standings.OrderOfficialTotal)
-		if tableErr != nil {
-			return seasonPage{}, fmt.Errorf("calculate official standings: %w", tableErr)
-		}
+		actualTable := calculateTable(standings.OrderOfficialPerGame)
+		totalTable = calculateTable(standings.OrderOfficialTotal)
 		playoffLine := scope.Entry.PlayoffPlaces
 		standingsView = tableViews(actualTable, playoffLine)
 		if showScheduleDifficulty {
@@ -907,7 +912,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		for i, row := range totalTable {
 			positions[row.Team.ID] = i
 		}
-		sort.Slice(standingsView, func(i, j int) bool { return positions[standingsView[i].TeamID] < positions[standingsView[j].TeamID] })
+		sort.SliceStable(standingsView, func(i, j int) bool { return positions[standingsView[i].TeamID] < positions[standingsView[j].TeamID] })
 	}
 	fixturesHeading := "Results and fixtures"
 	if presentation.Phase == seasonPhaseUpcoming {
@@ -941,7 +946,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		StandingsXGCaption:     standingsXGCaption,
 		StandingsCaptionSuffix: standingsCaptionSuffix,
 		StandingsMode:          standingsMode,
-		StandingsNote:          officialStandingsNote(season),
+		StandingsNote:          officialStandingsNote(season, adjustmentsUnavailable),
 		StandingsSeeding:       retrospective,
 		Phase:                  presentation.Phase,
 		Standings:              addTotalPositions(standingsView, totalTable, scope.Entry.PlayoffPlaces),

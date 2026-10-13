@@ -61,3 +61,17 @@ func TestOfficialStandingsDeductsBeforeRankingWithoutMutatingGames(t *testing.T)
 		t.Fatal("cached match input changed")
 	}
 }
+
+func TestOfficialStandingsReportsUnreconciledAwards(t *testing.T) {
+	overrides := HistoricalOutcomeOverrides()["2021"]
+	reign, spirit := overrides.Awards[0].Winner, overrides.Awards[0].Loser
+	teams := []standings.Team{{ID: reign}, {ID: spirit}, {ID: "other"}}
+	score := 0
+	games := []standings.Game{}
+	for range 3 {
+		games = append(games, standings.Game{Status: standings.CompletedStatus, HomeTeamID: "other", AwayTeamID: spirit, HomeScore: &score, AwayScore: &score})
+	}
+	if _, err := OfficialStandings("2021", teams, games, standings.OrderOfficialTotal); err == nil {
+		t.Fatal("expected a reconciliation error")
+	}
+}
