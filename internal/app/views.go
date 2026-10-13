@@ -57,6 +57,8 @@ type seasonPage struct {
 	ShowFixtureViewToggle  bool
 	ShowUpcomingSeason     bool
 	FixturesHeading        string
+	StandingsNote          string
+	StandingsSeeding       bool
 	StandingsCaption       string
 	StandingsXGCaption     string
 	StandingsCaptionSuffix string
@@ -423,6 +425,8 @@ type tableRowView struct {
 	PlayoffLine           bool
 	TotalPosition         int
 	TotalPlayoffLine      bool
+	SeedBadge             string
+	SeedTitle             string
 	QualificationBadge    string
 	QualificationTitle    string
 	EliminationBadge      string
@@ -1147,4 +1151,58 @@ func signedFloatText(value float64) string {
 
 func scheduleDeltaText(value float64) string {
 	return signedFloatText(math.Round(value*100) / 100)
+}
+
+// Seeding belongs to the official total order, even when the reader switches
+// to per-game or xG statistics. Unresolved ranks do not certify advantages.
+func addPlayoffSeeding(rows []tableRowView, table []standings.TableRow, season string) []tableRowView {
+	entry, ok := competition.Lookup(season, "Playoffs")
+	if !ok || entry.BracketFormat == nil {
+		return rows
+	}
+	format := entry.BracketFormat
+	firstSeed, hosts := len(table)+1, 0
+	for _, slot := range format.Slots {
+		if slot.RoundID == format.Rounds[0].ID && slot.SeedPair != nil {
+			firstSeed = min(firstSeed, slot.SeedPair[0], slot.SeedPair[1])
+			hosts++
+		}
+	}
+	if hosts == 0 {
+		return rows
+	}
+	byes := firstSeed - 1
+	positions := map[string]int{}
+	for i, row := range table {
+		if !row.TieBreak.Undetermined {
+			positions[row.Team.ID] = i + 1
+		}
+	}
+	for i := range rows {
+		place := positions[rows[i].TeamID]
+		switch {
+		case place > 0 && place <= byes:
+			rows[i].SeedBadge = "Bye · Home"
+			rows[i].SeedTitle = "Earned a first-round bye and a home semifinal by regular-season seed."
+		case place > 0 && place <= byes+hosts:
+			rows[i].SeedBadge = "Home"
+			rows[i].SeedTitle = "Earned a home game in the opening playoff round by regular-season seed."
+		}
+	}
+	return rows
+}
+
+func officialStandingsNote(season string) string {
+	note := "Ties: goal difference, wins, goals scored, head-to-head points, then head-to-head goals scored."
+	if season < "2022" {
+		note = "Ties: head-to-head, goal difference, goals scored, then away and home records."
+	}
+	override := competition.HistoricalOutcomeOverrides()[season]
+	if len(override.Awards) > 0 {
+		note += " Official records include awarded 3–0 forfeits; xG includes played matches only."
+	}
+	for _, deduction := range override.Deductions {
+		note += fmt.Sprintf(" Official points include a %d-point disciplinary deduction.", deduction.Points)
+	}
+	return note
 }

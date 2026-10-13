@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -56,6 +57,12 @@ func run() error {
 
 	rules = standings.RulesForSeason(*season, rules.Order)
 	table := standings.Calculate(teams, games, rules)
+	if *stage == "Regular Season" {
+		table, err = competition.OfficialStandings(*season, teams, games, rules.Order)
+		if err != nil {
+			return err
+		}
+	}
 	return printTable(os.Stdout, table)
 }
 

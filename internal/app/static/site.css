@@ -691,3 +691,6 @@ th:nth-child(2) { text-align: left; }
  .threshold-table th:nth-child(2) { width: 35%; }
 }
 [data-threshold-detail] p { overflow-wrap: anywhere; }
+
+.seed-badge { white-space: nowrap; font-weight: 800; }
+[data-standings-stat="xg"] .seed-badge { display: none; }

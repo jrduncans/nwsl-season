@@ -9,6 +9,14 @@ schedule difficulty never changes the official standings.
 cached games into a table. Unplayed, postponed and abandoned games are ignored;
 every participating team appears, including teams with zero points.
 
+Regular-season pages and the standings CLI apply the source-backed historical
+awards and point deductions from the competition exception file before ranking.
+Awarded 3–0 matches contribute to P/W/D/L, goals and every tie-break criterion;
+point deductions reduce points and PPG. Awards reconcile against observed
+full-season game counts, skipping awards already counted by ASA and reporting
+inconsistent counts instead of guessing. These adjustments never change cached
+fixtures, results pages or xG (which describes played matches).
+
 `RulesForSeason` selects the regular-season policy by year. Points come first:
 
 - **2013–2019 and 2021:** head-to-head win–loss record (mini-league PPG for
@@ -28,7 +36,8 @@ There was no 2020 regular season.
 Two orderings use the selected criteria:
 
 - **Total** ranks by the raw values. It is the official final order, and the
-  default for complete and historical seasons.
+  default for complete and historical seasons. The server renders that order even
+  without JavaScript; switching statistics back to Goals restores it.
 - **Per game** ranks by each criterion divided by games played, so the table is
   fair while teams have played different numbers of games. It is the default
   for an active season.
@@ -41,6 +50,16 @@ it never certifies a rank. The clinching guide explains how proofs treat that ca
 
 A playoff line is drawn only when the catalog verifies the cut line (see the
 [competitions guide](competitions-guide.md)).
+
+Finished-season tables show `Bye · Home` for seeds earning a first-round bye
+and home semifinal, and `Home` for other seeds earning an opening-round home
+game. The existing playoff line marks qualifying places, without repeated
+Playoffs badges. Entitlements come from the catalog bracket seed pairs, not
+physical venues, and unresolved ranks receive no entitlement badge. Badges
+follow official total seeds in per-game mode and hide in the xG view. Active
+seasons retain the existing clinching badges. A note lists the season
+tie-break order and any official adjustments. In 2022 Houston places fourth
+ahead of Kansas City fifth: both have 36 points, but Houston has +8 goal difference to Kansas City’s 0.
 
 ## Remaining schedule difficulty
 

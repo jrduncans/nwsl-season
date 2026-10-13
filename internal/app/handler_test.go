@@ -475,7 +475,8 @@ func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
 		} else {
 			requireText(t, body, "table.standings caption", "standings · totals")
 			requireElements(t, body, `[data-standings-mode="total"]`, `[data-standings-mode-value="per-game"]`, `[data-standings-mode-value="total"]`, `[data-per-game-playoff-line="true"]`, `[data-total-playoff-line="true"]`)
-			forbidRaw(t, body, "competition format", "playoff line")
+			forbidRaw(t, body, "competition format")
+			requireText(t, body, ".standings-note", "Ties: head-to-head", "playoff line")
 		}
 		forbidRaw(t, body, "All seasons", "2026 Regular Season", "2025 Regular Season", "Schedule difficulty", "Forecast lab", "Clinching scenarios", "top 8")
 	}

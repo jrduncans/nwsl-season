@@ -837,8 +837,14 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	}
 	showStandings := scope.standingsAvailable() && presentation.Phase != seasonPhaseUpcoming
 	if showStandings {
-		actualTable := standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(scope.Entry.Season, standings.OrderOfficialPerGame))
-		totalTable = standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(scope.Entry.Season, standings.OrderOfficialTotal))
+		actualTable, tableErr := competition.OfficialStandings(season, data.Teams, domainGames, standings.OrderOfficialPerGame)
+		if tableErr != nil {
+			return seasonPage{}, fmt.Errorf("calculate official standings: %w", tableErr)
+		}
+		totalTable, tableErr = competition.OfficialStandings(season, data.Teams, domainGames, standings.OrderOfficialTotal)
+		if tableErr != nil {
+			return seasonPage{}, fmt.Errorf("calculate official standings: %w", tableErr)
+		}
 		playoffLine := scope.Entry.PlayoffPlaces
 		standingsView = tableViews(actualTable, playoffLine)
 		if showScheduleDifficulty {
@@ -857,6 +863,9 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	hasUpcoming := len(upcomingFixtureGroups) > 0
 	presentation.HasUpcoming = hasUpcoming
 	retrospective := presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming)
+	if retrospective && showStandings {
+		standingsView = addPlayoffSeeding(standingsView, totalTable, season)
+	}
 	// Captions name the season and how current the table is, so a cropped
 	// screenshot keeps its context. The template adds the per-game or totals
 	// mode, which the page script updates when the reader switches it.
@@ -883,6 +892,13 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
 	} else if through, ok := latestCompletedMatchDate(data.Games, a.options.Location); ok {
 		standingsCaptionSuffix = "through " + through
+	}
+	if standingsMode == "total" {
+		positions := map[string]int{}
+		for i, row := range totalTable {
+			positions[row.Team.ID] = i
+		}
+		sort.Slice(standingsView, func(i, j int) bool { return positions[standingsView[i].TeamID] < positions[standingsView[j].TeamID] })
 	}
 	fixturesHeading := "Results and fixtures"
 	if presentation.Phase == seasonPhaseUpcoming {
@@ -917,6 +933,8 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		StandingsXGCaption:     standingsXGCaption,
 		StandingsCaptionSuffix: standingsCaptionSuffix,
 		StandingsMode:          standingsMode,
+		StandingsNote:          officialStandingsNote(season),
+		StandingsSeeding:       retrospective,
 		Phase:                  presentation.Phase,
 		Standings:              addTotalPositions(standingsView, totalTable, scope.Entry.PlayoffPlaces),
 		Strength:               scheduleView,
