@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
@@ -238,4 +239,236 @@ func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 	if err := expect.Locator(page.Locator(`[data-team-seasons-rows] tr[data-season="2026"]`)).ToHaveCount(0); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestExploreTeamSeasonsScatter(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		t.Run(fmt.Sprintf("%dpx", vp.Width), func(t *testing.T) {
+			page := newPageWith(t, pageOptions{Viewport: vp, Touch: vp == Mobile})
+			visit(t, page, base+"explore?view=team-seasons&team-seasons-rank-by=gap")
+			expect := playwright.NewPlaywrightAssertions()
+			defer expectInPlace(t, page, "scatter display, measures, identification and history")()
+			clickDisplay := func(display string) {
+				t.Helper()
+				if err := page.Locator(fmt.Sprintf(`[data-team-seasons-display="%s"]`, display)).Click(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			clickDisplay("scatter")
+			if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-team-seasons-values]")).Not().ToHaveAttribute("open", ""); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.Locator("[data-team-seasons-identification]")).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			const selector = `[data-chart="team-seasons-scatter"]`
+			canvas := page.Locator(selector)
+			for _, measure := range []string{"points", "for", "against", "difference"} {
+				chooseOption(t, page, "[data-team-seasons-measure]", measure)
+				var correct bool
+				evalJSON(t, page, `() => {
+     const chart = Chart.getChart(document.querySelector('[data-chart="team-seasons-scatter"]'));
+     const m = ['for','against','difference','points'].indexOf(new URLSearchParams(location.search).get('team-seasons-measure') || 'points');
+     const rows = JSON.parse(document.querySelector('#explore-team-seasons-data').textContent).all.filter(row => row.values[m].eligible && row.values[m].expected !== null);
+     return chart.data.datasets[0].data.length === rows.length && chart.scales.x.min === chart.scales.y.min && chart.scales.x.max === chart.scales.y.max &&
+       (m !== 3 || chart.scales.x.min === 0 && chart.scales.x.max === 3) &&
+       chart.options.scales.x.title.text.includes('(expected)') && chart.options.scales.y.title.text.includes('(actual)') &&
+       chart.data.datasets[0].data.every((v,i) => v.x === chart.teamRows[i].values[m].expected && v.y === chart.teamRows[i].values[m].actual) &&
+       chart.teamRows.some((row,i) => row.active && chart.getDatasetMeta(0).data[i].options.backgroundColor !== chart.getDatasetMeta(0).data[i].options.borderColor);
+    }`, nil, &correct)
+				if !correct {
+					t.Fatalf("scatter disagrees with payload, axes or hollow marks on %s", measure)
+				}
+				if err := expect.Locator(page.Locator("[data-team-seasons-missing]")).ToContainText("cannot be plotted"); err != nil {
+					t.Fatal(err)
+				}
+				assertNoHorizontalOverflow(t, page)
+			}
+			chooseOption(t, page, "[data-team-seasons-penalties]", "exclude")
+			var label string
+			evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="team-seasons-scatter"]')).options.scales.x.title.text`, nil, &label)
+			if label != "npxGD per match (expected)" {
+				t.Fatalf("basis axis = %s", label)
+			}
+			chooseOption(t, page, "[data-team-seasons-measure]", "points")
+			// The existing archive has coincident points; identify the same group using
+			// keyboard and pointer rather than inventing a special fixture.
+			var group struct {
+				Index, Count int
+				X, Y         float64
+			}
+			evalJSON(t, page, `() => {
+    const chart=Chart.getChart(document.querySelector('[data-chart="team-seasons-scatter"]')), marks=chart.getDatasetMeta(0).data;
+    const index=marks.findIndex((p,i) => marks.some((q,j) => i!==j && Math.hypot(p.x-q.x,p.y-q.y)<=.25));
+    return {Index:index,Count:marks.filter(p=>Math.hypot(p.x-marks[index].x,p.y-marks[index].y)<=.25).length,X:marks[index].x,Y:marks[index].y};
+   }`, nil, &group)
+			if group.Index < 0 || group.Count < 2 {
+				t.Fatal("scenario has no overlap")
+			}
+			if err := canvas.Focus(); err != nil {
+				t.Fatal(err)
+			}
+			if err := canvas.Press("Home"); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < group.Index; i++ {
+				if err := canvas.Press("ArrowRight"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := expect.Locator(page.Locator("[data-team-seasons-scatter-hint]")).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
+			if err := canvas.Press("Enter"); err != nil {
+				t.Fatal(err)
+			}
+			selection := page.Locator("[data-team-seasons-identification]")
+			if err := expect.Locator(selection).ToContainText(fmt.Sprintf("%d team-seasons at this point", group.Count)); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(selection.Locator("img")).ToHaveCount(group.Count); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(selection).ToContainText("Actual"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(canvas).ToHaveAttribute("aria-label", regexp.MustCompile(`Actual: .*Expected: .*Gap:`)); err != nil {
+				t.Fatal(err)
+			}
+			if queryOf(t, page).Has("team-season") {
+				t.Fatal("identification saved in URL")
+			}
+			if err := canvas.Press("Escape"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(selection).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			if vp == Mobile {
+				if err := canvas.Tap(playwright.LocatorTapOptions{Position: &playwright.Position{X: group.X, Y: group.Y}}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := canvas.Click(playwright.LocatorClickOptions{Position: &playwright.Position{X: group.X, Y: group.Y}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := expect.Locator(selection).ToContainText(fmt.Sprintf("%d team-seasons at this point", group.Count)); err != nil {
+				t.Fatal(err)
+			}
+			clickDisplay("ranking")
+			if queryOf(t, page).Has("team-seasons-display") {
+				t.Fatal("ranking default spelled in URL")
+			}
+			if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToHaveValue("gap"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := page.GoBack(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(canvas).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(selection).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := page.GoForward(); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(canvas).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			clickDisplay("scatter")
+			if err := page.Locator("[data-team-seasons-summary]").Click(); err != nil {
+				t.Fatal(err)
+			}
+			if err := page.Locator(`[data-team-seasons-sort="expected"]`).Click(); err != nil {
+				t.Fatal(err)
+			}
+			if queryOf(t, page).Get("team-seasons-display") != "scatter" {
+				t.Fatal("table sort lost scatter")
+			}
+			assertNoHorizontalOverflow(t, page)
+		})
+	}
+}
+
+func TestExploreTeamSeasonsScatterNoScript(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
+		visitStatic(t, page, base+"explore?view=team-seasons&team-seasons-rank-by=expected")
+		if err := page.Locator(`[data-team-seasons-display="scatter"]`).Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-team-seasons-chart]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-team-seasons-scatter] noscript p")).ToContainText("table below"); err != nil {
+			t.Fatal(err)
+		}
+		chooseOption(t, page, "[data-team-seasons-measure]", "against")
+		if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
+			t.Fatal(err)
+		}
+		if queryOf(t, page).Get("team-seasons-display") != "scatter" {
+			t.Fatal("GET form lost display")
+		}
+		if err := page.Locator("[data-team-seasons-summary]").Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(144); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.Locator(`[data-team-seasons-sort="actual"]`).Click(); err != nil {
+			t.Fatal(err)
+		}
+		if queryOf(t, page).Get("team-seasons-display") != "scatter" {
+			t.Fatal("sort lost display")
+		}
+		assertNoHorizontalOverflow(t, page)
+	}
+}
+
+func TestExploreTeamSeasonsScatterReloadAndEmpty(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore?view=team-seasons&team-seasons-display=scatter")
+	canvas := page.Locator(`[data-chart="team-seasons-scatter"]`)
+	if err := canvas.Press("Home"); err != nil {
+		t.Fatal(err)
+	}
+	if err := canvas.Press("Enter"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-team-seasons-identification]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := page.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-team-seasons-identification]")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(canvas).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	empty := explorePage(t, exploreBase(t, apptest.ScenarioEmpty), Mobile, "explore?view=team-seasons&team-seasons-display=scatter")
+	if err := expect.Locator(empty.Locator("[data-team-seasons-scatter-empty]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(empty.Locator("[data-team-seasons-scatter-wrap]")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	assertNoHorizontalOverflow(t, empty)
 }

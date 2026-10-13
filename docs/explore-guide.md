@@ -27,7 +27,7 @@ page, redirect to the Scoring trend.
 | | | Goal distribution | `view=distribution` |
 | | | Home advantage | `view=home-advantage` |
 | | | Parity | `view=parity` |
-| | | Team-seasons (four measures, ranked by actual, expected or gap) | `view=team-seasons` |
+| | | Team-seasons (ranking or actual-vs-expected scatter) | `view=team-seasons` |
 | | | Scoring table | `view=table` |
 
 An omitted view opens Actual vs expected; a view-less link that carries
@@ -35,7 +35,7 @@ An omitted view opens Actual vs expected; a view-less link that carries
 `exploreViewLabels` in `internal/app/explore.go` holds the tab names. Explore
 uses the current season's navigation with Explore marked active.
 
-Every selection lives in the URL and restores through reload and Back/Forward.
+View and control selections live in the URL and restore through reload and Back/Forward. Scatter point identification is transient and clears on navigation or reload.
 The server renders each view with GET forms, sortable header links and native
 disclosures, so everything works without JavaScript; the script switches views
 and selections in place from the same payload, without another data request.
@@ -234,7 +234,7 @@ standard points note. The calculation is `history.SummarizeParity`.
 
 `view=team-seasons` ranks every eligible ASA team-season since 2016 on Points,
 Goals scored, Goals allowed or Goal differential, by Actual, Expected or Gap.
-The default is actual points per match. Bars and table rows are plain content:
+The default display is Ranking on actual points per match. Ranking bars and table rows are plain content:
 there is no selection, highlighting, detail panel, Team select or Season select.
 
 The heading follows Rank by: "Points per match, since 2016" for Actual,
@@ -288,6 +288,25 @@ carried exclusion). One short note below the chart combines the standing
 qualifications: per-match rates do not adjust for opponents or era and do not
 judge the best team, and active seasons use the ten-match rule.
 
+The **Ranking | Scatter** switch (`team-seasons-display=ranking|scatter`)
+shows the same eligible population. Scatter plots expected per-match values on
+x against actual on y, with equal numeric axes and a labelled dashed parity
+diagonal. Points uses fixed 0–3 axes; goals measures fit both series with round
+bounds, including negatives for differential. Rank by is hidden and ignored in
+Scatter, even when carried in the URL. Measure and goals' Penalties still apply.
+The table uses actual ranks in Scatter; its sort and order are shared with Ranking.
+
+Each complete team-season is a plain dot; in-progress seasons are hollow.
+Click or tap a dot, or use arrow keys followed by Enter, to show the logo, team,
+season and the chosen measure's Actual, Expected and Gap below the plot.
+Coincident dots list every team-season at that point. Identification does not
+change the URL and clears on reload, Back/Forward or a control/display change;
+Escape or empty plot space also clears it. There is no detail panel or default
+highlight. A coverage count beside the plot reports rows without the chosen
+measure's expected data; their actual values remain in the table. For goals
+allowed, above the diagonal means more goals allowed than expected. Without
+JavaScript, Scatter falls back to the same table and GET controls.
+
 The table is a `<details>` disclosure, collapsed by default, whose summary is
 "Table: all N team-seasons". N counts every eligible row for the current measure
 and basis, including rows missing expected values. A sort or order parameter
@@ -297,6 +316,7 @@ headers are links; sorting keeps unrankable rows last in either direction.
 
 | Parameter | Values | Default |
 |---|---|---|
+| `team-seasons-display` | `ranking`, `scatter` | `ranking` (omitted from links) |
 | `team-seasons-measure` | `points`, `for`, `against`, `difference` | `points` |
 | `team-seasons-rank-by` | `actual`, `expected`, `gap` | `actual` |
 | `team-seasons-sort` | `rank`, `team`, `season`, `played`, `actual`, `expected`, `gap` | `rank` |

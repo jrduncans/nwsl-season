@@ -64,6 +64,7 @@ func TestGeometry(t *testing.T) {
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
 		{"HeadToHeadExpected", testGeometryHeadToHeadExpected},
 		{"PlotDomain", testGeometryPlotDomain},
+		{"ScatterGroup", testGeometryScatterGroup},
 		{"PointRadius", testGeometryPointRadius},
 		{"LogoPlacement", testGeometryLogoPlacement},
 		{"LayoutLogos", testGeometryLayoutLogos},
@@ -76,7 +77,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "stripRows"}
+	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -598,3 +599,39 @@ func testGeometryHeadToHeadExpected(t *testing.T, page playwright.Page) {
 }
 
 func ptrFloat(value float64) *float64 { return &value }
+
+func testGeometryScatterGroup(t *testing.T, page playwright.Page) {
+	var denseRadius float64
+	callGeometry(t, page, "pointRadius", []any{[]map[string]float64{{"x": 50, "y": 50}, {"x": 50, "y": 50}}, map[string]float64{"left": 0, "right": 100, "top": 0, "bottom": 100}, 3, 6}, &denseRadius)
+	if denseRadius != 3 {
+		t.Fatalf("dense radius = %v, want 3", denseRadius)
+	}
+
+	points := []map[string]any{{"x": 1, "y": 2, "index": 0}, {"x": 1, "y": 2, "index": 1}, {"x": 1.2, "y": 2, "index": 2}, {"x": 1.4, "y": 2, "index": 3}}
+	for _, tc := range []struct {
+		index int
+		want  []int
+	}{{0, []int{0, 1, 2}}, {3, []int{2, 3}}, {4, nil}} {
+		var got []int
+		callGeometry(t, page, "scatterGroup", []any{points, tc.index}, &got)
+		if len(got) != len(tc.want) {
+			t.Fatalf("scatterGroup(%d) = %v, want %v", tc.index, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Fatalf("scatterGroup(%d) = %v, want %v", tc.index, got, tc.want)
+			}
+		}
+	}
+	for _, tc := range []struct {
+		values   []float64
+		signed   bool
+		min, max float64
+	}{{[]float64{1, 3}, false, .5, 3.5}, {[]float64{-1.5, .5}, true, -2, 1}, {[]float64{0, 0}, false, 0, .05}} {
+		var got struct{ Min, Max float64 }
+		callGeometry(t, page, "plotDomain", []any{tc.values, tc.signed, true}, &got)
+		if !near(got.Min, tc.min) || !near(got.Max, tc.max) {
+			t.Fatalf("rounded domain = %+v, want %v–%v", got, tc.min, tc.max)
+		}
+	}
+}

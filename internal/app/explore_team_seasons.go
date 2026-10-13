@@ -13,8 +13,14 @@ import (
 
 var teamSeasonsMeasures = []string{"for", "against", "difference", "points"}
 var teamSeasonsRankBys = []string{"actual", "expected", "gap"}
+var teamSeasonsDisplays = []string{"ranking", "scatter"}
 var teamSeasonsSortKeys = []string{"rank", "team", "season", "played", "actual", "expected", "gap"}
 var teamSeasonsMeasureLabels = []string{"Goals scored", "Goals allowed", "Goal differential", "Points"}
+
+type exploreTeamSeasonsDisplay struct {
+	Value, Label, URL string
+	Selected          bool
+}
 
 type exploreTeamSeasonRecord struct {
 	history.TeamSeason
@@ -42,6 +48,9 @@ type exploreTeamSeasonBar struct {
 }
 
 type exploreTeamSeasonsView struct {
+	TeamSeasonsDisplay                                                          string
+	TeamSeasonsDisplays                                                         []exploreTeamSeasonsDisplay
+	TeamSeasonsScatterDescription, TeamSeasonsScatterMeaning                    string
 	TeamSeasonsData                                                             exploreTeamSeasonsPayload
 	TeamSeasonsRows                                                             []exploreTeamSeasonRow
 	TeamSeasonsBars                                                             []exploreTeamSeasonBar
@@ -57,13 +66,14 @@ type exploreTeamSeasonsView struct {
 }
 
 func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (exploreTeamSeasonsView, error) {
-	page := exploreTeamSeasonsView{TeamSeasonsMeasure: "points", TeamSeasonsRankBy: "actual", TeamSeasonsSort: "rank", TeamSeasonsOrder: "asc"}
+	page := exploreTeamSeasonsView{TeamSeasonsDisplay: "ranking", TeamSeasonsMeasure: "points", TeamSeasonsRankBy: "actual", TeamSeasonsSort: "rank", TeamSeasonsOrder: "asc"}
 	for _, field := range []struct {
 		key     string
 		value   *string
 		allowed []string
 	}{
 		{"team-seasons-measure", &page.TeamSeasonsMeasure, teamSeasonsMeasures},
+		{"team-seasons-display", &page.TeamSeasonsDisplay, teamSeasonsDisplays},
 		{"team-seasons-rank-by", &page.TeamSeasonsRankBy, teamSeasonsRankBys},
 		{"team-seasons-sort", &page.TeamSeasonsSort, teamSeasonsSortKeys},
 		{"team-seasons-order", &page.TeamSeasonsOrder, []string{"asc", "desc"}},
@@ -99,6 +109,9 @@ func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (explore
 	}
 	measure := history.TeamSeasonMeasure(slices.Index(teamSeasonsMeasures, page.TeamSeasonsMeasure))
 	by := history.TeamSeasonRankBy(slices.Index(teamSeasonsRankBys, page.TeamSeasonsRankBy))
+	if page.TeamSeasonsDisplay == "scatter" {
+		by = history.TeamSeasonActual
+	}
 	missing := 0
 	for _, record := range data {
 		v := record.Values[measure]
@@ -113,13 +126,16 @@ func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (explore
 			continue
 		}
 		page.TeamSeasonsRows = append(page.TeamSeasonsRows, row)
-		if row.Rank == 0 {
+		if row.Rank == 0 || page.TeamSeasonsDisplay == "scatter" && row.Expected == nil {
 			missing++
 		}
 	}
 	missingLabel := teamSeasonsMissingLabel(measure, labelBasis)
 	if missing > 0 {
 		page.TeamSeasonsMissing = fmt.Sprintf("%d team-seasons have %s and are not ranked. Their actual values appear last in the table.", missing, missingLabel)
+		if page.TeamSeasonsDisplay == "scatter" {
+			page.TeamSeasonsMissing = fmt.Sprintf("%d team-seasons have %s and cannot be plotted. Their actual values remain in the table.", missing, missingLabel)
+		}
 	}
 	ranked := append([]exploreTeamSeasonRow(nil), page.TeamSeasonsRows...)
 	sortExploreTeamSeasons(ranked, "rank", "asc")
@@ -139,6 +155,18 @@ func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (explore
 		headingMeasure += " compared with expected,"
 	}
 	page.TeamSeasonsHeading = headingMeasure + " per match, since 2016"
+	if page.TeamSeasonsDisplay == "scatter" {
+		page.TeamSeasonsHeading = page.TeamSeasonsActualLabel + " vs expected per match, since 2016"
+	}
+	page.TeamSeasonsScatterDescription = fmt.Sprintf("Eligible regular-season team-seasons since 2016. One dot per team-season with complete expected data. Horizontal axis: %s per match (expected). Vertical axis: %s per match (actual). Dashed diagonal: actual matches expected. Hollow dots are in-progress seasons.", page.TeamSeasonsExpectedLabel, page.TeamSeasonsActualLabel)
+	more, fewer := "more", "fewer"
+	if measure == history.TeamSeasonDifference {
+		more, fewer = "higher", "lower"
+	}
+	page.TeamSeasonsScatterMeaning = fmt.Sprintf("One dot per team-season; hollow dots are in progress. Dashed diagonal: actual matches expected. Above: %s %s than %s; below: %s.", more, strings.ToLower(page.TeamSeasonsActualLabel), page.TeamSeasonsExpectedLabel, fewer)
+	for _, display := range teamSeasonsDisplays {
+		page.TeamSeasonsDisplays = append(page.TeamSeasonsDisplays, exploreTeamSeasonsDisplay{Value: display, Label: map[string]string{"ranking": "Ranking", "scatter": "Scatter"}[display], URL: exploreTeamURL(query, map[string]string{"view": "team-seasons", "team-seasons-display": display}), Selected: page.TeamSeasonsDisplay == display})
+	}
 	page.TeamSeasonsHigh, page.TeamSeasonsLow = teamSeasonsEnds(measure, by, labelBasis)
 	extent := 0.0
 	for _, row := range ranked {

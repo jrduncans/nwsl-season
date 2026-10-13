@@ -9,16 +9,27 @@
   // Fit the visible extremes with 5% padding on each side, rather than padding a
   // whole quadrant. A tied population still needs a small, nonzero range for
   // inspection. Nonnegative measures stop at zero; signed ones may go below it.
-  function plotDomain(values, signed = false) {
+  function plotDomain(values, signed = false, roundBounds = false) {
     const low = Math.min(...values), high = Math.max(...values);
     const padding = high === low ? Math.max(Math.abs(high) * .025, .05) : (high - low) * .05;
-    return {min: signed ? low - padding : Math.max(0, low - padding), max: high + padding};
+    const min = signed ? low - padding : Math.max(0, low - padding), max = high + padding;
+    if (!roundBounds) return {min, max};
+    const unit = 10 ** Math.floor(Math.log10(max - min)) / 2;
+    return {min: Math.floor(min / unit) * unit, max: Math.ceil(max / unit) * unit};
   }
 
-  // One radius for every point, from 6 to 10 CSS pixels, limited by the nearest
+  // Coincident screen positions form one inspection group. Nearby points stay
+  // individually selectable; pointer and keyboard use the same membership.
+  function scatterGroup(points, index) {
+    const anchor = points.find(point => point.index === index);
+    return anchor ? points.filter(point => Math.hypot(point.x - anchor.x, point.y - anchor.y) <= .25).map(point => point.index) : [];
+  }
+
+  // One radius for every point, defaulting to 6–10 CSS pixels (dense archive
+  // plots use 3–6), limited by the nearest
   // pair of points and by the plot edges. Crowded or coincident points keep the
   // minimum. points are {x, y} in pixels; area is {left, right, top, bottom}.
-  function pointRadius(points, area) {
+  function pointRadius(points, area, minimum = 6, maximum = 10) {
     let clearance = Infinity;
     points.forEach((point, index) => {
       clearance = Math.min(clearance, point.x - area.left, area.right - point.x, point.y - area.top, area.bottom - point.y);
@@ -28,7 +39,7 @@
         clearance = Math.min(clearance, (distance - 4) / 2);
       });
     });
-    return Math.max(6, Math.min(10, Math.floor(clearance - 2)));
+    return Math.max(minimum, Math.min(maximum, Math.floor(clearance - 2)));
   }
 
   // The first of eight positions around point that holds a size x size logo
@@ -170,5 +181,5 @@
     }
     return [...labels, last];
   }
-  window.NWSLGeometry = Object.freeze({headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, plotDomain, pointRadius, logoPlacement, layoutLogos, stripRows});
+  window.NWSLGeometry = Object.freeze({headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
@@ -219,7 +221,7 @@ func TestExploreTeamSeasonsTableExpansionAndNoBreak(t *testing.T) {
 func TestExploreTeamSeasonsRejectsInvalidState(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
 	var queries []string
-	for key, allowed := range map[string][]string{"team-seasons-measure": teamSeasonsMeasures, "team-seasons-rank-by": teamSeasonsRankBys, "team-seasons-sort": teamSeasonsSortKeys, "team-seasons-order": {"asc", "desc"}, "penalties": {"include", "exclude"}} {
+	for key, allowed := range map[string][]string{"team-seasons-display": teamSeasonsDisplays, "team-seasons-measure": teamSeasonsMeasures, "team-seasons-rank-by": teamSeasonsRankBys, "team-seasons-sort": teamSeasonsSortKeys, "team-seasons-order": {"asc", "desc"}, "penalties": {"include", "exclude"}} {
 		queries = append(queries, key+"=", key+"=bad", key+"="+allowed[0]+"&"+key+"="+allowed[0])
 	}
 	for _, q := range queries {
@@ -285,4 +287,57 @@ func TestExploreTeamSeasonsSortAndPointsBasis(t *testing.T) {
 	if len(find(t, body, "[data-team-seasons-rows] tr")) != 0 {
 		t.Fatal("non-penalty integrity ignored")
 	}
+}
+
+func TestExploreTeamSeasonsScatter(t *testing.T) {
+	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
+	for _, measure := range teamSeasonsMeasures {
+		var baseline string
+		for _, by := range teamSeasonsRankBys {
+			path := "/explore?view=team-seasons&team-seasons-display=scatter&team-seasons-measure=" + measure + "&team-seasons-rank-by=" + by
+			code, body := getPage(t, archive, path)
+			if code != http.StatusOK {
+				t.Fatalf("%s: %d", path, code)
+			}
+			requireAttr(t, body, "[data-team-seasons-rank-control]", "hidden", "")
+			requireAttr(t, body, "[data-team-seasons-chart]", "hidden", "")
+			requireAttr(t, body, `[data-team-seasons-display="scatter"]`, "aria-current", "page")
+			requireText(t, body, "[data-team-seasons-title]", "vs expected per match, since 2016")
+			var payload exploreTeamSeasonsPayload
+			if err := json.Unmarshal([]byte(text(find(t, body, "#explore-team-seasons-data")[0])), &payload); err != nil {
+				t.Fatal(err)
+			}
+			missing := 0
+			for _, row := range payload.All {
+				v := row.Values[slices.Index(teamSeasonsMeasures, measure)]
+				if v.Eligible && v.Expected == nil {
+					missing++
+				}
+			}
+			requireExact(t, body, "[data-team-seasons-missing]", fmt.Sprintf("%d team-seasons have %s and cannot be plotted. Their actual values remain in the table.", missing, teamSeasonsMissingLabel(history.TeamSeasonMeasure(slices.Index(teamSeasonsMeasures, measure)), history.AllShots)))
+			requireText(t, body, "[data-team-seasons-scatter-description]", "Horizontal axis:")
+			requireText(t, body, "[data-team-seasons-scatter-description]", "Vertical axis:")
+			requireExact(t, body, "[data-team-seasons-summary]", "Table: all 144 team-seasons")
+			table := text(find(t, body, "[data-team-seasons-rows]")[0])
+			if by == "actual" {
+				baseline = table
+			} else if table != baseline {
+				t.Fatalf("scatter uses rank-by %s", by)
+			}
+			for _, link := range find(t, body, "[data-team-seasons-sort]") {
+				if !strings.Contains(attr(link, "href"), "team-seasons-display=scatter") {
+					t.Fatal("sort lost display")
+				}
+			}
+			if strings.Contains(attr(find(t, body, `[data-team-seasons-display="ranking"]`)[0], "href"), "team-seasons-display=") {
+				t.Fatal("ranking default not omitted")
+			}
+		}
+	}
+	// Verify the existing fixture's independent metric coverage is retained.
+	_, body := getPage(t, archive, "/explore?view=team-seasons&team-seasons-display=scatter")
+	requireText(t, body, `[data-team-seasons-rows] tr[data-team-id="315VnJ759x"][data-season="2026"]`, "xPts incomplete")
+	_, body = getPage(t, archive, "/explore?view=team-seasons&team-seasons-display=scatter&team-seasons-measure=against&penalties=exclude")
+	requireText(t, body, "[data-team-seasons-scatter-description]", "npxG allowed")
+	requireText(t, body, "[data-team-seasons-scatter-meaning]", "more non-penalty goals allowed than npxG allowed")
 }

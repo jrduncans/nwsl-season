@@ -130,6 +130,7 @@
     if (update) chart.update('none');
   }
   function dismiss(clearPinned = true) {
+    if (clearPinned) clearArchiveIdentification(charts.archiveScatter, false);
     if (clearPinned) clearScatterSelection(charts.teamScatter, false);
     if (clearPinned) clearQuadrantSelection(charts.teamQuadrant, false);
     Object.values(charts).forEach(clearChart);
@@ -744,12 +745,12 @@
     keyboardAccess(chart, mark => `${chart.teamRows[mark.index].name}. ${teamDescription(chart, mark.index).join('. ')}`);
     return chart;
   }
-  function scatterDomain(rows, measure, units) {
+  function scatterDomain(rows, measure, units, roundBounds = false) {
     const values = rows.flatMap(row => {
       const metric = teamMetric(row, measure, units);
       return [metric.actual, metric.expected];
     });
-    return plotDomain(values, measure.index === 2);
+    return plotDomain(values, measure.index === 2, roundBounds);
   }
   function scatterMarks(chart) {
     return chart.data.datasets.flatMap((dataset, datasetIndex) => chart.isDatasetVisible(datasetIndex)
@@ -2033,7 +2034,8 @@
     const target = new URLSearchParams(params);
     Object.entries(changes).forEach(([key, value]) => target.set(key, value));
     const measure = target.get('team-seasons-measure') || 'points';
-    if (measure === 'points' || target.get('penalties') === 'include') target.delete('penalties');
+    if (measure === 'points' && !Object.hasOwn(changes, 'team-seasons-display') || target.get('penalties') === 'include') target.delete('penalties');
+    if (target.get('team-seasons-display') === 'ranking') target.delete('team-seasons-display');
     return `?${target}`;
   };
   function archiveElement(tag, text, className) {
@@ -2042,15 +2044,122 @@
     if (className) element.className = className;
     return element;
   }
+  function clearArchiveIdentification(chart, redraw = true) {
+    if (!chart) return;
+    chart.archiveIdentified = [];
+    root.querySelector('[data-team-seasons-identification]').hidden = true;
+    root.querySelector('[data-team-seasons-identification]').replaceChildren();
+    chart.canvas.setAttribute('aria-label', chart.archiveDescription);
+    if (redraw) chart.update('none');
+  }
+  function archiveDescription(chart, index) {
+    const row = chart.teamRows[index], v = row.values[chart.archiveMeasure];
+    return `${row.name} · ${row.season}. Actual: ${fixed(v.actual)}. Expected: ${fixed(v.expected)}. Gap: ${signed(v.gap)} per match.${row.active ? ` In progress through ${row.played} matches.` : ''}`;
+  }
+  function identifyArchivePoint(chart, index) {
+    if (index === undefined) { clearArchiveIdentification(chart); return; }
+    const indexes = window.NWSLGeometry.scatterGroup(scatterMarks(chart), index);
+    chart.archiveIdentified = indexes;
+    const label = root.querySelector('[data-team-seasons-identification]');
+    label.replaceChildren();
+    if (indexes.length > 1) label.append(archiveElement('p', `${indexes.length} team-seasons at this point`));
+    indexes.forEach(i => {
+      const row = chart.teamRows[i], v = row.values[chart.archiveMeasure];
+      const line = archiveElement('p', undefined, 'explore-archive-identification');
+      line.append(teamName(row), document.createTextNode(` · ${row.season} · Actual ${fixed(v.actual)} · Expected ${fixed(v.expected)} · Gap ${signed(v.gap)}${row.active ? ` · in progress through ${row.played} matches` : ''}`));
+      label.append(line);
+    });
+    label.hidden = !indexes.length;
+    chart.canvas.setAttribute('aria-label', `${chart.archiveDescription} ${indexes.map(i => archiveDescription(chart, i)).join(' ')}`);
+    chart.update('none');
+  }
+  function createArchiveScatter(canvas) {
+    const options = commonOptions();
+    options.layout = scatterLayout();
+    options.interaction = {mode: 'point', intersect: true};
+    options.onClick = (event, elements, chart) => {
+      const nearest = elements.map(mark => ({index: mark.index, point: chart.getDatasetMeta(0).data[mark.index]}))
+        .sort((a, b) => Math.hypot(a.point.x - event.x, a.point.y - event.y) - Math.hypot(b.point.x - event.x, b.point.y - event.y))[0];
+      identifyArchivePoint(chart, nearest?.index);
+    };
+    options.onHover = (_, elements, chart) => { chart.canvas.style.cursor = elements.length ? 'pointer' : ''; };
+    options.plugins.tooltip.callbacks = {title: () => '', label: item => {
+      const row = item.chart.teamRows[item.dataIndex], v = row.values[item.chart.archiveMeasure];
+      return [`${row.name} · ${row.season}`, `Actual: ${fixed(v.actual)} per match`, `Expected: ${fixed(v.expected)} per match`, `Gap: ${signed(v.gap)} per match`, ...(row.active ? [`In progress through ${row.played} matches`] : [])];
+    }};
+    const axis = text => ({type: 'linear', grid: {color: color('--line')}, border: {display: false}, ticks: {maxTicksLimit: 6}, title: {display: true, text}});
+    options.scales = {x: axis('Expected per match'), y: axis('Actual per match')};
+    const chart = new Chart(canvas, {type: 'scatter', options, plugins: [{id: 'archiveScatterParity',
+      afterLayout: chart => { chart.scatterPointRadius = pointRadius(scatterMarks(chart), chart.chartArea, 3, 6); },
+      beforeDatasetsDraw(chart) {
+        const {x, y} = chart.scales, ctx = chart.ctx;
+        ctx.save(); ctx.strokeStyle = color('--muted'); ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
+        ctx.beginPath(); ctx.moveTo(x.getPixelForValue(x.min), y.getPixelForValue(x.min));
+        ctx.lineTo(x.getPixelForValue(x.max), y.getPixelForValue(x.max)); ctx.stroke(); ctx.restore();
+      },
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx; ctx.save(); ctx.strokeStyle = color('--gold'); ctx.lineWidth = 2;
+        (chart.archiveIdentified || []).forEach(index => {
+          const point = chart.getDatasetMeta(0).data[index];
+          ctx.beginPath(); ctx.arc(point.x, point.y, (chart.scatterPointRadius || 6) + 3, 0, Math.PI * 2); ctx.stroke();
+        }); ctx.restore();
+      },
+    }], data: {labels: [], datasets: [{label: 'Team-seasons', data: [],
+      pointRadius: context => context.chart.scatterPointRadius || 6,
+      pointHoverRadius: context => (context.chart.scatterPointRadius || 6) + 2,
+      pointHitRadius: 5, borderWidth: 2, borderColor: goalsColor,
+      backgroundColor: context => context.chart.teamRows?.[context.dataIndex]?.active ? color('--panel') : goalsColor,
+    }]}});
+    keyboardAccess(chart, mark => archiveDescription(chart, mark.index));
+    canvas.addEventListener('keydown', event => {
+      if (!['Enter', ' '].includes(event.key)) return;
+      event.preventDefault(); identifyArchivePoint(chart, chart.getActiveElements()[0]?.index);
+    });
+    return chart;
+  }
+  function showArchiveScatter(rows, measure, actualLabel, expectedLabel) {
+    const placeable = rows.filter(row => row.values[measure].actual !== null && row.values[measure].expected !== null)
+      .sort((a, b) => a.values[measure].expected - b.values[measure].expected || archiveTie(a, b));
+    const empty = !placeable.length;
+    root.querySelector('[data-team-seasons-scatter-wrap]').hidden = empty;
+    root.querySelector('[data-team-seasons-scatter-empty]').hidden = !empty;
+    const description = `Eligible regular-season team-seasons since 2016. One dot per team-season with complete expected data. Horizontal axis: ${expectedLabel} per match (expected). Vertical axis: ${actualLabel} per match (actual). Dashed diagonal: actual matches expected. Hollow dots are in-progress seasons.`;
+    root.querySelector('[data-team-seasons-scatter-description]').textContent = description;
+    const meaning = `Above: ${measure === 2 ? 'higher' : 'more'} ${actualLabel.toLowerCase()} than ${expectedLabel}; below: ${measure === 2 ? 'lower' : 'fewer'}.`;
+    root.querySelector('[data-team-seasons-scatter-meaning]').textContent = `One dot per team-season; hollow dots are in progress. Dashed diagonal: actual matches expected. ${meaning}`;
+    if (empty) return;
+    const canvas = root.querySelector('[data-chart="team-seasons-scatter"]');
+    const chart = charts.archiveScatter || (charts.archiveScatter = createArchiveScatter(canvas));
+    chart.teamRows = placeable; chart.archiveMeasure = measure; chart.archiveDescription = description;
+    clearArchiveIdentification(chart, false);
+    const domain = measure === 3 ? {min: 0, max: 3} : scatterDomain(placeable, {index: measure}, 'per-match', true);
+    chart.data.labels = placeable.map(row => `${row.name} · ${row.season}`);
+    chart.data.datasets[0].data = placeable.map(row => ({x: row.values[measure].expected, y: row.values[measure].actual}));
+    chart.options.scales.x.min = chart.options.scales.y.min = domain.min;
+    chart.options.scales.x.max = chart.options.scales.y.max = domain.max;
+    chart.options.scales.x.title.text = `${expectedLabel} per match (expected)`;
+    chart.options.scales.y.title.text = `${actualLabel} per match (actual)`;
+    chart.resize(); chart.update('none');
+  }
   function showTeamSeasons(params) {
     const measureKey = params.get('team-seasons-measure') || 'points', measure = archiveMeasures.indexOf(measureKey);
-    const byKey = params.get('team-seasons-rank-by') || 'actual', by = archiveRankBys.indexOf(byKey);
+    const scatter = params.get('team-seasons-display') === 'scatter';
+    const byKey = params.get('team-seasons-rank-by') || 'actual', by = scatter ? 0 : archiveRankBys.indexOf(byKey);
+    root.querySelector('[data-team-seasons-rank-control]').hidden = scatter;
+    root.querySelector('[data-team-seasons-chart]').hidden = scatter;
+    root.querySelector('[data-team-seasons-scatter]').hidden = !scatter;
+    const displayInput = archiveControls.elements.namedItem('team-seasons-display'); displayInput.value = scatter ? 'scatter' : 'ranking'; displayInput.disabled = !scatter;
+    root.querySelectorAll('[data-team-seasons-display]').forEach(link => {
+      const selected = link.dataset.teamSeasonsDisplay === (scatter ? 'scatter' : 'ranking');
+      if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+      link.href = archiveLink(params, {view: 'team-seasons', 'team-seasons-display': link.dataset.teamSeasonsDisplay});
+    });
     const np = measureKey !== 'points' && params.get('penalties') === 'exclude';
     const records = np ? archivePayload.nonPenalty : archivePayload.all;
     const rows = records.filter(row => row.values[measure].eligible);
     const rank = row => row.values[measure].ranks[by];
     const ranked = rows.filter(row => rank(row)).sort((a, b) => rank(a) - rank(b) || archiveTie(a, b));
-    const missing = rows.filter(row => !rank(row));
+    const missing = rows.filter(row => scatter ? row.values[measure].expected === null : !rank(row));
     const missingLabel = archiveMissing(measure, np);
     archiveMeasure.value = measureKey; archiveRankBy.value = byKey;
     archivePenalties.disabled = measureKey === 'points'; archivePenalties.value = np ? 'exclude' : 'include';
@@ -2059,7 +2168,7 @@
     const actualLabel = archiveText(archiveLabels[measure], np), expectedLabel = archiveText(['xG', 'xG allowed', 'xGD', 'xPts'][measure], np);
     const companionLabel = by === 1 ? actualLabel : expectedLabel;
     const headingMeasure = by === 1 ? `Expected ${actualLabel.toLowerCase()}` : by === 2 ? `${actualLabel} compared with expected,` : actualLabel;
-    const heading = `${headingMeasure} per match, since 2016`;
+    const heading = scatter ? `${actualLabel} vs expected per match, since 2016` : `${headingMeasure} per match, since 2016`;
     root.querySelector('[data-team-seasons-title]').textContent = heading;
     root.querySelector('[data-team-seasons-chart]').setAttribute('aria-label', `${heading}, ranked ${byKey} values with comparisons`);
     const legend = root.querySelector('[data-team-seasons-legend]');
@@ -2070,9 +2179,10 @@
     }
     const note = root.querySelector('[data-team-seasons-missing]');
     note.hidden = !missing.length;
-    note.textContent = missing.length ? `${missing.length} team-seasons have ${missingLabel} and are not ranked. Their actual values appear last in the table.` : '';
+    note.textContent = missing.length ? `${missing.length} team-seasons have ${missingLabel} ${scatter ? 'and cannot be plotted. Their actual values remain in the table.' : 'and are not ranked. Their actual values appear last in the table.'}` : '';
+    root.querySelector('[data-team-seasons-standing-note]').textContent = `Rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow ${scatter ? 'dots' : 'bars'} are in progress.`;
     const gapHelp = root.querySelector('[data-team-seasons-gap-help]');
-    gapHelp.hidden = by !== 2;
+    gapHelp.hidden = scatter || by !== 2;
     gapHelp.textContent = `Gap is actual − expected. Positive means above expected; negative means below expected.${measure === 1 ? ' Fewer goals allowed than expected rank first.' : ''}`;
     let high = ['Most goals scored per match', 'Fewest goals allowed per match', 'Highest goal differential per match', 'Highest points per match'][measure];
     let low = ['Fewest goals scored per match', 'Most goals allowed per match', 'Lowest goal differential per match', 'Lowest points per match'][measure];
@@ -2090,7 +2200,7 @@
     root.querySelector('[data-team-seasons-low]').textContent = endText(low);
     const visible = ranked.length > 20 ? [...ranked.slice(0, 10), ...ranked.slice(-10)] : ranked;
     const bars = visible.map(row => {
-      const v = row.values[measure], value = v[byKey], companion = by === 2 ? null : by === 1 ? v.actual : v.expected;
+      const v = row.values[measure], value = v[archiveRankBys[by]], companion = by === 2 ? null : by === 1 ? v.actual : v.expected;
       const geometry = window.NWSLGeometry.rankingBar(value, companion, domain);
       const item = archiveElement('li', undefined, `explore-archive-bar${value < 0 ? ' is-negative' : ''}${row.active ? ' is-active' : ''}${value === 0 ? ' is-zero' : ''}`);
       item.dataset.teamSeasonsRow = ''; item.dataset.teamId = row.id; item.dataset.season = row.season;
@@ -2140,6 +2250,7 @@
       return archiveTie(a, b);
     });
     root.querySelector('[data-team-seasons-table-caption]').textContent = `${actualLabel} per match. Expected: ${expectedLabel}. Gap: actual − expected. Tied rows share a competition rank.`;
+    if (scatter) showArchiveScatter(rows, measure, actualLabel, expectedLabel);
     const tableBody = root.querySelector('[data-team-seasons-rows]');
     tableBody.replaceChildren(...rows.map(row => {
       const v = row.values[measure], tr = archiveElement('tr'); tr.dataset.teamId = row.id; tr.dataset.season = row.season;
@@ -2523,6 +2634,11 @@
       event.preventDefault();
       const params = new URL(h2hSort.href).searchParams;
       update({view: 'head-to-head', 'h2h-sort': params.get('h2h-sort'), 'h2h-order': params.get('h2h-order')});
+    }
+    const archiveDisplay = event.target.closest('[data-team-seasons-display]');
+    if (archiveDisplay && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      update({view: 'team-seasons', 'team-seasons-display': archiveDisplay.dataset.teamSeasonsDisplay === 'ranking' ? null : 'scatter'});
     }
     const archiveSort = event.target.closest('[data-team-seasons-sort]');
     if (archiveSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {

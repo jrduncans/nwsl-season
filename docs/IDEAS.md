@@ -10,9 +10,6 @@ Explore compares teams within one season (Compare teams) and one team across
 seasons (Season by season), and Team-seasons ranks every eligible team-season
 across the archive.
 
-- **Results vs expected across history.** A scatter of actual against expected
-  for the chosen measure, with every team-season as a mark and an equality
-  line. Clicking a dot would identify its team, season and values in one line.
 - **Trajectories against history.** Match number on the x-axis (not date), with
   the historical median and middle-50% band through the same match count, and
   at most two comparators (the record pace and the closest historical pace).
