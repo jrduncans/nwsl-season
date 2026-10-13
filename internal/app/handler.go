@@ -835,13 +835,22 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		scheduleView = strengthViewFrom(scheduleStrength)
 	}
+	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
 	showStandings := scope.standingsAvailable() && presentation.Phase != seasonPhaseUpcoming
 	if showStandings {
-		actualTable, tableErr := competition.OfficialStandings(season, data.Teams, domainGames, standings.OrderOfficialPerGame)
+		// Fixtures display cached match facts. Their xG completeness warning
+		// needs raw team records, but not validated official standings.
+		calculateTable := func(order standings.Order) ([]standings.TableRow, error) {
+			if featureSuffix == "/fixtures" {
+				return standings.Calculate(data.Teams, domainGames, standings.RulesForSeason(season, order)), nil
+			}
+			return competition.OfficialStandings(season, data.Teams, domainGames, order)
+		}
+		actualTable, tableErr := calculateTable(standings.OrderOfficialPerGame)
 		if tableErr != nil {
 			return seasonPage{}, fmt.Errorf("calculate official standings: %w", tableErr)
 		}
-		totalTable, tableErr = competition.OfficialStandings(season, data.Teams, domainGames, standings.OrderOfficialTotal)
+		totalTable, tableErr = calculateTable(standings.OrderOfficialTotal)
 		if tableErr != nil {
 			return seasonPage{}, fmt.Errorf("calculate official standings: %w", tableErr)
 		}
@@ -906,7 +915,6 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming) {
 		fixturesHeading = "Results"
 	}
-	featureSuffix, _ := seasonFeatureSuffix(r.URL.Path, scope.Entry.Slug)
 	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, season, scope.Stage, season, scope.Entry.Slug, featureSuffix)
 	if err != nil {
 		return seasonPage{}, err

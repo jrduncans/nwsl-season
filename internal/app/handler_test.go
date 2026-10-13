@@ -2020,3 +2020,15 @@ func catalogSeasonData() cache.SeasonData {
 	}
 	return data
 }
+
+// Results remain readable even when a partial snapshot lacks the teams needed
+// to reconcile a source-backed standings exception.
+func TestFixturesDoNotRequireOfficialStandingsAdjustments(t *testing.T) {
+	for _, season := range []string{"2021", "2024"} {
+		data := phaseTestData(standings.CompletedStatus, "PreMatch")
+		body := renderSeasonRequest(t, data, "/seasons/"+season+"/regular-season/fixtures")
+		requireText(t, body, "main", "2–1")
+		requireElements(t, body, ".fixtures")
+		forbidElements(t, body, "table.standings")
+	}
+}

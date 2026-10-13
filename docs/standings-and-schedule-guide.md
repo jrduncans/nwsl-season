@@ -15,7 +15,9 @@ Awarded 3–0 matches contribute to P/W/D/L, goals and every tie-break criterion
 point deductions reduce points and PPG. Awards reconcile against observed
 full-season game counts, skipping awards already counted by ASA and reporting
 inconsistent counts instead of guessing. These adjustments never change cached
-fixtures, results pages or xG (which describes played matches).
+fixtures, results pages or xG (which describes played matches). Results and
+fixtures remain readable when partial cached data cannot reconcile official
+standings adjustments; their xG completeness warnings use raw match records.
 
 `RulesForSeason` selects the regular-season policy by year. Points come first:
 
