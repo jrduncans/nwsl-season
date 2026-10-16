@@ -516,6 +516,14 @@ dotted lead-in. An xG or xPoints average needs every observation in its exact
 window, so missing expected data breaks that line until it leaves the window;
 it is never interpolated.
 
+Every chart's y axis is round and labels its own ticks (`trendAxis` in
+`explore-geometry.js`), rather than leaving tick choice to Chart.js, which
+thins ticks on these short panels: a 1, 2, 2.5 or 5 step, two or three ticks
+each side of zero for Differential (two to four above zero otherwise), ending
+on a tick at least 15% beyond the largest value. Whole-number data, such as
+per-match goals, keep whole-number steps; labels carry only the decimals the
+step needs.
+
 **Benchmarks** keep original units and draw horizontal reference means for the
 season: the team's own mean, plus one comparison.
 
