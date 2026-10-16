@@ -2117,3 +2117,61 @@ func TestExploreParitySelectsSeasonsInPlace(t *testing.T) {
 		}
 	}
 }
+
+// TestExploreSeasonTrendAxesShowAScale checks every Match by match chart and
+// smoothing mode at desktop size: each visible panel's y axis must label at
+// least two nonzero values inside its bounds. Chart.js's own tick thinning
+// once left the per-match Differential axis labelled only at zero. Per-match
+// goals are whole numbers, so their labels carry no decimals.
+func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=season-trend&season=2025")
+	for _, view := range []string{"balance", "compare", "difference", "points", "relative"} {
+		for _, mode := range []string{"match", "rolling"} {
+			t.Run(view+"/"+mode, func(t *testing.T) {
+				gotoInPage(t, page, "explore?view=season-trend&season=2025&trend-view="+view+"&trend-mode="+mode)
+				var axes []struct {
+					Name     string
+					Min, Max float64
+					Ticks    []float64
+					Labels   []string
+				}
+				evalJSON(t, page, `() => ['season-trend', 'season-trend-xg'].flatMap((name) => {
+					const canvas = document.querySelector('[data-chart="' + name + '"]');
+					if (canvas.closest('[hidden]')) return [];
+					const y = Chart.getChart(canvas).scales.y;
+					return [{Name: name, Min: y.min, Max: y.max, Ticks: y.ticks.map((tick) => tick.value), Labels: y.ticks.map((tick) => tick.label)}];
+				})`, nil, &axes)
+				if len(axes) == 0 {
+					t.Fatal("no visible chart")
+				}
+				for _, axis := range axes {
+					nonzero := 0
+					for _, tick := range axis.Ticks {
+						if tick < axis.Min-1e-9 || tick > axis.Max+1e-9 {
+							t.Errorf("%s tick %v outside [%v, %v]", axis.Name, tick, axis.Min, axis.Max)
+						}
+						if tick != 0 {
+							nonzero++
+						}
+					}
+					if nonzero < 2 {
+						t.Errorf("%s axis [%v, %v] labels %v, want at least two nonzero ticks", axis.Name, axis.Min, axis.Max, axis.Labels)
+					}
+				}
+			})
+		}
+	}
+	t.Run("per-match goals use whole-number labels", func(t *testing.T) {
+		gotoInPage(t, page, "explore?view=season-trend&season=2025&trend-view=balance&series=goals&trend-mode=match")
+		var labels []string
+		evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="season-trend"]')).scales.y.ticks.map((tick) => tick.label)`, nil, &labels)
+		for _, label := range labels {
+			if strings.Contains(label, ".") {
+				t.Errorf("per-match goal axis labels %v, want whole numbers", labels)
+				break
+			}
+		}
+	})
+}

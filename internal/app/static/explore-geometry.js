@@ -6,6 +6,27 @@
   // an all-zero or tied population still has a visible range, plus 15% headroom.
   const gapExtent = values => Math.max(.1, ...values.map(value => Math.abs(value))) * 1.15;
 
+  // Round line-chart axis for Match by match. Chart.js thins ticks on short
+  // plots, which once left a ±4.6 axis labelled only at zero, so the ticks are
+  // chosen here: a 1, 2, 2.5 or 5 step giving two or three ticks each side of
+  // zero (two to four above zero when unsigned), ending on a tick at least 15%
+  // beyond the largest value. All-integer data, such as per-match goals, keep
+  // whole-number steps; decimals is how many places a step label needs.
+  function trendAxis(values, signed = false) {
+    const largest = signed ? Math.max(.1, ...values.map(Math.abs)) : Math.max(1, ...values);
+    const target = largest * 1.15, limit = signed ? 3 : 4;
+    const integer = values.length > 0 && values.every(Number.isInteger);
+    let magnitude = 10 ** Math.floor(Math.log10(target / limit)), step;
+    while (!step) {
+      step = [1, 2, 2.5, 5].map(n => Number((n * magnitude).toPrecision(12)))
+        .find(s => Math.ceil(target / s - 1e-9) <= limit && (!integer || Number.isInteger(s)));
+      magnitude *= 10;
+    }
+    const count = Math.ceil(target / step - 1e-9), extent = Number((count * step).toPrecision(12));
+    const ticks = Array.from({length: (signed ? 2 : 1) * count + 1}, (_, index) => Number(((index - (signed ? count : 0)) * step).toPrecision(12)));
+    return {min: signed ? -extent : 0, max: extent, step, decimals: (String(step).split('.')[1] || '').length, ticks};
+  }
+
   // Fit the visible extremes with 5% padding on each side, rather than padding a
   // whole quadrant. A tied population still needs a small, nonzero range for
   // inspection. Nonnegative measures stop at zero; signed ones may go below it.
@@ -181,5 +202,5 @@
     }
     return [...labels, last];
   }
-  window.NWSLGeometry = Object.freeze({headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
+  window.NWSLGeometry = Object.freeze({headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

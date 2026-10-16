@@ -59,6 +59,7 @@ func TestGeometry(t *testing.T) {
 	}{
 		{"ExposesOneGlobal", testGeometryExposesOneGlobal},
 		{"GapExtent", testGeometryGapExtent},
+		{"TrendAxis", testGeometryTrendAxis},
 		{"RankingBars", testGeometryRankingBars},
 		{"HeadToHead", testGeometryHeadToHead},
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
@@ -77,7 +78,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows"}
+	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -112,6 +113,56 @@ func testGeometryGapExtent(t *testing.T, page playwright.Page) {
 			callGeometry(t, page, "gapExtent", []any{tc.values}, &got)
 			if !near(got, tc.want) {
 				t.Errorf("gapExtent(%v) = %v, want %v", tc.values, got, tc.want)
+			}
+		})
+	}
+}
+
+func testGeometryTrendAxis(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		name     string
+		values   []float64
+		signed   bool
+		ticks    []float64
+		decimals int
+	}{
+		// Chart.js once labelled this per-match Differential axis only at zero.
+		{"per-match differential", []float64{-4, 3, 1.2, -0.7}, true, []float64{-6, -4, -2, 0, 2, 4, 6}, 0},
+		{"integer goals keep whole steps", []float64{1, -1, 0}, true, []float64{-2, -1, 0, 1, 2}, 0},
+		{"rolling differential", []float64{0.4, -0.9, 0.2}, true, []float64{-1.5, -1, -0.5, 0, 0.5, 1, 1.5}, 1},
+		{"no values", []float64{}, true, []float64{-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15}, 2},
+		{"tiny tied gaps", []float64{0.01, -0.01}, true, []float64{-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15}, 2},
+		{"per-match goals", []float64{0, 5, 2}, false, []float64{0, 2, 4, 6}, 0},
+		{"points per match", []float64{0, 1, 3}, false, []float64{0, 1, 2, 3, 4}, 0},
+		{"rolling averages", []float64{0.8, 1.6, 2.1}, false, []float64{0, 1, 2, 3}, 0},
+		{"unsigned floor", []float64{0.2, 0.4}, false, []float64{0, 0.5, 1, 1.5}, 1},
+		{"large signed range", []float64{230, -40}, true, []float64{-300, -200, -100, 0, 100, 200, 300}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got struct {
+				Min, Max, Step float64
+				Decimals       int
+				Ticks          []float64
+			}
+			callGeometry(t, page, "trendAxis", []any{tc.values, tc.signed}, &got)
+			if len(got.Ticks) != len(tc.ticks) {
+				t.Fatalf("trendAxis(%v, %v) ticks = %v, want %v", tc.values, tc.signed, got.Ticks, tc.ticks)
+			}
+			for i := range tc.ticks {
+				if !near(got.Ticks[i], tc.ticks[i]) {
+					t.Fatalf("trendAxis(%v, %v) ticks = %v, want %v", tc.values, tc.signed, got.Ticks, tc.ticks)
+				}
+			}
+			if !near(got.Min, tc.ticks[0]) || !near(got.Max, tc.ticks[len(tc.ticks)-1]) {
+				t.Errorf("trendAxis(%v, %v) bounds = [%v, %v], want the end ticks", tc.values, tc.signed, got.Min, got.Max)
+			}
+			if got.Decimals != tc.decimals {
+				t.Errorf("trendAxis(%v, %v) decimals = %d, want %d", tc.values, tc.signed, got.Decimals, tc.decimals)
+			}
+			for _, value := range tc.values {
+				if math.Abs(value)*1.15 > got.Max+1e-9 {
+					t.Errorf("trendAxis(%v, %v) max %v leaves no headroom above %v", tc.values, tc.signed, got.Max, value)
+				}
 			}
 		})
 	}

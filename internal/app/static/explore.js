@@ -78,7 +78,7 @@
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
   // Pure chart geometry lives in explore-geometry.js, which loads first.
-  const {gapExtent, plotDomain, pointRadius, layoutLogos, stripRows} = window.NWSLGeometry;
+  const {gapExtent, trendAxis, plotDomain, pointRadius, layoutLogos, stripRows} = window.NWSLGeometry;
   const percent = value => `${value.toFixed(1)}%`;
   // Use the same fit rule for visible labels and tooltip content.
   const hasSegmentLabel = (chart, value) => chart.chartArea && chart.chartArea.width * value / 100 >= 58;
@@ -2041,7 +2041,7 @@
     root.querySelector('[data-trend-legend]').hidden = legend.length === 0;
     root.querySelector('[data-season-trend-plot]').hidden = false;
     const values = visible.flatMap(dataset => relative ? [...dataset.data, ...dataset.references.map(reference => reference.value)] : dataset.data).filter(value => value != null);
-    const limit = signedValues ? gapExtent(values) : Math.max(1, ...values) * 1.15;
+    const axis = trendAxis(values, signedValues);
     // Reuse two chart slots: basis panels for balance, metric panels for
     // actual/xG comparison, and one combined panel for differential.
     const panels = balance ? [
@@ -2082,9 +2082,11 @@
       chart.trendPlotReferences = chart.data.datasets.flatMap(dataset => dataset.references.map((reference, index) => ({...reference, ink: index === 0 ? color('--muted') : dataset.borderColor})));
       chart.data.datasets.forEach((_, index) => chart.setDatasetVisibility(index, true));
       chart.options.layout = {padding: relative ? {top: 12, right: 100} : 0};
-      chart.options.scales.y = {min: signedValues ? -limit : 0, max: limit, border: {display: false},
+      // trendAxis picks the ticks: Chart.js would thin them on short panels.
+      chart.options.scales.y = {min: axis.min, max: axis.max, border: {display: false},
+        afterBuildTicks: scale => { scale.ticks = axis.ticks.map(value => ({value})); },
         grid: {display: !relative, color: context => context.tick.value === 0 ? color('--muted') : color('--line')},
-        ticks: {maxTicksLimit: 6, includeBounds: false, ...(signedValues ? {callback: value => signed(value)} : {})},
+        ticks: {callback: value => `${signedValues && value > 0 ? '+' : ''}${value.toFixed(axis.decimals)}`},
         title: {display: true, text: pointsMetric ? 'Points per match' : T(relative ? effectiveSeries === 'xg' ? 'xG per match' : effectiveSeries === 'goals' ? 'Goals per match' : 'Goals / xG per match' : balance ? `${prefix === 'xg' ? 'xG' : 'Goals'} per match` : difference ? 'Differential per match' : 'Goals / xG per match')}};
       const dataDescription = pointsMetric ? relative ? effectiveSeries === 'points' ? 'actual points' : 'xPoints' : 'points and xPoints' : balance ? 'scored and allowed' : relative ? effectiveSeries === 'goals' ? `actual ${goalsWord}` : T('xG') : `actual ${goalsWord} and ${T('xG')}`;
       canvas.setAttribute('aria-label', `${team.name}, ${season}: ${panelLabel}, ${dataDescription}, ${rolling ? `${window}-match rolling averages using all matches played so far before the first full window` : 'per-match values'}${relative ? `, original values with team and selected benchmark references` : ''}`);
