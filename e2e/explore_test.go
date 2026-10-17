@@ -2171,7 +2171,7 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 					Ticks    []float64
 					Labels   []string
 				}
-				evalJSON(t, page, `() => ['season-trend', 'season-trend-xg', 'season-points-gap'].flatMap((name) => {
+				evalJSON(t, page, `() => ['season-trend', 'season-trend-xg', 'season-points-gap', 'season-margin', 'season-margin-xg'].flatMap((name) => {
 					const canvas = document.querySelector('[data-chart="' + name + '"]');
 					if (canvas.closest('[hidden]')) return [];
 					const y = Chart.getChart(canvas).scales.y;
@@ -2270,8 +2270,8 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 		{"balance", "rolling", []string{"2.00", "0.00", "1.10", "0.70"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match", "xG scored: 1.10 per match", "xG allowed: 0.70 per match"}},
 		{"compare", "match", []string{"2", "1.10", "0", "0.70"}, []string{"Goals scored: 2", "xG scored: 1.10", "Goals allowed: 0", "xG allowed: 0.70"}},
 		{"compare", "rolling", []string{"2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
-		{"difference", "match", []string{"2", "0.40"}, []string{"Goal differential: +2", "xG differential: +0.40"}},
-		{"difference", "rolling", []string{"2.00", "0.40"}, []string{"Goal differential: +2.00 per match", "xG differential: +0.40 per match"}},
+		{"difference", "match", []string{"2", "0.40"}, []string{"Goal margin: +2", "xG margin: +0.40"}},
+		{"difference", "rolling", []string{"2.00", "0.40"}, []string{"Goal margin: +2.00 per match", "xG margin: +0.40 per match"}},
 		{"points", "match", []string{"3", "1.54", "+1.46"}, []string{"Points: 3", "xPoints: 1.54", "Points − xPoints: +1.46"}},
 		{"points", "rolling", []string{"3.00", "1.54"}, []string{"Points: 3.00 per match", "xPoints: 1.54 per match"}},
 		{"relative", "match", []string{"2", "0"}, []string{"Goals scored: 2", "Goals allowed: 0"}},
@@ -2280,12 +2280,12 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 	check := func(t *testing.T, index int, scoreResult string, wantTable, wantLines []string) {
 		t.Helper()
 		var charts []struct{ Selector, Title, Lines string }
-		evalJSON(t, page, `(index) => ['season-trend', 'season-trend-xg', 'season-points-gap'].flatMap(name => {
+		evalJSON(t, page, `(index) => ['season-trend', 'season-trend-xg', 'season-points-gap', 'season-margin', 'season-margin-xg'].flatMap(name => {
    const selector = '[data-chart="'+name+'"]', canvas = document.querySelector(selector);
    if (!canvas.getClientRects().length) return [];
    const c = Chart.getChart(canvas), callbacks = c.options.plugins.tooltip.callbacks;
    const items = [{chart:c, dataIndex:index}];
-   if (name === 'season-points-gap') {
+   if (name === 'season-points-gap' || name.startsWith('season-margin')) {
      const r = c.meetings[index];
      return [{selector, title:[r.date,r.venue,r.opponent,r.score,r.result].join(' · '), lines:callbacks.label(items[0]).join(' ')}];
    }
@@ -2334,7 +2334,7 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 	}
 	t.Run("official result with penalties excluded", func(t *testing.T) {
 		visit(t, page, base+path+"&penalties=exclude&trend-view=difference&trend-mode=match")
-		check(t, 1, "1–0 · Win", []string{"0", "-0.40"}, []string{"Non-penalty goal differential: 0", "npxG differential: -0.40"})
+		check(t, 1, "1–0 · Win", []string{"0", "-0.40"}, []string{"Non-penalty goal margin: 0", "npxG margin: -0.40"})
 	})
 }
 
@@ -2544,4 +2544,76 @@ func TestExplorePointsOnlyPenaltyVisibilityMatchesSelectionMatrix(t *testing.T) 
 			t.Fatalf("%s: expected Penalties visible: %v", path, err)
 		}
 	}
+}
+
+func TestExploreSeasonMarginsPanelsAndCoverage(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&trend-mode=match")
+		defer expectInPlace(t, page, "Margins smoothing and table")()
+		assertMarginPanels(t, page, "season-margin", "season-margin-xg")
+		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToContainText("xG incomplete"); err != nil {
+			t.Fatal(err)
+		}
+		var consistent bool
+		evalJSON(t, page, `()=>{
+   const chart=Chart.getChart(document.querySelector('[data-chart="season-margin-xg"]'));
+   const tiles=[...document.querySelectorAll('[data-trend-margin-tiles] [data-h2h-tile]')], first=tiles[0].getBoundingClientRect();
+   return chart.data.datasets[0].data.some(v=>v===null) && tiles.every(tile=>{
+    const r=tile.getBoundingClientRect(), rows=chart.meetings.filter(row=>tile.dataset.h2hTile==='All'||row.venue===tile.dataset.h2hTile);
+    const covered=rows.filter(row=>row.expectedMargin!==null).length;
+    return Math.abs(r.top-first.top)<1 && Math.abs(r.width-first.width)<1 && tile.scrollWidth<=tile.clientWidth && (covered===rows.length || tile.textContent.includes('xG '+covered+'/'+rows.length+' matches'));
+   });
+  }`, nil, &consistent)
+		if !consistent {
+			t.Fatal("missing xG must retain slots and accurate coverage in three equal tiles")
+		}
+		for _, name := range []string{"season-margin", "season-margin-xg"} {
+			canvas := page.Locator(`[data-chart="` + name + `"]`)
+			if err := canvas.Focus(); err != nil {
+				t.Fatal(err)
+			}
+			if err := canvas.Press("Home"); err != nil {
+				t.Fatal(err)
+			}
+			if got := chartInspection(t, page, `[data-chart="`+name+`"]`); !strings.Contains(got.Status, "Goal margin:") || !strings.Contains(got.Status, "xG margin:") {
+				t.Fatal(got.Status)
+			}
+		}
+		assertNoHorizontalOverflow(t, page)
+		chooseOption(t, page, "[data-trend-view]", "points")
+		if err := expect.Locator(page.Locator("[data-trend-points-tiles]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		chooseOption(t, page, "[data-trend-view]", "difference")
+		if err := expect.Locator(page.Locator("[data-trend-points-tiles]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-trend-goals-title]")).ToHaveText("Margins · 5-match average"); err != nil {
+			t.Fatal(err)
+		}
+		chooseOption(t, page, "[data-trend-mode]", "match")
+		assertMarginPanels(t, page, "season-margin", "season-margin-xg")
+	}
+	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
+	visitStatic(t, page, base+"explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&trend-mode=match")
+	if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToContainText("xG incomplete"); err != nil {
+		t.Fatal(err)
+	}
+	if err := page.Locator("[data-trend-values] summary").Click(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-trend-headings]")).ToContainText("Goal margin"); err != nil {
+		t.Fatal(err)
+	}
+	assertNoHorizontalOverflow(t, page)
 }

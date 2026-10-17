@@ -1,0 +1,8 @@
+{{define "exploreMarginTiles"}}
+{{range .}}<div class="explore-h2h-tile explore-margin-tile" data-h2h-tile="{{.Label}}">
+<div class="explore-h2h-tile-label">{{if ne .Label "All"}}<i data-h2h-encoding="{{if eq .Label "Home"}}home{{else}}away{{end}}" aria-hidden="true"></i>{{end}}{{.Label}}</div>
+<strong class="explore-h2h-wdl" aria-label="{{.RecordLabel}}">{{.Record}}</strong>
+<div>{{.Rate}}</div><div>{{.Goals}}</div>{{if .Coverage}}<div>{{.Coverage}}</div>{{end}}
+<div class="explore-margin-xg">{{.XG}}</div>{{if .XGCoverage}}<div>{{.XGCoverage}}</div>{{end}}<div>{{.Matches}}</div>
+</div>{{end}}
+{{end}}

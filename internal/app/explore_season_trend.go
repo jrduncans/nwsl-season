@@ -50,6 +50,8 @@ type exploreSeasonTrendView struct {
 	TrendMissingXG, TrendUndated, TrendVenueDateUnavailable, TrendActive bool
 	TrendMissingXPoints                                                  bool
 	TrendPointsGap                                                       bool
+	TrendMargins                                                         bool
+	TrendMarginTiles                                                     []exploreMarginTile
 	TrendPointsTiles                                                     []explorePointsTile
 	TrendSort, TrendOrder                                                string
 }
@@ -129,9 +131,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		if ((series == "goals" || series == "points") && expected) || ((series == "xg" || series == "xpoints") && !expected) {
 			continue
 		}
-		labels := []string{"Goals scored", "Goals allowed", "Goal differential", "Points"}
+		labels := []string{"Goals scored", "Goals allowed", "Goal margin", "Points"}
 		if expected {
-			labels = []string{"xG scored", "xG allowed", "xG differential", "xPoints"}
+			labels = []string{"xG scored", "xG allowed", "xG margin", "xPoints"}
 		}
 		for _, measure := range measures {
 			page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: basisText(basis, labels[measure]), Measure: measure, Expected: expected})
@@ -142,6 +144,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		slices.SortStableFunc(page.TrendColumns, func(a, b exploreTrendColumn) int { return a.Measure - b.Measure })
 	}
 	page.TrendPointsGap = page.TrendView == "points" && page.TrendMode == "match"
+	page.TrendMargins = page.TrendView == "difference" && page.TrendMode == "match"
 	if !page.TrendPointsGap {
 		page.TrendSort, page.TrendOrder = "match", "asc"
 	}
@@ -176,6 +179,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		for _, team := range season.Teams {
 			if team.ID != selected.ID {
 				continue
+			}
+			if page.TrendMargins {
+				page.TrendMarginTiles = exploreMarginTiles(team.Matches, basis.ExcludesPenalties())
 			}
 			if page.TrendPointsGap {
 				page.TrendPointsTiles = explorePointsTiles(team.Matches, "match")

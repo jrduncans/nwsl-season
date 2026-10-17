@@ -27,6 +27,9 @@
     return {min: signed ? -extent : 0, max: extent, step, decimals: (String(step).split('.')[1] || '').length, ticks};
   }
 
+  // Margins in both panels use one symmetric, rounded scale, including missing slots.
+  const marginAxis = (goals, xg) => trendAxis([...goals, ...xg].filter(value => value !== null), true);
+
   // Fit the visible extremes with 5% padding on each side, rather than padding a
   // whole quadrant. A tied population still needs a small, nonzero range for
   // inspection. Nonnegative measures stop at zero; signed ones may go below it.
@@ -204,5 +207,5 @@
     }
     return [...labels, last];
   }
-  window.NWSLGeometry = Object.freeze({headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
+  window.NWSLGeometry = Object.freeze({marginAxis, headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

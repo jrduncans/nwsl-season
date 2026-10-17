@@ -102,7 +102,9 @@ line beside their xG.
 Match by match follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
 Actual vs xG pairs actual and expected values in separate Scored and Allowed
-panels; Differential compares goal and xG differential on one plot. Points vs
+panels; Margins pairs goal margin and xG margin in two bar panels when
+smoothing is off, with All / Home / Away record and xG tiles. Rolling Margins
+keeps its two lines. Points vs
 xPoints compares earned match points with ASA's retrospective expected points. Benchmarks shows Goals, xG, Points, or xPoints with a team-average
 reference plus an optional league, playoff-team, top-4, Shield-team, or best-team
 comparison. Completed seasons use final standings groups and the Shield winner. Active
