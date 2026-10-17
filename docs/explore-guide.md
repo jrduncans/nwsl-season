@@ -560,7 +560,9 @@ venue patterns, match slots, and the full match description for tooltips and
 keyboard inspection. Missing xG leaves an empty slot. Rolling Margins keeps
 two lines and uses “Margins · N-match average”; it has no venue tiles. The
 `difference` URL value stays compatible with existing links. Match values
-retain goal margin and xG margin.
+retain the same Goal margin and xG margin labels in rolling mode and the
+Match values table. When penalties are excluded, the unsmoothed tiles carry
+“W–D–L and points use official results, including penalties.”
 
 **Points vs xPoints** with Smoothing set to None (`trend-view=points&trend-mode=match`)
 plots one bar per match of **points − xPoints**, using the shared Head to head
@@ -711,7 +713,9 @@ incomplete coverage says “xG incomplete” and “xG N/M matches” rather tha
 summing a partial population as a complete total. Official W–D–L and points
 stay fixed when excluding penalties, with the explanatory note. xPts totals
 are available in Points vs xPoints. The former Expected view is accepted as
-an alias for Margins and omitted from generated URLs.
+an alias for Margins. Requests with `h2h-series=expected` (or explicit
+`actual`) redirect to the same relative URL without `h2h-series`, preserving
+all other selections; `both` and `points` remain in URLs.
 
 **Actual vs expected** replaces the record tiles with three comparisons:
 goals for vs xG for, goals against vs xG against, and points vs xPts. Each
@@ -747,9 +751,10 @@ totals, which state their smaller count; npxG compares that same population.
 Charts use non-penalty goals and/or npxG on that basis. Meetings without a split retain their
 slot and official result in the tooltip and table but have no non-penalty bar.
 Points and xPts use every meeting and never change. Meeting lists and official
-W–D–L also never change. Coverage notes appear above the chart; expected and comparison
-points carry "Points include penalties; ASA publishes no non-penalty expected
-points." where applicable.
+W–D–L also never change. Both goal views show an xG missing-note whenever
+coverage is incomplete. Only Actual vs expected adds an xPts missing-note
+and the standard points/basis note; Margins uses the official-results note.
+Points vs xPoints has neither a penalty-split nor an xG coverage note.
 
 `history.SummarizeHeadToHead(inputs, teamID, opponentID, basis)` and
 `HeadToHeadOpponents` use all-shots `TeamComparisonEligible` integrity checks.
@@ -781,7 +786,8 @@ Home and End move between meetings; Escape, blur or an outside tap dismisses
 the tooltip. There is no pinned selection or detail panel. `explore-geometry.js`
 owns chart bounds, bar values, hit testing and year-label placement, tested in
 `e2e/geometry_test.go`. Without JavaScript the chart is a chronological list
-with the same basis and expected details. Date warnings and the ASA identity
+with the same basis and expected details, including a goal margin and xG margin
+for every meeting in Margins (or `Unavailable` for missing observations). Date warnings and the ASA identity
 and home-designation qualifications stay below the chart.
 
 The values table is a native `<details>`, closed unless `h2h-sort` or
@@ -807,7 +813,22 @@ on narrow screens, with a scroll hint.
 The payload stores each fixture once with shared team identities and
 season-specific names. It carries official scores, both scoring bases and
 independent expected values; the browser derives either team's orientation,
-records, expected totals and comparison totals. An app test bounds the raw payload below 550 KB.
+records, expected totals and comparison totals. An app test bounds the raw
+payload below 550 KB. Margins keeps numeric totals and coverage counts separate
+from display formatting. `explore_margins.go` owns the Go formatting step;
+`explore-margins.js` owns the browser's equivalent numeric and formatting steps.
+Browser tests compare every tile line and accessible W–D–L label with the Go
+render for complete xG, incomplete xG and a non-penalty missing-split population.
+
+Tile calculation stays in the browser for in-place team, opponent and basis
+changes. Precomputing formatted tiles for every oriented pair in both bases
+would add a matrix that grows with the square of the team count to the bounded
+fixture archive. Both renderers instead consume explicit per-match goal
+coverage from the scoring calculation. That calculation still requires valid
+xG and a consistent penalty split for non-penalty goals: a raw split without
+valid xG, or valid xG without a split, covers neither non-penalty goals nor
+npxG. All-shots goals remain covered when xG is missing. Match by match retains
+its existing exclusion of seasons with incomplete non-penalty coverage.
 Controls and sort links update the URL in place from that payload without a
 data request and restore through Back/Forward and reload. Separate GET forms
 allow changing Team without carrying the previous Opponent when JavaScript is
