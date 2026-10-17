@@ -2354,7 +2354,7 @@ func TestExploreSeasonPointsEmptyAndVenueDates(t *testing.T) {
 					t.Fatal(err)
 				}
 				assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
-				if err := expect.Locator(page.Locator("[data-trend-venue-unknown]")).ToBeVisible(); err != nil {
+				if err := expect.Locator(page.Locator("[data-trend-venue-date-unavailable]")).ToBeVisible(); err != nil {
 					t.Fatal(err)
 				}
 				var known bool

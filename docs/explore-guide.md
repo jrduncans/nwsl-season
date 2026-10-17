@@ -592,7 +592,7 @@ Match dates show the venue's local calendar day, using the cached fixture's
 [`internal/fixtures/venues.go`](../internal/fixtures/venues.go). Neither the home
 team, the browser, nor the server picks the zone, and there is no UTC or
 usual-stadium fallback: unknown venues show `Venue date unavailable`, while
-their kickoff instant still orders matches. The unknown-venue notice concerns
+their kickoff instant still orders matches. The unavailable venue-date notice concerns
 the stadium time zone only: every match retains ASA’s Home/Away designation
 and stays in that venue tile, so All equals Home plus Away.
 

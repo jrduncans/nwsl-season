@@ -310,7 +310,7 @@
 <p class="note" data-trend-season-status>{{.TeamSeason}}{{if .TrendActive}} · In progress{{end}} · {{len .TrendRows}} played</p>
 <p class="explore-data-warning" data-trend-points-warning{{if not .TrendMissingXPoints}} hidden{{end}}>Some match xPoints are unavailable. Affected xPoints and rolling windows leave gaps; actual points remain available.</p>
 <p class="explore-data-warning" data-trend-warning{{if not .TrendMissingXG}} hidden{{end}}>{{$.T "Some match xG is unavailable. Affected xG points and rolling windows leave gaps; goals remain available."}}</p>
-<p class="explore-data-warning" data-trend-venue-unknown{{if not .TrendVenueUnknown}} hidden{{end}}>Some venue dates are unavailable because the venue’s time zone is unknown. These matches still follow kickoff order.</p>
+<p class="explore-data-warning" data-trend-venue-date-unavailable{{if not .TrendVenueDateUnavailable}} hidden{{end}}>Some venue dates are unavailable because the venue’s time zone is unknown. These matches still follow kickoff order.</p>
 <p class="explore-data-warning" data-trend-undated{{if not .TrendUndated}} hidden{{end}}>Some match dates are unavailable. Undated results appear last, ordered by fixture ID; their position may not reflect played order.</p>
 <div class="explore-team-controls" data-trend-reference-control{{if ne .TrendView "relative"}} hidden{{end}}><label>Benchmark <select name="average-reference" form="season-trend-controls" data-trend-reference>{{range .TrendReferenceOptions}}<option value="{{.Key}}"{{if eq .Key $.TrendAverageReference}} selected{{end}}>{{.Label}}</option>{{end}}</select></label></div>
 <p class="note" data-trend-reference-status{{if not .TrendReferenceStatus}} hidden{{end}}>{{.TrendReferenceStatus}}</p>

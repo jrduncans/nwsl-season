@@ -39,19 +39,19 @@ type exploreTrendColumn struct {
 }
 
 type exploreSeasonTrendView struct {
-	TrendMode, TrendWindow, TrendView, TrendCaption, TrendAverageSeries string
-	TrendAverageReference                                               string
-	TrendReferenceOptions                                               []exploreTrendReferenceOption
-	TrendReferences                                                     []exploreTrendReferenceView
-	TrendReferenceStatus                                                string
-	TrendColumns                                                        []exploreTrendColumn
-	TrendTeam                                                           teamNameView
-	TrendRows                                                           []exploreSeasonTrendRow
-	TrendMissingXG, TrendUndated, TrendVenueUnknown, TrendActive        bool
-	TrendMissingXPoints                                                 bool
-	TrendPointsGap                                                      bool
-	TrendPointsTiles                                                    []explorePointsTile
-	TrendSort, TrendOrder                                               string
+	TrendMode, TrendWindow, TrendView, TrendCaption, TrendAverageSeries  string
+	TrendAverageReference                                                string
+	TrendReferenceOptions                                                []exploreTrendReferenceOption
+	TrendReferences                                                      []exploreTrendReferenceView
+	TrendReferenceStatus                                                 string
+	TrendColumns                                                         []exploreTrendColumn
+	TrendTeam                                                            teamNameView
+	TrendRows                                                            []exploreSeasonTrendRow
+	TrendMissingXG, TrendUndated, TrendVenueDateUnavailable, TrendActive bool
+	TrendMissingXPoints                                                  bool
+	TrendPointsGap                                                       bool
+	TrendPointsTiles                                                     []explorePointsTile
+	TrendSort, TrendOrder                                                string
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
@@ -220,7 +220,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				page.TrendMissingXG = page.TrendMissingXG || (measures[0] != 3 && series != "goals" && match.Values[0].Expected == nil)
 				page.TrendMissingXPoints = page.TrendMissingXPoints || (measures[0] == 3 && series != "points" && match.Values[3].Expected == nil)
 				page.TrendUndated = page.TrendUndated || match.Undated
-				page.TrendVenueUnknown = page.TrendVenueUnknown || match.VenueDateUnavailable
+				page.TrendVenueDateUnavailable = page.TrendVenueDateUnavailable || match.VenueDateUnavailable
 			}
 		}
 	}

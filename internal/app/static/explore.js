@@ -2000,7 +2000,7 @@
     setPointsNote('season-trend', pointsMetric);
     root.querySelector('[data-trend-warning]').hidden = pointsMetric || effectiveSeries === 'goals' || !matches.some(match => match.values[0].expected == null);
     root.querySelector('[data-trend-points-warning]').hidden = !pointsMetric || effectiveSeries === 'points' || !matches.some(match => match.values[3].expected == null);
-    root.querySelector('[data-trend-venue-unknown]').hidden = !matches.some(match => match.venueDateUnavailable);
+    root.querySelector('[data-trend-venue-date-unavailable]').hidden = !matches.some(match => match.venueDateUnavailable);
     root.querySelector('[data-trend-undated]').hidden = !matches.some(match => match.undated);
     const measures = pointsMetric ? [3] : difference ? [2] : [0, 1];
     const visible = (effectiveSeries === 'both' ? [false, true] : [['xg', 'xpoints'].includes(effectiveSeries)]).flatMap(expected => measures.map(measure => {

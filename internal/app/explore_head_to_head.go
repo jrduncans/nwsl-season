@@ -143,7 +143,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			pair.Rows = append(pair.Rows, exploreHeadToHeadRow{exploreMatchRecord: record, Season: meeting.Season, Active: meeting.Active, Result: result, Points: meeting.Points, Margin: meeting.ScoreFor - meeting.ScoreAgainst, Position: i, BasisScore: h2hBasisScore(meeting), PointsGap: h2hPointsGap(meeting), ChartGap: h2hChartGap(meeting), ExpectedMargin: h2hExpectedMargin(meeting), ExpectedValues: [3]string{h2hExpectedValue(meeting.XGFor), h2hExpectedValue(meeting.XGAgainst), h2hExpectedValue(meeting.XPoints)}})
 		}
 		first, last := "", ""
-		active, venueUnknown := false, false
+		active, venueDateUnavailable := false, false
 		for _, row := range pair.Rows {
 			if first == "" || row.Season < first {
 				first = row.Season
@@ -152,7 +152,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 				last = row.Season
 			}
 			active = active || row.Active
-			venueUnknown = venueUnknown || row.VenueDateUnavailable
+			venueDateUnavailable = venueDateUnavailable || row.VenueDateUnavailable
 		}
 		years := first
 		if first != last {
@@ -165,7 +165,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		if summary.Undated {
 			pair.Warning = "Undated matches appear last."
 		}
-		if venueUnknown {
+		if venueDateUnavailable {
 			if pair.Warning != "" {
 				pair.Warning += " "
 			}
