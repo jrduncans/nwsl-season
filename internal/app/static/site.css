@@ -694,3 +694,9 @@ th:nth-child(2) { text-align: left; }
 
 .seed-badge { white-space: nowrap; font-weight: 800; }
 [data-standings-stat="xg"] .seed-badge { display: none; }
+
+/* Points comparisons keep three equal venue tiles and wrap at narrow widths. */
+.explore-points-tile { white-space: normal; overflow-wrap: anywhere; }
+.explore-points-tile strong { display: block; margin: .3rem 0; }
+.explore-points-tile strong span { display: block; }
+.explore-points-tile > div:not(.explore-h2h-tile-label) { margin-top: .25rem; }

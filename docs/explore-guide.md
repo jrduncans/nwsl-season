@@ -147,8 +147,10 @@ Every view accepts `penalties=include` (default, omitted from URLs) or
 `penalties=exclude`. The exceptions are Shield and playoff thresholds (always points-only, ignoring
 carried penalties) and Team-seasons on Points: the control is
 absent and the basis is ignored, with the points note for a carried `exclude`.
-Head to head offers Penalties in Actual, Expected and Actual vs expected,
-changing goals and xG while official results and points stay fixed.
+Head to head offers Penalties in Actual, Expected and Actual vs expected;
+its Points vs xPoints view hides the control and points note, ignores the
+carried basis, and uses official points and ASA xPoints. The other views change
+goals and xG while official results and points stay fixed.
 The server-rendered Penalties select is last in each view's data-control row
 and never in the navigation; links and forms carry it.
 
@@ -506,6 +508,8 @@ team's xG coverage is incomplete; goal ranks remain.
 | `series` | `goals`, `xg`, `both` | `both` |
 | `trend-mode` | `match`, `rolling` | `rolling` |
 | `window` | `3`, `5`, `10` | `5` |
+| `trend-sort` | `match`, `points-gap` (each-match points table) | `match` |
+| `trend-order` | `asc`, `desc` | `asc` |
 | `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `xg` if `series=xg`, else `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
 
@@ -523,13 +527,45 @@ dotted lead-in. An xG or xPoints average needs every observation in its exact
 window, so missing expected data breaks that line until it leaves the window;
 it is never interpolated.
 
-Every chart's y axis is round and labels its own ticks (`trendAxis` in
-`explore-geometry.js`), rather than leaving tick choice to Chart.js, which
+Except for the points gap bars described below, each chart's y axis is round
+and labels its own ticks (`trendAxis` in `explore-geometry.js`), rather than leaving tick choice to Chart.js, which
 thins ticks on these short panels: a 1, 2, 2.5 or 5 step, two or three ticks
 each side of zero for Differential (two to four above zero otherwise), ending
 on a tick at least 15% beyond the largest value. Whole-number data, such as
 per-match goals, keep whole-number steps; labels carry only the decimals the
 step needs.
+
+**Points vs xPoints** with Smoothing set to None (`trend-view=points&trend-mode=match`)
+plots one bar per match of **points − xPoints**, using the shared Head to head
+chart and its venue encoding. The axis is fixed at −3 to +3 across teams,
+seasons and both views. Missing xPoints keeps an empty chronological slot,
+never a zero bar. If every match lacks xPoints, the chart is replaced by
+“No xPoints is available for these matches.” The panel title is “Points above
+or below xPoints · Each match”, with “Above zero: more points than xPoints.
+Below: fewer.” The tooltip
+and keyboard description include the match, official score, points, xPoints
+and signed difference. A win cannot fall below zero, a loss cannot rise above
+zero, and draws can fall either way, because xPoints is between 0 and 3.
+
+Three equal All / Home / Away tiles show points vs xPts totals, the gap as
+above or below expected, both rates per match, and “N of M matches” coverage.
+Home is solid blue (`#1F6FA8`); away is orange (`#CF7424`) diagonal stripes on
+paper with a thin orange outline. Swatches on the Home and Away tiles form the
+venue legend. An incomplete xPoints population says `xPts incomplete`, keeps
+actual points and their rate, and withholds the expected total and gap.
+A venue with no appearances says “No matches” (“No meetings” in Head to head),
+with zero coverage rather than an incomplete-data warning.
+
+Rolling mode retains two lines for points pace vs xPoints pace and titles the
+panel “Points vs xPoints · N-match average”. Venue tiles appear only with
+smoothing off. The Match values table retains points and xPoints and adds a
+sortable **Points − xPoints** column in each-match mode; sort links use exact
+values, missing last, chronological order on ties, and preserve URL state.
+Default sort parameters are omitted from form submissions and sort links;
+switching to rolling mode or another chart clears the gap sort. Native GET
+submissions carrying that sort outside the points match view redirect to the
+same selection without it.
+Without JavaScript the same tiles and table show the comparisons.
 
 **Benchmarks** keep original units and draw horizontal reference means for the
 season: the team's own mean, plus one comparison.
@@ -556,7 +592,9 @@ Match dates show the venue's local calendar day, using the cached fixture's
 [`internal/fixtures/venues.go`](../internal/fixtures/venues.go). Neither the home
 team, the browser, nor the server picks the zone, and there is no UTC or
 usual-stadium fallback: unknown venues show `Venue date unavailable`, while
-their kickoff instant still orders matches.
+their kickoff instant still orders matches. The unavailable venue-date notice concerns
+the stadium time zone only: every match retains ASA’s Home/Away designation
+and stays in that venue tile, so All equals Home plus Away.
 
 The catalog covers all 49 entries from the
 [ASA NWSL stadia endpoint](https://app.americansocceranalysis.com/api/v1/nwsl/stadia)
@@ -600,8 +638,9 @@ start rather than claimed as all-time. Tied holders are all listed in the
 ### Head to head
 
 `view=head-to-head` follows two ASA team IDs across eligible regular seasons.
-Controls are Team, Opponent, View (Actual by default, Expected, Actual vs expected)
-and Penalties (Include or Exclude). The opponent list includes clubs met at
+Controls are Team, Opponent, View (Actual by default, Expected, Actual vs
+expected, Points vs xPoints) and Penalties (Include or Exclude, hidden for
+Points vs xPoints). The opponent list includes clubs met at
 least once, each as "Name (N)", sorted by the ID's newest name, then ID. The
 default is the most-met opponent, ties broken by newest name, then ID. A valid
 never-met pair remains selected with "X and Y have not met in a regular-season
@@ -648,7 +687,18 @@ from overlapping text in Safari. No companion ticks or extra actual-margin serie
 without xG retains its chronological slot but has no gap bar. Missing values
 are null, never zero.
 
-Penalties affects goals and xG in all three views through
+**Points vs xPoints** (`h2h-series=points`) plots official points − ASA xPoints
+per meeting with the shared gap bars and fixed −3 to +3 axis. Its All / Home /
+Away tiles show the same totals, gap, rates and complete-coverage rule as Match
+by match, with rates and coverage per meeting. Swatches live on these tiles,
+so there is no separate venue legend. Missing xPoints retains its slot without
+a bar, independently of xG or penalty-split coverage. The tooltip, keyboard
+description, no-JavaScript list and values table include points, xPts and the
+signed points − xPoints difference. The panel title and zero-line explanation
+match the season chart. This view has no Penalties control or points note;
+a carried penalties parameter has no effect.
+
+Penalties affects goals and xG in the three goal views through
 `basisText`. With exclusion, only split-covered meetings enter goals and npxG
 totals, which state their smaller count; npxG compares that same population.
 Charts use non-penalty goals and/or npxG on that basis. Meetings without a split retain their
@@ -667,12 +717,13 @@ excluded; malformed completed results exclude their season. Distinct ASA IDs
 stay separate, with no franchise lineage inferred (including Utah's gap years).
 Playoff and cup meetings are excluded.
 
-All three charts use kickoff-instant order, fixture ID breaking ties and undated
+All four charts use kickoff-instant order, fixture ID breaking ties and undated
 meetings last. Home meetings are solid blue (`#1F6FA8`); away meetings have
 orange (`#CF7424`) diagonal stripes on paper (`#fbfcf8`) with a thin orange
 outline: 1.5px stripes every 3.4px at 45 degrees. Zero values have a short mark.
 Color and pattern jointly encode venue; hollow columns remain reserved for
-Team-seasons' in-progress seasons. All three charts have a symmetric round axis.
+Team-seasons' in-progress seasons. The three goal charts have a symmetric
+round axis; points uses exactly ±3.
 Years sit under their first meeting; overlapping intermediate labels are
 skipped while first and last remain inside the plot. Up to forty columns fit
 at 390px without page scrolling.
@@ -705,10 +756,10 @@ on narrow screens, with a scroll hint.
 |---|---|---|
 | `team` | ASA team ID | Portland Thorns FC |
 | `opponent` | Different recorded ASA team ID | Most-met opponent |
-| `h2h-series` | `actual`, `expected`, `both` | `actual` (omitted from URLs) |
+| `h2h-series` | `actual`, `expected`, `both`, `points` | `actual` (omitted from URLs) |
 | `h2h-sort` | `date`, `venue`, `result`, `margin` | `date` |
 | `h2h-order` | `asc`, `desc` | `desc` |
-| `penalties` | `include`, `exclude` (all three views) | `include` |
+| `penalties` | `include`, `exclude` (three goal views; ignored for points) | `include` |
 
 The payload stores each fixture once with shared team identities and
 season-specific names. It carries official scores, both scoring bases and

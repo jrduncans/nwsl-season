@@ -2137,7 +2137,7 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 					Ticks    []float64
 					Labels   []string
 				}
-				evalJSON(t, page, `() => ['season-trend', 'season-trend-xg'].flatMap((name) => {
+				evalJSON(t, page, `() => ['season-trend', 'season-trend-xg', 'season-points-gap'].flatMap((name) => {
 					const canvas = document.querySelector('[data-chart="' + name + '"]');
 					if (canvas.closest('[hidden]')) return [];
 					const y = Chart.getChart(canvas).scales.y;
@@ -2195,7 +2195,7 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 		{"compare", "rolling", []string{"2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
 		{"difference", "match", []string{"2", "0.40"}, []string{"Goal differential: +2", "xG differential: +0.40"}},
 		{"difference", "rolling", []string{"2.00", "0.40"}, []string{"Goal differential: +2.00 per match", "xG differential: +0.40 per match"}},
-		{"points", "match", []string{"3", "1.54"}, []string{"Points: 3", "xPoints: 1.54"}},
+		{"points", "match", []string{"3", "1.54", "+1.46"}, []string{"Points: 3", "xPoints: 1.54", "Points − xPoints: +1.46"}},
 		{"points", "rolling", []string{"3.00", "1.54"}, []string{"Points: 3.00 per match", "xPoints: 1.54 per match"}},
 		{"relative", "match", []string{"2", "0"}, []string{"Goals scored: 2", "Goals allowed: 0"}},
 		{"relative", "rolling", []string{"2.00", "0.00"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match"}},
@@ -2203,11 +2203,15 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 	check := func(t *testing.T, index int, scoreResult string, wantTable, wantLines []string) {
 		t.Helper()
 		var charts []struct{ Selector, Title, Lines string }
-		evalJSON(t, page, `(index) => ['season-trend', 'season-trend-xg'].flatMap(name => {
+		evalJSON(t, page, `(index) => ['season-trend', 'season-trend-xg', 'season-points-gap'].flatMap(name => {
    const selector = '[data-chart="'+name+'"]', canvas = document.querySelector(selector);
    if (!canvas.getClientRects().length) return [];
    const c = Chart.getChart(canvas), callbacks = c.options.plugins.tooltip.callbacks;
    const items = [{chart:c, dataIndex:index}];
+   if (name === 'season-points-gap') {
+     const r = c.meetings[index];
+     return [{selector, title:[r.date,r.venue,r.opponent,r.score,r.result].join(' · '), lines:callbacks.label(items[0]).join(' ')}];
+   }
    return [{selector, title:callbacks.title(items).join(' '), lines:callbacks.beforeBody(items).join(' ')}];
   })`, index, &charts)
 		if len(charts) == 0 {
@@ -2255,4 +2259,133 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 		visit(t, page, base+path+"&penalties=exclude&trend-view=difference&trend-mode=match")
 		check(t, 1, "1–0 · Win", []string{"0", "-0.40"}, []string{"Non-penalty goal differential: 0", "npxG differential: -0.40"})
 	})
+}
+
+func TestExploreSeasonPointsGap(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&trend-mode=match")
+		assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
+		if err := page.Locator("[data-trend-values] summary").Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.Locator("[data-trend-sort]").Click(); err != nil {
+			t.Fatal(err)
+		}
+		if queryOf(t, page).Get("trend-order") != "desc" {
+			t.Fatal("sort state lost")
+		}
+		var ordered bool
+		evalJSON(t, page, `()=>{const values=[...document.querySelectorAll('[data-trend-rows] tr')].map(r=>Number(r.lastElementChild.textContent));return values.every((v,i)=>!i||v<=values[i-1]);}`, nil, &ordered)
+		if !ordered {
+			t.Fatal("gap column must sort by exact difference")
+		}
+		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
+			t.Fatal("rolling mode retained gap sort")
+		}
+		if err := expect.Locator(page.Locator("[data-trend-points-tiles]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-trend-points-panel]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		var lines bool
+		evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="season-trend"]'));return c.data.datasets.length===2&&c.data.datasets.every(d=>d.type==='line');}`, nil, &lines)
+		if !lines {
+			t.Fatal("rolling points must retain two lines")
+		}
+		if _, err := page.GoBack(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-trend-points-panel]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
+	}
+	// Bay FC's 2026 first home appearance lacks xPoints, even though xG exists.
+	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&trend-mode=match")
+	assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
+	if err := expect.Locator(page.Locator("[data-trend-points-tiles] [data-points-tile=All]")).ToContainText("xPts incomplete"); err != nil {
+		t.Fatal(err)
+	}
+	var missing bool
+	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="season-points-gap"]'));return c.data.datasets[0].data.some(v=>v===null)&&c.meetings.length===c.getDatasetMeta(0).data.length;}`, nil, &missing)
+	if !missing {
+		t.Fatal("missing xPoints must retain an empty chart slot")
+	}
+}
+
+func TestExploreSeasonPointsEmptyAndVenueDates(t *testing.T) {
+	t.Parallel()
+	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	for i := range archive {
+		for j := range archive[i].Data.Games {
+			archive[i].Data.Games[j].RawJSON = `{"stadium_id":"unknown"}`
+		}
+		if archive[i].Entry.Season == "2026" {
+			for j := range archive[i].Data.XGoals {
+				archive[i].Data.XGoals[j].HomeXPoints.Valid, archive[i].Data.XGoals[j].AwayXPoints.Valid = false, false
+			}
+		}
+	}
+	base := exploreBaseArchive(t, archive)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&trend-view=points&trend-mode=match")
+		for _, year := range []string{"2026", "2025", "2026"} {
+			chooseOption(t, page, "[data-trend-season]", year)
+			if year == "2026" {
+				if err := expect.Locator(page.Locator("[data-trend-points-empty]")).ToHaveText("No xPoints is available for these matches."); err != nil {
+					t.Fatal(err)
+				}
+				if err := expect.Locator(page.Locator("[data-trend-points-empty]")).ToBeVisible(); err != nil {
+					t.Fatal(err)
+				}
+				for _, selector := range []string{"[data-trend-points-wrap]", "[data-trend-points-hint]"} {
+					if err := expect.Locator(page.Locator(selector)).ToBeHidden(); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				if err := expect.Locator(page.Locator("[data-trend-points-empty]")).ToBeHidden(); err != nil {
+					t.Fatal(err)
+				}
+				assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
+				if err := expect.Locator(page.Locator("[data-trend-venue-date-unavailable]")).ToBeVisible(); err != nil {
+					t.Fatal(err)
+				}
+				var known bool
+				evalJSON(t, page, `()=>{const rows=Chart.getChart(document.querySelector('[data-chart="season-points-gap"]')).meetings;return rows.every(r=>r.venueDateUnavailable && ['Home','Away'].includes(r.venue)) && rows.some(r=>r.venue==='Away');}`, nil, &known)
+				if !known {
+					t.Fatal("unknown stadium time zones must retain Home/Away designation and encoding")
+				}
+			}
+			assertNoHorizontalOverflow(t, page)
+		}
+	}
+}
+
+func TestExplorePointsNativeSortURLs(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
+	path := "explore?view=season-trend&season=2025&trend-view=points&trend-mode=match"
+	visitStatic(t, page, base+path)
+	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
+		t.Fatal(err)
+	}
+	if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
+		t.Fatal("default sort leaked into GET form")
+	}
+	visitStatic(t, page, base+path+"&trend-sort=points-gap&trend-order=desc")
+	chooseOption(t, page, "[data-trend-mode]", "rolling")
+	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
+		t.Fatal(err)
+	}
+	if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
+		t.Fatal("native mode switch retained gap sort")
+	}
 }

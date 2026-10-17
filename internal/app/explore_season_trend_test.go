@@ -53,7 +53,7 @@ func TestExploreSeasonTrendChronologyVenueAndPartialXG(t *testing.T) {
 	for _, view := range []string{"balance", "compare", "difference"} {
 		query := url.Values{"view": {"season-trend"}, "trend-view": {view}, "window": {"3"}}
 		page, err := exploreSeasonTrend(query, teams, teamNameView{ID: "alpha"})
-		if err != nil || len(page.TrendRows) != 20 || !page.TrendMissingXG || !page.TrendActive || page.TrendUndated || page.TrendVenueUnknown {
+		if err != nil || len(page.TrendRows) != 20 || !page.TrendMissingXG || !page.TrendActive || page.TrendUndated || page.TrendVenueDateUnavailable {
 			t.Fatalf("%s: invalid trend: %+v, %v", view, page, err)
 		}
 		for index, row := range page.TrendRows {
@@ -78,7 +78,7 @@ func TestExploreSeasonTrendChronologyVenueAndPartialXG(t *testing.T) {
 func TestExploreSeasonTrendVenueDates(t *testing.T) {
 	for _, test := range []struct {
 		name, kickoff, stadium, id, date string
-		undated, unknownVenue            bool
+		undated, venueDateUnavailable    bool
 	}{
 		{"ASA west coast", "2026-07-12 05:30:00 UTC", "7vQ7xbOMD1", "game", "Jul 11, 2026", false, false},
 		{"same instant east coast", "2026-07-12T05:30:00Z", "vzqoJrj5ap", "game", "Jul 12, 2026", false, false},
@@ -102,7 +102,14 @@ func TestExploreSeasonTrendVenueDates(t *testing.T) {
 			// Home/away orientation never changes which venue's calendar applies.
 			for _, home := range []bool{true, false} {
 				rows := exploreMatches([]history.TeamMatch{{ID: test.id, KickoffUTC: test.kickoff, StadiumID: test.stadium, Home: home}}, nil)
-				if rows[0].Date != test.date || rows[0].Undated != test.undated || rows[0].VenueDateUnavailable != test.unknownVenue {
+				venue := "Away"
+				if home {
+					venue = "Home"
+				}
+				if rows[0].Venue != venue {
+					t.Fatalf("stadium metadata changed ASA designation: %+v", rows[0])
+				}
+				if rows[0].Date != test.date || rows[0].Undated != test.undated || rows[0].VenueDateUnavailable != test.venueDateUnavailable {
 					t.Fatalf("home=%v: %+v", home, rows[0])
 				}
 			}
@@ -130,7 +137,7 @@ func TestExploreSeasonTrendUnknownVenuePreservesOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, err := exploreSeasonTrend(nil, teams, teamNameView{ID: "alpha"})
-	if err != nil || !page.TrendUndated || !page.TrendVenueUnknown || len(page.TrendRows) != 20 {
+	if err != nil || !page.TrendUndated || !page.TrendVenueDateUnavailable || len(page.TrendRows) != 20 {
 		t.Fatalf("missing date notices or dropped results: %+v, %v", page, err)
 	}
 	if page.TrendRows[0].ID != "history-2026-0" || page.TrendRows[1].ID != "history-2026-1" || page.TrendRows[19].ID != "history-2026-2" {
@@ -336,13 +343,13 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 							t.Fatal("differential must have its own value columns")
 						}
 					} else if view == "compare" {
-						want := []exploreTrendColumn{{"Goals scored", 0, false}, {"xG scored", 0, true}, {"Goals allowed", 1, false}, {"xG allowed", 1, true}}
+						want := []exploreTrendColumn{{Label: "Goals scored", Measure: 0}, {Label: "xG scored", Measure: 0, Expected: true}, {Label: "Goals allowed", Measure: 1}, {Label: "xG allowed", Measure: 1, Expected: true}}
 						if !slices.Equal(page.TrendColumns, want) {
 							t.Fatalf("comparison must pair actual and xG per metric: %v", page.TrendColumns)
 						}
 					} else if view == "points" {
 						measures = []int{3}
-						if !slices.Equal(page.TrendColumns, []exploreTrendColumn{{"Points", 3, false}, {"xPoints", 3, true}}) {
+						if !slices.Equal(page.TrendColumns[:2], []exploreTrendColumn{{Label: "Points", Measure: 3}, {Label: "xPoints", Measure: 3, Expected: true}}) {
 							t.Fatalf("points columns = %v", page.TrendColumns)
 						}
 					} else if view == "relative" {
@@ -363,11 +370,17 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					if effectiveSeries == "both" {
 						wantColumns *= 2
 					}
+					if view == "points" && mode == "match" {
+						wantColumns++
+					}
 					if len(page.TrendColumns) != wantColumns || page.TrendMissingXG != (view != "points" && effectiveSeries != "goals") {
 						t.Fatalf("wrong series selection: %+v", page)
 					}
 					for end, row := range page.TrendRows {
 						for columnIndex, column := range page.TrendColumns {
+							if column.Gap {
+								continue
+							}
 							start, count := end, 1
 							if mode == "rolling" {
 								count = min(end+1, window)

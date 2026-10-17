@@ -64,6 +64,7 @@ func TestGeometry(t *testing.T) {
 		{"HeadToHead", testGeometryHeadToHead},
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
 		{"HeadToHeadExpected", testGeometryHeadToHeadExpected},
+		{"Points", testGeometryPoints},
 		{"PlotDomain", testGeometryPlotDomain},
 		{"ScatterGroup", testGeometryScatterGroup},
 		{"PointRadius", testGeometryPointRadius},
@@ -646,6 +647,31 @@ func testGeometryHeadToHeadExpected(t *testing.T, page playwright.Page) {
 	callGeometry(t, page, "headToHeadGeometry", []any{[]any{nil, .4, -6.2}, 390, 260}, &bounds)
 	if bounds.Extent != 10 {
 		t.Fatalf("gap margins must set extent: %+v", bounds)
+	}
+}
+
+func testGeometryPoints(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		points  float64
+		xpoints *float64
+		want    *float64
+	}{
+		{3, ptrFloat(.4), ptrFloat(2.6)}, {0, ptrFloat(3), ptrFloat(-3)},
+		{1, ptrFloat(2.6), ptrFloat(-1.6)}, {1, ptrFloat(.4), ptrFloat(.6)},
+		{3, ptrFloat(3), ptrFloat(0)}, {3, ptrFloat(0), ptrFloat(3)}, {1, nil, nil},
+	} {
+		var got *float64
+		callGeometry(t, page, "headToHeadValue", []any{[]any{nil, nil}, []any{nil, nil}, "points", tc.points, tc.xpoints}, &got)
+		if (got == nil) != (tc.want == nil) || got != nil && !near(*got, *tc.want) {
+			t.Fatalf("points gap = %v, want %v", got, tc.want)
+		}
+	}
+	for _, values := range [][]any{{2.6}, {0}, {nil}, {-3, 3}, {}} {
+		var bounds struct{ Extent float64 }
+		callGeometry(t, page, "headToHeadGeometry", []any{values, 390, 260, "points"}, &bounds)
+		if bounds.Extent != 3 {
+			t.Fatalf("points extent = %v", bounds.Extent)
+		}
 	}
 }
 

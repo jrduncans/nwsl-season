@@ -23,6 +23,7 @@ type exploreHeadToHeadRow struct {
 	Points         int    `json:"points"`
 	ExpectedValues [3]string
 	BasisScore     string
+	PointsGap      string
 	ChartGap       string
 	ExpectedMargin string
 	Margin         int64 `json:"margin"`
@@ -84,6 +85,8 @@ type exploreHeadToHeadView struct {
 	H2HRecordRows                             []exploreHeadToHeadRecordRow
 	H2HSort, H2HOrder, H2HSeries              string
 	H2HBoth, H2HExpectedOnly, H2HShowExpected bool
+	H2HPoints                                 bool
+	H2HPointsTiles                            []explorePointsTile
 	H2HExpectedRows                           []exploreHeadToHeadComparison
 	H2HCoverage, H2HXGLabel, H2HDirection     string
 	H2HExpanded                               bool
@@ -97,7 +100,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		value   *string
 		allowed []string
 	}{
-		{"h2h-series", &page.H2HSeries, []string{"actual", "expected", "both"}},
+		{"h2h-series", &page.H2HSeries, []string{"actual", "expected", "both", "points"}},
 		{"h2h-sort", &page.H2HSort, []string{"date", "venue", "result", "margin"}},
 		{"h2h-order", &page.H2HOrder, []string{"asc", "desc"}},
 	} {
@@ -114,6 +117,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 	if err != nil {
 		return page, err
 	}
+	page.H2HPoints = page.H2HSeries == "points"
 	page.H2HBoth = page.H2HSeries == "both"
 	page.H2HExpectedOnly = page.H2HSeries == "expected"
 	page.H2HShowExpected = page.H2HSeries != "actual"
@@ -136,10 +140,10 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			case 1:
 				result = "Draw"
 			}
-			pair.Rows = append(pair.Rows, exploreHeadToHeadRow{exploreMatchRecord: record, Season: meeting.Season, Active: meeting.Active, Result: result, Points: meeting.Points, Margin: meeting.ScoreFor - meeting.ScoreAgainst, Position: i, BasisScore: h2hBasisScore(meeting), ChartGap: h2hChartGap(meeting), ExpectedMargin: h2hExpectedMargin(meeting), ExpectedValues: [3]string{h2hExpectedValue(meeting.XGFor), h2hExpectedValue(meeting.XGAgainst), h2hExpectedValue(meeting.XPoints)}})
+			pair.Rows = append(pair.Rows, exploreHeadToHeadRow{exploreMatchRecord: record, Season: meeting.Season, Active: meeting.Active, Result: result, Points: meeting.Points, Margin: meeting.ScoreFor - meeting.ScoreAgainst, Position: i, BasisScore: h2hBasisScore(meeting), PointsGap: h2hPointsGap(meeting), ChartGap: h2hChartGap(meeting), ExpectedMargin: h2hExpectedMargin(meeting), ExpectedValues: [3]string{h2hExpectedValue(meeting.XGFor), h2hExpectedValue(meeting.XGAgainst), h2hExpectedValue(meeting.XPoints)}})
 		}
 		first, last := "", ""
-		active, venueUnknown := false, false
+		active, venueDateUnavailable := false, false
 		for _, row := range pair.Rows {
 			if first == "" || row.Season < first {
 				first = row.Season
@@ -148,7 +152,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 				last = row.Season
 			}
 			active = active || row.Active
-			venueUnknown = venueUnknown || row.VenueDateUnavailable
+			venueDateUnavailable = venueDateUnavailable || row.VenueDateUnavailable
 		}
 		years := first
 		if first != last {
@@ -161,7 +165,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		if summary.Undated {
 			pair.Warning = "Undated matches appear last."
 		}
-		if venueUnknown {
+		if venueDateUnavailable {
 			if pair.Warning != "" {
 				pair.Warning += " "
 			}
@@ -215,8 +219,16 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		}
 		page.H2HRecordRows = append(page.H2HRecordRows, exploreHeadToHeadRecordRow{Label: row.label, HeadToHeadRecord: row.record, Rate: rate, Goals: goals, Coverage: coverage})
 	}
+	pointMatches := make([]exploreMatchRecord, 0, len(page.H2HPair.Rows))
+	for _, row := range page.H2HPair.Rows {
+		pointMatches = append(pointMatches, row.exploreMatchRecord)
+	}
+	page.H2HPointsTiles = explorePointsTiles(pointMatches, "meeting")
 	page.H2HExpectedRows = h2hComparisons(page.H2HPair, basis)
 	page.H2HCoverage = h2hCoverage(page.H2HPair, basis, page.H2HShowExpected)
+	if page.H2HPoints {
+		page.H2HCoverage = ""
+	}
 	page.H2HRows = append([]exploreHeadToHeadRow(nil), page.H2HPair.Rows...)
 	sortExploreHeadToHead(page.H2HRows, page.H2HSort, page.H2HOrder)
 	page.H2HColumns = []exploreTeamColumn{{Key: "date", Label: "Date"}, {Label: "Season"}, {Key: "venue", Label: "Venue"}, {Label: "Opponent"}, {Key: "margin", Label: "Score", Description: "goal margin"}, {Key: "result", Label: "Result"}, {Label: "Points"}}
@@ -469,6 +481,9 @@ func h2hMissingNote(n int, metric string) string {
 }
 
 func h2hDirection(series string, basis history.ScoringBasis) string {
+	if series == "points" {
+		return "Above zero: more points than xPoints. Below: fewer."
+	}
 	if series == "expected" {
 		return basisText(basis, "xG margin · up: more xG for · zero: level · down: more xG against")
 	}
@@ -479,6 +494,13 @@ func h2hDirection(series string, basis history.ScoringBasis) string {
 		return "Non-penalty goal margin · zero: level"
 	}
 	return "Goal margin · up: win · zero: draw · down: loss"
+}
+
+func h2hPointsGap(meeting history.HeadToHeadMeeting) string {
+	if meeting.XPoints == nil {
+		return "Unavailable"
+	}
+	return h2hSignedMargin(float64(meeting.Points) - *meeting.XPoints)
 }
 
 func h2hChartGap(meeting history.HeadToHeadMeeting) string {
