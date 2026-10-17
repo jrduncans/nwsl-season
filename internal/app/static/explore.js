@@ -1970,7 +1970,7 @@
     const series = ['goals', 'xg', 'both'].includes(params.get('series')) ? params.get('series') : 'both';
     const mode = params.get('trend-mode') === 'match' ? 'match' : 'rolling';
     const window = ['3', '5', '10'].includes(params.get('window')) ? Number(params.get('window')) : 5;
-    const rolling = mode === 'rolling', balance = view === 'balance', difference = view === 'difference', relative = view === 'relative', points = view === 'points';
+    const rolling = mode === 'rolling', difference = view === 'difference', balance = view === 'balance', relative = view === 'relative', points = view === 'points';
     const pointsGap = points && !rolling;
     const signedValues = difference;
     const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : 'goals';

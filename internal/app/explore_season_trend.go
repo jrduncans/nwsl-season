@@ -115,10 +115,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	// Scoring balance always includes actual and xG. The shared series query is
 	// retained for Season by season, but has no effect on Match by match.
 	series := "both"
-	switch page.TrendView {
-	case "compare", "difference", "points":
-		series = "both"
-	case "relative":
+	if page.TrendView == "relative" {
 		series = page.TrendAverageSeries
 	}
 	measures := []int{0, 1}

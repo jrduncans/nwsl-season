@@ -514,7 +514,8 @@ team's xG coverage is incomplete; goal ranks remain.
 
 Scoring balance always shows both Goals and xG. A carried `series` parameter
 belongs to Season by season and is ignored here; it stays in the form and links
-so switching views restores that selection.
+so switching views restores that selection. Benchmarks defaults to Goals even
+when a saved URL carries `series=xg`; set `average-series=xg` to select xG.
 
 Matches are numbered by kickoff instant (`fixtures.ParseKickoff` handles both
 RFC 3339 and ASA timestamps), with fixture ID breaking ties; a missing kickoff

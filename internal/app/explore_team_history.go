@@ -13,6 +13,14 @@ import (
 // team and the default Team profile selection.
 const portlandThornsTeamID = "Pk5LeeNqOW"
 
+var exploreSeriesOptions = []string{"goals", "xg", "both"}
+
+func ignoreInvalidExploreSeries(query url.Values) {
+	if values, present := query["series"]; present && (len(values) != 1 || !slices.Contains(exploreSeriesOptions, values[0])) {
+		query.Del("series")
+	}
+}
+
 type exploreTeamHistoryRecord struct {
 	exploreTeamRecord
 	Season string
@@ -58,7 +66,7 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 	}{
 		{"history-sort", &page.HistorySort, keys},
 		{"history-order", &page.HistoryOrder, []string{"asc", "desc"}},
-		{"series", &page.HistorySeries, []string{"goals", "xg", "both"}},
+		{"series", &page.HistorySeries, exploreSeriesOptions},
 		{"context", &page.HistoryContext, []string{"on", "off"}},
 	} {
 		if values, present := query[field.key]; present {

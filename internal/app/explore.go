@@ -144,9 +144,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if view == "season-trend" {
 		// `series` belongs to Season by season. Match by match carries valid
 		// choices through its form, but ignores malformed carried values.
-		if values := profileQuery["series"]; len(values) != 1 || !slices.Contains([]string{"goals", "xg", "both"}, values[0]) {
-			profileQuery.Del("series")
-		}
+		ignoreInvalidExploreSeries(profileQuery)
 	}
 	page.exploreTeamHistoryView, err = exploreTeamHistory(profileQuery, teams.TeamSeasons)
 	if err != nil {
@@ -178,9 +176,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	officialQuery := cloneQuery(r.URL.Query())
 	officialQuery.Del("penalties")
 	if view == "season-trend" {
-		if values := officialQuery["series"]; len(values) != 1 || !slices.Contains([]string{"goals", "xg", "both"}, values[0]) {
-			officialQuery.Del("series")
-		}
+		ignoreInvalidExploreSeries(officialQuery)
 	}
 	officialTeams, err := exploreTeams(officialQuery, allSummaries, archive)
 	if err != nil {
