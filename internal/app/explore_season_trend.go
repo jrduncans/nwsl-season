@@ -169,6 +169,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 						value = exploreRollingValue(team.Matches, index, column.Measure, window)
 					}
 					display := exploreTrendNumber(&value.Actual)
+					if page.TrendMode == "match" {
+						display = fmt.Sprintf("%.0f", value.Actual)
+					}
 					if column.Expected {
 						display = exploreTrendNumber(value.Expected)
 					}

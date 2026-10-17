@@ -394,6 +394,9 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 									average = 0
 								}
 								want = fmt.Sprintf("%.2f", average)
+								if mode == "match" && !column.Expected {
+									want = fmt.Sprintf("%.0f", average)
+								}
 							}
 							if row.DisplayValues[columnIndex] != want {
 								t.Fatalf("%v, match %d, column %s: got %s, want %s", query, end+1, column.Label, row.DisplayValues[columnIndex], want)
@@ -425,7 +428,7 @@ func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := [][]string{{"0.00", "2.00"}, {"4.00", "0.00"}, {"2.00", "1.00"}}
+		want := [][]string{{"0", "2"}, {"4", "0"}, {"2", "1"}}
 		if series == "xg" {
 			want = [][]string{{"0.00", "1.00"}, {"Unavailable", "Unavailable"}, {"3.00", "3.00"}}
 		}
@@ -449,7 +452,7 @@ func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 		teams.TeamSeason = "2025"
 		query.Set("trend-mode", "match")
 		page, err = exploreSeasonTrend(query, teams, teamNameView{ID: "alpha"})
-		oneMatch := []string{"7.00", "4.00"}
+		oneMatch := []string{"7", "4"}
 		if series == "xg" {
 			oneMatch = []string{"0.00", "0.00"}
 		}
@@ -457,6 +460,9 @@ func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 			t.Fatalf("one-match season must keep original values, including zero xG: %+v, %v", page, err)
 		}
 		query.Set("trend-mode", "rolling")
+		if series == "goals" {
+			oneMatch = []string{"7.00", "4.00"}
+		}
 		page, err = exploreSeasonTrend(query, teams, teamNameView{ID: "alpha"})
 		if err != nil || !slices.Equal(page.TrendRows[0].DisplayValues, oneMatch) {
 			t.Fatalf("one-match rolling averages must preserve the original value: %+v, %v", page, err)

@@ -2175,3 +2175,67 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 		}
 	})
 }
+
+func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2025")
+	for _, basis := range []string{"include", "exclude"} {
+		visit(t, page, base+"explore?view=season-trend&season=2025&penalties="+basis)
+		for _, mode := range []string{"match", "rolling"} {
+			for _, view := range []string{"balance", "compare", "difference", "points", "relative"} {
+				t.Run(basis+"/"+mode+"/"+view, func(t *testing.T) {
+					gotoInPage(t, page, "explore?view=season-trend&season=2025&penalties="+basis+"&trend-mode="+mode+"&trend-view="+view)
+					var checks []struct {
+						Selector, Title, Want string
+						Numbers               bool
+					}
+					evalJSON(t, page, `() => ['season-trend', 'season-trend-xg'].flatMap(name => {
+      const selector = '[data-chart="'+name+'"]', canvas = document.querySelector(selector);
+      if (!canvas.getClientRects().length) return [];
+      const c = Chart.getChart(canvas), m = c.matchRows[0];
+      const [gf, ga] = m.score.split('–').map(Number), result = gf > ga ? 'Win' : gf < ga ? 'Loss' : 'Draw';
+      const callbacks = c.options.plugins.tooltip.callbacks, items = [{chart:c, dataIndex:0}];
+      const lines = callbacks.beforeBody(items).join(' ');
+      const numbers = c.data.datasets.every(s => {
+       const v = s.data[0], integer = !c.trendRolling && !s.expected;
+       const text = v == null ? 'Unavailable' : (c.trendSigned && v >= .005 ? '+' : '') + (integer ? String(v) : (Math.abs(v) < .005 ? '0.00' : v.toFixed(2)));
+       const needle = s.label + ': ' + text + (c.trendRolling && v != null ? ' per match' : '');
+       const start = lines.indexOf(needle);
+       return start >= 0 && !/[\d.]/.test(lines.charAt(start + needle.length));
+      });
+      return [{selector, title:callbacks.title(items).join(' '), want:'Match 1 · '+m.date+' · '+m.venue+' vs '+m.opponent+' · '+m.score+' · '+result, numbers}];
+     })`, nil, &checks)
+					if len(checks) == 0 {
+						t.Fatal("no charts")
+					}
+					for _, check := range checks {
+						if check.Title != check.Want || !check.Numbers {
+							t.Fatalf("tooltip: %+v", check)
+						}
+						if err := page.Locator(check.Selector).Focus(); err != nil {
+							t.Fatal(err)
+						}
+						if err := page.Keyboard().Press("Home"); err != nil {
+							t.Fatal(err)
+						}
+						if got := chartInspection(t, page, check.Selector); !strings.Contains(got.Status, check.Want) {
+							t.Fatalf("keyboard description: %q, want %q", got.Status, check.Want)
+						}
+					}
+					var tableNumbers bool
+					evalJSON(t, page, `() => {
+      const headings = [...document.querySelector('[data-trend-headings]').children].slice(5);
+      return [...document.querySelectorAll('[data-trend-rows] tr')].every(row => headings.every((h,i) => {
+       const text = row.cells[i+5].textContent;
+       return text === 'Unavailable' || (document.querySelector('[data-trend-mode]').value === 'match' && !/xG|npxG|xPoints/.test(h.textContent) ? /^-?\d+$/.test(text) : /^-?\d+\.\d{2}$/.test(text));
+      }));
+     }`, nil, &tableNumbers)
+					if !tableNumbers {
+						t.Fatal("table must distinguish actual counts from expected values and averages")
+					}
+				})
+			}
+		}
+	}
+}

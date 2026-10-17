@@ -420,7 +420,7 @@ func h2hComparisons(pair exploreHeadToHeadPair, basis history.ScoringBasis) []ex
 			r.ExpectedRate = fmt.Sprintf("%.2f per meeting", *metric.expected/float64(metric.expectedCount))
 		}
 		if metric.count > 0 {
-			r.Actual = fmt.Sprintf("%.2f", metric.actual)
+			r.Actual = fmt.Sprintf("%.0f", metric.actual)
 			r.Rate = fmt.Sprintf("%.2f per meeting", metric.actual/float64(metric.count))
 			if metric.expected != nil {
 				r.Expected = h2hExpectedValue(metric.expected)
