@@ -291,7 +291,7 @@
 <section data-panel="season-trend"{{if ne .View "season-trend"}} hidden{{end}} aria-labelledby="explore-season-trend-title">
 <h2 id="explore-season-trend-title">Match-by-match performance (regular-season)</h2>
 <form method="get" id="season-trend-controls" data-season-trend-controls class="explore-team-controls">
-<input type="hidden" name="view" value="season-trend">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
+<input type="hidden" name="view" value="season-trend"><input type="hidden" name="trend-sort" value="{{.TrendSort}}"><input type="hidden" name="trend-order" value="{{.TrendOrder}}">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
 <label>Season <select name="season" data-trend-season{{if not .TeamSeasons}} disabled{{end}}>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team" data-trend-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <label>Chart <select name="trend-view" data-trend-view><option value="balance"{{if eq .TrendView "balance"}} selected{{end}}>Scoring balance</option><option value="compare"{{if eq .TrendView "compare"}} selected{{end}}>Actual vs xG</option><option value="difference"{{if eq .TrendView "difference"}} selected{{end}}>Differential</option><option value="points"{{if eq .TrendView "points"}} selected{{end}}>Points vs xPoints</option><option value="relative"{{if eq .TrendView "relative"}} selected{{end}}>Benchmarks</option></select></label>
@@ -302,7 +302,7 @@
 {{template "penaltiesSelect" $}}
 <button class="button" type="submit" data-trend-submit>Show matches</button>
 </form>
-<p class="note" data-season-trend-note>Completed regular-season matches, in played order. {{if eq .TrendMode "rolling"}}Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.{{else}}Solid lines connect successive matches.{{end}} Dates are local to each match’s venue.{{if eq .TrendView "relative"}} References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.{{end}}{{if eq .TrendView "points"}} xPoints are ASA’s retrospective expected points for played matches.{{end}}{{if .NonPenalty}} Penalty kicks excluded.{{end}}</p>
+<p class="note" data-season-trend-note>Completed regular-season matches, in played order. {{if eq .TrendMode "rolling"}}Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.{{else if .TrendPointsGap}}Bars show points minus xPoints for each match.{{else}}Solid lines connect successive matches.{{end}} Dates are local to each match’s venue.{{if eq .TrendView "relative"}} References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.{{end}}{{if eq .TrendView "points"}} xPoints are ASA’s retrospective expected points for played matches.{{end}}{{if .NonPenalty}} Penalty kicks excluded.{{end}}</p>
 {{if .NonPenalty}}<p class="note" data-points-note="season-trend"{{if not ($.PointsNoteShown "season-trend")}} hidden{{end}}>{{$.PointsNote}}</p>{{end}}
 <p data-season-trend-empty{{if .TrendRows}} hidden{{end}}>No eligible recorded results for this team and season.</p>
 <div data-season-trend-results{{if not .TrendRows}} hidden{{end}}>
@@ -318,7 +318,14 @@
 <summary>Benchmark values, teams and coverage</summary>
 <div data-trend-reference-values>{{range .TrendReferences}}<p><strong>{{.Label}}: {{.Value}} per match</strong><br>{{.Coverage}}{{if .Members}} · {{.Members}}{{end}}<br>{{.Note}}</p>{{end}}</div>
 </details>
+<div class="explore-h2h-record" data-trend-points-tiles{{if not .TrendPointsGap}} hidden{{end}}>{{template "explorePointsTiles" .TrendPointsTiles}}</div>
 <div data-season-trend-plot hidden>
+<section data-trend-points-panel hidden>
+<h4 class="explore-context-heading">Points above or below xPoints · Each match</h4>
+<p>Above zero: more points than xPoints. Below: fewer.</p>
+<div class="explore-h2h-chart"><canvas data-chart="season-points-gap" tabindex="0" role="img" aria-label="Points minus xPoints by match" aria-describedby="explore-chart-help"></canvas></div>
+<p class="explore-keyboard-hint">Use arrow keys to inspect matches. Escape clears the tooltip.</p>
+</section>
 <div class="explore-legend" data-trend-legend></div>
 <section data-trend-goals-panel>
 <h4 class="explore-context-heading" data-trend-goals-title>{{$.T "Goals"}}</h4>
@@ -335,12 +342,12 @@
 <p class="explore-keyboard-hint">Use arrow keys to inspect matches. Escape clears the tooltip.</p>
 </section>
 </div>
-<details class="explore-context-details">
+<details class="explore-context-details" data-trend-values{{if eq .TrendSort "points-gap"}} open{{end}}>
 <summary>Match values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Season trend match values"><table class="explore-table explore-season-trend-table">
 <caption><span data-trend-table-caption>{{.TrendCaption}}</span></caption>
-<thead><tr data-trend-headings><th scope="col">Match</th><th scope="col">Date (venue local)</th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col">Score</th>{{range .TrendColumns}}<th scope="col">{{.Label}}</th>{{end}}</tr></thead>
+<thead><tr data-trend-headings><th scope="col">Match</th><th scope="col">Date (venue local)</th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col">Score</th>{{range .TrendColumns}}<th scope="col"{{if .Gap}} aria-sort="{{.Sort}}"{{end}}>{{if .Gap}}<a href="{{.URL}}" data-trend-sort="points-gap">{{.Label}}</a>{{else}}{{.Label}}{{end}}</th>{{end}}</tr></thead>
 <tbody data-trend-rows>{{range .TrendRows}}<tr><th scope="row">{{.Number}}</th><td>{{.Date}}</td><td>{{.Opponent}}</td><td>{{.Venue}}</td><td>{{.Score}}</td>{{range .DisplayValues}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody>
 </table></div>
 </details>

@@ -201,7 +201,7 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 	}
 	query := url.Values{"trend-view": {"points"}, "trend-mode": {"match"}, "series": {"xg"}}
 	page, err := exploreSeasonTrend(query, teams, teamNameView{ID: "team-0"})
-	if err != nil || page.TrendMissingXG || !page.TrendMissingXPoints || !slices.Equal(page.TrendRows[0].DisplayValues, []string{"3", "0.00"}) || page.TrendRows[1].DisplayValues[1] != "Unavailable" {
+	if err != nil || page.TrendMissingXG || !page.TrendMissingXPoints || !slices.Equal(page.TrendRows[0].DisplayValues, []string{"3", "0.00", "+3.00"}) || page.TrendRows[1].DisplayValues[1] != "Unavailable" {
 		t.Fatalf("points with independently missing xG/xPoints = %+v, %v", page, err)
 	}
 	for _, window := range []string{"3", "5"} {

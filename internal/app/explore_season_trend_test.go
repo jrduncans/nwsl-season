@@ -336,13 +336,13 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 							t.Fatal("differential must have its own value columns")
 						}
 					} else if view == "compare" {
-						want := []exploreTrendColumn{{"Goals scored", 0, false}, {"xG scored", 0, true}, {"Goals allowed", 1, false}, {"xG allowed", 1, true}}
+						want := []exploreTrendColumn{{Label: "Goals scored", Measure: 0}, {Label: "xG scored", Measure: 0, Expected: true}, {Label: "Goals allowed", Measure: 1}, {Label: "xG allowed", Measure: 1, Expected: true}}
 						if !slices.Equal(page.TrendColumns, want) {
 							t.Fatalf("comparison must pair actual and xG per metric: %v", page.TrendColumns)
 						}
 					} else if view == "points" {
 						measures = []int{3}
-						if !slices.Equal(page.TrendColumns, []exploreTrendColumn{{"Points", 3, false}, {"xPoints", 3, true}}) {
+						if !slices.Equal(page.TrendColumns[:2], []exploreTrendColumn{{Label: "Points", Measure: 3}, {Label: "xPoints", Measure: 3, Expected: true}}) {
 							t.Fatalf("points columns = %v", page.TrendColumns)
 						}
 					} else if view == "relative" {
@@ -363,11 +363,17 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					if effectiveSeries == "both" {
 						wantColumns *= 2
 					}
+					if view == "points" && mode == "match" {
+						wantColumns++
+					}
 					if len(page.TrendColumns) != wantColumns || page.TrendMissingXG != (view != "points" && effectiveSeries != "goals") {
 						t.Fatalf("wrong series selection: %+v", page)
 					}
 					for end, row := range page.TrendRows {
 						for columnIndex, column := range page.TrendColumns {
+							if column.Gap {
+								continue
+							}
 							start, count := end, 1
 							if mode == "rolling" {
 								count = min(end+1, window)

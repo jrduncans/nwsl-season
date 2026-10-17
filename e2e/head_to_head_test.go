@@ -661,3 +661,91 @@ func TestExploreHeadToHeadExpectedView(t *testing.T) {
 		}
 	}
 }
+
+// assertPointsChart checks the plotted population and tiles against the
+// oriented per-match inputs, including missing slots and venue encodings.
+func assertPointsChart(t *testing.T, page playwright.Page, selector, tiles string) {
+	t.Helper()
+	var agrees bool
+	evalJSON(t, page, `({selector, tiles}) => {
+ const c=Chart.getChart(document.querySelector(selector)), rows=c.meetings;
+ const close=(a,b)=>Math.abs(a-b)<1e-8;
+ if(c.scales.y.min!==-3||c.scales.y.max!==3||c.data.datasets.length!==1||c.config.type!=='bar') return false;
+ if(!rows.every((r,i)=>r.xpoints==null?c.data.datasets[0].data[i]===null:close(c.data.datasets[0].data[i],r.points-r.xpoints))) return false;
+ if(!rows.every((r,i)=>r.venue==='Home'?c.getDatasetMeta(0).data[i].options.backgroundColor==='#1F6FA8':c.getDatasetMeta(0).data[i].options.backgroundColor instanceof CanvasPattern)) return false;
+ const nodes=[...document.querySelectorAll(tiles+' [data-points-tile]')], first=nodes[0].getBoundingClientRect();
+ return nodes.length===3&&nodes.every(tile=>{
+ const r=tile.getBoundingClientRect(), meetings=rows.filter(row=>tile.dataset.pointsTile==='All'||row.venue===tile.dataset.pointsTile), n=meetings.length;
+ const covered=meetings.filter(row=>row.xpoints!=null), actual=meetings.reduce((s,r)=>s+r.points,0), expected=covered.reduce((s,r)=>s+r.xpoints,0);
+ return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&tile.textContent.includes(covered.length+' of '+n)&&tile.querySelector('strong').textContent.trim()===actual+' vs '+(n&&covered.length===n?expected.toFixed(2)+' xPts':'xPts incomplete');
+ });
+ }`, map[string]any{"selector": selector, "tiles": tiles}, &agrees)
+	if !agrees {
+		t.Fatal("points bars and venue totals must agree with complete inputs on a fixed ±3 axis")
+	}
+	assertNoHorizontalOverflow(t, page)
+	canvas := page.Locator(selector)
+	if err := canvas.Focus(); err != nil {
+		t.Fatal(err)
+	}
+	if err := canvas.Press("Home"); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	evalJSON(t, page, `()=>document.querySelector('[data-chart-status]').textContent`, nil, &status)
+	for _, part := range []string{"Points:", "xPoints:", "Points − xPoints:", " · "} {
+		if !strings.Contains(status, part) {
+			t.Fatalf("keyboard description %q lacks %s", status, part)
+		}
+	}
+	if err := canvas.Press("End"); err != nil {
+		t.Fatal(err)
+	}
+	if err := canvas.Press("Escape"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExploreHeadToHeadPoints(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&penalties=exclude")
+		chooseOption(t, page, "[data-h2h-series]", "points")
+		assertPointsChart(t, page, `[data-chart="head-to-head"]`, `[data-h2h-points-tiles]`)
+		for _, selector := range []string{"[data-h2h-penalties-label]", "[data-h2h-points-note]", "[data-h2h-venues]", "[data-h2h-comparison]"} {
+			if err := expect.Locator(page.Locator(selector)).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if queryOf(t, page).Get("h2h-series") != "points" {
+			t.Fatal("URL lost points")
+		}
+		chooseOption(t, page, "[data-h2h-series]", "both")
+		if err := expect.Locator(page.Locator("[data-h2h-points-tiles]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := page.GoBack(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("points"); err != nil {
+			t.Fatal(err)
+		}
+		assertPointsChart(t, page, `[data-chart="head-to-head"]`, `[data-h2h-points-tiles]`)
+		if _, err := page.Reload(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-h2h-points-tiles]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
+	visitStatic(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=points")
+	if err := expect.Locator(page.Locator("[data-h2h-fallback] li").First()).ToContainText("Points − xPoints:"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-h2h-points-tiles]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+}

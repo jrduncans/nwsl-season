@@ -1,0 +1,7 @@
+{{define "explorePointsTiles"}}
+{{range .}}<div class="explore-h2h-tile explore-points-tile" data-points-tile="{{.Label}}">
+<div class="explore-h2h-tile-label">{{if ne .Label "All"}}<i data-h2h-encoding="{{if eq .Label "Home"}}home{{else}}away{{end}}" aria-hidden="true"></i>{{end}}{{.Label}}</div>
+<strong>{{.Actual}} <span>vs {{.Expected}}</span></strong>
+<div>{{.Gap}}</div><div>{{.Rate}}</div><div class="note">{{.Coverage}}</div>
+</div>{{end}}
+{{end}}
