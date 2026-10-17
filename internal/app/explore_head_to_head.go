@@ -491,6 +491,7 @@ func h2hGoalMargin(meeting history.HeadToHeadMeeting) string {
 
 // parseHeadToHeadSeries validates once and returns canonical link state.
 // expected is a legacy spelling of the default Margins view, actual.
+// renderExplore issues the HTTP redirect after all selections are validated.
 func parseHeadToHeadSeries(query url.Values) (string, url.Values, error) {
 	series := "actual"
 	if values, present := query["h2h-series"]; present {

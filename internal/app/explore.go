@@ -209,6 +209,9 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			return
 		}
 	}
+	// parseHeadToHeadSeries already normalized rendering and generated links.
+	// After validating every selection, redirect explicit default/legacy URLs
+	// to that same canonical state instead of only rendering it canonically.
 	if view == "head-to-head" && r.URL.Query().Get("h2h-series") != "" && page.H2HSeries == "actual" {
 		query := r.URL.Query()
 		query.Del("h2h-series")
