@@ -158,7 +158,7 @@ selections, but generated links and forms omit the parameter. Blank, repeated
 and unsupported values still return the standard 400 page.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered Penalties select is last in each view's data-control row
-and never in the navigation; links and forms carry it.
+and never in the navigation; mixed-view links and forms carry its selection.
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and
@@ -395,8 +395,9 @@ goals. These are independent. Unrankable team-seasons appear last in the table
 for every sort, labelled `xPts incomplete` or `xG incomplete`; their actual
 values remain visible. The coverage note above the chart gives only the count,
 since the table names those rows. The only other notes above the chart are gap
-direction (when ranking by Gap) and the standard points note (Points with a
-carried exclusion). One short note below the chart combines the standing
+direction (when ranking by Gap) and the points note when Points appears beside
+a penalty-sensitive measure. On Points, Penalties is hidden, carried
+exclusions are ignored, and there is no points note. One short note below the chart combines the standing
 qualifications: per-match rates do not adjust for opponents or era and do not
 judge the best team, and active seasons use the ten-match rule.
 
@@ -654,6 +655,9 @@ unrounded values, with unavailable values last and newest season first on ties.
 With `measure=points`, the chart shows Points and/or xPoints only, so Penalties
 is hidden and a carried exclusion is ignored and removed from generated links
 and forms. Other measures retain the control and points note when applicable.
+For Goals and xG, Team History still shows official points and xPoints beside
+the selected scoring measure, so its points note remains visible when the
+penalty basis is excluded.
 
 League context adds, per season, a bar from the lowest to the highest team rate
 (an expected-value range needs complete coverage for every team that season),

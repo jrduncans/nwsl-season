@@ -45,8 +45,7 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if pointsOnlyExploreSelection(query) {
 		basis = history.AllShots
-		query.Del("penalties")
-		r.URL.RawQuery = query.Encode()
+		r.URL.RawQuery = withoutQueryParameter(r.URL.RawQuery, "penalties")
 	}
 	store, ok := a.store.(historicalStore)
 	if !ok {
@@ -64,6 +63,22 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderExplore(w, r, summaries, inputs, basis)
+}
+
+// withoutQueryParameter removes one already-validated selection without
+// re-encoding or reordering the remaining query string.
+func withoutQueryParameter(rawQuery, key string) string {
+	parts := strings.Split(rawQuery, "&")
+	kept := parts[:0]
+	for _, part := range parts {
+		name, _, _ := strings.Cut(part, "=")
+		decoded, err := url.QueryUnescape(name)
+		if err == nil && decoded == key {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	return strings.Join(kept, "&")
 }
 
 func (a *application) renderExploreBadRequest(w http.ResponseWriter, r *http.Request, err error) {

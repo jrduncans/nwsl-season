@@ -9,7 +9,13 @@
     if (!select) return;
     event.stopPropagation();
     const links = [...(select.closest('label')?.parentElement?.querySelectorAll('a[data-penalties-choice]') ?? [])];
-    links.find(link => link.dataset.penaltiesChoice === select.value)?.click();
+    const choice = links.find(link => link.dataset.penaltiesChoice === select.value);
+    if (choice) choice.click();
+    else {
+      const url = new URL(location.href);
+      if (select.value === 'exclude') url.searchParams.set('penalties', 'exclude'); else url.searchParams.delete('penalties');
+      location.assign(url);
+    }
   }, true);
   // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
@@ -71,9 +77,9 @@
     points: 'Above: more points earned than xPts; below: fewer.',
   };
   // Official points and ASA xPts keep penalties; say so wherever they appear.
-  const setPointsNote = (panel, shown) => {
+  const setPointsNote = (panel, shown, params) => {
     const note = root.querySelector(`[data-points-note="${panel}"]`);
-    if (note) note.hidden = !(nonPenalty && shown && !isPointsOnlySelection(new URL(location.href).searchParams));
+    if (note) note.hidden = !(nonPenalty && shown && !isPointsOnlySelection(params));
   };
   function isPointsOnlySelection(params) {
     const view = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
@@ -1302,6 +1308,7 @@
     const units = teamUnits.value;
     const unitLabel = units === 'total' ? 'in total' : 'per match';
     const measure = teamMeasures[teamMeasure.value];
+    const isPointsMeasure = measure === teamMeasures.points;
     const rows = season?.teams || [];
     const display = ['chart', 'gap', 'scatter', 'quadrant', 'table'].includes(params.get('display')) ? params.get('display') : 'chart';
     quadrantData.value = ['goals', 'xg', 'both'].includes(params.get('quadrant-data')) ? params.get('quadrant-data') : 'goals';
@@ -1323,13 +1330,13 @@
       : display === 'scatter' ? 'Actual vs expected by team (regular-season)'
       : display === 'quadrant' ? 'Scored vs allowed by team (regular-season)' : 'Actual vs expected (regular-season)';
     root.querySelector('[data-team-measure-control]').hidden = display === 'table' || display === 'quadrant';
-    root.querySelector('[data-team-controls] [data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && measure.index === 3;
+    root.querySelector('[data-team-controls] [data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && isPointsMeasure;
     root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
       `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
-    setPointsNote('teams', display === 'table' || (display !== 'quadrant' && measure.index === 3));
+    setPointsNote('teams', display === 'table' || (display !== 'quadrant' && isPointsMeasure), params);
     root.querySelector('[data-team-plot]').hidden = display !== 'chart';
     root.querySelector('[data-team-gap-plot]').hidden = display !== 'gap';
     root.querySelector('[data-team-scatter-plot]').hidden = display !== 'scatter';
@@ -1339,7 +1346,7 @@
     const missingXPoints = rows.some(row => row.values[3].expected === null);
     const warningTypes = display === 'quadrant' ? [] : display === 'table'
       ? [missingXG && T('xG'), missingXPoints && 'xPts'].filter(Boolean)
-      : [measure.index === 3 ? missingXPoints && 'xPts' : missingXG && T('xG')].filter(Boolean);
+      : [isPointsMeasure ? missingXPoints && 'xPts' : missingXG && T('xG')].filter(Boolean);
     const warning = root.querySelector('[data-team-warning]');
     warning.hidden = warningTypes.length === 0;
     warning.textContent = warningTypes.length === 0 ? '' : warningTypes.length === 2
@@ -1661,7 +1668,7 @@
     const contextEnabled = historyContext.checked;
     const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
     const context = historyContextData[measure.index];
-    const isPoints = measure.index === 3;
+    const isPoints = measure === teamMeasures.points;
     root.querySelector('[data-team-history-controls] [data-penalties-selector]').closest('label').hidden = isPoints;
     root.querySelector('#explore-team-history-title').textContent =
       `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
@@ -1669,7 +1676,7 @@
     choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
     choices[2].textContent = isPoints ? 'xPts' : 'xG';
-    setPointsNote('team-history', !isPoints);
+    setPointsNote('team-history', !isPoints, params);
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
     root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
     root.querySelector('[data-history-context-legend]').hidden = !contextEnabled;
@@ -2011,7 +2018,7 @@
     root.querySelector('[data-trend-team-name]').replaceChildren(teamName(team));
     root.querySelector('[data-trend-season-status]').textContent = `${season}${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
     const pointsMetric = points || ['points', 'xpoints'].includes(effectiveSeries);
-    setPointsNote('season-trend', pointsMetric);
+    setPointsNote('season-trend', pointsMetric, params);
     root.querySelector('[data-trend-warning]').hidden = pointsMetric || effectiveSeries === 'goals' || !matches.some(match => match.values[0].expected == null);
     root.querySelector('[data-trend-points-warning]').hidden = !pointsMetric || effectiveSeries === 'points' || !matches.some(match => match.values[3].expected == null);
     root.querySelector('[data-trend-venue-date-unavailable]').hidden = !matches.some(match => match.venueDateUnavailable);
@@ -2748,8 +2755,9 @@
     }
     if (!['team-seasons', 'head-to-head', 'thresholds'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
     dismiss();
+    root.querySelectorAll('[data-penalties-selector]').forEach(select => { select.closest('label').hidden = false; });
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
-    if (view === 'parity') root.querySelector('[data-parity-controls] [data-penalties-selector]')?.closest('label')?.setAttribute('hidden', '');
+    root.querySelectorAll('[data-panel="parity"] [data-penalties-selector]').forEach(select => { select.closest('label').hidden = view === 'parity'; });
     const group = view === 'teams' ? 'teams'
       : ['team-rankings', 'season-trend', 'team-history', 'head-to-head'].includes(view) ? 'profile' : 'league';
     root.querySelectorAll('[data-group-views]').forEach(nav => { nav.hidden = nav.dataset.groupViews !== group; });

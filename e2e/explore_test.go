@@ -2493,3 +2493,62 @@ func TestExplorePointsOnlySwitchDropsPenaltyBasis(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExplorePointsOnlyNavigationRestoresMixedViewPenaltyControls(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=parity")
+	expect := playwright.NewPlaywrightAssertions()
+	if err := expect.Locator(page.Locator("[data-panel=parity] .penalties-select")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	gotoInPage(t, page, "explore?view=home-advantage")
+	if err := expect.Locator(page.Locator("[data-panel=home-advantage] .penalties-select")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	gotoInPage(t, page, "explore?view=teams&display=table")
+	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	chooseOption(t, page, "[data-team-controls] [data-penalties-selector]", "exclude")
+	if err := page.WaitForURL("**penalties=exclude**"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-points-note=teams]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExplorePointsOnlyPenaltyVisibilityMatchesSelectionMatrix(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams")
+	expect := playwright.NewPlaywrightAssertions()
+	for _, test := range []struct {
+		path     string
+		selector string
+		hidden   bool
+	}{
+		{"explore?view=teams&measure=points", "[data-team-controls] .penalties-select", true},
+		{"explore?view=teams&measure=points&display=table", "[data-team-controls] .penalties-select", false},
+		{"explore?view=teams&measure=points&display=quadrant", "[data-team-controls] .penalties-select", false},
+		{"explore?view=team-history&measure=points", "[data-team-history-controls] .penalties-select", true},
+		{"explore?view=team-history&measure=for", "[data-team-history-controls] .penalties-select", false},
+		{"explore?view=season-trend&trend-view=points", "[data-season-trend-controls] .penalties-select", true},
+		{"explore?view=season-trend&trend-view=relative&average-series=xpoints", "[data-season-trend-controls] .penalties-select", true},
+		{"explore?view=head-to-head&h2h-series=points", "[data-h2h-penalties-label]", true},
+		{"explore?view=parity", "[data-parity-controls] .penalties-select", true},
+		{"explore?view=home-advantage", "[data-panel=home-advantage] .penalties-select", false},
+		{"explore?view=team-seasons&team-seasons-measure=points", "[data-team-seasons-penalties-control]", true},
+	} {
+		gotoInPage(t, page, test.path)
+		locator := page.Locator(test.selector)
+		if test.hidden {
+			if err := expect.Locator(locator).ToBeHidden(); err != nil {
+				t.Fatalf("%s: expected Penalties hidden: %v", test.path, err)
+			}
+		} else if err := expect.Locator(locator).ToBeVisible(); err != nil {
+			t.Fatalf("%s: expected Penalties visible: %v", test.path, err)
+		}
+	}
+}

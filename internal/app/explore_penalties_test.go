@@ -288,6 +288,13 @@ func TestExplorePointsOnlySelectionsIgnoreAndCanonicalizePenalties(t *testing.T)
 	}
 }
 
+func TestWithoutQueryParameterPreservesRemainingOrder(t *testing.T) {
+	got := withoutQueryParameter("z=last&%70enalties=exclude&a=first&empty=&z=again", "penalties")
+	if want := "z=last&a=first&empty=&z=again"; got != want {
+		t.Fatalf("withoutQueryParameter() = %q, want %q", got, want)
+	}
+}
+
 func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *testing.T) {
 	archive := penaltyArchive(t, 19)
 	code, body := getPage(t, archive, "/explore?view=table&penalties=exclude")
