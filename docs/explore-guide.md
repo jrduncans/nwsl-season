@@ -89,6 +89,9 @@ Presentation:
   tooltips, touch and keyboard behavior stay consistent across views. Do not
   add SVG trend charts or a separate chart engine. SVG is reserved for existing
   supplementary geometry such as the Parity team strip, not new trend charts.
+- Show individual-match goals, goals allowed, goal margins and points, and
+  totals of those counts, as whole numbers. Keep two decimals for xG, xPoints,
+  rolling averages, per-match rates and differences involving expected values.
 - Label values, units and reference lines directly. Over-performance views use
   a zero line and a consistent favorable direction. Color is never the only
   signal; no dual axes, unexplained composite scores, or one line per team.
@@ -509,6 +512,10 @@ team's xG coverage is incomplete; goal ranks remain.
 Matches are numbered by kickoff instant (`fixtures.ParseKickoff` handles both
 RFC 3339 and ASA timestamps), with fixture ID breaking ties; a missing kickoff
 sorts last with a warning.
+
+Every chart's tooltip and keyboard description starts with the match number,
+venue-local date, venue, opponent, official score and result (Win, Draw or Loss).
+The result follows the official score even when penalties are excluded.
 
 A rolling average includes the current match and resets each season. Until the
 window fills it averages all matches so far (`min(played, window)`), drawn as a

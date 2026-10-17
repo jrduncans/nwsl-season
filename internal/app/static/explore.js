@@ -1880,12 +1880,17 @@
       return row;
     })));
   }
+  function seasonTrendNumber(value, expected, rolling, signedValue = false) {
+    if (value == null) return 'Unavailable';
+    if (expected || rolling) return signedValue ? signed(value) : fixed(value);
+    return `${signedValue && value > 0 ? '+' : ''}${value}`;
+  }
   function seasonTrendInspection(chart, mark) {
     const match = chart.matchRows[mark.index];
-    const title = `Match ${mark.index + 1} · ${match.date} · ${match.venue} vs ${match.opponent} · ${match.score}`;
+    const title = `Match ${mark.index + 1} · ${match.date} · ${match.venue} vs ${match.opponent} · ${match.score} · ${{3: 'Win', 1: 'Draw', 0: 'Loss'}[match.values[3].actual]}`;
     const lines = chart.data.datasets.map(series => {
       const value = series.data[mark.index];
-      return `${series.label}: ${value == null ? 'Unavailable' : chart.trendSigned ? signed(value) : fixed(value)}${chart.trendRolling && value != null ? ' per match' : ''}`;
+      return `${series.label}: ${seasonTrendNumber(value, series.expected, chart.trendRolling, chart.trendSigned)}${chart.trendRolling && value != null ? ' per match' : ''}`;
     });
     if (chart.trendAverage) chart.data.datasets.forEach(series => series.references.forEach(reference => {
       const names = reference.identifyTeams && reference.names?.length ? ` · ${reference.names.join(', ')}` : '';
@@ -2022,7 +2027,7 @@
       values.forEach((value, column) => {
         const cell = document.createElement(column === 0 ? 'th' : 'td');
         if (column === 0) cell.scope = 'row';
-        cell.textContent = column < 5 ? String(value) : value == null ? 'Unavailable' : fixed(value);
+        cell.textContent = column < 5 ? String(value) : seasonTrendNumber(value, visible[column - 5].expected, rolling);
         row.append(cell);
       });
       return row;
@@ -2483,7 +2488,7 @@
     ];
     comparison.replaceChildren(...metrics.map(metric => {
       const tile = archiveElement('div'); tile.className = 'explore-h2h-comparison-tile'; tile.append(archiveElement('h3', metric.label));
-      const total = archiveElement('p', metric.n ? fixed(metric.actual) + ' ' : 'Unavailable '); total.className = 'explore-h2h-total';
+      const total = archiveElement('p', metric.n ? String(metric.actual) + ' ' : 'Unavailable '); total.className = 'explore-h2h-total';
       total.append(archiveElement('span', `vs ${metric.expected === null ? metric.missing : fixed(metric.expected)} ${metric.expectedLabel}`)); tile.append(total);
       const gap = metric.expected === null ? null : metric.actual - metric.expected;
       tile.append(archiveElement('p', gap === null ? metric.missing : `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected`));

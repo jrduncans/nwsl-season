@@ -2175,3 +2175,84 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 		}
 	})
 }
+
+func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	path := "explore?view=season-trend&season=2025&team=odMX2OJqYL"
+	page := explorePage(t, base, Mobile, path)
+	// Boston's first match is a 2–0 win with 1.10–0.70 xG and 1.54 xPoints.
+	// Its second match is a 1–0 win from a penalty: excluding penalties leaves
+	// a level goal margin while the official result remains a win.
+	cases := []struct {
+		view, mode string
+		table      []string
+		lines      []string
+	}{
+		{"balance", "match", []string{"2", "0", "1.10", "0.70"}, []string{"Goals scored: 2", "Goals allowed: 0", "xG scored: 1.10", "xG allowed: 0.70"}},
+		{"balance", "rolling", []string{"2.00", "0.00", "1.10", "0.70"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match", "xG scored: 1.10 per match", "xG allowed: 0.70 per match"}},
+		{"compare", "match", []string{"2", "1.10", "0", "0.70"}, []string{"Goals scored: 2", "xG scored: 1.10", "Goals allowed: 0", "xG allowed: 0.70"}},
+		{"compare", "rolling", []string{"2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
+		{"difference", "match", []string{"2", "0.40"}, []string{"Goal differential: +2", "xG differential: +0.40"}},
+		{"difference", "rolling", []string{"2.00", "0.40"}, []string{"Goal differential: +2.00 per match", "xG differential: +0.40 per match"}},
+		{"points", "match", []string{"3", "1.54"}, []string{"Points: 3", "xPoints: 1.54"}},
+		{"points", "rolling", []string{"3.00", "1.54"}, []string{"Points: 3.00 per match", "xPoints: 1.54 per match"}},
+		{"relative", "match", []string{"2", "0"}, []string{"Goals scored: 2", "Goals allowed: 0"}},
+		{"relative", "rolling", []string{"2.00", "0.00"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match"}},
+	}
+	check := func(t *testing.T, index int, scoreResult string, wantTable, wantLines []string) {
+		t.Helper()
+		var charts []struct{ Selector, Title, Lines string }
+		evalJSON(t, page, `(index) => ['season-trend', 'season-trend-xg'].flatMap(name => {
+   const selector = '[data-chart="'+name+'"]', canvas = document.querySelector(selector);
+   if (!canvas.getClientRects().length) return [];
+   const c = Chart.getChart(canvas), callbacks = c.options.plugins.tooltip.callbacks;
+   const items = [{chart:c, dataIndex:index}];
+   return [{selector, title:callbacks.title(items).join(' '), lines:callbacks.beforeBody(items).join(' ')}];
+  })`, index, &charts)
+		if len(charts) == 0 {
+			t.Fatal("no charts")
+		}
+		var allLines string
+		for _, chart := range charts {
+			if !strings.HasSuffix(chart.Title, scoreResult) {
+				t.Fatalf("tooltip title: %q, want suffix %q", chart.Title, scoreResult)
+			}
+			allLines += " " + chart.Lines
+			if err := page.Locator(chart.Selector).Focus(); err != nil {
+				t.Fatal(err)
+			}
+			if err := page.Keyboard().Press("Home"); err != nil {
+				t.Fatal(err)
+			}
+			if index == 1 {
+				if err := page.Keyboard().Press("ArrowRight"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := chartInspection(t, page, chart.Selector); !strings.Contains(got.Status, chart.Title) {
+				t.Fatalf("keyboard description: %q, want %q", got.Status, chart.Title)
+			}
+		}
+		for _, line := range wantLines {
+			if !regexp.MustCompile(`(?:^| )` + regexp.QuoteMeta(line) + `(?: |$)`).MatchString(allLines) {
+				t.Fatalf("tooltip lines %q lack %q", allLines, line)
+			}
+		}
+		var values []string
+		evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-trend-rows] tr')[index].cells].slice(5).map(cell => cell.textContent)`, index, &values)
+		if !slices.Equal(values, wantTable) {
+			t.Fatalf("table values: %v, want %v", values, wantTable)
+		}
+	}
+	for _, tc := range cases {
+		t.Run(tc.view+"/"+tc.mode, func(t *testing.T) {
+			gotoInPage(t, page, path+"&trend-view="+tc.view+"&trend-mode="+tc.mode)
+			check(t, 0, "2–0 · Win", tc.table, tc.lines)
+		})
+	}
+	t.Run("official result with penalties excluded", func(t *testing.T) {
+		visit(t, page, base+path+"&penalties=exclude&trend-view=difference&trend-mode=match")
+		check(t, 1, "1–0 · Win", []string{"0", "-0.40"}, []string{"Non-penalty goal differential: 0", "npxG differential: -0.40"})
+	})
+}

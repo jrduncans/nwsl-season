@@ -319,7 +319,11 @@ func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, row := range h2hComparisons(exploreHeadToHeadPair{All: want.All, Expected: want.AllExpected}, basis) {
+		actualTotals := []int64{want.AllExpected.GoalsFor, want.AllExpected.GoalsAgainst, int64(want.All.Points)}
+		for i, row := range h2hComparisons(exploreHeadToHeadPair{All: want.All, Expected: want.AllExpected}, basis) {
+			if row.Actual != fmt.Sprint(actualTotals[i]) {
+				t.Fatalf("actual total %q, want %d", row.Actual, actualTotals[i])
+			}
 			for _, value := range []string{row.Label, row.Actual, row.Expected, row.Gap, row.Rate, row.Coverage} {
 				requireText(t, body, "[data-h2h-comparison]", value)
 			}

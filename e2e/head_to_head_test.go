@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -496,6 +497,15 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 		}
 		if err := expect.Locator(page.Locator("[data-h2h-fallback]")).ToContainText("Unavailable"); err != nil {
 			t.Fatal(err)
+		}
+		headlines, err := page.Locator("[data-h2h-comparison] .explore-h2h-total").AllTextContents()
+		if err != nil || len(headlines) != 3 {
+			t.Fatalf("comparison headlines: %v, %v", headlines, err)
+		}
+		for _, headline := range headlines {
+			if !regexp.MustCompile(`^\s*\d+\s+vs `).MatchString(headline) {
+				t.Fatalf("actual total must be a whole number: %q", headline)
+			}
 		}
 		totals, err := page.Locator("[data-h2h-comparison]").TextContent()
 		if err != nil {
