@@ -450,6 +450,20 @@ func teamTableColumn(t *testing.T, page playwright.Page, index int) []string {
 func gotoInPage(t *testing.T, page playwright.Page, path string) {
 	t.Helper()
 	_, query, _ := strings.Cut(path, "?")
+	parsed, _ := url.ParseQuery(query)
+	var loadedNonPenalty bool
+	evalJSON(t, page, `() => document.querySelector('[data-explore]').dataset.penalties === 'exclude'`, nil, &loadedNonPenalty)
+	targetNonPenalty := parsed.Get("penalties") == "exclude" && !isPointsOnlyExploreQuery(parsed)
+	if loadedNonPenalty != targetNonPenalty {
+		base := strings.SplitN(page.URL(), "explore?", 2)[0]
+		if _, err := page.Goto(base+path, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateLoad}); err != nil {
+			t.Fatalf("reload to %s: %v", path, err)
+		}
+		if err := settle(page); err != nil {
+			t.Fatalf("settle after loading %s: %v", path, err)
+		}
+		return
+	}
 	if _, err := page.Evaluate(`(query) => {
 		history.pushState(null, '', '?' + query);
 		window.dispatchEvent(new PopStateEvent('popstate'));
@@ -458,6 +472,27 @@ func gotoInPage(t *testing.T, page playwright.Page, path string) {
 	}
 	if err := settle(page); err != nil {
 		t.Fatalf("settle after moving to %s: %v", path, err)
+	}
+}
+
+func isPointsOnlyExploreQuery(query url.Values) bool {
+	view := query.Get("view")
+	switch view {
+	case "parity":
+		return true
+	case "teams":
+		display := query.Get("display")
+		return display != "table" && display != "quadrant" && query.Get("measure") == "points"
+	case "team-history":
+		return query.Get("measure") == "points"
+	case "team-seasons":
+		return query.Get("team-seasons-measure") == "" || query.Get("team-seasons-measure") == "points"
+	case "season-trend":
+		return query.Get("trend-view") == "points" || (query.Get("trend-view") == "relative" && (query.Get("average-series") == "points" || query.Get("average-series") == "xpoints"))
+	case "head-to-head":
+		return query.Get("h2h-series") == "points"
+	default:
+		return false
 	}
 }
 
@@ -2429,5 +2464,84 @@ func TestExplorePointsNativeSortURLs(t *testing.T) {
 	}
 	if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
 		t.Fatal("native mode switch retained gap sort")
+	}
+}
+
+func TestExplorePointsOnlySwitchDropsPenaltyBasis(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams&measure=for&penalties=exclude")
+	expect := playwright.NewPlaywrightAssertions()
+	chooseOption(t, page, "[data-team-measure]", "points")
+	if err := page.WaitForURL("**measure=points**"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-team-controls] .penalties-select")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	if queryOf(t, page).Has("penalties") {
+		t.Fatalf("points-only selection retained penalties: %s", page.URL())
+	}
+	if err := expect.Locator(page.Locator("[data-points-note=teams]")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	chooseOption(t, page, "[data-team-measure]", "for")
+	if queryOf(t, page).Has("penalties") {
+		t.Fatalf("switching back to goals did not use Included: %s", page.URL())
+	}
+	if err := expect.Locator(page.Locator("[data-team-controls] .penalties-select")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExplorePointsOnlyNavigationRestoresMixedViewPenaltyControls(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=parity")
+	expect := playwright.NewPlaywrightAssertions()
+	if err := expect.Locator(page.Locator("[data-panel=parity] .penalties-select")).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	gotoInPage(t, page, "explore?view=home-advantage")
+	if err := expect.Locator(page.Locator("[data-panel=home-advantage] .penalties-select")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	var inactiveParityControlRemainsHidden bool
+	evalJSON(t, page, `() => document.querySelector('[data-panel=parity] .penalties-select').hidden`, nil, &inactiveParityControlRemainsHidden)
+	if !inactiveParityControlRemainsHidden {
+		t.Fatal("navigating to Home advantage unexpectedly revealed the inactive Parity control")
+	}
+	gotoInPage(t, page, "explore?view=teams&display=table")
+	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	chooseOption(t, page, "[data-team-controls] [data-penalties-selector]", "exclude")
+	if err := page.WaitForURL("**penalties=exclude**"); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("[data-points-note=teams]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExplorePointsOnlyPenaltyVisibilityMatchesSelectionMatrix(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	page := explorePage(t, base, Desktop, "explore?view=teams")
+	expect := playwright.NewPlaywrightAssertions()
+	for _, selection := range apptest.ExplorePointsOnlyCases() {
+		path := "explore"
+		if selection.Query != "" {
+			path += "?" + selection.Query
+		}
+		gotoInPage(t, page, path)
+		locator := page.Locator(selection.Selector)
+		if selection.PointsOnly {
+			if err := expect.Locator(locator).ToBeHidden(); err != nil {
+				t.Fatalf("%s: expected Penalties hidden: %v", path, err)
+			}
+		} else if err := expect.Locator(locator).ToBeVisible(); err != nil {
+			t.Fatalf("%s: expected Penalties visible: %v", path, err)
+		}
 	}
 }

@@ -144,15 +144,21 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. The exceptions are Shield and playoff thresholds (always points-only, ignoring
-carried penalties) and Team-seasons on Points: the control is
-absent and the basis is ignored, with the points note for a carried `exclude`.
-Head to head offers Penalties in Actual, Expected and Actual vs expected;
-its Points vs xPoints view hides the control and points note, ignores the
-carried basis, and uses official points and ASA xPoints. The other views change
-goals and xG while official results and points stay fixed.
+`penalties=exclude`. Points-only selections hide the control, ignore and drop a
+carried basis, and show no points note: Compare teams on Points except Table and
+Scored vs allowed; Season by season on Points; Match by match on Points vs
+xPoints and Benchmarks showing Points or xPoints; Head to head on Points vs
+xPoints; Parity; and Team-seasons on Points. Parity always uses all-shots
+eligibility, even for an old link with `penalties=exclude`. Shield and playoff
+thresholds also always ignore a carried basis and have no Penalties control.
+Mixed views keep the control and the points note when they show points: Compare
+teams' Table, Home advantage, and Head to head's views other than Points vs
+xPoints. The server accepts valid old `penalties=exclude` links for points-only
+selections, but generated links and forms omit the parameter. Blank, repeated
+and unsupported values still return the standard 400 page.
+The other views change goals and xG while official results and points stay fixed.
 The server-rendered Penalties select is last in each view's data-control row
-and never in the navigation; links and forms carry it.
+and never in the navigation; mixed-view links and forms carry its selection.
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and
@@ -163,9 +169,9 @@ coverage gets `incomplete_non_penalty_data`. Team match records keep the
 official score beside the basis goals.
 
 Official points, ASA xPts, benchmark groups and forecasts never change with the
-basis (ASA publishes no non-penalty xPoints). Where points appear on the
-non-penalty basis, a note says "Points include penalties; ASA publishes no
-non-penalty expected points." Labels follow the basis (`xG` → `npxG`, `Goals` →
+basis (ASA publishes no non-penalty xPoints). Mixed views that combine points
+with non-penalty goals or xG show the note "Points include penalties; ASA
+publishes no non-penalty expected points." Labels follow the basis (`xG` → `npxG`, `Goals` →
 `Non-penalty goals`, `xGD` → `npxGD`) through `basisText` in Go and `T` in
 `explore.js`; option text and select labels never change, so controls keep
 their size. Fixture results add an `npxG` line when a match had penalty xG.
@@ -238,8 +244,9 @@ IQR, sorted from unrounded values (`parity-sort=season|teams|matches|spread|chan
 `parity-order=asc|desc`, default season descending, unavailable values last).
 Quartiles use linear interpolation between closest ranks (`history.Quantile`,
 R and NumPy's default), and the chart receives them from the server. Points
-never change with `penalties`; that basis keeps its eligibility rule and the
-standard points note. The calculation is `history.SummarizeParity`.
+never change with `penalties`; Parity has no Penalties control and always uses
+all-shots eligibility, even when an old link carries `penalties=exclude`. The
+calculation is `history.SummarizeParity`.
 
 ### Shield and playoff thresholds
 
@@ -388,8 +395,9 @@ goals. These are independent. Unrankable team-seasons appear last in the table
 for every sort, labelled `xPts incomplete` or `xG incomplete`; their actual
 values remain visible. The coverage note above the chart gives only the count,
 since the table names those rows. The only other notes above the chart are gap
-direction (when ranking by Gap) and the standard points note (Points with a
-carried exclusion). One short note below the chart combines the standing
+direction (when ranking by Gap) and the points note when Points appears beside
+a penalty-sensitive measure. On Points, Penalties is hidden, carried
+exclusions are ignored, and there is no points note. One short note below the chart combines the standing
 qualifications: per-match rates do not adjust for opponents or era and do not
 judge the best team, and active seasons use the ten-match rule.
 
@@ -438,10 +446,9 @@ collapsed disclosure, sort links and a GET form work without JavaScript.
 For goals measures, `penalties=exclude` switches to non-penalty goals and npxG
 through `basisText`, including `incomplete_non_penalty_data` season eligibility.
 For Points the select is absent and penalties never change values or the
-population. A carried `exclude` is accepted, ignored and explained by the
-standard points note; that note is absent on goals measures. Changing measure
-drops stale penalties from forms and links. This exception differs from
-Parity's basis eligibility rule. The scatter remains a follow-up.
+population. A carried `exclude` is accepted and ignored without a note.
+Changing measure drops stale penalties from forms and links. The scatter remains
+a follow-up.
 
 **Scoring table** lists eligible seasons with matches, goals/match, xG/match,
 and goals − xG/match, sorted from unrounded values.
@@ -466,6 +473,12 @@ xPoints and the points gap; another team's gaps never hide its values. Teams
 without coverage sort last in both directions, appear last with an
 `xG incomplete` or `xPts incomplete` label on the gap chart, and are named in a
 note on the scatter plots.
+
+When `measure=points` selects a points-only chart (Actual vs expected, Gap to
+expected or Outlier plot), the Penalties control and points note are absent.
+A carried `penalties=exclude` is ignored and dropped from the generated URL,
+forms and links. Table and Scored vs allowed are mixed views and retain the
+control and the points note when the basis is excluded.
 
 - **Gap to expected** ranks teams by gap, favorable first: positive for goals
   scored, differential and points; negative for goals allowed. Green is above
@@ -550,6 +563,8 @@ Below: fewer.” The tooltip
 and keyboard description include the match, official score, points, xPoints
 and signed difference. A win cannot fall below zero, a loss cannot rise above
 zero, and draws can fall either way, because xPoints is between 0 and 3.
+This points-only view has no Penalties control or points note. Old links with
+`penalties=exclude` are accepted and canonical links and forms drop the value.
 
 Three equal All / Home / Away tiles show points vs xPts totals, the gap as
 above or below expected, both rates per match, and “N of M matches” coverage.
@@ -588,6 +603,11 @@ season: the team's own mean, plus one comparison.
   highest probability, keeping ties), sharing Forecast Lab's executor and cache.
   Means still use recorded matches. When no forecast is available, the
   comparison is unavailable rather than falling back to current standings.
+
+When Benchmarks shows Points or xPoints (`average-series=points|xpoints`), the
+view is points-only and hides Penalties. Carried exclusions are ignored and
+removed from generated links and forms. Goals and xG benchmarks retain the
+control.
 
 #### Venue-local dates
 
@@ -632,6 +652,12 @@ every eligible season, reusing Compare teams' rates and coverage.
 
 The chart is chronological with gaps for missing years; the table sorts from
 unrounded values, with unavailable values last and newest season first on ties.
+With `measure=points`, the chart shows Points and/or xPoints only, so Penalties
+is hidden and a carried exclusion is ignored and removed from generated links
+and forms. Other measures retain the control and points note when applicable.
+For Goals and xG, Team History still shows official points and xPoints beside
+the selected scoring measure, so its points note remains visible when the
+penalty basis is excluded.
 
 League context adds, per season, a bar from the lowest to the highest team rate
 (an expected-value range needs complete coverage for every team that season),
@@ -643,7 +669,7 @@ start rather than claimed as all-time. Tied holders are all listed in the
 
 `view=head-to-head` follows two ASA team IDs across eligible regular seasons.
 Controls are Team, Opponent, View (Actual by default, Expected, Actual vs
-expected, Points vs xPoints) and Penalties (Include or Exclude, hidden for
+expected, Points vs xPoints) and Penalties (Included or Excluded, hidden for
 Points vs xPoints). The opponent list includes clubs met at
 least once, each as "Name (N)", sorted by the ID's newest name, then ID. The
 default is the most-met opponent, ties broken by newest name, then ID. A valid

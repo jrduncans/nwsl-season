@@ -156,7 +156,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-rows] img")).ToHaveCount(144); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeVisible(); err != nil {
+	if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-team-seasons-penalties]")).ToBeHidden(); err != nil {
@@ -199,7 +199,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-penalties]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeVisible(); err != nil {
+	if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
 	assertNoHorizontalOverflow(t, page)

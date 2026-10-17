@@ -42,6 +42,11 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
+	query := r.URL.Query()
+	if pointsOnlyExploreSelection(query) {
+		basis = history.AllShots
+		r.URL.RawQuery = withoutQueryParameter(r.URL.RawQuery, "penalties")
+	}
 	store, ok := a.store.(historicalStore)
 	if !ok {
 		a.renderExploreError(w, r, http.StatusServiceUnavailable, "Explore unavailable", "The local archive cannot provide historical scoring data.")
@@ -58,6 +63,22 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderExplore(w, r, summaries, inputs, basis)
+}
+
+// withoutQueryParameter removes one already-validated selection without
+// re-encoding or reordering the remaining query string.
+func withoutQueryParameter(rawQuery, key string) string {
+	parts := strings.Split(rawQuery, "&")
+	kept := parts[:0]
+	for _, part := range parts {
+		name, _, _ := strings.Cut(part, "=")
+		decoded, err := url.QueryUnescape(name)
+		if err == nil && decoded == key {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	return strings.Join(kept, "&")
 }
 
 func (a *application) renderExploreBadRequest(w http.ResponseWriter, r *http.Request, err error) {
@@ -97,6 +118,47 @@ type exploreScoringPage struct {
 	Basis        history.ScoringBasis
 	NonPenalty   bool
 	PenaltyLinks []exploreChoice
+}
+
+// pointsOnlyExploreSelection identifies selections where the penalty basis
+// cannot change any plotted value or eligibility rule.
+func pointsOnlyExploreSelection(query url.Values) bool {
+	view := query.Get("view")
+	if view == "" {
+		view = "teams"
+		if query.Has("metric") {
+			view = "trend"
+		}
+	}
+	switch view {
+	case "parity":
+		return true
+	case "teams":
+		display := query.Get("display")
+		if display == "" {
+			display = "chart"
+		}
+		measure := query.Get("measure")
+		if measure == "" {
+			measure = "difference"
+		}
+		return display != "table" && display != "quadrant" && measure == "points"
+	case "team-seasons":
+		measure := query.Get("team-seasons-measure")
+		return measure == "" || measure == "points"
+	case "team-history":
+		return query.Get("measure") == "points"
+	case "season-trend":
+		trendView := query.Get("trend-view")
+		if trendView == "points" {
+			return true
+		}
+		return trendView == "relative" && (query.Get("average-series") == "points" || query.Get("average-series") == "xpoints")
+	case "head-to-head":
+		return query.Get("h2h-series") == "points"
+	default:
+		return false
+	}
 }
 
 // PointsNote says that official points and ASA xPts keep penalties.
