@@ -170,7 +170,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 					}
 					display := exploreTrendNumber(&value.Actual)
 					if page.TrendMode == "match" {
-						display = fmt.Sprintf("%.0f", value.Actual)
+						display = strconv.FormatInt(int64(value.Actual), 10)
 					}
 					if column.Expected {
 						display = exploreTrendNumber(value.Expected)

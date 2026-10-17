@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -420,7 +421,7 @@ func h2hComparisons(pair exploreHeadToHeadPair, basis history.ScoringBasis) []ex
 			r.ExpectedRate = fmt.Sprintf("%.2f per meeting", *metric.expected/float64(metric.expectedCount))
 		}
 		if metric.count > 0 {
-			r.Actual = fmt.Sprintf("%.0f", metric.actual)
+			r.Actual = strconv.FormatInt(int64(metric.actual), 10)
 			r.Rate = fmt.Sprintf("%.2f per meeting", metric.actual/float64(metric.count))
 			if metric.expected != nil {
 				r.Expected = h2hExpectedValue(metric.expected)
