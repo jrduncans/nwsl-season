@@ -223,7 +223,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 			}
 		}
 		if strings.Contains(path, "trend-view=relative") {
-			for _, fragment := range []string{`value="relative" selected`, `data-trend-data-control hidden`, `data-trend-average-data-control>`, `Benchmarks</option>`, `References show each series`, `in the original units`} {
+			for _, fragment := range []string{`value="relative" selected`, `data-trend-average-data-control>`, `Benchmarks</option>`, `References show each series`, `in the original units`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("relative fallback missing %s", fragment)
 				}
@@ -247,9 +247,6 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal(err)
 			}
 			selected := parsed.Query().Get("average-series")
-			if selected == "" {
-				selected = parsed.Query().Get("series")
-			}
 			basis, other := "Goals", "xG"
 			if selected == "xg" {
 				basis, other = other, basis
@@ -258,7 +255,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal("relative fallback must honor the Data selection")
 			}
 		} else if strings.Contains(path, "series=goals") {
-			for _, fragment := range []string{`data-trend-data-control hidden`, `value="goals" selected`, `value="match" selected`, `value="3" selected`} {
+			for _, fragment := range []string{`data-trend-carried-series value="goals"`, `value="match" selected`, `value="3" selected`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("comparison URL lost hidden Data preference or mode: %s", fragment)
 				}
@@ -281,7 +278,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal("known incomplete inventory must not produce a trend")
 			}
 		} else if strings.Contains(path, "season=2026") {
-			for _, fragment := range []string{`value="10" selected`, `value="xg" selected`, `value="rolling" selected`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
+			for _, fragment := range []string{`value="10" selected`, `data-trend-carried-series value="xg"`, `value="rolling" selected`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("direct URL/fallback missing %s", fragment)
 				}
@@ -292,12 +289,19 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"window=", "window=4", "window=3&window=5", "trend-mode=", "trend-mode=total", "trend-mode=both", "trend-view=", "trend-view=for", "trend-view=balance&trend-view=difference", "trend-mode=match&trend-mode=rolling",
 		"average-series=", "average-series=both", "average-series=goals&average-series=xg",
 		"average-reference=", "average-reference=others", "average-reference=team&average-reference=league",
-		"series=", "series=xg&series=goals", "team=", "team=unknown", "team=alpha&team=bravo", "season=2000",
+		"team=", "team=unknown", "team=alpha&team=bravo", "season=2000",
 	} {
 		response := httptest.NewRecorder()
 		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&"+query, nil))
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("invalid %s returned %d", query, response.Code)
+		}
+	}
+	for _, query := range []string{"series=", "series=invalid", "series=xg&series=goals"} {
+		response := httptest.NewRecorder()
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&"+query, nil))
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `data-trend-carried-series value="both"`) {
+			t.Errorf("malformed carried %s should be ignored and default to both: status %d", query, response.Code)
 		}
 	}
 	response := httptest.NewRecorder()
@@ -360,11 +364,8 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 						t.Fatal("balance must show scored and allowed together")
 					}
 					wantColumns := len(measures)
-					effectiveSeries := series
-					if view == "compare" || view == "difference" || view == "points" {
-						effectiveSeries = "both"
-					}
-					if view == "relative" && effectiveSeries == "both" {
+					effectiveSeries := "both"
+					if view == "relative" {
 						effectiveSeries = "goals"
 					}
 					if effectiveSeries == "both" {

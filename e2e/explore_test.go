@@ -236,13 +236,12 @@ func exploreViews() []exploreView {
 			name: "season-trend", scenario: apptest.ScenarioSeasonTrend,
 			path: "explore?view=season-trend",
 			controls: []string{
-				"[data-trend-season]", "[data-trend-team]", "[data-trend-view]", "[data-trend-series]", "[data-trend-mode]",
+				"[data-trend-season]", "[data-trend-team]", "[data-trend-view]", "[data-trend-mode]",
 				"[data-trend-window]", "[data-trend-average-series]", "[data-trend-reference]",
 			},
 			steps: []exploreStep{
 				{selector: "[data-trend-season]", value: "2025", param: "season"},
 				{selector: "[data-trend-team]", value: teamGotham, param: "team"},
-				{selector: "[data-trend-series]", value: "xg", param: "series"},
 				{selector: "[data-trend-window]", value: "10", param: "window"},
 				{selector: "[data-trend-mode]", value: "match", param: "trend-mode", check: func(t *testing.T, page playwright.Page) {
 					hidden, err := page.Locator("[data-trend-window-control]").IsHidden()
@@ -2174,6 +2173,49 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestExploreSeasonTrendAlwaysShowsBothSeriesAndCarriesSeasonBySeasonChoice(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, carried := range []string{"", "goals", "xg"} {
+		name, selection := carried, carried
+		if selection == "" {
+			name, selection = "default", "both"
+		}
+		t.Run(name, func(t *testing.T) {
+			path := "explore?view=season-trend&season=2025"
+			if carried != "" {
+				path += "&series=" + carried
+			}
+			page := explorePage(t, base, Mobile, path)
+			for _, selector := range []string{"[data-chart=season-trend]", "[data-chart=season-trend-xg]"} {
+				if err := expect.Locator(page.Locator(selector)).ToBeVisible(); err != nil {
+					t.Errorf("%s is not visible: %v", selector, err)
+				}
+			}
+			if count, err := page.Locator("[data-trend-data-control]").Count(); err != nil || count != 0 {
+				t.Fatalf("Match by match Show control count = %d (%v), want 0", count, err)
+			}
+			if err := expect.Locator(page.Locator("[data-trend-carried-series]")).ToHaveValue(selection); err != nil {
+				t.Fatal(err)
+			}
+			gotoInPage(t, page, path+"&trend-mode=match")
+			for _, selector := range []string{"[data-chart=season-trend]", "[data-chart=season-trend-xg]"} {
+				if err := expect.Locator(page.Locator(selector)).ToBeVisible(); err != nil {
+					t.Errorf("%s is not visible in unsmoothed mode: %v", selector, err)
+				}
+			}
+			click(t, page.Locator("[data-view-choice=team-history]"))
+			if got := queryOf(t, page); got.Get("series") != carried || got.Get("view") != "team-history" {
+				t.Fatalf("Season by season URL = %v, want carried series=%s", got, carried)
+			}
+			if err := expect.Locator(page.Locator("[data-history-series]")).ToHaveValue(selection); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }
 
 func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {

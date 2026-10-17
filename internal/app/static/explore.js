@@ -1973,11 +1973,10 @@
     const rolling = mode === 'rolling', difference = view === 'difference', balance = view === 'balance', relative = view === 'relative', points = view === 'points';
     const pointsGap = points && !rolling;
     const signedValues = difference;
-    const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : series === 'xg' ? 'xg' : 'goals';
+    const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : 'goals';
     const averageReference = ['team', 'league', 'playoff', 'top-four', 'shield', 'best'].includes(params.get('average-reference')) ? params.get('average-reference') : 'league';
-    const effectiveSeries = relative ? averageSeries : balance ? series : 'both';
+    const effectiveSeries = relative ? averageSeries : 'both';
     Object.entries({season, team: teamID, 'trend-view': view, series, 'average-series': averageSeries, 'average-reference': averageReference, 'trend-mode': mode, window: String(window)}).forEach(([key, value]) => { control(key).value = value; });
-    root.querySelector('[data-trend-data-control]').hidden = !balance;
     root.querySelector('[data-trend-average-data-control]').hidden = !relative;
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;

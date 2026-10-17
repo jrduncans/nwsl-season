@@ -92,9 +92,6 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	}
 	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendAverageReference: "league", TrendTeam: selected, TrendSort: "match", TrendOrder: "asc"}
 	page.TrendAverageSeries = "goals"
-	if query.Get("series") == "xg" {
-		page.TrendAverageSeries = "xg"
-	}
 	for _, field := range []struct {
 		key     string
 		value   *string
@@ -115,16 +112,10 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			*field.value = values[0]
 		}
 	}
-	series := query.Get("series")
-	if series == "" {
-		series = "both"
-	}
-	// Comparison views always include actual and xG. The query still retains
-	// the Data preference for returning to scoring balance or another team view.
-	switch page.TrendView {
-	case "compare", "difference", "points":
-		series = "both"
-	case "relative":
+	// Scoring balance always includes actual and xG. The shared series query is
+	// retained for Season by season, but has no effect on Match by match.
+	series := "both"
+	if page.TrendView == "relative" {
 		series = page.TrendAverageSeries
 	}
 	measures := []int{0, 1}
