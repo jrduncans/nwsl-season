@@ -26,6 +26,7 @@ type exploreHeadToHeadRow struct {
 	PointsGap      string
 	ChartGap       string
 	ExpectedMargin string
+	GoalMargin     string
 	Margin         int64 `json:"margin"`
 	// Position retains kickoff-instant order, including fixture-ID ties and undated last.
 	Position int `json:"position"`
@@ -69,38 +70,36 @@ type exploreHeadToHeadPayload struct {
 	Seasons  []exploreHeadToHeadSeason  `json:"seasons"`
 	Fixtures []exploreHeadToHeadFixture `json:"fixtures"`
 }
-type exploreHeadToHeadRecordRow struct {
-	Label string
-	history.HeadToHeadRecord
-	Rate, Goals, Coverage string
-}
-
 type exploreHeadToHeadView struct {
-	H2HTeam                                   teamNameView
-	H2HTeamOptions                            []teamNameView
-	H2HOpponents                              []exploreHeadToHeadPair
-	H2HPair                                   exploreHeadToHeadPair
-	H2HRows                                   []exploreHeadToHeadRow
-	H2HData                                   exploreHeadToHeadPayload
-	H2HRecordRows                             []exploreHeadToHeadRecordRow
-	H2HSort, H2HOrder, H2HSeries              string
-	H2HBoth, H2HExpectedOnly, H2HShowExpected bool
-	H2HPoints                                 bool
-	H2HPointsTiles                            []explorePointsTile
-	H2HExpectedRows                           []exploreHeadToHeadComparison
-	H2HCoverage, H2HXGLabel, H2HDirection     string
-	H2HExpanded                               bool
-	H2HColumns                                []exploreTeamColumn
+	H2HTeam                               teamNameView
+	H2HTeamOptions                        []teamNameView
+	H2HOpponents                          []exploreHeadToHeadPair
+	H2HPair                               exploreHeadToHeadPair
+	H2HRows                               []exploreHeadToHeadRow
+	H2HData                               exploreHeadToHeadPayload
+	H2HMarginTiles                        []exploreMarginTileView
+	H2HSort, H2HOrder, H2HSeries          string
+	H2HBoth, H2HMargins                   bool
+	H2HPoints                             bool
+	H2HPointsTiles                        []explorePointsTile
+	H2HExpectedRows                       []exploreHeadToHeadComparison
+	H2HCoverage, H2HXGLabel, H2HDirection string
+	H2HExpanded                           bool
+	H2HColumns                            []exploreTeamColumn
 }
 
 func exploreHeadToHead(query url.Values, summaries, npSummaries []history.SeasonScoring, archive []cache.HistoricalSeason, selected teamNameView, options []teamNameView) (exploreHeadToHeadView, error) {
-	page := exploreHeadToHeadView{H2HTeam: selected, H2HTeamOptions: options, H2HSeries: "actual", H2HSort: "date", H2HOrder: "desc", H2HExpanded: query.Has("h2h-sort") || query.Has("h2h-order")}
+	series, canonical, err := parseHeadToHeadSeries(query)
+	if err != nil {
+		return exploreHeadToHeadView{}, err
+	}
+	query = canonical
+	page := exploreHeadToHeadView{H2HTeam: selected, H2HTeamOptions: options, H2HSeries: series, H2HSort: "date", H2HOrder: "desc", H2HExpanded: query.Has("h2h-sort") || query.Has("h2h-order")}
 	for _, field := range []struct {
 		key     string
 		value   *string
 		allowed []string
 	}{
-		{"h2h-series", &page.H2HSeries, []string{"actual", "expected", "both", "points"}},
 		{"h2h-sort", &page.H2HSort, []string{"date", "venue", "result", "margin"}},
 		{"h2h-order", &page.H2HOrder, []string{"asc", "desc"}},
 	} {
@@ -119,8 +118,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 	}
 	page.H2HPoints = page.H2HSeries == "points"
 	page.H2HBoth = page.H2HSeries == "both"
-	page.H2HExpectedOnly = page.H2HSeries == "expected"
-	page.H2HShowExpected = page.H2HSeries != "actual"
+	page.H2HMargins = page.H2HSeries == "actual"
 	goals := summaries
 	if basis.ExcludesPenalties() {
 		goals = npSummaries
@@ -140,7 +138,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			case 1:
 				result = "Draw"
 			}
-			pair.Rows = append(pair.Rows, exploreHeadToHeadRow{exploreMatchRecord: record, Season: meeting.Season, Active: meeting.Active, Result: result, Points: meeting.Points, Margin: meeting.ScoreFor - meeting.ScoreAgainst, Position: i, BasisScore: h2hBasisScore(meeting), PointsGap: h2hPointsGap(meeting), ChartGap: h2hChartGap(meeting), ExpectedMargin: h2hExpectedMargin(meeting), ExpectedValues: [3]string{h2hExpectedValue(meeting.XGFor), h2hExpectedValue(meeting.XGAgainst), h2hExpectedValue(meeting.XPoints)}})
+			pair.Rows = append(pair.Rows, exploreHeadToHeadRow{exploreMatchRecord: record, Season: meeting.Season, Active: meeting.Active, Result: result, Points: meeting.Points, Margin: meeting.ScoreFor - meeting.ScoreAgainst, Position: i, BasisScore: h2hBasisScore(meeting), PointsGap: h2hPointsGap(meeting), ChartGap: h2hChartGap(meeting), ExpectedMargin: h2hExpectedMargin(meeting), GoalMargin: h2hGoalMargin(meeting), ExpectedValues: [3]string{h2hExpectedValue(meeting.XGFor), h2hExpectedValue(meeting.XGAgainst), h2hExpectedValue(meeting.XPoints)}})
 		}
 		first, last := "", ""
 		active, venueDateUnavailable := false, false
@@ -158,7 +156,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		if first != last {
 			years += "–" + last
 		}
-		pair.Scope = fmt.Sprintf("regular season, %s · %s", years, h2hMatchCount(pair.All.Played))
+		pair.Scope = fmt.Sprintf("regular season, %s · %s", years, exploreMatchCount(pair.All.Played))
 		if active {
 			pair.Scope += " · season in progress"
 		}
@@ -197,38 +195,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			page.H2HOpponents = append(page.H2HOpponents, page.H2HPair)
 		}
 	}
-	for _, row := range []struct {
-		label    string
-		record   history.HeadToHeadRecord
-		expected history.HeadToHeadExpected
-	}{{"All", page.H2HPair.All, page.H2HPair.Expected}, {"Home", page.H2HPair.Home, page.H2HPair.HomeExpected}, {"Away", page.H2HPair.Away, page.H2HPair.AwayExpected}} {
-		rate := "—"
-		if row.record.Played > 0 {
-			rate = fmt.Sprintf("%.2f", float64(row.record.Points)/float64(row.record.Played))
-		}
-		goals := fmt.Sprintf("%d–%d goals", row.expected.GoalsFor, row.expected.GoalsAgainst)
-		coverage := ""
-		if basis.ExcludesPenalties() {
-			goals = fmt.Sprintf("%d–%d np goals", row.expected.GoalsFor, row.expected.GoalsAgainst)
-			if row.expected.GoalsCovered == 0 {
-				goals = "Goals unavailable"
-			}
-			if row.expected.GoalsCovered < row.record.Played {
-				coverage = fmt.Sprintf("%d/%d with split", row.expected.GoalsCovered, row.record.Played)
-			}
-		}
-		page.H2HRecordRows = append(page.H2HRecordRows, exploreHeadToHeadRecordRow{Label: row.label, HeadToHeadRecord: row.record, Rate: rate, Goals: goals, Coverage: coverage})
-	}
-	pointMatches := make([]exploreMatchRecord, 0, len(page.H2HPair.Rows))
-	for _, row := range page.H2HPair.Rows {
-		pointMatches = append(pointMatches, row.exploreMatchRecord)
-	}
-	page.H2HPointsTiles = explorePointsTiles(pointMatches, "meeting")
-	page.H2HExpectedRows = h2hComparisons(page.H2HPair, basis)
-	page.H2HCoverage = h2hCoverage(page.H2HPair, basis, page.H2HShowExpected)
-	if page.H2HPoints {
-		page.H2HCoverage = ""
-	}
+	page.populateHeadToHeadTiles(basis)
 	page.H2HRows = append([]exploreHeadToHeadRow(nil), page.H2HPair.Rows...)
 	sortExploreHeadToHead(page.H2HRows, page.H2HSort, page.H2HOrder)
 	page.H2HColumns = []exploreTeamColumn{{Key: "date", Label: "Date"}, {Label: "Season"}, {Key: "venue", Label: "Venue"}, {Label: "Opponent"}, {Key: "margin", Label: "Score", Description: "goal margin"}, {Key: "result", Label: "Result"}, {Label: "Points"}}
@@ -246,9 +213,6 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			}
 		}
 		target := cloneQuery(query)
-		if target.Get("h2h-series") == "actual" {
-			target.Del("h2h-series")
-		}
 		if target.Get("penalties") == "include" {
 			target.Del("penalties")
 		}
@@ -268,13 +232,6 @@ func cloneQuery(query url.Values) url.Values {
 		result[key] = append([]string(nil), values...)
 	}
 	return result
-}
-
-func h2hMatchCount(n int) string {
-	if n == 1 {
-		return "1 match"
-	}
-	return fmt.Sprintf("%d matches", n)
 }
 
 func sortExploreHeadToHead(rows []exploreHeadToHeadRow, column, order string) {
@@ -374,7 +331,7 @@ func headToHeadPayload(summaries, npSummaries []history.SeasonScoring, archive [
 				row.XPoints = [2]*float64{match.XPoints, awayPoints[match.ID]}
 				np := nonPenalty[season.Season][match.ID]
 				row.NonPenaltyXG = [2]*float64{np.XGFor, np.XGAgainst}
-				if np.XGFor != nil && np.XGAgainst != nil {
+				if np.GoalsCovered {
 					row.NonPenaltyGoals = &[2]int64{np.GoalsFor, np.GoalsAgainst}
 				}
 				matches = append(matches, fixture{row: row, kickoff: match.KickoffUTC})
@@ -408,7 +365,6 @@ func h2hExpectedValue(value *float64) string {
 
 type exploreHeadToHeadComparison struct {
 	Label, ExpectedLabel, Actual, Expected, Gap, Rate, Coverage string
-	ExpectedRate, ExpectedCoverage                              string
 }
 
 func h2hComparisons(pair exploreHeadToHeadPair, basis history.ScoringBasis) []exploreHeadToHeadComparison {
@@ -419,19 +375,13 @@ func h2hComparisons(pair exploreHeadToHeadPair, basis history.ScoringBasis) []ex
 		actual               float64
 		expected             *float64
 		count                int
-		expectedCount        int
 		missing              string
 	}{
-		{basisText(basis, "Goals for"), basisText(basis, "xG for"), float64(e.GoalsFor), e.XGFor, e.GoalsCovered, e.XGCovered, basisText(basis, "xG incomplete")},
-		{basisText(basis, "Goals against"), basisText(basis, "xG against"), float64(e.GoalsAgainst), e.XGAgainst, e.GoalsCovered, e.XGCovered, basisText(basis, "xG incomplete")},
-		{"Points", "xPts", float64(pair.All.Points), e.XPoints, pair.All.Played, e.XPointsCovered, "xPts incomplete"},
+		{basisText(basis, "Goals for"), basisText(basis, "xG for"), float64(e.GoalsFor), e.XGFor, e.GoalsCovered, basisText(basis, "xG incomplete")},
+		{basisText(basis, "Goals against"), basisText(basis, "xG against"), float64(e.GoalsAgainst), e.XGAgainst, e.GoalsCovered, basisText(basis, "xG incomplete")},
+		{"Points", "xPts", float64(pair.All.Points), e.XPoints, pair.All.Played, "xPts incomplete"},
 	} {
 		r := exploreHeadToHeadComparison{Label: metric.label, ExpectedLabel: metric.expectedLabel, Actual: "Unavailable", Expected: metric.missing, Gap: metric.missing, Rate: "Unavailable", Coverage: fmt.Sprintf("%d of %d meetings", metric.count, pair.All.Played)}
-		r.ExpectedRate = "Unavailable"
-		r.ExpectedCoverage = fmt.Sprintf("%d of %d meetings", metric.expectedCount, pair.All.Played)
-		if metric.expected != nil && metric.expectedCount > 0 {
-			r.ExpectedRate = fmt.Sprintf("%.2f per meeting", *metric.expected/float64(metric.expectedCount))
-		}
 		if metric.count > 0 {
 			r.Actual = strconv.FormatInt(int64(metric.actual), 10)
 			r.Rate = fmt.Sprintf("%.2f per meeting", metric.actual/float64(metric.count))
@@ -452,12 +402,15 @@ func h2hComparisons(pair exploreHeadToHeadPair, basis history.ScoringBasis) []ex
 	return rows
 }
 
-func h2hCoverage(pair exploreHeadToHeadPair, basis history.ScoringBasis, both bool) string {
+func h2hCoverage(pair exploreHeadToHeadPair, basis history.ScoringBasis, series string) string {
+	if series == "points" {
+		return ""
+	}
 	var notes []string
-	if n := pair.All.Played - pair.Expected.XGCovered; both && n > 0 {
+	if n := pair.All.Played - pair.Expected.XGCovered; n > 0 {
 		notes = append(notes, h2hMissingNote(n, basisText(basis, "xG")))
 	}
-	if n := pair.All.Played - pair.Expected.XPointsCovered; both && n > 0 {
+	if n := pair.All.Played - pair.Expected.XPointsCovered; series == "both" && n > 0 {
 		notes = append(notes, h2hMissingNote(n, "xPts"))
 	}
 	if basis.ExcludesPenalties() && pair.Expected.GoalsCovered < pair.All.Played {
@@ -484,16 +437,13 @@ func h2hDirection(series string, basis history.ScoringBasis) string {
 	if series == "points" {
 		return "Above zero: more points than xPoints. Below: fewer."
 	}
-	if series == "expected" {
-		return basisText(basis, "xG margin · up: more xG for · zero: level · down: more xG against")
-	}
 	if series == "both" {
 		return basisText(basis, "Goal margin − xG margin · zero: matched expected")
 	}
 	if basis.ExcludesPenalties() {
-		return "Non-penalty goal margin · zero: level"
+		return "zero: level"
 	}
-	return "Goal margin · up: win · zero: draw · down: loss"
+	return "up: win · zero: draw · down: loss"
 }
 
 func h2hPointsGap(meeting history.HeadToHeadMeeting) string {
@@ -526,4 +476,49 @@ func h2hSignedMargin(gap float64) string {
 		return fmt.Sprintf("+%.2f", gap)
 	}
 	return fmt.Sprintf("%.2f", gap)
+}
+
+func h2hGoalMargin(meeting history.HeadToHeadMeeting) string {
+	if !meeting.GoalsCovered {
+		return "Unavailable"
+	}
+	margin := meeting.GoalsFor - meeting.GoalsAgainst
+	if margin > 0 {
+		return fmt.Sprintf("+%d", margin)
+	}
+	return fmt.Sprint(margin)
+}
+
+// parseHeadToHeadSeries validates once and returns canonical link state.
+// expected is a legacy spelling of the default Margins view, actual.
+// renderExplore issues the HTTP redirect after all selections are validated.
+func parseHeadToHeadSeries(query url.Values) (string, url.Values, error) {
+	series := "actual"
+	if values, present := query["h2h-series"]; present {
+		if len(values) != 1 || !slices.Contains([]string{"actual", "expected", "both", "points"}, values[0]) {
+			return "", nil, fmt.Errorf("invalid h2h-series selection")
+		}
+		series = values[0]
+	}
+	if series == "expected" {
+		series = "actual"
+	}
+	canonical := cloneQuery(query)
+	if series == "actual" {
+		canonical.Del("h2h-series")
+	} else {
+		canonical.Set("h2h-series", series)
+	}
+	return series, canonical, nil
+}
+
+func (page *exploreHeadToHeadView) populateHeadToHeadTiles(basis history.ScoringBasis) {
+	matches := make([]exploreMatchRecord, 0, len(page.H2HPair.Rows))
+	for _, row := range page.H2HPair.Rows {
+		matches = append(matches, row.exploreMatchRecord)
+	}
+	page.H2HMarginTiles = formatMarginTiles(exploreMarginTiles(matches), basis)
+	page.H2HPointsTiles = explorePointsTiles(matches, "meeting")
+	page.H2HExpectedRows = h2hComparisons(page.H2HPair, basis)
+	page.H2HCoverage = h2hCoverage(page.H2HPair, basis, page.H2HSeries)
 }

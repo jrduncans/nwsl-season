@@ -60,6 +60,7 @@ func TestGeometry(t *testing.T) {
 		{"ExposesOneGlobal", testGeometryExposesOneGlobal},
 		{"GapExtent", testGeometryGapExtent},
 		{"TrendAxis", testGeometryTrendAxis},
+		{"MarginAxis", testGeometryMarginAxis},
 		{"RankingBars", testGeometryRankingBars},
 		{"HeadToHead", testGeometryHeadToHead},
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
@@ -79,7 +80,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
+	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "marginAxis", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -709,6 +710,27 @@ func testGeometryScatterGroup(t *testing.T, page playwright.Page) {
 		callGeometry(t, page, "plotDomain", []any{tc.values, tc.signed, true}, &got)
 		if !near(got.Min, tc.min) || !near(got.Max, tc.max) {
 			t.Fatalf("rounded domain = %+v, want %v–%v", got, tc.min, tc.max)
+		}
+	}
+}
+
+func testGeometryMarginAxis(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		goals, xg []any
+		extent    float64
+	}{
+		{[]any{4, -3, 0}, []any{.2, -.4, nil}, 6},
+		{[]any{0, 1, -1}, []any{7.2, nil, -2.1}, 10},
+		{[]any{0, 0}, []any{nil, nil}, 1},
+		{[]any{nil}, []any{nil}, .15},
+	} {
+		var axis struct {
+			Min, Max float64
+			Ticks    []float64
+		}
+		callGeometry(t, page, "marginAxis", []any{tc.goals, tc.xg}, &axis)
+		if !near(axis.Min, -tc.extent) || !near(axis.Max, tc.extent) || len(axis.Ticks) < 3 {
+			t.Fatalf("shared margin axis: %+v, extent %v", axis, tc.extent)
 		}
 	}
 }

@@ -46,6 +46,8 @@
   const scatterSelectionTitle = root.querySelector('[data-team-scatter-selection-title]');
   const scatterSelectionTeams = root.querySelector('[data-team-scatter-selection-teams]');
   const scatterGuideValues = root.querySelector('[data-team-scatter-guide-values]');
+  const marginsData = window.NWSLMargins;
+  const matchMeasure = marginsData.measure;
   const charts = {};
   const styles = getComputedStyle(root);
   const color = name => styles.getPropertyValue(name).trim();
@@ -53,10 +55,10 @@
   // The server renders every figure on the chosen penalties basis. This script
   // only has to name that basis: the same label rules as basisText in Go.
   const nonPenalty = root.dataset.penalties === 'exclude';
-  const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Total goals|Goals)\b/g;
+  const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Goal margin|Total goals|Goals)\b/g;
   const basisReplacement = match => ({
     'Expected goals': 'Non-penalty expected goals', 'expected goals': 'non-penalty expected goals',
-    xGD: 'npxGD', xG: 'npxG', 'Goal differential': 'Non-penalty goal differential',
+    xGD: 'npxGD', xG: 'npxG', 'Goal differential': 'Non-penalty goal differential', 'Goal margin': 'Non-penalty goal margin',
     'Total goals': 'Total non-penalty goals', Goals: 'Non-penalty goals',
   })[match] || match.replace(' ', ' non-penalty ');
   const T = text => nonPenalty && !/npxG|on-penalty/.test(text) ? text.replace(basisPattern, basisReplacement) : text;
@@ -132,6 +134,7 @@
       title: {display: true, text: T('Goals − xG per match')}};
   }
   const clearChart = chart => {
+    chart.keyboardInspecting = false;
     chart.setActiveElements([]);
     chart.tooltip.setActiveElements([], {x: 0, y: 0});
     chart.update('none');
@@ -178,6 +181,7 @@
       else position = Math.max(0, Math.min(marks.length - 1, position + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1)));
       const mark = marks[position];
       const element = chart.getDatasetMeta(mark.datasetIndex).data[mark.index];
+      chart.keyboardInspecting = true;
       chart.setActiveElements([mark]);
       chart.tooltip.setActiveElements([mark], element.getCenterPoint());
       chart.update('none');
@@ -1992,7 +1996,7 @@
     const mode = params.get('trend-mode') === 'match' ? 'match' : 'rolling';
     const window = ['3', '5', '10'].includes(params.get('window')) ? Number(params.get('window')) : 5;
     const rolling = mode === 'rolling', difference = view === 'difference', balance = view === 'balance', relative = view === 'relative', points = view === 'points';
-    const pointsGap = points && !rolling;
+    const pointsGap = points && !rolling, margins = difference && !rolling;
     const signedValues = difference;
     const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : 'goals';
     const averageReference = ['team', 'league', 'playoff', 'top-four', 'shield', 'best'].includes(params.get('average-reference')) ? params.get('average-reference') : 'league';
@@ -2003,7 +2007,7 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
-    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : pointsGap ? 'Bars show points minus xPoints for each match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : margins ? 'Bars show goal margin and xG margin for each match.' : pointsGap ? 'Bars show points minus xPoints for each match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
     comparison.replaceChildren(...[{key: 'team', label: 'None (team average only)'}, ...(selectedSeason?.benchmarks || [])].map(reference => {
@@ -2025,7 +2029,7 @@
     root.querySelector('[data-trend-undated]').hidden = !matches.some(match => match.undated);
     const measures = pointsMetric ? [3] : difference ? [2] : [0, 1];
     const visible = (effectiveSeries === 'both' ? [false, true] : [['xg', 'xpoints'].includes(effectiveSeries)]).flatMap(expected => measures.map(measure => {
-      const label = T(expected ? ['xG scored', 'xG allowed', 'xG differential', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal differential', 'Points'][measure]);
+      const label = T(expected ? ['xG scored', 'xG allowed', 'xG margin', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal margin', 'Points'][measure]);
       const references = relative ? trendReferences(selectedSeason, matches, measure, expected, averageReference) : [];
       return {expected, measure, label, references,
         data: matches.map((_, index) => seasonTrendValue(matches, index, measure, window, expected, rolling)),
@@ -2075,8 +2079,20 @@
       });
       return row;
     }));
-    root.querySelector('[data-trend-points-panel]').hidden = !pointsGap;
     showPointsTiles(root.querySelector('[data-trend-points-tiles]'), matches.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap);
+    root.querySelector('[data-trend-margins-panel]').hidden = !margins;
+    root.querySelector('[data-trend-margin-official]').hidden = !margins || !nonPenalty;
+    showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), matches, nonPenalty, margins);
+    if (margins) {
+      root.querySelector('[data-season-trend-plot]').hidden = false;
+      for (const panel of ['goals', 'xg', 'points']) root.querySelector(`[data-trend-${panel}-panel]`).hidden = true;
+      root.querySelector('[data-trend-legend]').hidden = true;
+      root.querySelector('[data-trend-margin-title]').textContent = nonPenalty ? 'Non-penalty goal margin' : 'Goal margin';
+      root.querySelector('[data-trend-margin-direction]').textContent = nonPenalty ? 'zero: level' : 'up: win · zero: draw · down: loss';
+      showMarginPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, inspection: seasonMarginInspection});
+      return;
+    }
+    root.querySelector('[data-trend-points-panel]').hidden = !pointsGap;
     if (pointsGap) {
       root.querySelector('[data-season-trend-plot]').hidden = false;
       root.querySelector('[data-trend-goals-panel]').hidden = true;
@@ -2110,7 +2126,7 @@
       {prefix: 'goals', label: T('Goals'), datasets: visible.filter(dataset => !dataset.expected)},
       {prefix: 'xg', label: T('Expected goals (xG)'), datasets: visible.filter(dataset => dataset.expected)},
     ] : difference || pointsMetric ? [
-      {prefix: 'goals', label: pointsMetric ? 'Points vs xPoints' : 'Differential', datasets: visible},
+      {prefix: 'goals', label: pointsMetric ? 'Points vs xPoints' : 'Margins', datasets: visible},
       {prefix: 'xg', label: '', datasets: []},
     ] : [
       {prefix: 'goals', label: 'Scored', datasets: visible.filter(dataset => dataset.measure === 0)},
@@ -2476,6 +2492,44 @@
       return tile;
     }));
   }
+  function showMarginTiles(container, matches, np, shown) {
+    container.hidden = !shown || !matches.length;
+    if (!shown) return;
+    const basis = {nonPenalty: np, xgLabel: archiveText('xG', np)};
+    container.replaceChildren(...marginsData.summarize(matches).map(total => {
+      const view = marginsData.format(total, basis), venue = view.label;
+      const tile = archiveElement('div'); tile.className = 'explore-h2h-tile explore-margin-tile'; tile.dataset.h2hTile = venue;
+      const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
+      if (venue !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
+      label.append(document.createTextNode(venue)); tile.append(label);
+      const wdl = archiveElement('strong', view.record); wdl.className = 'explore-h2h-wdl';
+      wdl.setAttribute('aria-label', view.recordLabel); tile.append(wdl);
+      tile.append(archiveElement('div', view.rate), archiveElement('div', view.goals));
+      if (view.coverage) tile.append(archiveElement('div', view.coverage));
+      const xg = archiveElement('div', view.xg); xg.className = 'explore-margin-xg'; tile.append(xg);
+      if (view.xgCoverage) tile.append(archiveElement('div', view.xgCoverage));
+      tile.append(archiveElement('div', view.matches)); return tile;
+    }));
+  }
+  function showMarginPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection}) {
+    const values = [matches.map(marginsData.goalMargin), matches.map(marginsData.xgMargin)];
+    const axis = window.NWSLGeometry.marginAxis(...values), xg = archiveText('xG', np);
+    panels.forEach(({canvas: name, key}, i) => {
+      const canvas = root.querySelector(`[data-chart="${name}"]`);
+      const chart = charts[key] || (charts[key] = createHeadToHead(canvas, matchNumbers, inspection));
+      chart.meetings = matches;
+      chart.data.labels = matches.map((_, index) => String(index));
+      chart.data.datasets[0].data = values[i];
+      const label = i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin';
+      chart.data.datasets[0].label = label;
+      Object.assign(chart.options.scales.y, {min: axis.min, max: axis.max,
+        afterBuildTicks: scale => { scale.ticks = axis.ticks.map(value => ({value})); },
+        afterFit: scale => { scale.width = 40; },
+        ticks: {callback: value => `${value > 0 ? '+' : ''}${value.toFixed(axis.decimals)}`}});
+      canvas.setAttribute('aria-label', `${description}: ${label}, each match; ${i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np ? 'zero: level' : 'up: win; zero: draw; down: loss'}; home solid blue, away striped orange`);
+      chart.resize(); chart.update('none');
+    });
+  }
   function showSeasonPointsChart(matches, team, season) {
     const canvas = root.querySelector('[data-chart="season-points-gap"]');
     const chart = charts.seasonPointsGap || (charts.seasonPointsGap = createHeadToHead(canvas, true));
@@ -2490,8 +2544,8 @@
   }
   function showHeadToHead(params) {
     if (!h2hData.teams?.length) return;
-    const series = ['expected', 'both', 'points'].includes(params.get('h2h-series')) ? params.get('h2h-series') : 'actual';
-    const pointsView = series === 'points', both = series === 'both', expectedOnly = series === 'expected', showExpected = series !== 'actual', np = !pointsView && params.get('penalties') === 'exclude';
+    const series = ['both', 'points'].includes(params.get('h2h-series')) ? params.get('h2h-series') : 'actual';
+    const pointsView = series === 'points', both = series === 'both', margins = series === 'actual', np = !pointsView && params.get('penalties') === 'exclude';
     const label = text => np ? text.replace(basisPattern, basisReplacement) : text;
     const xgLabel = label('xG');
     h2hSeries.value = series;
@@ -2499,14 +2553,19 @@
     h2hPenalties.disabled = pointsView;
     root.querySelector('[data-h2h-points-title]').hidden = !pointsView;
     h2hPenalties.value = params.get('penalties') === 'exclude' ? 'exclude' : 'include';
-    const carriedSeries = root.querySelector('[data-h2h-carried-series]'); carriedSeries.disabled = !showExpected; carriedSeries.value = h2hSeries.value;
-    root.querySelector('[data-h2h-venues]').hidden = pointsView || !showExpected;
+    const carriedSeries = root.querySelector('[data-h2h-carried-series]'); carriedSeries.disabled = margins; carriedSeries.value = h2hSeries.value;
+    root.querySelector('[data-h2h-venues]').hidden = !both;
+    root.querySelector('[data-h2h-goal-title]').hidden = !margins;
+    root.querySelector('[data-h2h-goal-title]').textContent = np ? 'Non-penalty goal margin' : 'Goal margin';
+    root.querySelector('[data-h2h-xg-panel]').hidden = !margins;
+    root.querySelector('[data-h2h-xg-panel] h3').textContent = `${xgLabel} margin`;
+    root.querySelector('[data-h2h-xg-panel] p').textContent = `up: more ${xgLabel} for · zero: level · down: more ${xgLabel} against`;
     root.querySelector('[data-h2h-venue-direction]').hidden = !both;
-    root.querySelector('[data-h2h-direction]').textContent = pointsView ? 'Above zero: more points than xPoints. Below: fewer.' : both ? label('Goal margin − xG margin · zero: matched expected') : expectedOnly ? label('xG margin · up: more xG for · zero: level · down: more xG against') : np ? 'Non-penalty goal margin · zero: level' : 'Goal margin · up: win · zero: draw · down: loss';
+    root.querySelector('[data-h2h-direction]').textContent = pointsView ? 'Above zero: more points than xPoints. Below: fewer.' : both ? label('Goal margin − xG margin · zero: matched expected') : np ? 'zero: level' : 'up: win · zero: draw · down: loss';
     root.querySelector('th[data-h2h-basis-column]').hidden = !np;
-    root.querySelector('[data-h2h-points-note]').hidden = !np || !showExpected;
+    root.querySelector('[data-h2h-points-note]').hidden = !np || !both;
     const headers = root.querySelectorAll('th[data-h2h-expected-column]');
-    [xgLabel + ' for', xgLabel + ' against', 'xPts', pointsView ? 'Points − xPoints' : both ? 'Margin gap' : xgLabel + ' margin'].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = !showExpected || pointsView && i < 2; });
+    [xgLabel + ' for', xgLabel + ' against', 'xPts', pointsView ? 'Points − xPoints' : both ? 'Margin gap' : xgLabel + ' margin'].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = pointsView ? i < 2 : margins && i === 2; });
     const teamIndex = h2hData.teams.findIndex(t => t.ID === (params.get('team') || root.dataset.defaultH2hTeam));
     if (teamIndex < 0) return;
     const data = {team: h2hData.teams[teamIndex]};
@@ -2534,7 +2593,11 @@
       const goals = np ? f.npGoals ? orient(f.npGoals) : [null, null] : score;
       const xg = orient(np ? f.npxg : f.xg), xpoints = f.xpoints[home ? 0 : 1];
       return {...f, season: season.year, active: !!season.active, position, venue: home ? 'Home' : 'Away', opponent: season.names[pair.opponent.ID] || pair.opponent.ID,
-        pointsView, both, showExpected, np, xgLabel, basisGoals: goals, xg, xpoints, expectedMargin: xg.every(v => v !== null) ? xg[0] - xg[1] : null,
+        pointsView, both, np, xgLabel, basisGoals: goals, xg, xpoints,
+        goalsCovered: !np || f.npGoals !== null,
+        values: [{actual: goals[0], expected: xg[0]}, {actual: goals[1], expected: xg[1]},
+          {actual: goals[0] === null ? null : goals[0] - goals[1], expected: xg.some(v => v === null) ? null : xg[0] - xg[1]},
+          {actual: margin > 0 ? 3 : margin < 0 ? 0 : 1, expected: xpoints}], expectedMargin: xg.every(v => v !== null) ? xg[0] - xg[1] : null,
         score: score.join('–'), goalsFor: score[0], goalsAgainst: score[1], margin, result: margin > 0 ? 'Win' : margin < 0 ? 'Loss' : 'Draw', points: margin > 0 ? 3 : margin < 0 ? 0 : 1};
     });
     const years = [...new Set(rows.map(r => r.season))].sort();
@@ -2546,34 +2609,16 @@
     }));
     h2hOpponent.value = pair.opponent.ID;
     const title = root.querySelector('[data-h2h-title]');
-    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)), ...(showExpected ? [document.createTextNode(pointsView ? ' · points vs xPoints' : both ? ' · actual vs expected' : ' · expected')] : []));
+    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)), ...(!margins ? [document.createTextNode(pointsView ? ' · points vs xPoints' : ' · actual vs expected')] : []));
     for (const key of ['scope', 'warning']) {
       const element = root.querySelector(`[data-h2h-${key}]`); element.textContent = pair[key];
       if (key === 'warning') element.hidden = !pair.warning;
     }
-    const record = root.querySelector('[data-h2h-record]'); record.hidden = showExpected || !rows.length;
+    const record = root.querySelector('[data-h2h-record]');
     record.setAttribute('aria-label', `Official regular-season record from ${data.team.Name}’s side`);
-    record.replaceChildren(...['All', 'Home', 'Away'].map(venue => {
-      const meetings = rows.filter(r => venue === 'All' || r.venue === venue), n = meetings.length;
-      const count = result => meetings.filter(r => r.result === result).length;
-      const sum = key => meetings.reduce((total, r) => total + r[key], 0);
-      const tile = archiveElement('div'); tile.className = 'explore-h2h-tile'; tile.dataset.h2hTile = venue;
-      const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
-      if (venue !== 'All') {
-        const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch);
-      }
-      label.append(document.createTextNode(venue)); tile.append(label);
-      const wdl = archiveElement('strong', `${count('Win')}–${count('Draw')}–${count('Loss')}`); wdl.className = 'explore-h2h-wdl';
-      wdl.setAttribute('aria-label', `${count('Win')} wins, ${count('Draw')} draws, ${count('Loss')} losses`); tile.append(wdl);
-      const covered = meetings.filter(r => r.basisGoals[0] !== null);
-      const goals = covered.length ? covered.reduce((total, r) => total.map((v, i) => v + r.basisGoals[i]), [0, 0]).join('–') + (np ? ' np goals' : ' goals') : np ? 'Goals unavailable' : '0–0 goals';
-      tile.append(archiveElement('div', `${n ? fixed(sum('points') / n) : '—'} pts/match`),
-        archiveElement('div', goals), archiveElement('div', `${n} ${n === 1 ? 'match' : 'matches'}`));
-      if (np && covered.length < n) tile.append(archiveElement('div', `${covered.length}/${n} with split`)); return tile;
-    }));
+    showMarginTiles(record, rows, np, margins);
     showPointsTiles(root.querySelector('[data-h2h-points-tiles]'), rows, 'meeting', pointsView);
     const comparison = root.querySelector('[data-h2h-comparison]'); comparison.hidden = !both || !rows.length;
-    const expectedTiles = root.querySelector('[data-h2h-expected]'); expectedTiles.hidden = !expectedOnly || !rows.length;
     const goalsCovered = rows.filter(r => r.basisGoals[0] !== null), xgCovered = rows.filter(r => r.xg[0] !== null), pointsCovered = rows.filter(r => r.xpoints !== null);
     const sum = (meetings, value) => meetings.reduce((total, row) => total + value(row), 0);
     const metrics = [
@@ -2590,20 +2635,13 @@
       tile.append(archiveElement('p', !metric.n ? 'Unavailable' : metric.expected === null ? `${fixed(metric.actual / metric.n)} per meeting` : `${fixed(metric.actual / metric.n)} vs ${fixed(metric.expected / metric.n)} per meeting`));
       const count = archiveElement('p', `${metric.n} of ${rows.length} meetings`); count.className = 'note'; tile.append(count); return tile;
     }));
-    expectedTiles.replaceChildren(...metrics.map(metric => {
-      const tile = archiveElement('div'); tile.className = 'explore-h2h-comparison-tile';
-      tile.append(archiveElement('h3', metric.expectedLabel));
-      const total = archiveElement('p', metric.expected === null ? metric.missing : fixed(metric.expected)); total.className = 'explore-h2h-total'; tile.append(total);
-      tile.append(archiveElement('p', metric.expected === null || !metric.expectedCount ? 'Unavailable' : `${fixed(metric.expected / metric.expectedCount)} per meeting`));
-      const count = archiveElement('p', `${metric.expectedCount} of ${rows.length} meetings`); count.className = 'note'; tile.append(count); return tile;
-    }));
     const coverage = root.querySelector('[data-h2h-coverage]'), notes = [];
     const missingNote = (n, metric) => `${n} ${n === 1 ? 'meeting lacks' : 'meetings lack'} ${metric}.`;
-    if (!pointsView && showExpected && xgCovered.length < rows.length) notes.push(missingNote(rows.length - xgCovered.length, xgLabel));
-    if (!pointsView && showExpected && pointsCovered.length < rows.length) notes.push(missingNote(rows.length - pointsCovered.length, 'xPts'));
+    if (!pointsView && xgCovered.length < rows.length) notes.push(missingNote(rows.length - xgCovered.length, xgLabel));
+    if (both && pointsCovered.length < rows.length) notes.push(missingNote(rows.length - pointsCovered.length, 'xPts'));
     if (np && goalsCovered.length < rows.length) notes.push(`Non-penalty goals and npxG cover ${goalsCovered.length} of ${rows.length} meetings with a penalty split.`);
     coverage.textContent = notes.join(' '); coverage.hidden = !notes.length;
-    root.querySelector('[data-h2h-official]').hidden = showExpected || !np;
+    root.querySelector('[data-h2h-official]').hidden = !margins || !np;
     const empty = root.querySelector('[data-h2h-empty]'); empty.hidden = pair.all.Played > 0;
     empty.textContent = `${data.team.Name} and ${pair.opponent.Name} have not met in a regular-season match.`;
     root.querySelector('[data-h2h-chart-wrap]').hidden = !pair.all.Played;
@@ -2625,8 +2663,8 @@
       const tr = archiveElement('tr'); tr.dataset.matchId = row.id;
       for (const text of [row.date, `${row.season}${row.active ? ' (season in progress)' : ''}`, row.venue, row.opponent, row.score, row.result, row.points]) tr.append(archiveElement('td', text));
       const basisCell = archiveElement('td', row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')); basisCell.dataset.h2hBasisColumn = ''; basisCell.hidden = !np; tr.append(basisCell);
-      [...row.xg, row.xpoints].forEach((value, i) => { const td = archiveElement('td', value === null ? 'Unavailable' : fixed(value)); td.dataset.h2hExpectedColumn = ''; td.hidden = !showExpected || pointsView && i < 2; tr.append(td); });
-      const gapCell = archiveElement('td', pointsView ? pointGapText(row) : row.expectedMargin === null || both && row.basisGoals[0] === null ? 'Unavailable' : signed(both ? row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin : row.expectedMargin)); gapCell.dataset.h2hExpectedColumn = ''; gapCell.hidden = !showExpected; tr.append(gapCell);
+      [...row.xg, row.xpoints].forEach((value, i) => { const td = archiveElement('td', value === null ? 'Unavailable' : fixed(value)); td.dataset.h2hExpectedColumn = ''; td.hidden = pointsView ? i < 2 : margins && i === 2; tr.append(td); });
+      const gapCell = archiveElement('td', pointsView ? pointGapText(row) : row.expectedMargin === null || both && row.basisGoals[0] === null ? 'Unavailable' : signed(both ? row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin : row.expectedMargin)); gapCell.dataset.h2hExpectedColumn = ''; gapCell.hidden = false; tr.append(gapCell);
       return tr;
     }));
     root.querySelectorAll('[data-h2h-sort]').forEach(link => {
@@ -2649,25 +2687,49 @@
     }));
     const wrap = root.querySelector('[data-h2h-chart]'); wrap.hidden = !rows.length;
     if (!rows.length) return;
+    root.querySelector('[data-h2h-xg-chart]').hidden = !margins;
+    if (margins) {
+      showMarginPanels({panels: [{canvas: 'head-to-head', key: 'headToHead'}, {canvas: 'head-to-head-xg', key: 'headToHeadXG'}], matches: rows, description: `${data.team.Name} vs ${pair.opponent.Name}`, nonPenalty: np, matchNumbers: false});
+      return;
+    }
     const canvas = wrap.querySelector('canvas');
-    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${pointsView ? 'points minus xPoints; above zero: more points than xPoints; below zero: fewer' : both ? label('goal margin minus xG margin; above zero: above expected; below zero: below expected') : expectedOnly ? label('xG margins; above zero: more xG for; below zero: more xG against') : np ? 'non-penalty goal margins; zero means level' : 'goal margins; up means win, zero means draw, down means loss'}; home solid blue, away striped orange`);
+    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${pointsView ? 'points minus xPoints; above zero: more points than xPoints; below zero: fewer' : label('goal margin minus xG margin; above zero: above expected; below zero: below expected')}; home solid blue, away striped orange`);
     if (!charts.headToHead) charts.headToHead = createHeadToHead(canvas);
     const chart = charts.headToHead;
+    delete chart.options.scales.y.afterBuildTicks; delete chart.options.scales.y.afterFit;
+    chart.options.scales.y.ticks = {maxTicksLimit: 5, precision: 0};
     chart.meetings = rows;
     chart.data.labels = rows.map(row => row.id);
     chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.headToHeadValue(row.basisGoals, row.xg, series, row.points, row.xpoints));
-    chart.data.datasets[0].label = pointsView ? 'Points − xPoints' : both ? label('Goal margin − xG margin') : expectedOnly ? label('xG margin') : np ? 'Non-penalty goal margin' : 'Goal margin';
+    chart.data.datasets[0].label = pointsView ? 'Points − xPoints' : label('Goal margin − xG margin');
     const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data.filter(v => v !== null), chart.width, chart.height, series).extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
     chart.update('none');
   }
   const pointGapText = row => row.xpoints == null ? 'Unavailable' : signed(row.points - row.xpoints);
   const pointsDescription = row => [`Points: ${row.points}`, `xPoints: ${row.xpoints == null ? 'Unavailable' : fixed(row.xpoints)}`, `Points − xPoints: ${pointGapText(row)}`];
+  const goalMarginText = row => row.basisGoals[0] === null ? 'Unavailable' : `${row.basisGoals[0] > row.basisGoals[1] ? '+' : ''}${row.basisGoals[0] - row.basisGoals[1]}`;
   const headToHeadExpectedDescription = row => row.pointsView ? pointsDescription(row) : [
     ...(row.np ? [`Non-penalty goals: ${row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')}`] : []),
-    ...(row.showExpected ? [`${row.xgLabel} for: ${row.xg[0] === null ? 'Unavailable' : fixed(row.xg[0])}`, `${row.xgLabel} against: ${row.xg[1] === null ? 'Unavailable' : fixed(row.xg[1])}`, `xPts: ${row.xpoints === null ? 'Unavailable' : fixed(row.xpoints)}`, row.both ? `Margin gap: ${row.basisGoals[0] === null || row.expectedMargin === null ? 'Unavailable' : signed(row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin)}` : `${row.xgLabel} margin: ${row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)}`] : []),
+    `${row.np ? 'Non-penalty goal margin' : 'Goal margin'}: ${goalMarginText(row)}`,
+    `${row.xgLabel} for: ${row.xg[0] === null ? 'Unavailable' : fixed(row.xg[0])}`,
+    `${row.xgLabel} against: ${row.xg[1] === null ? 'Unavailable' : fixed(row.xg[1])}`,
+    ...(row.both ? [`xPts: ${row.xpoints === null ? 'Unavailable' : fixed(row.xpoints)}`, `Margin gap: ${row.basisGoals[0] === null || row.expectedMargin === null ? 'Unavailable' : signed(row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin)}`] : [`${row.xgLabel} margin: ${row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)}`]),
   ];
   const headToHeadDescription = row => [`${row.date}${row.active ? ' · season in progress' : ''} · ${row.venue} · ${row.opponent} · ${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)].join(' · ');
+  function headToHeadInspection(row) {
+    return {title: row.date, lines: [...(row.active ? ['season in progress'] : []), row.venue, row.opponent, `${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)]};
+  }
+  function seasonMarginInspection(row, index) {
+    const goals = marginsData.goals(row), xg = marginsData.xg(row), margin = marginsData.goalMargin(row), expected = marginsData.xgMargin(row);
+    const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
+    const label = T('xG');
+    return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
+      ...(nonPenalty ? [`Non-penalty goals: ${goals[0] === null ? 'Unavailable' : goals.join('–')}`] : []),
+      `${T('Goal margin')}: ${margin === null ? 'Unavailable' : `${margin > 0 ? '+' : ''}${margin}`}`,
+      `${label} for: ${xg[0] === null ? 'Unavailable' : fixed(xg[0])}`, `${label} against: ${xg[1] === null ? 'Unavailable' : fixed(xg[1])}`,
+      `${label} margin: ${expected === null ? 'Unavailable' : signed(expected)}`]};
+  }
   // Use Chart.js's event and tooltip lifecycle, with the full-height nearest
   // column geometry shared by pointer, touch and geometry tests.
   Chart.Interaction.modes.headToHead = (chart, event) => {
@@ -2696,7 +2758,7 @@
     const outline = context => away(context) ? 1 : 0;
     return {backgroundColor: fill, hoverBackgroundColor: fill, borderColor: '#CF7424', hoverBorderColor: '#CF7424', borderWidth: outline, hoverBorderWidth: outline, borderSkipped: false, barPercentage: .7, categoryPercentage: 1, minBarLength: 3};
   }
-  function createHeadToHead(canvas, matchNumbers = false) {
+  function createHeadToHead(canvas, matchNumbers = false, inspection = headToHeadInspection) {
     const options = commonOptions();
     options.interaction = {mode: 'headToHead', intersect: false};
     options.layout = {padding: {top: 12, right: 8, bottom: 28}};
@@ -2708,8 +2770,8 @@
     options.plugins.tooltip.padding = 8;
     options.plugins.tooltip.titleFont = {size: 11}; options.plugins.tooltip.bodyFont = {size: 11};
     options.plugins.tooltip.callbacks = {
-      title: items => items.length ? items[0].chart.meetings[items[0].dataIndex].date : '',
-      label: item => { const r = item.chart.meetings[item.dataIndex]; return [...(r.active ? ['season in progress'] : []), r.venue, r.opponent, `${r.score} · ${r.result}`, ...headToHeadExpectedDescription(r)]; },
+      title: items => items.length ? inspection(items[0].chart.meetings[items[0].dataIndex], items[0].dataIndex).title : '',
+      label: item => inspection(item.chart.meetings[item.dataIndex], item.dataIndex).lines,
     };
     const years = {id: 'headToHeadYears', afterDraw(chart) {
       const rows = chart.meetings || [], seen = new Set(), ctx = chart.ctx;
@@ -2722,11 +2784,17 @@
       chart.yearLabels = window.NWSLGeometry.headToHeadLabels(candidates, chart.chartArea);
       chart.yearLabels.forEach(label => ctx.fillText(label.text, label.center, chart.chartArea.bottom + 20)); ctx.restore();
     }};
-    const chart = new Chart(canvas, {type: 'bar', options, plugins: [years], data: {labels: [], datasets: [{label: 'Goal margin', data: [], ...venueBarStyle(canvas)}]}});
+    // Focusing a panel after a control below both charts scrolls the page.
+    // Its queued mouseout must not dismiss the new keyboard inspection.
+    const keyboardTooltip = {id: 'headToHeadKeyboard', beforeEvent(chart, {event, replay}) {
+      if (chart.keyboardInspecting && (event.type === 'mouseout' || replay)) return false;
+      chart.keyboardInspecting = false;
+    }};
+    const chart = new Chart(canvas, {type: 'bar', options, plugins: [years, keyboardTooltip], data: {labels: [], datasets: [{label: 'Goal margin', data: [], ...venueBarStyle(canvas)}]}});
     chart.meetings = [];
     // Every meeting has an inspectable slot, including those without xG or splits.
     chart.keyboardIncludeMissing = true;
-    keyboardAccess(chart, mark => headToHeadDescription(chart.meetings[mark.index]), true);
+    keyboardAccess(chart, mark => { const detail = inspection(chart.meetings[mark.index], mark.index); return [detail.title,...detail.lines].join(' · '); }, true);
     return chart;
   }
   const changeHeadToHead = event => {
@@ -2754,6 +2822,7 @@
       if (nonPenalty) { location.assign(location.href); return; }
     }
     if (!['team-seasons', 'head-to-head', 'thresholds'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
+    if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', `?${params}`); }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     // Only update known generic controls in the active view. Other controls

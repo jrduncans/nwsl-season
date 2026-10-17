@@ -260,7 +260,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 					t.Errorf("comparison URL lost hidden Data preference or mode: %s", fragment)
 				}
 			}
-			want := []string{"Goal differential", "xG differential"}
+			want := []string{"Goal margin", "xG margin"}
 			if strings.Contains(path, "trend-view=compare") {
 				want = []string{"Goals scored", "xG scored", "Goals allowed", "xG allowed"}
 			}

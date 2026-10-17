@@ -26,7 +26,7 @@ func assertHeadToHeadTiles(t *testing.T, page playwright.Page) {
 	if err := expect.Locator(page.Locator("[data-h2h-tile=Home] [data-h2h-encoding=home], [data-h2h-tile=Away] [data-h2h-encoding=away]")).ToHaveCount(2); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-direction]")).ToHaveText("Goal margin · up: win · zero: draw · down: loss"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-direction]")).ToHaveText("up: win · zero: draw · down: loss"); err != nil {
 		t.Fatal(err)
 	}
 	var fits bool
@@ -54,8 +54,10 @@ func assertHeadToHeadTiles(t *testing.T, page playwright.Page) {
  const count=result=>rows.filter(row=>row.children[5].textContent===result).length;
  const goals=rows.reduce((sum,row)=>{row.children[4].textContent.split('–').map(Number).forEach((g,i)=>sum[i]+=g);return sum},[0,0]);
  const points=rows.reduce((sum,row)=>sum+Number(row.children[6].textContent),0);
- const expected=[tile.dataset.h2hTile,count('Win')+'–'+count('Draw')+'–'+count('Loss'),(n?(points/n).toFixed(2):'—')+' pts/match',goals.join('–')+' goals',n+' '+(n===1?'match':'matches')];
- return [...tile.children].every((child,i)=>child.textContent.trim()===expected[i]);
+ const expected=[tile.dataset.h2hTile,count('Win')+'–'+count('Draw')+'–'+count('Loss'),(n?(points/n).toFixed(2):'—')+' pts/match',goals.join('–')+' goals'];
+ const covered=rows.filter(row=>!row.children[8].textContent.includes('Unavailable'));
+ const xg=!n ? 'No matches' : covered.length===n ? [8,9].map(i=>covered.reduce((sum,row)=>sum+Number(row.children[i].textContent),0).toFixed(2)).join('–')+' xG' : 'xG incomplete';
+ return [...tile.children].slice(0,4).every((child,i)=>child.textContent.trim()===expected[i])&&tile.textContent.includes(xg)&&tile.textContent.includes(n+' '+(n===1?'match':'matches'));
  })`, nil, &agrees)
 	if !agrees {
 		t.Fatal("server and in-place tiles must match official meeting rows")
@@ -73,10 +75,10 @@ func TestExploreHeadToHeadPhoneLayout(t *testing.T) {
 		evalJSON(t, page, `()=>{
  document.querySelector('.explore-h2h-controls').scrollIntoView({block:'start'});
  const tiles=document.querySelector('[data-h2h-record]').getBoundingClientRect(),chart=document.querySelector('[data-h2h-chart]').getBoundingClientRect();
- return tiles.top>=0 && tiles.bottom<=innerHeight && chart.top>=0 && chart.bottom<=innerHeight;
+ return tiles.top>=0 && tiles.bottom<=innerHeight && chart.width>0 && chart.height<=innerHeight;
  }`, nil, &visible)
 		if width == 390 && !visible {
-			t.Fatalf("%dpx: tiles and whole chart must fit below controls in 812px", width)
+			t.Fatalf("%dpx: tiles must fit below controls and each panel must fit the viewport", width)
 		}
 	}
 }
@@ -256,6 +258,7 @@ func assertHeadToHeadTooltip(t *testing.T, page playwright.Page, index int) stri
  const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));
  return c.tooltip.opacity>0 && c.tooltip.dataPoints?.[0]?.dataIndex===index;
  }`, index); err != nil {
+
 		t.Fatal(err)
 	}
 	var state struct {
@@ -570,7 +573,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 	}
 }
 
-func TestExploreHeadToHeadExpectedView(t *testing.T) {
+func TestExploreHeadToHeadMarginsAlias(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
@@ -581,9 +584,7 @@ func TestExploreHeadToHeadExpectedView(t *testing.T) {
 			visitStatic(t, page, path)
 		} else {
 			visit(t, page, path)
-		}
-		if !noScript {
-			defer expectInPlace(t, page, "three head-to-head views and penalties")()
+			defer expectInPlace(t, page, "Margins alias and views")()
 		}
 		choose := func(selector, value string) {
 			chooseOption(t, page, selector, value)
@@ -595,39 +596,30 @@ func TestExploreHeadToHeadExpectedView(t *testing.T) {
 		}
 		for _, penalties := range []string{"include", "exclude"} {
 			choose("[data-h2h-penalties]", penalties)
-			if err := expect.Locator(page.Locator("[data-h2h-expected]")).ToBeVisible(); err != nil {
+			if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeHidden(); err != nil {
+			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("actual"); err != nil {
 				t.Fatal(err)
 			}
 			if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeHidden(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("[data-h2h-direction]")).ToContainText("zero: level"); err != nil {
-				t.Fatal(err)
-			}
-			if err := expect.Locator(page.Locator("[data-h2h-fallback]")).Not().ToContainText("Margin gap:"); err != nil {
+			if err := expect.Locator(page.Locator("[data-h2h-fallback]")).ToContainText(regexp.MustCompile(`(?i)goal margin:`)); err != nil {
 				t.Fatal(err)
 			}
 			assertNoHorizontalOverflow(t, page)
 			if !noScript {
-				var expected bool
-				evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.data.datasets[0].data.every((v,i)=>Math.abs(v-c.meetings[i].expectedMargin)<1e-9)}`, nil, &expected)
-				if !expected {
-					t.Fatal("Expected bars must use xG margin")
+				if queryOf(t, page).Has("h2h-series") {
+					t.Fatal("alias must canonicalize to default")
 				}
+				assertMarginPanels(t, page, "head-to-head", "head-to-head-xg")
 				canvas := page.Locator("[data-chart=head-to-head]")
 				if err := canvas.Press("Home"); err != nil {
 					t.Fatal(err)
 				}
-				if tooltip := assertHeadToHeadTooltip(t, page, 0); !strings.Contains(tooltip, "xG margin:") && !strings.Contains(tooltip, "npxG margin:") {
+				if tooltip := assertHeadToHeadTooltip(t, page, 0); !strings.Contains(tooltip, "xG margin:") {
 					t.Fatal(tooltip)
-				}
-				var fits bool
-				evalJSON(t, page, `()=>[...document.querySelectorAll('.explore-h2h-venue')].every(e=>e.scrollWidth<=Math.ceil(e.getBoundingClientRect().width))`, nil, &fits)
-				if !fits {
-					t.Fatal("venue labels overflow their boxes")
 				}
 			}
 		}
@@ -635,31 +627,40 @@ func TestExploreHeadToHeadExpectedView(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-expected]")).ToBeHidden(); err != nil {
-			t.Fatal(err)
-		}
 		choose("[data-h2h-series]", "actual")
 		if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
-			t.Fatal(err)
-		}
-		choose("[data-h2h-series]", "expected")
-		if err := expect.Locator(page.Locator("[data-h2h-expected]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
 		if !noScript {
 			if _, err := page.GoBack(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("actual"); err != nil {
+			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("both"); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := page.GoForward(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("expected"); err != nil {
-				t.Fatal(err)
-			}
+			assertMarginPanels(t, page, "head-to-head", "head-to-head-xg")
 		}
+	}
+}
+
+// The two panels must preserve all chronological slots, their x coordinates,
+// year labels, a common rounded scale and both selected-basis measures.
+func assertMarginPanels(t *testing.T, page playwright.Page, first, second string) {
+	t.Helper()
+	var agrees bool
+	evalJSON(t, page, `(names)=>{
+ const [a,b]=names.map(name=>Chart.getChart(document.querySelector('[data-chart="'+name+'"]')));
+ return a.config.type==='bar' && b.config.type==='bar' && a.scales.y.min===b.scales.y.min && a.scales.y.max===b.scales.y.max && a.scales.y.min===-a.scales.y.max &&
+ JSON.stringify(a.yearLabels)===JSON.stringify(b.yearLabels) &&
+ a.data.datasets[0].data.every((value,i)=>value===NWSLMargins.goalMargin(a.meetings[i])) &&
+ b.data.datasets[0].data.every((value,i)=>value===NWSLMargins.xgMargin(b.meetings[i])) &&
+ a.getDatasetMeta(0).data.every((bar,i)=>Math.abs(bar.x-b.getDatasetMeta(0).data[i].x)<.1);
+ }`, []string{first, second}, &agrees)
+	if !agrees {
+		t.Fatal("Margins panels must share a scale and chronological slots with correct values")
 	}
 }
 

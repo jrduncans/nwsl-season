@@ -88,7 +88,7 @@ func withPenalties(values url.Values, basis history.ScoringBasis) url.Values {
 // basisPattern matches every label that changes with the basis in one pass, so
 // replacement text is never rewritten again. The browser script uses the same
 // alternatives.
-var basisPattern = regexp.MustCompile(`\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Total goals|Goals)\b`)
+var basisPattern = regexp.MustCompile(`\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Goal margin|Total goals|Goals)\b`)
 
 func basisReplacement(match string) string {
 	switch match {
@@ -100,6 +100,8 @@ func basisReplacement(match string) string {
 		return "npxGD"
 	case "xG":
 		return "npxG"
+	case "Goal margin":
+		return "Non-penalty goal margin"
 	case "Goal differential":
 		return "Non-penalty goal differential"
 	case "Total goals":
