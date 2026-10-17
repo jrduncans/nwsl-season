@@ -216,13 +216,14 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 		return false
 	}
 	for target, want := range map[string]bool{
-		"/explore?view=teams&display=chart&measure=points&penalties=exclude":                      true,
+		"/explore?view=teams&display=chart&measure=points&penalties=exclude":                      false,
 		"/explore?view=teams&display=table&penalties=exclude":                                     true,
 		"/explore?view=teams&display=chart&measure=for&penalties=exclude":                         false,
 		"/explore?view=teams&display=quadrant&measure=points&penalties=exclude":                   false,
+		"/explore?view=team-history&measure=points&penalties=exclude":                             false,
+		"/explore?view=season-trend&trend-view=points&penalties=exclude":                          false,
+		"/explore?view=season-trend&trend-view=relative&average-series=xpoints&penalties=exclude": false,
 		"/explore?view=team-history&penalties=exclude":                                            true,
-		"/explore?view=season-trend&trend-view=points&penalties=exclude":                          true,
-		"/explore?view=season-trend&trend-view=relative&average-series=xpoints&penalties=exclude": true,
 		"/explore?view=season-trend&trend-view=compare&penalties=exclude":                         false,
 		"/explore?view=teams&display=chart&measure=points":                                        false,
 		"/explore?view=team-history":                                                              false,
@@ -233,6 +234,58 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 	}
 	_, body := getPage(t, archive, "/explore?view=team-history&penalties=exclude")
 	requireText(t, body, "[data-points-note=team-history]", pointsBasisNote)
+}
+
+func TestExplorePointsOnlySelectionsIgnoreAndCanonicalizePenalties(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	paths := []string{
+		"/explore?view=teams&display=chart&measure=points&penalties=exclude",
+		"/explore?view=teams&display=gap&measure=points&penalties=exclude",
+		"/explore?view=teams&display=scatter&measure=points&penalties=exclude",
+		"/explore?view=team-history&measure=points&penalties=exclude",
+		"/explore?view=season-trend&trend-view=points&penalties=exclude",
+		"/explore?view=season-trend&trend-view=relative&average-series=points&penalties=exclude",
+		"/explore?view=season-trend&trend-view=relative&average-series=xpoints&penalties=exclude",
+		"/explore?view=head-to-head&h2h-series=points&team=alpha&opponent=bravo&penalties=exclude",
+		"/explore?view=parity&penalties=exclude",
+		"/explore?view=team-seasons&team-seasons-measure=points&penalties=exclude",
+	}
+	for _, path := range paths {
+		_, body := getPage(t, archive, path)
+		t.Run(path, func(t *testing.T) {
+			panel := strings.Split(path, "view=")[1]
+			panel = strings.Split(panel, "&")[0]
+			panelSelector := "[data-panel=" + panel + "]"
+			controlSelector := panelSelector + " label.penalties-select[hidden]"
+			if panel == "head-to-head" {
+				controlSelector = panelSelector + " [data-h2h-penalties-label][hidden]"
+			}
+			if panel == "team-seasons" {
+				controlSelector = panelSelector + " [data-team-seasons-penalties-control][hidden]"
+			}
+			if len(find(t, body, controlSelector)) == 0 {
+				t.Fatalf("Penalties control is not hidden in %s", panel)
+			}
+			for _, note := range find(t, body, `[data-points-note]`) {
+				if note.Parent != nil && note.Parent.Data == "section" && attr(note.Parent, "data-panel") != panel {
+					continue
+				}
+				if _, hidden := lookupAttr(note, "hidden"); !hidden {
+					t.Errorf("points note is visible")
+				}
+			}
+			for _, form := range find(t, body, panelSelector+" form") {
+				if len(findIn(t, form, `input[type=hidden][name=penalties]`)) != 0 {
+					t.Errorf("form carries stale penalties: %s", text(form))
+				}
+			}
+			for _, link := range find(t, body, "a[href]") {
+				if strings.Contains(attr(link, "href"), "penalties=") {
+					t.Errorf("link carries penalties: %s", attr(link, "href"))
+				}
+			}
+		})
+	}
 }
 
 func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *testing.T) {

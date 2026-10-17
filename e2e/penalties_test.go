@@ -110,6 +110,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 
 	// Every analysis keeps the carried basis. Team-seasons on Points explains
 	// that it ignores the basis and hides its control.
+	carriedExclusion := true
 	for _, tab := range exploreTabs {
 		if err := page.Locator("a[data-group-choice]").Filter(playwright.LocatorFilterOptions{HasText: tab.group}).Click(); err != nil {
 			t.Fatalf("open group %s: %v", tab.group, err)
@@ -117,21 +118,31 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 		if err := page.Locator("nav.explore-subviews:not([hidden]) a").Filter(playwright.LocatorFilterOptions{HasText: regexp.MustCompile("^" + regexp.QuoteMeta(tab.tab) + "$")}).Click(); err != nil {
 			t.Fatalf("open tab %s: %v", tab.tab, err)
 		}
-		if got := queryOf(t, page).Get("penalties"); got != "exclude" {
-			t.Errorf("%s / %s dropped penalties: %s", tab.group, tab.tab, page.URL())
+		pointsOnlyTab := tab.tab == "Parity" || tab.tab == "Team-seasons"
+		if pointsOnlyTab {
+			carriedExclusion = false
+		}
+		if got := queryOf(t, page).Get("penalties"); (got == "exclude") != carriedExclusion {
+			t.Errorf("%s / %s penalties = %q, carried exclusion = %v: %s", tab.group, tab.tab, got, carriedExclusion, page.URL())
 		}
 		if tab.tab == "Team-seasons" {
 			if err := expect.Locator(page.Locator("[data-team-seasons-penalties]")).ToBeHidden(); err != nil {
 				t.Error(err)
 			}
-			if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToContainText("Points include penalties"); err != nil {
+			if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeHidden(); err != nil {
 				t.Error(err)
 			}
-		} else if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue("exclude"); err != nil {
-			t.Errorf("%s / %s does not offer Penalties = Excluded: %v", tab.group, tab.tab, err)
+		} else if tab.tab == "Parity" {
+			if err := expect.Locator(page.Locator("[data-parity-controls] .penalties-select")).ToBeHidden(); err != nil {
+				t.Error(err)
+			}
+		} else if carriedExclusion && tab.tab != "Shield and playoff thresholds" {
+			if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue("exclude"); err != nil {
+				t.Errorf("%s / %s does not offer Penalties = Excluded: %v", tab.group, tab.tab, err)
+			}
 		}
 		for _, href := range hrefs(t, page, "nav.explore-views a, nav.explore-subviews a") {
-			if parsed, err := url.Parse(href); err != nil || parsed.Query().Get("penalties") != "exclude" {
+			if parsed, err := url.Parse(href); err != nil || (parsed.Query().Get("penalties") == "exclude") != carriedExclusion {
 				t.Errorf("%s / %s: link %q lost penalties=exclude", tab.group, tab.tab, href)
 			}
 		}

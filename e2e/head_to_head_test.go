@@ -714,6 +714,9 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	for _, vp := range []viewport{Desktop, Mobile} {
 		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&penalties=exclude")
 		chooseOption(t, page, "[data-h2h-series]", "points")
+		if err := page.WaitForURL("**h2h-series=points**"); err != nil {
+			t.Fatal(err)
+		}
 		assertPointsChart(t, page, `[data-chart="head-to-head"]`, `[data-h2h-points-tiles]`)
 		for _, selector := range []string{"[data-h2h-penalties-label]", "[data-h2h-points-note]", "[data-h2h-venues]", "[data-h2h-comparison]"} {
 			if err := expect.Locator(page.Locator(selector)).ToBeHidden(); err != nil {

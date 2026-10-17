@@ -23,6 +23,7 @@ type explorePage struct {
 	exploreTeamRankingsView
 	View                              string
 	ViewGroup                         string
+	PointsOnly                        bool
 	Records                           []exploreRecord
 	ChartData                         []exploreChartRecord
 	ChartLibraryPath, ChartLabelsPath string
@@ -39,9 +40,9 @@ func (p explorePage) PointsNoteShown(panel string) bool {
 	}
 	switch panel {
 	case "teams":
-		return p.View == "teams" && (p.TeamDisplay == "table" || (p.TeamDisplay != "quadrant" && p.TeamMeasure == "points"))
+		return p.View == "teams" && p.TeamDisplay == "table"
 	case "team-history":
-		return p.View == "team-history"
+		return p.View == "team-history" && p.TeamMeasure != "points"
 	case "season-trend":
 		return p.View == "season-trend" && (p.TrendView == "points" || (p.TrendView == "relative" && (p.TrendAverageSeries == "points" || p.TrendAverageSeries == "xpoints")))
 	}
@@ -110,7 +111,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view)}
+	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query())}
 	// The Explore workspace keeps its own selection in the query, so the basis
 	// links change only the penalties parameter.
 	for index, choice := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {

@@ -14,7 +14,7 @@
 <input type="hidden" name="h2h-sort" value="{{.H2HSort}}"{{if not .H2HExpanded}} disabled{{end}}><input type="hidden" name="h2h-order" value="{{.H2HOrder}}"{{if not .H2HExpanded}} disabled{{end}}>
 <label>Opponent <select name="opponent" data-h2h-opponent>{{range .H2HOpponents}}<option value="{{.Opponent.ID}}"{{if eq .Opponent.ID $.H2HPair.Opponent.ID}} selected{{end}}>{{.Opponent.Name}} ({{.All.Played}})</option>{{end}}</select></label>
 <label data-h2h-view-label>View <select name="h2h-series" data-h2h-series><option value="actual"{{if not .H2HShowExpected}} selected{{end}}>Actual</option><option value="expected"{{if .H2HExpectedOnly}} selected{{end}}>Expected</option><option value="both"{{if .H2HBoth}} selected{{end}}>Actual vs expected</option><option value="points"{{if .H2HPoints}} selected{{end}}>Points vs xPoints</option></select></label>
-<label data-h2h-penalties-label{{if .H2HPoints}} hidden{{end}}>Penalties <select name="penalties" data-h2h-penalties><option value="include"{{if not .NonPenalty}} selected{{end}}>Include</option><option value="exclude"{{if .NonPenalty}} selected{{end}}>Exclude</option></select></label>
+<label data-h2h-penalties-label{{if .H2HPoints}} hidden{{end}}>Penalties <select name="penalties" data-h2h-penalties{{if .H2HPoints}} disabled{{end}}><option value="include"{{if not .NonPenalty}} selected{{end}}>Included</option><option value="exclude"{{if .NonPenalty}} selected{{end}}>Excluded</option></select></label>
 <noscript><button class="button" type="submit" data-h2h-submit>Show head to head</button></noscript>
 </form>
 </div>

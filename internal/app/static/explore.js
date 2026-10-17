@@ -73,8 +73,20 @@
   // Official points and ASA xPts keep penalties; say so wherever they appear.
   const setPointsNote = (panel, shown) => {
     const note = root.querySelector(`[data-points-note="${panel}"]`);
-    if (note) note.hidden = !(nonPenalty && shown);
+    if (note) note.hidden = !(nonPenalty && shown && !isPointsOnlySelection(new URL(location.href).searchParams));
   };
+  function isPointsOnlySelection(params) {
+    const view = params.get('view') || (params.has('metric') ? 'trend' : 'teams');
+    if (view === 'parity') return true;
+    if (view === 'teams') {
+      const display = params.get('display') || 'chart';
+      return !['table', 'quadrant'].includes(display) && (params.get('measure') || 'difference') === 'points';
+    }
+    if (view === 'team-seasons') return !params.get('team-seasons-measure') || params.get('team-seasons-measure') === 'points';
+    if (view === 'team-history') return params.get('measure') === 'points';
+    if (view === 'season-trend') return params.get('trend-view') === 'points' || (params.get('trend-view') === 'relative' && ['points', 'xpoints'].includes(params.get('average-series')));
+    return view === 'head-to-head' && params.get('h2h-series') === 'points';
+  }
   const fixed = value => (Math.abs(value) < .005 ? 0 : value).toFixed(2);
   const signed = value => `${value >= .005 ? '+' : ''}${fixed(value)}`;
   // Pure chart geometry lives in explore-geometry.js, which loads first.
@@ -1311,6 +1323,7 @@
       : display === 'scatter' ? 'Actual vs expected by team (regular-season)'
       : display === 'quadrant' ? 'Scored vs allowed by team (regular-season)' : 'Actual vs expected (regular-season)';
     root.querySelector('[data-team-measure-control]').hidden = display === 'table' || display === 'quadrant';
+    root.querySelector('[data-team-controls] [data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && measure.index === 3;
     root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
       `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
@@ -1649,13 +1662,14 @@
     const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
     const context = historyContextData[measure.index];
     const isPoints = measure.index === 3;
+    root.querySelector('[data-team-history-controls] [data-penalties-selector]').closest('label').hidden = isPoints;
     root.querySelector('#explore-team-history-title').textContent =
       `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
     const choices = historySeries.options;
     choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
     choices[2].textContent = isPoints ? 'xPts' : 'xG';
-    setPointsNote('team-history', true);
+    setPointsNote('team-history', !isPoints);
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
     root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
     root.querySelector('[data-history-context-legend]').hidden = !contextEnabled;
@@ -1976,6 +1990,7 @@
     const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : 'goals';
     const averageReference = ['team', 'league', 'playoff', 'top-four', 'shield', 'best'].includes(params.get('average-reference')) ? params.get('average-reference') : 'league';
     const effectiveSeries = relative ? averageSeries : 'both';
+    trendControls.querySelector('[data-penalties-selector]').closest('label').hidden = points || (relative && ['points', 'xpoints'].includes(averageSeries));
     Object.entries({season, team: teamID, 'trend-view': view, series, 'average-series': averageSeries, 'average-reference': averageReference, 'trend-mode': mode, window: String(window)}).forEach(([key, value]) => { control(key).value = value; });
     root.querySelector('[data-trend-average-data-control]').hidden = !relative;
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
@@ -2474,6 +2489,7 @@
     const xgLabel = label('xG');
     h2hSeries.value = series;
     root.querySelector('[data-h2h-penalties-label]').hidden = pointsView;
+    h2hPenalties.disabled = pointsView;
     root.querySelector('[data-h2h-points-title]').hidden = !pointsView;
     h2hPenalties.value = params.get('penalties') === 'exclude' ? 'exclude' : 'include';
     const carriedSeries = root.querySelector('[data-h2h-carried-series]'); carriedSeries.disabled = !showExpected; carriedSeries.value = h2hSeries.value;
@@ -2725,9 +2741,15 @@
     // A thresholds request skips forecast work. Entering Match by match needs
     // its forecast benchmark payload from a normal server render.
     if (root.dataset.view === 'thresholds' && view === 'season-trend') { location.assign(location.href); return; }
+    if (isPointsOnlySelection(params) && params.get('penalties') === 'exclude') {
+      params.delete('penalties');
+      history.replaceState(null, '', `?${params}`);
+      if (nonPenalty) { location.assign(location.href); return; }
+    }
     if (!['team-seasons', 'head-to-head', 'thresholds'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
+    if (view === 'parity') root.querySelector('[data-parity-controls] [data-penalties-selector]')?.closest('label')?.setAttribute('hidden', '');
     const group = view === 'teams' ? 'teams'
       : ['team-rankings', 'season-trend', 'team-history', 'head-to-head'].includes(view) ? 'profile' : 'league';
     root.querySelectorAll('[data-group-views]').forEach(nav => { nav.hidden = nav.dataset.groupViews !== group; });
@@ -2827,6 +2849,9 @@
   function update(changes) {
     const url = new URL(location.href);
     Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
+    const becomingPointsOnly = isPointsOnlySelection(url.searchParams);
+    if (becomingPointsOnly) url.searchParams.delete('penalties');
+    if (becomingPointsOnly && root.dataset.penalties === 'exclude') { location.assign(url); return; }
     if (url.searchParams.get('view') === 'season-trend') {
       const params = url.searchParams;
       if (params.get('trend-view') !== 'points' || params.get('trend-mode') !== 'match' || params.get('trend-sort') !== 'points-gap') {

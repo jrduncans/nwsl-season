@@ -132,18 +132,20 @@ func TestExploreParityFallsBackFromAnUnplottedCatalogSeason(t *testing.T) {
 	}
 }
 
-func TestExploreParityNonPenaltyBasisKeepsPointsAndAddsTheNote(t *testing.T) {
+func TestExploreParityIgnoresAndDropsNonPenaltyBasis(t *testing.T) {
 	archive := penaltyArchive(t, 20)
 	_, all := getPage(t, archive, "/explore?view=parity")
 	_, np := getPage(t, archive, "/explore?view=parity&penalties=exclude")
-	requireText(t, np, "[data-panel=parity]", "Points include penalties; ASA publishes no non-penalty expected points.")
+	forbidText(t, np, "[data-panel=parity]", "Points include penalties")
+	requireAttr(t, np, "[data-panel=parity] label.penalties-select", "hidden", "")
+	forbidRaw(t, np, `data-parity-controls><input type="hidden" name="penalties"`)
 	forbidText(t, all, "[data-panel=parity]", "Points include penalties")
 	if a, b := text(find(t, all, "[data-parity-rows]")[0]), text(find(t, np, "[data-parity-rows]")[0]); a != b {
 		t.Errorf("values changed with the basis: %q vs %q", a, b)
 	}
-	// A season without a complete penalty split is not plotted on that basis.
+	// Penalty-split coverage cannot affect Parity eligibility.
 	_, partial := getPage(t, penaltyArchive(t, 19), "/explore?view=parity&penalties=exclude")
-	requireText(t, partial, "[data-panel=parity]", "No seasons currently have enough complete results to compare.")
+	forbidText(t, partial, "[data-panel=parity]", "No seasons currently have enough complete results to compare.")
 }
 
 func TestExploreParitySortUsesUnroundedValuesAndKeepsMissingLast(t *testing.T) {
