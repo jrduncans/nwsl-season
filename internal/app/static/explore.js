@@ -2755,9 +2755,13 @@
     }
     if (!['team-seasons', 'head-to-head', 'thresholds'].includes(view) && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
     dismiss();
-    root.querySelectorAll('[data-penalties-selector]').forEach(select => { select.closest('label').hidden = false; });
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
-    root.querySelectorAll('[data-panel="parity"] [data-penalties-selector]').forEach(select => { select.closest('label').hidden = view === 'parity'; });
+    // Only update known generic controls in the active view. Other controls
+    // retain their server-rendered visibility until their renderer owns them.
+    if (['trend', 'distribution', 'home-advantage', 'parity', 'table', 'teams', 'team-rankings', 'team-history', 'season-trend'].includes(view)) {
+      const select = root.querySelector(`[data-panel="${view}"] [data-penalties-selector]`);
+      if (select) select.closest('label').hidden = isPointsOnlySelection(params);
+    }
     const group = view === 'teams' ? 'teams'
       : ['team-rankings', 'season-trend', 'team-history', 'head-to-head'].includes(view) ? 'profile' : 'league';
     root.querySelectorAll('[data-group-views]').forEach(nav => { nav.hidden = nav.dataset.groupViews !== group; });

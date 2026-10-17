@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -238,19 +239,19 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 
 func TestExplorePointsOnlySelectionsIgnoreAndCanonicalizePenalties(t *testing.T) {
 	archive := penaltyArchive(t, 20)
-	paths := []string{
-		"/explore?view=teams&display=chart&measure=points&penalties=exclude",
-		"/explore?view=teams&display=gap&measure=points&penalties=exclude",
-		"/explore?view=teams&display=scatter&measure=points&penalties=exclude",
-		"/explore?view=team-history&measure=points&penalties=exclude",
-		"/explore?view=season-trend&trend-view=points&penalties=exclude",
-		"/explore?view=season-trend&trend-view=relative&average-series=points&penalties=exclude",
-		"/explore?view=season-trend&trend-view=relative&average-series=xpoints&penalties=exclude",
-		"/explore?view=head-to-head&h2h-series=points&team=alpha&opponent=bravo&penalties=exclude",
-		"/explore?view=parity&penalties=exclude",
-		"/explore?view=team-seasons&team-seasons-measure=points&penalties=exclude",
-	}
-	for _, path := range paths {
+	for _, selection := range apptest.ExplorePointsOnlyCases() {
+		if !selection.PointsOnly {
+			continue
+		}
+		path := "/explore"
+		if selection.Query != "" {
+			path += "?" + selection.Query
+		}
+		separator := "?"
+		if strings.Contains(path, "?") {
+			separator = "&"
+		}
+		path += separator + "penalties=exclude"
 		_, body := getPage(t, archive, path)
 		t.Run(path, func(t *testing.T) {
 			panel := strings.Split(path, "view=")[1]
@@ -285,6 +286,18 @@ func TestExplorePointsOnlySelectionsIgnoreAndCanonicalizePenalties(t *testing.T)
 				}
 			}
 		})
+	}
+}
+
+func TestPointsOnlyExplorePredicateMatchesSharedCases(t *testing.T) {
+	for _, selection := range apptest.ExplorePointsOnlyCases() {
+		query, err := url.ParseQuery(selection.Query)
+		if err != nil {
+			t.Fatalf("parse shared query %q: %v", selection.Query, err)
+		}
+		if got := pointsOnlyExploreSelection(query); got != selection.PointsOnly {
+			t.Errorf("pointsOnlyExploreSelection(%q) = %v, want %v", selection.Query, got, selection.PointsOnly)
+		}
 	}
 }
 
