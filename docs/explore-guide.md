@@ -505,13 +505,16 @@ team's xG coverage is incomplete; goal ranks remain.
 | Parameter | Values | Default |
 |---|---|---|
 | `trend-view` | `balance` (Scoring balance), `compare` (Actual vs xG), `difference`, `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
-| `series` | `goals`, `xg`, `both` | `both` |
 | `trend-mode` | `match`, `rolling` | `rolling` |
 | `window` | `3`, `5`, `10` | `5` |
 | `trend-sort` | `match`, `points-gap` (each-match points table) | `match` |
 | `trend-order` | `asc`, `desc` | `asc` |
-| `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `xg` if `series=xg`, else `goals` |
+| `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
+
+Scoring balance always shows both Goals and xG. A carried `series` parameter
+belongs to Season by season and is ignored here; it stays in the form and links
+so switching views restores that selection.
 
 Matches are numbered by kickoff instant (`fixtures.ParseKickoff` handles both
 RFC 3339 and ASA timestamps), with fixture ID breaking ties; a missing kickoff

@@ -135,9 +135,18 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	// Keep the other views' payload on the requested basis, including when they
 	// are reached by an in-place tab switch from Head to head.
 	profileQuery := r.URL.Query()
-	if view == "head-to-head" {
+	if view == "head-to-head" || view == "season-trend" {
 		profileQuery = cloneQuery(profileQuery)
+	}
+	if view == "head-to-head" {
 		profileQuery.Del("team")
+	}
+	if view == "season-trend" {
+		// `series` belongs to Season by season. Match by match carries valid
+		// choices through its form, but ignores malformed carried values.
+		if values := profileQuery["series"]; len(values) != 1 || !slices.Contains([]string{"goals", "xg", "both"}, values[0]) {
+			profileQuery.Del("series")
+		}
 	}
 	page.exploreTeamHistoryView, err = exploreTeamHistory(profileQuery, teams.TeamSeasons)
 	if err != nil {
@@ -168,6 +177,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	}
 	officialQuery := cloneQuery(r.URL.Query())
 	officialQuery.Del("penalties")
+	if view == "season-trend" {
+		if values := officialQuery["series"]; len(values) != 1 || !slices.Contains([]string{"goals", "xg", "both"}, values[0]) {
+			officialQuery.Del("series")
+		}
+	}
 	officialTeams, err := exploreTeams(officialQuery, allSummaries, archive)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
