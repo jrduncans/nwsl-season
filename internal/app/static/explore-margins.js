@@ -1,4 +1,4 @@
-// Numeric Margins summaries and their single display-formatting step.
+// Numeric venue summaries and formatting for Margins and Goals vs xG.
 // Both renderers consume the common match values and explicit goal coverage.
 (() => {
   const measure = Object.freeze({scored: 0, allowed: 1, margin: 2, points: 3});
@@ -38,5 +38,19 @@
       xgCoverage: !n || tile.xgCovered < n ? `${xgLabel} ${tile.xgCovered}/${n} matches` : '',
       matches: `${n} ${n === 1 ? 'match' : 'matches'}`};
   }
-  window.NWSLMargins = Object.freeze({measure, goals, xg, goalMargin, xgMargin, summarize, format});
+  function formatGoalGap(tile, {nonPenalty, xgLabel}, unit) {
+    const noun = unit === 'match' ? 'matches' : 'meetings', n = tile.played;
+    const lines = [tile.goalsFor, tile.goalsAgainst].map((actual, side) => {
+      if (!n) return `No ${noun}`;
+      if (tile.goalsCovered !== n) return nonPenalty ? 'Non-penalty goals incomplete' : 'Goals incomplete';
+      const label = `${nonPenalty ? 'non-penalty ' : ''}${side ? 'allowed' : 'goals'}`;
+      if (tile.xgCovered !== n) return `${actual} ${label} · ${xgLabel} incomplete`;
+      const expected = side ? tile.xgAgainst : tile.xgFor, gap = actual - expected;
+      return `${actual} ${label} vs ${expected.toFixed(2)} ${xgLabel}${side ? ' allowed' : ''} · ${Math.abs(gap).toFixed(2)} ${gap < 0 ? 'below' : 'above'}`;
+    });
+    return {label: tile.label, scored: lines[0], allowed: lines[1],
+      coverage: `${tile.xgCovered} of ${n} ${noun} with ${xgLabel}`,
+      splitCoverage: nonPenalty && tile.goalsCovered < n ? `${tile.goalsCovered} of ${n} ${noun} with penalty split` : ''};
+  }
+  window.NWSLMargins = Object.freeze({measure, goals, xg, goalMargin, xgMargin, summarize, format, formatGoalGap});
 })();

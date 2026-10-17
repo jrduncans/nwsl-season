@@ -271,7 +271,7 @@ func assertHeadToHeadTooltip(t *testing.T, page playwright.Page, index int) stri
  const row=c.meetings[index],label=document.querySelectorAll('[data-h2h-mark]')[index];
  const text=[...tip.title,...tip.body.flatMap(b=>b.lines)].join(' · ');
  return {text,label:label.getAttribute('aria-label'), index:tip.dataPoints?.[0]?.dataIndex??-1, visible:tip.opacity>0,
- adjacent:Math.abs(tip.caretX-bar.x)<1 && (tip.x>=bar.x || tip.x+tip.width<=bar.x) && Math.abs(tip.caretY-bar.y)<1,
+ adjacent:Math.abs(tip.caretX-bar.x)<1 && tip.x>=0 && tip.x+tip.width<=c.width && Math.abs(tip.caretY-bar.y)<1,
  encoded:label.dataset.venue===row.venue&&label.dataset.encoding===(row.venue==='Home'?'solid-blue':'striped-orange')};
  }`, index, &state)
 	if state.Index != index || !state.Visible || !state.Adjacent || !state.Encoded {
@@ -376,7 +376,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-title]")).ToContainText("actual vs expected"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-title]")).ToContainText("goals vs xG"); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-values]")).Not().ToHaveAttribute("open", ""); err != nil {
@@ -390,7 +390,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	var gaps bool
-	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.data.datasets[0].data.every((value,i)=>Math.abs(value-(c.meetings[i].margin-c.meetings[i].expectedMargin))<1e-9)&&!c.config.plugins.some(p=>p.id==='headToHeadExpected')}`, nil, &gaps)
+	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return c.data.datasets[0].data.every((value,i)=>Math.abs(value-(c.meetings[i].basisGoals[0]-c.meetings[i].xg[0]))<1e-9)&&!c.config.plugins.some(p=>p.id==='headToHeadExpected')}`, nil, &gaps)
 	if !gaps {
 		t.Fatal("comparison must show gap bars with no ticks")
 	}
@@ -404,7 +404,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	tooltip := assertHeadToHeadTooltip(t, page, 0)
-	if !strings.Contains(tooltip, "xG for:") || !strings.Contains(tooltip, "xPts:") || !strings.Contains(tooltip, "Margin gap:") {
+	if !strings.Contains(tooltip, "xG for:") || !strings.Contains(tooltip, "Goals against − xG against:") || !strings.Contains(tooltip, "Goals for − xG for:") {
 		t.Fatal(tooltip)
 	}
 	if err := page.Keyboard().Press("Escape"); err != nil {
@@ -426,13 +426,13 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 		t.Fatal("keyboard expected tooltip differs")
 	}
 	chooseOption(t, page, "[data-h2h-penalties]", "exclude")
-	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("Non-penalty goals"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("non-penalty goals"); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-points-note]")).ToBeVisible(); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-points-note]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
 	assertNoHorizontalOverflow(t, page)
@@ -487,7 +487,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 		} else {
 			visit(t, page, base+path)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-coverage]")).ToHaveText("1 meeting lacks xG. 2 meetings lack xPts."); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-coverage]")).ToHaveText("1 meeting lacks xG."); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
@@ -496,20 +496,14 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("xG incomplete"); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("xPts incomplete"); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).Not().ToContainText("xPts"); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-h2h-fallback]")).ToContainText("Unavailable"); err != nil {
 			t.Fatal(err)
 		}
-		headlines, err := page.Locator("[data-h2h-comparison] .explore-h2h-total").AllTextContents()
-		if err != nil || len(headlines) != 3 {
-			t.Fatalf("comparison headlines: %v, %v", headlines, err)
-		}
-		for _, headline := range headlines {
-			if !regexp.MustCompile(`^\s*\d+\s+vs `).MatchString(headline) {
-				t.Fatalf("actual total must be a whole number: %q", headline)
-			}
+		if err := expect.Locator(page.Locator("[data-h2h-comparison] [data-goal-gap-tile]")).ToHaveCount(3); err != nil {
+			t.Fatal(err)
 		}
 		totals, err := page.Locator("[data-h2h-comparison]").TextContent()
 		if err != nil {
@@ -538,7 +532,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 				}
 			}
 			tooltip := assertHeadToHeadTooltip(t, page, missing)
-			if !strings.Contains(tooltip, "xG for: Unavailable") || !strings.Contains(tooltip, "Margin gap: Unavailable") {
+			if !strings.Contains(tooltip, "xG for: Unavailable") || !strings.Contains(tooltip, "Goals for − xG for: Unavailable") {
 				t.Fatal(tooltip)
 			}
 		}
@@ -719,7 +713,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertPointsChart(t, page, `[data-chart="head-to-head"]`, `[data-h2h-points-tiles]`)
-		for _, selector := range []string{"[data-h2h-penalties-label]", "[data-h2h-points-note]", "[data-h2h-venues]", "[data-h2h-comparison]"} {
+		for _, selector := range []string{"[data-h2h-penalties-label]", "[data-h2h-points-note]", "[data-h2h-comparison]"} {
 			if err := expect.Locator(page.Locator(selector)).ToBeHidden(); err != nil {
 				t.Fatal(err)
 			}
@@ -790,6 +784,27 @@ func TestExplorePointsTileFormattingParity(t *testing.T) {
 		}
 		if !slices.Equal(rendered[0], rendered[1]) {
 			t.Fatalf("server and browser tiles differ: %v vs %v", rendered[0], rendered[1])
+		}
+	}
+}
+
+func TestExploreHeadToHeadGoalGapPanels(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=both")
+		defer expectInPlace(t, page, "goal gap panel switches")()
+		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
+		chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
+		chooseOption(t, page, "[data-h2h-series]", "actual")
+		chooseOption(t, page, "[data-h2h-series]", "both")
+		if err := page.Locator("[data-chart=head-to-head-xg]").Press("End"); err != nil {
+			t.Fatal(err)
+		}
+		expect := playwright.NewPlaywrightAssertions()
+		if err := expect.Locator(page.Locator("[data-chart-status]")).ToContainText("Non-penalty goals against − npxG against:"); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

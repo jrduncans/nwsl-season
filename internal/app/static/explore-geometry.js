@@ -27,8 +27,11 @@
     return {min: signed ? -extent : 0, max: extent, step, decimals: (String(step).split('.')[1] || '').length, ticks};
   }
 
-  // Margins in both panels use one symmetric, rounded scale, including missing slots.
+  // Paired margins or side gaps share one symmetric rounded scale, including missing slots.
   const marginAxis = (goals, xg) => trendAxis([...goals, ...xg].filter(value => value !== null), true);
+
+  // Each end keeps its own signed gap; missing goals or xG never become zero.
+  const goalGap = (goals, xg, side) => goals[side] == null || xg[side] == null ? null : goals[side] - xg[side];
 
   // Fit the visible extremes with 5% padding on each side, rather than padding a
   // whole quadrant. A tied population still needs a small, nonzero range for
@@ -207,5 +210,5 @@
     }
     return [...labels, last];
   }
-  window.NWSLGeometry = Object.freeze({marginAxis, headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
+  window.NWSLGeometry = Object.freeze({goalGap, marginAxis, headToHeadValue, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 
+	playwright "github.com/mxschmitt/playwright-go"
+
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 )
 
@@ -17,6 +19,11 @@ func TestExploreMarginsGoBrowserParity(t *testing.T) {
 		name, scenario, path, tiles string
 		missingSplit                bool
 	}{
+		{"season goal gaps", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&trend-mode=match", "[data-trend-goal-gap-tiles]", false},
+		{"season goal gaps incomplete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&trend-mode=match", "[data-trend-goal-gap-tiles]", false},
+		{"h2h goal gaps", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both", "[data-h2h-comparison]", false},
+		{"h2h goal gaps incomplete", apptest.ScenarioTeams, "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both", "[data-h2h-comparison]", false},
+		{"h2h goal gaps missing split", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both&penalties=exclude", "[data-h2h-comparison]", true},
 		{"season complete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&trend-mode=match", "[data-trend-margin-tiles]", false},
 		{"season incomplete xG", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&trend-mode=match", "[data-trend-margin-tiles]", false},
 		{"season non-penalty", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&trend-mode=match&penalties=exclude", "[data-trend-margin-tiles]", false},
@@ -37,7 +44,7 @@ func TestExploreMarginsGoBrowserParity(t *testing.T) {
 			base := exploreBaseArchive(t, archive)
 			noScript := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
 			visitStatic(t, noScript, base+tc.path)
-			read := `selector=>[...document.querySelector(selector).children].map(tile=>({lines:[...tile.children].map(line=>line.textContent.trim()),record:tile.querySelector('strong').getAttribute('aria-label')}))`
+			read := `selector=>[...document.querySelector(selector).children].map(tile=>({lines:[...tile.children].map(line=>line.textContent.trim()),record:tile.querySelector('strong')?.getAttribute('aria-label') || ''}))`
 			var want, got []struct {
 				Lines  []string
 				Record string
@@ -80,4 +87,23 @@ func TestExploreMarginNumbersUseExplicitCoverage(t *testing.T) {
 	if len(totals) != 3 || all.Played != 3 || all.Wins != 2 || all.Losses != 1 || all.Points != 6 || all.GoalsCovered != 2 || all.XGCovered != 2 || all.GoalsFor != 2 || all.GoalsAgainst != 1 || all.XGFor != 1.75 || all.XGAgainst != 1.25 {
 		t.Fatalf("browser numeric totals: %+v", totals)
 	}
+}
+
+func assertGoalGapPanels(t *testing.T, page playwright.Page, names []string) {
+	t.Helper()
+	var valid bool
+	evalJSON(t, page, `(names)=>{
+ const charts=names.map(name=>Chart.getChart(document.querySelector('[data-chart="'+name+'"]')));
+ if(charts.some(c=>!c)) return false;
+ const [a,b]=charts;
+ return a.scales.y.min===b.scales.y.min && a.scales.y.max===b.scales.y.max && a.scales.y.min===-a.scales.y.max &&
+ charts.every((c,side)=>c.data.datasets[0].data.every((v,i)=>{
+  const r=c.meetings[i], actual=r.goalsCovered?r.values[side].actual:null, expected=r.values[side].expected;
+  return actual===null||expected===null ? v===null : Math.abs(v-(actual-expected))<1e-9;
+ })) && JSON.stringify(a.yearLabels)===JSON.stringify(b.yearLabels);
+ }`, names, &valid)
+	if !valid {
+		t.Fatal("goal gap panels differ in values, axis or slots")
+	}
+	assertNoHorizontalOverflow(t, page)
 }

@@ -61,6 +61,7 @@ func TestGeometry(t *testing.T) {
 		{"GapExtent", testGeometryGapExtent},
 		{"TrendAxis", testGeometryTrendAxis},
 		{"MarginAxis", testGeometryMarginAxis},
+		{"GoalGaps", testGeometryGoalGaps},
 		{"RankingBars", testGeometryRankingBars},
 		{"HeadToHead", testGeometryHeadToHead},
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
@@ -80,7 +81,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "marginAxis", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
+	want := []string{"gapExtent", "goalGap", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "headToHeadValue", "layoutLogos", "logoPlacement", "marginAxis", "plotDomain", "pointRadius", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -732,5 +733,32 @@ func testGeometryMarginAxis(t *testing.T, page playwright.Page) {
 		if !near(axis.Min, -tc.extent) || !near(axis.Max, tc.extent) || len(axis.Ticks) < 3 {
 			t.Fatalf("shared margin axis: %+v, extent %v", axis, tc.extent)
 		}
+	}
+}
+
+func testGeometryGoalGaps(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		goals, xg []any
+		side      int
+		want      *float64
+	}{
+		{[]any{2, 0}, []any{1.1, .7}, 0, new(.9)},
+		{[]any{2, 0}, []any{1.1, .7}, 1, new(-.7)},
+		{[]any{0, 0}, []any{0, 0}, 0, new(0.0)},
+		{[]any{8, 0}, []any{.1, 1.5}, 0, new(7.9)},
+		{[]any{2, 0}, []any{nil, .7}, 0, nil},
+		{[]any{nil, nil}, []any{1.1, .7}, 1, nil},
+	} {
+		var got *float64
+		callGeometry(t, page, "goalGap", []any{tc.goals, tc.xg, tc.side}, &got)
+		if (got == nil) != (tc.want == nil) || got != nil && !near(*got, *tc.want) {
+			t.Fatalf("gap %v, want %v", got, tc.want)
+		}
+	}
+	// A large finishing gap controls both panels, with rounded symmetric headroom.
+	var axis struct{ Min, Max float64 }
+	callGeometry(t, page, "marginAxis", []any{[]any{7.9, nil}, []any{-1.5, -.7}}, &axis)
+	if axis.Min != -10 || axis.Max != 10 {
+		t.Fatalf("shared goal-gap axis: %+v", axis)
 	}
 }

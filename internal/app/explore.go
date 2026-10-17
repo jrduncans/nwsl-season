@@ -200,7 +200,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	if view == "season-trend" && !page.TrendPointsGap {
+	if view == "season-trend" && ((!page.TrendPointsGap && !page.TrendGoalGaps) || (r.URL.Query().Has("trend-sort") && r.URL.Query().Get("trend-sort") != page.TrendSort)) {
 		query := r.URL.Query()
 		if query.Has("trend-sort") || query.Has("trend-order") {
 			query.Del("trend-sort")

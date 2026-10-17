@@ -2268,7 +2268,7 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 	}{
 		{"balance", "match", []string{"2", "0", "1.10", "0.70"}, []string{"Goals scored: 2", "Goals allowed: 0", "xG scored: 1.10", "xG allowed: 0.70"}},
 		{"balance", "rolling", []string{"2.00", "0.00", "1.10", "0.70"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match", "xG scored: 1.10 per match", "xG allowed: 0.70 per match"}},
-		{"compare", "match", []string{"2", "1.10", "0", "0.70"}, []string{"Goals scored: 2", "xG scored: 1.10", "Goals allowed: 0", "xG allowed: 0.70"}},
+		{"compare", "match", []string{"2", "1.10", "0", "0.70", "+0.90", "-0.70"}, []string{"Goals: 2–0", "xG for: 1.10", "xG against: 0.70", "Goals for − xG for: +0.90", "Goals against − xG against: -0.70"}},
 		{"compare", "rolling", []string{"2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
 		{"difference", "match", []string{"2", "0.40"}, []string{"Goal margin: +2", "xG margin: +0.40"}},
 		{"difference", "rolling", []string{"2.00", "0.40"}, []string{"Goal margin: +2.00 per match", "xG margin: +0.40 per match"}},
@@ -2616,4 +2616,41 @@ func TestExploreSeasonMarginsPanelsAndCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertNoHorizontalOverflow(t, page)
+}
+
+func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&trend-mode=match")
+		assertGoalGapPanels(t, page, []string{"season-margin", "season-margin-xg"})
+		expect := playwright.NewPlaywrightAssertions()
+		if err := expect.Locator(page.Locator("[data-trend-goal-gap-tiles]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.Locator("[data-trend-values] summary").Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.Locator("[data-trend-sort=allowed-gap]").Click(); err != nil {
+			t.Fatal(err)
+		}
+		if queryOf(t, page).Get("trend-sort") != "allowed-gap" {
+			t.Fatal("gap sort lost")
+		}
+		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		if err := expect.Locator(page.Locator("[data-trend-goal-gap-tiles]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if queryOf(t, page).Has("trend-sort") {
+			t.Fatal("rolling kept gap sort")
+		}
+		chooseOption(t, page, "[data-trend-mode]", "match")
+		assertGoalGapPanels(t, page, []string{"season-margin", "season-margin-xg"})
+		if err := page.Locator("[data-chart=season-margin-xg]").Press("End"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("[data-chart-status]")).ToContainText("Goals against − xG against:"); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

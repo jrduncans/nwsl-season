@@ -101,8 +101,9 @@ always include penalties. Completed-match results with a penalty add an npxG
 line beside their xG.
 Match by match follows one team through a regular season. Scoring balance pairs
 scored and allowed, with aligned goals and xG panels when both are selected.
-Actual vs xG pairs actual and expected values in separate Scored and Allowed
-panels; Margins pairs goal margin and xG margin in two bar panels when
+Goals vs xG shows goals minus xG in separate Scored and Allowed bar panels
+with All / Home / Away totals when smoothing is off, and keeps paired actual
+and expected lines in rolling mode; Margins pairs goal margin and xG margin in two bar panels when
 smoothing is off, with All / Home / Away record and xG tiles. Rolling Margins
 keeps its two lines. Points vs
 xPoints compares earned match points with ASA's retrospective expected points. Benchmarks shows Goals, xG, Points, or xPoints with a team-average
