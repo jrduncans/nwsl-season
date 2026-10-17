@@ -28,6 +28,9 @@ func explorePointsTiles(matches []exploreMatchRecord, unit string) []explorePoin
 			}
 		}
 		tile := explorePointsTile{Label: venue, Actual: fmt.Sprintf("%.0f", actual), Expected: "xPts incomplete", Gap: "xPts incomplete", Rate: "Unavailable", Coverage: fmt.Sprintf("%d of %d %s", covered, n, plural)}
+		if n == 0 {
+			tile.Actual, tile.Expected, tile.Gap, tile.Rate = "No "+plural, "", "", ""
+		}
 		if n > 0 {
 			tile.Rate = fmt.Sprintf("%.2f pts per %s", actual/float64(n), unit)
 			if covered == n {

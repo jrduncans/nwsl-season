@@ -102,6 +102,13 @@ func TestExploreSeasonTrendVenueDates(t *testing.T) {
 			// Home/away orientation never changes which venue's calendar applies.
 			for _, home := range []bool{true, false} {
 				rows := exploreMatches([]history.TeamMatch{{ID: test.id, KickoffUTC: test.kickoff, StadiumID: test.stadium, Home: home}}, nil)
+				venue := "Away"
+				if home {
+					venue = "Home"
+				}
+				if rows[0].Venue != venue {
+					t.Fatalf("stadium metadata changed ASA designation: %+v", rows[0])
+				}
 				if rows[0].Date != test.date || rows[0].Undated != test.undated || rows[0].VenueDateUnavailable != test.unknownVenue {
 					t.Fatalf("home=%v: %+v", home, rows[0])
 				}

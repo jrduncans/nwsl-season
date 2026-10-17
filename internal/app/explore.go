@@ -188,6 +188,15 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
+	if view == "season-trend" && !page.TrendPointsGap {
+		query := r.URL.Query()
+		if query.Has("trend-sort") || query.Has("trend-order") {
+			query.Del("trend-sort")
+			query.Del("trend-order")
+			redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+			return
+		}
+	}
 	// Validate selections before spending forecast capacity. Populate every
 	// eligible active season once so browser selections retain one snapshot.
 	// Historical thresholds never depend on forecast availability or capacity.

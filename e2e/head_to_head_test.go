@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -677,7 +678,7 @@ func assertPointsChart(t *testing.T, page playwright.Page, selector, tiles strin
  return nodes.length===3&&nodes.every(tile=>{
  const r=tile.getBoundingClientRect(), meetings=rows.filter(row=>tile.dataset.pointsTile==='All'||row.venue===tile.dataset.pointsTile), n=meetings.length;
  const covered=meetings.filter(row=>row.xpoints!=null), actual=meetings.reduce((s,r)=>s+r.points,0), expected=covered.reduce((s,r)=>s+r.xpoints,0);
- return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&tile.textContent.includes(covered.length+' of '+n)&&tile.querySelector('strong').textContent.trim()===actual+' vs '+(n&&covered.length===n?expected.toFixed(2)+' xPts':'xPts incomplete');
+ return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&tile.textContent.includes(covered.length+' of '+n)&&tile.querySelector('strong').textContent.trim()===(n?actual+' vs '+(covered.length===n?expected.toFixed(2)+' xPts':'xPts incomplete'):'No meetings');
  });
  }`, map[string]any{"selector": selector, "tiles": tiles}, &agrees)
 	if !agrees {
@@ -747,5 +748,44 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-points-tiles]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestExplorePointsTileFormattingParity(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	for _, path := range []string{
+		"explore?view=head-to-head&h2h-series=points&opponent=" + seattleH2H,
+		"explore?view=head-to-head&h2h-series=points&opponent=aDQ0lzvQEv",
+		"explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&trend-mode=match",
+	} {
+		var rendered [2][]string
+		for i, noScript := range []bool{true, false} {
+			page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
+			if noScript {
+				visitStatic(t, page, base+path)
+			} else {
+				visit(t, page, base+path)
+			}
+			selector := "[data-h2h-points-tiles] [data-points-tile]"
+			if strings.Contains(path, "season-trend") {
+				selector = "[data-trend-points-tiles] [data-points-tile]"
+			}
+			values, err := page.Locator(selector).AllTextContents()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, value := range values {
+				rendered[i] = append(rendered[i], strings.Join(strings.Fields(value), ""))
+			}
+			if strings.Contains(path, "opponent=aDQ0lzvQEv") {
+				if err := playwright.NewPlaywrightAssertions().Locator(page.Locator(selector + "[data-points-tile=Away] strong")).ToHaveText("No meetings"); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if !slices.Equal(rendered[0], rendered[1]) {
+			t.Fatalf("server and browser tiles differ: %v vs %v", rendered[0], rendered[1])
+		}
 	}
 }

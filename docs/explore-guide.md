@@ -539,8 +539,10 @@ step needs.
 plots one bar per match of **points − xPoints**, using the shared Head to head
 chart and its venue encoding. The axis is fixed at −3 to +3 across teams,
 seasons and both views. Missing xPoints keeps an empty chronological slot,
-never a zero bar. The panel title is “Points above or below xPoints · Each
-match”, with “Above zero: more points than xPoints. Below: fewer.” The tooltip
+never a zero bar. If every match lacks xPoints, the chart is replaced by
+“No xPoints is available for these matches.” The panel title is “Points above
+or below xPoints · Each match”, with “Above zero: more points than xPoints.
+Below: fewer.” The tooltip
 and keyboard description include the match, official score, points, xPoints
 and signed difference. A win cannot fall below zero, a loss cannot rise above
 zero, and draws can fall either way, because xPoints is between 0 and 3.
@@ -551,12 +553,18 @@ Home is solid blue (`#1F6FA8`); away is orange (`#CF7424`) diagonal stripes on
 paper with a thin orange outline. Swatches on the Home and Away tiles form the
 venue legend. An incomplete xPoints population says `xPts incomplete`, keeps
 actual points and their rate, and withholds the expected total and gap.
+A venue with no appearances says “No matches” (“No meetings” in Head to head),
+with zero coverage rather than an incomplete-data warning.
 
 Rolling mode retains two lines for points pace vs xPoints pace and titles the
 panel “Points vs xPoints · N-match average”. Venue tiles appear only with
 smoothing off. The Match values table retains points and xPoints and adds a
 sortable **Points − xPoints** column in each-match mode; sort links use exact
 values, missing last, chronological order on ties, and preserve URL state.
+Default sort parameters are omitted from form submissions and sort links;
+switching to rolling mode or another chart clears the gap sort. Native GET
+submissions carrying that sort outside the points match view redirect to the
+same selection without it.
 Without JavaScript the same tiles and table show the comparisons.
 
 **Benchmarks** keep original units and draw horizontal reference means for the
@@ -584,7 +592,9 @@ Match dates show the venue's local calendar day, using the cached fixture's
 [`internal/fixtures/venues.go`](../internal/fixtures/venues.go). Neither the home
 team, the browser, nor the server picks the zone, and there is no UTC or
 usual-stadium fallback: unknown venues show `Venue date unavailable`, while
-their kickoff instant still orders matches.
+their kickoff instant still orders matches. The unknown-venue notice concerns
+the stadium time zone only: every match retains ASA’s Home/Away designation
+and stays in that venue tile, so All equals Home plus Away.
 
 The catalog covers all 49 entries from the
 [ASA NWSL stadia endpoint](https://app.americansocceranalysis.com/api/v1/nwsl/stadia)

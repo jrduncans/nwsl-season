@@ -2017,7 +2017,7 @@
     const missingReference = relative ? visible.filter(dataset => dataset.references[1]?.value == null && dataset.references.length > 1) : [];
     referenceStatus.hidden = !missingReference.length;
     referenceStatus.textContent = missingReference.length ? `${missingReference[0].references[1].label} unavailable for ${missingReference.map(dataset => dataset.label).join(', ')}. ${missingReference[0].references[1].note}` : '';
-    root.querySelector('[data-trend-values]').open = params.get('trend-sort') === 'points-gap';
+    root.querySelector('[data-trend-values]').open = pointsGap && params.get('trend-sort') === 'points-gap';
     const headingRow = root.querySelector('[data-trend-headings]');
     [...headingRow.children].slice(5).forEach(cell => cell.remove());
     visible.forEach(dataset => {
@@ -2025,7 +2025,8 @@
       if (dataset.gap) {
         const target = new URLSearchParams(params), active = params.get('trend-sort') === 'points-gap';
         const desc = params.get('trend-order') === 'desc';
-        target.set('trend-sort', 'points-gap'); target.set('trend-order', active && desc ? 'asc' : 'desc');
+        target.set('trend-sort', 'points-gap');
+        if (active && desc) target.delete('trend-order'); else target.set('trend-order', 'desc');
         heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
         const link = archiveElement('a', dataset.label); link.href = `?${target}`; link.dataset.trendSort = 'points-gap'; heading.replaceChildren(link);
       }
@@ -2039,6 +2040,8 @@
       return (x - y) * (params.get('trend-order') === 'desc' ? -1 : 1) || a - b;
     });
     control('trend-sort').value = params.get('trend-sort') || 'match'; control('trend-order').value = params.get('trend-order') || 'asc';
+    control('trend-sort').disabled = !pointsGap || control('trend-sort').value === 'match';
+    control('trend-order').disabled = control('trend-sort').disabled || control('trend-order').value === 'asc';
     root.querySelector('[data-trend-rows]').replaceChildren(...matchOrder.map(index => {
       const match = matches[index];
       const row = document.createElement('tr');
@@ -2058,7 +2061,11 @@
       root.querySelector('[data-trend-goals-panel]').hidden = true;
       root.querySelector('[data-trend-xg-panel]').hidden = true;
       root.querySelector('[data-trend-legend]').hidden = true;
-      showSeasonPointsChart(matches, team, season);
+      const hasMarks = visible.at(-1).data.some(value => value != null);
+      root.querySelector('[data-trend-points-empty]').hidden = hasMarks;
+      root.querySelector('[data-trend-points-wrap]').hidden = !hasMarks;
+      root.querySelector('[data-trend-points-hint]').hidden = !hasMarks;
+      if (hasMarks) showSeasonPointsChart(matches, team, season);
       return;
     }
     const legend = relative ? [] : balance ? [
@@ -2438,10 +2445,13 @@
       const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
       if (venue !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
       label.append(venue);
-      const total = archiveElement('strong', `${actual} `); total.append(archiveElement('span', `vs ${complete ? fixed(expected) + ' xPts' : 'xPts incomplete'}`));
+      const total = archiveElement('strong', n ? `${actual} ` : unit === 'match' ? 'No matches' : 'No meetings');
+      if (n) total.append(archiveElement('span', `vs ${complete ? fixed(expected) + ' xPts' : 'xPts incomplete'}`));
       const rate = !n ? 'Unavailable' : `${fixed(actual / n)} pts${complete ? ' vs ' + fixed(expected / n) + ' xPts' : ''} per ${unit}`;
       const coverage = archiveElement('div', `${covered.length} of ${n} ${unit === 'match' ? 'matches' : 'meetings'}`); coverage.className = 'note';
-      tile.append(label, total, archiveElement('div', complete ? `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected` : 'xPts incomplete'), archiveElement('div', rate), coverage);
+      tile.append(label, total);
+      if (n) tile.append(archiveElement('div', complete ? `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected` : 'xPts incomplete'), archiveElement('div', rate));
+      tile.append(coverage);
       return tile;
     }));
   }
@@ -2818,6 +2828,12 @@
   function update(changes) {
     const url = new URL(location.href);
     Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
+    if (url.searchParams.get('view') === 'season-trend') {
+      const params = url.searchParams;
+      if (params.get('trend-view') !== 'points' || params.get('trend-mode') !== 'match' || params.get('trend-sort') !== 'points-gap') {
+        params.delete('trend-sort'); params.delete('trend-order');
+      } else if (params.get('trend-order') !== 'desc') params.delete('trend-order');
+    }
     history.pushState(null, '', url);
     applyURL();
   }
@@ -2945,7 +2961,7 @@
   historyTeam.addEventListener('change', () => update({team: historyTeam.value}));
   historyMeasure.addEventListener('change', () => update({measure: historyMeasure.value}));
   const updateSeasonTrend = () => {
-    const selection = Object.fromEntries(new FormData(trendControls));
+    const selection = {'trend-sort': null, 'trend-order': null, ...Object.fromEntries(new FormData(trendControls))};
     update(selection);
   };
   trendControls.addEventListener('submit', event => { event.preventDefault(); updateSeasonTrend(); });

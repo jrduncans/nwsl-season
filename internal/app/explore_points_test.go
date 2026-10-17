@@ -3,6 +3,7 @@ package app
 import (
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -64,6 +65,9 @@ func TestExplorePointsTrendFallback(t *testing.T) {
 	_, incomplete := getPage(t, archive, strings.Replace(path, "season=2025", "season=2026&team=315VnJ759x", 1))
 	requireText(t, incomplete, "[data-trend-points-tiles] [data-points-tile=All]", "xPts incomplete")
 	requireText(t, incomplete, "[data-trend-points-tiles] [data-points-tile=All]", "28 of 29 matches")
+	for _, key := range []string{"trend-sort", "trend-order"} {
+		requireAttr(t, body, "[data-season-trend-controls] input[name="+key+"]", "disabled", "")
+	}
 	for _, order := range []string{"asc", "desc"} {
 		_, sorted := getPage(t, archive, path+"&trend-sort=points-gap&trend-order="+order)
 		rows := find(t, sorted, "[data-trend-rows] tr")
@@ -123,4 +127,56 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	_, incomplete := getPage(t, archive, path)
 	requireText(t, incomplete, "[data-h2h-points-tiles] [data-points-tile=All]", "xPts incomplete")
 	requireText(t, incomplete, "[data-h2h-fallback]", "Points − xPoints: Unavailable")
+}
+
+func TestExplorePointsEmptyVenue(t *testing.T) {
+	t.Parallel()
+	for _, unit := range []string{"match", "meeting"} {
+		tiles := explorePointsTiles([]exploreMatchRecord{{Venue: "Home"}}, unit)
+		want := "No matches"
+		if unit == "meeting" {
+			want = "No meetings"
+		}
+		if tiles[2].Actual != want || tiles[2].Expected != "" || tiles[2].Gap != "" || tiles[2].Rate != "" {
+			t.Fatalf("empty venue: %+v", tiles[2])
+		}
+	}
+}
+
+func TestExplorePointsSortFormState(t *testing.T) {
+	t.Parallel()
+	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	path := "/explore?view=season-trend&season=2025&trend-view=points&trend-mode=match"
+	for _, order := range []string{"asc", "desc"} {
+		_, body := getPage(t, archive, path+"&trend-sort=points-gap&trend-order="+order)
+		input := find(t, body, "[data-season-trend-controls] input[name=trend-sort]")[0]
+		if _, disabled := lookupAttr(input, "disabled"); disabled {
+			t.Fatal("gap sort must submit")
+		}
+		orderInput := find(t, body, "[data-season-trend-controls] input[name=trend-order]")[0]
+		if _, disabled := lookupAttr(orderInput, "disabled"); disabled != (order == "asc") {
+			t.Fatal("only non-default order should submit")
+		}
+		target, err := url.Parse(attr(find(t, body, "[data-trend-sort]")[0], "href"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if target.Query().Has("trend-order") != (order == "asc") {
+			t.Fatal("ascending links should omit default order")
+		}
+	}
+	for _, selection := range []string{"trend-view=points&trend-mode=rolling", "trend-view=balance&trend-mode=match"} {
+		response := httptest.NewRecorder()
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=season-trend&"+selection+"&trend-sort=points-gap&trend-order=desc", nil))
+		if response.Code != http.StatusFound {
+			t.Fatalf("stale sort status: %d", response.Code)
+		}
+		target, err := url.Parse(response.Header().Get("Location"))
+		if err != nil || target.Path != "" || target.Query().Has("trend-sort") || target.Query().Has("trend-order") {
+			t.Fatalf("canonical sort redirect: %s, %v", target, err)
+		}
+		if target.Query().Get("trend-mode") == "" || target.Query().Get("view") != "season-trend" {
+			t.Fatal("redirect lost selection")
+		}
+	}
 }

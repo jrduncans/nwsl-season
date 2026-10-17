@@ -1,11 +1,11 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"net/url"
 	"slices"
-	"sort"
 	"strconv"
 
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
@@ -151,6 +151,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		slices.SortStableFunc(page.TrendColumns, func(a, b exploreTrendColumn) int { return a.Measure - b.Measure })
 	}
 	page.TrendPointsGap = page.TrendView == "points" && page.TrendMode == "match"
+	if !page.TrendPointsGap {
+		page.TrendSort, page.TrendOrder = "match", "asc"
+	}
 	if page.TrendPointsGap {
 		target := cloneQuery(query)
 		target.Set("view", "season-trend")
@@ -162,7 +165,10 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				state, order = "descending", "asc"
 			}
 		}
-		target.Set("trend-order", order)
+		target.Del("trend-order")
+		if order != "asc" {
+			target.Set("trend-order", order)
+		}
 		page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: "Points − xPoints", Measure: 3, Gap: true, URL: "?" + target.Encode(), Sort: state})
 	}
 	page.TrendCaption = "Individual match values. Scores are shown from this team's perspective."
@@ -219,15 +225,21 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		}
 	}
 	if page.TrendPointsGap && page.TrendSort == "points-gap" {
-		sort.SliceStable(page.TrendRows, func(i, j int) bool {
-			a, b := page.TrendRows[i].PointsGap, page.TrendRows[j].PointsGap
-			if a == nil || b == nil {
-				return a != nil && b == nil
+		slices.SortStableFunc(page.TrendRows, func(a, b exploreSeasonTrendRow) int {
+			if a.PointsGap == nil || b.PointsGap == nil {
+				if a.PointsGap == nil && b.PointsGap == nil {
+					return 0
+				}
+				if a.PointsGap == nil {
+					return 1
+				}
+				return -1
 			}
+			order := cmp.Compare(*a.PointsGap, *b.PointsGap)
 			if page.TrendOrder == "desc" {
-				return *a > *b
+				return -order
 			}
-			return *a < *b
+			return order
 		})
 	}
 	return page, nil

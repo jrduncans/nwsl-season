@@ -147,10 +147,11 @@
 
   // One meeting per slot, with a symmetric integer goal axis. No server copy:
   // without JavaScript the chart is a chronological, accessible results list.
-  function headToHeadGeometry(margins, width, height = 260, series = "actual") {
+  function headToHeadGeometry(margins, width, height = 260, series = 'actual') {
     const largest = Math.max(1, ...margins.filter(v => v !== null).map(Math.abs));
     const magnitude = 10 ** Math.floor(Math.log10(largest));
-    const extent = series === "points" ? 3 : [1, 2, 5, 10].map(n => n * magnitude).find(n => n >= largest);
+    // Both points and xPoints lie in [0, 3], so their difference lies in [−3, 3].
+    const extent = series === 'points' ? 3 : [1, 2, 5, 10].map(n => n * magnitude).find(n => n >= largest);
     const left = 34, right = Math.max(left, width - 6), top = 20, bottom = height - 44;
     const zero = (top + bottom) / 2, scale = (bottom - top) / (2 * extent);
     const slot = (right - left) / Math.max(1, margins.length);
