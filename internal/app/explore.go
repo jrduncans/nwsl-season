@@ -30,6 +30,7 @@ type explorePage struct {
 	// GeometryPath is the versioned link to explore-geometry.js, which must
 	// load before explore.js (the page's ScriptPath).
 	GeometryPath string
+	MarginsPath  string
 }
 
 // PointsNoteShown reports whether the current view shows official points or
@@ -208,6 +209,12 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			return
 		}
 	}
+	if view == "head-to-head" && r.URL.Query().Get("h2h-series") != "" && page.H2HSeries == "actual" {
+		query := r.URL.Query()
+		query.Del("h2h-series")
+		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+		return
+	}
 	// Validate selections before spending forecast capacity. Populate every
 	// eligible active season once so browser selections retain one snapshot.
 	// Historical thresholds never depend on forecast availability or capacity.
@@ -224,6 +231,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.Title = label + " · Explore"
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.GeometryPath = staticURL(r.URL.Path, "explore-geometry.js")
+	page.MarginsPath = staticURL(r.URL.Path, "explore-margins.js")
 	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
 	page.ChartLabelsPath = relativeURL(r.URL.Path, "/static/vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")
 	scope := a.requestScope(r)

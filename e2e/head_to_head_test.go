@@ -655,8 +655,8 @@ func assertMarginPanels(t *testing.T, page playwright.Page, first, second string
  const [a,b]=names.map(name=>Chart.getChart(document.querySelector('[data-chart="'+name+'"]')));
  return a.config.type==='bar' && b.config.type==='bar' && a.scales.y.min===b.scales.y.min && a.scales.y.max===b.scales.y.max && a.scales.y.min===-a.scales.y.max &&
  JSON.stringify(a.yearLabels)===JSON.stringify(b.yearLabels) &&
- a.data.datasets[0].data.every((value,i)=>value===(a.meetings[i].basisGoals[0]===null?null:a.meetings[i].basisGoals[0]-a.meetings[i].basisGoals[1])) &&
- b.data.datasets[0].data.every((value,i)=>value===b.meetings[i].expectedMargin) &&
+ a.data.datasets[0].data.every((value,i)=>value===NWSLMargins.goalMargin(a.meetings[i])) &&
+ b.data.datasets[0].data.every((value,i)=>value===NWSLMargins.xgMargin(b.meetings[i])) &&
  a.getDatasetMeta(0).data.every((bar,i)=>Math.abs(bar.x-b.getDatasetMeta(0).data[i].x)<.1);
  }`, []string{first, second}, &agrees)
 	if !agrees {

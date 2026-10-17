@@ -21,7 +21,7 @@
 <div class="explore-heading"><h2 id="explore-h2h-title" data-h2h-title>{{template "teamName" .H2HTeam}} vs {{template "teamName" .H2HPair.Opponent}}{{if .H2HPoints}} · points vs xPoints{{else if .H2HBoth}} · actual vs expected{{end}}</h2></div>
 <p data-h2h-scope>{{.H2HPair.Scope}}</p>
 <div class="explore-h2h-record" data-h2h-record role="group" aria-label="Official regular-season record from {{.H2HTeam.Name}}’s side"{{if or (not .H2HMargins) (not .H2HPair.All.Played)}} hidden{{end}}>
-{{template "exploreMarginTiles" .H2HRecordRows}}
+{{template "exploreMarginTiles" .H2HMarginTiles}}
 </div>
 <p class="note" data-h2h-official{{if or (not .H2HMargins) (not .NonPenalty)}} hidden{{end}}>W–D–L and points use official results, including penalties.</p>
 

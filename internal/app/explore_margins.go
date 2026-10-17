@@ -2,75 +2,99 @@ package app
 
 import (
 	"fmt"
-	"strings"
+
+	"github.com/jrduncans/nwsl-season/internal/history"
 )
 
-// Both match views summarize the same oriented, selected-basis match values.
-// Expected totals require every match; coverage never masquerades as a full total.
+// exploreMarginTile keeps arithmetic and coverage separate from display text.
+// GoalsCovered comes from the scoring calculation, never inferred from xG.
 type exploreMarginTile struct {
+	Label        string  `json:"label"`
+	Played       int     `json:"played"`
+	Wins         int     `json:"wins"`
+	Draws        int     `json:"draws"`
+	Losses       int     `json:"losses"`
+	Points       int     `json:"points"`
+	GoalsCovered int     `json:"goalsCovered"`
+	XGCovered    int     `json:"xgCovered"`
+	GoalsFor     int64   `json:"goalsFor"`
+	GoalsAgainst int64   `json:"goalsAgainst"`
+	XGFor        float64 `json:"xgFor"`
+	XGAgainst    float64 `json:"xgAgainst"`
+}
+
+type exploreMarginTileView struct {
 	Label, Record, RecordLabel, Rate, Goals, Coverage, XG, XGCoverage, Matches string
 }
 
-func exploreMarginTiles(matches []exploreMatchRecord, nonPenalty bool) []exploreMarginTile {
-	var tiles []exploreMarginTile
-	for _, venue := range []string{"All", "Home", "Away"} {
-		n, wins, draws, losses, points, covered, xgCovered := 0, 0, 0, 0, 0.0, 0, 0
-		goals, xg := [2]float64{}, [2]float64{}
+func exploreMarginTiles(matches []exploreMatchRecord) []exploreMarginTile {
+	tiles := []exploreMarginTile{{Label: "All"}, {Label: "Home"}, {Label: "Away"}}
+	for i := range tiles {
+		tile := &tiles[i]
 		for _, match := range matches {
-			if venue != "All" && venue != match.Venue {
+			if tile.Label != "All" && tile.Label != match.Venue {
 				continue
 			}
-			n++
-			p := match.Values[3].Actual
-			points += p
-			switch p {
+			tile.Played++
+			points := int(match.Values[explorePoints].Actual)
+			tile.Points += points
+			switch points {
 			case 3:
-				wins++
+				tile.Wins++
 			case 1:
-				draws++
+				tile.Draws++
 			default:
-				losses++
+				tile.Losses++
 			}
-			hasXG := match.Values[0].Expected != nil && match.Values[1].Expected != nil
-			if !nonPenalty || hasXG {
-				covered++
-				for i := range goals {
-					goals[i] += match.Values[i].Actual
-				}
+			if match.GoalsCovered {
+				tile.GoalsCovered++
+				tile.GoalsFor += int64(match.Values[exploreScored].Actual)
+				tile.GoalsAgainst += int64(match.Values[exploreAllowed].Actual)
 			}
-			if hasXG {
-				xgCovered++
-				for i := range xg {
-					xg[i] += *match.Values[i].Expected
-				}
+			if match.Values[exploreScored].Expected != nil && match.Values[exploreAllowed].Expected != nil {
+				tile.XGCovered++
+				tile.XGFor += *match.Values[exploreScored].Expected
+				tile.XGAgainst += *match.Values[exploreAllowed].Expected
 			}
 		}
-		tile := exploreMarginTile{Label: venue, Record: fmt.Sprintf("%d–%d–%d", wins, draws, losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", wins, draws, losses), Rate: "— pts/match", Goals: fmt.Sprintf("%.0f–%.0f goals", goals[0], goals[1]), XG: "xG incomplete", Matches: h2hMatchCount(n)}
-		if n > 0 {
-			tile.Rate = fmt.Sprintf("%.2f pts/match", points/float64(n))
-		}
-		if nonPenalty {
-			tile.Goals = fmt.Sprintf("%.0f–%.0f np goals", goals[0], goals[1])
-			if covered == 0 {
-				tile.Goals = "Goals unavailable"
-			}
-			if covered < n {
-				tile.Coverage = fmt.Sprintf("%d/%d with split", covered, n)
-			}
-		}
-		if xgCovered == n && n > 0 {
-			tile.XG = fmt.Sprintf("%.2f–%.2f xG", xg[0], xg[1])
-		} else {
-			tile.XGCoverage = fmt.Sprintf("xG %d/%d matches", xgCovered, n)
-		}
-		if nonPenalty {
-			tile.XG = strings.ReplaceAll(tile.XG, "xG", "npxG")
-			tile.XGCoverage = strings.ReplaceAll(tile.XGCoverage, "xG", "npxG")
-		}
-		if n == 0 {
-			tile.XG = "No matches"
-		}
-		tiles = append(tiles, tile)
 	}
 	return tiles
+}
+
+// This is the only Go formatting step; browser parity tests compare it with
+// the in-place renderer for complete, missing-xG and missing-split populations.
+func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis) []exploreMarginTileView {
+	views := make([]exploreMarginTileView, 0, len(tiles))
+	for _, tile := range tiles {
+		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: fmt.Sprintf("%d–%d goals", tile.GoalsFor, tile.GoalsAgainst), XG: basisText(basis, "xG incomplete"), Matches: exploreMatchCount(tile.Played)}
+		if tile.Played > 0 {
+			view.Rate = fmt.Sprintf("%.2f pts/match", float64(tile.Points)/float64(tile.Played))
+		}
+		if basis.ExcludesPenalties() {
+			view.Goals = fmt.Sprintf("%d–%d np goals", tile.GoalsFor, tile.GoalsAgainst)
+			if tile.GoalsCovered == 0 {
+				view.Goals = "Goals unavailable"
+			}
+			if tile.GoalsCovered < tile.Played {
+				view.Coverage = fmt.Sprintf("%d/%d with split", tile.GoalsCovered, tile.Played)
+			}
+		}
+		if tile.XGCovered == tile.Played && tile.Played > 0 {
+			view.XG = fmt.Sprintf("%.2f–%.2f %s", tile.XGFor, tile.XGAgainst, basisText(basis, "xG"))
+		} else {
+			view.XGCoverage = fmt.Sprintf("%s %d/%d matches", basisText(basis, "xG"), tile.XGCovered, tile.Played)
+		}
+		if tile.Played == 0 {
+			view.XG = "No matches"
+		}
+		views = append(views, view)
+	}
+	return views
+}
+
+func exploreMatchCount(n int) string {
+	if n == 1 {
+		return "1 match"
+	}
+	return fmt.Sprintf("%d matches", n)
 }

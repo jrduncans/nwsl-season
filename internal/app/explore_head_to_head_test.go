@@ -415,7 +415,12 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 		if basis.ExcludesPenalties() {
 			path += "&penalties=exclude"
 		}
-		code, body := getPage(t, archive, path)
+		response := httptest.NewRecorder()
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusFound {
+			t.Fatal(response.Code)
+		}
+		code, body := getPage(t, archive, "/explore"+response.Header().Get("Location"))
 		if code != http.StatusOK {
 			t.Fatal(code)
 		}
@@ -441,7 +446,7 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 			}
 		}
 	}
-	code, body := getPage(t, apptest.Scenario(t, apptest.ScenarioTeams), "/explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=expected")
+	code, body := getPage(t, apptest.Scenario(t, apptest.ScenarioTeams), "/explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}

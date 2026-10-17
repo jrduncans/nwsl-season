@@ -2287,7 +2287,7 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
    const items = [{chart:c, dataIndex:index}];
    if (name === 'season-points-gap' || name.startsWith('season-margin')) {
      const r = c.meetings[index];
-     return [{selector, title:[r.date,r.venue,r.opponent,r.score,r.result].join(' · '), lines:callbacks.label(items[0]).join(' ')}];
+     return [{selector, title:[r.date,r.venue,r.opponent,r.score,r.result ?? {3:'Win',1:'Draw',0:'Loss'}[r.values[3].actual]].join(' · '), lines:callbacks.label(items[0]).join(' ')}];
    }
    return [{selector, title:callbacks.title(items).join(' '), lines:callbacks.beforeBody(items).join(' ')}];
   })`, index, &charts)
@@ -2566,7 +2566,7 @@ func TestExploreSeasonMarginsPanelsAndCoverage(t *testing.T) {
    const tiles=[...document.querySelectorAll('[data-trend-margin-tiles] [data-h2h-tile]')], first=tiles[0].getBoundingClientRect();
    return chart.data.datasets[0].data.some(v=>v===null) && tiles.every(tile=>{
     const r=tile.getBoundingClientRect(), rows=chart.meetings.filter(row=>tile.dataset.h2hTile==='All'||row.venue===tile.dataset.h2hTile);
-    const covered=rows.filter(row=>row.expectedMargin!==null).length;
+    const covered=rows.filter(row=>NWSLMargins.xgMargin(row)!==null).length;
     return Math.abs(r.top-first.top)<1 && Math.abs(r.width-first.width)<1 && tile.scrollWidth<=tile.clientWidth && (covered===rows.length || tile.textContent.includes('xG '+covered+'/'+rows.length+' matches'));
    });
   }`, nil, &consistent)

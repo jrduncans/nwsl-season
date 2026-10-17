@@ -46,6 +46,8 @@
   const scatterSelectionTitle = root.querySelector('[data-team-scatter-selection-title]');
   const scatterSelectionTeams = root.querySelector('[data-team-scatter-selection-teams]');
   const scatterGuideValues = root.querySelector('[data-team-scatter-guide-values]');
+  const marginsData = window.NWSLMargins;
+  const matchMeasure = marginsData.measure;
   const charts = {};
   const styles = getComputedStyle(root);
   const color = name => styles.getPropertyValue(name).trim();
@@ -2080,14 +2082,14 @@
     showPointsTiles(root.querySelector('[data-trend-points-tiles]'), matches.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap);
     root.querySelector('[data-trend-margins-panel]').hidden = !margins;
     root.querySelector('[data-trend-margin-official]').hidden = !margins || !nonPenalty;
-    showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), matches.map((match, index) => marginMeeting(match, index)), nonPenalty, margins);
+    showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), matches, nonPenalty, margins);
     if (margins) {
       root.querySelector('[data-season-trend-plot]').hidden = false;
       for (const panel of ['goals', 'xg', 'points']) root.querySelector(`[data-trend-${panel}-panel]`).hidden = true;
       root.querySelector('[data-trend-legend]').hidden = true;
       root.querySelector('[data-trend-margin-title]').textContent = nonPenalty ? 'Non-penalty goal margin' : 'Goal margin';
       root.querySelector('[data-trend-margin-direction]').textContent = nonPenalty ? 'zero: level' : 'up: win · zero: draw · down: loss';
-      showMarginPanels(['season-margin', 'season-margin-xg'], matches.map((match, index) => marginMeeting(match, index)), `${team.name}, ${season}`, true);
+      showMarginPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, inspection: seasonMarginInspection});
       return;
     }
     root.querySelector('[data-trend-points-panel]').hidden = !pointsGap;
@@ -2490,47 +2492,34 @@
       return tile;
     }));
   }
-  function marginMeeting(match, index) {
-    const xg = match.values.slice(0, 2).map(value => value.expected);
-    return {...match, date: `Match ${index + 1} · ${match.date}`, np: nonPenalty, xgLabel: T('xG'),
-      basisGoals: match.values.slice(0, 2).map(value => value.actual), xg, expectedMargin: match.values[2].expected,
-      points: match.values[3].actual, result: {3: 'Win', 1: 'Draw', 0: 'Loss'}[match.values[3].actual]};
-  }
-  function showMarginTiles(container, rows, np, shown) {
-    container.hidden = !shown || !rows.length;
+  function showMarginTiles(container, matches, np, shown) {
+    container.hidden = !shown || !matches.length;
     if (!shown) return;
-    const xgLabel = np ? 'npxG' : 'xG';
-    container.replaceChildren(...['All', 'Home', 'Away'].map(venue => {
-      const meetings = rows.filter(row => venue === 'All' || row.venue === venue), n = meetings.length;
-      const count = result => meetings.filter(row => row.result === result).length;
-      const covered = meetings.filter(row => row.basisGoals[0] !== null), xgCovered = meetings.filter(row => row.xg.every(value => value !== null));
-      const total = (population, key) => [0, 1].map(i => population.reduce((sum, row) => sum + row[key][i], 0));
+    const basis = {nonPenalty: np, xgLabel: archiveText('xG', np)};
+    container.replaceChildren(...marginsData.summarize(matches).map(total => {
+      const view = marginsData.format(total, basis), venue = view.label;
       const tile = archiveElement('div'); tile.className = 'explore-h2h-tile explore-margin-tile'; tile.dataset.h2hTile = venue;
       const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
       if (venue !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
       label.append(document.createTextNode(venue)); tile.append(label);
-      const wdl = archiveElement('strong', `${count('Win')}–${count('Draw')}–${count('Loss')}`); wdl.className = 'explore-h2h-wdl';
-      wdl.setAttribute('aria-label', `${count('Win')} wins, ${count('Draw')} draws, ${count('Loss')} losses`); tile.append(wdl);
-      const points = meetings.reduce((sum, row) => sum + row.points, 0);
-      tile.append(archiveElement('div', `${n ? fixed(points / n) : '—'} pts/match`), archiveElement('div', np && !covered.length ? 'Goals unavailable' : `${total(covered, 'basisGoals').join('–')} ${np ? 'np goals' : 'goals'}`));
-      if (np && covered.length < n) tile.append(archiveElement('div', `${covered.length}/${n} with split`));
-      const xg = archiveElement('div', !n ? 'No matches' : xgCovered.length === n ? `${total(xgCovered, 'xg').map(fixed).join('–')} ${xgLabel}` : `${xgLabel} incomplete`); xg.className = 'explore-margin-xg'; tile.append(xg);
-      if (!n || xgCovered.length < n) tile.append(archiveElement('div', `${xgLabel} ${xgCovered.length}/${n} matches`));
-      tile.append(archiveElement('div', `${n} ${n === 1 ? 'match' : 'matches'}`)); return tile;
+      const wdl = archiveElement('strong', view.record); wdl.className = 'explore-h2h-wdl';
+      wdl.setAttribute('aria-label', view.recordLabel); tile.append(wdl);
+      tile.append(archiveElement('div', view.rate), archiveElement('div', view.goals));
+      if (view.coverage) tile.append(archiveElement('div', view.coverage));
+      const xg = archiveElement('div', view.xg); xg.className = 'explore-margin-xg'; tile.append(xg);
+      if (view.xgCoverage) tile.append(archiveElement('div', view.xgCoverage));
+      tile.append(archiveElement('div', view.matches)); return tile;
     }));
   }
-  function showMarginPanels(names, rows, description, matchNumbers = false) {
-    const goals = rows.map(row => row.basisGoals[0] === null ? null : row.basisGoals[0] - row.basisGoals[1]);
-    const expected = rows.map(row => row.expectedMargin);
-    const axis = window.NWSLGeometry.marginAxis(goals, expected);
-    names.forEach((name, i) => {
+  function showMarginPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection}) {
+    const values = [matches.map(marginsData.goalMargin), matches.map(marginsData.xgMargin)];
+    const axis = window.NWSLGeometry.marginAxis(...values), xg = archiveText('xG', np);
+    panels.forEach(({canvas: name, key}, i) => {
       const canvas = root.querySelector(`[data-chart="${name}"]`);
-      const key = name === 'head-to-head' ? 'headToHead' : name;
-      const chart = charts[key] || (charts[key] = createHeadToHead(canvas, matchNumbers));
-      chart.meetings = rows;
-      chart.data.labels = rows.map((_, index) => String(index));
-      chart.data.datasets[0].data = i ? expected : goals;
-      const np = rows[0]?.np, xg = np ? 'npxG' : 'xG';
+      const chart = charts[key] || (charts[key] = createHeadToHead(canvas, matchNumbers, inspection));
+      chart.meetings = matches;
+      chart.data.labels = matches.map((_, index) => String(index));
+      chart.data.datasets[0].data = values[i];
       const label = i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin';
       chart.data.datasets[0].label = label;
       Object.assign(chart.options.scales.y, {min: axis.min, max: axis.max,
@@ -2604,7 +2593,11 @@
       const goals = np ? f.npGoals ? orient(f.npGoals) : [null, null] : score;
       const xg = orient(np ? f.npxg : f.xg), xpoints = f.xpoints[home ? 0 : 1];
       return {...f, season: season.year, active: !!season.active, position, venue: home ? 'Home' : 'Away', opponent: season.names[pair.opponent.ID] || pair.opponent.ID,
-        pointsView, both, np, xgLabel, basisGoals: goals, xg, xpoints, expectedMargin: xg.every(v => v !== null) ? xg[0] - xg[1] : null,
+        pointsView, both, np, xgLabel, basisGoals: goals, xg, xpoints,
+        goalsCovered: !np || f.npGoals !== null,
+        values: [{actual: goals[0], expected: xg[0]}, {actual: goals[1], expected: xg[1]},
+          {actual: goals[0] === null ? null : goals[0] - goals[1], expected: xg.some(v => v === null) ? null : xg[0] - xg[1]},
+          {actual: margin > 0 ? 3 : margin < 0 ? 0 : 1, expected: xpoints}], expectedMargin: xg.every(v => v !== null) ? xg[0] - xg[1] : null,
         score: score.join('–'), goalsFor: score[0], goalsAgainst: score[1], margin, result: margin > 0 ? 'Win' : margin < 0 ? 'Loss' : 'Draw', points: margin > 0 ? 3 : margin < 0 ? 0 : 1};
     });
     const years = [...new Set(rows.map(r => r.season))].sort();
@@ -2696,11 +2689,11 @@
     if (!rows.length) return;
     root.querySelector('[data-h2h-xg-chart]').hidden = !margins;
     if (margins) {
-      showMarginPanels(['head-to-head', 'head-to-head-xg'], rows, `${data.team.Name} vs ${pair.opponent.Name}`);
+      showMarginPanels({panels: [{canvas: 'head-to-head', key: 'headToHead'}, {canvas: 'head-to-head-xg', key: 'headToHeadXG'}], matches: rows, description: `${data.team.Name} vs ${pair.opponent.Name}`, nonPenalty: np, matchNumbers: false});
       return;
     }
     const canvas = wrap.querySelector('canvas');
-    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${pointsView ? 'points minus xPoints; above zero: more points than xPoints; below zero: fewer' : both ? label('goal margin minus xG margin; above zero: above expected; below zero: below expected') : np ? 'non-penalty goal margins; zero means level' : 'goal margins; up means win, zero means draw, down means loss'}; home solid blue, away striped orange`);
+    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${pointsView ? 'points minus xPoints; above zero: more points than xPoints; below zero: fewer' : label('goal margin minus xG margin; above zero: above expected; below zero: below expected')}; home solid blue, away striped orange`);
     if (!charts.headToHead) charts.headToHead = createHeadToHead(canvas);
     const chart = charts.headToHead;
     delete chart.options.scales.y.afterBuildTicks; delete chart.options.scales.y.afterFit;
@@ -2708,7 +2701,7 @@
     chart.meetings = rows;
     chart.data.labels = rows.map(row => row.id);
     chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.headToHeadValue(row.basisGoals, row.xg, series, row.points, row.xpoints));
-    chart.data.datasets[0].label = pointsView ? 'Points − xPoints' : both ? label('Goal margin − xG margin') : np ? 'Non-penalty goal margin' : 'Goal margin';
+    chart.data.datasets[0].label = pointsView ? 'Points − xPoints' : label('Goal margin − xG margin');
     const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data.filter(v => v !== null), chart.width, chart.height, series).extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
     chart.update('none');
@@ -2724,6 +2717,19 @@
     ...(row.both ? [`xPts: ${row.xpoints === null ? 'Unavailable' : fixed(row.xpoints)}`, `Margin gap: ${row.basisGoals[0] === null || row.expectedMargin === null ? 'Unavailable' : signed(row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin)}`] : [`${row.xgLabel} margin: ${row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)}`]),
   ];
   const headToHeadDescription = row => [`${row.date}${row.active ? ' · season in progress' : ''} · ${row.venue} · ${row.opponent} · ${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)].join(' · ');
+  function headToHeadInspection(row) {
+    return {title: row.date, lines: [...(row.active ? ['season in progress'] : []), row.venue, row.opponent, `${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)]};
+  }
+  function seasonMarginInspection(row, index) {
+    const goals = marginsData.goals(row), xg = marginsData.xg(row), margin = marginsData.goalMargin(row), expected = marginsData.xgMargin(row);
+    const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
+    const label = T('xG');
+    return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
+      ...(nonPenalty ? [`Non-penalty goals: ${goals[0] === null ? 'Unavailable' : goals.join('–')}`] : []),
+      `${T('Goal margin')}: ${margin === null ? 'Unavailable' : `${margin > 0 ? '+' : ''}${margin}`}`,
+      `${label} for: ${xg[0] === null ? 'Unavailable' : fixed(xg[0])}`, `${label} against: ${xg[1] === null ? 'Unavailable' : fixed(xg[1])}`,
+      `${label} margin: ${expected === null ? 'Unavailable' : signed(expected)}`]};
+  }
   // Use Chart.js's event and tooltip lifecycle, with the full-height nearest
   // column geometry shared by pointer, touch and geometry tests.
   Chart.Interaction.modes.headToHead = (chart, event) => {
@@ -2752,7 +2758,7 @@
     const outline = context => away(context) ? 1 : 0;
     return {backgroundColor: fill, hoverBackgroundColor: fill, borderColor: '#CF7424', hoverBorderColor: '#CF7424', borderWidth: outline, hoverBorderWidth: outline, borderSkipped: false, barPercentage: .7, categoryPercentage: 1, minBarLength: 3};
   }
-  function createHeadToHead(canvas, matchNumbers = false) {
+  function createHeadToHead(canvas, matchNumbers = false, inspection = headToHeadInspection) {
     const options = commonOptions();
     options.interaction = {mode: 'headToHead', intersect: false};
     options.layout = {padding: {top: 12, right: 8, bottom: 28}};
@@ -2764,8 +2770,8 @@
     options.plugins.tooltip.padding = 8;
     options.plugins.tooltip.titleFont = {size: 11}; options.plugins.tooltip.bodyFont = {size: 11};
     options.plugins.tooltip.callbacks = {
-      title: items => items.length ? items[0].chart.meetings[items[0].dataIndex].date : '',
-      label: item => { const r = item.chart.meetings[item.dataIndex]; return [...(r.active ? ['season in progress'] : []), r.venue, r.opponent, `${r.score} · ${r.result}`, ...headToHeadExpectedDescription(r)]; },
+      title: items => items.length ? inspection(items[0].chart.meetings[items[0].dataIndex], items[0].dataIndex).title : '',
+      label: item => inspection(item.chart.meetings[item.dataIndex], item.dataIndex).lines,
     };
     const years = {id: 'headToHeadYears', afterDraw(chart) {
       const rows = chart.meetings || [], seen = new Set(), ctx = chart.ctx;
@@ -2788,7 +2794,7 @@
     chart.meetings = [];
     // Every meeting has an inspectable slot, including those without xG or splits.
     chart.keyboardIncludeMissing = true;
-    keyboardAccess(chart, mark => headToHeadDescription(chart.meetings[mark.index]), true);
+    keyboardAccess(chart, mark => { const detail = inspection(chart.meetings[mark.index], mark.index); return [detail.title,...detail.lines].join(' · '); }, true);
     return chart;
   }
   const changeHeadToHead = event => {

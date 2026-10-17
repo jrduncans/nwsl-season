@@ -29,6 +29,9 @@ type TeamScoring struct {
 type TeamMatch struct {
 	ID, KickoffUTC, OpponentID, StadiumID string
 	Home                                  bool
+	// GoalsCovered records the scoring calculation's selected-basis coverage.
+	// Under NonPenalty this requires valid xG and a consistent penalty split.
+	GoalsCovered bool
 	// GoalsFor and GoalsAgainst follow the scoring basis. ScoreFor and
 	// ScoreAgainst are the official result, which determines Points.
 	GoalsFor, GoalsAgainst int64
@@ -64,7 +67,7 @@ func (teams teamScoringTotals) addResult(game cache.Game, homeGoals, awayGoals i
 			teams[id] = &teamScoringAccumulator{TeamScoring: TeamScoring{TeamID: id}}
 		}
 		teams[id].Played++
-		match := TeamMatch{ID: game.ASAID, KickoffUTC: game.KickoffUTC, StadiumID: venue.StadiumID, Home: id == game.HomeTeamID}
+		match := TeamMatch{ID: game.ASAID, KickoffUTC: game.KickoffUTC, StadiumID: venue.StadiumID, Home: id == game.HomeTeamID, GoalsCovered: goalsCovered}
 		match.OpponentID = game.AwayTeamID
 		match.GoalsFor, match.GoalsAgainst = homeGoals, awayGoals
 		match.ScoreFor, match.ScoreAgainst = game.HomeScore.Int64, game.AwayScore.Int64

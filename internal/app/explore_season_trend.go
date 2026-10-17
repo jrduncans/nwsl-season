@@ -12,7 +12,16 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/history"
 )
 
+// Match measures retain the established payload order across Explore views.
+const (
+	exploreScored = iota
+	exploreAllowed
+	exploreMargin
+	explorePoints
+)
+
 type exploreMatchRecord struct {
+	GoalsCovered         bool                 `json:"goalsCovered"`
 	Undated              bool                 `json:"undated,omitempty"`
 	VenueDateUnavailable bool                 `json:"venueDateUnavailable,omitempty"`
 	ID                   string               `json:"id"`
@@ -50,16 +59,17 @@ type exploreSeasonTrendView struct {
 	TrendMissingXG, TrendUndated, TrendVenueDateUnavailable, TrendActive bool
 	TrendMissingXPoints                                                  bool
 	TrendPointsGap                                                       bool
-	TrendMargins                                                         bool
-	TrendMarginTiles                                                     []exploreMarginTile
-	TrendPointsTiles                                                     []explorePointsTile
-	TrendSort, TrendOrder                                                string
+	// TrendMargins uses difference, the legacy URL value of Margins.
+	TrendMargins          bool
+	TrendMarginTiles      []exploreMarginTileView
+	TrendPointsTiles      []explorePointsTile
+	TrendSort, TrendOrder string
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
 	rows := make([]exploreMatchRecord, 0, len(matches))
 	for _, match := range matches {
-		row := exploreMatchRecord{ID: match.ID, Date: "Date unavailable", Opponent: names[match.OpponentID], Venue: "Away", Score: fmt.Sprintf("%d–%d", match.ScoreFor, match.ScoreAgainst)}
+		row := exploreMatchRecord{GoalsCovered: match.GoalsCovered, ID: match.ID, Date: "Date unavailable", Opponent: names[match.OpponentID], Venue: "Away", Score: fmt.Sprintf("%d–%d", match.ScoreFor, match.ScoreAgainst)}
 		if row.Opponent == "" {
 			row.Opponent = match.OpponentID
 		}
@@ -74,13 +84,13 @@ func exploreMatches(matches []history.TeamMatch, names map[string]string) []expl
 		} else {
 			row.Date, row.VenueDateUnavailable = "Venue date unavailable", true
 		}
-		row.Values[0] = exploreTeamValues{Actual: float64(match.GoalsFor), Expected: match.XGFor}
-		row.Values[1] = exploreTeamValues{Actual: float64(match.GoalsAgainst), Expected: match.XGAgainst}
-		row.Values[2].Actual = float64(match.GoalsFor) - float64(match.GoalsAgainst)
-		row.Values[3] = exploreTeamValues{Actual: float64(match.Points), Expected: match.XPoints}
+		row.Values[exploreScored] = exploreTeamValues{Actual: float64(match.GoalsFor), Expected: match.XGFor}
+		row.Values[exploreAllowed] = exploreTeamValues{Actual: float64(match.GoalsAgainst), Expected: match.XGAgainst}
+		row.Values[exploreMargin].Actual = float64(match.GoalsFor) - float64(match.GoalsAgainst)
+		row.Values[explorePoints] = exploreTeamValues{Actual: float64(match.Points), Expected: match.XPoints}
 		if match.XGFor != nil && match.XGAgainst != nil {
 			difference := *match.XGFor - *match.XGAgainst
-			row.Values[2].Expected = &difference
+			row.Values[exploreMargin].Expected = &difference
 		}
 		rows = append(rows, row)
 	}
@@ -181,7 +191,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				continue
 			}
 			if page.TrendMargins {
-				page.TrendMarginTiles = exploreMarginTiles(team.Matches, basis.ExcludesPenalties())
+				page.TrendMarginTiles = formatMarginTiles(exploreMarginTiles(team.Matches), basis)
 			}
 			if page.TrendPointsGap {
 				page.TrendPointsTiles = explorePointsTiles(team.Matches, "match")
