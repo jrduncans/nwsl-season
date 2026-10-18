@@ -61,6 +61,7 @@ func TestGeometry(t *testing.T) {
 		{"GapExtent", testGeometryGapExtent},
 		{"TrendAxis", testGeometryTrendAxis},
 		{"MarginAxis", testGeometryMarginAxis},
+		{"BalanceAxis", testGeometryBalanceAxis},
 		{"GoalGaps", testGeometryGoalGaps},
 		{"RankingBars", testGeometryRankingBars},
 		{"HeadToHead", testGeometryHeadToHead},
@@ -701,6 +702,26 @@ func testGeometryMarginAxis(t *testing.T, page playwright.Page) {
 		callGeometry(t, page, "marginAxis", []any{tc.goals, tc.xg}, &axis)
 		if !near(axis.Min, -tc.extent) || !near(axis.Max, tc.extent) || len(axis.Ticks) < 3 {
 			t.Fatalf("shared margin axis: %+v, extent %v", axis, tc.extent)
+		}
+	}
+}
+
+// Mirrored counts must size the shared scale from all four series, rather
+// than their net margins: an open match can have a nearly zero margin.
+func testGeometryBalanceAxis(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		goals, xg []any
+		extent    float64
+	}{
+		{[]any{1, -5, 0, 0}, []any{.6, -.7, nil, nil}, 6},
+		{[]any{4, -3, 0, 0}, []any{2.52, -2.66, nil, nil}, 6},
+		{[]any{1, 0}, []any{7.2, -7.1}, 10},
+		{[]any{0, 0}, []any{nil, nil}, 1},
+	} {
+		var axis struct{ Min, Max float64 }
+		callGeometry(t, page, "marginAxis", []any{tc.goals, tc.xg}, &axis)
+		if axis.Min != -tc.extent || axis.Max != tc.extent {
+			t.Fatalf("shared balance axis: %+v, want ±%v", axis, tc.extent)
 		}
 	}
 }

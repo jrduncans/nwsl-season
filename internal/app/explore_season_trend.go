@@ -60,6 +60,7 @@ type exploreSeasonTrendView struct {
 	TrendMissingXPoints                                                  bool
 	TrendPointsGap                                                       bool
 	TrendGoalGaps                                                        bool
+	TrendBalanceBars                                                     bool
 	TrendGoalGapTiles                                                    []exploreGoalGapTile
 	// TrendMargins uses difference, the legacy URL value of Margins.
 	TrendMargins          bool
@@ -157,6 +158,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	}
 	page.TrendPointsGap = page.TrendView == "points" && page.TrendMode == "match"
 	page.TrendMargins = page.TrendView == "difference" && page.TrendMode == "match"
+	page.TrendBalanceBars = page.TrendView == "balance" && page.TrendMode == "match"
 	page.TrendGoalGaps = page.TrendView == "compare" && page.TrendMode == "match"
 	if (page.TrendSort == "points-gap" && !page.TrendPointsGap) || (page.TrendSort != "points-gap" && !page.TrendGoalGaps) {
 		page.TrendSort, page.TrendOrder = "match", "asc"
@@ -210,7 +212,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			if page.TrendGoalGaps {
 				page.TrendGoalGapTiles = exploreGoalGapTiles(team.Matches, basis, "match")
 			}
-			if page.TrendMargins {
+			if page.TrendMargins || page.TrendBalanceBars {
 				page.TrendMarginTiles = formatMarginTiles(exploreMarginTiles(team.Matches), basis)
 			}
 			if page.TrendPointsGap {

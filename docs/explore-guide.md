@@ -547,10 +547,31 @@ it is never interpolated.
 Except for the points gap bars described below, each chart's y axis is round
 and labels its own ticks (`trendAxis` in `explore-geometry.js`), rather than leaving tick choice to Chart.js, which
 thins ticks on these short panels: a 1, 2, 2.5 or 5 step, two or three ticks
-each side of zero for Margins (two to four above zero otherwise), ending
-on a tick at least 15% beyond the largest value. Whole-number data, such as
+each side of zero for symmetric bar charts and rolling Margins (two to four
+above zero otherwise), ending on a tick at least 15% beyond the largest value. Whole-number data, such as
 per-match goals, keep whole-number steps; labels carry only the decimals the
 step needs.
+
+**Scoring balance** (`trend-view=balance`) always shows Goals and xG. With
+smoothing off (`trend-mode=match`), both panels use mirrored bars in the same
+match slot: scored up from zero, allowed down. The notes read “Up: scored ·
+Down: allowed” and “Up: xG for · Down: xG allowed”. Both bars use the match's
+venue encoding: home solid blue (`#1F6FA8`), away orange (`#CF7424`) stripes on
+paper with an orange outline. Direction distinguishes scored from allowed.
+The panels share one symmetric rounded `marginAxis`, sized to the largest
+scored or allowed value in either panel, with at least 15% headroom. Tick labels
+show absolute counts on both sides of zero. Missing xG leaves an empty slot;
+both panels remain visible even if every xG value is unavailable. Excluding
+penalties uses non-penalty goals and npxG.
+
+The same All / Home / Away tiles as Margins show W–D–L, points per match,
+goals for–against, xG for–against, matches and coverage. Tiles appear only with
+smoothing off; Home and Away swatches are the venue legend. With penalties
+excluded, the official-result note also applies. Each slot is one inspectable
+mark covering both bars: tooltip and keyboard content include the match,
+official score and result, xG for and xG against, plus non-penalty goals when
+selected. The Match values table keeps scored and allowed goals and xG without
+derived columns. Rolling Scoring balance keeps its scored and allowed lines.
 
 **Goals vs xG** (`trend-view=compare`) keeps its two Scored and Allowed
 line panels in rolling mode. With smoothing off (`trend-mode=match`), it shows
