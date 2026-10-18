@@ -49,13 +49,11 @@ func TestExplorePointsTrendFallback(t *testing.T) {
 	if len(find(t, body, "[data-trend-points-tiles] [data-points-tile]")) != 3 {
 		t.Fatal("missing venue tiles")
 	}
-	requireText(t, body, "[data-trend-sort]", "Points − xPoints")
+	requireText(t, body, "[data-trend-sort=points-gap]", "Points − xPoints")
 	requireAttr(t, body, "[data-trend-points-tiles]", "class", "explore-h2h-record")
 	_, rolling := getPage(t, archive, strings.Replace(path, "trend-mode=match", "trend-mode=rolling", 1))
 	requireAttr(t, rolling, "[data-trend-points-tiles]", "hidden", "")
-	if len(find(t, rolling, "[data-trend-sort]")) != 0 {
-		t.Fatal("gap column only applies to each match")
-	}
+	requireElements(t, rolling, "[data-trend-sort=points-gap]")
 	for _, bad := range []string{"trend-sort=", "trend-sort=unknown", "trend-sort=points-gap&trend-sort=points-gap", "trend-order=", "trend-order=sideways"} {
 		code, _ := getPage(t, archive, path+"&"+bad)
 		if code != http.StatusBadRequest {
@@ -88,7 +86,7 @@ func TestExplorePointsTrendFallback(t *testing.T) {
 			}
 			previous = value
 		}
-		requireAttr(t, sorted, "[data-trend-sort]", "data-trend-sort", "points-gap")
+		requireAttr(t, sorted, "[data-trend-sort=points-gap]", "data-trend-sort", "points-gap")
 	}
 }
 
@@ -156,7 +154,7 @@ func TestExplorePointsSortFormState(t *testing.T) {
 		if _, disabled := lookupAttr(orderInput, "disabled"); disabled != (order == "asc") {
 			t.Fatal("only non-default order should submit")
 		}
-		target, err := url.Parse(attr(find(t, body, "[data-trend-sort]")[0], "href"))
+		target, err := url.Parse(attr(find(t, body, "[data-trend-sort=points-gap]")[0], "href"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +162,7 @@ func TestExplorePointsSortFormState(t *testing.T) {
 			t.Fatal("ascending links should omit default order")
 		}
 	}
-	for _, selection := range []string{"trend-view=points&trend-mode=rolling", "trend-view=balance&trend-mode=match"} {
+	for _, selection := range []string{"trend-view=compare&trend-mode=rolling", "trend-view=balance&trend-mode=match"} {
 		response := httptest.NewRecorder()
 		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=season-trend&"+selection+"&trend-sort=points-gap&trend-order=desc", nil))
 		if response.Code != http.StatusFound {

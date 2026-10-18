@@ -291,7 +291,7 @@
 <section data-panel="season-trend"{{if ne .View "season-trend"}} hidden{{end}} aria-labelledby="explore-season-trend-title">
 <h2 id="explore-season-trend-title">Match-by-match performance (regular-season)</h2>
 <form method="get" id="season-trend-controls" data-season-trend-controls class="explore-team-controls">
-<input type="hidden" name="view" value="season-trend"><input type="hidden" name="trend-sort" value="{{.TrendSort}}"{{if or (not (or .TrendPointsGap .TrendGoalGaps)) (eq .TrendSort "match")}} disabled{{end}}><input type="hidden" name="trend-order" value="{{.TrendOrder}}"{{if or (not (or .TrendPointsGap .TrendGoalGaps)) (eq .TrendSort "match") (eq .TrendOrder "asc")}} disabled{{end}}>{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
+<input type="hidden" name="view" value="season-trend"><input type="hidden" name="trend-sort" value="{{.TrendSort}}"{{if eq .TrendSort "match"}} disabled{{end}}><input type="hidden" name="trend-order" value="{{.TrendOrder}}"{{if eq .TrendOrder "asc"}} disabled{{end}}>{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
 <label>Season <select name="season" data-trend-season{{if not .TeamSeasons}} disabled{{end}}>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team" data-trend-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <label>Chart <select name="trend-view" data-trend-view><option value="balance"{{if eq .TrendView "balance"}} selected{{end}}>Scoring balance</option><option value="compare"{{if eq .TrendView "compare"}} selected{{end}}>Goals vs xG</option><option value="difference"{{if eq .TrendView "difference"}} selected{{end}}>Margins</option><option value="points"{{if eq .TrendView "points"}} selected{{end}}>Points vs xPoints</option><option value="relative"{{if eq .TrendView "relative"}} selected{{end}}>Benchmarks</option></select></label>
@@ -353,13 +353,13 @@
 <p class="explore-keyboard-hint">Use arrow keys to inspect matches. Escape clears the tooltip.</p>
 </section>
 </div>
-<details class="explore-context-details" data-trend-values{{if ne .TrendSort "match"}} open{{end}}>
+<details class="explore-context-details" data-trend-values{{if .TrendExpanded}} open{{end}}>
 <summary>Match values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Season trend match values"><table class="explore-table explore-season-trend-table">
 <caption><span data-trend-table-caption>{{.TrendCaption}}</span></caption>
-<thead><tr data-trend-headings><th scope="col">Match</th><th scope="col">Date (venue local)</th><th scope="col">Opponent</th><th scope="col">Venue</th><th scope="col">Score</th>{{range .TrendColumns}}<th scope="col"{{if .Gap}} aria-sort="{{.Sort}}"{{end}}>{{if .Gap}}<a href="{{.URL}}" data-trend-sort="{{.Key}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</th>{{end}}</tr></thead>
-<tbody data-trend-rows>{{range .TrendRows}}<tr><th scope="row">{{.Number}}</th><td>{{.Date}}</td><td>{{.Opponent}}</td><td>{{.Venue}}</td><td>{{.Score}}</td>{{range .DisplayValues}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody>
+<thead><tr data-trend-headings>{{range .TrendTableColumns}}<th scope="col"{{if .Key}} aria-sort="{{.Sort}}"{{end}}>{{if .Key}}<a href="{{.URL}}" data-trend-sort="{{.Key}}" aria-label="Sort by {{.Label}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</th>{{end}}</tr></thead>
+<tbody data-trend-rows>{{range .TrendRows}}<tr>{{range $index, $value := .DisplayValues}}{{if eq $index 0}}<th scope="row">{{$value}}</th>{{else}}<td>{{$value}}</td>{{end}}{{end}}</tr>{{end}}</tbody>
 </table></div>
 </details>
 </div>

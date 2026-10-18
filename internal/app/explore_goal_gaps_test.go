@@ -36,9 +36,9 @@ func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 			}
 			requireAttr(t, sorted, "[data-trend-sort='"+key+"']", "data-trend-sort", key)
 			rows := find(t, sorted, "[data-trend-rows] tr")
-			column := 9
+			column := 10
 			if key == "allowed-gap" {
-				column = 10
+				column = 11
 			}
 			previous := -1e9
 			if order == "desc" {
@@ -102,9 +102,9 @@ func TestExploreGoalGapSortPrecisionAndMissingLast(t *testing.T) {
 			for _, row := range page.TrendRows {
 				got = append(got, row.Number)
 			}
-			want := []int{3, 2, 4, 1, 5}
+			want := []int{3, 4, 2, 5, 1}
 			if order == "desc" {
-				want = []int{2, 4, 3, 1, 5}
+				want = []int{4, 2, 3, 5, 1}
 			}
 			if !slices.Equal(got, want) {
 				t.Fatalf("%s %s: %v, want %v", key, order, got, want)

@@ -201,7 +201,7 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 	}
 	query := url.Values{"trend-view": {"points"}, "trend-mode": {"match"}, "series": {"xg"}}
 	page, err := exploreSeasonTrend(query, teams, teamNameView{ID: "team-0"})
-	if err != nil || page.TrendMissingXG || !page.TrendMissingXPoints || !slices.Equal(page.TrendRows[0].DisplayValues, []string{"3", "0.00", "+3.00"}) || page.TrendRows[1].DisplayValues[1] != "Unavailable" {
+	if err != nil || page.TrendMissingXG || !page.TrendMissingXPoints || !slices.Equal([]string{page.TrendRows[0].DisplayValues[6], page.TrendRows[0].DisplayValues[9], page.TrendRows[0].DisplayValues[10]}, []string{"3", "0.00", "+3.00"}) || page.TrendRows[1].DisplayValues[9] != "Unavailable" {
 		t.Fatalf("points with independently missing xG/xPoints = %+v, %v", page, err)
 	}
 	for _, window := range []string{"3", "5"} {
@@ -211,13 +211,13 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Equal(page.TrendRows[0].DisplayValues, []string{"3.00", "0.00"}) || page.TrendRows[1].DisplayValues[1] != "Unavailable" || page.TrendRows[2].DisplayValues[1] != "Unavailable" || page.TrendRows[4].DisplayValues[0] != "3.00" {
+		if !slices.Equal(page.TrendRows[0].DisplayValues[11:], []string{"3.00", "0.00"}) || page.TrendRows[1].DisplayValues[12] != "Unavailable" || page.TrendRows[2].DisplayValues[12] != "Unavailable" || page.TrendRows[4].DisplayValues[11] != "3.00" {
 			t.Fatal("points must show expanding averages and then full windows, retaining missing xPoints")
 		}
-		if page.TrendRows[4].DisplayValues[1] == "Unavailable" && window == "3" {
+		if page.TrendRows[4].DisplayValues[12] == "Unavailable" && window == "3" {
 			t.Fatal("xPoints must recover when missing observation leaves the window")
 		}
-		if page.TrendRows[4].DisplayValues[1] != "Unavailable" && window == "5" {
+		if page.TrendRows[4].DisplayValues[12] != "Unavailable" && window == "5" {
 			t.Fatal("xPoints must leave gaps throughout affected windows")
 		}
 	}
