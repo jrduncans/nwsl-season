@@ -2553,7 +2553,7 @@
       chart.data.labels = matches.map((_, index) => String(index));
       const label = mirrored ? archiveText(i ? 'xG' : 'Goals', np) : goalGaps ? archiveText(i ? 'Goals against − xG against' : 'Goals for − xG for', np) : i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin';
       chart.data.datasets = values[i].map((data, side) => ({data, label: mirrored ? `${label} ${side ? 'allowed' : 'for'}` : label,
-        ...venueBarStyle(canvas), grouped: !mirrored, ...(mirrored && {minBarLength: 0})}));
+        ...venueBarStyle(canvas), grouped: !mirrored}));
       Object.assign(chart.options.scales.y, {min: axis.min, max: axis.max,
         afterBuildTicks: scale => { scale.ticks = axis.ticks.map(value => ({value})); },
         afterFit: scale => { scale.width = 40; },

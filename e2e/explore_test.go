@@ -2687,7 +2687,6 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
       const value=pair[side], bar=c.getDatasetMeta(side).data[index];
       if(d.data[index] !== (value===null?null:side?-value:value)) errors.push('missing or incorrect value');
       if(value!==null && Math.abs(value)*1.15>y.max+1e-9) errors.push('clipped scored/allowed extent');
-      if(value===0 && Math.abs(bar.y-bar.base)>0.5) errors.push('zero count draws no bar');
       if(value>0 && (Math.abs(bar.base-zero)>1 || (side?bar.y<=zero:bar.y>=zero))) errors.push('bar direction');
       const style=bar.options;
       if(row.venue==='Home' ? style.backgroundColor!=='#1F6FA8' || style.borderWidth!==0 : !(style.backgroundColor instanceof CanvasPattern) || style.borderWidth!==1 || style.borderColor!=='#CF7424') errors.push('venue style on both bars');
