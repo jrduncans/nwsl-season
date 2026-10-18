@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
@@ -107,6 +108,37 @@ func TestExploreGoalGapSortPrecisionAndMissingLast(t *testing.T) {
 			}
 			if !slices.Equal(got, want) {
 				t.Fatalf("%s %s: %v, want %v", key, order, got, want)
+			}
+		}
+	}
+}
+
+func TestExploreGoalGapDisplayPrecision(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		gap          float64
+		want, signed string
+	}{
+		{0, "matched expected", "0.00"},
+		{-1e-10, "matched expected", "0.00"},
+		{1e-10, "matched expected", "0.00"},
+		{-.0049, "matched expected", "0.00"},
+		{.0049, "matched expected", "0.00"},
+		{-.0051, "0.01 below", "-0.01"},
+		{.0051, "0.01 above", "+0.01"},
+	} {
+		expected := 1 - tc.gap
+		rows := []exploreMatchRecord{{Venue: "Home", GoalsCovered: true, Values: [4]exploreTeamValues{{Actual: 1, Expected: &expected}, {Actual: 1, Expected: &expected}}}}
+		tile := exploreGoalGapTiles(rows, history.AllShots, "match")[0]
+		if !strings.HasSuffix(tile.Scored, " · "+tc.want) || !strings.HasSuffix(tile.Allowed, " · "+tc.want) || goalGapText(rows[0], exploreScored) != tc.signed || h2hSignedMargin(tc.gap) != tc.signed {
+			t.Fatalf("gap %g: %+v, signed %q", tc.gap, tile, h2hSignedMargin(tc.gap))
+		}
+	}
+	for _, unit := range []string{"match", "meeting"} {
+		tiles := exploreGoalGapTiles(nil, history.NonPenalty, unit)
+		for _, tile := range tiles {
+			if tile.Scored == "" || tile.Allowed != "" || tile.Coverage != "" || tile.SplitCoverage != "" {
+				t.Fatalf("empty %s tile: %+v", unit, tile)
 			}
 		}
 	}

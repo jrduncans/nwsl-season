@@ -22,6 +22,7 @@ func TestExploreMarginsGoBrowserParity(t *testing.T) {
 		{"season goal gaps", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&trend-mode=match", "[data-trend-goal-gap-tiles]", false},
 		{"season goal gaps incomplete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&trend-mode=match", "[data-trend-goal-gap-tiles]", false},
 		{"h2h goal gaps", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both", "[data-h2h-comparison]", false},
+		{"h2h goal gaps empty venue", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=aDQ0lzvQEv&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps incomplete", apptest.ScenarioTeams, "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps missing split", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both&penalties=exclude", "[data-h2h-comparison]", true},
 		{"season complete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&trend-mode=match", "[data-trend-margin-tiles]", false},
@@ -106,4 +107,26 @@ func assertGoalGapPanels(t *testing.T, page playwright.Page, names []string) {
 		t.Fatal("goal gap panels differ in values, axis or slots")
 	}
 	assertNoHorizontalOverflow(t, page)
+}
+
+func TestExploreGoalGapDisplayPrecision(t *testing.T) {
+	t.Parallel()
+	page := geometryPage(t)
+	var valid bool
+	evalJSON(t, page, `() => {
+ const basis = {nonPenalty:false, xgLabel:'xG'};
+ const cases = [[0,'matched expected'],[-1e-10,'matched expected'],[1e-10,'matched expected'],[-.0049,'matched expected'],[.0049,'matched expected'],[-.0051,'0.01 below'],[.0051,'0.01 above']];
+ if (!cases.every(([gap,want]) => {
+  const row = {venue:'Home', goalsCovered:true, values:[{actual:1,expected:1-gap},{actual:1,expected:1-gap},{},{actual:1}]};
+  const tile = NWSLMargins.formatGoalGap(NWSLMargins.summarize([row])[0],basis,'match');
+  return tile.scored.endsWith(' · '+want) && tile.allowed.endsWith(' · '+want);
+ })) return false;
+ return ['match','meeting'].every(unit => NWSLMargins.summarize([]).every(total => {
+  const tile = NWSLMargins.formatGoalGap(total,basis,unit);
+  return tile.scored===(unit==='match'?'No matches':'No meetings') && tile.allowed==='' && tile.coverage==='' && tile.splitCoverage==='';
+ }));
+ }`, nil, &valid)
+	if !valid {
+		t.Fatal("near-zero or empty-venue display regression")
+	}
 }

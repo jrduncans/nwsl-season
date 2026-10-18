@@ -182,6 +182,7 @@
       const mark = marks[position];
       const element = chart.getDatasetMeta(mark.datasetIndex).data[mark.index];
       chart.keyboardInspecting = true;
+      chart.keyboardInspectionStartedAt = event.timeStamp;
       chart.setActiveElements([mark]);
       chart.tooltip.setActiveElements([mark], element.getCenterPoint());
       chart.update('none');
@@ -2524,7 +2525,8 @@
       const tile = archiveElement('div'); tile.className = 'explore-h2h-tile explore-goal-gap-tile'; tile.dataset.goalGapTile = view.label;
       const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
       if (view.label !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = view.label.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
-      label.append(view.label); tile.append(label, archiveElement('div', view.scored), archiveElement('div', view.allowed));
+      label.append(view.label); tile.append(label, archiveElement('div', view.scored));
+      if (view.allowed) tile.append(archiveElement('div', view.allowed));
       for (const text of [view.coverage, view.splitCoverage].filter(Boolean)) { const line = archiveElement('div', text); line.className = 'note'; tile.append(line); }
       return tile;
     }));
@@ -2554,7 +2556,7 @@
     const chart = charts.seasonPointsGap || (charts.seasonPointsGap = createHeadToHead(canvas, true));
     chart.meetings = matches.map((match, index) => ({...match, date: `Match ${index + 1} · ${match.date}`, pointsView: true, points: match.values[3].actual, xpoints: match.values[3].expected, result: {3: 'Win', 1: 'Draw', 0: 'Loss'}[match.values[3].actual]}));
     chart.data.labels = matches.map((_, index) => String(index + 1));
-    chart.data.datasets[0].data = chart.meetings.map(row => window.NWSLGeometry.headToHeadValue([], [], 'points', row.points, row.xpoints));
+    chart.data.datasets[0].data = chart.meetings.map(row => window.NWSLGeometry.pointsGap(row.points, row.xpoints));
     chart.data.datasets[0].label = 'Points − xPoints';
     const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data, chart.width, chart.height, 'points').extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
@@ -2580,7 +2582,6 @@
     root.querySelector('[data-h2h-xg-panel] p').textContent = both ? label('Above zero: more goals conceded than xG allowed. Below: fewer.') : `up: more ${xgLabel} for · zero: level · down: more ${xgLabel} against`;
     root.querySelector('[data-h2h-direction]').textContent = pointsView ? 'Above zero: more points than xPoints. Below: fewer.' : both ? label('Above zero: more goals scored than xG. Below: fewer.') : np ? 'zero: level' : 'up: win · zero: draw · down: loss';
     root.querySelector('th[data-h2h-basis-column]').hidden = !np;
-    root.querySelector('[data-h2h-points-note]').hidden = true;
     const headers = root.querySelectorAll('th[data-h2h-expected-column]');
     [xgLabel + ' for', xgLabel + ' against', 'xPts', pointsView ? 'Points − xPoints' : both ? label('Goals for − xG for') : xgLabel + ' margin', label('Goals against − xG against')].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = i === 4 ? !both : pointsView ? i < 2 : i === 2; });
     const teamIndex = h2hData.teams.findIndex(t => t.ID === (params.get('team') || root.dataset.defaultH2hTeam));
@@ -2702,7 +2703,7 @@
     chart.options.scales.y.ticks = {maxTicksLimit: 5, precision: 0};
     chart.meetings = rows;
     chart.data.labels = rows.map(row => row.id);
-    chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.headToHeadValue(row.basisGoals, row.xg, series, row.points, row.xpoints));
+    chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.pointsGap(row.points, row.xpoints));
     chart.data.datasets[0].label = 'Points − xPoints';
     const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data.filter(v => v !== null), chart.width, chart.height, series).extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
@@ -2799,10 +2800,10 @@
       chart.yearLabels = window.NWSLGeometry.headToHeadLabels(candidates, chart.chartArea);
       chart.yearLabels.forEach(label => ctx.fillText(label.text, label.center, chart.chartArea.bottom + 20)); ctx.restore();
     }};
-    // Focusing a panel after a control below both charts scrolls the page.
-    // Its queued mouseout must not dismiss the new keyboard inspection.
+    // Focus can scroll the page before Chart.js processes an earlier tap.
+    // Those stale events and the resulting mouseout must not clear keyboard inspection.
     const keyboardTooltip = {id: 'headToHeadKeyboard', beforeEvent(chart, {event, replay}) {
-      if (chart.keyboardInspecting && (event.type === 'mouseout' || replay)) return false;
+      if (chart.keyboardInspecting && (event.type === 'mouseout' || replay || event.native?.timeStamp < chart.keyboardInspectionStartedAt)) return false;
       chart.keyboardInspecting = false;
     }};
     const chart = new Chart(canvas, {type: 'bar', options, plugins: [years, keyboardTooltip], data: {labels: [], datasets: [{label: 'Goal margin', data: [], ...venueBarStyle(canvas)}]}});

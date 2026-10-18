@@ -432,9 +432,6 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-points-note]")).ToBeHidden(); err != nil {
-		t.Fatal(err)
-	}
 	assertNoHorizontalOverflow(t, page)
 	chooseOption(t, page, "[data-h2h-series]", "actual")
 	if queryOf(t, page).Has("h2h-series") {
@@ -713,7 +710,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertPointsChart(t, page, `[data-chart="head-to-head"]`, `[data-h2h-points-tiles]`)
-		for _, selector := range []string{"[data-h2h-penalties-label]", "[data-h2h-points-note]", "[data-h2h-comparison]"} {
+		for _, selector := range []string{"[data-h2h-penalties-label]", "[data-h2h-comparison]"} {
 			if err := expect.Locator(page.Locator(selector)).ToBeHidden(); err != nil {
 				t.Fatal(err)
 			}
@@ -807,4 +804,40 @@ func TestExploreHeadToHeadGoalGapPanels(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestExploreHeadToHeadKeyboardIgnoresQueuedPointerEvents(t *testing.T) {
+	t.Parallel()
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=both")
+	canvas := page.Locator("[data-chart=head-to-head]")
+	if err := canvas.ScrollIntoViewIfNeeded(); err != nil {
+		t.Fatal(err)
+	}
+	// Create a pointer event before keyboard inspection, then deliver it afterward
+	// as Chart.js's queued native events can do during focus-induced scrolling.
+	var queued bool
+	evalJSON(t, page, `()=>{const canvas=document.querySelector('[data-chart="head-to-head"]'), r=canvas.getBoundingClientRect();canvas.pendingPointer=new MouseEvent('mousemove',{bubbles:true,clientX:r.left+2,clientY:r.top+2});return true;}`, nil, &queued)
+	if err := canvas.Press("Home"); err != nil {
+		t.Fatal(err)
+	}
+	preserved, err := page.Evaluate(`async()=>{
+ const canvas=document.querySelector('[data-chart="head-to-head"]'), c=Chart.getChart(canvas);
+ canvas.dispatchEvent(canvas.pendingPointer);delete canvas.pendingPointer;
+ canvas.dispatchEvent(new MouseEvent('mouseout',{bubbles:true}));
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ return c.keyboardInspecting && c.tooltip.opacity>0 && c.tooltip.dataPoints?.[0]?.dataIndex===0;
+ }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preserved != true {
+		t.Fatal("queued pointer event dismissed keyboard inspection")
+	}
+	assertHeadToHeadTooltip(t, page, 0)
+	var point struct{ X, Y float64 }
+	evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="head-to-head"]'));return {x:c.getDatasetMeta(0).data[1].x,y:c.chartArea.top+2};}`, nil, &point)
+	if err := canvas.Hover(playwright.LocatorHoverOptions{Position: &playwright.Position{X: point.X, Y: point.Y}}); err != nil {
+		t.Fatal(err)
+	}
+	assertHeadToHeadTooltip(t, page, 1)
 }

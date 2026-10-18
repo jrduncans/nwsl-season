@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/jrduncans/nwsl-season/internal/history"
 )
@@ -18,6 +19,10 @@ func exploreGoalGapTiles(matches []exploreMatchRecord, basis history.ScoringBasi
 		if unit == "match" {
 			noun = "matches"
 		}
+		if tile.Played == 0 {
+			views = append(views, exploreGoalGapTile{Label: tile.Label, Scored: "No " + noun})
+			continue
+		}
 		view := exploreGoalGapTile{Label: tile.Label, Coverage: fmt.Sprintf("%d of %d %s with %s", tile.XGCovered, tile.Played, noun, basisText(basis, "xG"))}
 		labels := []string{"goals", "allowed"}
 		if basis.ExcludesPenalties() {
@@ -28,8 +33,6 @@ func exploreGoalGapTiles(matches []exploreMatchRecord, basis history.ScoringBasi
 		lines := [2]string{}
 		for i := range lines {
 			switch {
-			case tile.Played == 0:
-				lines[i] = "No " + noun
 			case tile.GoalsCovered != tile.Played:
 				lines[i] = basisText(basis, "Goals incomplete")
 			case tile.XGCovered != tile.Played:
@@ -40,12 +43,15 @@ func exploreGoalGapTiles(matches []exploreMatchRecord, basis history.ScoringBasi
 					xg += " allowed"
 				}
 				gap := float64(actual[i]) - expected[i]
-				direction := "above"
-				if gap < 0 {
-					direction = "below"
-					gap = -gap
+				difference := "matched expected"
+				if math.Abs(gap) >= .005 {
+					direction := "above"
+					if gap < 0 {
+						direction = "below"
+					}
+					difference = fmt.Sprintf("%.2f %s", math.Abs(gap), direction)
 				}
-				lines[i] = fmt.Sprintf("%d %s vs %.2f %s · %.2f %s", actual[i], labels[i], expected[i], xg, gap, direction)
+				lines[i] = fmt.Sprintf("%d %s vs %.2f %s · %s", actual[i], labels[i], expected[i], xg, difference)
 			}
 		}
 		view.Scored, view.Allowed = lines[0], lines[1]

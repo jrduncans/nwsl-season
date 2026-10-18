@@ -40,13 +40,14 @@
   }
   function formatGoalGap(tile, {nonPenalty, xgLabel}, unit) {
     const noun = unit === 'match' ? 'matches' : 'meetings', n = tile.played;
+    if (!n) return {label: tile.label, scored: `No ${noun}`, allowed: '', coverage: '', splitCoverage: ''};
     const lines = [tile.goalsFor, tile.goalsAgainst].map((actual, side) => {
-      if (!n) return `No ${noun}`;
       if (tile.goalsCovered !== n) return nonPenalty ? 'Non-penalty goals incomplete' : 'Goals incomplete';
       const label = `${nonPenalty ? 'non-penalty ' : ''}${side ? 'allowed' : 'goals'}`;
       if (tile.xgCovered !== n) return `${actual} ${label} · ${xgLabel} incomplete`;
       const expected = side ? tile.xgAgainst : tile.xgFor, gap = actual - expected;
-      return `${actual} ${label} vs ${expected.toFixed(2)} ${xgLabel}${side ? ' allowed' : ''} · ${Math.abs(gap).toFixed(2)} ${gap < 0 ? 'below' : 'above'}`;
+      const difference = Math.abs(gap) < .005 ? 'matched expected' : `${Math.abs(gap).toFixed(2)} ${gap < 0 ? 'below' : 'above'}`;
+      return `${actual} ${label} vs ${expected.toFixed(2)} ${xgLabel}${side ? ' allowed' : ''} · ${difference}`;
     });
     return {label: tile.label, scored: lines[0], allowed: lines[1],
       coverage: `${tile.xgCovered} of ${n} ${noun} with ${xgLabel}`,

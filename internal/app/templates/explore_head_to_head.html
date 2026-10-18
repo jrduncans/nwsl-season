@@ -28,7 +28,6 @@
 <div class="explore-h2h-record" data-h2h-points-tiles{{if or (not .H2HPoints) (not .H2HPair.All.Played)}} hidden{{end}}>{{template "explorePointsTiles" .H2HPointsTiles}}</div>
 <div class="explore-h2h-record" data-h2h-comparison{{if or (not .H2HBoth) (not .H2HPair.All.Played)}} hidden{{end}}>{{template "exploreGoalGapTiles" .H2HGoalGapTiles}}</div>
 <p class="note" data-h2h-coverage{{if not .H2HCoverage}} hidden{{end}}>{{.H2HCoverage}}</p>
-<p class="note" data-h2h-points-note hidden>{{.PointsNote}}</p>
 <p data-h2h-empty{{if .H2HPair.All.Played}} hidden{{end}}>{{.H2HTeam.Name}} and {{.H2HPair.Opponent.Name}} have not met in a regular-season match.</p>
 <div data-h2h-chart-wrap{{if not .H2HPair.All.Played}} hidden{{end}}>
 <h3 data-h2h-points-title{{if not .H2HPoints}} hidden{{end}}>Points above or below xPoints · Each match</h3>

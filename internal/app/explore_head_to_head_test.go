@@ -332,9 +332,6 @@ func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 		}
 		requireText(t, body, "[data-h2h-fallback]", basisText(basis, "xG for:"), basisText(basis, "Goals for − xG for:"), basisText(basis, "Goals against − xG against:"))
 		requireExact(t, body, "th[data-h2h-expected-column]", basisText(basis, "Goals for − xG for"), basisText(basis, "Goals against − xG against"))
-		if basis.ExcludesPenalties() {
-			requireElements(t, body, "[data-h2h-points-note][hidden]")
-		}
 		for _, link := range find(t, body, "[data-h2h-sort]") {
 			parsed, err := url.Parse(attr(link, "href"))
 			if err != nil || parsed.Query().Get("h2h-series") != "both" {

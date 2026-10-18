@@ -569,9 +569,12 @@ example “45 goals vs 42.35 xG · 2.65 above” and “39 allowed vs 39.69 xG a
 · 0.69 below”. There is no netted headline. Home and Away swatches are the
 venue legend. Each tile states match coverage. Incomplete xG withholds its
 total and gap; incomplete penalty splits withhold the non-penalty goal total
-and state split coverage. Empty venues say “No matches”. These tiles appear
-only with smoothing off. Tooltips and keyboard descriptions include the match,
-official score, selected-basis goals, xG and signed gaps at both ends. The
+and state split coverage. Gaps smaller than 0.005 in magnitude read “matched
+expected”, consistent with the signed table and tooltip precision. Empty venues
+show only “No matches” (“No meetings” in Head to head), without coverage lines.
+These tiles appear only with smoothing off. Tooltips and keyboard descriptions
+include the match, official score, selected-basis goals, xG and signed gaps at
+both ends. The
 Match values table adds sortable **Goals − xG** and **Goals allowed − xG
 allowed** columns in this mode, with missing last and chronological ties.
 `trend-sort=scored-gap` or `allowed-gap` preserves the selection; changing to
@@ -809,8 +812,10 @@ and the two separate signed gaps, with `Unavailable` where missing. Hit
 testing chooses the nearest slot
 across the full plot height, including slots with missing values. Arrow keys,
 Home and End move between meetings; Escape, blur or an outside tap dismisses
-the tooltip. There is no pinned selection or detail panel. `explore-geometry.js`
-owns chart bounds, bar values, hit testing and year-label placement, tested in
+the tooltip. Pointer events queued before keyboard inspection cannot dismiss
+it; a fresh hover or tap takes over. There is no pinned selection or detail
+panel. `explore-geometry.js` owns chart bounds, bar values, hit testing and
+year-label placement, tested in
 `e2e/geometry_test.go`. Without JavaScript the chart is a chronological list
 with the same basis and expected details, including a goal margin and xG margin
 for every meeting in Margins, or both side gaps in Goals vs xG (with

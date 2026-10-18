@@ -99,22 +99,24 @@ final points. A Penalties control (Included or Excluded) switches Explore
 between official goals and xG and non-penalty goals and npxG; points and xPts
 always include penalties. Completed-match results with a penalty add an npxG
 line beside their xG.
-Match by match follows one team through a regular season. Scoring balance pairs
-scored and allowed, with aligned goals and xG panels when both are selected.
-Goals vs xG shows goals minus xG in separate Scored and Allowed bar panels
-with All / Home / Away totals when smoothing is off, and keeps paired actual
-and expected lines in rolling mode; Margins pairs goal margin and xG margin in two bar panels when
-smoothing is off, with All / Home / Away record and xG tiles. Rolling Margins
-keeps its two lines. Points vs
-xPoints compares earned match points with ASA's retrospective expected points. Benchmarks shows Goals, xG, Points, or xPoints with a team-average
-reference plus an optional league, playoff-team, top-4, Shield-team, or best-team
-comparison. Completed seasons use final standings groups and the Shield winner. Active
-seasons use the default Forecast Lab model's projected final standings for
-playoff and top-4 groups, and highest Shield probability for the favorite. Group averages weight by recorded
-match appearances. Means, membership, and coverage are inspectable without
-JavaScript. Per-match values and 3/5/10-match rolling averages use separate
-line-chart modes. Before a rolling window fills, averages use all matches played
-so far. Missing xG or xPoints leaves gaps in every affected window.
+Match by match follows one team through a regular season. Scoring balance
+pairs scored and allowed, with aligned goals and xG panels when both are
+selected. Goals vs xG shows goals minus xG in separate Scored and Allowed bar
+panels with All / Home / Away totals when smoothing is off, and keeps paired
+actual and expected lines in rolling mode; Margins pairs goal margin and xG
+margin in two bar panels when smoothing is off, with All / Home / Away record
+and xG tiles. Rolling Margins keeps its two lines. Points vs xPoints compares
+earned match points with ASA's retrospective expected points. Benchmarks shows
+Goals, xG, Points, or xPoints with a team-average reference plus an optional
+league, playoff-team, top-4, Shield-team, or best-team comparison. Completed
+seasons use final standings groups and the Shield winner. Active seasons use
+the default Forecast Lab model's projected final standings for playoff and
+top-4 groups, and highest Shield probability for the favorite. Group averages
+weight by recorded match appearances. Means, membership, and coverage are
+inspectable without JavaScript. Per-match values and 3/5/10-match rolling
+averages use separate line-chart modes. Before a rolling window fills,
+averages use all matches played so far. Missing xG or xPoints leaves gaps in
+every affected window.
 
 Useful endpoints:
 
