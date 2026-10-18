@@ -27,7 +27,8 @@
     return {min: signed ? -extent : 0, max: extent, step, decimals: (String(step).split('.')[1] || '').length, ticks};
   }
 
-  // Paired margins or side gaps share one symmetric rounded scale, including missing slots.
+  // Margins, side gaps and mirrored counts share one symmetric rounded scale.
+  // Callers flatten scored/allowed series so every extent participates; nulls stay missing.
   const marginAxis = (goals, xg) => trendAxis([...goals, ...xg].filter(value => value !== null), true);
 
   // Each end keeps its own signed gap; missing goals or xG never become zero.

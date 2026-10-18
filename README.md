@@ -100,8 +100,9 @@ between official goals and xG and non-penalty goals and npxG; points and xPts
 always include penalties. Completed-match results with a penalty add an npxG
 line beside their xG.
 Match by match follows one team through a regular season. Scoring balance
-pairs scored and allowed, with aligned goals and xG panels when both are
-selected. Goals vs xG shows goals minus xG in separate Scored and Allowed bar
+pairs scored and allowed in aligned goals and xG panels. With smoothing off,
+mirrored venue bars show scored up and allowed down, with All / Home / Away
+record and xG tiles; rolling mode keeps its lines. Goals vs xG shows goals minus xG in separate Scored and Allowed bar
 panels with All / Home / Away totals when smoothing is off, and keeps paired
 actual and expected lines in rolling mode; Margins pairs goal margin and xG
 margin in two bar panels when smoothing is off, with All / Home / Away record

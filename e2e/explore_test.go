@@ -2200,7 +2200,7 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 	t.Run("per-match goals use whole-number labels", func(t *testing.T) {
 		gotoInPage(t, page, "explore?view=season-trend&season=2025&trend-view=balance&series=goals&trend-mode=match")
 		var labels []string
-		evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="season-trend"]')).scales.y.ticks.map((tick) => tick.label)`, nil, &labels)
+		evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="season-margin"]')).scales.y.ticks.map((tick) => tick.label)`, nil, &labels)
 		for _, label := range labels {
 			if strings.Contains(label, ".") {
 				t.Errorf("per-match goal axis labels %v, want whole numbers", labels)
@@ -2237,7 +2237,7 @@ func TestExploreSeasonTrendAlwaysShowsBothSeriesAndCarriesSeasonBySeasonChoice(t
 				t.Fatal(err)
 			}
 			gotoInPage(t, page, path+"&trend-mode=match")
-			for _, selector := range []string{"[data-chart=season-trend]", "[data-chart=season-trend-xg]"} {
+			for _, selector := range []string{"[data-chart=season-margin]", "[data-chart=season-margin-xg]"} {
 				if err := expect.Locator(page.Locator(selector)).ToBeVisible(); err != nil {
 					t.Errorf("%s is not visible in unsmoothed mode: %v", selector, err)
 				}
@@ -2266,7 +2266,7 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 		table      []string
 		lines      []string
 	}{
-		{"balance", "match", []string{"2", "0", "1.10", "0.70"}, []string{"Goals scored: 2", "Goals allowed: 0", "xG scored: 1.10", "xG allowed: 0.70"}},
+		{"balance", "match", []string{"2", "0", "1.10", "0.70"}, []string{"xG for: 1.10", "xG against: 0.70"}},
 		{"balance", "rolling", []string{"2.00", "0.00", "1.10", "0.70"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match", "xG scored: 1.10 per match", "xG allowed: 0.70 per match"}},
 		{"compare", "match", []string{"2", "1.10", "0", "0.70", "+0.90", "-0.70"}, []string{"Goals: 2–0", "xG for: 1.10", "xG against: 0.70", "Goals for − xG for: +0.90", "Goals against − xG against: -0.70"}},
 		{"compare", "rolling", []string{"2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
@@ -2652,5 +2652,165 @@ func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-chart-status]")).ToContainText("Goals against − xG against:"); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-mode=match")
+		defer expectInPlace(t, page, "Scoring balance smoothing and chart switches")()
+		for selector, text := range map[string]string{
+			"[data-trend-margin-title]":     "Goals",
+			"[data-trend-second-title]":     "xG",
+			"[data-trend-margin-direction]": "Up: scored · Down: allowed",
+			"[data-trend-second-direction]": "Up: xG for · Down: xG allowed",
+		} {
+			if err := expect.Locator(page.Locator(selector)).ToHaveText(text); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var problems []string
+		evalJSON(t, page, `() => {
+   const errors=[], names=['season-margin','season-margin-xg'];
+   const charts=names.map(name=>Chart.getChart(document.querySelector('[data-chart="'+name+'"]')));
+   charts.forEach((c,panel)=>{
+    if(!c.canvas.getClientRects().length || c.data.datasets.length!==2) {errors.push('two visible mirrored series'); return;}
+    const y=c.scales.y, zero=y.getPixelForValue(0);
+    if(y.min!==-y.max || y.min!==charts[0].scales.y.min || y.max!==charts[0].scales.y.max) errors.push('shared symmetric axis');
+    if(y.ticks.some(t=>Number(t.label)!==Math.abs(t.value))) errors.push('absolute tick labels');
+    c.meetings.forEach((row,index)=>{
+     const pair=panel?NWSLMargins.xg(row):NWSLMargins.goals(row);
+     const bars=c.data.datasets.map((d,side)=>{
+      const value=pair[side], bar=c.getDatasetMeta(side).data[index];
+      if(d.data[index] !== (value===null?null:side?-value:value)) errors.push('missing or incorrect value');
+      if(value!==null && Math.abs(value)*1.15>y.max+1e-9) errors.push('clipped scored/allowed extent');
+      if(value===0 && (Math.abs(bar.y-bar.base)<2 || Math.abs((bar.y+bar.base)/2-zero)>1)) errors.push('zero count keeps a centered mark');
+      if(value>0 && (Math.abs(bar.base-zero)>1 || (side?bar.y<=zero:bar.y>=zero))) errors.push('bar direction');
+      const style=bar.options;
+      if(row.venue==='Home' ? style.backgroundColor!=='#1F6FA8' || style.borderWidth!==0 : !(style.backgroundColor instanceof CanvasPattern) || style.borderWidth!==1 || style.borderColor!=='#CF7424') errors.push('venue style on both bars');
+      return bar;
+     });
+     if(bars[0].x!==bars[1].x || bars[0].width!==bars[1].width) errors.push('scored/allowed share slot');
+    });
+   });
+   if(!charts[1].data.datasets.every(d=>d.data.some(v=>v===null))) errors.push('fixture must exercise missing xG');
+   const tiles=[...document.querySelectorAll('[data-trend-margin-tiles] [data-h2h-tile]')];
+   if(tiles.length!==3 || tiles.some(t=>!t.getClientRects().length || Math.abs(t.getBoundingClientRect().width-tiles[0].getBoundingClientRect().width)>1 || Math.abs(t.getBoundingClientRect().top-tiles[0].getBoundingClientRect().top)>1 || t.scrollWidth>t.clientWidth)) errors.push('three equal visible venue tiles');
+   return errors;
+  }`, nil, &problems)
+		if len(problems) != 0 {
+			t.Fatalf("mirrored balance: %v", problems)
+		}
+		assertNoHorizontalOverflow(t, page)
+		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToContainText("xG incomplete"); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"season-margin", "season-margin-xg"} {
+			selector := `[data-chart="` + name + `"]`
+			canvas := page.Locator(selector)
+			if err := canvas.Press("Home"); err != nil {
+				t.Fatal(err)
+			}
+			if got := chartInspection(t, page, selector); !strings.Contains(got.Status, "Match 1 ·") || !strings.Contains(got.Status, "xG for:") || !strings.Contains(got.Status, "xG against:") || !regexp.MustCompile(` · (Win|Draw|Loss)`).MatchString(got.Status) {
+				t.Fatalf("full match keyboard description: %+v", got)
+			}
+			if err := canvas.Press("ArrowRight"); err != nil {
+				t.Fatal(err)
+			}
+			if got := chartInspection(t, page, selector); !strings.Contains(got.Status, "Match 2 ·") {
+				t.Fatalf("keyboard must visit each match once: %+v", got)
+			}
+		}
+		// Hit a missing xG slot well below zero: the entire slot, including both
+		// halves and empty space, must inspect one match with unavailable xG.
+		var hit struct {
+			X, Y  float64
+			Index int
+		}
+		evalJSON(t, page, `() => {
+   const c=Chart.getChart(document.querySelector('[data-chart="season-margin-xg"]')), index=c.data.datasets[0].data.findIndex(v=>v===null);
+   return {x:c.getDatasetMeta(0).data[index].x,y:(c.scales.y.getPixelForValue(0)+c.chartArea.bottom)/2,index};
+  }`, nil, &hit)
+		canvas := page.Locator("[data-chart=season-margin-xg]")
+		if err := canvas.Hover(playwright.LocatorHoverOptions{Position: &playwright.Position{X: hit.X, Y: hit.Y}}); err != nil {
+			t.Fatal(err)
+		}
+		var tooltip []string
+		evalJSON(t, page, `() => {
+   const c=Chart.getChart(document.querySelector('[data-chart="season-margin-xg"]'));
+   return [...c.tooltip.title,...c.tooltip.body.flatMap(b=>b.lines)];
+  }`, nil, &tooltip)
+		if text := strings.Join(tooltip, " · "); !strings.Contains(text, fmt.Sprintf("Match %d ·", hit.Index+1)) || !strings.Contains(text, "xG for: Unavailable") || !strings.Contains(text, "xG against: Unavailable") {
+			t.Fatalf("empty-slot pointer tooltip: %v", tooltip)
+		}
+		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		var lines bool
+		evalJSON(t, page, `() => ['season-trend','season-trend-xg'].every(name=>{
+   const canvas=document.querySelector('[data-chart="'+name+'"]'), c=Chart.getChart(canvas);
+   return canvas.getClientRects().length>0 && c.data.datasets.every(d=>d.type==='line');
+  })`, nil, &lines)
+		if !lines {
+			t.Fatal("rolling balance must retain its two line panels")
+		}
+		chooseOption(t, page, "[data-trend-mode]", "match")
+		for _, view := range []string{"difference", "compare", "balance"} {
+			chooseOption(t, page, "[data-trend-view]", view)
+			var count int
+			evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="season-margin"]')).data.datasets.length`, nil, &count)
+			want := 1
+			if view == "balance" {
+				want = 2
+			}
+			if count != want {
+				t.Fatalf("%s retained stale bar series: %d", view, count)
+			}
+		}
+	}
+	// An entirely uncovered season still renders both panels and lets the
+	// keyboard inspect every empty xG slot.
+	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	for i := range archive {
+		archive[i].Data.XGoals = nil
+	}
+	missingBase := exploreBaseArchive(t, archive)
+	missing := explorePage(t, missingBase, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-mode=match")
+	for _, name := range []string{"season-margin", "season-margin-xg"} {
+		if err := expect.Locator(missing.Locator("[data-chart=" + name + "]")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var allMissing bool
+	evalJSON(t, missing, `() => {
+   const c=Chart.getChart(document.querySelector('[data-chart="season-margin-xg"]'));
+   return c.data.labels.length>0 && c.data.datasets.every(d=>d.data.every(v=>v===null));
+  }`, nil, &allMissing)
+	if !allMissing {
+		t.Fatal("missing xG must stay null in both bar series")
+	}
+	if err := missing.Locator("[data-chart=season-margin-xg]").Press("End"); err != nil {
+		t.Fatal(err)
+	}
+	if got := chartInspection(t, missing, "[data-chart=season-margin-xg]"); !strings.Contains(got.Status, "Match 30 ·") || !strings.Contains(got.Status, "xG for: Unavailable") {
+		t.Fatalf("empty xG keyboard inspection: %+v", got)
+	}
+
+	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-mode=match&penalties=exclude")
+	canvas := page.Locator("[data-chart=season-margin]")
+	for _, key := range []string{"Home", "ArrowRight"} {
+		if err := canvas.Press(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := chartInspection(t, page, "[data-chart=season-margin]"); !strings.Contains(got.Status, "1–0 · Win") || !strings.Contains(got.Status, "Non-penalty goals: 0–0") || !strings.Contains(got.Status, "npxG for:") {
+		t.Fatalf("selected basis and official score: %+v", got)
+	}
+	if err := expect.Locator(page.Locator("[data-trend-margin-official]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
 	}
 }
