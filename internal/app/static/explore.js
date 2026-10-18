@@ -2018,8 +2018,9 @@
       if (!dataset.expected && dataset.measure !== 3 && matches.slice(Math.max(0, index + 1 - window), index + 1).some(row => !row.goalsCovered)) return null;
       return dataset.data[index];
     }, format: value => seasonTrendNumber(value, dataset.expected, true)}));
-    const key = params.get('trend-sort') || 'match', desc = params.get('trend-order') === 'desc';
-    const sorted = columns.find(column => column.key === key);
+    const requested = params.get('trend-sort') || 'match';
+    const sorted = columns.find(column => column.key === requested) || columns[0];
+    const key = sorted.key, desc = key === requested && params.get('trend-order') === 'desc';
     const expanded = params.has('trend-sort') || params.has('trend-order');
     root.querySelector('[data-trend-values]').open = expanded;
     root.querySelector('[data-trend-headings]').replaceChildren(...columns.map(column => {

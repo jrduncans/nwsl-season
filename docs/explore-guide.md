@@ -566,7 +566,9 @@ changes retain the sort. Switching charts retains shared sorts; a derived sort
 that no longer exists falls back to match order and drops both sort parameters
 from the URL, including on native GET submissions. The native `<details>` opens
 when either parameter is present and is otherwise closed. The table scrolls
-inside its container on phones, with a scroll hint.
+inside its container on phones, with a scroll hint. The browser renderer also
+falls back to played order if restored history names a column absent from the
+current chart, keeping the sort indicator and form controls consistent.
 
 Except for the points gap bars described below, each chart's y axis is round
 and labels its own ticks (`trendAxis` in `explore-geometry.js`), rather than leaving tick choice to Chart.js, which

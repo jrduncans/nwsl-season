@@ -2903,3 +2903,29 @@ func TestExploreMatchValuesSortHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExploreMatchValuesStaleSort(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&trend-sort=points-gap&trend-order=desc")
+		for _, key := range []string{"points-gap", "scored-gap", "allowed-gap", "goal-margin", "xg-margin", "unknown"} {
+			// Bypass the controls and server redirect, as restored history can.
+			gotoInPage(t, page, "explore?view=season-trend&season=2025&trend-view=balance&trend-sort="+key+"&trend-order=desc")
+			var playedOrder bool
+			evalJSON(t, page, `() => [...document.querySelectorAll('[data-trend-rows] tr')].every((row, index) => Number(row.cells[0].textContent) === index + 1)`, nil, &playedOrder)
+			if !playedOrder {
+				t.Fatalf("stale sort %s must fall back to played order", key)
+			}
+			if err := expect.Locator(page.Locator("[data-trend-sort=match]").Locator("..")).ToHaveAttribute("aria-sort", "ascending"); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"trend-sort", "trend-order"} {
+				if err := expect.Locator(page.Locator("[data-season-trend-controls] input[name=" + name + "]")).ToBeDisabled(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+}
