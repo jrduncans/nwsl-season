@@ -2531,35 +2531,52 @@
       return tile;
     }));
   }
-  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false}) {
-    // Each panel owns one margin/gap series, or a scored/allowed pair. Preserve
-    // nulls before negating allowed counts so an uncovered match stays empty.
-    let values;
+  // One entry per bar layout: its series per panel, and the text and tick
+  // format each panel carries. `sides` is how many bar series a panel draws.
+  function matchBarMode({goalGaps, mirrored, np, xg}) {
+    const {goals, xg: xgPair, goalMargin, xgMargin} = marginsData, {goalGap} = window.NWSLGeometry;
+    const signed = (value, decimals) => `${value > 0 ? '+' : ''}${value.toFixed(decimals)}`;
     if (mirrored) {
-      values = [marginsData.goals, marginsData.xg].map(read => [0, 1].map(side => matches.map(row => {
-        const value = read(row)[side];
-        return value === null ? null : side ? -value : value;
-      })));
-    } else {
-      const single = goalGaps ? [0, 1].map(side => matches.map(row => window.NWSLGeometry.goalGap(marginsData.goals(row), marginsData.xg(row), side))) : [matches.map(marginsData.goalMargin), matches.map(marginsData.xgMargin)];
-      values = single.map(data => [data]);
+      // Preserve nulls before negating allowed counts so an uncovered match stays empty.
+      const side = (read, index) => matches => matches.map(row => { const value = read(row)[index]; return value === null ? null : index ? -value : value; });
+      return {
+        series: [goals, xgPair].map(read => [side(read, 0), side(read, 1)]),
+        label: i => archiveText(i ? 'xG' : 'Goals', np),
+        seriesLabel: (label, index) => `${label} ${index ? 'allowed' : 'for'}`,
+        direction: i => `Up: ${i ? xg + ' for' : 'scored'}; Down: ${i ? xg + ' allowed' : 'allowed'}`,
+        tick: (value, decimals) => Math.abs(value).toFixed(decimals),
+        grouped: false,
+      };
     }
-    const axis = window.NWSLGeometry.marginAxis(...values.map(series => series.flat())), xg = archiveText('xG', np);
+    const single = goalGaps
+      ? [0, 1].map(index => matches => matches.map(row => goalGap(goals(row), xgPair(row), index)))
+      : [matches => matches.map(goalMargin), matches => matches.map(xgMargin)];
+    return {
+      series: single.map(read => [read]),
+      label: i => goalGaps ? archiveText(i ? 'Goals against − xG against' : 'Goals for − xG for', np) : i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin',
+      seriesLabel: label => label,
+      direction: i => goalGaps ? archiveText(i ? 'Above zero: more goals conceded than xG allowed. Below: fewer.' : 'Above zero: more goals scored than xG. Below: fewer.', np) : i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np ? 'zero: level' : 'up: win; zero: draw; down: loss',
+      tick: signed,
+      grouped: true,
+    };
+  }
+  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false}) {
+    const xg = archiveText('xG', np), mode = matchBarMode({goalGaps, mirrored, np, xg});
+    const values = mode.series.map(panel => panel.map(read => read(matches)));
+    const axis = window.NWSLGeometry.marginAxis(...values.map(panel => panel.flat()));
     panels.forEach(({canvas: name, key}, i) => {
       const canvas = root.querySelector(`[data-chart="${name}"]`);
       const chart = charts[key] || (charts[key] = createHeadToHead(canvas, matchNumbers, inspection));
       chart.inspection = inspection;
       chart.meetings = matches;
       chart.data.labels = matches.map((_, index) => String(index));
-      const label = mirrored ? archiveText(i ? 'xG' : 'Goals', np) : goalGaps ? archiveText(i ? 'Goals against − xG against' : 'Goals for − xG for', np) : i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin';
-      chart.data.datasets = values[i].map((data, side) => ({data, label: mirrored ? `${label} ${side ? 'allowed' : 'for'}` : label,
-        ...venueBarStyle(canvas), grouped: !mirrored}));
+      const label = mode.label(i);
+      chart.data.datasets = values[i].map((data, index) => ({data, label: mode.seriesLabel(label, index), ...venueBarStyle(canvas), grouped: mode.grouped}));
       Object.assign(chart.options.scales.y, {min: axis.min, max: axis.max,
         afterBuildTicks: scale => { scale.ticks = axis.ticks.map(value => ({value})); },
         afterFit: scale => { scale.width = 40; },
-        ticks: {callback: value => mirrored ? Math.abs(value).toFixed(axis.decimals) : `${value > 0 ? '+' : ''}${value.toFixed(axis.decimals)}`}});
-      const direction = mirrored ? `Up: ${i ? xg + ' for' : 'scored'}; Down: ${i ? xg + ' allowed' : 'allowed'}` : goalGaps ? archiveText(i ? 'Above zero: more goals conceded than xG allowed. Below: fewer.' : 'Above zero: more goals scored than xG. Below: fewer.', np) : i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np ? 'zero: level' : 'up: win; zero: draw; down: loss';
-      canvas.setAttribute('aria-label', `${description}: ${label}, each match; ${direction}; home solid blue, away striped orange`);
+        ticks: {callback: value => mode.tick(value, axis.decimals)}});
+      canvas.setAttribute('aria-label', `${description}: ${label}, each match; ${mode.direction(i)}; home solid blue, away striped orange`);
       chart.resize(); chart.update('none');
     });
   }
