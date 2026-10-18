@@ -691,5 +691,8 @@ th:nth-child(2) { text-align: left; }
 .explore-points-tile strong span { display: block; }
 .explore-points-tile > div:not(.explore-h2h-tile-label) { margin-top: .25rem; }
 
-.explore-goal-gap-tile { white-space: normal; overflow-wrap: anywhere; }
-.explore-goal-gap-tile > div:not(.explore-h2h-tile-label) { margin-top: .5rem; font-size: .8rem; line-height: 1.4; }
+/* Each side wraps between its heading, totals and gap, never inside them. */
+.explore-goal-gap-tile { white-space: normal; }
+.explore-goal-gap-tile > div:not(.explore-h2h-tile-label) { margin-top: .5rem; line-height: 1.4; }
+.explore-goal-gap-side > * { display: block; }
+.explore-goal-gap-heading { color: var(--muted); }

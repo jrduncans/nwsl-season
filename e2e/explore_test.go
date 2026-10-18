@@ -236,19 +236,14 @@ func exploreViews() []exploreView {
 			name: "season-trend", scenario: apptest.ScenarioSeasonTrend,
 			path: "explore?view=season-trend",
 			controls: []string{
-				"[data-trend-season]", "[data-trend-team]", "[data-trend-view]", "[data-trend-mode]",
-				"[data-trend-window]", "[data-trend-average-series]", "[data-trend-reference]",
+				"[data-trend-season]", "[data-trend-team]", "[data-trend-view]", "[data-trend-smoothing]",
+				"[data-trend-average-series]", "[data-trend-reference]",
 			},
 			steps: []exploreStep{
 				{selector: "[data-trend-season]", value: "2025", param: "season"},
 				{selector: "[data-trend-team]", value: teamGotham, param: "team"},
-				{selector: "[data-trend-window]", value: "10", param: "window"},
-				{selector: "[data-trend-mode]", value: "match", param: "trend-mode", check: func(t *testing.T, page playwright.Page) {
-					hidden, err := page.Locator("[data-trend-window-control]").IsHidden()
-					if err != nil || !hidden {
-						t.Errorf("window control hidden = %v (%v), want hidden in per-match mode", hidden, err)
-					}
-				}},
+				{selector: "[data-trend-smoothing]", value: "10", param: "smoothing"},
+				{selector: "[data-trend-smoothing]", value: "none", param: "smoothing"},
 				{selector: "[data-trend-view]", value: "relative", param: "trend-view"},
 				{selector: "[data-trend-average-series]", value: "points", param: "average-series"},
 				{selector: "[data-trend-reference]", value: "best", param: "average-reference"},
@@ -1936,12 +1931,12 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 
 	t.Run("match by match form submits a GET", func(t *testing.T) {
 		goTo("explore?view=season-trend&season=2025")
-		chooseOption(t, page, "[data-trend-mode]", "match")
+		chooseOption(t, page, "[data-trend-smoothing]", "none")
 		if err := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Show matches"}).Click(); err != nil {
 			t.Fatalf("submit: %v", err)
 		}
-		if got := queryOf(t, page).Get("trend-mode"); got != "match" {
-			t.Errorf("submitted trend-mode = %q, want match (%s)", got, page.URL())
+		if got := queryOf(t, page).Get("smoothing"); got != "none" {
+			t.Errorf("submitted smoothing = %q, want none (%s)", got, page.URL())
 		}
 		if err := expect.Locator(page.Locator("[data-trend-rows] tr")).ToHaveCount(30); err != nil {
 			t.Errorf("match values table rows: %v", err)
@@ -2198,7 +2193,7 @@ func TestExploreSeasonTrendAxesShowAScale(t *testing.T) {
 		}
 	}
 	t.Run("per-match goals use whole-number labels", func(t *testing.T) {
-		gotoInPage(t, page, "explore?view=season-trend&season=2025&trend-view=balance&series=goals&trend-mode=match")
+		gotoInPage(t, page, "explore?view=season-trend&season=2025&trend-view=balance&series=goals&smoothing=none")
 		var labels []string
 		evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="season-margin"]')).scales.y.ticks.map((tick) => tick.label)`, nil, &labels)
 		for _, label := range labels {
@@ -2236,7 +2231,7 @@ func TestExploreSeasonTrendAlwaysShowsBothSeriesAndCarriesSeasonBySeasonChoice(t
 			if err := expect.Locator(page.Locator("[data-trend-carried-series]")).ToHaveValue(selection); err != nil {
 				t.Fatal(err)
 			}
-			gotoInPage(t, page, path+"&trend-mode=match")
+			gotoInPage(t, page, path+"&smoothing=none")
 			for _, selector := range []string{"[data-chart=season-margin]", "[data-chart=season-margin-xg]"} {
 				if err := expect.Locator(page.Locator(selector)).ToBeVisible(); err != nil {
 					t.Errorf("%s is not visible in unsmoothed mode: %v", selector, err)
@@ -2341,7 +2336,7 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 		})
 	}
 	t.Run("official result with penalties excluded", func(t *testing.T) {
-		visit(t, page, base+path+"&penalties=exclude&trend-view=difference&trend-mode=match")
+		visit(t, page, base+path+"&penalties=exclude&trend-view=difference&smoothing=none")
 		check(t, 1, "1–0 · Win", []string{"0", "-0.40"}, []string{"Non-penalty goal margin: 0", "npxG margin: -0.40"})
 	})
 }
@@ -2351,7 +2346,7 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&trend-mode=match")
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&smoothing=none")
 		assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
 		if err := page.Locator("[data-trend-values] summary").Click(); err != nil {
 			t.Fatal(err)
@@ -2367,7 +2362,7 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 		if !ordered {
 			t.Fatal("gap column must sort by exact difference")
 		}
-		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		chooseOption(t, page, "[data-trend-smoothing]", "5")
 		if queryOf(t, page).Get("trend-sort") != "points-gap" || queryOf(t, page).Get("trend-order") != "desc" {
 			t.Fatal("rolling mode lost gap sort")
 		}
@@ -2391,7 +2386,7 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 		assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
 	}
 	// Bay FC's 2026 first home appearance lacks xPoints, even though xG exists.
-	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&trend-mode=match")
+	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&smoothing=none")
 	assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
 	if err := expect.Locator(page.Locator("[data-trend-points-tiles] [data-points-tile=All]")).ToContainText("xPts incomplete"); err != nil {
 		t.Fatal(err)
@@ -2419,7 +2414,7 @@ func TestExploreSeasonPointsEmptyAndVenueDates(t *testing.T) {
 	base := exploreBaseArchive(t, archive)
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&trend-view=points&trend-mode=match")
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&trend-view=points&smoothing=none")
 		for _, year := range []string{"2026", "2025", "2026"} {
 			chooseOption(t, page, "[data-trend-season]", year)
 			if year == "2026" {
@@ -2457,7 +2452,7 @@ func TestExplorePointsNativeSortURLs(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-	path := "explore?view=season-trend&season=2025&trend-view=points&trend-mode=match"
+	path := "explore?view=season-trend&season=2025&trend-view=points&smoothing=none"
 	visitStatic(t, page, base+path)
 	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
 		t.Fatal(err)
@@ -2466,7 +2461,7 @@ func TestExplorePointsNativeSortURLs(t *testing.T) {
 		t.Fatal("default sort leaked into GET form")
 	}
 	visitStatic(t, page, base+path+"&trend-sort=points-gap&trend-order=desc")
-	chooseOption(t, page, "[data-trend-mode]", "rolling")
+	chooseOption(t, page, "[data-trend-smoothing]", "5")
 	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
 		t.Fatal(err)
 	}
@@ -2559,7 +2554,7 @@ func TestExploreSeasonMarginsPanelsAndCoverage(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&trend-mode=match")
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&smoothing=none")
 		defer expectInPlace(t, page, "Margins smoothing and table")()
 		assertMarginPanels(t, page, "season-margin", "season-margin-xg")
 		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToBeVisible(); err != nil {
@@ -2602,18 +2597,18 @@ func TestExploreSeasonMarginsPanelsAndCoverage(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-trend-points-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
-		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		chooseOption(t, page, "[data-trend-smoothing]", "5")
 		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-trend-goals-title]")).ToHaveText("Margins · 5-match average"); err != nil {
 			t.Fatal(err)
 		}
-		chooseOption(t, page, "[data-trend-mode]", "match")
+		chooseOption(t, page, "[data-trend-smoothing]", "none")
 		assertMarginPanels(t, page, "season-margin", "season-margin-xg")
 	}
 	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-	visitStatic(t, page, base+"explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&trend-mode=match")
+	visitStatic(t, page, base+"explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&smoothing=none")
 	if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToContainText("xG incomplete"); err != nil {
 		t.Fatal(err)
 	}
@@ -2630,7 +2625,7 @@ func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&trend-mode=match")
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&smoothing=none")
 		assertGoalGapPanels(t, page, []string{"season-margin", "season-margin-xg"})
 		expect := playwright.NewPlaywrightAssertions()
 		if err := expect.Locator(page.Locator("[data-trend-goal-gap-tiles]")).ToBeVisible(); err != nil {
@@ -2645,14 +2640,14 @@ func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
 		if queryOf(t, page).Get("trend-sort") != "allowed-gap" {
 			t.Fatal("gap sort lost")
 		}
-		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		chooseOption(t, page, "[data-trend-smoothing]", "5")
 		if err := expect.Locator(page.Locator("[data-trend-goal-gap-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
 		if queryOf(t, page).Get("trend-sort") != "allowed-gap" {
 			t.Fatal("rolling lost gap sort")
 		}
-		chooseOption(t, page, "[data-trend-mode]", "match")
+		chooseOption(t, page, "[data-trend-smoothing]", "none")
 		assertGoalGapPanels(t, page, []string{"season-margin", "season-margin-xg"})
 		if err := page.Locator("[data-chart=season-margin-xg]").Press("End"); err != nil {
 			t.Fatal(err)
@@ -2668,7 +2663,7 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-mode=match")
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2026&team=odMX2OJqYL&smoothing=none")
 		defer expectInPlace(t, page, "Scoring balance smoothing and chart switches")()
 		for selector, text := range map[string]string{
 			"[data-trend-margin-title]":     "Goals",
@@ -2754,7 +2749,7 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 		if text := strings.Join(tooltip, " · "); !strings.Contains(text, fmt.Sprintf("Match %d ·", hit.Index+1)) || !strings.Contains(text, "xG for: Unavailable") || !strings.Contains(text, "xG against: Unavailable") {
 			t.Fatalf("empty-slot pointer tooltip: %v", tooltip)
 		}
-		chooseOption(t, page, "[data-trend-mode]", "rolling")
+		chooseOption(t, page, "[data-trend-smoothing]", "5")
 		if err := expect.Locator(page.Locator("[data-trend-margin-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
@@ -2766,7 +2761,7 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 		if !lines {
 			t.Fatal("rolling balance must retain its two line panels")
 		}
-		chooseOption(t, page, "[data-trend-mode]", "match")
+		chooseOption(t, page, "[data-trend-smoothing]", "none")
 		for _, view := range []string{"difference", "compare", "balance"} {
 			chooseOption(t, page, "[data-trend-view]", view)
 			var count int
@@ -2787,7 +2782,7 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 		archive[i].Data.XGoals = nil
 	}
 	missingBase := exploreBaseArchive(t, archive)
-	missing := explorePage(t, missingBase, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-mode=match")
+	missing := explorePage(t, missingBase, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&smoothing=none")
 	for _, name := range []string{"season-margin", "season-margin-xg"} {
 		if err := expect.Locator(missing.Locator("[data-chart=" + name + "]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
@@ -2808,7 +2803,7 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 		t.Fatalf("empty xG keyboard inspection: %+v", got)
 	}
 
-	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-mode=match&penalties=exclude")
+	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&smoothing=none&penalties=exclude")
 	canvas := page.Locator("[data-chart=season-margin]")
 	for _, key := range []string{"Home", "ArrowRight"} {
 		if err := canvas.Press(key); err != nil {
@@ -2828,7 +2823,7 @@ func TestExploreMatchValuesSortHistory(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&trend-mode=rolling")
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&smoothing=5")
 		click(t, page.Locator("[data-trend-values] summary"))
 		click(t, page.Locator("[data-trend-sort=points-gap]"))
 		click(t, page.Locator("[data-trend-sort=points-gap]"))
@@ -2885,14 +2880,14 @@ func TestExploreMatchValuesSortHistory(t *testing.T) {
 		}
 		click(t, page.Locator("[data-trend-values] summary"))
 		click(t, page.Locator("[data-trend-sort=goal-margin]"))
-		chooseOption(t, page, "[data-trend-mode]", "match")
+		chooseOption(t, page, "[data-trend-smoothing]", "none")
 		if queryOf(t, page).Get("trend-sort") != "goal-margin" {
 			t.Fatal("smoothing switch lost margin sort")
 		}
 	}
 	// Sort links also navigate and expand the table with scripts disabled.
 	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-	visitStatic(t, page, base+"explore?view=season-trend&season=2025&trend-view=points&trend-mode=rolling")
+	visitStatic(t, page, base+"explore?view=season-trend&season=2025&trend-view=points&smoothing=5")
 	click(t, page.Locator("[data-trend-values] summary"))
 	click(t, page.Locator("[data-trend-sort=points-gap]"))
 	click(t, page.Locator("[data-trend-sort=points-gap]"))

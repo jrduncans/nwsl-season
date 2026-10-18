@@ -127,8 +127,9 @@ func TestExploreTrendBenchmarksSeasonGroupsAndFallback(t *testing.T) {
 			if err != nil || len(page.TrendReferences) != 4 {
 				t.Fatalf("references = %+v, %v", page, err)
 			}
-			for _, mode := range []string{"match", "rolling"} {
-				query.Set("trend-mode", mode)
+			query.Del("trend-mode")
+			for _, smoothing := range []string{"none", "5"} {
+				query.Set("smoothing", smoothing)
 				response := httptest.NewRecorder()
 				store := &archiveHTTPStore{archive: archive}
 				NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&season="+year+"&team=team-9&"+query.Encode(), nil))
@@ -229,7 +230,7 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 		t.Fatalf("xPoints benchmark must honor independent coverage and selection: %+v, %v", page, err)
 	}
 	response := httptest.NewRecorder()
-	NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&season=2026&team=team-0&trend-view=points&trend-mode=match", nil))
+	NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&season=2026&team=team-0&trend-view=points&smoothing=none", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `<th scope="col">xPoints</th>`) || !strings.Contains(response.Body.String(), `data-trend-points-warning>`) || !strings.Contains(response.Body.String(), `data-trend-warning hidden`) {
 		t.Fatal("points fallback must render points and its own coverage warning")
 	}

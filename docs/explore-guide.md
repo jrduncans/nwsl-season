@@ -518,12 +518,28 @@ team's xG coverage is incomplete; goal ranks remain.
 | Parameter | Values | Default |
 |---|---|---|
 | `trend-view` | `balance` (Scoring balance), `compare` (Goals vs xG), `difference` (Margins), `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
-| `trend-mode` | `match`, `rolling` | `rolling` |
-| `window` | `3`, `5`, `10` | `5` |
+| `smoothing` | `none`, `3`, `5`, `10` (N-match rolling average) | `5` |
 | `trend-sort` | `match`, `venue`, `result`, `goal-margin`, `xg-margin`, `points-gap`, `scored-gap`, `allowed-gap` (derived columns depend on the chart) | `match` |
 | `trend-order` | `asc`, `desc` | `asc` |
 | `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
+
+The section has a visually hidden “Match by match” heading; the team name
+follows the controls, with a status line such as “2026 regular season · In
+progress · 27 played”. One Smoothing select offers None or a 3-, 5- or
+10-match average, so the window never wraps away from the mode. Old links
+with `trend-mode` and `window` still validate and redirect to the equivalent
+`smoothing` value, keeping every other selection; an explicit `smoothing`
+wins. The note
+above the chart says only what the controls and panel titles do not: the
+rolling window (“Each point averages the last 5 matches, including that one.”),
+Benchmarks' reference lines (plus “Expected means use available matches.”
+when the selected expected series has gaps), the xPoints definition on Points
+vs xPoints, and “Penalty kicks excluded.” when it applies. With none of these,
+the note is hidden. Unsmoothed panel titles carry no “Each match” suffix;
+rolling titles end in “· N-match average”. Direction notes state only the
+above-zero or upward meaning, in sentence case (for example “Up: win · Zero:
+draw · Down: loss”).
 
 Scoring balance always shows both Goals and xG. A carried `series` parameter
 belongs to Season by season and is ignored here; it stays in the form and links
@@ -579,7 +595,7 @@ per-match goals, keep whole-number steps; labels carry only the decimals the
 step needs.
 
 **Scoring balance** (`trend-view=balance`) always shows Goals and xG. With
-smoothing off (`trend-mode=match`), both panels use mirrored bars in the same
+smoothing off (`smoothing=none`), both panels use mirrored bars in the same
 match slot: scored up from zero, allowed down. The notes read “Up: scored ·
 Down: allowed” and “Up: xG for · Down: xG allowed”. Both bars use the match's
 venue encoding: home solid blue (`#1F6FA8`), away orange (`#CF7424`) stripes on
@@ -599,7 +615,7 @@ official score and result, xG for and xG against, plus non-penalty goals when
 selected. Rolling Scoring balance keeps its scored and allowed lines.
 
 **Goals vs xG** (`trend-view=compare`) keeps its two Scored and Allowed
-line panels in rolling mode. With smoothing off (`trend-mode=match`), it shows
+line panels in rolling mode. With smoothing off (`smoothing=none`), it shows
 two gap-bar panels: **Scored · Goals − xG** and **Allowed · Goals allowed − xG
 allowed**. Above zero means more scored than xG in Scored, and more conceded
 than xG allowed in Allowed; each panel states its direction. Both share one
@@ -610,10 +626,13 @@ Missing xG or a missing penalty split retains its chronological slot with no
 bar; zero remains a short mark. Penalties excluded compares non-penalty goals
 with npxG.
 
-Three equal All / Home / Away tiles above the panels show both sides, for
-example “45 goals vs 42.35 xG · 2.65 above” and “39 allowed vs 39.69 xG allowed
-· 0.69 below”. There is no netted headline. Home and Away swatches are the
-venue legend. Each tile states match coverage. Incomplete xG withholds its
+Three equal All / Home / Away tiles above the panels show both sides, each as
+a heading, totals and gap on their own lines (for example “Scored”, “45 vs
+42.35 xG”, “2.65 above”), so narrow tiles wrap between those parts rather than
+inside them. There is no netted headline. Home and Away swatches are the
+venue legend. Coverage appears only when incomplete. Headings stay “Scored” and
+“Allowed” when penalties are excluded; the npxG value and panel titles carry
+the basis. Incomplete xG withholds its
 total and gap; incomplete penalty splits withhold the non-penalty goal total
 and state split coverage. Gaps smaller than 0.005 in magnitude read “matched
 expected”, consistent with the signed table and tooltip precision. Empty venues
@@ -622,37 +641,38 @@ These tiles appear only with smoothing off. Tooltips and keyboard descriptions
 include the match, official score, selected-basis goals, xG and signed gaps at
 both ends. `trend-view=compare` keeps existing links compatible.
 
-With smoothing off, **Margins** (`trend-view=difference&trend-mode=match`)
+With smoothing off, **Margins** (`trend-view=difference&smoothing=none`)
 uses the same two bar panels and All / Home / Away record tiles as Head to
 head. The tiles summarize the selected team's season and appear only in
 unsmoothed mode. The goal and xG panels share a symmetric rounded scale,
 venue patterns, match slots, and the full match description for tooltips and
 keyboard inspection. Missing xG leaves an empty slot. Rolling Margins keeps
-two lines and uses “Margins · N-match average”; it has no venue tiles. The
+two lines and uses “Margins · N-match average”, with a “Margin per match”
+axis; it has no venue tiles. The
 `difference` URL value stays compatible with existing links. When penalties
 are excluded, the unsmoothed tiles carry
 “W–D–L and points use official results, including penalties.”
 
-**Points vs xPoints** with Smoothing set to None (`trend-view=points&trend-mode=match`)
+**Points vs xPoints** with Smoothing set to None (`trend-view=points&smoothing=none`)
 plots one bar per match of **points − xPoints**, using the shared Head to head
 chart and its venue encoding. The axis is fixed at −3 to +3 across teams,
-seasons and both views. Missing xPoints keeps an empty chronological slot,
+seasons and both views, with a signed tick at every whole point. Missing xPoints keeps an empty chronological slot,
 never a zero bar. If every match lacks xPoints, the chart is replaced by
-“No xPoints is available for these matches.” The panel title is “Points above
-or below xPoints · Each match”, with “Above zero: more points than xPoints.
-Below: fewer.” The tooltip
+“No xPoints is available for these matches.” The panel title is “Points −
+xPoints”, with “Above zero: more points than xPoints.” The tooltip
 and keyboard description include the match, official score, points, xPoints
 and signed difference. A win cannot fall below zero, a loss cannot rise above
 zero, and draws can fall either way, because xPoints is between 0 and 3.
 This points-only view has no Penalties control or points note. Old links with
 `penalties=exclude` are accepted and canonical links and forms drop the value.
 
-Three equal All / Home / Away tiles show points vs xPts totals, the gap as
-above or below expected, both rates per match, and “N of M matches” coverage.
+Three equal All / Home / Away tiles show points vs xPts totals and the gap as
+above or below expected. “N of M matches” coverage appears only when xPoints
+is incomplete.
 Home is solid blue (`#1F6FA8`); away is orange (`#CF7424`) diagonal stripes on
 paper with a thin orange outline. Swatches on the Home and Away tiles form the
 venue legend. An incomplete xPoints population says `xPts incomplete`, keeps
-actual points and their rate, and withholds the expected total and gap.
+actual points, and withholds the expected total and gap.
 A venue with no appearances says “No matches” (“No meetings” in Head to head),
 with zero coverage rather than an incomplete-data warning.
 
@@ -753,10 +773,12 @@ match." and a selected zero-meeting option. Blank, repeated, unknown or
 same-as-team opponents return the standard 400.
 
 The heading shows both clubs with decorative logos (`teamName` and
-`clubLogoURL`), adding “goals vs xG” or “points vs xPoints” with those views, followed by
-regular-season scope, years and match count. Small samples show numbers
-without a conclusion. Active-season meetings enter immediately, and scope and
-table mark "season in progress".
+`clubLogoURL`); the View select names the selected view, so the heading does
+not repeat it. The scope line follows, for example “Regular season 2016–2026 ·
+26 meetings · 2026 in progress”. Small samples show numbers without a
+conclusion. Active-season meetings enter immediately, and the table marks
+"season in progress". The table caption carries the ASA team-ID and home
+designation caveat.
 
 **Margins** combines goal margin (goals for − goals against) above xG margin
 (xG for − xG against), one bar per meeting in two aligned panels. Both panels
@@ -764,14 +786,15 @@ share a symmetric rounded axis with 15% headroom and the same chronological
 slots and year labels. Up means win, zero draw, down loss for goal margin;
 for xG margin, up means more xG for, zero level, down more xG against.
 Excluding penalties labels the goal panel “Non-penalty goal margin”, with
-“zero: level” below it. Missing xG or penalty splits keep their slot without a bar; zero has a
+“Zero: level” below it. Missing xG or penalty splits keep their slot without a bar; zero has a
 short visible mark.
 
 Three equal All / Home / Away record tiles give official W–D–L, points per
-match, selected-basis goals for–against, xG for–against and matches. Home and
+match, selected-basis goals for–against, xG for–against and meetings (counts
+and coverage say “meetings” here, “matches” in Match by match). Home and
 Away swatches are the venue legend. Non-penalty goals say “np goals”, with
 “N/M with split” for incomplete coverage. xG totals require every match;
-incomplete coverage says “xG incomplete” and “xG N/M matches” rather than
+incomplete coverage says “xG incomplete” and “xG N/M meetings” rather than
 summing a partial population as a complete total. Official W–D–L and points
 stay fixed when excluding penalties, with the explanatory note. xPts totals
 are available in Points vs xPoints. The former Expected view is accepted as
@@ -787,7 +810,7 @@ each panel explains its direction. The shared symmetric rounded axis takes
 the largest magnitude across both panels, and both retain identical
 chronological slots and year placement. Missing xG or penalty splits leave
 empty slots, never zero bars. Each venue tile gives both goals vs xG totals,
-the separate above/below gaps and meeting coverage. Incomplete populations
+the separate above/below gaps, and meeting coverage only when incomplete. Incomplete populations
 withhold their totals and gaps. There is no separate venue legend or netted
 margin-gap chart. Points comparisons live in Points vs xPoints. The option
 label stays “Goals vs xG” when penalties are excluded, while the panels,
@@ -795,13 +818,13 @@ tiles, tooltip and table use non-penalty wording.
 
 **Points vs xPoints** (`h2h-series=points`) plots official points − ASA xPoints
 per meeting with the shared gap bars and fixed −3 to +3 axis. Its All / Home /
-Away tiles show the same totals, gap, rates and complete-coverage rule as Match
-by match, with rates and coverage per meeting. Swatches live on these tiles,
+Away tiles show the same totals, gap and coverage rule as Match by match, with
+coverage counted in meetings. Swatches live on these tiles,
 so there is no separate venue legend. Missing xPoints retains its slot without
 a bar, independently of xG or penalty-split coverage. The tooltip, keyboard
 description, no-JavaScript list and values table include points, xPts and the
-signed points − xPoints difference. The panel title and zero-line explanation
-match the season chart. This view has no Penalties control or points note;
+signed points − xPoints difference. The panel title reads “Points − xPoints”,
+and the zero-line explanation matches the season chart. This view has no Penalties control or points note;
 a carried penalties parameter has no effect.
 
 Penalties affects goals and xG in the two goal views through

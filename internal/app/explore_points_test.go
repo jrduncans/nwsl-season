@@ -23,9 +23,9 @@ func TestExplorePointsTiles(t *testing.T) {
 	}
 	tiles := explorePointsTiles(matches, "match")
 	want := []explorePointsTile{
-		{"All", "4", "4.00 xPts", "0.00 above expected", "1.33 pts vs 1.33 xPts per match", "3 of 3 matches"},
-		{"Home", "3", "1.40 xPts", "1.60 above expected", "1.50 pts vs 0.70 xPts per match", "2 of 2 matches"},
-		{"Away", "1", "2.60 xPts", "1.60 below expected", "1.00 pts vs 2.60 xPts per match", "1 of 1 matches"},
+		{"All", "4", "4.00 xPts", "0.00 above expected", ""},
+		{"Home", "3", "1.40 xPts", "1.60 above expected", ""},
+		{"Away", "1", "2.60 xPts", "1.60 below expected", ""},
 	}
 	if !reflect.DeepEqual(tiles, want) {
 		t.Fatalf("tiles = %+v", tiles)
@@ -40,18 +40,18 @@ func TestExplorePointsTiles(t *testing.T) {
 func TestExplorePointsTrendFallback(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&trend-view=points&trend-mode=match"
+	path := "/explore?view=season-trend&season=2025&trend-view=points&smoothing=none"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireText(t, body, "[data-trend-points-tiles]", "matches")
+	requireText(t, body, "[data-trend-points-tiles]", "expected")
 	if len(find(t, body, "[data-trend-points-tiles] [data-points-tile]")) != 3 {
 		t.Fatal("missing venue tiles")
 	}
 	requireText(t, body, "[data-trend-sort=points-gap]", "Points − xPoints")
 	requireAttr(t, body, "[data-trend-points-tiles]", "class", "explore-h2h-record")
-	_, rolling := getPage(t, archive, strings.Replace(path, "trend-mode=match", "trend-mode=rolling", 1))
+	_, rolling := getPage(t, archive, strings.Replace(path, "smoothing=none", "smoothing=5", 1))
 	requireAttr(t, rolling, "[data-trend-points-tiles]", "hidden", "")
 	requireElements(t, rolling, "[data-trend-sort=points-gap]")
 	for _, bad := range []string{"trend-sort=", "trend-sort=unknown", "trend-sort=points-gap&trend-sort=points-gap", "trend-order=", "trend-order=sideways"} {
@@ -103,9 +103,10 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	requireText(t, body, "[data-h2h-fallback] li", "Points − xPoints:")
 	requireText(t, body, "[data-h2h-fallback] li", "Points:")
 	requireText(t, body, "[data-h2h-rows]", "+")
-	requireText(t, body, "[data-h2h-points-tiles]", "26 of 26 meetings")
-	requireText(t, body, "[data-h2h-points-tiles] [data-points-tile=Home]", "13 of 13 meetings")
-	requireText(t, body, "[data-h2h-points-tiles] [data-points-tile=Away]", "13 of 13 meetings")
+	requireText(t, body, "[data-h2h-points-tiles]", "expected")
+	if len(find(t, body, "[data-h2h-points-tiles] .note")) != 0 {
+		t.Fatal("complete coverage still stated")
+	}
 	for _, link := range find(t, body, "[data-h2h-sort]") {
 		target, err := url.Parse(attr(link, "href"))
 		if err != nil || target.Query().Get("h2h-series") != "points" {
@@ -134,7 +135,7 @@ func TestExplorePointsEmptyVenue(t *testing.T) {
 		if unit == "meeting" {
 			want = "No meetings"
 		}
-		if tiles[2].Actual != want || tiles[2].Expected != "" || tiles[2].Gap != "" || tiles[2].Rate != "" {
+		if tiles[2].Actual != want || tiles[2].Expected != "" || tiles[2].Gap != "" || tiles[2].Coverage != "" {
 			t.Fatalf("empty venue: %+v", tiles[2])
 		}
 	}
@@ -143,7 +144,7 @@ func TestExplorePointsEmptyVenue(t *testing.T) {
 func TestExplorePointsSortFormState(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&trend-view=points&trend-mode=match"
+	path := "/explore?view=season-trend&season=2025&trend-view=points&smoothing=none"
 	for _, order := range []string{"asc", "desc"} {
 		_, body := getPage(t, archive, path+"&trend-sort=points-gap&trend-order="+order)
 		input := find(t, body, "[data-season-trend-controls] input[name=trend-sort]")[0]
@@ -162,7 +163,7 @@ func TestExplorePointsSortFormState(t *testing.T) {
 			t.Fatal("ascending links should omit default order")
 		}
 	}
-	for _, selection := range []string{"trend-view=compare&trend-mode=rolling", "trend-view=balance&trend-mode=match"} {
+	for _, selection := range []string{"trend-view=compare&smoothing=5", "trend-view=balance&smoothing=none"} {
 		response := httptest.NewRecorder()
 		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=season-trend&"+selection+"&trend-sort=points-gap&trend-order=desc", nil))
 		if response.Code != http.StatusFound {
@@ -172,7 +173,7 @@ func TestExplorePointsSortFormState(t *testing.T) {
 		if err != nil || target.Path != "" || target.Query().Has("trend-sort") || target.Query().Has("trend-order") {
 			t.Fatalf("canonical sort redirect: %s, %v", target, err)
 		}
-		if target.Query().Get("trend-mode") == "" || target.Query().Get("view") != "season-trend" {
+		if target.Query().Get("smoothing") == "" || target.Query().Get("view") != "season-trend" {
 			t.Fatal("redirect lost selection")
 		}
 	}

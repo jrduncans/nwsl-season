@@ -207,6 +207,14 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
 		return
 	}
+	if view == "season-trend" && page.TrendLegacySmoothing {
+		query := r.URL.Query()
+		query.Del("trend-mode")
+		query.Del("window")
+		query.Set("smoothing", page.TrendSmoothing)
+		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+		return
+	}
 	// parseHeadToHeadSeries already normalized rendering and generated links.
 	// After validating every selection, redirect explicit default/legacy URLs
 	// to that same canonical state instead of only rendering it canonically.

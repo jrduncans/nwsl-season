@@ -25,7 +25,7 @@ func TestExploreMarginTilesCoverageAndOfficialRecord(t *testing.T) {
 	if tiles[0] != want {
 		t.Fatalf("numeric total: %+v, want %+v", tiles[0], want)
 	}
-	views := formatMarginTiles(tiles, history.AllShots)
+	views := formatMarginTiles(tiles, history.AllShots, "match")
 	if views[0].Record != "2–0–1" || views[0].Rate != "2.00 pts/match" || views[0].Goals != "2–1 goals" || views[0].XG != "xG incomplete" || views[0].XGCoverage != "xG 2/3 matches" || views[1].XG != "1.75–1.25 xG" {
 		t.Fatalf("formatted totals: %+v", views)
 	}
@@ -36,11 +36,11 @@ func TestExploreMarginTilesCoverageAndOfficialRecord(t *testing.T) {
 	if tiles[0].GoalsCovered != 2 || tiles[0].XGCovered != 2 || tiles[0].GoalsAgainst != 1 {
 		t.Fatalf("goal coverage inferred from xG: %+v", tiles[0])
 	}
-	views = formatMarginTiles(tiles, history.NonPenalty)
+	views = formatMarginTiles(tiles, history.NonPenalty, "match")
 	if views[0].Coverage != "2/3 with split" || views[0].XG != "npxG incomplete" || views[0].XGCoverage != "npxG 2/3 matches" {
 		t.Fatalf("non-penalty formatting: %+v", views)
 	}
-	empty := formatMarginTiles(exploreMarginTiles(matches[:1]), history.AllShots)[2]
+	empty := formatMarginTiles(exploreMarginTiles(matches[:1]), history.AllShots, "match")[2]
 	if empty.XG != "No matches" || empty.XGCoverage != "xG 0/0 matches" {
 		t.Fatalf("empty venue: %+v", empty)
 	}
@@ -106,9 +106,9 @@ func TestExploreMarginCoverageFromArchive(t *testing.T) {
 			t.Fatal(code)
 		}
 		if tc.basis.ExcludesPenalties() {
-			requireText(t, body, "[data-h2h-tile=All]", "18/20 with split", "npxG 18/20 matches")
+			requireText(t, body, "[data-h2h-tile=All]", "18/20 with split", "npxG 18/20 meetings")
 		} else {
-			requireText(t, body, "[data-h2h-tile=All]", "xG 19/20 matches")
+			requireText(t, body, "[data-h2h-tile=All]", "xG 19/20 meetings")
 			requireText(t, body, "[data-h2h-coverage]", "1 meeting lacks xG.")
 		}
 	}
@@ -122,7 +122,7 @@ func TestExploreSeasonMarginsTilesAndRolling(t *testing.T) {
 	t.Parallel()
 	archive := testArchive(t, map[string]archiveState{"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19}})
 	path := "/explore?view=season-trend&team=alpha&season=2025&trend-view=difference"
-	code, body := getPage(t, archive, path+"&trend-mode=match")
+	code, body := getPage(t, archive, path+"&smoothing=none")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
@@ -133,7 +133,7 @@ func TestExploreSeasonMarginsTilesAndRolling(t *testing.T) {
 	}
 	requireText(t, body, "[data-trend-margin-tiles]", "xG incomplete", "xG 19/20 matches", "20 matches")
 	requireText(t, body, "[data-trend-headings]", "Goal margin", "xG margin")
-	_, rolling := getPage(t, archive, path+"&trend-mode=rolling")
+	_, rolling := getPage(t, archive, path+"&smoothing=5")
 	requireAttr(t, rolling, "[data-trend-margin-tiles]", "hidden", "")
 }
 
@@ -192,7 +192,7 @@ func TestExploreMarginCoverageLabelAndNullPayload(t *testing.T) {
 		t.Fatal("fixture must contain missing xG")
 	}
 	// The same formatter supplies both views' coverage labels.
-	tile := formatMarginTiles([]exploreMarginTile{{Label: "All", Played: 27, GoalsCovered: 27, XGCovered: 25}}, history.AllShots)[0]
+	tile := formatMarginTiles([]exploreMarginTile{{Label: "All", Played: 27, GoalsCovered: 27, XGCovered: 25}}, history.AllShots, "match")[0]
 	if tile.XGCoverage != "xG 25/27 matches" || tile.XG != "xG incomplete" {
 		t.Fatalf("coverage: %+v", tile)
 	}

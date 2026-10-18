@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/apptest"
@@ -15,7 +14,7 @@ import (
 func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&trend-mode=match"
+	path := "/explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=none"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -24,8 +23,9 @@ func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 	for _, venue := range []string{"All", "Home", "Away"} {
 		requireText(t, body, "[data-trend-goal-gap-tiles]", venue)
 	}
-	requireText(t, body, "[data-trend-goal-gap-tiles]", "goals vs")
-	requireText(t, body, "[data-trend-goal-gap-tiles]", "allowed vs")
+	requireText(t, body, "[data-trend-goal-gap-tiles]", "Scored")
+	requireText(t, body, "[data-trend-goal-gap-tiles]", "Allowed")
+	requireText(t, body, "[data-trend-goal-gap-tiles]", " vs ")
 	requireText(t, body, "[data-trend-rows]", "+0.90")
 	requireText(t, body, "[data-trend-rows]", "-0.70")
 	for _, key := range []string{"scored-gap", "allowed-gap"} {
@@ -57,7 +57,7 @@ func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 			}
 		}
 	}
-	_, rolling := getPage(t, archive, "/explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&trend-mode=rolling")
+	_, rolling := getPage(t, archive, "/explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=5")
 	requireElements(t, rolling, "[data-trend-goal-gap-tiles][hidden]")
 }
 
@@ -66,17 +66,17 @@ func TestExploreGoalGapTotalsAreCompletePopulations(t *testing.T) {
 	xgFor, xgAgainst := 1.25, .5
 	rows := []exploreMatchRecord{{Venue: "Home", GoalsCovered: true, Values: [4]exploreTeamValues{{Actual: 2, Expected: &xgFor}, {Actual: 0, Expected: &xgAgainst}}}}
 	tiles := exploreGoalGapTiles(rows, history.AllShots, "meeting")
-	if tiles[0].Scored != "2 goals vs 1.25 xG · 0.75 above" || tiles[0].Allowed != "0 allowed vs 0.50 xG allowed · 0.50 below" || tiles[2].Scored != "No meetings" {
+	if fmt.Sprint(tiles[0].Sides) != "[{Scored 2 vs 1.25 xG 0.75 above} {Allowed 0 vs 0.50 xG 0.50 below}]" || tiles[2].Empty != "No meetings" || tiles[2].Sides != nil {
 		t.Fatalf("%+v", tiles)
 	}
 	rows = append(rows, exploreMatchRecord{Venue: "Away", GoalsCovered: true, Values: [4]exploreTeamValues{{Actual: 3}, {Actual: 1}}})
 	tiles = exploreGoalGapTiles(rows, history.AllShots, "meeting")
-	if tiles[0].Scored != "5 goals · xG incomplete" || tiles[0].Allowed != "1 allowed · xG incomplete" || tiles[0].Coverage != "1 of 2 meetings with xG" {
+	if fmt.Sprint(tiles[0].Sides) != "[{Scored 5 xG incomplete} {Allowed 1 xG incomplete}]" || tiles[0].Coverage != "1 of 2 meetings with xG" {
 		t.Fatalf("%+v", tiles)
 	}
 	rows[1].GoalsCovered = false
 	tiles = exploreGoalGapTiles(rows, history.NonPenalty, "meeting")
-	if tiles[0].Scored != "Non-penalty goals incomplete" || tiles[0].SplitCoverage != "1 of 2 meetings with penalty split" {
+	if fmt.Sprint(tiles[0].Sides[0]) != "{Scored Non-penalty goals incomplete }" || tiles[0].SplitCoverage != "1 of 2 meetings with penalty split" {
 		t.Fatalf("%+v", tiles)
 	}
 	if goalGap(rows[1], exploreScored) != nil || goalGap(rows[1], exploreAllowed) != nil {
@@ -130,14 +130,14 @@ func TestExploreGoalGapDisplayPrecision(t *testing.T) {
 		expected := 1 - tc.gap
 		rows := []exploreMatchRecord{{Venue: "Home", GoalsCovered: true, Values: [4]exploreTeamValues{{Actual: 1, Expected: &expected}, {Actual: 1, Expected: &expected}}}}
 		tile := exploreGoalGapTiles(rows, history.AllShots, "match")[0]
-		if !strings.HasSuffix(tile.Scored, " · "+tc.want) || !strings.HasSuffix(tile.Allowed, " · "+tc.want) || goalGapText(rows[0], exploreScored) != tc.signed || h2hSignedMargin(tc.gap) != tc.signed {
+		if tile.Sides[0].Gap != tc.want || tile.Sides[1].Gap != tc.want || goalGapText(rows[0], exploreScored) != tc.signed || h2hSignedMargin(tc.gap) != tc.signed {
 			t.Fatalf("gap %g: %+v, signed %q", tc.gap, tile, h2hSignedMargin(tc.gap))
 		}
 	}
 	for _, unit := range []string{"match", "meeting"} {
 		tiles := exploreGoalGapTiles(nil, history.NonPenalty, unit)
 		for _, tile := range tiles {
-			if tile.Scored == "" || tile.Allowed != "" || tile.Coverage != "" || tile.SplitCoverage != "" {
+			if tile.Empty == "" || tile.Sides != nil || tile.Coverage != "" || tile.SplitCoverage != "" {
 				t.Fatalf("empty %s tile: %+v", unit, tile)
 			}
 		}

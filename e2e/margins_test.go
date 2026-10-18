@@ -19,15 +19,15 @@ func TestExploreMarginsGoBrowserParity(t *testing.T) {
 		name, scenario, path, tiles string
 		missingSplit                bool
 	}{
-		{"season goal gaps", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&trend-mode=match", "[data-trend-goal-gap-tiles]", false},
-		{"season goal gaps incomplete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&trend-mode=match", "[data-trend-goal-gap-tiles]", false},
+		{"season goal gaps", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=none", "[data-trend-goal-gap-tiles]", false},
+		{"season goal gaps incomplete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&smoothing=none", "[data-trend-goal-gap-tiles]", false},
 		{"h2h goal gaps", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps empty venue", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=aDQ0lzvQEv&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps incomplete", apptest.ScenarioTeams, "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps missing split", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both&penalties=exclude", "[data-h2h-comparison]", true},
-		{"season complete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&trend-mode=match", "[data-trend-margin-tiles]", false},
-		{"season incomplete xG", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&trend-mode=match", "[data-trend-margin-tiles]", false},
-		{"season non-penalty", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&trend-mode=match&penalties=exclude", "[data-trend-margin-tiles]", false},
+		{"season complete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&smoothing=none", "[data-trend-margin-tiles]", false},
+		{"season incomplete xG", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&smoothing=none", "[data-trend-margin-tiles]", false},
+		{"season non-penalty", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&smoothing=none&penalties=exclude", "[data-trend-margin-tiles]", false},
 		{"h2h complete", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H, "[data-h2h-record]", false},
 		{"h2h incomplete xG", apptest.ScenarioTeams, "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg", "[data-h2h-record]", false},
 		{"h2h non-penalty missing split", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&penalties=exclude", "[data-h2h-record]", true},
@@ -119,11 +119,11 @@ func TestExploreGoalGapDisplayPrecision(t *testing.T) {
  if (!cases.every(([gap,want]) => {
   const row = {venue:'Home', goalsCovered:true, values:[{actual:1,expected:1-gap},{actual:1,expected:1-gap},{},{actual:1}]};
   const tile = NWSLMargins.formatGoalGap(NWSLMargins.summarize([row])[0],basis,'match');
-  return tile.scored.endsWith(' · '+want) && tile.allowed.endsWith(' · '+want);
+  return tile.sides.length===2 && tile.sides.every(side => side.gap===want);
  })) return false;
  return ['match','meeting'].every(unit => NWSLMargins.summarize([]).every(total => {
   const tile = NWSLMargins.formatGoalGap(total,basis,unit);
-  return tile.scored===(unit==='match'?'No matches':'No meetings') && tile.allowed==='' && tile.coverage==='' && tile.splitCoverage==='';
+  return tile.empty===(unit==='match'?'No matches':'No meetings') && tile.sides.length===0 && tile.coverage==='' && tile.splitCoverage==='';
  }));
  }`, nil, &valid)
 	if !valid {

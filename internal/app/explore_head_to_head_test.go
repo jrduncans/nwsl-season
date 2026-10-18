@@ -33,7 +33,7 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 	}
 	body := response.Body.String()
 	requireExact(t, body, "[data-h2h-summary]", "Table: all 26 meetings")
-	requireText(t, body, "[data-h2h-record]", "13 matches")
+	requireText(t, body, "[data-h2h-record]", "13 meetings")
 	if len(find(t, body, "[data-h2h-tile]")) != 3 || len(find(t, body, "[data-h2h-record] table, .explore-h2h-legend")) != 0 {
 		t.Fatal("three stat tiles without a separate legend")
 	}
@@ -42,13 +42,13 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 		requireText(t, body, selector, venue)
 		requireText(t, body, selector, "pts/match")
 		requireText(t, body, selector, "goals")
-		requireText(t, body, selector, "matches")
+		requireText(t, body, selector, "meetings")
 	}
 	if len(find(t, body, "[data-h2h-tile=All] i")) != 0 || len(find(t, body, "[data-h2h-tile=Home] [data-h2h-encoding=home], [data-h2h-tile=Away] [data-h2h-encoding=away]")) != 2 {
 		t.Fatal("home and away tile swatches")
 	}
-	requireExact(t, body, "[data-h2h-direction]", "up: win · zero: draw · down: loss")
-	requireText(t, body, "[data-h2h-scope]", "season in progress")
+	requireExact(t, body, "[data-h2h-direction]", "Up: win · Zero: draw · Down: loss")
+	requireText(t, body, "[data-h2h-scope]", "Regular season 2016–2026 · 26 meetings · 2026 in progress")
 	if len(find(t, body, "[data-h2h-values][open]")) != 0 {
 		t.Fatal("default table open")
 	}
@@ -309,7 +309,9 @@ func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatal(code)
 		}
-		requireText(t, body, "[data-h2h-title]", "goals vs xG")
+		if strings.Contains(text(find(t, body, "[data-h2h-title]")[0]), "·") {
+			t.Fatal("heading repeats the View selection")
+		}
 		requireAttr(t, body, "[data-h2h-record]", "hidden", "")
 		requireText(t, body, "[data-h2h-direction]", basisText(basis, "Above zero: more goals scored than xG"))
 		if len(find(t, body, "[data-h2h-penalties-label][hidden], [data-h2h-penalties][disabled], [data-h2h-values][open]")) != 0 {
@@ -385,7 +387,7 @@ func TestExploreHeadToHeadActualUsesPenaltyBasis(t *testing.T) {
 	}
 	requireAttr(t, body, "[data-h2h-comparison]", "hidden", "")
 	requireText(t, body, "[data-h2h-goal-title]", "Non-penalty goal margin")
-	requireExact(t, body, "[data-h2h-direction]", "zero: level")
+	requireExact(t, body, "[data-h2h-direction]", "Zero: level")
 	requireText(t, body, "[data-h2h-fallback]", "Non-penalty goals:")
 	want, err := history.SummarizeHeadToHead(archive, portlandThornsTeamID, h2hSeattleID, history.NonPenalty)
 	if err != nil {
@@ -448,6 +450,6 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireText(t, body, "[data-h2h-tile=All]", "xG incomplete", "xG 6/8 matches")
+	requireText(t, body, "[data-h2h-tile=All]", "xG incomplete", "xG 6/8 meetings")
 	requireText(t, body, "[data-h2h-fallback]", "xG margin: Unavailable")
 }
