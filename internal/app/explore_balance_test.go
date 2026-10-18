@@ -21,9 +21,9 @@ func TestExploreSeasonBalanceTilesAndRolling(t *testing.T) {
 	}
 	requireText(t, body, "[data-season-trend-note]", "scored up and allowed down")
 	requireText(t, body, "[data-trend-margin-tiles]", "pts/match", "goals", "xG incomplete", "xG 19/20 matches", "20 matches")
-	requireText(t, body, "[data-trend-headings]", "Goals scored", "Goals allowed", "xG scored", "xG allowed")
-	if len(find(t, body, "[data-trend-headings] th")) != 9 {
-		t.Fatal("Scoring balance must have four value columns, without derived columns")
+	requireText(t, body, "[data-trend-headings]", "Points", "xG for", "xG against", "xPoints")
+	if len(find(t, body, "[data-trend-headings] th")) != 10 {
+		t.Fatal("Scoring balance must have all per-match columns, without derived columns")
 	}
 	_, rolling := getPage(t, archive, path+"&trend-mode=rolling")
 	requireAttr(t, rolling, "[data-trend-margin-tiles]", "hidden", "")

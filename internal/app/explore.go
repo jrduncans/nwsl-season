@@ -200,14 +200,12 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	if view == "season-trend" && ((!page.TrendPointsGap && !page.TrendGoalGaps) || (r.URL.Query().Has("trend-sort") && r.URL.Query().Get("trend-sort") != page.TrendSort)) {
+	if view == "season-trend" && r.URL.Query().Has("trend-sort") && r.URL.Query().Get("trend-sort") != page.TrendSort {
 		query := r.URL.Query()
-		if query.Has("trend-sort") || query.Has("trend-order") {
-			query.Del("trend-sort")
-			query.Del("trend-order")
-			redirectRelative(w, "?"+query.Encode(), http.StatusFound)
-			return
-		}
+		query.Del("trend-sort")
+		query.Del("trend-order")
+		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+		return
 	}
 	// parseHeadToHeadSeries already normalized rendering and generated links.
 	// After validating every selection, redirect explicit default/legacy URLs

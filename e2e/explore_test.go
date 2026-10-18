@@ -2266,16 +2266,16 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 		table      []string
 		lines      []string
 	}{
-		{"balance", "match", []string{"2", "0", "1.10", "0.70"}, []string{"xG for: 1.10", "xG against: 0.70"}},
-		{"balance", "rolling", []string{"2.00", "0.00", "1.10", "0.70"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match", "xG scored: 1.10 per match", "xG allowed: 0.70 per match"}},
-		{"compare", "match", []string{"2", "1.10", "0", "0.70", "+0.90", "-0.70"}, []string{"Goals: 2–0", "xG for: 1.10", "xG against: 0.70", "Goals for − xG for: +0.90", "Goals against − xG against: -0.70"}},
-		{"compare", "rolling", []string{"2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
-		{"difference", "match", []string{"2", "0.40"}, []string{"Goal margin: +2", "xG margin: +0.40"}},
-		{"difference", "rolling", []string{"2.00", "0.40"}, []string{"Goal margin: +2.00 per match", "xG margin: +0.40 per match"}},
-		{"points", "match", []string{"3", "1.54", "+1.46"}, []string{"Points: 3", "xPoints: 1.54", "Points − xPoints: +1.46"}},
-		{"points", "rolling", []string{"3.00", "1.54"}, []string{"Points: 3.00 per match", "xPoints: 1.54 per match"}},
-		{"relative", "match", []string{"2", "0"}, []string{"Goals scored: 2", "Goals allowed: 0"}},
-		{"relative", "rolling", []string{"2.00", "0.00"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match"}},
+		{"balance", "match", []string{"3", "1.10", "0.70", "1.54"}, []string{"xG for: 1.10", "xG against: 0.70"}},
+		{"balance", "rolling", []string{"3", "1.10", "0.70", "1.54", "2.00", "0.00", "1.10", "0.70"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match", "xG scored: 1.10 per match", "xG allowed: 0.70 per match"}},
+		{"compare", "match", []string{"3", "1.10", "0.70", "1.54", "+0.90", "-0.70"}, []string{"Goals: 2–0", "xG for: 1.10", "xG against: 0.70", "Goals for − xG for: +0.90", "Goals against − xG against: -0.70"}},
+		{"compare", "rolling", []string{"3", "1.10", "0.70", "1.54", "+0.90", "-0.70", "2.00", "1.10", "0.00", "0.70"}, []string{"Goals scored: 2.00 per match", "xG scored: 1.10 per match", "Goals allowed: 0.00 per match", "xG allowed: 0.70 per match"}},
+		{"difference", "match", []string{"3", "1.10", "0.70", "1.54", "2", "0.40"}, []string{"Goal margin: +2", "xG margin: +0.40"}},
+		{"difference", "rolling", []string{"3", "1.10", "0.70", "1.54", "2", "0.40", "2.00", "0.40"}, []string{"Goal margin: +2.00 per match", "xG margin: +0.40 per match"}},
+		{"points", "match", []string{"3", "1.10", "0.70", "1.54", "+1.46"}, []string{"Points: 3", "xPoints: 1.54", "Points − xPoints: +1.46"}},
+		{"points", "rolling", []string{"3", "1.10", "0.70", "1.54", "+1.46", "3.00", "1.54"}, []string{"Points: 3.00 per match", "xPoints: 1.54 per match"}},
+		{"relative", "match", []string{"3", "1.10", "0.70", "1.54"}, []string{"Goals scored: 2", "Goals allowed: 0"}},
+		{"relative", "rolling", []string{"3", "1.10", "0.70", "1.54", "2.00", "0.00"}, []string{"Goals scored: 2.00 per match", "Goals allowed: 0.00 per match"}},
 	}
 	check := func(t *testing.T, index int, scoreResult string, wantTable, wantLines []string) {
 		t.Helper()
@@ -2321,7 +2321,15 @@ func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 			}
 		}
 		var values []string
-		evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-trend-rows] tr')[index].cells].slice(5).map(cell => cell.textContent)`, index, &values)
+		evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-trend-rows] tr')[index].cells].slice(6).map(cell => cell.textContent)`, index, &values)
+		params := queryOf(t, page)
+		if index == 1 && params.Get("penalties") == "exclude" {
+			// The official points stay at three; the selected basis is level.
+			if len(values) != 7 || values[0] != "3" || values[1] != "0–0" || !slices.Equal(values[len(values)-2:], wantTable) {
+				t.Fatalf("non-penalty table values: %v", values)
+			}
+			return
+		}
 		if !slices.Equal(values, wantTable) {
 			t.Fatalf("table values: %v, want %v", values, wantTable)
 		}
@@ -2348,7 +2356,7 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 		if err := page.Locator("[data-trend-values] summary").Click(); err != nil {
 			t.Fatal(err)
 		}
-		if err := page.Locator("[data-trend-sort]").Click(); err != nil {
+		if err := page.Locator("[data-trend-sort=points-gap]").Click(); err != nil {
 			t.Fatal(err)
 		}
 		if queryOf(t, page).Get("trend-order") != "desc" {
@@ -2360,8 +2368,8 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 			t.Fatal("gap column must sort by exact difference")
 		}
 		chooseOption(t, page, "[data-trend-mode]", "rolling")
-		if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
-			t.Fatal("rolling mode retained gap sort")
+		if queryOf(t, page).Get("trend-sort") != "points-gap" || queryOf(t, page).Get("trend-order") != "desc" {
+			t.Fatal("rolling mode lost gap sort")
 		}
 		if err := expect.Locator(page.Locator("[data-trend-points-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
@@ -2462,8 +2470,8 @@ func TestExplorePointsNativeSortURLs(t *testing.T) {
 	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
 		t.Fatal(err)
 	}
-	if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
-		t.Fatal("native mode switch retained gap sort")
+	if queryOf(t, page).Get("trend-sort") != "points-gap" || queryOf(t, page).Get("trend-order") != "desc" {
+		t.Fatal("native mode switch lost gap sort")
 	}
 }
 
@@ -2641,8 +2649,8 @@ func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-trend-goal-gap-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
-		if queryOf(t, page).Has("trend-sort") {
-			t.Fatal("rolling kept gap sort")
+		if queryOf(t, page).Get("trend-sort") != "allowed-gap" {
+			t.Fatal("rolling lost gap sort")
 		}
 		chooseOption(t, page, "[data-trend-mode]", "match")
 		assertGoalGapPanels(t, page, []string{"season-margin", "season-margin-xg"})
@@ -2811,6 +2819,87 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 		t.Fatalf("selected basis and official score: %+v", got)
 	}
 	if err := expect.Locator(page.Locator("[data-trend-margin-official]")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExploreMatchValuesSortHistory(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	expect := playwright.NewPlaywrightAssertions()
+	for _, vp := range []viewport{Desktop, Mobile} {
+		page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=points&trend-mode=rolling")
+		click(t, page.Locator("[data-trend-values] summary"))
+		click(t, page.Locator("[data-trend-sort=points-gap]"))
+		click(t, page.Locator("[data-trend-sort=points-gap]"))
+		assertShortfall := func() {
+			t.Helper()
+			if queryOf(t, page).Get("trend-sort") != "points-gap" || queryOf(t, page).Get("trend-order") == "desc" {
+				t.Fatal("shortfall sort not restored")
+			}
+			var correct bool
+			evalJSON(t, page, `() => {
+     const rows = [...document.querySelectorAll('[data-trend-rows] tr')];
+     const gaps = rows.map(row => Number(row.cells[10].textContent));
+     const chart = Chart.getChart(document.querySelector('[data-chart=season-trend]'));
+     const firstIndex = Number(rows[0].cells[0].textContent) - 1;
+     const exact = chart.matchRows.map(row => row.values[3].expected == null ? null : row.values[3].actual - row.values[3].expected);
+     return gaps[0] < 0 && gaps.every((v, i) => !i || v >= gaps[i-1]) && exact[firstIndex] === Math.min(...exact.filter(v => v !== null)) && document.querySelector('[data-trend-values]').open;
+   }`, nil, &correct)
+			if !correct {
+				t.Fatal("largest per-match points shortfall must come first, including with smoothing on")
+			}
+		}
+		assertShortfall()
+		var before []string
+		evalJSON(t, page, `() => [...document.querySelectorAll('[data-trend-rows] tr')].map(row => row.cells[0].textContent)`, nil, &before)
+		if _, err := page.GoBack(); err != nil {
+			t.Fatal(err)
+		}
+		if queryOf(t, page).Get("trend-order") != "desc" {
+			t.Fatal("Back lost descending sort")
+		}
+		if _, err := page.GoForward(); err != nil {
+			t.Fatal(err)
+		}
+		assertShortfall()
+		var after []string
+		evalJSON(t, page, `() => [...document.querySelectorAll('[data-trend-rows] tr')].map(row => row.cells[0].textContent)`, nil, &after)
+		if !slices.Equal(before, after) {
+			t.Fatal("Forward changed row order")
+		}
+		if vp == Mobile {
+			if err := expect.Locator(page.Locator("[data-trend-values] .explore-table-scroll-hint")).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
+			var scrollable bool
+			evalJSON(t, page, `() => { const box = document.querySelector('[data-trend-values] .table-scroll'); box.scrollLeft = box.scrollWidth; return box.scrollWidth > box.clientWidth && box.scrollLeft > 0; }`, nil, &scrollable)
+			if !scrollable {
+				t.Fatal("mobile table must scroll horizontally")
+			}
+		}
+		assertNoHorizontalOverflow(t, page)
+		chooseOption(t, page, "[data-trend-view]", "difference")
+		if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
+			t.Fatal("changing chart kept unavailable derived sort")
+		}
+		click(t, page.Locator("[data-trend-values] summary"))
+		click(t, page.Locator("[data-trend-sort=goal-margin]"))
+		chooseOption(t, page, "[data-trend-mode]", "match")
+		if queryOf(t, page).Get("trend-sort") != "goal-margin" {
+			t.Fatal("smoothing switch lost margin sort")
+		}
+	}
+	// Sort links also navigate and expand the table with scripts disabled.
+	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
+	visitStatic(t, page, base+"explore?view=season-trend&season=2025&trend-view=points&trend-mode=rolling")
+	click(t, page.Locator("[data-trend-values] summary"))
+	click(t, page.Locator("[data-trend-sort=points-gap]"))
+	click(t, page.Locator("[data-trend-sort=points-gap]"))
+	if queryOf(t, page).Get("trend-sort") != "points-gap" || queryOf(t, page).Get("trend-order") == "desc" {
+		t.Fatal("native ascending sort lost")
+	}
+	if err := expect.Locator(page.Locator("[data-trend-sort=points-gap]").Locator("..")).ToHaveAttribute("aria-sort", "ascending"); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -520,7 +520,7 @@ team's xG coverage is incomplete; goal ranks remain.
 | `trend-view` | `balance` (Scoring balance), `compare` (Goals vs xG), `difference` (Margins), `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
 | `trend-mode` | `match`, `rolling` | `rolling` |
 | `window` | `3`, `5`, `10` | `5` |
-| `trend-sort` | `match`, `points-gap`, `scored-gap`, `allowed-gap` (each-match gap tables) | `match` |
+| `trend-sort` | `match`, `venue`, `result`, `goal-margin`, `xg-margin`, `points-gap`, `scored-gap`, `allowed-gap` (derived columns depend on the chart) | `match` |
 | `trend-order` | `asc`, `desc` | `asc` |
 | `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
@@ -543,6 +543,30 @@ window fills it averages all matches so far (`min(played, window)`), drawn as a
 dotted lead-in. An xG or xPoints average needs every observation in its exact
 window, so missing expected data breaks that line until it leaves the window;
 it is never interpolated.
+
+The **Match values** table always shows individual matches, whatever the chart
+or smoothing selection: Match, Date (venue local), Venue, Opponent, official
+Score, Result, Points, xG for, xG against and xPoints. Excluding penalties adds
+Non-penalty goals and changes xG to npxG, following the selected basis; official
+scores, results and points retain penalties. Missing values say `Unavailable`.
+Margins adds per-match Goal margin and xG margin; Goals vs xG adds Goals − xG
+and Goals allowed − xG allowed; Points vs xPoints adds Points − xPoints.
+Scoring balance and Benchmarks add no derived columns. With smoothing on, the
+chart's rolling-average columns follow all per-match columns, labeled with the
+window. The caption describes the trailing window and its expanding lead-in.
+
+Sort links work with or without JavaScript for Match (played order), Venue,
+Result (ordered by points) and the selected chart's derived columns. They use
+exact values before display rounding, with newest-first ties. Undated matches
+stay last, and unavailable values follow available ones in either direction.
+`trend-sort` and `trend-order` preserve the selection in the URL; blank, repeated
+or unsupported values return the standard 400 page. Sorting never changes the
+chronological chart or the population used for rolling averages. Smoothing
+changes retain the sort. Switching charts retains shared sorts; a derived sort
+that no longer exists falls back to match order and drops both sort parameters
+from the URL, including on native GET submissions. The native `<details>` opens
+when either parameter is present and is otherwise closed. The table scrolls
+inside its container on phones, with a scroll hint.
 
 Except for the points gap bars described below, each chart's y axis is round
 and labels its own ticks (`trendAxis` in `explore-geometry.js`), rather than leaving tick choice to Chart.js, which
@@ -570,8 +594,7 @@ smoothing off; Home and Away swatches are the venue legend. With penalties
 excluded, the official-result note also applies. Each slot is one inspectable
 mark covering both bars: tooltip and keyboard content include the match,
 official score and result, xG for and xG against, plus non-penalty goals when
-selected. The Match values table keeps scored and allowed goals and xG without
-derived columns. Rolling Scoring balance keeps its scored and allowed lines.
+selected. Rolling Scoring balance keeps its scored and allowed lines.
 
 **Goals vs xG** (`trend-view=compare`) keeps its two Scored and Allowed
 line panels in rolling mode. With smoothing off (`trend-mode=match`), it shows
@@ -595,12 +618,7 @@ expected”, consistent with the signed table and tooltip precision. Empty venue
 show only “No matches” (“No meetings” in Head to head), without coverage lines.
 These tiles appear only with smoothing off. Tooltips and keyboard descriptions
 include the match, official score, selected-basis goals, xG and signed gaps at
-both ends. The
-Match values table adds sortable **Goals − xG** and **Goals allowed − xG
-allowed** columns in this mode, with missing last and chronological ties.
-`trend-sort=scored-gap` or `allowed-gap` preserves the selection; changing to
-rolling mode or another chart clears these sorts. `trend-view=compare` keeps
-existing links compatible.
+both ends. `trend-view=compare` keeps existing links compatible.
 
 With smoothing off, **Margins** (`trend-view=difference&trend-mode=match`)
 uses the same two bar panels and All / Home / Away record tiles as Head to
@@ -609,9 +627,8 @@ unsmoothed mode. The goal and xG panels share a symmetric rounded scale,
 venue patterns, match slots, and the full match description for tooltips and
 keyboard inspection. Missing xG leaves an empty slot. Rolling Margins keeps
 two lines and uses “Margins · N-match average”; it has no venue tiles. The
-`difference` URL value stays compatible with existing links. Match values
-retain the same Goal margin and xG margin labels in rolling mode and the
-Match values table. When penalties are excluded, the unsmoothed tiles carry
+`difference` URL value stays compatible with existing links. When penalties
+are excluded, the unsmoothed tiles carry
 “W–D–L and points use official results, including penalties.”
 
 **Points vs xPoints** with Smoothing set to None (`trend-view=points&trend-mode=match`)
@@ -639,14 +656,7 @@ with zero coverage rather than an incomplete-data warning.
 
 Rolling mode retains two lines for points pace vs xPoints pace and titles the
 panel “Points vs xPoints · N-match average”. Venue tiles appear only with
-smoothing off. The Match values table retains points and xPoints and adds a
-sortable **Points − xPoints** column in each-match mode; sort links use exact
-values, missing last, chronological order on ties, and preserve URL state.
-Default sort parameters are omitted from form submissions and sort links;
-switching to rolling mode or another chart clears the gap sort. Native GET
-submissions carrying that sort outside the points match view redirect to the
-same selection without it.
-Without JavaScript the same tiles and table show the comparisons.
+smoothing off. Without JavaScript the same tiles and table show the comparisons.
 
 **Benchmarks** keep original units and draw horizontal reference means for the
 season: the team's own mean, plus one comparison.

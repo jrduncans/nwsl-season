@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"fmt"
 	"math"
 	"net/url"
@@ -36,7 +35,6 @@ type exploreSeasonTrendRow struct {
 	Number int
 	exploreMatchRecord
 	DisplayValues []string
-	PointsGap     *float64
 }
 
 type exploreTrendColumn struct {
@@ -44,6 +42,8 @@ type exploreTrendColumn struct {
 	Measure        int
 	Expected       bool
 	Gap            bool
+	Rolling        bool
+	Field          string
 	URL, Sort, Key string
 }
 
@@ -54,6 +54,8 @@ type exploreSeasonTrendView struct {
 	TrendReferences                                                      []exploreTrendReferenceView
 	TrendReferenceStatus                                                 string
 	TrendColumns                                                         []exploreTrendColumn
+	TrendTableColumns                                                    []exploreTrendColumn
+	TrendExpanded                                                        bool
 	TrendTeam                                                            teamNameView
 	TrendRows                                                            []exploreSeasonTrendRow
 	TrendMissingXG, TrendUndated, TrendVenueDateUnavailable, TrendActive bool
@@ -114,7 +116,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	}{
 		{"trend-mode", &page.TrendMode, []string{"match", "rolling"}},
 		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "points", "relative"}},
-		{"trend-sort", &page.TrendSort, []string{"match", "points-gap", "scored-gap", "allowed-gap"}},
+		{"trend-sort", &page.TrendSort, []string{"match", "venue", "result", "goal-margin", "xg-margin", "points-gap", "scored-gap", "allowed-gap"}},
 		{"trend-order", &page.TrendOrder, []string{"asc", "desc"}},
 		{"window", &page.TrendWindow, []string{"3", "5", "10"}},
 		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg", "points", "xpoints"}},
@@ -160,44 +162,16 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	page.TrendMargins = page.TrendView == "difference" && page.TrendMode == "match"
 	page.TrendBalanceBars = page.TrendView == "balance" && page.TrendMode == "match"
 	page.TrendGoalGaps = page.TrendView == "compare" && page.TrendMode == "match"
-	if (page.TrendSort == "points-gap" && !page.TrendPointsGap) || (page.TrendSort != "points-gap" && !page.TrendGoalGaps) {
+	page.TrendTableColumns = exploreTrendTableColumns(page, basis)
+	if !slices.ContainsFunc(page.TrendTableColumns, func(column exploreTrendColumn) bool { return column.Key == page.TrendSort }) {
 		page.TrendSort, page.TrendOrder = "match", "asc"
 	}
-	gapMeasures := []int{}
-	if page.TrendPointsGap {
-		gapMeasures = []int{explorePoints}
-	}
-	if page.TrendGoalGaps {
-		gapMeasures = []int{exploreScored, exploreAllowed}
-	}
-	for _, measure := range gapMeasures {
-		key, label := "points-gap", "Points − xPoints"
-		if measure == exploreScored {
-			key, label = "scored-gap", basisText(basis, "Goals − xG")
-		}
-		if measure == exploreAllowed {
-			key, label = "allowed-gap", basisText(basis, "Goals allowed − xG allowed")
-		}
-		target := cloneQuery(query)
-		target.Set("view", "season-trend")
-		target.Set("trend-sort", key)
-		order, state := "desc", "none"
-		if page.TrendSort == key {
-			state = "ascending"
-			if page.TrendOrder == "desc" {
-				state, order = "descending", "asc"
-			}
-		}
-		target.Del("trend-order")
-		if order != "asc" {
-			target.Set("trend-order", order)
-		}
-		page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: label, Measure: measure, Gap: true, Key: key, URL: "?" + target.Encode(), Sort: state})
-	}
+	page.TrendExpanded = query.Has("trend-sort") || query.Has("trend-order")
+	page.TrendTableColumns = exploreTrendSortLinks(page.TrendTableColumns, query, page.TrendSort, page.TrendOrder)
 	page.TrendCaption = "Individual match values. Scores are shown from this team's perspective."
 	window, _ := strconv.Atoi(page.TrendWindow)
 	if page.TrendMode == "rolling" {
-		page.TrendCaption = fmt.Sprintf("%s-match trailing averages, per match; matches 1–%d use all matches played so far. Scores are shown from this team's perspective.", page.TrendWindow, window-1)
+		page.TrendCaption = fmt.Sprintf("Individual match values, followed by %s-match trailing averages, per match; matches 1–%d use all matches played so far. Scores are shown from this team's perspective.", page.TrendWindow, window-1)
 	}
 	for _, season := range teams.TeamSeasons {
 		if season.Season != teams.TeamSeason {
@@ -224,30 +198,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				page.TrendReferenceStatus = exploreTrendUnavailableReference(season, page.TrendColumns, page.TrendAverageReference)
 			}
 			for index, match := range team.Matches {
-				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match, PointsGap: pointsGap(match.Values[3])}
-				for _, column := range page.TrendColumns {
-					value := match.Values[column.Measure]
-					if page.TrendMode == "rolling" {
-						value = exploreRollingValue(team.Matches, index, column.Measure, window)
-					}
-					display := exploreTrendNumber(&value.Actual)
-					if page.TrendMode == "match" {
-						display = strconv.FormatInt(int64(value.Actual), 10)
-					}
-					if column.Expected {
-						display = exploreTrendNumber(value.Expected)
-					}
-					if column.Gap {
-						display = "Unavailable"
-						gap := row.PointsGap
-						if column.Measure != explorePoints {
-							gap = goalGap(match, column.Measure)
-						}
-						if gap != nil {
-							display = h2hSignedMargin(*gap)
-						}
-					}
-					row.DisplayValues = append(row.DisplayValues, display)
+				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match}
+				for _, column := range page.TrendTableColumns {
+					row.DisplayValues = append(row.DisplayValues, exploreTrendCell(column, team.Matches, index, window))
 				}
 				page.TrendRows = append(page.TrendRows, row)
 				page.TrendMissingXG = page.TrendMissingXG || (measures[0] != 3 && series != "goals" && match.Values[0].Expected == nil)
@@ -257,35 +210,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			}
 		}
 	}
-	if page.TrendSort != "match" {
-		measure := explorePoints
-		if page.TrendSort == "scored-gap" {
-			measure = exploreScored
-		}
-		if page.TrendSort == "allowed-gap" {
-			measure = exploreAllowed
-		}
-		slices.SortStableFunc(page.TrendRows, func(a, b exploreSeasonTrendRow) int {
-			x, y := a.PointsGap, b.PointsGap
-			if measure != explorePoints {
-				x, y = goalGap(a.exploreMatchRecord, measure), goalGap(b.exploreMatchRecord, measure)
-			}
-			if x == nil || y == nil {
-				if x == nil && y == nil {
-					return 0
-				}
-				if x == nil {
-					return 1
-				}
-				return -1
-			}
-			order := cmp.Compare(*x, *y)
-			if page.TrendOrder == "desc" {
-				return -order
-			}
-			return order
-		})
-	}
+	sortExploreTrendRows(page.TrendRows, page.TrendSort, page.TrendOrder)
 	return page, nil
 }
 

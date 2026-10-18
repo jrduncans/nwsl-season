@@ -1988,6 +1988,83 @@
     });
     return chart;
   }
+  function trendSortAvailable(params) {
+    const key = params.get('trend-sort') || 'match', view = params.get('trend-view') || 'balance';
+    return ['match', 'venue', 'result'].includes(key) ||
+      (view === 'points' && key === 'points-gap') ||
+      (view === 'compare' && ['scored-gap', 'allowed-gap'].includes(key)) ||
+      (view === 'difference' && ['goal-margin', 'xg-margin'].includes(key));
+  }
+  function showSeasonTrendTable(params, matches, series, {view, rolling, window}) {
+    const metric = (label, measure, expected = false, key = '', gap = false) => ({label, key, gap,
+      value: row => gap ? measure === 3 ? row.values[3].expected == null ? null : row.values[3].actual - row.values[3].expected : globalThis.NWSLGeometry.goalGap(marginsData.goals(row), marginsData.xg(row), measure) : expected ? row.values[measure].expected : measure !== 3 && !row.goalsCovered ? null : row.values[measure].actual,
+      format: value => seasonTrendNumber(value, expected || gap, false, gap),
+    });
+    const columns = [
+      {label: 'Match', key: 'match', value: (_, index) => index + 1},
+      {label: 'Date (venue local)', value: row => row.date},
+      {label: 'Venue', key: 'venue', value: row => row.venue},
+      {label: 'Opponent', value: row => row.opponent},
+      {label: 'Score', value: row => row.score},
+      {label: 'Result', key: 'result', value: row => row.values[3].actual, format: value => ({3: 'Win', 1: 'Draw', 0: 'Loss'}[value])},
+      metric('Points', 3),
+      ...(nonPenalty ? [{label: 'Non-penalty goals', value: row => row.goalsCovered ? marginsData.goals(row).join('–') : 'Unavailable'}] : []),
+      metric(T('xG for'), 0, true), metric(T('xG against'), 1, true), metric('xPoints', 3, true),
+    ];
+    if (view === 'difference') columns.push(metric(T('Goal margin'), 2, false, 'goal-margin'), metric(T('xG margin'), 2, true, 'xg-margin'));
+    if (view === 'compare') columns.push(metric(T('Goals − xG'), 0, false, 'scored-gap', true), metric(T('Goals allowed − xG allowed'), 1, false, 'allowed-gap', true));
+    if (view === 'points') columns.push(metric('Points − xPoints', 3, false, 'points-gap', true));
+    if (rolling) series.forEach(dataset => columns.push({label: `${dataset.label} · ${window}-match average`, value: (_, index) => {
+      if (!dataset.expected && dataset.measure !== 3 && matches.slice(Math.max(0, index + 1 - window), index + 1).some(row => !row.goalsCovered)) return null;
+      return dataset.data[index];
+    }, format: value => seasonTrendNumber(value, dataset.expected, true)}));
+    const key = params.get('trend-sort') || 'match', desc = params.get('trend-order') === 'desc';
+    const sorted = columns.find(column => column.key === key);
+    const expanded = params.has('trend-sort') || params.has('trend-order');
+    root.querySelector('[data-trend-values]').open = expanded;
+    root.querySelector('[data-trend-headings]').replaceChildren(...columns.map(column => {
+      const heading = archiveElement('th', column.label); heading.scope = 'col';
+      if (column.key) {
+        const active = key === column.key, target = new URLSearchParams(params);
+        if (target.get('penalties') === 'include') target.delete('penalties');
+        const nextDesc = active ? !desc : column.gap || ['goal-margin', 'xg-margin'].includes(column.key);
+        target.set('trend-sort', column.key); target.delete('trend-order');
+        if (nextDesc) target.set('trend-order', 'desc');
+        heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
+        const link = archiveElement('a', column.label); link.href = `?${target}`; link.dataset.trendSort = column.key;
+        link.setAttribute('aria-label', `Sort by ${column.label}`); heading.replaceChildren(link);
+      }
+      return heading;
+    }));
+    root.querySelector('[data-trend-table-caption]').textContent = `${rolling ? `Individual match values, followed by ${window}-match trailing averages, per match; matches 1–${window - 1} use all matches played so far` : 'Individual match values'}. Scores are shown from this team's perspective.`;
+    const indices = matches.map((_, index) => index);
+    indices.sort((a, b) => {
+      if (!!matches[a].undated !== !!matches[b].undated) return matches[a].undated ? 1 : -1;
+      const x = sorted.value(matches[a], a), y = sorted.value(matches[b], b);
+      if (x == null || y == null) {
+        if (x != null) return -1;
+        if (y != null) return 1;
+      } else {
+        const comparison = typeof x === 'string' ? x.localeCompare(y) : x - y;
+        if (comparison) return comparison * (desc ? -1 : 1);
+      }
+      return b - a;
+    });
+    for (const name of ['trend-sort', 'trend-order']) {
+      const input = trendControls.elements.namedItem(name);
+      input.value = name === 'trend-sort' ? key : desc ? 'desc' : 'asc';
+      input.disabled = name === 'trend-sort' ? key === 'match' : !desc;
+    }
+    root.querySelector('[data-trend-rows]').replaceChildren(...indices.map(index => {
+      const row = document.createElement('tr');
+      columns.forEach((column, position) => {
+        const value = column.value(matches[index], index);
+        const cell = archiveElement(position ? 'td' : 'th', column.format ? column.format(value) : String(value));
+        if (!position) cell.scope = 'row'; row.append(cell);
+      });
+      return row;
+    }));
+  }
   function showSeasonTrend(params) {
     const control = key => trendControls.elements.namedItem(key);
     const season = params.get('season') || root.dataset.defaultTeamSeason;
@@ -2044,44 +2121,7 @@
     const missingReference = relative ? visible.filter(dataset => dataset.references[1]?.value == null && dataset.references.length > 1) : [];
     referenceStatus.hidden = !missingReference.length;
     referenceStatus.textContent = missingReference.length ? `${missingReference[0].references[1].label} unavailable for ${missingReference.map(dataset => dataset.label).join(', ')}. ${missingReference[0].references[1].note}` : '';
-    const sortedGap = visible.find(dataset => dataset.gap && dataset.sortKey === params.get('trend-sort'));
-    root.querySelector('[data-trend-values]').open = !!sortedGap;
-    const headingRow = root.querySelector('[data-trend-headings]');
-    [...headingRow.children].slice(5).forEach(cell => cell.remove());
-    visible.forEach(dataset => {
-      const heading = document.createElement('th'); heading.scope = 'col'; heading.textContent = dataset.label;
-      if (dataset.gap) {
-        const target = new URLSearchParams(params), active = params.get('trend-sort') === dataset.sortKey;
-        const desc = params.get('trend-order') === 'desc';
-        target.set('trend-sort', dataset.sortKey);
-        if (active && desc) target.delete('trend-order'); else target.set('trend-order', 'desc');
-        heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
-        const link = archiveElement('a', dataset.label); link.href = `?${target}`; link.dataset.trendSort = dataset.sortKey; heading.replaceChildren(link);
-      }
-      headingRow.append(heading);
-    });
-    root.querySelector('[data-trend-table-caption]').textContent = `${rolling ? `${window}-match trailing averages, per match; matches 1–${window - 1} use all matches played so far` : 'Individual match values'}. Scores are shown from this team's perspective.`;
-    const matchOrder = matches.map((_, index) => index);
-    if (sortedGap) matchOrder.sort((a, b) => {
-      const x = sortedGap.data[a], y = sortedGap.data[b];
-      if (x == null || y == null) return (x == null) - (y == null);
-      return (x - y) * (params.get('trend-order') === 'desc' ? -1 : 1) || a - b;
-    });
-    control('trend-sort').value = params.get('trend-sort') || 'match'; control('trend-order').value = params.get('trend-order') || 'asc';
-    control('trend-sort').disabled = !(pointsGap || goalGaps) || control('trend-sort').value === 'match';
-    control('trend-order').disabled = control('trend-sort').disabled || control('trend-order').value === 'asc';
-    root.querySelector('[data-trend-rows]').replaceChildren(...matchOrder.map(index => {
-      const match = matches[index];
-      const row = document.createElement('tr');
-      const values = [index + 1, match.date, match.opponent, match.venue, match.score, ...visible.map(dataset => dataset.data[index])];
-      values.forEach((value, column) => {
-        const cell = document.createElement(column === 0 ? 'th' : 'td');
-        if (column === 0) cell.scope = 'row';
-        cell.textContent = column < 5 ? String(value) : seasonTrendNumber(value, visible[column - 5].expected, rolling, visible[column - 5].gap);
-        row.append(cell);
-      });
-      return row;
-    }));
+    showSeasonTrendTable(params, matches, visible.filter(dataset => !dataset.gap), {view, rolling, window});
     showPointsTiles(root.querySelector('[data-trend-points-tiles]'), matches.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap);
     root.querySelector('[data-trend-margins-panel]').hidden = !(margins || goalGaps || balanceBars);
     showGoalGapTiles(root.querySelector('[data-trend-goal-gap-tiles]'), matches, nonPenalty, 'match', goalGaps);
@@ -2989,9 +3029,9 @@
     if (becomingPointsOnly && root.dataset.penalties === 'exclude') { location.assign(url); return; }
     if (url.searchParams.get('view') === 'season-trend') {
       const params = url.searchParams;
-      if (params.get('trend-mode') !== 'match' || !(params.get('trend-view') === 'points' && params.get('trend-sort') === 'points-gap' || params.get('trend-view') === 'compare' && ['scored-gap', 'allowed-gap'].includes(params.get('trend-sort')))) {
+      if (!trendSortAvailable(params)) {
         params.delete('trend-sort'); params.delete('trend-order');
-      } else if (params.get('trend-order') !== 'desc') params.delete('trend-order');
+      }
     }
     history.pushState(null, '', url);
     applyURL();
