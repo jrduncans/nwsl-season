@@ -102,7 +102,6 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	}
 	requireAttr(t, body, "[data-h2h-series] option[value=points]", "selected", "")
 	requireAttr(t, body, "[data-h2h-penalties-label]", "hidden", "")
-	requireAttr(t, body, "[data-h2h-points-note]", "hidden", "")
 	requireText(t, body, "[data-h2h-fallback] li", "Points − xPoints:")
 	requireText(t, body, "[data-h2h-fallback] li", "Points:")
 	requireText(t, body, "[data-h2h-rows]", "+")

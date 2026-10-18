@@ -517,10 +517,10 @@ team's xG coverage is incomplete; goal ranks remain.
 
 | Parameter | Values | Default |
 |---|---|---|
-| `trend-view` | `balance` (Scoring balance), `compare` (Actual vs xG), `difference` (Margins), `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
+| `trend-view` | `balance` (Scoring balance), `compare` (Goals vs xG), `difference` (Margins), `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
 | `trend-mode` | `match`, `rolling` | `rolling` |
 | `window` | `3`, `5`, `10` | `5` |
-| `trend-sort` | `match`, `points-gap` (each-match points table) | `match` |
+| `trend-sort` | `match`, `points-gap`, `scored-gap`, `allowed-gap` (each-match gap tables) | `match` |
 | `trend-order` | `asc`, `desc` | `asc` |
 | `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
@@ -551,6 +551,35 @@ each side of zero for Margins (two to four above zero otherwise), ending
 on a tick at least 15% beyond the largest value. Whole-number data, such as
 per-match goals, keep whole-number steps; labels carry only the decimals the
 step needs.
+
+**Goals vs xG** (`trend-view=compare`) keeps its two Scored and Allowed
+line panels in rolling mode. With smoothing off (`trend-mode=match`), it shows
+two gap-bar panels: **Scored · Goals − xG** and **Allowed · Goals allowed − xG
+allowed**. Above zero means more scored than xG in Scored, and more conceded
+than xG allowed in Allowed; each panel states its direction. Both share one
+symmetric rounded axis with at least 15% headroom, sized to the largest gap
+across both panels using `marginAxis`. Home is solid blue and away striped
+orange, using the same venue helper as Head to head and Points vs xPoints.
+Missing xG or a missing penalty split retains its chronological slot with no
+bar; zero remains a short mark. Penalties excluded compares non-penalty goals
+with npxG.
+
+Three equal All / Home / Away tiles above the panels show both sides, for
+example “45 goals vs 42.35 xG · 2.65 above” and “39 allowed vs 39.69 xG allowed
+· 0.69 below”. There is no netted headline. Home and Away swatches are the
+venue legend. Each tile states match coverage. Incomplete xG withholds its
+total and gap; incomplete penalty splits withhold the non-penalty goal total
+and state split coverage. Gaps smaller than 0.005 in magnitude read “matched
+expected”, consistent with the signed table and tooltip precision. Empty venues
+show only “No matches” (“No meetings” in Head to head), without coverage lines.
+These tiles appear only with smoothing off. Tooltips and keyboard descriptions
+include the match, official score, selected-basis goals, xG and signed gaps at
+both ends. The
+Match values table adds sortable **Goals − xG** and **Goals allowed − xG
+allowed** columns in this mode, with missing last and chronological ties.
+`trend-sort=scored-gap` or `allowed-gap` preserves the selection; changing to
+rolling mode or another chart clears these sorts. `trend-view=compare` keeps
+existing links compatible.
 
 With smoothing off, **Margins** (`trend-view=difference&trend-mode=match`)
 uses the same two bar panels and All / Home / Away record tiles as Head to
@@ -681,8 +710,8 @@ start rather than claimed as all-time. Tied holders are all listed in the
 ### Head to head
 
 `view=head-to-head` follows two ASA team IDs across eligible regular seasons.
-Controls are Team, Opponent, View (Margins by default, Actual vs
-expected, Points vs xPoints) and Penalties (Included or Excluded, hidden for
+Controls are Team, Opponent, View (Margins by default, Goals vs xG,
+Points vs xPoints) and Penalties (Included or Excluded, hidden for
 Points vs xPoints). The opponent list includes clubs met at
 least once, each as "Name (N)", sorted by the ID's newest name, then ID. The
 default is the most-met opponent, ties broken by newest name, then ID. A valid
@@ -691,7 +720,7 @@ match." and a selected zero-meeting option. Blank, repeated, unknown or
 same-as-team opponents return the standard 400.
 
 The heading shows both clubs with decorative logos (`teamName` and
-`clubLogoURL`), adding “actual vs expected” or “points vs xPoints” with those views, followed by
+`clubLogoURL`), adding “goals vs xG” or “points vs xPoints” with those views, followed by
 regular-season scope, years and match count. Small samples show numbers
 without a conclusion. Active-season meetings enter immediately, and scope and
 table mark "season in progress".
@@ -717,22 +746,19 @@ an alias for Margins. Requests with `h2h-series=expected` (or explicit
 `actual`) redirect to the same relative URL without `h2h-series`, preserving
 all other selections; `both` and `points` remain in URLs.
 
-**Actual vs expected** replaces the record tiles with three comparisons:
-goals for vs xG for, goals against vs xG against, and points vs xPts. Each
-shows total actual − expected as above or below expected, per-meeting rates
-and “N of M meetings”. The total is the headline. xG and xPts coverage are
-independent. An incomplete total shows `xG incomplete` or `xPts incomplete`;
-actual values and covered per-meeting expected values remain visible.
-
-The comparison chart replaces actual margins with **actual goal margin minus
-expected goal margin**: (goals for − goals against) − (xG for − xG against).
-Positive bars are above expected, negative bars below expected; zero is
-labelled "matched expected". These bars do not describe wins or losses.
-Home/away swatches appear in a separate legend because the record tiles are
-hidden. The legend uses explicit non-shrinking label boxes to keep swatches
-from overlapping text in Safari. No companion ticks or extra actual-margin series appear. A meeting
-without xG retains its chronological slot but has no gap bar. Missing values
-are null, never zero.
+**Goals vs xG** (`h2h-series=both`, preserving existing links) uses the same
+two gap-bar panels and All / Home / Away tiles as unsmoothed Match by match.
+The panels are **Goals for − xG for** and **Goals against − xG against**.
+Above zero means more scored than xG for, or more conceded than xG against;
+each panel explains its direction. The shared symmetric rounded axis takes
+the largest magnitude across both panels, and both retain identical
+chronological slots and year placement. Missing xG or penalty splits leave
+empty slots, never zero bars. Each venue tile gives both goals vs xG totals,
+the separate above/below gaps and meeting coverage. Incomplete populations
+withhold their totals and gaps. There is no separate venue legend or netted
+margin-gap chart. Points comparisons live in Points vs xPoints. The option
+label stays “Goals vs xG” when penalties are excluded, while the panels,
+tiles, tooltip and table use non-penalty wording.
 
 **Points vs xPoints** (`h2h-series=points`) plots official points − ASA xPoints
 per meeting with the shared gap bars and fixed −3 to +3 axis. Its All / Home /
@@ -746,14 +772,15 @@ match the season chart. This view has no Penalties control or points note;
 a carried penalties parameter has no effect.
 
 Penalties affects goals and xG in the two goal views through
-`basisText`. With exclusion, only split-covered meetings enter goals and npxG
-totals, which state their smaller count; npxG compares that same population.
+`basisText`. With exclusion, Margins states the smaller split-covered
+population; Goals vs xG withholds incomplete totals and shows explicit split
+coverage.
 Charts use non-penalty goals and/or npxG on that basis. Meetings without a split retain their
 slot and official result in the tooltip and table but have no non-penalty bar.
 Points and xPts use every meeting and never change. Meeting lists and official
 W–D–L also never change. Both goal views show an xG missing-note whenever
-coverage is incomplete. Only Actual vs expected adds an xPts missing-note
-and the standard points/basis note; Margins uses the official-results note.
+coverage is incomplete. Goals vs xG has no xPts missing-note or points/basis
+note; Margins uses the official-results note.
 Points vs xPoints has neither a penalty-split nor an xG coverage note.
 
 `history.SummarizeHeadToHead(inputs, teamID, opponentID, basis)` and
@@ -771,7 +798,7 @@ orange (`#CF7424`) diagonal stripes on paper (`#fbfcf8`) with a thin orange
 outline: 1.5px stripes every 3.4px at 45 degrees. Zero values have a short mark.
 Color and pattern jointly encode venue; hollow columns remain reserved for
 Team-seasons' in-progress seasons. The goal charts have a symmetric
-round axis; Margins shares its scale across both panels, and points uses exactly ±3.
+round axis shared across both panels in both goal views, and points uses exactly ±3.
 Years sit under their first meeting; overlapping intermediate labels are
 skipped while first and last remain inside the plot. Up to forty columns fit
 at 390px without page scrolling.
@@ -779,22 +806,28 @@ at 390px without page scrolling.
 Hover, tap or keyboard focus shows the same transient tooltip and accessible
 label: venue-local date, "season in progress" when applicable, venue,
 opponent's season-specific name, official score and result. Non-penalty goals
-are added when excluded. Margins includes goal margin, xG for, xG against and xG margin; comparison uses margin
-gap instead and retains its xPts comparison, with `Unavailable` where missing. Hit testing chooses the nearest slot
+are added when excluded. Margins includes goal margin, xG for, xG against
+and xG margin. Goals vs xG includes selected-basis goals, xG for, xG against
+and the two separate signed gaps, with `Unavailable` where missing. Hit
+testing chooses the nearest slot
 across the full plot height, including slots with missing values. Arrow keys,
 Home and End move between meetings; Escape, blur or an outside tap dismisses
-the tooltip. There is no pinned selection or detail panel. `explore-geometry.js`
-owns chart bounds, bar values, hit testing and year-label placement, tested in
+the tooltip. Pointer events queued before keyboard inspection cannot dismiss
+it; a fresh hover or tap takes over. There is no pinned selection or detail
+panel. `explore-geometry.js` owns chart bounds, bar values, hit testing and
+year-label placement, tested in
 `e2e/geometry_test.go`. Without JavaScript the chart is a chronological list
 with the same basis and expected details, including a goal margin and xG margin
-for every meeting in Margins (or `Unavailable` for missing observations). Date warnings and the ASA identity
+for every meeting in Margins, or both side gaps in Goals vs xG (with
+`Unavailable` for missing observations). Date warnings and the ASA identity
 and home-designation qualifications stay below the chart.
 
 The values table is a native `<details>`, closed unless `h2h-sort` or
 `h2h-order` is present, with summary "Table: all N meetings". Columns are Date,
 Season, Venue, Opponent, official Score, Result and Points. Excluding penalties
-adds Non-penalty goals. Margins always adds xG for, xG against and xG margin; comparison uses Margin gap and retains xPts;
-missing values say `Unavailable`. Text columns align left, with no logos or row
+adds Non-penalty goals. Both goal views add xG for and xG against. Margins
+adds xG margin; Goals vs xG adds Goals for − xG for and Goals against − xG
+against. Missing values say `Unavailable`. Text columns align left, with no logos or row
 links. Sort links use kickoff order, venue, official result points or official
 goal margin; ties use newest-first kickoff order and missing dates stay last.
 `exploreMatches` supplies venue-local dates, saying `Venue date unavailable`
@@ -805,7 +838,7 @@ on narrow screens, with a scroll hint.
 |---|---|---|
 | `team` | ASA team ID | Portland Thorns FC |
 | `opponent` | Different recorded ASA team ID | Most-met opponent |
-| `h2h-series` | `actual` (Margins), `expected` (legacy alias for Margins), `both`, `points` | `actual` (omitted from URLs) |
+| `h2h-series` | `actual` (Margins), `expected` (legacy alias for Margins), `both` (Goals vs xG), `points` | `actual` (omitted from URLs) |
 | `h2h-sort` | `date`, `venue`, `result`, `margin` | `date` |
 | `h2h-order` | `asc`, `desc` | `desc` |
 | `penalties` | `include`, `exclude` (two goal views; ignored for points) | `include` |

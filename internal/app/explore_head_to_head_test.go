@@ -309,9 +309,9 @@ func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatal(code)
 		}
-		requireText(t, body, "[data-h2h-title]", "actual vs expected")
+		requireText(t, body, "[data-h2h-title]", "goals vs xG")
 		requireAttr(t, body, "[data-h2h-record]", "hidden", "")
-		requireText(t, body, "[data-h2h-direction]", "zero: matched expected")
+		requireText(t, body, "[data-h2h-direction]", basisText(basis, "Above zero: more goals scored than xG"))
 		if len(find(t, body, "[data-h2h-penalties-label][hidden], [data-h2h-penalties][disabled], [data-h2h-values][open]")) != 0 {
 			t.Fatal("both controls visible and table collapsed")
 		}
@@ -319,22 +319,19 @@ func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		actualTotals := []int64{want.AllExpected.GoalsFor, want.AllExpected.GoalsAgainst, int64(want.All.Points)}
-		for i, row := range h2hComparisons(exploreHeadToHeadPair{All: want.All, Expected: want.AllExpected}, basis) {
-			if row.Actual != fmt.Sprint(actualTotals[i]) {
-				t.Fatalf("actual total %q, want %d", row.Actual, actualTotals[i])
-			}
-			for _, value := range []string{row.Label, row.Actual, row.Expected, row.Gap, row.Rate, row.Coverage} {
-				requireText(t, body, "[data-h2h-comparison]", value)
-			}
+		for _, venue := range []string{"All", "Home", "Away"} {
+			requireText(t, body, "[data-h2h-comparison]", venue)
 		}
-		if len(find(t, body, "th[data-h2h-expected-column]")) != 4 || len(find(t, body, "th[data-h2h-expected-column][hidden]")) != 0 || len(find(t, body, "[data-h2h-rows] tr")) != 26 {
+		if want.AllExpected.XGFor == nil {
+			t.Fatal("fixture needs xG")
+		}
+		requireText(t, body, "[data-h2h-comparison]", fmt.Sprintf("%.2f", *want.AllExpected.XGFor))
+		requireText(t, body, "[data-h2h-comparison]", "above")
+		if len(find(t, body, "th[data-h2h-expected-column]")) != 5 || len(find(t, body, "th[data-h2h-expected-column][hidden]")) != 1 || len(find(t, body, "[data-h2h-rows] tr")) != 26 {
 			t.Fatal("expected table columns and unchanged population")
 		}
-		requireText(t, body, "[data-h2h-fallback]", basisText(basis, "xG for:"))
-		if basis.ExcludesPenalties() {
-			requireText(t, body, "[data-h2h-points-note]", pointsBasisNote)
-		}
+		requireText(t, body, "[data-h2h-fallback]", basisText(basis, "xG for:"), basisText(basis, "Goals for − xG for:"), basisText(basis, "Goals against − xG against:"))
+		requireExact(t, body, "th[data-h2h-expected-column]", basisText(basis, "Goals for − xG for"), basisText(basis, "Goals against − xG against"))
 		for _, link := range find(t, body, "[data-h2h-sort]") {
 			parsed, err := url.Parse(attr(link, "href"))
 			if err != nil || parsed.Query().Get("h2h-series") != "both" {
@@ -353,10 +350,11 @@ func TestExploreHeadToHeadIncompleteTotalsAndPerMeeting(t *testing.T) {
 		t.Fatal(code)
 	}
 	requireText(t, body, "[data-h2h-comparison]", "xG incomplete")
-	requireText(t, body, "[data-h2h-comparison]", "xPts incomplete")
+	forbidText(t, body, "[data-h2h-comparison]", "xPts")
 	requireText(t, body, "[data-h2h-coverage]", "2 meetings lack xG")
-	requireText(t, body, "[data-h2h-coverage]", "2 meetings lack xPts")
+	forbidText(t, body, "[data-h2h-coverage]", "xPts")
 	requireText(t, body, "[data-h2h-rows]", "Unavailable")
+	requireText(t, body, "[data-h2h-fallback]", "Goals for − xG for: Unavailable", "Goals against − xG against: Unavailable")
 	requireText(t, body, "[data-h2h-rows]", "1.78")
 	// Non-penalty totals use only split-covered meetings, with counts alongside.
 	code, body = getPage(t, archive, path+"&penalties=exclude")
@@ -370,7 +368,7 @@ func TestExploreHeadToHeadIncompleteTotalsAndPerMeeting(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireText(t, body, "[data-h2h-comparison]", "Unavailable")
+	requireText(t, body, "[data-h2h-comparison]", "Non-penalty goals incomplete")
 	requireText(t, body, "[data-h2h-coverage]", "0 of 4 meetings")
 }
 

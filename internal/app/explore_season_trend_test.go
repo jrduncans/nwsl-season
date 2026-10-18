@@ -348,7 +348,7 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 						}
 					} else if view == "compare" {
 						want := []exploreTrendColumn{{Label: "Goals scored", Measure: 0}, {Label: "xG scored", Measure: 0, Expected: true}, {Label: "Goals allowed", Measure: 1}, {Label: "xG allowed", Measure: 1, Expected: true}}
-						if !slices.Equal(page.TrendColumns, want) {
+						if !slices.Equal(page.TrendColumns[:4], want) {
 							t.Fatalf("comparison must pair actual and xG per metric: %v", page.TrendColumns)
 						}
 					} else if view == "points" {
@@ -373,6 +373,9 @@ func TestExploreSeasonTrendViewAndModeSelections(t *testing.T) {
 					}
 					if view == "points" && mode == "match" {
 						wantColumns++
+					}
+					if view == "compare" && mode == "match" {
+						wantColumns += 2
 					}
 					if len(page.TrendColumns) != wantColumns || page.TrendMissingXG != (view != "points" && effectiveSeries != "goals") {
 						t.Fatalf("wrong series selection: %+v", page)

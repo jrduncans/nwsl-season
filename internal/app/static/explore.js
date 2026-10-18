@@ -182,6 +182,7 @@
       const mark = marks[position];
       const element = chart.getDatasetMeta(mark.datasetIndex).data[mark.index];
       chart.keyboardInspecting = true;
+      chart.keyboardInspectionStartedAt = event.timeStamp;
       chart.setActiveElements([mark]);
       chart.tooltip.setActiveElements([mark], element.getCenterPoint());
       chart.update('none');
@@ -1996,7 +1997,7 @@
     const mode = params.get('trend-mode') === 'match' ? 'match' : 'rolling';
     const window = ['3', '5', '10'].includes(params.get('window')) ? Number(params.get('window')) : 5;
     const rolling = mode === 'rolling', difference = view === 'difference', balance = view === 'balance', relative = view === 'relative', points = view === 'points';
-    const pointsGap = points && !rolling, margins = difference && !rolling;
+    const pointsGap = points && !rolling, margins = difference && !rolling, goalGaps = view === 'compare' && !rolling;
     const signedValues = difference;
     const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : 'goals';
     const averageReference = ['team', 'league', 'playoff', 'top-four', 'shield', 'best'].includes(params.get('average-reference')) ? params.get('average-reference') : 'league';
@@ -2007,7 +2008,7 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-window-control]').hidden = !rolling;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
-    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : margins ? 'Bars show goal margin and xG margin for each match.' : pointsGap ? 'Bars show points minus xPoints for each match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+    root.querySelector('[data-season-trend-note]').textContent = `Completed regular-season matches, in played order. ${rolling ? 'Dotted lead-ins average all matches played so far before the first full window. Solid lines show averages including the current match.' : margins ? 'Bars show goal margin and xG margin for each match.' : goalGaps ? 'Bars show goals minus xG and goals allowed minus xG allowed for each match.' : pointsGap ? 'Bars show points minus xPoints for each match.' : 'Solid lines connect successive matches.'} Dates are local to each match’s venue.${relative ? ' References show each series’ team mean and selected benchmark in the original units. Expected means use available matches.' : ''}${points ? ' xPoints are ASA’s retrospective expected points for played matches.' : ''}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
     comparison.replaceChildren(...[{key: 'team', label: 'None (team average only)'}, ...(selectedSeason?.benchmarks || [])].map(reference => {
@@ -2035,37 +2036,39 @@
         data: matches.map((_, index) => seasonTrendValue(matches, index, measure, window, expected, rolling)),
       };
     }));
-    if (pointsGap) visible.push({label: 'Points − xPoints', expected: true, gap: true, data: matches.map(match => match.values[3].expected == null ? null : match.values[3].actual - match.values[3].expected)});
+    if (pointsGap) visible.push({label: 'Points − xPoints', expected: true, gap: true, sortKey: 'points-gap', data: matches.map(match => match.values[3].expected == null ? null : match.values[3].actual - match.values[3].expected)});
     if (view === 'compare' || relative) visible.sort((a, b) => a.measure - b.measure);
+    if (goalGaps) [0, 1].forEach(side => visible.push({label: T(side ? 'Goals allowed − xG allowed' : 'Goals − xG'), expected: true, gap: true, measure: side, sortKey: side ? 'allowed-gap' : 'scored-gap', data: matches.map(row => globalThis.NWSLGeometry.goalGap(marginsData.goals(row), marginsData.xg(row), side))}));
     if (relative) showTrendReferenceDetails(visible);
     const referenceStatus = root.querySelector('[data-trend-reference-status]');
     const missingReference = relative ? visible.filter(dataset => dataset.references[1]?.value == null && dataset.references.length > 1) : [];
     referenceStatus.hidden = !missingReference.length;
     referenceStatus.textContent = missingReference.length ? `${missingReference[0].references[1].label} unavailable for ${missingReference.map(dataset => dataset.label).join(', ')}. ${missingReference[0].references[1].note}` : '';
-    root.querySelector('[data-trend-values]').open = pointsGap && params.get('trend-sort') === 'points-gap';
+    const sortedGap = visible.find(dataset => dataset.gap && dataset.sortKey === params.get('trend-sort'));
+    root.querySelector('[data-trend-values]').open = !!sortedGap;
     const headingRow = root.querySelector('[data-trend-headings]');
     [...headingRow.children].slice(5).forEach(cell => cell.remove());
     visible.forEach(dataset => {
       const heading = document.createElement('th'); heading.scope = 'col'; heading.textContent = dataset.label;
       if (dataset.gap) {
-        const target = new URLSearchParams(params), active = params.get('trend-sort') === 'points-gap';
+        const target = new URLSearchParams(params), active = params.get('trend-sort') === dataset.sortKey;
         const desc = params.get('trend-order') === 'desc';
-        target.set('trend-sort', 'points-gap');
+        target.set('trend-sort', dataset.sortKey);
         if (active && desc) target.delete('trend-order'); else target.set('trend-order', 'desc');
         heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
-        const link = archiveElement('a', dataset.label); link.href = `?${target}`; link.dataset.trendSort = 'points-gap'; heading.replaceChildren(link);
+        const link = archiveElement('a', dataset.label); link.href = `?${target}`; link.dataset.trendSort = dataset.sortKey; heading.replaceChildren(link);
       }
       headingRow.append(heading);
     });
     root.querySelector('[data-trend-table-caption]').textContent = `${rolling ? `${window}-match trailing averages, per match; matches 1–${window - 1} use all matches played so far` : 'Individual match values'}. Scores are shown from this team's perspective.`;
     const matchOrder = matches.map((_, index) => index);
-    if (pointsGap && params.get('trend-sort') === 'points-gap') matchOrder.sort((a, b) => {
-      const x = visible.at(-1).data[a], y = visible.at(-1).data[b];
+    if (sortedGap) matchOrder.sort((a, b) => {
+      const x = sortedGap.data[a], y = sortedGap.data[b];
       if (x == null || y == null) return (x == null) - (y == null);
       return (x - y) * (params.get('trend-order') === 'desc' ? -1 : 1) || a - b;
     });
     control('trend-sort').value = params.get('trend-sort') || 'match'; control('trend-order').value = params.get('trend-order') || 'asc';
-    control('trend-sort').disabled = !pointsGap || control('trend-sort').value === 'match';
+    control('trend-sort').disabled = !(pointsGap || goalGaps) || control('trend-sort').value === 'match';
     control('trend-order').disabled = control('trend-sort').disabled || control('trend-order').value === 'asc';
     root.querySelector('[data-trend-rows]').replaceChildren(...matchOrder.map(index => {
       const match = matches[index];
@@ -2080,16 +2083,19 @@
       return row;
     }));
     showPointsTiles(root.querySelector('[data-trend-points-tiles]'), matches.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap);
-    root.querySelector('[data-trend-margins-panel]').hidden = !margins;
+    root.querySelector('[data-trend-margins-panel]').hidden = !(margins || goalGaps);
+    showGoalGapTiles(root.querySelector('[data-trend-goal-gap-tiles]'), matches, nonPenalty, 'match', goalGaps);
     root.querySelector('[data-trend-margin-official]').hidden = !margins || !nonPenalty;
     showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), matches, nonPenalty, margins);
-    if (margins) {
+    if (margins || goalGaps) {
       root.querySelector('[data-season-trend-plot]').hidden = false;
       for (const panel of ['goals', 'xg', 'points']) root.querySelector(`[data-trend-${panel}-panel]`).hidden = true;
       root.querySelector('[data-trend-legend]').hidden = true;
-      root.querySelector('[data-trend-margin-title]').textContent = nonPenalty ? 'Non-penalty goal margin' : 'Goal margin';
-      root.querySelector('[data-trend-margin-direction]').textContent = nonPenalty ? 'zero: level' : 'up: win · zero: draw · down: loss';
-      showMarginPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, inspection: seasonMarginInspection});
+      root.querySelector('[data-trend-margin-title]').textContent = goalGaps ? T('Scored · Goals − xG') : nonPenalty ? 'Non-penalty goal margin' : 'Goal margin';
+      root.querySelector('[data-trend-second-title]').textContent = goalGaps ? T('Allowed · Goals allowed − xG allowed') : T('xG margin');
+      root.querySelector('[data-trend-second-direction]').textContent = goalGaps ? T('Above zero: more goals conceded than xG allowed. Below: fewer.') : T('up: more xG for · zero: level · down: more xG against');
+      root.querySelector('[data-trend-margin-direction]').textContent = goalGaps ? T('Above zero: more goals scored than xG. Below: fewer.') : nonPenalty ? 'zero: level' : 'up: win · zero: draw · down: loss';
+      showMatchBarPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, goalGaps, inspection: goalGaps ? seasonGoalGapInspection : seasonMarginInspection});
       return;
     }
     root.querySelector('[data-trend-points-panel]').hidden = !pointsGap;
@@ -2511,22 +2517,37 @@
       tile.append(archiveElement('div', view.matches)); return tile;
     }));
   }
-  function showMarginPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection}) {
-    const values = [matches.map(marginsData.goalMargin), matches.map(marginsData.xgMargin)];
+  function showGoalGapTiles(container, matches, np, unit, shown) {
+    container.hidden = !shown || !matches.length;
+    if (!shown) return;
+    container.replaceChildren(...marginsData.summarize(matches).map(total => {
+      const view = marginsData.formatGoalGap(total, {nonPenalty: np, xgLabel: archiveText('xG', np)}, unit);
+      const tile = archiveElement('div'); tile.className = 'explore-h2h-tile explore-goal-gap-tile'; tile.dataset.goalGapTile = view.label;
+      const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
+      if (view.label !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = view.label.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
+      label.append(view.label); tile.append(label, archiveElement('div', view.scored));
+      if (view.allowed) tile.append(archiveElement('div', view.allowed));
+      for (const text of [view.coverage, view.splitCoverage].filter(Boolean)) { const line = archiveElement('div', text); line.className = 'note'; tile.append(line); }
+      return tile;
+    }));
+  }
+  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false}) {
+    const values = goalGaps ? [0, 1].map(side => matches.map(row => window.NWSLGeometry.goalGap(marginsData.goals(row), marginsData.xg(row), side))) : [matches.map(marginsData.goalMargin), matches.map(marginsData.xgMargin)];
     const axis = window.NWSLGeometry.marginAxis(...values), xg = archiveText('xG', np);
     panels.forEach(({canvas: name, key}, i) => {
       const canvas = root.querySelector(`[data-chart="${name}"]`);
       const chart = charts[key] || (charts[key] = createHeadToHead(canvas, matchNumbers, inspection));
+      chart.inspection = inspection;
       chart.meetings = matches;
       chart.data.labels = matches.map((_, index) => String(index));
       chart.data.datasets[0].data = values[i];
-      const label = i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin';
+      const label = goalGaps ? archiveText(i ? 'Goals against − xG against' : 'Goals for − xG for', np) : i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin';
       chart.data.datasets[0].label = label;
       Object.assign(chart.options.scales.y, {min: axis.min, max: axis.max,
         afterBuildTicks: scale => { scale.ticks = axis.ticks.map(value => ({value})); },
         afterFit: scale => { scale.width = 40; },
         ticks: {callback: value => `${value > 0 ? '+' : ''}${value.toFixed(axis.decimals)}`}});
-      canvas.setAttribute('aria-label', `${description}: ${label}, each match; ${i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np ? 'zero: level' : 'up: win; zero: draw; down: loss'}; home solid blue, away striped orange`);
+      canvas.setAttribute('aria-label', `${description}: ${label}, each match; ${goalGaps ? archiveText(i ? 'Above zero: more goals conceded than xG allowed. Below: fewer.' : 'Above zero: more goals scored than xG. Below: fewer.', np) : i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np ? 'zero: level' : 'up: win; zero: draw; down: loss'}; home solid blue, away striped orange`);
       chart.resize(); chart.update('none');
     });
   }
@@ -2535,7 +2556,7 @@
     const chart = charts.seasonPointsGap || (charts.seasonPointsGap = createHeadToHead(canvas, true));
     chart.meetings = matches.map((match, index) => ({...match, date: `Match ${index + 1} · ${match.date}`, pointsView: true, points: match.values[3].actual, xpoints: match.values[3].expected, result: {3: 'Win', 1: 'Draw', 0: 'Loss'}[match.values[3].actual]}));
     chart.data.labels = matches.map((_, index) => String(index + 1));
-    chart.data.datasets[0].data = chart.meetings.map(row => window.NWSLGeometry.headToHeadValue([], [], 'points', row.points, row.xpoints));
+    chart.data.datasets[0].data = chart.meetings.map(row => window.NWSLGeometry.pointsGap(row.points, row.xpoints));
     chart.data.datasets[0].label = 'Points − xPoints';
     const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data, chart.width, chart.height, 'points').extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
@@ -2554,18 +2575,15 @@
     root.querySelector('[data-h2h-points-title]').hidden = !pointsView;
     h2hPenalties.value = params.get('penalties') === 'exclude' ? 'exclude' : 'include';
     const carriedSeries = root.querySelector('[data-h2h-carried-series]'); carriedSeries.disabled = margins; carriedSeries.value = h2hSeries.value;
-    root.querySelector('[data-h2h-venues]').hidden = !both;
-    root.querySelector('[data-h2h-goal-title]').hidden = !margins;
-    root.querySelector('[data-h2h-goal-title]').textContent = np ? 'Non-penalty goal margin' : 'Goal margin';
-    root.querySelector('[data-h2h-xg-panel]').hidden = !margins;
-    root.querySelector('[data-h2h-xg-panel] h3').textContent = `${xgLabel} margin`;
-    root.querySelector('[data-h2h-xg-panel] p').textContent = `up: more ${xgLabel} for · zero: level · down: more ${xgLabel} against`;
-    root.querySelector('[data-h2h-venue-direction]').hidden = !both;
-    root.querySelector('[data-h2h-direction]').textContent = pointsView ? 'Above zero: more points than xPoints. Below: fewer.' : both ? label('Goal margin − xG margin · zero: matched expected') : np ? 'zero: level' : 'up: win · zero: draw · down: loss';
+    root.querySelector('[data-h2h-goal-title]').hidden = pointsView;
+    root.querySelector('[data-h2h-goal-title]').textContent = both ? label('Goals for − xG for') : np ? 'Non-penalty goal margin' : 'Goal margin';
+    root.querySelector('[data-h2h-xg-panel]').hidden = pointsView;
+    root.querySelector('[data-h2h-xg-panel] h3').textContent = both ? label('Goals against − xG against') : `${xgLabel} margin`;
+    root.querySelector('[data-h2h-xg-panel] p').textContent = both ? label('Above zero: more goals conceded than xG allowed. Below: fewer.') : `up: more ${xgLabel} for · zero: level · down: more ${xgLabel} against`;
+    root.querySelector('[data-h2h-direction]').textContent = pointsView ? 'Above zero: more points than xPoints. Below: fewer.' : both ? label('Above zero: more goals scored than xG. Below: fewer.') : np ? 'zero: level' : 'up: win · zero: draw · down: loss';
     root.querySelector('th[data-h2h-basis-column]').hidden = !np;
-    root.querySelector('[data-h2h-points-note]').hidden = !np || !both;
     const headers = root.querySelectorAll('th[data-h2h-expected-column]');
-    [xgLabel + ' for', xgLabel + ' against', 'xPts', pointsView ? 'Points − xPoints' : both ? 'Margin gap' : xgLabel + ' margin'].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = pointsView ? i < 2 : margins && i === 2; });
+    [xgLabel + ' for', xgLabel + ' against', 'xPts', pointsView ? 'Points − xPoints' : both ? label('Goals for − xG for') : xgLabel + ' margin', label('Goals against − xG against')].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = i === 4 ? !both : pointsView ? i < 2 : i === 2; });
     const teamIndex = h2hData.teams.findIndex(t => t.ID === (params.get('team') || root.dataset.defaultH2hTeam));
     if (teamIndex < 0) return;
     const data = {team: h2hData.teams[teamIndex]};
@@ -2609,7 +2627,7 @@
     }));
     h2hOpponent.value = pair.opponent.ID;
     const title = root.querySelector('[data-h2h-title]');
-    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)), ...(!margins ? [document.createTextNode(pointsView ? ' · points vs xPoints' : ' · actual vs expected')] : []));
+    title.replaceChildren(teamName(identity(data.team)), document.createTextNode(' vs '), teamName(identity(pair.opponent)), ...(!margins ? [document.createTextNode(pointsView ? ' · points vs xPoints' : ' · goals vs xG')] : []));
     for (const key of ['scope', 'warning']) {
       const element = root.querySelector(`[data-h2h-${key}]`); element.textContent = pair[key];
       if (key === 'warning') element.hidden = !pair.warning;
@@ -2618,27 +2636,11 @@
     record.setAttribute('aria-label', `Official regular-season record from ${data.team.Name}’s side`);
     showMarginTiles(record, rows, np, margins);
     showPointsTiles(root.querySelector('[data-h2h-points-tiles]'), rows, 'meeting', pointsView);
-    const comparison = root.querySelector('[data-h2h-comparison]'); comparison.hidden = !both || !rows.length;
-    const goalsCovered = rows.filter(r => r.basisGoals[0] !== null), xgCovered = rows.filter(r => r.xg[0] !== null), pointsCovered = rows.filter(r => r.xpoints !== null);
-    const sum = (meetings, value) => meetings.reduce((total, row) => total + value(row), 0);
-    const metrics = [
-      {label: label('Goals for'), expectedLabel: `${xgLabel} for`, actual: sum(goalsCovered, r => r.basisGoals[0]), expected: xgCovered.length === goalsCovered.length && goalsCovered.length ? sum(xgCovered, r => r.xg[0]) : null, n: goalsCovered.length, expectedCount: xgCovered.length, missing: `${xgLabel} incomplete`},
-      {label: label('Goals against'), expectedLabel: `${xgLabel} against`, actual: sum(goalsCovered, r => r.basisGoals[1]), expected: xgCovered.length === goalsCovered.length && goalsCovered.length ? sum(xgCovered, r => r.xg[1]) : null, n: goalsCovered.length, expectedCount: xgCovered.length, missing: `${xgLabel} incomplete`},
-      {label: 'Points', expectedLabel: 'xPts', actual: sum(rows, r => r.points), expected: pointsCovered.length === rows.length && rows.length ? sum(rows, r => r.xpoints) : null, n: rows.length, expectedCount: pointsCovered.length, missing: 'xPts incomplete'},
-    ];
-    comparison.replaceChildren(...metrics.map(metric => {
-      const tile = archiveElement('div'); tile.className = 'explore-h2h-comparison-tile'; tile.append(archiveElement('h3', metric.label));
-      const total = archiveElement('p', metric.n ? String(metric.actual) + ' ' : 'Unavailable '); total.className = 'explore-h2h-total';
-      total.append(archiveElement('span', `vs ${metric.expected === null ? metric.missing : fixed(metric.expected)} ${metric.expectedLabel}`)); tile.append(total);
-      const gap = metric.expected === null ? null : metric.actual - metric.expected;
-      tile.append(archiveElement('p', gap === null ? metric.missing : `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected`));
-      tile.append(archiveElement('p', !metric.n ? 'Unavailable' : metric.expected === null ? `${fixed(metric.actual / metric.n)} per meeting` : `${fixed(metric.actual / metric.n)} vs ${fixed(metric.expected / metric.n)} per meeting`));
-      const count = archiveElement('p', `${metric.n} of ${rows.length} meetings`); count.className = 'note'; tile.append(count); return tile;
-    }));
+    showGoalGapTiles(root.querySelector('[data-h2h-comparison]'), rows, np, 'meeting', both);
+    const goalsCovered = rows.filter(r => r.basisGoals[0] !== null), xgCovered = rows.filter(r => r.xg[0] !== null);
     const coverage = root.querySelector('[data-h2h-coverage]'), notes = [];
     const missingNote = (n, metric) => `${n} ${n === 1 ? 'meeting lacks' : 'meetings lack'} ${metric}.`;
     if (!pointsView && xgCovered.length < rows.length) notes.push(missingNote(rows.length - xgCovered.length, xgLabel));
-    if (both && pointsCovered.length < rows.length) notes.push(missingNote(rows.length - pointsCovered.length, 'xPts'));
     if (np && goalsCovered.length < rows.length) notes.push(`Non-penalty goals and npxG cover ${goalsCovered.length} of ${rows.length} meetings with a penalty split.`);
     coverage.textContent = notes.join(' '); coverage.hidden = !notes.length;
     root.querySelector('[data-h2h-official]').hidden = !margins || !np;
@@ -2663,8 +2665,9 @@
       const tr = archiveElement('tr'); tr.dataset.matchId = row.id;
       for (const text of [row.date, `${row.season}${row.active ? ' (season in progress)' : ''}`, row.venue, row.opponent, row.score, row.result, row.points]) tr.append(archiveElement('td', text));
       const basisCell = archiveElement('td', row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')); basisCell.dataset.h2hBasisColumn = ''; basisCell.hidden = !np; tr.append(basisCell);
-      [...row.xg, row.xpoints].forEach((value, i) => { const td = archiveElement('td', value === null ? 'Unavailable' : fixed(value)); td.dataset.h2hExpectedColumn = ''; td.hidden = pointsView ? i < 2 : margins && i === 2; tr.append(td); });
-      const gapCell = archiveElement('td', pointsView ? pointGapText(row) : row.expectedMargin === null || both && row.basisGoals[0] === null ? 'Unavailable' : signed(both ? row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin : row.expectedMargin)); gapCell.dataset.h2hExpectedColumn = ''; gapCell.hidden = false; tr.append(gapCell);
+      [...row.xg, row.xpoints].forEach((value, i) => { const td = archiveElement('td', value === null ? 'Unavailable' : fixed(value)); td.dataset.h2hExpectedColumn = ''; td.hidden = pointsView ? i < 2 : i === 2; tr.append(td); });
+      const gapCell = archiveElement('td', pointsView ? pointGapText(row) : both ? goalSideGapText(row, 0) : row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)); gapCell.dataset.h2hExpectedColumn = ''; tr.append(gapCell);
+      const allowed = archiveElement('td', goalSideGapText(row, 1)); allowed.dataset.h2hExpectedColumn = ''; allowed.hidden = !both; tr.append(allowed);
       return tr;
     }));
     root.querySelectorAll('[data-h2h-sort]').forEach(link => {
@@ -2687,34 +2690,42 @@
     }));
     const wrap = root.querySelector('[data-h2h-chart]'); wrap.hidden = !rows.length;
     if (!rows.length) return;
-    root.querySelector('[data-h2h-xg-chart]').hidden = !margins;
-    if (margins) {
-      showMarginPanels({panels: [{canvas: 'head-to-head', key: 'headToHead'}, {canvas: 'head-to-head-xg', key: 'headToHeadXG'}], matches: rows, description: `${data.team.Name} vs ${pair.opponent.Name}`, nonPenalty: np, matchNumbers: false});
+    root.querySelector('[data-h2h-xg-chart]').hidden = pointsView;
+    if (!pointsView) {
+      showMatchBarPanels({panels: [{canvas: 'head-to-head', key: 'headToHead'}, {canvas: 'head-to-head-xg', key: 'headToHeadXG'}], matches: rows, description: `${data.team.Name} vs ${pair.opponent.Name}`, nonPenalty: np, matchNumbers: false, goalGaps: both});
       return;
     }
     const canvas = wrap.querySelector('canvas');
-    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${pointsView ? 'points minus xPoints; above zero: more points than xPoints; below zero: fewer' : label('goal margin minus xG margin; above zero: above expected; below zero: below expected')}; home solid blue, away striped orange`);
+    canvas.setAttribute('aria-label', `${data.team.Name} vs ${pair.opponent.Name}: ${'points minus xPoints; above zero: more points than xPoints; below zero: fewer'}; home solid blue, away striped orange`);
     if (!charts.headToHead) charts.headToHead = createHeadToHead(canvas);
     const chart = charts.headToHead;
     delete chart.options.scales.y.afterBuildTicks; delete chart.options.scales.y.afterFit;
     chart.options.scales.y.ticks = {maxTicksLimit: 5, precision: 0};
     chart.meetings = rows;
     chart.data.labels = rows.map(row => row.id);
-    chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.headToHeadValue(row.basisGoals, row.xg, series, row.points, row.xpoints));
-    chart.data.datasets[0].label = pointsView ? 'Points − xPoints' : label('Goal margin − xG margin');
+    chart.data.datasets[0].data = rows.map(row => window.NWSLGeometry.pointsGap(row.points, row.xpoints));
+    chart.data.datasets[0].label = 'Points − xPoints';
     const extent = window.NWSLGeometry.headToHeadGeometry(chart.data.datasets[0].data.filter(v => v !== null), chart.width, chart.height, series).extent;
     chart.options.scales.y.min = -extent; chart.options.scales.y.max = extent;
     chart.update('none');
   }
+  const goalSideGapText = (row, side) => { const gap = window.NWSLGeometry.goalGap(row.basisGoals, row.xg, side); return gap === null ? 'Unavailable' : signed(gap); };
+  const goalGapDescription = row => [
+    `${row.np ? 'Non-penalty goals' : 'Goals'}: ${row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')}`,
+    `${row.xgLabel} for: ${row.xg[0] === null ? 'Unavailable' : fixed(row.xg[0])}`,
+    `${row.xgLabel} against: ${row.xg[1] === null ? 'Unavailable' : fixed(row.xg[1])}`,
+    `${archiveText('Goals for − xG for', row.np)}: ${goalSideGapText(row, 0)}`,
+    `${archiveText('Goals against − xG against', row.np)}: ${goalSideGapText(row, 1)}`];
   const pointGapText = row => row.xpoints == null ? 'Unavailable' : signed(row.points - row.xpoints);
   const pointsDescription = row => [`Points: ${row.points}`, `xPoints: ${row.xpoints == null ? 'Unavailable' : fixed(row.xpoints)}`, `Points − xPoints: ${pointGapText(row)}`];
   const goalMarginText = row => row.basisGoals[0] === null ? 'Unavailable' : `${row.basisGoals[0] > row.basisGoals[1] ? '+' : ''}${row.basisGoals[0] - row.basisGoals[1]}`;
-  const headToHeadExpectedDescription = row => row.pointsView ? pointsDescription(row) : [
+  const headToHeadExpectedDescription = row => row.pointsView ? pointsDescription(row) : row.both ? goalGapDescription(row) : [
     ...(row.np ? [`Non-penalty goals: ${row.basisGoals[0] === null ? 'Unavailable' : row.basisGoals.join('–')}`] : []),
     `${row.np ? 'Non-penalty goal margin' : 'Goal margin'}: ${goalMarginText(row)}`,
     `${row.xgLabel} for: ${row.xg[0] === null ? 'Unavailable' : fixed(row.xg[0])}`,
     `${row.xgLabel} against: ${row.xg[1] === null ? 'Unavailable' : fixed(row.xg[1])}`,
-    ...(row.both ? [`xPts: ${row.xpoints === null ? 'Unavailable' : fixed(row.xpoints)}`, `Margin gap: ${row.basisGoals[0] === null || row.expectedMargin === null ? 'Unavailable' : signed(row.basisGoals[0] - row.basisGoals[1] - row.expectedMargin)}`] : [`${row.xgLabel} margin: ${row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)}`]),
+    `${row.xgLabel} margin: ${row.expectedMargin === null ? 'Unavailable' : signed(row.expectedMargin)}`,
+
   ];
   const headToHeadDescription = row => [`${row.date}${row.active ? ' · season in progress' : ''} · ${row.venue} · ${row.opponent} · ${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)].join(' · ');
   function headToHeadInspection(row) {
@@ -2729,6 +2740,11 @@
       `${T('Goal margin')}: ${margin === null ? 'Unavailable' : `${margin > 0 ? '+' : ''}${margin}`}`,
       `${label} for: ${xg[0] === null ? 'Unavailable' : fixed(xg[0])}`, `${label} against: ${xg[1] === null ? 'Unavailable' : fixed(xg[1])}`,
       `${label} margin: ${expected === null ? 'Unavailable' : signed(expected)}`]};
+  }
+  function seasonGoalGapInspection(row, index) {
+    const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
+    return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
+      ...goalGapDescription({basisGoals: marginsData.goals(row), xg: marginsData.xg(row), xgLabel: T('xG'), np: nonPenalty})]};
   }
   // Use Chart.js's event and tooltip lifecycle, with the full-height nearest
   // column geometry shared by pointer, touch and geometry tests.
@@ -2770,8 +2786,8 @@
     options.plugins.tooltip.padding = 8;
     options.plugins.tooltip.titleFont = {size: 11}; options.plugins.tooltip.bodyFont = {size: 11};
     options.plugins.tooltip.callbacks = {
-      title: items => items.length ? inspection(items[0].chart.meetings[items[0].dataIndex], items[0].dataIndex).title : '',
-      label: item => inspection(item.chart.meetings[item.dataIndex], item.dataIndex).lines,
+      title: items => items.length ? items[0].chart.inspection(items[0].chart.meetings[items[0].dataIndex], items[0].dataIndex).title : '',
+      label: item => item.chart.inspection(item.chart.meetings[item.dataIndex], item.dataIndex).lines,
     };
     const years = {id: 'headToHeadYears', afterDraw(chart) {
       const rows = chart.meetings || [], seen = new Set(), ctx = chart.ctx;
@@ -2784,17 +2800,18 @@
       chart.yearLabels = window.NWSLGeometry.headToHeadLabels(candidates, chart.chartArea);
       chart.yearLabels.forEach(label => ctx.fillText(label.text, label.center, chart.chartArea.bottom + 20)); ctx.restore();
     }};
-    // Focusing a panel after a control below both charts scrolls the page.
-    // Its queued mouseout must not dismiss the new keyboard inspection.
+    // Focus can scroll the page before Chart.js processes an earlier tap.
+    // Those stale events and the resulting mouseout must not clear keyboard inspection.
     const keyboardTooltip = {id: 'headToHeadKeyboard', beforeEvent(chart, {event, replay}) {
-      if (chart.keyboardInspecting && (event.type === 'mouseout' || replay)) return false;
+      if (chart.keyboardInspecting && (event.type === 'mouseout' || replay || event.native?.timeStamp < chart.keyboardInspectionStartedAt)) return false;
       chart.keyboardInspecting = false;
     }};
     const chart = new Chart(canvas, {type: 'bar', options, plugins: [years, keyboardTooltip], data: {labels: [], datasets: [{label: 'Goal margin', data: [], ...venueBarStyle(canvas)}]}});
+    chart.inspection = inspection;
     chart.meetings = [];
     // Every meeting has an inspectable slot, including those without xG or splits.
     chart.keyboardIncludeMissing = true;
-    keyboardAccess(chart, mark => { const detail = inspection(chart.meetings[mark.index], mark.index); return [detail.title,...detail.lines].join(' · '); }, true);
+    keyboardAccess(chart, mark => { const detail = chart.inspection(chart.meetings[mark.index], mark.index); return [detail.title,...detail.lines].join(' · '); }, true);
     return chart;
   }
   const changeHeadToHead = event => {
@@ -2935,7 +2952,7 @@
     if (becomingPointsOnly && root.dataset.penalties === 'exclude') { location.assign(url); return; }
     if (url.searchParams.get('view') === 'season-trend') {
       const params = url.searchParams;
-      if (params.get('trend-view') !== 'points' || params.get('trend-mode') !== 'match' || params.get('trend-sort') !== 'points-gap') {
+      if (params.get('trend-mode') !== 'match' || !(params.get('trend-view') === 'points' && params.get('trend-sort') === 'points-gap' || params.get('trend-view') === 'compare' && ['scored-gap', 'allowed-gap'].includes(params.get('trend-sort')))) {
         params.delete('trend-sort'); params.delete('trend-order');
       } else if (params.get('trend-order') !== 'desc') params.delete('trend-order');
     }
