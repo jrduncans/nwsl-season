@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/history"
@@ -48,7 +49,11 @@ type exploreTrendColumn struct {
 }
 
 type exploreSeasonTrendView struct {
-	TrendMode, TrendWindow, TrendView, TrendCaption, TrendAverageSeries  string
+	TrendMode, TrendWindow, TrendView, TrendCaption, TrendAverageSeries string
+	// TrendSmoothing is the single Smoothing selection: none, 3, 5 or 10.
+	// TrendLegacySmoothing marks an old trend-mode/window URL to redirect.
+	TrendSmoothing                                                       string
+	TrendLegacySmoothing                                                 bool
 	TrendAverageReference                                                string
 	TrendReferenceOptions                                                []exploreTrendReferenceOption
 	TrendReferences                                                      []exploreTrendReferenceView
@@ -60,6 +65,7 @@ type exploreSeasonTrendView struct {
 	TrendRows                                                            []exploreSeasonTrendRow
 	TrendMissingXG, TrendUndated, TrendVenueDateUnavailable, TrendActive bool
 	TrendMissingXPoints                                                  bool
+	TrendNote                                                            string
 	TrendPointsGap                                                       bool
 	TrendGoalGaps                                                        bool
 	TrendBalanceBars                                                     bool
@@ -107,18 +113,16 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	if err != nil {
 		return exploreSeasonTrendView{}, err
 	}
-	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendView: "balance", TrendAverageReference: "league", TrendTeam: selected, TrendSort: "match", TrendOrder: "asc"}
+	page := exploreSeasonTrendView{TrendMode: "rolling", TrendWindow: "5", TrendSmoothing: "5", TrendView: "balance", TrendAverageReference: "league", TrendTeam: selected, TrendSort: "match", TrendOrder: "asc"}
 	page.TrendAverageSeries = "goals"
 	for _, field := range []struct {
 		key     string
 		value   *string
 		allowed []string
 	}{
-		{"trend-mode", &page.TrendMode, []string{"match", "rolling"}},
 		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "points", "relative"}},
 		{"trend-sort", &page.TrendSort, []string{"match", "venue", "result", "goal-margin", "xg-margin", "points-gap", "scored-gap", "allowed-gap"}},
 		{"trend-order", &page.TrendOrder, []string{"asc", "desc"}},
-		{"window", &page.TrendWindow, []string{"3", "5", "10"}},
 		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg", "points", "xpoints"}},
 		{"average-reference", &page.TrendAverageReference, []string{"team", "league", "playoff", "top-four", "shield", "best"}},
 	} {
@@ -128,6 +132,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			}
 			*field.value = values[0]
 		}
+	}
+	if err := parseTrendSmoothing(query, &page); err != nil {
+		return page, err
 	}
 	// Scoring balance always includes actual and xG. The shared series query is
 	// retained for Season by season, but has no effect on Match by match.
@@ -187,7 +194,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				page.TrendGoalGapTiles = exploreGoalGapTiles(team.Matches, basis, "match")
 			}
 			if page.TrendMargins || page.TrendBalanceBars {
-				page.TrendMarginTiles = formatMarginTiles(exploreMarginTiles(team.Matches), basis)
+				page.TrendMarginTiles = formatMarginTiles(exploreMarginTiles(team.Matches), basis, "match")
 			}
 			if page.TrendPointsGap {
 				page.TrendPointsTiles = explorePointsTiles(team.Matches, "match")
@@ -211,7 +218,67 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		}
 	}
 	sortExploreTrendRows(page.TrendRows, page.TrendSort, page.TrendOrder)
+	page.TrendNote = exploreSeasonTrendNote(page, basis)
 	return page, nil
+}
+
+// One Smoothing select covers both the mode and the rolling window. Old
+// trend-mode and window links still validate; the handler redirects them to
+// the equivalent smoothing value, which wins when both are present.
+func parseTrendSmoothing(query url.Values, page *exploreSeasonTrendView) error {
+	legacy := struct{ mode, window string }{"rolling", "5"}
+	for _, field := range []struct {
+		key     string
+		value   *string
+		allowed []string
+	}{
+		{"trend-mode", &legacy.mode, []string{"match", "rolling"}},
+		{"window", &legacy.window, []string{"3", "5", "10"}},
+	} {
+		if values, present := query[field.key]; present {
+			if len(values) != 1 || !slices.Contains(field.allowed, values[0]) {
+				return fmt.Errorf("invalid %s selection", field.key)
+			}
+			*field.value = values[0]
+			page.TrendLegacySmoothing = true
+		}
+	}
+	page.TrendSmoothing = legacy.window
+	if legacy.mode == "match" {
+		page.TrendSmoothing = "none"
+	}
+	if values, present := query["smoothing"]; present {
+		if len(values) != 1 || !slices.Contains([]string{"none", "3", "5", "10"}, values[0]) {
+			return fmt.Errorf("invalid smoothing selection")
+		}
+		page.TrendSmoothing = values[0]
+	}
+	page.TrendMode, page.TrendWindow = "rolling", page.TrendSmoothing
+	if page.TrendSmoothing == "none" {
+		page.TrendMode, page.TrendWindow = "match", "5"
+	}
+	return nil
+}
+
+// The note carries only what the controls and panel titles do not already say.
+func exploreSeasonTrendNote(page exploreSeasonTrendView, basis history.ScoringBasis) string {
+	var parts []string
+	if page.TrendMode == "rolling" {
+		parts = append(parts, fmt.Sprintf("Each point averages the last %s matches, including that one.", page.TrendWindow))
+	}
+	if page.TrendView == "relative" {
+		parts = append(parts, "Reference lines show the team’s season average and the selected benchmark.")
+		if page.TrendMissingXG || page.TrendMissingXPoints {
+			parts = append(parts, "Expected means use available matches.")
+		}
+	}
+	if page.TrendView == "points" {
+		parts = append(parts, "xPoints: ASA’s expected points for each match.")
+	}
+	if basis.ExcludesPenalties() {
+		parts = append(parts, "Penalty kicks excluded.")
+	}
+	return strings.Join(parts, " ")
 }
 
 // A trailing window uses consecutive played matches, including the endpoint.

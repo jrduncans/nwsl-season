@@ -140,7 +140,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			pair.Rows = append(pair.Rows, exploreHeadToHeadRow{exploreMatchRecord: record, Season: meeting.Season, Active: meeting.Active, Result: result, Points: meeting.Points, Margin: meeting.ScoreFor - meeting.ScoreAgainst, Position: i, BasisScore: h2hBasisScore(meeting), PointsGap: h2hPointsGap(meeting), ScoredGap: goalGapText(record, exploreScored), AllowedGap: goalGapText(record, exploreAllowed), ExpectedMargin: h2hExpectedMargin(meeting), GoalMargin: h2hGoalMargin(meeting), ExpectedValues: [3]string{h2hExpectedValue(meeting.XGFor), h2hExpectedValue(meeting.XGAgainst), h2hExpectedValue(meeting.XPoints)}})
 		}
 		first, last := "", ""
-		active, venueDateUnavailable := false, false
+		active, activeSeason, venueDateUnavailable := false, "", false
 		for _, row := range pair.Rows {
 			if first == "" || row.Season < first {
 				first = row.Season
@@ -148,16 +148,22 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 			if row.Season > last {
 				last = row.Season
 			}
-			active = active || row.Active
+			if row.Active {
+				active, activeSeason = true, row.Season
+			}
 			venueDateUnavailable = venueDateUnavailable || row.VenueDateUnavailable
 		}
 		years := first
 		if first != last {
 			years += "–" + last
 		}
-		pair.Scope = fmt.Sprintf("regular season, %s · %s", years, exploreMatchCount(pair.All.Played))
+		meetings := "1 meeting"
+		if pair.All.Played != 1 {
+			meetings = fmt.Sprintf("%d meetings", pair.All.Played)
+		}
+		pair.Scope = fmt.Sprintf("Regular season %s · %s", years, meetings)
 		if active {
-			pair.Scope += " · season in progress"
+			pair.Scope += fmt.Sprintf(" · %s in progress", activeSeason)
 		}
 		if summary.Undated {
 			pair.Warning = "Undated matches appear last."
@@ -184,7 +190,7 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		if index < 0 {
 			return page, fmt.Errorf("opponent is not in the recorded regular-season results")
 		}
-		page.H2HPair = exploreHeadToHeadPair{Opponent: options[index], Scope: "regular season"}
+		page.H2HPair = exploreHeadToHeadPair{Opponent: options[index], Scope: "Regular season"}
 		for _, pair := range page.H2HOpponents {
 			if pair.Opponent.ID == values[0] {
 				page.H2HPair = pair
@@ -392,15 +398,15 @@ func h2hMissingNote(n int, metric string) string {
 
 func h2hDirection(series string, basis history.ScoringBasis) string {
 	if series == "points" {
-		return "Above zero: more points than xPoints. Below: fewer."
+		return "Above zero: more points than xPoints."
 	}
 	if series == "both" {
-		return basisText(basis, "Above zero: more goals scored than xG. Below: fewer.")
+		return basisText(basis, "Above zero: more goals scored than xG.")
 	}
 	if basis.ExcludesPenalties() {
-		return "zero: level"
+		return "Zero: level"
 	}
-	return "up: win · zero: draw · down: loss"
+	return "Up: win · Zero: draw · Down: loss"
 }
 
 func h2hPointsGap(meeting history.HeadToHeadMeeting) string {
@@ -466,7 +472,7 @@ func (page *exploreHeadToHeadView) populateHeadToHeadTiles(basis history.Scoring
 	for _, row := range page.H2HPair.Rows {
 		matches = append(matches, row.exploreMatchRecord)
 	}
-	page.H2HMarginTiles = formatMarginTiles(exploreMarginTiles(matches), basis)
+	page.H2HMarginTiles = formatMarginTiles(exploreMarginTiles(matches), basis, "meeting")
 	page.H2HPointsTiles = explorePointsTiles(matches, "meeting")
 	page.H2HGoalGapTiles = exploreGoalGapTiles(matches, basis, "meeting")
 	page.H2HCoverage = h2hCoverage(page.H2HPair, basis, page.H2HSeries)

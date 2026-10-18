@@ -18,7 +18,7 @@
 <noscript><button class="button" type="submit" data-h2h-submit>Show head to head</button></noscript>
 </form>
 </div>
-<div class="explore-heading"><h2 id="explore-h2h-title" data-h2h-title>{{template "teamName" .H2HTeam}} vs {{template "teamName" .H2HPair.Opponent}}{{if .H2HPoints}} · points vs xPoints{{else if .H2HBoth}} · goals vs xG{{end}}</h2></div>
+<div class="explore-heading"><h2 id="explore-h2h-title" data-h2h-title>{{template "teamName" .H2HTeam}} vs {{template "teamName" .H2HPair.Opponent}}</h2></div>
 <p data-h2h-scope>{{.H2HPair.Scope}}</p>
 <div class="explore-h2h-record" data-h2h-record role="group" aria-label="Official regular-season record from {{.H2HTeam.Name}}’s side"{{if or (not .H2HMargins) (not .H2HPair.All.Played)}} hidden{{end}}>
 {{template "exploreMarginTiles" .H2HMarginTiles}}
@@ -30,22 +30,21 @@
 <p class="note" data-h2h-coverage{{if not .H2HCoverage}} hidden{{end}}>{{.H2HCoverage}}</p>
 <p data-h2h-empty{{if .H2HPair.All.Played}} hidden{{end}}>{{.H2HTeam.Name}} and {{.H2HPair.Opponent.Name}} have not met in a regular-season match.</p>
 <div data-h2h-chart-wrap{{if not .H2HPair.All.Played}} hidden{{end}}>
-<h3 data-h2h-points-title{{if not .H2HPoints}} hidden{{end}}>Points above or below xPoints · Each match</h3>
+<h3 data-h2h-points-title{{if not .H2HPoints}} hidden{{end}}>Points − xPoints</h3>
 <h3 data-h2h-goal-title{{if .H2HPoints}} hidden{{end}}>{{if .H2HBoth}}{{$.T "Goals for − xG for"}}{{else if .NonPenalty}}Non-penalty goal margin{{else}}Goal margin{{end}}</h3>
 <p class="explore-h2h-direction" data-h2h-direction>{{.H2HDirection}}</p>
 <div class="explore-h2h-chart" data-h2h-chart hidden><canvas data-chart="head-to-head" tabindex="0" role="img" aria-label="Chronological goal margins" aria-describedby="explore-h2h-help"></canvas></div>
 <section data-h2h-xg-panel{{if .H2HPoints}} hidden{{end}}>
-<h3>{{if .H2HBoth}}{{$.T "Goals against − xG against"}}{{else}}{{.H2HXGLabel}} margin{{end}}</h3><p class="explore-h2h-direction">{{if .H2HBoth}}{{$.T "Above zero: more goals conceded than xG allowed. Below: fewer."}}{{else}}up: more {{.H2HXGLabel}} for · zero: level · down: more {{.H2HXGLabel}} against{{end}}</p>
+<h3>{{if .H2HBoth}}{{$.T "Goals against − xG against"}}{{else}}{{.H2HXGLabel}} margin{{end}}</h3><p class="explore-h2h-direction">{{if .H2HBoth}}{{$.T "Above zero: more goals conceded than xG allowed."}}{{else}}Up: more {{.H2HXGLabel}} for · Zero: level · Down: more {{.H2HXGLabel}} against{{end}}</p>
 <div class="explore-h2h-chart" data-h2h-xg-chart hidden><canvas data-chart="head-to-head-xg" tabindex="0" role="img" aria-label="Chronological xG margins" aria-describedby="explore-h2h-help"></canvas></div>
 </section>
 <p id="explore-h2h-help" class="visually-hidden">Hover, tap or focus to inspect a meeting. Arrow keys, Home and End move between meetings; Escape dismisses the tooltip.</p>
 <ol class="explore-h2h-fallback" data-h2h-fallback>{{range .H2HPair.Rows}}<li>{{.Date}}{{if .Active}} · season in progress{{end}} · {{.Venue}} · {{.Opponent}} · {{.Score}} · {{.Result}}{{if and $.NonPenalty (not $.H2HPoints)}} · Non-penalty goals: {{.BasisScore}}{{end}}{{if $.H2HPoints}} · Points: {{.Points}} · xPts: {{index .ExpectedValues 2}} · Points − xPoints: {{.PointsGap}}{{else}} · {{$.H2HXGLabel}} for: {{index .ExpectedValues 0}} · {{$.H2HXGLabel}} against: {{index .ExpectedValues 1}}{{if $.H2HBoth}} · {{$.T "Goals for − xG for"}}: {{.ScoredGap}} · {{$.T "Goals against − xG against"}}: {{.AllowedGap}}{{else}} · {{if $.NonPenalty}}Non-penalty goal margin{{else}}Goal margin{{end}}: {{.GoalMargin}} · {{$.H2HXGLabel}} margin: {{.ExpectedMargin}}{{end}}{{end}}</li>{{end}}</ol>
 </div>
 <p class="note" data-h2h-warning{{if not .H2HPair.Warning}} hidden{{end}}>{{.H2HPair.Warning}}</p>
-<p class="note">Records follow ASA team IDs; home is ASA’s designation, including alternate venues.</p>
 <details class="explore-context-details" data-h2h-values{{if .H2HExpanded}} open{{end}}><summary data-h2h-summary>Table: all {{.H2HPair.All.Played}} meetings</summary>
 <p class="scroll-hint">Scroll horizontally to see all columns.</p>
-<div class="table-scroll" tabindex="0" role="region" aria-label="Head to head meetings"><table class="explore-table explore-h2h-table"><caption>Official scores from the selected team's side; newest first by default.</caption>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Head to head meetings"><table class="explore-table explore-h2h-table"><caption>Official scores from the selected team's side; newest first by default. Records follow ASA team IDs; home is ASA’s designation, including alternate venues.</caption>
 <thead><tr>{{range .H2HColumns}}<th scope="col"{{if .Key}} aria-sort="{{.Sort}}"{{end}}>{{if .Key}}<a href="{{.URL}}" data-h2h-sort="{{.Key}}" aria-label="Sort by {{if .Description}}{{.Description}}{{else}}{{.Label}}{{end}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</th>{{end}}<th scope="col" data-h2h-basis-column{{if or .H2HPoints (not .NonPenalty)}} hidden{{end}}>Non-penalty goals</th><th scope="col" data-h2h-expected-column{{if .H2HPoints}} hidden{{end}}>{{.H2HXGLabel}} for</th><th scope="col" data-h2h-expected-column{{if .H2HPoints}} hidden{{end}}>{{.H2HXGLabel}} against</th><th scope="col" data-h2h-expected-column{{if not .H2HPoints}} hidden{{end}}>xPts</th><th scope="col" data-h2h-expected-column>{{if .H2HPoints}}Points − xPoints{{else if .H2HBoth}}{{$.T "Goals for − xG for"}}{{else}}{{.H2HXGLabel}} margin{{end}}</th><th scope="col" data-h2h-expected-column{{if not .H2HBoth}} hidden{{end}}>{{$.T "Goals against − xG against"}}</th></tr></thead>
 <tbody data-h2h-rows>{{range .H2HRows}}<tr data-match-id="{{.ID}}"><td>{{.Date}}</td><td>{{.Season}}{{if .Active}} (season in progress){{end}}</td><td>{{.Venue}}</td><td>{{.Opponent}}</td><td>{{.Score}}</td><td>{{.Result}}</td><td>{{.Points}}</td><td data-h2h-basis-column{{if or $.H2HPoints (not $.NonPenalty)}} hidden{{end}}>{{.BasisScore}}</td>{{range $i, $value := .ExpectedValues}}<td data-h2h-expected-column{{if or (and $.H2HPoints (lt $i 2)) (and (not $.H2HPoints) (eq $i 2))}} hidden{{end}}>{{$value}}</td>{{end}}<td data-h2h-expected-column>{{if $.H2HPoints}}{{.PointsGap}}{{else if $.H2HBoth}}{{.ScoredGap}}{{else}}{{.ExpectedMargin}}{{end}}</td><td data-h2h-expected-column{{if not $.H2HBoth}} hidden{{end}}>{{.AllowedGap}}</td></tr>{{end}}</tbody>
 </table></div></details>

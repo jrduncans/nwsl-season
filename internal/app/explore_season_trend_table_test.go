@@ -22,8 +22,8 @@ func TestExploreTrendTableColumnsAndNativeSorting(t *testing.T) {
 		{"balance", nil}, {"relative", nil}, {"difference", []string{"Goal margin", "xG margin"}},
 		{"compare", []string{"Goals − xG", "Goals allowed − xG allowed"}}, {"points", []string{"Points − xPoints"}},
 	} {
-		for _, mode := range []string{"match", "rolling"} {
-			path := base + "&trend-view=" + chart.view + "&trend-mode=" + mode
+		for _, mode := range []string{"none", "5"} {
+			path := base + "&trend-view=" + chart.view + "&smoothing=" + mode
 			code, body := getPage(t, archive, path)
 			if code != http.StatusOK {
 				t.Fatal(code)
@@ -52,7 +52,7 @@ func TestExploreTrendTableColumnsAndNativeSorting(t *testing.T) {
 			if err != nil || target.Path != "" {
 				t.Fatalf("relative sort URL: %v, %v", target, err)
 			}
-			if target.Query().Get("trend-view") != chart.view || target.Query().Get("trend-mode") != mode {
+			if target.Query().Get("trend-view") != chart.view || target.Query().Get("smoothing") != mode {
 				t.Fatal("sort lost chart selection")
 			}
 			code, sorted := getPage(t, archive, "/explore"+target.String())
@@ -63,7 +63,7 @@ func TestExploreTrendTableColumnsAndNativeSorting(t *testing.T) {
 			requireAttr(t, sorted, "[data-trend-sort=venue]", "data-trend-sort", "venue")
 		}
 	}
-	_, body := getPage(t, archive, base+"&trend-view=compare&trend-mode=rolling&penalties=exclude")
+	_, body := getPage(t, archive, base+"&trend-view=compare&smoothing=5&penalties=exclude")
 	requireText(t, body, "[data-trend-headings]", "Non-penalty goals", "npxG for", "npxG against", "Non-penalty goals − npxG", "5-match average")
 }
 

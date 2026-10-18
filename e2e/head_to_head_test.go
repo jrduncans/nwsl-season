@@ -26,7 +26,7 @@ func assertHeadToHeadTiles(t *testing.T, page playwright.Page) {
 	if err := expect.Locator(page.Locator("[data-h2h-tile=Home] [data-h2h-encoding=home], [data-h2h-tile=Away] [data-h2h-encoding=away]")).ToHaveCount(2); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-direction]")).ToHaveText("up: win · zero: draw · down: loss"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-direction]")).ToHaveText("Up: win · Zero: draw · Down: loss"); err != nil {
 		t.Fatal(err)
 	}
 	var fits bool
@@ -56,8 +56,8 @@ func assertHeadToHeadTiles(t *testing.T, page playwright.Page) {
  const points=rows.reduce((sum,row)=>sum+Number(row.children[6].textContent),0);
  const expected=[tile.dataset.h2hTile,count('Win')+'–'+count('Draw')+'–'+count('Loss'),(n?(points/n).toFixed(2):'—')+' pts/match',goals.join('–')+' goals'];
  const covered=rows.filter(row=>!row.children[8].textContent.includes('Unavailable'));
- const xg=!n ? 'No matches' : covered.length===n ? [8,9].map(i=>covered.reduce((sum,row)=>sum+Number(row.children[i].textContent),0).toFixed(2)).join('–')+' xG' : 'xG incomplete';
- return [...tile.children].slice(0,4).every((child,i)=>child.textContent.trim()===expected[i])&&tile.textContent.includes(xg)&&tile.textContent.includes(n+' '+(n===1?'match':'matches'));
+ const xg=!n ? 'No meetings' : covered.length===n ? [8,9].map(i=>covered.reduce((sum,row)=>sum+Number(row.children[i].textContent),0).toFixed(2)).join('–')+' xG' : 'xG incomplete';
+ return [...tile.children].slice(0,4).every((child,i)=>child.textContent.trim()===expected[i])&&tile.textContent.includes(xg)&&tile.textContent.includes(n+' '+(n===1?'meeting':'meetings'));
  })`, nil, &agrees)
 	if !agrees {
 		t.Fatal("server and in-place tiles must match official meeting rows")
@@ -376,7 +376,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-title]")).ToContainText("goals vs xG"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-title]")).ToHaveText("Portland Thorns FC vs Seattle Reign FC"); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-values]")).Not().ToHaveAttribute("open", ""); err != nil {
@@ -426,7 +426,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 		t.Fatal("keyboard expected tooltip differs")
 	}
 	chooseOption(t, page, "[data-h2h-penalties]", "exclude")
-	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("non-penalty goals"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("npxG"); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
@@ -664,13 +664,14 @@ func assertPointsChart(t *testing.T, page playwright.Page, selector, tiles strin
  const c=Chart.getChart(document.querySelector(selector)), rows=c.meetings;
  const close=(a,b)=>Math.abs(a-b)<1e-8;
  if(c.scales.y.min!==-3||c.scales.y.max!==3||c.data.datasets.length!==1||c.config.type!=='bar') return false;
+ if(c.scales.y.ticks.map(t=>t.label).join(' ')!=='-3 -2 -1 0 +1 +2 +3') return false;
  if(!rows.every((r,i)=>r.xpoints==null?c.data.datasets[0].data[i]===null:close(c.data.datasets[0].data[i],r.points-r.xpoints))) return false;
  if(!rows.every((r,i)=>r.venue==='Home'?c.getDatasetMeta(0).data[i].options.backgroundColor==='#1F6FA8':c.getDatasetMeta(0).data[i].options.backgroundColor instanceof CanvasPattern)) return false;
  const nodes=[...document.querySelectorAll(tiles+' [data-points-tile]')], first=nodes[0].getBoundingClientRect();
  return nodes.length===3&&nodes.every(tile=>{
  const r=tile.getBoundingClientRect(), meetings=rows.filter(row=>tile.dataset.pointsTile==='All'||row.venue===tile.dataset.pointsTile), n=meetings.length;
  const covered=meetings.filter(row=>row.xpoints!=null), actual=meetings.reduce((s,r)=>s+r.points,0), expected=covered.reduce((s,r)=>s+r.xpoints,0);
- return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&tile.textContent.includes(covered.length+' of '+n)&&tile.querySelector('strong').textContent.trim()===(n?actual+' vs '+(covered.length===n?expected.toFixed(2)+' xPts':'xPts incomplete'):'No meetings');
+ return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&(n&&covered.length<n?tile.textContent.includes(covered.length+' of '+n):!tile.querySelector('.note'))&&tile.querySelector('strong').textContent.trim()===(n?actual+' vs '+(covered.length===n?expected.toFixed(2)+' xPts':'xPts incomplete'):'No meetings');
  });
  }`, map[string]any{"selector": selector, "tiles": tiles}, &agrees)
 	if !agrees {
@@ -752,7 +753,7 @@ func TestExplorePointsTileFormattingParity(t *testing.T) {
 	for _, path := range []string{
 		"explore?view=head-to-head&h2h-series=points&opponent=" + seattleH2H,
 		"explore?view=head-to-head&h2h-series=points&opponent=aDQ0lzvQEv",
-		"explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&trend-mode=match",
+		"explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&smoothing=none",
 	} {
 		var rendered [2][]string
 		for i, noScript := range []bool{true, false} {

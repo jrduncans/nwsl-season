@@ -63,10 +63,15 @@ func exploreMarginTiles(matches []exploreMatchRecord) []exploreMarginTile {
 
 // This is the only Go formatting step; browser parity tests compare it with
 // the in-place renderer for complete, missing-xG and missing-split populations.
-func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis) []exploreMarginTileView {
+// unit is "match" or "meeting", so Head to head counts meetings.
+func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis, unit string) []exploreMarginTileView {
+	noun := "matches"
+	if unit == "meeting" {
+		noun = "meetings"
+	}
 	views := make([]exploreMarginTileView, 0, len(tiles))
 	for _, tile := range tiles {
-		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: fmt.Sprintf("%d–%d goals", tile.GoalsFor, tile.GoalsAgainst), XG: basisText(basis, "xG incomplete"), Matches: exploreMatchCount(tile.Played)}
+		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: fmt.Sprintf("%d–%d goals", tile.GoalsFor, tile.GoalsAgainst), XG: basisText(basis, "xG incomplete"), Matches: exploreCount(tile.Played, unit, noun)}
 		if tile.Played > 0 {
 			view.Rate = fmt.Sprintf("%.2f pts/match", float64(tile.Points)/float64(tile.Played))
 		}
@@ -82,19 +87,19 @@ func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis) []
 		if tile.XGCovered == tile.Played && tile.Played > 0 {
 			view.XG = fmt.Sprintf("%.2f–%.2f %s", tile.XGFor, tile.XGAgainst, basisText(basis, "xG"))
 		} else {
-			view.XGCoverage = fmt.Sprintf("%s %d/%d matches", basisText(basis, "xG"), tile.XGCovered, tile.Played)
+			view.XGCoverage = fmt.Sprintf("%s %d/%d %s", basisText(basis, "xG"), tile.XGCovered, tile.Played, noun)
 		}
 		if tile.Played == 0 {
-			view.XG = "No matches"
+			view.XG = "No " + noun
 		}
 		views = append(views, view)
 	}
 	return views
 }
 
-func exploreMatchCount(n int) string {
+func exploreCount(n int, unit, plural string) string {
 	if n == 1 {
-		return "1 match"
+		return "1 " + unit
 	}
-	return fmt.Sprintf("%d matches", n)
+	return fmt.Sprintf("%d %s", n, plural)
 }

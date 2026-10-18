@@ -199,14 +199,14 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	for _, path := range []string{
-		"/nwsl-season/explore?view=season-trend&season=2026&team=alpha&trend-view=balance&series=xg&trend-mode=rolling&window=10",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=difference&series=goals&trend-mode=match&window=3",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=compare&series=goals&trend-mode=match&window=3",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=goals&trend-mode=match&window=3",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=xg&trend-mode=rolling&window=10",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=both&trend-mode=match&window=3",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=both&average-series=xg&trend-mode=match&window=3",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=xg&average-series=goals&trend-mode=match&window=3",
+		"/nwsl-season/explore?view=season-trend&season=2026&team=alpha&trend-view=balance&series=xg&smoothing=10",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=difference&series=goals&smoothing=none",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=compare&series=goals&smoothing=none",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=goals&smoothing=none",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=xg&smoothing=10",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=both&smoothing=none",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=both&average-series=xg&smoothing=none",
+		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=xg&average-series=goals&smoothing=none",
 		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&average-reference=league&average-series=xg",
 		"/explore?view=season-trend&season=2024&team=alpha",
 	} {
@@ -223,7 +223,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 			}
 		}
 		if strings.Contains(path, "trend-view=relative") {
-			for _, fragment := range []string{`value="relative" selected`, `data-trend-average-data-control>`, `Benchmarks</option>`, `References show each series`, `in the original units`} {
+			for _, fragment := range []string{`value="relative" selected`, `data-trend-average-data-control>`, `Benchmarks</option>`, `Reference lines show the team’s season average`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("relative fallback missing %s", fragment)
 				}
@@ -252,8 +252,8 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				basis, other = other, basis
 			}
 			requireText(t, body, "[data-trend-headings]", "Score", "Points", "xG for", "xG against", "xPoints")
-			if parsed.Query().Get("trend-mode") != "match" {
-				window := parsed.Query().Get("window")
+			if parsed.Query().Get("smoothing") != "none" {
+				window := parsed.Query().Get("smoothing")
 				if window == "" {
 					window = "5"
 				}
@@ -262,7 +262,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				}
 			}
 		} else if strings.Contains(path, "series=goals") {
-			for _, fragment := range []string{`data-trend-carried-series value="goals"`, `value="match" selected`, `value="3" selected`} {
+			for _, fragment := range []string{`data-trend-carried-series value="goals"`, `value="none" selected`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("comparison URL lost hidden Data preference or mode: %s", fragment)
 				}
@@ -285,7 +285,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal("known incomplete inventory must not produce a trend")
 			}
 		} else if strings.Contains(path, "season=2026") {
-			for _, fragment := range []string{`value="10" selected`, `data-trend-carried-series value="xg"`, `value="rolling" selected`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
+			for _, fragment := range []string{`value="10" selected`, `data-trend-carried-series value="xg"`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("direct URL/fallback missing %s", fragment)
 				}
@@ -293,7 +293,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		}
 	}
 	for _, query := range []string{
-		"window=", "window=4", "window=3&window=5", "trend-mode=", "trend-mode=total", "trend-mode=both", "trend-view=", "trend-view=for", "trend-view=balance&trend-view=difference", "trend-mode=match&trend-mode=rolling",
+		"window=", "window=4", "window=3&window=5", "trend-mode=", "trend-mode=total", "trend-mode=both", "trend-view=", "trend-view=for", "trend-view=balance&trend-view=difference", "smoothing=none&smoothing=5", "smoothing=", "smoothing=7", "smoothing=rolling",
 		"average-series=", "average-series=both", "average-series=goals&average-series=xg",
 		"average-reference=", "average-reference=others", "average-reference=team&average-reference=league",
 		"team=", "team=unknown", "team=alpha&team=bravo", "season=2000",
@@ -481,4 +481,35 @@ func TestExploreSeasonTrendAverageViewPreservesValuesAndGaps(t *testing.T) {
 			t.Fatalf("one-match rolling averages must preserve the original value: %+v, %v", page, err)
 		}
 	}
+}
+
+// Old trend-mode and window links redirect to the single Smoothing value,
+// keeping every other selection; an explicit smoothing value wins.
+func TestExploreSeasonTrendLegacySmoothingRedirects(t *testing.T) {
+	t.Parallel()
+	archive := testArchive(t, map[string]archiveState{"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20}})
+	for legacy, want := range map[string]string{
+		"trend-mode=match":                  "none",
+		"trend-mode=match&window=10":        "none",
+		"trend-mode=rolling":                "5",
+		"window=3":                          "3",
+		"trend-mode=rolling&window=10":      "10",
+		"trend-mode=rolling&smoothing=none": "none",
+	} {
+		response := httptest.NewRecorder()
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=season-trend&season=2025&team=alpha&trend-view=points&"+legacy, nil))
+		if response.Code != http.StatusFound {
+			t.Fatalf("%s: status %d", legacy, response.Code)
+		}
+		target, err := url.Parse(response.Header().Get("Location"))
+		if err != nil || target.Path != "" || target.Query().Has("trend-mode") || target.Query().Has("window") || target.Query().Get("smoothing") != want || target.Query().Get("trend-view") != "points" || target.Query().Get("team") != "alpha" {
+			t.Fatalf("%s: redirect %s, %v", legacy, target, err)
+		}
+	}
+	code, body := getPage(t, archive, "/explore?view=season-trend&season=2025&team=alpha&smoothing=10")
+	if code != http.StatusOK {
+		t.Fatal(code)
+	}
+	requireAttr(t, body, "[data-trend-smoothing] option[value='10']", "selected", "")
+	forbidElements(t, body, "select[name=trend-mode], select[name=window], [data-trend-window-control]")
 }
