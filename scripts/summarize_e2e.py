@@ -36,8 +36,7 @@ def summarize(paths):
     lines = [
         "## E2E timings",
         "",
-        "Tracing is enabled for every run. `default` uses Go's default test parallelism; "
-        "`parallel12` uses `-parallel=12`. The trailing number identifies the repetition.",
+        "CI runs with `-parallel=12` and Playwright tracing enabled.",
         "",
         "| Run | Result | Suite seconds | Passed | Failed | Skipped |",
         "| --- | --- | ---: | ---: | ---: | ---: |",
@@ -53,8 +52,7 @@ def summarize(paths):
         "",
         "Counts include tests and subtests. Test durations include child tests and "
         "can overlap; they must not be added together. Suite seconds exclude compilation "
-        "and runner setup. These repeated runs compare separate runners, so compare "
-        "both repetitions before choosing a setting.",
+        "and runner setup. Runner performance varies between builds.",
     ])
     for name, _, _, tests in runs:
         lines.extend([

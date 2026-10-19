@@ -497,13 +497,14 @@ The suite takes about 20s locally. Every top-level browser test runs in
 parallel, and test servers simulate 1,000 forecast seasons instead of 50,000;
 the `e2e` package comment explains both.
 
-CI temporarily compares default E2E parallelism against `-parallel=12`, with
-two independent runs of each setting and Playwright tracing enabled for all
-four runs. Each run uploads its `go test -json` output and lists its slowest
-tests in the job summary. The overall `E2E` job combines the timings for
-comparison and fails if any run fails. Compare both repetitions before
-adopting a setting: runner performance varies. Test durations can overlap and
-include subtests, so use the package duration to compare total suite time.
+CI runs E2E with `-parallel=12` and Playwright tracing enabled. A
+[four-run CI comparison](https://github.com/jrduncans/nwsl-season/actions/runs/39189725215)
+measured default parallelism at 247.69s and 262.22s, versus 143.53s and 238.87s
+with twelve concurrent tests. Both twelve-way runs were faster; runner
+variation means the roughly 25% average improvement is not a guaranteed gain.
+The `E2E` job uploads its `go test -json` output and lists its slowest tests in
+the job summary. Test durations can overlap and include subtests, so use the
+package duration to compare total suite time.
 `python3 -m unittest discover -s scripts -p 'test_*.py'` checks the summary
 script, which is also exercised in CI.
 
