@@ -2,7 +2,7 @@
 
 set -eu
 
-collector_image="otel/opentelemetry-collector:0.159.0@sha256:7725a7a10c87d8853208bdd4bb3439ad3c0d7b32b4292b9300ac07c8daba14a2"
+collector_image="otel/opentelemetry-collector:0.163.1@sha256:f0e23036dce3db3f9cb80d907c75a0d034cd32e93511a1943482d46129b9ae9c"
 weaver_port="${WEAVER_LIVE_CHECK_OTLP_PORT:-14317}"
 collector_port="${WEAVER_LIVE_CHECK_HTTP_PORT:-14318}"
 admin_port="${WEAVER_LIVE_CHECK_ADMIN_PORT:-14320}"
@@ -85,7 +85,6 @@ mise exec -- weaver registry live-check \
 	--otlp-grpc-address 127.0.0.1 \
 	--otlp-grpc-port "$weaver_port" \
 	--admin-port "$admin_port" \
-	--inactivity-timeout 120 \
 	--format json \
 	--output http \
 	--fail-on violation \
@@ -166,7 +165,10 @@ go test ./internal/telemetrycontract -run '^TestRuntimeTelemetryMatchesRegistry$
 docker stop "$collector_name" >/dev/null
 collector_started=false
 
-curl -fsS -X POST "http://127.0.0.1:$admin_port/stop" -o "$state_dir/report.json"
+# In HTTP output mode, stop waits for the report; shutdown ends the process.
+curl -fsS --max-time 300 -X POST "http://127.0.0.1:$admin_port/stop" >/dev/null
+curl -fsS --max-time 60 "http://127.0.0.1:$admin_port/report" -o "$state_dir/report.json"
+curl -fsS --max-time 30 -X POST "http://127.0.0.1:$admin_port/shutdown" >/dev/null
 if ! wait "$weaver_pid"; then
 	weaver_pid=""
 	exit 1

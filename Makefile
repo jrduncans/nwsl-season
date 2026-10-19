@@ -85,8 +85,10 @@ vuln:
 telemetry-check-code:
 	sh ./telemetry/check-code-coverage.sh
 
+# The pinned semconv 1.43.0 manifest lacks file_format. Keep its warning
+# non-fatal until that dependency can move; registry and Rego checks still run.
 telemetry-check: telemetry-check-code
-	$(WEAVER) --future registry check -r $(TELEMETRY_REGISTRY) --policy $(TELEMETRY_POLICIES)
+	$(WEAVER) registry check -r $(TELEMETRY_REGISTRY) --policy $(TELEMETRY_POLICIES)
 
 telemetry-generate: telemetry-check
 	$(WEAVER) registry generate -r $(TELEMETRY_REGISTRY) --templates $(TELEMETRY_TEMPLATES) markdown $(TELEMETRY_DOCS)
@@ -109,10 +111,10 @@ telemetry-diff: telemetry-check
 		echo "TELEMETRY_BASELINE_REGISTRY must point to the baseline registry" >&2; \
 		exit 2; \
 	}
-	$(WEAVER) --future registry diff -r $(TELEMETRY_REGISTRY) --baseline-registry $(TELEMETRY_BASELINE_REGISTRY) --format markdown --output $(TELEMETRY_DIFF_OUTPUT)
+	$(WEAVER) registry diff -r $(TELEMETRY_REGISTRY) --baseline-registry $(TELEMETRY_BASELINE_REGISTRY) --format markdown --output $(TELEMETRY_DIFF_OUTPUT)
 
 telemetry-mcp:
-	@exec $(WEAVER) --future registry mcp -r $(TELEMETRY_REGISTRY)
+	@exec $(WEAVER) registry mcp -r $(TELEMETRY_REGISTRY)
 
 # Weaver's standard OTLP endpoint variables override --endpoint. Unset all of
 # them so this target cannot accidentally send synthetic examples to Honeycomb.
@@ -125,7 +127,7 @@ telemetry-emit-local: telemetry-check
 		-u OTEL_EXPORTER_OTLP_TRACES_HEADERS \
 		-u OTEL_EXPORTER_OTLP_METRICS_HEADERS \
 		-u OTEL_EXPORTER_OTLP_LOGS_HEADERS \
-		$(WEAVER) --future registry emit -r $(TELEMETRY_REGISTRY) --endpoint http://127.0.0.1:4317
+		$(WEAVER) registry emit -r $(TELEMETRY_REGISTRY) --endpoint http://127.0.0.1:4317
 
 telemetry-live-check:
 	sh ./telemetry/live-check.sh
