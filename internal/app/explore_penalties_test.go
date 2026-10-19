@@ -25,7 +25,7 @@ func penaltyArchive(t *testing.T, splits int) []cache.HistoricalSeason {
 func getPage(t *testing.T, archive []cache.HistoricalSeason, target string) (int, string) {
 	t.Helper()
 	response := httptest.NewRecorder()
-	NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	NewHandlerWithOptions(&archiveHTTPStore{archive: archive}, Options{ForecastIterations: 20}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
 	return response.Code, response.Body.String()
 }
 

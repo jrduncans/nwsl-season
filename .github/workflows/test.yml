@@ -69,6 +69,8 @@ jobs:
             go-test-
       - name: Vet
         run: make vet
+      - name: Test E2E timing summaries
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Clinching regressions
         run: make test-clinching
       - name: Benchmark budget guards
@@ -132,11 +134,18 @@ jobs:
             ~/.cache/go-build
           key: go-race-${{ matrix.shard }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
-  e2e:
-    name: E2E
+  e2e-runs:
+    name: E2E (${{ matrix.parallelism }}, run ${{ matrix.repetition }})
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
+    # Compare both settings twice before adopting a new concurrency limit.
+    # Each run gets a separate runner and keeps the same tracing behavior.
+    strategy:
+      fail-fast: false
+      matrix:
+        parallelism: [default, parallel12]
+        repetition: [1, 2]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -161,11 +170,35 @@ jobs:
       - name: Install Chromium
         run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --only-shell chromium
       - name: Browser journeys
-        run: make test-e2e
+        shell: bash
+        run: |
+          args=()
+          if [ "$E2E_PARALLELISM" = parallel12 ]; then
+            args+=(-parallel=12)
+          fi
+          go version
+          echo "Runner CPUs: $(nproc); parallelism: $E2E_PARALLELISM; repetition: $E2E_REPETITION"
+          go test -tags e2e -count=1 -json "${args[@]}" ./e2e/... | tee "${E2E_PARALLELISM}-${E2E_REPETITION}.jsonl"
         env:
+          E2E_PARALLELISM: ${{ matrix.parallelism }}
+          E2E_REPETITION: ${{ matrix.repetition }}
           NWSL_E2E_TRACE_DIR: ${{ github.workspace }}/e2e-traces
+      - name: Summarize E2E timings
+        if: ${{ !cancelled() }}
+        run: python3 scripts/summarize_e2e.py "${E2E_PARALLELISM}-${E2E_REPETITION}.jsonl" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          E2E_PARALLELISM: ${{ matrix.parallelism }}
+          E2E_REPETITION: ${{ matrix.repetition }}
+      - name: Upload E2E timings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-timings-${{ matrix.parallelism }}-${{ matrix.repetition }}
+          path: ${{ matrix.parallelism }}-${{ matrix.repetition }}.jsonl
+          if-no-files-found: error
       - name: Save Go cache
-        if: ${{ !cancelled() && (github.event_name == 'push' || steps.go-cache.outputs.cache-matched-key == '') }}
+        # Only one comparison run writes the shared cache key.
+        if: ${{ !cancelled() && matrix.parallelism == 'default' && matrix.repetition == 1 && (github.event_name == 'push' || steps.go-cache.outputs.cache-matched-key == '') }}
         uses: actions/cache/save@v6
         with:
           path: |
@@ -176,6 +209,34 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.parallelism }}-${{ matrix.repetition }}
           path: e2e-traces
           if-no-files-found: ignore
+
+  e2e:
+    name: E2E
+    needs: e2e-runs
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        if: ${{ needs.e2e-runs.result != 'skipped' }}
+      - name: Download E2E timings
+        if: ${{ needs.e2e-runs.result != 'skipped' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-timings-*
+          path: e2e-timings
+          merge-multiple: true
+      - name: Compare E2E timings
+        if: ${{ !cancelled() && needs.e2e-runs.result != 'skipped' }}
+        run: python3 scripts/summarize_e2e.py e2e-timings/*.jsonl >> "$GITHUB_STEP_SUMMARY"
+      - name: Check all E2E runs
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ needs.e2e-runs.result }}
+        run: |
+          if [ "$RESULT" != success ] && [ "$RESULT" != skipped ]; then
+            echo "E2E comparison result: $RESULT"
+            exit 1
+          fi

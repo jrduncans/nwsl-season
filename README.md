@@ -497,6 +497,16 @@ The suite takes about 20s locally. Every top-level browser test runs in
 parallel, and test servers simulate 1,000 forecast seasons instead of 50,000;
 the `e2e` package comment explains both.
 
+CI temporarily compares default E2E parallelism against `-parallel=12`, with
+two independent runs of each setting and Playwright tracing enabled for all
+four runs. Each run uploads its `go test -json` output and lists its slowest
+tests in the job summary. The overall `E2E` job combines the timings for
+comparison and fails if any run fails. Compare both repetitions before
+adopting a setting: runner performance varies. Test durations can overlap and
+include subtests, so use the package duration to compare total suite time.
+`python3 -m unittest discover -s scripts -p 'test_*.py'` checks the summary
+script, which is also exercised in CI.
+
 `make build` creates host-platform server, sync, and back-test binaries in `bin/`.
 `make build-linux` creates Linux binaries; ARM64 is the default target and
 `TARGET_ARCH=amd64` selects x86_64:
