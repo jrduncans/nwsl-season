@@ -497,6 +497,17 @@ The suite takes about 20s locally. Every top-level browser test runs in
 parallel, and test servers simulate 1,000 forecast seasons instead of 50,000;
 the `e2e` package comment explains both.
 
+CI runs E2E with `-parallel=12` and Playwright tracing enabled. A
+[four-run CI comparison](https://github.com/jrduncans/nwsl-season/actions/runs/39189725215)
+measured default parallelism at 247.69s and 262.22s, versus 143.53s and 238.87s
+with twelve concurrent tests. Both twelve-way runs were faster; runner
+variation means the roughly 25% average improvement is not a guaranteed gain.
+The `E2E` job uploads its `go test -json` output and lists its slowest tests in
+the job summary. Test durations can overlap and include subtests, so use the
+package duration to compare total suite time.
+`python3 -m unittest discover -s scripts -p 'test_*.py'` checks the summary
+script, which is also exercised in CI.
+
 `make build` creates host-platform server, sync, and back-test binaries in `bin/`.
 `make build-linux` creates Linux binaries; ARM64 is the default target and
 `TARGET_ARCH=amd64` selects x86_64:

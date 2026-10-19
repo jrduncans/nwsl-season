@@ -937,6 +937,11 @@ checks wait for Chart.js's animation-frame event dispatch, including reopening
 the same column after Escape and an outside tap.
 Look at layouts, colors and touch behavior by eye.
 
+The shared HTTP test helper `getPage` uses 20 forecast iterations. Each call
+creates a fresh application, and active-season benchmarks can trigger a
+forecast even when a historical season is selected. The small test budget
+keeps repeated page requests practical under the race detector.
+
 `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario <name>` serves a
 seeded temporary cache under `/nwsl-season/` on loopback and prints a matching
 Explore URL. It starts no scheduler, makes no ASA request, and deletes its
