@@ -32,8 +32,8 @@ make telemetry-live-check
 generated package instead of raw application attribute, signal, or error-code
 names. Its AST-level source contract covers multiline calls and future
 telemetry domains rather than relying on a list of current signal names.
-`telemetry-check` runs that enforcement check, validates the registry with
-Weaver's future-facing rules, and applies the project's custom Rego policies.
+`telemetry-check` runs that enforcement check, validates the registry, and
+applies the project's custom Rego policies.
 Those policies require examples and cardinality guidance for free-form
 `nwsl.*` string dimensions. Enum member lists serve as the complete examples
 and bounded-cardinality guidance for enum attributes. They also require every
@@ -51,6 +51,30 @@ exporters. The Collector bridges those signals to Weaver's OTLP/gRPC listener,
 and the target fails on contract violations or when Weaver receives no trace,
 metric, or correlated exception-log samples. It does not need Honeycomb
 credentials or contact ASA.
+
+### Weaver updates
+
+Weaver 0.28.0 uses `file_format: definition_manifest/2.0` in our
+`manifest.yaml`. This identifies the manifest format; the convention files,
+templates, and Rego policy inputs still use the supported v1 registry model.
+A v2 convention-language migration is not required for this tool update.
+
+The pinned semantic-conventions 1.43.0 source manifest omits `file_format`.
+Weaver accepts it with a warning, but `--future` makes that warning fatal.
+The Make targets therefore omit `--future` while retaining registry validation,
+custom policies, generated-artifact drift checks, and runtime validation.
+Restore `--future` when the dependency can move to a corrected manifest,
+keeping its semantic-convention version aligned with the application and
+`otelhttp`. Do not edit Weaver's downloaded dependency cache.
+
+Since Weaver 0.27, Live Check's HTTP output requires three calls after the
+application has flushed its exporters: `POST /stop` waits for the report,
+`GET /report` downloads it, and `POST /shutdown` ends the process. The script
+bounds these requests with client timeouts and checks Weaver's exit status
+after shutdown so violations still fail the target. HTTP output mode ignores
+`--inactivity-timeout`, so the script omits that option. See the
+[upstream HTTP API guide](https://github.com/open-telemetry/weaver/blob/v0.28.0/crates/weaver_live_check/docs/http-api.md)
+when updating this lifecycle.
 
 ## Error classification
 
@@ -184,7 +208,7 @@ maintenance.
    avoids a platform-specific digest:
 
    ```sh
-   collector_version=0.159.0
+   collector_version=0.163.1
    collector_digest=$(docker buildx imagetools inspect \
      "otel/opentelemetry-collector:${collector_version}" \
      --format '{{json .Manifest}}' | jq -r '.digest')

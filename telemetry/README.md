@@ -6,7 +6,8 @@ catalog.
 
 - `registry/manifest.yaml` pins the OpenTelemetry semantic-conventions
   dependency to 1.43.0, matching the version emitted by `otelhttp` and used by
-  the application's telemetry package.
+  the application's telemetry package. Its `definition_manifest/2.0` format
+  marker is independent of the convention files' v1 model.
 - `registry/*.yaml` defines the shared, HTTP, and application-domain contract.
   It uses Weaver's v1 registry model while the v2 definition language remains
   alpha.

@@ -1,4 +1,4 @@
-name: nwsl-season
+file_format: definition_manifest/2.0
 description: Semantic conventions for the NWSL Season application's telemetry.
 schema_url: https://github.com/jrduncans/nwsl-season/telemetry/schemas/0.1.0
 dependencies:
