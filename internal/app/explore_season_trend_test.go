@@ -65,6 +65,12 @@ func TestExploreSeasonTrendChronologyVenueAndPartialXG(t *testing.T) {
 		if first.Opponent != "Bravo" || away.Venue != "Away" || away.Score != "1–3" || first.Date != "Mar 1, 2026" || away.Date != "Mar 1, 2026" || first.DisplayValues[len(page.TrendTableColumns)-len(page.TrendColumns)] != exploreTrendNumber(&first.Values[page.TrendColumns[0].Measure].Actual) || first.Values[0].Expected == nil || *first.Values[0].Expected != 0 {
 			t.Fatalf("date/venue/zero-xG/full-window semantics: %+v / %+v", first, away)
 		}
+		// The browser resolves the opponent logo from the season's team records.
+		if first.OpponentID != "bravo" || !slices.ContainsFunc(teams.TeamSeasons[0].Teams, func(team exploreTeamRecord) bool {
+			return team.ID == first.OpponentID && team.LogoURL == clubLogoURL("bravo")
+		}) {
+			t.Fatalf("opponent logo is not resolvable: %+v", first)
+		}
 		if away.Values[0].Actual != 1 || away.Values[1].Actual != 3 || away.Values[2].Actual != -2 || *away.Values[0].Expected != .5 || *away.Values[1].Expected != .1 || *away.Values[2].Expected != .4 {
 			t.Fatalf("orientation changed: %+v", away)
 		}

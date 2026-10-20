@@ -2144,6 +2144,8 @@
     showGoalGapTiles(root.querySelector('[data-trend-goal-gap-tiles]'), matches, nonPenalty, 'match', goalGaps);
     root.querySelector('[data-trend-margin-official]').hidden = !(margins || balanceBars) || !nonPenalty;
     showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), matches, nonPenalty, margins || balanceBars);
+    const logos = new Map(selectedSeason.teams.map(row => [row.id, row.logo]));
+    const opponentLogos = matches.map(match => logos.get(match.opponentId) || '');
     if (margins || goalGaps || balanceBars) {
       root.querySelector('[data-season-trend-plot]').hidden = false;
       for (const panel of ['goals', 'xg', 'points']) root.querySelector(`[data-trend-${panel}-panel]`).hidden = true;
@@ -2152,7 +2154,7 @@
       root.querySelector('[data-trend-second-title]').textContent = balanceBars ? T('xG') : goalGaps ? T('Allowed · Goals allowed − xG allowed') : T('xG margin');
       root.querySelector('[data-trend-second-direction]').textContent = balanceBars ? T('Up: xG for · Down: xG allowed') : goalGaps ? T('Above zero: more goals conceded than xG allowed.') : T('Up: more xG for · Zero: level · Down: more xG against');
       root.querySelector('[data-trend-margin-direction]').textContent = balanceBars ? 'Up: scored · Down: allowed' : goalGaps ? T('Above zero: more goals scored than xG.') : nonPenalty ? 'Zero: level' : 'Up: win · Zero: draw · Down: loss';
-      showMatchBarPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, goalGaps, mirrored: balanceBars, inspection: balanceBars ? seasonBalanceInspection : goalGaps ? seasonGoalGapInspection : seasonMarginInspection});
+      showMatchBarPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, goalGaps, mirrored: balanceBars, opponentLogos, inspection: balanceBars ? seasonBalanceInspection : goalGaps ? seasonGoalGapInspection : seasonMarginInspection});
       return;
     }
     root.querySelector('[data-trend-points-panel]').hidden = !pointsGap;
@@ -2165,7 +2167,7 @@
       root.querySelector('[data-trend-points-empty]').hidden = hasMarks;
       root.querySelector('[data-trend-points-wrap]').hidden = !hasMarks;
       root.querySelector('[data-trend-points-hint]').hidden = !hasMarks;
-      if (hasMarks) showSeasonPointsChart(matches, team, season);
+      if (hasMarks) showSeasonPointsChart(matches, team, season, opponentLogos);
       return;
     }
     const legend = relative ? [] : balance ? [
@@ -2623,7 +2625,7 @@
       grouped: true,
     };
   }
-  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false}) {
+  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false, opponentLogos = null}) {
     const xg = archiveText('xG', np), mode = matchBarMode({goalGaps, mirrored, np, xg});
     const values = mode.series.map(panel => panel.map(read => read(matches)));
     const axis = window.NWSLGeometry.marginAxis(...values.map(panel => panel.flat()));
@@ -2640,6 +2642,8 @@
         afterFit: scale => { scale.width = 40; },
         ticks: {callback: value => mode.tick(value, axis.decimals)}});
       canvas.setAttribute('aria-label', `${description}: ${label}, each ${matchNumbers ? 'match' : 'meeting'}; ${mode.direction(i)}; home solid blue, away striped orange`);
+      chart.opponentLogos = opponentLogos;
+      syncOpponentLogoRow(chart);
       chart.resize(); chart.update('none');
     });
   }
@@ -2652,7 +2656,7 @@
       afterBuildTicks: scale => { scale.ticks = ticks.map(value => ({value})); },
       ticks: {callback: value => `${value > 0 ? '+' : ''}${value}`}});
   }
-  function showSeasonPointsChart(matches, team, season) {
+  function showSeasonPointsChart(matches, team, season, opponentLogos) {
     const canvas = root.querySelector('[data-chart="season-points-gap"]');
     const chart = charts.seasonPointsGap || (charts.seasonPointsGap = createHeadToHead(canvas, true));
     chart.meetings = matches.map((match, index) => ({...match, date: `Match ${index + 1} · ${match.date}`, pointsView: true, points: match.values[3].actual, xpoints: match.values[3].expected, result: {3: 'Win', 1: 'Draw', 0: 'Loss'}[match.values[3].actual]}));
@@ -2661,6 +2665,8 @@
     chart.data.datasets[0].label = 'Points − xPoints';
     pointsGapAxis(chart);
     canvas.setAttribute('aria-label', `${team.name}, ${season}: points minus xPoints, each match; above zero: more points than xPoints; below zero: fewer; home solid blue, away striped orange`);
+    chart.opponentLogos = opponentLogos;
+    syncOpponentLogoRow(chart);
     chart.resize(); chart.update('none');
   }
   function showHeadToHead(params) {
@@ -2880,8 +2886,51 @@
     const outline = context => away(context) ? 1 : 0;
     return {backgroundColor: fill, hoverBackgroundColor: fill, borderColor: '#CF7424', hoverBorderColor: '#CF7424', borderWidth: outline, hoverBorderWidth: outline, borderSkipped: false, barPercentage: .7, categoryPercentage: 1, minBarLength: 3};
   }
+  // Opponent logos are decorative (inspection names the opponent), so a logo
+  // that fails to load leaves its slot blank. Images are shared by URL.
+  const opponentLogoImages = new Map();
+  function opponentLogoImage(url, chart) {
+    let image = opponentLogoImages.get(url);
+    if (!image) {
+      image = new Image(); image.decoding = 'async'; image.waiting = new Set();
+      image.addEventListener('load', () => { image.waiting.forEach(waiting => waiting.draw()); image.waiting.clear(); });
+      image.addEventListener('error', () => image.waiting.clear());
+      image.src = url;
+      opponentLogoImages.set(url, image);
+    }
+    if (!image.complete) image.waiting.add(chart);
+    return image;
+  }
+  // Show the logo row only when every match slot is wide enough for a logo:
+  // thinning logos would leave unlabeled matches. The wrap grows by the row's
+  // height so the plot keeps its height.
+  function syncOpponentLogoRow(chart, width = chart.canvas.parentElement.clientWidth) {
+    const count = chart.opponentLogos?.length || 0;
+    // The y axis and right padding take about 48px of the canvas.
+    const shown = count > 0 && (width - 48) / count >= 16;
+    chart.opponentLogoRow = shown;
+    chart.options.layout.padding.bottom = shown ? 56 : 28;
+    chart.canvas.parentElement.classList.toggle('has-opponent-logos', shown);
+  }
+  function drawOpponentLogos(chart) {
+    chart.opponentLogoRects = [];
+    if (!chart.opponentLogoRow) return;
+    const {chartArea: area, ctx} = chart, x = chart.scales.x;
+    const size = Math.min(20, Math.floor(area.width / chart.opponentLogos.length) - 4);
+    chart.opponentLogos.forEach((url, index) => {
+      const image = url && opponentLogoImage(url, chart);
+      if (!image?.complete || !image.naturalWidth) return;
+      // Contain the logo in a size x size box centered under its slot.
+      const scale = size / Math.max(image.naturalWidth, image.naturalHeight);
+      const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+      const rect = {index, x: x.getPixelForValue(index) - width / 2, y: area.bottom + 6 + (size - height) / 2, width, height};
+      ctx.drawImage(image, rect.x, rect.y, width, height);
+      chart.opponentLogoRects.push(rect);
+    });
+  }
   function createHeadToHead(canvas, matchNumbers = false, inspection = headToHeadInspection) {
     const options = commonOptions();
+    options.onResize = (chart, size) => syncOpponentLogoRow(chart, size.width);
     options.interaction = {mode: 'headToHead', intersect: false};
     options.layout = {padding: {top: 12, right: 8, bottom: 28}};
     options.scales = {
@@ -2904,7 +2953,11 @@
         return [{text, center: chart.getDatasetMeta(0).data[index].x, width: ctx.measureText(text).width}];
       });
       chart.yearLabels = window.NWSLGeometry.headToHeadLabels(candidates, chart.chartArea);
-      chart.yearLabels.forEach(label => ctx.fillText(label.text, label.center, chart.chartArea.bottom + 20)); ctx.restore();
+      // Match numbers sit below the opponent logo row when it is shown.
+      const baseline = chart.chartArea.bottom + (chart.opponentLogoRow ? 46 : 20);
+      chart.yearLabelBaseline = baseline;
+      chart.yearLabels.forEach(label => ctx.fillText(label.text, label.center, baseline)); ctx.restore();
+      drawOpponentLogos(chart);
     }};
     // Focus can scroll the page before Chart.js processes an earlier tap.
     // Those stale events and the resulting mouseout must not clear keyboard inspection.
