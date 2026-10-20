@@ -554,6 +554,19 @@ Every chart's tooltip and keyboard description starts with the match number,
 venue-local date, venue, opponent, official score and result (Win, Draw or Loss).
 The result follows the official score even when penalties are excluded.
 
+With smoothing off, Scoring balance, Goals vs xG, Margins and Points vs
+xPoints draw each opponent's logo under every panel's plot, centered on its
+slot, with the match numbers below the logos. Rolling
+charts and Benchmarks have no logos, since a rolling point spans several
+opponents. Each match carries `opponentId`, and the logo comes from that
+team's record in the same season payload, so the URL is not repeated per
+match. The row appears only when every slot is at least about 16px wide
+(logos up to 20px); narrower charts, such as on phones, keep the plain axis
+rather than thinning logos, and the choice is remade on resize. Each chart
+grows by the row's height so its plot keeps its height. Logos are decorative and not inspectable, because inspection already
+names the opponent; one that fails to load leaves its slot blank. Head to head
+uses the same bar chart without logos.
+
 A rolling average includes the current match and resets each season. Until the
 window fills it averages all matches so far (`min(played, window)`), drawn as a
 dotted lead-in. An xG or xPoints average needs every observation in its exact

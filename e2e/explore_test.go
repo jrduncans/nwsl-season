@@ -2658,6 +2658,98 @@ func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
 	}
 }
 
+func TestExploreSeasonTrendOpponentLogos(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	const team = "explore?view=season-trend&season=2025&team=odMX2OJqYL&smoothing=none&trend-view="
+	// logoRow reports each panel's logo row and checks that the row sits under
+	// the plot and above the match numbers, one logo centered on each slot.
+	logoRow := `(names) => names.map(name => {
+   const c=Chart.getChart(document.querySelector('[data-chart="'+name+'"]'));
+   const rects=c.opponentLogoRects||[], area=c.chartArea, errors=[];
+   rects.forEach(r=>{
+    if(Math.abs(r.x+r.width/2-c.scales.x.getPixelForValue(r.index))>0.5) errors.push('logo off its slot');
+    if(r.y<area.bottom || r.width>20 || r.height>20) errors.push('logo outside the row');
+    if(r.y+r.height>c.yearLabelBaseline-11) errors.push('logo not above the match numbers');
+   });
+   if(c.yearLabelBaseline>c.height) errors.push('match numbers clipped');
+   return {shown: c.opponentLogoRow, wrapped: c.canvas.parentElement.classList.contains('has-opponent-logos'), count: rects.length, matches: c.meetings.length, plot: area.height, errors};
+  })`
+	type row struct {
+		Shown, Wrapped bool
+		Count, Matches int
+		Plot           float64
+		Errors         []string
+	}
+	views := []struct {
+		view   string
+		charts []string
+	}{
+		{"balance", []string{"season-margin", "season-margin-xg"}},
+		{"compare", []string{"season-margin", "season-margin-xg"}},
+		{"difference", []string{"season-margin", "season-margin-xg"}},
+		{"points", []string{"season-points-gap"}},
+	}
+	page := explorePage(t, base, Desktop, team+"balance")
+	for _, v := range views {
+		gotoInPage(t, page, team+v.view)
+		if _, err := page.WaitForFunction(`(names) => names.every(name => { const c=Chart.getChart(document.querySelector('[data-chart="'+name+'"]')); return c.opponentLogoRects?.length===c.meetings.length; })`, v.charts); err != nil {
+			t.Fatalf("%s: logos never drew: %v", v.view, err)
+		}
+		var got []row
+		evalJSON(t, page, logoRow, v.charts, &got)
+		for i, panel := range got {
+			if !panel.Shown || !panel.Wrapped || panel.Count != panel.Matches || len(panel.Errors) > 0 || panel.Plot != got[0].Plot {
+				t.Fatalf("%s %s: desktop logo row: %+v", v.view, v.charts[i], got)
+			}
+		}
+	}
+	// Head to head shares the bar chart but has one opponent: no logo row.
+	gotoInPage(t, page, "explore?view=head-to-head")
+	var h2h []row
+	evalJSON(t, page, logoRow, []string{"head-to-head", "head-to-head-xg"}, &h2h)
+	for _, panel := range h2h {
+		if panel.Shown || panel.Count != 0 {
+			t.Fatalf("head to head drew opponent logos: %+v", h2h)
+		}
+	}
+
+	phone := explorePage(t, base, Mobile, team+"balance")
+	for _, v := range views {
+		gotoInPage(t, phone, team+v.view)
+		var got []row
+		evalJSON(t, phone, logoRow, v.charts, &got)
+		for _, panel := range got {
+			if panel.Shown || panel.Wrapped || panel.Count != 0 || len(panel.Errors) > 0 {
+				t.Fatalf("%s: phone slots are too narrow for logos: %+v", v.view, got)
+			}
+		}
+	}
+
+	// A logo that fails to decode leaves only that opponent's slots blank.
+	var opponent string
+	evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="season-points-gap"]')).meetings[0].opponentId`, nil, &opponent)
+	failing := newPage(t, Desktop)
+	if err := failing.Route(clubLogoPattern, func(route playwright.Route) {
+		body := clubLogoPNG
+		if strings.HasSuffix(route.Request().URL(), "/"+opponent+".png") {
+			body = []byte("not an image")
+		}
+		_ = route.Fulfill(playwright.RouteFulfillOptions{Status: playwright.Int(200), ContentType: playwright.String("image/png"), Body: body})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	visit(t, failing, base+team+"points")
+	if _, err := failing.WaitForFunction(`(id) => { const c=Chart.getChart(document.querySelector('[data-chart="season-points-gap"]')); return c.opponentLogoRects?.length===c.meetings.filter(m=>m.opponentId!==id).length; }`, opponent); err != nil {
+		t.Fatalf("other opponents' logos never drew: %v", err)
+	}
+	var partial []row
+	evalJSON(t, failing, logoRow, []string{"season-points-gap"}, &partial)
+	if !partial[0].Shown || len(partial[0].Errors) > 0 {
+		t.Fatalf("a failed logo must blank only its slots: %+v", partial)
+	}
+}
+
 func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)

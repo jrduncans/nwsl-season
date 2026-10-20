@@ -21,15 +21,18 @@ const (
 )
 
 type exploreMatchRecord struct {
-	GoalsCovered         bool                 `json:"goalsCovered"`
-	Undated              bool                 `json:"undated,omitempty"`
-	VenueDateUnavailable bool                 `json:"venueDateUnavailable,omitempty"`
-	ID                   string               `json:"id"`
-	Date                 string               `json:"date"`
-	Opponent             string               `json:"opponent"`
-	Venue                string               `json:"venue"`
-	Score                string               `json:"score"`
-	Values               [4]exploreTeamValues `json:"values"`
+	GoalsCovered         bool   `json:"goalsCovered"`
+	Undated              bool   `json:"undated,omitempty"`
+	VenueDateUnavailable bool   `json:"venueDateUnavailable,omitempty"`
+	ID                   string `json:"id"`
+	Date                 string `json:"date"`
+	Opponent             string `json:"opponent"`
+	// OpponentID finds the opponent's logo among the season's team records,
+	// which already carry each logo URL once.
+	OpponentID string               `json:"opponentId"`
+	Venue      string               `json:"venue"`
+	Score      string               `json:"score"`
+	Values     [4]exploreTeamValues `json:"values"`
 }
 
 type exploreSeasonTrendRow struct {
@@ -80,7 +83,7 @@ type exploreSeasonTrendView struct {
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
 	rows := make([]exploreMatchRecord, 0, len(matches))
 	for _, match := range matches {
-		row := exploreMatchRecord{GoalsCovered: match.GoalsCovered, ID: match.ID, Date: "Date unavailable", Opponent: names[match.OpponentID], Venue: "Away", Score: fmt.Sprintf("%d–%d", match.ScoreFor, match.ScoreAgainst)}
+		row := exploreMatchRecord{GoalsCovered: match.GoalsCovered, ID: match.ID, Date: "Date unavailable", Opponent: names[match.OpponentID], OpponentID: match.OpponentID, Venue: "Away", Score: fmt.Sprintf("%d–%d", match.ScoreFor, match.ScoreAgainst)}
 		if row.Opponent == "" {
 			row.Opponent = match.OpponentID
 		}

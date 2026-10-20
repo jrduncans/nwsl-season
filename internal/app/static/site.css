@@ -602,6 +602,8 @@ th:nth-child(2) { text-align: left; }
 .explore-h2h-tile-label i { flex: 0 0 1rem; height: .8rem; background: #1F6FA8; }
 .explore-h2h-tile-label [data-h2h-encoding="away"] { background: repeating-linear-gradient(45deg, #CF7424 0 1.5px, var(--paper) 1.5px 3.4px); border: 1px solid #CF7424; }
 .explore-h2h-chart { width: 100%; min-width: 0; height: 280px; position: relative; }
+/* The opponent logo row adds height below the plot rather than taking it. */
+.explore-h2h-chart.has-opponent-logos { height: 308px; }
 .explore-h2h-direction { color: var(--muted); font-size: .75rem; }
 [data-panel="head-to-head"] .explore-heading { margin-top: 1.5rem; }
 @media (max-width: 450px) {
