@@ -427,8 +427,8 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		if got := page.TeamRows[0].Values[3]; got != want {
 			t.Fatalf("%s points row = %+v, want %+v", units, got, want)
 		}
-		if !strings.Contains(page.TeamTableURL, "units="+units) {
-			t.Fatalf("units lost from comparison link: %s", page.TeamTableURL)
+		if !strings.Contains(page.TeamDisplayURLs["table"], "units="+units) {
+			t.Fatalf("units lost from comparison link: %s", page.TeamDisplayURLs["table"])
 		}
 	}
 	for _, tc := range []struct {
@@ -516,9 +516,9 @@ func TestExploreTeamViewsKeepSelectionAndWarnOnlyForMissingXG(t *testing.T) {
 		if page.TeamMissingXG != (season == "2026") || page.TeamSort != "difference-gap" || page.TeamOrder != "desc" || page.TeamDisplay != "table" {
 			t.Fatalf("unexpected selection/warning: %+v", page)
 		}
-		link, err := url.Parse(page.TeamChartURL)
+		link, err := url.Parse(page.TeamDisplayURLs["chart"])
 		if err != nil || link.Query().Get("season") != season || link.Query().Get("measure") != "difference" || link.Query().Get("display") != "chart" {
-			t.Fatalf("chart link lost selection: %s", page.TeamChartURL)
+			t.Fatalf("chart link lost selection: %s", page.TeamDisplayURLs["chart"])
 		}
 		if page.TeamRows[0].Team.LogoURL != clubLogoURL(page.TeamRows[0].Team.ID) {
 			t.Fatal("team logo missing")
@@ -559,11 +559,11 @@ func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
 		t.Fatalf("gap view lost selection: %+v", page)
 	}
 	for _, tc := range []struct{ name, link, display string }{
-		{"paired-dot chart", page.TeamChartURL, "chart"},
-		{"gap chart", page.TeamGapURL, "gap"},
-		{"outlier plot", page.TeamScatterURL, "scatter"},
-		{"quadrant plot", page.TeamQuadrantURL, "quadrant"},
-		{"table", page.TeamTableURL, "table"},
+		{"paired-dot chart", page.TeamDisplayURLs["chart"], "chart"},
+		{"gap chart", page.TeamDisplayURLs["gap"], "gap"},
+		{"outlier plot", page.TeamDisplayURLs["scatter"], "scatter"},
+		{"quadrant plot", page.TeamDisplayURLs["quadrant"], "quadrant"},
+		{"table", page.TeamDisplayURLs["table"], "table"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			link, err := url.Parse(tc.link)
@@ -657,7 +657,7 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, target := range []string{page.TeamQuadrantURL, page.TeamChartURL, page.TeamGapURL, page.TeamScatterURL, page.TeamTableURL, page.TeamColumns[0].URL} {
+				for _, target := range []string{page.TeamDisplayURLs["quadrant"], page.TeamDisplayURLs["chart"], page.TeamDisplayURLs["gap"], page.TeamDisplayURLs["scatter"], page.TeamDisplayURLs["table"], page.TeamColumns[0].URL} {
 					link, err := url.Parse(target)
 					if err != nil || link.Query().Get("quadrant-data") != mode || link.Query().Get("units") != units || link.Query().Get("measure") != "points" || link.Query().Get("season") != "2026" {
 						t.Fatalf("selection lost in link %s: %v", target, err)

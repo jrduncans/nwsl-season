@@ -1,9 +1,8 @@
 package app
 
 import (
-	"fmt"
 	"net/http"
-	"slices"
+	"net/url"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
@@ -31,50 +30,16 @@ type explorePage struct {
 	// load before explore.js (the page's ScriptPath).
 	GeometryPath string
 	MarginsPath  string
+	// Views is the view registry, for the tabs and for explore.js.
+	Views []exploreViewGroup
+	query url.Values
 }
 
 // PointsNoteShown reports whether the current view shows official points or
 // ASA xPts beside the non-penalty basis, so it must carry the points note.
 func (p explorePage) PointsNoteShown(panel string) bool {
-	if !p.NonPenalty {
-		return false
-	}
-	switch panel {
-	case "teams":
-		return p.View == "teams" && p.TeamDisplay == "table"
-	case "team-history":
-		return p.View == "team-history" && p.TeamMeasure != "points"
-	case "season-trend":
-		return p.View == "season-trend" && (p.TrendView == "points" || (p.TrendView == "relative" && (p.TrendAverageSeries == "points" || p.TrendAverageSeries == "xpoints")))
-	}
-	return false
-}
-
-// exploreViewLabels holds each Explore tab's visible name, keyed by view, or by
-// "teams-" and display for Compare teams. Tabs and page titles share them.
-var exploreViewLabels = map[string]string{
-	"teams-chart": "Actual vs expected", "teams-gap": "Gap to expected", "teams-scatter": "Outlier plot",
-	"teams-quadrant": "Scored vs allowed", "teams-table": "Table",
-	"team-rankings": "Rankings", "season-trend": "Match by match", "team-history": "Season by season", "head-to-head": "Head to head",
-	"trend": "Scoring trend", "distribution": "Goal distribution", "home-advantage": "Home advantage", "parity": "Parity", "thresholds": "Shield and playoff thresholds", "team-seasons": "Team-seasons", "table": "Scoring table",
-}
-
-// ViewLabel returns the visible name of an Explore tab.
-func (explorePage) ViewLabel(key string) string {
-	return exploreViewLabels[key]
-}
-
-// exploreViewGroup names the navigation group for a view: league-wide views
-// across seasons, every team in one season, or a selected team's profile.
-func exploreViewGroup(view string) string {
-	switch view {
-	case "teams":
-		return "teams"
-	case "team-rankings", "season-trend", "team-history", "head-to-head":
-		return "profile"
-	default:
-		return "league"
-	}
+	view, _ := exploreViewFor(panel)
+	return p.NonPenalty && p.View == panel && view.PointsNote.matches(p.query, view.Defaults) && !p.PointsOnly
 }
 
 type exploreChartRecord struct {
@@ -95,16 +60,10 @@ type exploreRecord struct {
 }
 
 func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason, basis history.ScoringBasis) {
-	view := r.URL.Query().Get("view")
-	if view == "" {
-		view = "teams"
-		// Scoring trend was once the default view, so its metric links omitted it.
-		if r.URL.Query().Has("metric") {
-			view = "trend"
-		}
-	}
-	if !slices.Contains([]string{"trend", "distribution", "home-advantage", "parity", "thresholds", "team-seasons", "table", "teams", "team-history", "season-trend", "team-rankings", "head-to-head"}, view) {
-		a.renderExploreBadRequest(w, r, fmt.Errorf("view must be trend, distribution, home-advantage, parity, thresholds, team-seasons, table, teams, team-history, season-trend, team-rankings, or head-to-head"))
+	view := exploreRequestedView(r.URL.Query())
+	descriptor, ok := exploreViewFor(view)
+	if !ok {
+		a.renderExploreBadRequest(w, r, unknownExploreViewError())
 		return
 	}
 	teams, err := exploreTeams(r.URL.Query(), summaries, archive)
@@ -112,7 +71,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreViewGroup(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query())}
+	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreGroupOf(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query()), Views: exploreViewGroups, query: r.URL.Query()}
 	// The Explore workspace keeps its own selection in the query, so the basis
 	// links change only the penalties parameter.
 	for index, choice := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {
@@ -227,15 +186,15 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	// Validate selections before spending forecast capacity. Populate every
 	// eligible active season once so browser selections retain one snapshot.
 	// Historical thresholds never depend on forecast availability or capacity.
-	if view != "thresholds" {
+	if !descriptor.SkipsForecast {
 		a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
 	}
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
-	label := exploreViewLabels[view]
-	if view == "teams" {
-		label = exploreViewLabels["teams-"+page.TeamDisplay]
+	label := descriptor.Label
+	if len(descriptor.Displays) > 0 {
+		label = descriptor.displayLabel(page.TeamDisplay)
 	}
 	page.Title = label + " · Explore"
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")

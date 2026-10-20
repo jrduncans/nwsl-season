@@ -129,8 +129,8 @@ func TestExplorePenaltiesExcludedComputesAndLabelsNonPenaltyBasis(t *testing.T) 
 	if page.TeamActualLabel != "Non-penalty goal differential" || page.TeamXGLabel != "npxG differential" {
 		t.Fatalf("labels = %q / %q", page.TeamActualLabel, page.TeamXGLabel)
 	}
-	if !strings.Contains(page.TeamChartURL, "penalties=exclude") || !strings.Contains(page.TeamTableURL, "penalties=exclude") {
-		t.Fatalf("selection links lost the basis: %s %s", page.TeamChartURL, page.TeamTableURL)
+	if !strings.Contains(page.TeamDisplayURLs["chart"], "penalties=exclude") || !strings.Contains(page.TeamDisplayURLs["table"], "penalties=exclude") {
+		t.Fatalf("selection links lost the basis: %s %s", page.TeamDisplayURLs["chart"], page.TeamDisplayURLs["table"])
 	}
 	for _, column := range page.TeamColumns {
 		if !strings.Contains(column.URL, "penalties=exclude") {
