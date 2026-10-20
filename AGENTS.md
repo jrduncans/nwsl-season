@@ -36,3 +36,15 @@ telemetry configuration stay out of source, tests and docs.
 
 Before changing behavior, read the owning guide listed in
 [README "Documentation"](README.md#documentation); update it with the change.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for jrduncans/nwsl-season, via the `gh`
+CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` plus `docs/adr/`, both created lazily.
+See `docs/agents/domain.md`.
