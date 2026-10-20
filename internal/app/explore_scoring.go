@@ -120,47 +120,6 @@ type exploreScoringPage struct {
 	PenaltyLinks []exploreChoice
 }
 
-// pointsOnlyExploreSelection identifies selections where the penalty basis
-// cannot change any plotted value or eligibility rule.
-func pointsOnlyExploreSelection(query url.Values) bool {
-	view := query.Get("view")
-	if view == "" {
-		view = "teams"
-		if query.Has("metric") {
-			view = "trend"
-		}
-	}
-	switch view {
-	case "parity":
-		return true
-	case "teams":
-		display := query.Get("display")
-		if display == "" {
-			display = "chart"
-		}
-		measure := query.Get("measure")
-		if measure == "" {
-			measure = "difference"
-		}
-		return display != "table" && display != "quadrant" && measure == "points"
-	case "team-seasons":
-		measure := query.Get("team-seasons-measure")
-		return measure == "" || measure == "points"
-	case "team-history":
-		return query.Get("measure") == "points"
-	case "season-trend":
-		trendView := query.Get("trend-view")
-		if trendView == "points" {
-			return true
-		}
-		return trendView == "relative" && (query.Get("average-series") == "points" || query.Get("average-series") == "xpoints")
-	case "head-to-head":
-		return query.Get("h2h-series") == "points"
-	default:
-		return false
-	}
-}
-
 // PointsNote says that official points and ASA xPts keep penalties.
 func (exploreScoringPage) PointsNote() string { return pointsBasisNote }
 

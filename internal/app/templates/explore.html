@@ -3,33 +3,13 @@
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
-<a href="?view=teams{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-group-choice="teams"{{if eq .ViewGroup "teams"}} aria-current="page"{{end}}>Compare teams</a>
-<a href="?view=team-rankings{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-group-choice="profile"{{if eq .ViewGroup "profile"}} aria-current="page"{{end}}>Team profile</a>
-<a href="?view=trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-group-choice="league"{{if eq .ViewGroup "league"}} aria-current="page"{{end}}>League trends</a>
-</nav>
-<nav class="explore-subviews" data-group-views="teams" aria-label="Compare teams views"{{if ne .ViewGroup "teams"}} hidden{{end}}>
-<a href="{{.TeamChartURL}}" data-team-display="chart"{{if and (eq .View "teams") (eq .TeamDisplay "chart")}} aria-current="page"{{end}}>{{.ViewLabel "teams-chart"}}</a>
-<a href="{{.TeamGapURL}}" data-team-display="gap"{{if and (eq .View "teams") (eq .TeamDisplay "gap")}} aria-current="page"{{end}}>{{.ViewLabel "teams-gap"}}</a>
-<a href="{{.TeamScatterURL}}" data-team-display="scatter"{{if and (eq .View "teams") (eq .TeamDisplay "scatter")}} aria-current="page"{{end}}>{{.ViewLabel "teams-scatter"}}</a>
-<a href="{{.TeamQuadrantURL}}" data-team-display="quadrant"{{if and (eq .View "teams") (eq .TeamDisplay "quadrant")}} aria-current="page"{{end}}>{{.ViewLabel "teams-quadrant"}}</a>
-<a href="{{.TeamTableURL}}" data-team-display="table"{{if and (eq .View "teams") (eq .TeamDisplay "table")}} aria-current="page"{{end}}>{{.ViewLabel "teams-table"}}</a>
-</nav>
-<nav class="explore-subviews" data-group-views="profile" aria-label="Team profile views"{{if ne .ViewGroup "profile"}} hidden{{end}}>
-<a href="?view=team-rankings{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="team-rankings"{{if eq .View "team-rankings"}} aria-current="page"{{end}}>{{.ViewLabel "team-rankings"}}</a>
-<a href="?view=season-trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="season-trend"{{if eq .View "season-trend"}} aria-current="page"{{end}}>{{.ViewLabel "season-trend"}}</a>
-<a href="?view=team-history{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="team-history"{{if eq .View "team-history"}} aria-current="page"{{end}}>{{.ViewLabel "team-history"}}</a>
-<a href="?view=head-to-head{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="head-to-head"{{if eq .View "head-to-head"}} aria-current="page"{{end}}>{{.ViewLabel "head-to-head"}}</a>
-</nav>
-<nav class="explore-subviews" data-group-views="league" aria-label="League trends views"{{if ne .ViewGroup "league"}} hidden{{end}}>
-<a href="?view=trend{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="trend"{{if eq .View "trend"}} aria-current="page"{{end}}>{{.ViewLabel "trend"}}</a>
-<a href="?view=distribution{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="distribution"{{if eq .View "distribution"}} aria-current="page"{{end}}>{{.ViewLabel "distribution"}}</a>
-<a href="?view=home-advantage{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="home-advantage"{{if eq .View "home-advantage"}} aria-current="page"{{end}}>{{.ViewLabel "home-advantage"}}</a>
-<a href="?view=parity{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="parity"{{if eq .View "parity"}} aria-current="page"{{end}}>{{.ViewLabel "parity"}}</a>
-<a href="?view=thresholds{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="thresholds"{{if eq .View "thresholds"}} aria-current="page"{{end}}>{{.ViewLabel "thresholds"}}</a>
-<a href="?view=team-seasons{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="team-seasons"{{if eq .View "team-seasons"}} aria-current="page"{{end}}>{{.ViewLabel "team-seasons"}}</a>
-<a href="?view=table{{if .NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="table"{{if eq .View "table"}} aria-current="page"{{end}}>{{.ViewLabel "table"}}</a>
-</nav>
-<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
+{{range .Views}}<a href="?view={{(index .Views 0).Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" data-group-choice="{{.Key}}"{{if eq $.ViewGroup .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+{{end}}</nav>
+{{range .Views}}<nav class="explore-subviews" data-group-views="{{.Key}}" aria-label="{{.Label}} views"{{if ne $.ViewGroup .Key}} hidden{{end}}>
+{{range .Views}}{{$view := .Key}}{{range .Displays}}<a href="{{index $.TeamDisplayURLs .Key}}" data-team-display="{{.Key}}"{{if and (eq $.View $view) (eq $.TeamDisplay .Key)}} aria-current="page"{{end}}>{{.Label}}</a>
+{{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+{{end}}{{end}}</nav>
+{{end}}<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
 <div class="explore-heading"><h2 id="explore-trend-title">{{$.T "Goals and chances per match (regular-season)"}}</h2><div class="explore-team-controls"><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label>{{template "penaltiesSelect" $}}</div></div>
 {{if .HasTrendData}}
 <div class="explore-legend"><span data-series="goals">● {{$.T "Goals"}}</span><span data-series="xg">◆ {{$.T "Expected goals (xG)"}}</span></div>
@@ -200,7 +180,7 @@
 <div class="explore-scatter-selection-teams" data-team-scatter-selection-teams></div>
 </section>
 <p class="note" data-team-scatter-hint hidden>Click a point to keep its details. Click a hollow circle to move the guides.</p>
-<p class="note" data-team-scatter-table-link><a href="{{.TeamTableURL}}" data-team-display="table">See every team's values in the table</a>.</p>
+<p class="note" data-team-scatter-table-link><a href="{{index .TeamDisplayURLs "table"}}" data-team-display="table">See every team's values in the table</a>.</p>
 </div>
 <div data-team-quadrant-plot hidden>
 <p class="note" id="explore-team-quadrant-note">Up means more scored; right means fewer allowed. Dashed lines divide the four quadrants at the average.</p>
@@ -211,7 +191,7 @@
 <div class="explore-chart-wrap explore-team-scatter-wrap explore-team-quadrant-wrap" data-team-quadrant-chart-wrap><div class="explore-team-scatter-chart-area"><div class="explore-legend explore-in-chart-legend explore-team-quadrant-legend" id="explore-team-quadrant-legend" data-team-quadrant-legend><span class="explore-actual-key" data-quadrant-goals-key>● {{$.T "Goals"}}</span><span class="explore-expected-key" data-quadrant-xg-key>◆ {{$.T "xG"}}</span><span data-quadrant-connection-key><i class="explore-quadrant-line-key" aria-hidden="true"></i>{{$.T "Goals ↔ xG pairs"}}</span></div><canvas data-chart="team-quadrant" tabindex="0" role="img" aria-label="Team scored versus allowed" aria-describedby="explore-chart-help explore-team-quadrant-note explore-team-quadrant-missing explore-team-quadrant-legend"></canvas><div class="explore-scatter-logo-layer" data-team-scatter-logo-layer hidden aria-hidden="true"></div></div></div>
 <div class="explore-scatter-selection" data-team-quadrant-selection hidden aria-live="polite" aria-atomic="true"><div class="explore-scatter-selection-heading"><h3>Selected teams</h3><button type="button" class="button" data-team-quadrant-clear>Clear selection</button></div><div class="explore-scatter-selection-teams" data-team-quadrant-selection-teams></div></div>
 <p class="note" data-team-quadrant-hint>Hover or tap a point to inspect it. Click to keep its details. Arrow keys inspect every point; Escape clears the selection.</p>
-<p class="note"><a href="{{.TeamTableURL}}" data-team-display="table">See every team's values in the table</a>.</p>
+<p class="note"><a href="{{index .TeamDisplayURLs "table"}}" data-team-display="table">See every team's values in the table</a>.</p>
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
@@ -302,7 +282,6 @@
 <button class="button" type="submit" data-trend-submit>Show matches</button>
 </form>
 <p class="note" data-season-trend-note{{if not .TrendNote}} hidden{{end}}>{{.TrendNote}}</p>
-{{if .NonPenalty}}<p class="note" data-points-note="season-trend"{{if not ($.PointsNoteShown "season-trend")}} hidden{{end}}>{{$.PointsNote}}</p>{{end}}
 <p data-season-trend-empty{{if .TrendRows}} hidden{{end}}>No eligible recorded results for this team and season.</p>
 <div data-season-trend-results{{if not .TrendRows}} hidden{{end}}>
 <h3 data-trend-team-name>{{template "teamName" .TrendTeam}}</h3>
@@ -373,6 +352,7 @@
 <script type="application/json" id="explore-team-seasons-data">{{.TeamSeasonsData}}</script>
 <script type="application/json" id="explore-threshold-data">{{.ThresholdData}}</script>
 <script type="application/json" id="explore-parity-data">{{.ParityData}}</script>
+<script type="application/json" id="explore-views">{{.Views}}</script>
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>
 <script src="{{.ChartLabelsPath}}" defer></script>

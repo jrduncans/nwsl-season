@@ -33,8 +33,14 @@ page, redirect to the Scoring trend.
 
 An omitted view opens Actual vs expected; a view-less link that carries
 `metric` (from when Scoring trend was the default) opens Scoring trend.
-`exploreViewLabels` in `internal/app/explore.go` holds the tab names. Explore
-uses the current season's navigation with Explore marked active.
+The view registry, `exploreViewGroups` in `internal/app/explore_views.go`,
+lists every view and Compare teams display in tab order with its label and view
+group, and holds each view's selection rules: points-only selection, points
+note, whether it carries both scoring bases (so switching basis needs no
+reload), and its forecast needs. The server validates views, builds the tabs
+and applies those rules from it, and emits it as the `explore-views` payload so
+`explore.js` applies the same rules in place. Explore uses the current season's
+navigation with Explore marked active.
 
 View and control selections live in the URL and restore through reload and Back/Forward. Scatter point identification is transient and clears on navigation or reload.
 The server renders each view with GET forms, sortable header links and native
@@ -102,7 +108,8 @@ Presentation:
   selected detail goes below the chart.
 - URLs share the view and its selections, not a frozen answer; data may update.
 
-A new view needs an entry in `exploreViewLabels` and the table above, a pure
+A new view needs a registry entry and a row in the table above, a matching
+`data-panel` section (the registry test checks tabs and panels agree), a pure
 calculation over the archive read, canonical URL state, `make test-explore`
 coverage, and browser checks at desktop width and 390px.
 
@@ -155,7 +162,9 @@ Mixed views keep the control and the points note when they show points: Compare
 teams' Table, Home advantage, and Head to head's views other than Points vs
 xPoints. The server accepts valid old `penalties=exclude` links for points-only
 selections, but generated links and forms omit the parameter. Blank, repeated
-and unsupported values still return the standard 400 page.
+and unsupported values still return the standard 400 page. These rules are the
+registry's `PointsOnly` and `PointsNote` rules; `apptest.ExplorePointsOnlyCases`
+checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered Penalties select is last in each view's data-control row
 and never in the navigation; mixed-view links and forms carry its selection.
