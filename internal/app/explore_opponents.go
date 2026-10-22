@@ -16,7 +16,9 @@ const (
 	opponentsAdjusted = "adjusted"
 )
 
-const opponentAdjustmentNote = "Adjusted to an average opponent at a neutral venue with even rest."
+// opponentAdjustmentNote describes the switch, so the note reads the same, and
+// keeps its length, whether the switch is on or off.
+const opponentAdjustmentNote = "Adjust for opponents rescales values to an average opponent at a neutral venue with even rest."
 
 var errOpponentsSelection = fmt.Errorf("opponents must be adjusted")
 
@@ -32,17 +34,21 @@ func opponentsSelection(query url.Values) (bool, error) {
 }
 
 // exploreOpponentFactors divide a match's values for (Scored) and against
-// (Allowed) the team; see forecast.OpponentAdjustments.
+// (Allowed) the team; ExpectedPoints, less the season's AveragePoints, is
+// subtracted from its points and xPoints. See forecast.OpponentAdjustments.
 type exploreOpponentFactors struct {
-	Scored  float64 `json:"scored"`
-	Allowed float64 `json:"allowed"`
+	Scored         float64 `json:"scored"`
+	Allowed        float64 `json:"allowed"`
+	ExpectedPoints float64 `json:"expectedPoints"`
 }
 
 // exploreOpponentCoverage counts the season's completed matches with xG,
-// which alone contribute to opponent ratings.
+// which alone contribute to opponent ratings. AveragePoints is an average
+// team's expected points in the season's average match.
 type exploreOpponentCoverage struct {
-	XGMatches int `json:"xgMatches"`
-	Completed int `json:"completed"`
+	XGMatches     int     `json:"xgMatches"`
+	Completed     int     `json:"completed"`
+	AveragePoints float64 `json:"averagePoints"`
 }
 
 // Note returns the coverage clause, or nothing when coverage is complete.
@@ -64,7 +70,7 @@ func populateExploreOpponentFactors(season *exploreTeamSeason, data cache.Season
 	if err != nil || adjustment.XGMatches == 0 {
 		return
 	}
-	season.Opponents = &exploreOpponentCoverage{XGMatches: adjustment.XGMatches, Completed: adjustment.CompletedMatches}
+	season.Opponents = &exploreOpponentCoverage{XGMatches: adjustment.XGMatches, Completed: adjustment.CompletedMatches, AveragePoints: adjustment.AveragePoints}
 	for teamIndex := range season.Teams {
 		matches := season.Teams[teamIndex].Matches
 		for index := range matches {
@@ -76,14 +82,16 @@ func populateExploreOpponentFactors(season *exploreTeamSeason, data cache.Season
 			if matches[index].Venue == "Home" {
 				side = fixture.Home
 			}
-			matches[index].Opponents = &exploreOpponentFactors{Scored: side.Scored, Allowed: side.Allowed}
+			matches[index].Opponents = &exploreOpponentFactors{Scored: side.Scored, Allowed: side.Allowed, ExpectedPoints: side.ExpectedPoints}
 		}
 	}
 }
 
-// opponentAdjusted divides goals and xG by the match's factors. Points stay
-// official. A match without factors has no adjusted values.
-func (match exploreMatchRecord) opponentAdjusted() exploreMatchRecord {
+// opponentAdjusted divides goals and xG by the match's factors, and shifts
+// points and xPoints by how many more points an average team would expect
+// here than in the season's average match. A match without factors has no
+// adjusted values; see adjustedPointsCovered.
+func (match exploreMatchRecord) opponentAdjusted(averagePoints float64) exploreMatchRecord {
 	divide := func(value exploreTeamValues, factor float64) exploreTeamValues {
 		adjusted := exploreTeamValues{Actual: value.Actual / factor}
 		if value.Expected != nil {
@@ -94,11 +102,17 @@ func (match exploreMatchRecord) opponentAdjusted() exploreMatchRecord {
 	}
 	if match.Opponents == nil {
 		match.GoalsCovered = false
-		for measure := range exploreMargin + 1 {
+		for measure := range match.Values {
 			match.Values[measure] = exploreTeamValues{}
 		}
 		return match
 	}
+	shift := match.Opponents.ExpectedPoints - averagePoints
+	points := exploreTeamValues{Actual: match.Values[explorePoints].Actual - shift}
+	if expected := match.Values[explorePoints].Expected; expected != nil {
+		points.Expected = new(*expected - shift)
+	}
+	match.Values[explorePoints] = points
 	scored, allowed := divide(match.Values[exploreScored], match.Opponents.Scored), divide(match.Values[exploreAllowed], match.Opponents.Allowed)
 	match.Values[exploreScored], match.Values[exploreAllowed] = scored, allowed
 	match.Values[exploreMargin] = exploreTeamValues{Actual: scored.Actual - allowed.Actual}
@@ -109,12 +123,18 @@ func (match exploreMatchRecord) opponentAdjusted() exploreMatchRecord {
 	return match
 }
 
-func opponentAdjustedMatches(matches []exploreMatchRecord) []exploreMatchRecord {
+func opponentAdjustedMatches(matches []exploreMatchRecord, averagePoints float64) []exploreMatchRecord {
 	adjusted := make([]exploreMatchRecord, len(matches))
 	for index, match := range matches {
-		adjusted[index] = match.opponentAdjusted()
+		adjusted[index] = match.opponentAdjusted(averagePoints)
 	}
 	return adjusted
+}
+
+// adjustedPointsCovered reports whether an adjusted match has adjusted
+// points: points, unlike goals, have no coverage flag of their own.
+func adjustedPointsCovered(match exploreMatchRecord) bool {
+	return match.Opponents != nil
 }
 
 // adjustedLabel names an adjusted series: "Goals scored" becomes "Adjusted

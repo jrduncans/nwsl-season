@@ -166,7 +166,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		allowed []string
 	}{
 		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "points", "relative"}},
-		{"trend-sort", &page.TrendSort, []string{"match", "venue", "result", "goal-margin", "xg-margin", "points-gap", "scored-gap", "allowed-gap", "adjusted-goals-for", "adjusted-goals-against", "adjusted-xg-for", "adjusted-xg-against"}},
+		{"trend-sort", &page.TrendSort, []string{"match", "venue", "result", "goal-margin", "xg-margin", "points-gap", "scored-gap", "allowed-gap", "adjusted-goals-for", "adjusted-goals-against", "adjusted-xg-for", "adjusted-xg-against", "adjusted-points", "adjusted-xpoints"}},
 		{"trend-order", &page.TrendOrder, []string{"asc", "desc"}},
 		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg", "points", "xpoints"}},
 		{"average-reference", &page.TrendAverageReference, []string{"team", "league", "playoff", "top-four", "shield", "best"}},
@@ -218,7 +218,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		}
 		for _, measure := range measures {
 			column := exploreTrendColumn{Label: basisText(basis, labels[measure]), Measure: measure, Expected: expected}
-			if page.TrendAdjusted && measure != explorePoints {
+			if page.TrendAdjusted {
 				column.Label, column.Adjusted = adjustedLabel(column.Label), true
 			}
 			page.TrendColumns = append(page.TrendColumns, column)
@@ -258,7 +258,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			}
 			adjusted := team.Matches
 			if page.TrendAdjusted {
-				adjusted = opponentAdjustedMatches(team.Matches)
+				adjusted = opponentAdjustedMatches(team.Matches, coverage.AveragePoints)
 			}
 			if page.TrendMargins || page.TrendBalanceBars {
 				tiles := exploreMarginTiles(team.Matches)
@@ -269,6 +269,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			}
 			if page.TrendPointsGap {
 				page.TrendPointsTiles = explorePointsTiles(team.Matches, "match")
+				if page.TrendAdjusted {
+					page.TrendPointsTiles = exploreAdjustedPointsTiles(adjusted)
+				}
 			}
 			page.TrendTeam = teamNameView{ID: team.ID, Name: team.Name, LogoURL: team.LogoURL}
 			if page.TrendView == "relative" {
@@ -346,7 +349,7 @@ func exploreSeasonTrendNote(page exploreSeasonTrendView, coverage *exploreOppone
 	if page.TrendView == "points" {
 		parts = append(parts, "xPoints: ASA’s expected points for each match.")
 	}
-	if page.TrendAdjusted {
+	if page.TrendOpponentsShown {
 		parts = append(parts, opponentAdjustmentNote)
 		if note := coverage.Note(); note != "" {
 			parts = append(parts, note)

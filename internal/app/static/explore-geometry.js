@@ -31,6 +31,16 @@
   // Callers flatten scored/allowed series so every extent participates; nulls stay missing.
   const marginAxis = (goals, xg) => trendAxis([...goals, ...xg].filter(value => value !== null), true);
 
+  // Per-match points and xPoints bars share a fixed −1 to 4 scale with a tick
+  // at every whole point, so teams, seasons and the opponent adjustment (which
+  // can push a value past 0 or 3) compare at a glance; a value beyond it widens
+  // the scale to the next whole point. Nulls stay missing.
+  function pointsBarAxis(...series) {
+    const values = series.flat().filter(value => value !== null);
+    const min = Math.min(-1, ...values.map(Math.floor)), max = Math.max(4, ...values.map(Math.ceil));
+    return {min, max, decimals: 0, ticks: Array.from({length: max - min + 1}, (_, index) => min + index)};
+  }
+
   // Each end keeps its own signed gap; missing goals or xG never become zero.
   const goalGap = (goals, xg, side) => goals[side] == null || xg[side] == null ? null : goals[side] - xg[side];
 
@@ -202,5 +212,5 @@
     }
     return [...labels, last];
   }
-  window.NWSLGeometry = Object.freeze({goalGap, marginAxis, pointsGap, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
+  window.NWSLGeometry = Object.freeze({goalGap, marginAxis, pointsBarAxis, pointsGap, headToHeadHit, headToHeadLabels, headToHeadGeometry, rankingDomain, rankingBar, gapExtent, trendAxis, plotDomain, scatterGroup, pointRadius, logoPlacement, layoutLogos, stripRows});
 })();

@@ -549,11 +549,11 @@ team's xG coverage is incomplete; goal ranks remain.
 |---|---|---|
 | `trend-view` | `balance` (Scoring balance), `compare` (Goals vs xG), `difference` (Margins), `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
 | `smoothing` | `none`, `3`, `5`, `10` (N-match rolling average) | `5` |
-| `trend-sort` | `match`, `venue`, `result`, `goal-margin`, `xg-margin`, `points-gap`, `scored-gap`, `allowed-gap`, `adjusted-goals-for`, `adjusted-goals-against`, `adjusted-xg-for`, `adjusted-xg-against` (derived columns depend on the chart and the opponent adjustment) | `match` |
+| `trend-sort` | `match`, `venue`, `result`, `goal-margin`, `xg-margin`, `points-gap`, `scored-gap`, `allowed-gap`, `adjusted-goals-for`, `adjusted-goals-against`, `adjusted-xg-for`, `adjusted-xg-against`, `adjusted-points`, `adjusted-xpoints` (derived columns depend on the chart and the opponent adjustment) | `match` |
 | `trend-order` | `asc`, `desc` | `asc` |
 | `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
-| `opponents` | `adjusted` (Scoring balance and Margins) | absent (official values) |
+| `opponents` | `adjusted` (Scoring balance, Margins and Points vs xPoints) | absent (official values) |
 
 The section has a visually hidden “Match by match” heading. Season and Team
 selects come first; the team name follows, with a status line such as “2026
@@ -615,7 +615,8 @@ match. The row appears only when every slot is at least about 16px wide
 (logos up to 20px); narrower charts, such as on phones, keep the plain axis
 rather than thinning logos, and the choice is remade on resize. Each chart
 grows by the row's height so its plot keeps its height. Logos are decorative and not inspectable, because inspection already
-names the opponent; one that fails to load leaves its slot blank. Head to head
+names the opponent; one that fails to load leaves its slot blank. Logos and
+match numbers are drawn before the tooltip, so a tooltip always covers them. Head to head
 uses the same bar chart without logos.
 
 A rolling average includes the current match and resets each season. Until the
@@ -632,6 +633,7 @@ Non-penalty goals and changes xG to npxG, following the selected basis; official
 scores, results and points retain penalties. Missing values say `Unavailable`.
 Margins adds per-match Goal margin and xG margin; Goals vs xG adds Goals − xG
 and Goals allowed − xG allowed; Points vs xPoints adds Points − xPoints.
+The opponent adjustment adds its own columns, described below.
 Scoring balance and Benchmarks add no derived columns. With smoothing on, the
 chart's rolling-average columns follow all per-match columns, labeled with the
 window. The caption describes the trailing window and its expanding lead-in.
@@ -719,17 +721,17 @@ are excluded, the unsmoothed tiles carry
 “W–D–L and points use official results, including penalties.”
 
 **Adjust for opponents** is a switch in the chart card on Scoring
-balance and Margins. It answers whether a run of scoring came only from facing
-weak defenses. Checked submits `opponents=adjusted`; unchecked carries no
+balance, Margins and Points vs xPoints. It answers whether a run of scoring, or
+a points haul, came only from facing weak opponents. Checked submits `opponents=adjusted`; unchecked carries no
 parameter. Blank, repeated and unsupported values return the standard 400 page.
 `explore.js` switches it in place.
-Goals vs xG, Points vs xPoints and Benchmarks hide it, as does a season without
+Goals vs xG and Benchmarks hide it, as does a season without
 xG; there a carried value is ignored but kept, as `series` is. The view
 registry's `opponentAdjustment` rule decides where it appears, for both the Go
 and browser renderers.
 
-Each completed match carries two factors for each team (`opponents` in the
-payload), from `forecast.OpponentAdjustments`. They use the default forecast
+Each completed match carries two factors and an expected-points baseline for
+each team (`opponents` in the payload), from `forecast.OpponentAdjustments`. They use the default forecast
 model, xG Poisson (schedule load), as written: xG attack and defense ratings
 shrunk with eight prior matches, league home and away rates from the current
 and two previous regular seasons, the schedule-load shift and the rate clamp.
@@ -757,23 +759,42 @@ its own baseline; only the season-wide normalizing divisor includes it. Only mat
 has no schedule-load term. Zero stays zero: a goalless match or clean sheet
 earns no credit for the opponent's strength. Both scoring bases use the same
 factors (from full xG); excluding penalties changes only the values divided,
-non-penalty goals and npxG. Points and xPoints stay official. See
-[ADR 0001](adr/0001-opponent-adjustment.md).
+non-penalty goals and npxG. See [ADR 0001](adr/0001-opponent-adjustment.md).
+
+Points and xPoints shift rather than divide, since 0, 1 or 3 points divided by
+a factor do not read naturally. The same clamped rates that give the factors
+give an average team's expected points in the match, 3 × P(win) + P(draw)
+under independent Poisson scores. The season's average match takes the mean of
+that over every team's completed matches (`averagePoints` on the season's
+`opponents`). Adjusted points = points − (the match's expected points − the
+season's average), and xPoints shift the same way. A win at a strong opponent
+can exceed 3 and a loss to a weak one can fall below 0. Across the league,
+adjusted points total the official points. See
+[ADR 0002](adr/0002-opponent-adjusted-points.md).
 
 When checked, the chart shapes stay the same: unsmoothed Scoring balance keeps
 its mirrored bars and Margins its two bar panels, with titles such as “Adjusted
 goals” and “Adjusted goal margin”. An adjusted goal margin can differ in sign
 from the result, so its direction note reads “Zero: level”. Rolling lines
-average adjusted values with the usual window and lead-in, labeled “Adjusted goals scored” and so on. The
-note adds “Adjusted to an average opponent at a neutral venue with even rest.”
+average adjusted values with the usual window and lead-in, labeled “Adjusted goals scored” and so on; rolling
+panel titles take the same prefix (“Adjusted margins · 5-match average”), and
+the legend names the adjusted series (“Adjusted goals”, “Adjusted xG”) instead
+of “Actual”. Wherever
+the switch shows, checked or not, the note includes “Adjust for opponents
+rescales values to an average opponent at a neutral venue with even rest.”
 and, when the season's xG coverage is incomplete, for example “Opponent ratings
-use 231 of 232 matches with xG.” Adjusted goals stay fully available; adjusted
+use 231 of 232 matches with xG.” Keeping that text while unchecked means
+toggling never changes the note's length, so the chart stays put. Adjusted goals stay fully available; adjusted
 xG has gaps only where that match's own xG is missing.
 
-With smoothing off, the tiles total adjusted goals and xG (for example
-“46.12–39.85 adjusted goals” and “43.40–40.95 adjusted xG”) while W–D–L and points per match
-stay official, under the note “W–D–L and points use official results.” (with
-“, including penalties” when penalties are excluded). The Match values table
+Toggling the switch never moves the chart: the note and tiles keep the same
+lines either way, so a chart can be compared with and without the adjustment
+in place. With smoothing off, the tiles total adjusted goals and xG in the
+official lines' wording (for example “46.12–39.85 goals” and “43.40–40.95
+xG”); the status line and panel titles say they are adjusted. W–D–L and points
+per match stay official, under the note “W–D–L and points use official
+results.” (with “, including penalties” when penalties are excluded), which
+shows wherever the switch does, checked or not. The Match values table
 keeps its official columns and adds Adjusted goals for, Adjusted goals against,
 Adjusted xG for and Adjusted xG against, sortable like the other derived
 columns (descending first); with smoothing on, the rolling columns average
@@ -783,9 +804,30 @@ both factors:
 “Opponent defense × venue × rest” (scored) and “Opponent attack × venue ×
 rest” (allowed).
 
+On Points vs xPoints the same shift moves points and xPoints, so points −
+xPoints cannot show it. With smoothing off, the checkbox moves the Points and
+xPoints bars, retitled **Adjusted points** and **Adjusted xPoints**, and leaves
+the Points − xPoints panel as it was. Rolling mode keeps its two lines,
+averaging adjusted values under “Adjusted points vs xPoints · N-match average”
+with “Adjusted points” and “Adjusted xPoints” legend keys. Each tile keeps its lines
+and totals adjusted values in place (for example “43.90 vs 39.96 xPoints”);
+the gap matches the official one, since the same shift moves both. The Match values table
+adds Adjusted points and Adjusted xPoints instead of the adjusted goal
+columns, and keeps Points − xPoints. Tooltips and keyboard descriptions show
+“Points: 3 · adjusted 3.34”, “xPoints: 0.82 · adjusted 1.16”, then “Average
+team's expected points: 1.04 (season average 1.38)”. Results, W–D–L and the
+tiles on other charts stay official.
+
 **Points vs xPoints** with Smoothing set to None (`trend-view=points&smoothing=none`)
-plots one bar per match of **points − xPoints**, using the shared Head to head
-chart and its venue encoding. The axis is fixed at −3 to +3 across teams,
+draws three bar panels, one bar per match, using the shared Head to head chart
+and its venue encoding: **Points** (“Up: more points”), **xPoints** (“Up: more
+xPoints”) and **points − xPoints**. The panels are the same with Adjust for
+opponents on or off, so the switch visibly moves the first two. Points and
+xPoints share an axis fixed at −1 to 4 with a tick at every whole point, so
+official values (0 to 3) and adjusted ones (which can pass 0 or 3) keep one
+scale; a value beyond it widens the axis to the next whole point
+(`pointsBarAxis`). Their tooltips give the match, official score, points and
+xPoints. Points − xPoints keeps its own axis, fixed at −3 to +3 across teams,
 seasons and both views, with a signed tick at every whole point. Missing xPoints keeps an empty chronological slot,
 never a zero bar. If every match lacks xPoints, the chart is replaced by
 “No xPoints is available for these matches.” The panel title is “Points −

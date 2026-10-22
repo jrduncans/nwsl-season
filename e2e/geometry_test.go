@@ -68,6 +68,7 @@ func TestGeometry(t *testing.T) {
 		{"HeadToHeadHitAndLabels", testGeometryHeadToHeadHitAndLabels},
 		{"Points", testGeometryPoints},
 		{"PlotDomain", testGeometryPlotDomain},
+		{"PointsBarAxis", testGeometryPointsBarAxis},
 		{"ScatterGroup", testGeometryScatterGroup},
 		{"PointRadius", testGeometryPointRadius},
 		{"LogoPlacement", testGeometryLogoPlacement},
@@ -81,7 +82,7 @@ func TestGeometry(t *testing.T) {
 func testGeometryExposesOneGlobal(t *testing.T, page playwright.Page) {
 	var names []string
 	evalJSON(t, page, `() => Object.keys(window.NWSLGeometry).sort()`, nil, &names)
-	want := []string{"gapExtent", "goalGap", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "layoutLogos", "logoPlacement", "marginAxis", "plotDomain", "pointRadius", "pointsGap", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
+	want := []string{"gapExtent", "goalGap", "headToHeadGeometry", "headToHeadHit", "headToHeadLabels", "layoutLogos", "logoPlacement", "marginAxis", "plotDomain", "pointRadius", "pointsBarAxis", "pointsGap", "rankingBar", "rankingDomain", "scatterGroup", "stripRows", "trendAxis"}
 	if len(names) != len(want) {
 		t.Fatalf("NWSLGeometry exports %v, want %v", names, want)
 	}
@@ -166,6 +167,31 @@ func testGeometryTrendAxis(t *testing.T, page playwright.Page) {
 				if math.Abs(value)*1.15 > got.Max+1e-9 {
 					t.Errorf("trendAxis(%v, %v) max %v leaves no headroom above %v", tc.values, tc.signed, got.Max, value)
 				}
+			}
+		})
+	}
+}
+
+func testGeometryPointsBarAxis(t *testing.T, page playwright.Page) {
+	for _, tc := range []struct {
+		name     string
+		points   []any
+		xpoints  []any
+		min, max float64
+	}{
+		{"typical season keeps the fixed scale", []any{3.42, -0.38, 1.1}, []any{2.2, nil, 0.4}, -1, 4},
+		{"no values", []any{}, []any{}, -1, 4},
+		{"a value beyond widens to the next whole point", []any{4.2}, []any{-1.3}, -2, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got struct {
+				Min, Max float64
+				Decimals int
+				Ticks    []float64
+			}
+			callGeometry(t, page, "pointsBarAxis", []any{tc.points, tc.xpoints}, &got)
+			if got.Min != tc.min || got.Max != tc.max || got.Decimals != 0 || len(got.Ticks) != int(tc.max-tc.min)+1 || got.Ticks[0] != tc.min {
+				t.Fatalf("pointsBarAxis(%v, %v) = %+v, want [%v, %v] with whole ticks", tc.points, tc.xpoints, got, tc.min, tc.max)
 			}
 		})
 	}

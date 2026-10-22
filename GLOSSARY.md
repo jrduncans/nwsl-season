@@ -158,9 +158,9 @@ a short span.
 _Avoid_: congestion, fixture load
 
 **Opponent adjustment**:
-A team's goals and xG in each played match, rescaled to what they would be
-against an average opponent at a neutral venue with even rest, using the
-default forecast model's opponent ratings. It describes matches already played;
+A team's goals, xG, points and xPoints in each played match, rescaled to what
+they would be against an average opponent at a neutral venue with even rest,
+using the default forecast model's opponent ratings. It describes matches already played;
 Schedule difficulty describes remaining ones.
 _Avoid_: strength of schedule, opponent-adjusted form
 

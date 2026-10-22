@@ -29,7 +29,12 @@ func exploreTrendTableColumns(page exploreSeasonTrendView, basis history.Scoring
 		exploreTrendColumn{Label: basisText(basis, "xG against"), Measure: exploreAllowed, Expected: true},
 		exploreTrendColumn{Label: "xPoints", Measure: explorePoints, Expected: true},
 	)
-	if page.TrendAdjusted {
+	if page.TrendAdjusted && page.TrendView == "points" {
+		columns = append(columns,
+			exploreTrendColumn{Label: "Adjusted points", Measure: explorePoints, Adjusted: true, Key: "adjusted-points"},
+			exploreTrendColumn{Label: "Adjusted xPoints", Measure: explorePoints, Expected: true, Adjusted: true, Key: "adjusted-xpoints"},
+		)
+	} else if page.TrendAdjusted {
 		goals := "goals"
 		if basis.ExcludesPenalties() {
 			goals = "non-penalty goals"
@@ -158,13 +163,17 @@ func exploreTrendTableValue(column exploreTrendColumn, matches []exploreMatchRec
 	if column.Expected {
 		return value.Expected
 	}
-	if column.Measure != explorePoints {
+	if column.Measure != explorePoints || column.Adjusted {
 		start := index
 		if column.Rolling {
 			start = max(0, index+1-window)
 		}
 		for _, row := range matches[start : index+1] {
-			if !row.GoalsCovered {
+			covered := row.GoalsCovered
+			if column.Measure == explorePoints {
+				covered = adjustedPointsCovered(row)
+			}
+			if !covered {
 				return nil
 			}
 		}
@@ -202,6 +211,13 @@ func sortExploreTrendRows(rows []exploreSeasonTrendRow, column, order string) {
 			return row.AdjustedMatch.Values[exploreScored].Expected
 		case "adjusted-xg-against":
 			return row.AdjustedMatch.Values[exploreAllowed].Expected
+		case "adjusted-points":
+			if !adjustedPointsCovered(row.AdjustedMatch) {
+				return nil
+			}
+			return &row.AdjustedMatch.Values[explorePoints].Actual
+		case "adjusted-xpoints":
+			return row.AdjustedMatch.Values[explorePoints].Expected
 		default:
 			return new(float64(row.Number))
 		}

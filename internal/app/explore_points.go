@@ -9,6 +9,12 @@ type explorePointsTile struct {
 }
 
 func explorePointsTiles(matches []exploreMatchRecord, unit string) []explorePointsTile {
+	return pointsTiles(matches, unit, "%.0f")
+}
+
+// pointsTiles formats totals with actualFormat: whole for official points,
+// two decimals for adjusted ones.
+func pointsTiles(matches []exploreMatchRecord, unit, actualFormat string) []explorePointsTile {
 	plural := "matches"
 	if unit == "meeting" {
 		plural = "meetings"
@@ -28,7 +34,7 @@ func explorePointsTiles(matches []exploreMatchRecord, unit string) []explorePoin
 			}
 		}
 		// Coverage is stated only when it qualifies the totals.
-		tile := explorePointsTile{Label: venue, Actual: fmt.Sprintf("%.0f", actual), Expected: "xPoints incomplete", Gap: "xPoints incomplete"}
+		tile := explorePointsTile{Label: venue, Actual: fmt.Sprintf(actualFormat, actual), Expected: "xPoints incomplete", Gap: "xPoints incomplete"}
 		switch {
 		case n == 0:
 			tile.Actual, tile.Expected, tile.Gap = "No "+plural, "", ""
@@ -53,4 +59,20 @@ func pointsGap(value exploreTeamValues) *float64 {
 	}
 	gap := value.Actual - *value.Expected
 	return &gap
+}
+
+// exploreAdjustedPointsTiles totals opponent-adjusted points and xPoints in
+// the same lines as the official tiles, so the switch never adds a line. The
+// same shift moves both, so each gap matches the official one.
+func exploreAdjustedPointsTiles(adjusted []exploreMatchRecord) []explorePointsTile {
+	tiles := pointsTiles(adjusted, "match", "%.2f")
+	for i := range tiles {
+		for _, match := range adjusted {
+			if (tiles[i].Label == "All" || match.Venue == tiles[i].Label) && !adjustedPointsCovered(match) {
+				tiles[i] = explorePointsTile{Label: tiles[i].Label, Actual: "Points unavailable"}
+				break
+			}
+		}
+	}
+	return tiles
 }

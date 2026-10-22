@@ -1884,19 +1884,23 @@
     return average;
   }
   // Mirrors opponentAdjusted in Go: goals and xG divided by the match's
-  // opponent factors, points official. The official match rides along for
-  // tooltips.
-  function opponentAdjusted(match) {
+  // opponent factors; points and xPoints shifted by how many more points an
+  // average team would expect here than in the season's average match. The
+  // official match and that average ride along for tooltips.
+  function opponentAdjusted(match, averagePoints) {
     const factors = match.opponents, values = [...match.values];
     if (!factors) {
       [0, 1, 2].forEach(measure => { values[measure] = {actual: 0, expected: null}; });
-      return {...match, goalsCovered: false, values, official: match};
+      values[3] = {actual: null, expected: null};
+      return {...match, goalsCovered: false, values, official: match, averagePoints};
     }
+    const shift = factors.expectedPoints - averagePoints, points = match.values[3];
+    values[3] = {actual: points.actual - shift, expected: points.expected == null ? null : points.expected - shift};
     const divide = (value, factor) => ({actual: value.actual / factor, expected: value.expected == null ? null : value.expected / factor});
     values[0] = divide(match.values[0], factors.scored);
     values[1] = divide(match.values[1], factors.allowed);
     values[2] = {actual: values[0].actual - values[1].actual, expected: values[0].expected == null || values[1].expected == null ? null : values[0].expected - values[1].expected};
-    return {...match, values, official: match};
+    return {...match, values, official: match, averagePoints};
   }
   // "Goals scored" becomes "Adjusted goals scored"; xG and npxG keep their case.
   const adjustedLabel = label => `Adjusted ${/^(np)?xG/.test(label) ? label : label[0].toLowerCase() + label.slice(1)}`;
@@ -1975,7 +1979,8 @@
       beforeBody: items => items.length ? wrapHistoryTooltip(items[0].chart, seasonTrendInspection(items[0].chart, {index: items[0].dataIndex}).lines) : [],
       label: () => [],
     };
-    const guide = {id: 'seasonMatchGuide', afterDraw(chart) {
+    // Drawn before the tooltip, which must stay on top.
+    const guide = {id: 'seasonMatchGuide', afterDatasetsDraw(chart) {
       const mark = chart.getActiveElements()[0];
       if (!mark || !chart.chartArea) return;
       const x = chart.scales.x.getPixelForValue(mark.index);
@@ -2033,7 +2038,8 @@
   function trendSortAvailable(params) {
     const key = params.get('trend-sort') || 'match', view = params.get('trend-view') || 'balance';
     return ['match', 'venue', 'result'].includes(key) ||
-      (trendAdjusted(params) && ['adjusted-goals-for', 'adjusted-goals-against', 'adjusted-xg-for', 'adjusted-xg-against'].includes(key)) ||
+      (trendAdjusted(params) && view !== 'points' && ['adjusted-goals-for', 'adjusted-goals-against', 'adjusted-xg-for', 'adjusted-xg-against'].includes(key)) ||
+      (trendAdjusted(params) && view === 'points' && ['adjusted-points', 'adjusted-xpoints'].includes(key)) ||
       (view === 'points' && key === 'points-gap') ||
       (view === 'compare' && ['scored-gap', 'allowed-gap'].includes(key)) ||
       (view === 'difference' && ['goal-margin', 'xg-margin'].includes(key));
@@ -2056,10 +2062,11 @@
     ];
     // Adjusted columns read the opponent-adjusted rows; the rest read official.
     const adjustedMetric = (label, measure, expected, key) => ({label, key, adjusted: true,
-      value: (_, index) => expected ? adjustedRows[index].values[measure].expected : adjustedRows[index].goalsCovered ? adjustedRows[index].values[measure].actual : null,
+      value: (_, index) => expected || measure === 3 || adjustedRows[index].goalsCovered ? adjustedRows[index].values[measure][expected ? 'expected' : 'actual'] : null,
       format: value => seasonTrendNumber(value, true, false),
     });
-    if (adjustedRows !== matches) columns.push(
+    if (adjustedRows !== matches && view === 'points') columns.push(adjustedMetric('Adjusted points', 3, false, 'adjusted-points'), adjustedMetric('Adjusted xPoints', 3, true, 'adjusted-xpoints'));
+    else if (adjustedRows !== matches) columns.push(
       adjustedMetric(`Adjusted ${nonPenalty ? 'non-penalty goals' : 'goals'} for`, 0, false, 'adjusted-goals-for'),
       adjustedMetric(`Adjusted ${nonPenalty ? 'non-penalty goals' : 'goals'} against`, 1, false, 'adjusted-goals-against'),
       adjustedMetric(T('Adjusted xG for'), 0, true, 'adjusted-xg-for'), adjustedMetric(T('Adjusted xG against'), 1, true, 'adjusted-xg-against'));
@@ -2139,7 +2146,8 @@
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-reference-key]').dataset.series = ['xg', 'xpoints'].includes(averageSeries) ? 'xg' : 'goals';
     // Elsewhere a carried opponents value is ignored but kept, as series is.
-    root.querySelector('[data-trend-opponents-control]').hidden = !trendOpponentsShown(params);
+    const opponentsShown = trendOpponentsShown(params);
+    root.querySelector('[data-trend-opponents-control]').hidden = !opponentsShown;
     control('opponents').checked = params.get('opponents') === 'adjusted';
     const adjusted = trendAdjusted(params);
 
@@ -2154,7 +2162,7 @@
     root.querySelector('[data-season-trend-empty]').hidden = matches.length > 0;
     root.querySelector('[data-season-trend-results]').hidden = matches.length === 0;
     if (!matches.length) return;
-    const shown = adjusted ? matches.map(opponentAdjusted) : matches;
+    const shown = adjusted ? matches.map(match => opponentAdjusted(match, selectedSeason.opponents.averagePoints)) : matches;
     root.querySelector('[data-trend-team-name]').replaceChildren(teamName(team));
     root.querySelector('[data-trend-season-summary]').textContent = `${season} regular season${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
     root.querySelector('[data-trend-basis="non-penalty"]').hidden = !nonPenalty;
@@ -2165,8 +2173,9 @@
       relative ? 'Reference lines show the team’s season average and the selected benchmark.' : '',
       missingExpected ? 'Expected means use available matches.' : '',
       points ? 'xPoints: ASA’s expected points for each match.' : '',
-      adjusted ? 'Adjusted to an average opponent at a neutral venue with even rest.' : '',
-      adjusted && selectedSeason.opponents.xgMatches < selectedSeason.opponents.completed ? `Opponent ratings use ${selectedSeason.opponents.xgMatches} of ${selectedSeason.opponents.completed} matches with xG.` : ''].filter(Boolean).join(' ');
+      // Shown with the switch, on or off, so toggling never reflows the note.
+      opponentsShown ? 'Adjust for opponents rescales values to an average opponent at a neutral venue with even rest.' : '',
+      opponentsShown && selectedSeason.opponents.xgMatches < selectedSeason.opponents.completed ? `Opponent ratings use ${selectedSeason.opponents.xgMatches} of ${selectedSeason.opponents.completed} matches with xG.` : ''].filter(Boolean).join(' ');
     root.querySelector('[data-season-trend-note]').textContent = note;
     root.querySelector('[data-season-trend-note]').hidden = !note;
     const pointsMetric = points || ['points', 'xpoints'].includes(effectiveSeries);
@@ -2178,7 +2187,7 @@
     const visible = (effectiveSeries === 'both' ? [false, true] : [['xg', 'xpoints'].includes(effectiveSeries)]).flatMap(expected => measures.map(measure => {
       const official = T(expected ? ['xG scored', 'xG allowed', 'xG margin', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal margin', 'Points'][measure]);
       const references = relative ? trendReferences(selectedSeason, matches, measure, expected, averageReference) : [];
-      const rescaled = adjusted && measure !== 3;
+      const rescaled = adjusted;
       return {expected, measure, label: rescaled ? adjustedLabel(official) : official, references,
         data: shown.map((_, index) => seasonTrendValue(shown, index, measure, window, expected, rolling)),
         ...(rescaled ? {raw: matches.map((_, index) => seasonTrendValue(matches, index, measure, window, expected, rolling))} : {}),
@@ -2192,11 +2201,12 @@
     referenceStatus.hidden = !missingReference.length;
     referenceStatus.textContent = missingReference.length ? `${missingReference[0].references[1].label} unavailable for ${missingReference.map(dataset => dataset.label).join(', ')}. ${missingReference[0].references[1].note}` : '';
     showSeasonTrendTable(params, matches, visible.filter(dataset => !dataset.gap), {view, rolling, window, adjustedRows: shown});
-    showPointsTiles(root.querySelector('[data-trend-points-tiles]'), matches.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap);
-    root.querySelector('[data-trend-margins-panel]').hidden = !(margins || goalGaps || balanceBars);
+    showPointsTiles(root.querySelector('[data-trend-points-tiles]'), shown.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap, adjusted);
+    root.querySelector('[data-trend-margins-panel]').hidden = !(margins || goalGaps || balanceBars || pointsGap);
     showGoalGapTiles(root.querySelector('[data-trend-goal-gap-tiles]'), matches, nonPenalty, 'match', goalGaps);
     const officialNote = root.querySelector('[data-trend-margin-official]');
-    officialNote.hidden = !(margins || balanceBars) || !(nonPenalty || adjusted);
+    // Shown with the switch, on or off, so toggling never adds a line.
+    officialNote.hidden = !(margins || balanceBars) || !(nonPenalty || opponentsShown);
     officialNote.textContent = `W–D–L and points use official results${nonPenalty ? ', including penalties' : ''}.`;
     showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), shown, nonPenalty, margins || balanceBars, 'match', adjusted);
     const logos = new Map(selectedSeason.teams.map(row => [row.id, row.logo]));
@@ -2220,6 +2230,14 @@
       root.querySelector('[data-trend-goals-panel]').hidden = true;
       root.querySelector('[data-trend-xg-panel]').hidden = true;
       root.querySelector('[data-trend-legend]').hidden = true;
+      // Points and xPoints come first, drawn the same way with or without the
+      // adjustment so the switch moves their bars; points − xPoints follows,
+      // which the adjustment cannot move.
+      root.querySelector('[data-trend-margin-title]').textContent = adjusted ? 'Adjusted points' : 'Points';
+      root.querySelector('[data-trend-second-title]').textContent = adjusted ? 'Adjusted xPoints' : 'xPoints';
+      root.querySelector('[data-trend-margin-direction]').textContent = 'Up: more points';
+      root.querySelector('[data-trend-second-direction]').textContent = 'Up: more xPoints';
+      showMatchBarPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches: shown, description: `${team.name}, ${season}`, nonPenalty: false, matchNumbers: true, pointsBars: true, adjusted, opponentLogos, inspection: seasonPointsInspection});
       const hasMarks = visible.at(-1).data.some(value => value != null);
       root.querySelector('[data-trend-points-empty]').hidden = hasMarks;
       root.querySelector('[data-trend-points-wrap]').hidden = !hasMarks;
@@ -2231,8 +2249,9 @@
       {className: 'explore-season-scored-key', label: '━ ● Scored'},
       {className: 'explore-season-allowed-key', label: '━ □ Allowed'},
     ] : [
-      {className: 'explore-actual-key', label: '━ ● Actual'},
-      {className: 'explore-expected-key', label: pointsMetric ? '━ ◇ xPoints' : T('━ ◇ xG')},
+      // Adjusted lines name what they show; "Actual" would claim official values.
+      {className: 'explore-actual-key', label: adjusted ? `━ ● Adjusted ${pointsMetric ? 'points' : nonPenalty ? 'non-penalty goals' : 'goals'}` : '━ ● Actual'},
+      {className: 'explore-expected-key', label: `━ ◇ ${adjusted ? 'Adjusted ' : ''}${pointsMetric ? 'xPoints' : T('xG')}`},
     ];
     root.querySelector('[data-trend-legend]').replaceChildren(...legend.map(entry => {
       const key = document.createElement('span'); key.className = entry.className; key.textContent = entry.label; return key;
@@ -2256,7 +2275,7 @@
     for (const {prefix, label: panelLabel, datasets} of panels) {
       root.querySelector(`[data-trend-${prefix}-panel]`).hidden = datasets.length === 0;
       if (!datasets.length) continue;
-      root.querySelector(`[data-trend-${prefix}-title]`).textContent = `${panelLabel}${rolling ? ` · ${window}-match average` : ''}`;
+      root.querySelector(`[data-trend-${prefix}-title]`).textContent = `${adjusted ? adjustedLabel(panelLabel) : panelLabel}${rolling ? ` · ${window}-match average` : ''}`;
       const hasMarks = datasets.some(dataset => dataset.data.some(value => value != null));
       root.querySelector(`[data-trend-${prefix}-relative-note]`).hidden = !relative;
       root.querySelector(`[data-trend-${prefix}-relative-note]`).textContent = pointsMetric ? 'Higher points per match means more points earned.' : `Above a reference: more ${prefix === 'goals' ? 'scored' : 'conceded'}.`;
@@ -2591,7 +2610,9 @@
   const h2hOpponent = root.querySelector('[data-h2h-opponent]');
   const h2hSeries = root.querySelector('[data-h2h-series]');
   const h2hPenalties = root.querySelector('[data-h2h-penalties]');
-  function showPointsTiles(container, rows, unit, shown) {
+  // Adjusted tiles total opponent-adjusted points in the same lines, as
+  // exploreAdjustedPointsTiles in Go.
+  function showPointsTiles(container, rows, unit, shown, adjusted = false) {
     container.hidden = !shown || !rows.length;
     if (!shown) return;
     container.replaceChildren(...['All', 'Home', 'Away'].map(venue => {
@@ -2603,7 +2624,8 @@
       const label = archiveElement('div'); label.className = 'explore-h2h-tile-label';
       if (venue !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
       label.append(venue);
-      const total = archiveElement('strong', n ? `${actual} ` : unit === 'match' ? 'No matches' : 'No meetings');
+      if (adjusted && matches.some(row => row.points == null)) { tile.append(label, archiveElement('strong', 'Points unavailable')); return tile; }
+      const total = archiveElement('strong', n ? `${adjusted ? fixed(actual) : actual} ` : unit === 'match' ? 'No matches' : 'No meetings');
       if (n) total.append(archiveElement('span', `vs ${complete ? fixed(expected) + ' xPoints' : 'xPoints incomplete'}`));
       tile.append(label, total);
       if (n) tile.append(archiveElement('div', complete ? `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected` : 'xPoints incomplete'));
@@ -2654,9 +2676,21 @@
   }
   // One entry per bar layout: its series per panel, and the text and tick
   // format each panel carries. `sides` is how many bar series a panel draws.
-  function matchBarMode({goalGaps, mirrored, np, xg, adjusted = false}) {
+  function matchBarMode({goalGaps, mirrored, pointsBars, np, xg, adjusted = false}) {
     const {goals, xg: xgPair, goalMargin, xgMargin} = marginsData, {goalGap} = window.NWSLGeometry;
     const signed = (value, decimals) => `${value > 0 ? '+' : ''}${value.toFixed(decimals)}`;
+    if (pointsBars) {
+      // Opponent-adjusted points, then xPoints, on one fixed whole-point scale.
+      return {
+        series: ['actual', 'expected'].map(key => [matches => matches.map(row => row.values[matchMeasure.points][key] ?? null)]),
+        label: i => i ? 'xPoints' : 'Points',
+        seriesLabel: label => label,
+        direction: i => `up: more ${i ? 'xPoints' : 'points'}`,
+        tick: value => `${value}`,
+        axis: window.NWSLGeometry.pointsBarAxis,
+        grouped: true,
+      };
+    }
     if (mirrored) {
       // Preserve nulls before negating allowed counts so an uncovered match stays empty.
       const side = (read, index) => matches => matches.map(row => { const value = read(row)[index]; return value === null ? null : index ? -value : value; });
@@ -2681,11 +2715,11 @@
       grouped: true,
     };
   }
-  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false, adjusted = false, opponentLogos = null}) {
-    const xg = archiveText('xG', np), mode = matchBarMode({goalGaps, mirrored, np, xg, adjusted});
+  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false, pointsBars = false, adjusted = false, opponentLogos = null}) {
+    const xg = archiveText('xG', np), mode = matchBarMode({goalGaps, mirrored, pointsBars, np, xg, adjusted});
     if (adjusted) { const label = mode.label; mode.label = i => adjustedLabel(label(i)); }
     const values = mode.series.map(panel => panel.map(read => read(matches)));
-    const axis = window.NWSLGeometry.marginAxis(...values.map(panel => panel.flat()));
+    const axis = (mode.axis || window.NWSLGeometry.marginAxis)(...values.map(panel => panel.flat()));
     panels.forEach(({canvas: name, key}, i) => {
       const canvas = root.querySelector(`[data-chart="${name}"]`);
       const chart = charts[key] || (charts[key] = createHeadToHead(canvas, matchNumbers, inspection));
@@ -2900,9 +2934,18 @@
     const official = text(read(row.official || row), format);
     return row.official ? `${official} · adjusted ${text(read(row), adjustedFormat)}` : official;
   };
+  // Results stay official; an adjusted row's points are shifted.
+  const matchResult = row => ({3: 'Win', 1: 'Draw', 0: 'Loss'}[(row.official || row).values[matchMeasure.points].actual]);
+  function seasonPointsInspection(row, index) {
+    const points = match => match.values[matchMeasure.points];
+    return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${matchResult(row)}`,
+      `Points: ${besideAdjusted(row, match => points(match).actual, String, fixed)}`,
+      `xPoints: ${besideAdjusted(row, match => points(match).expected ?? null, fixed)}`,
+      ...(row.official ? [`Average team's expected points: ${row.opponents ? `${fixed(row.opponents.expectedPoints)} (season average ${fixed(row.averagePoints)})` : 'Unavailable'}`] : [])]};
+  }
   function seasonMarginInspection(row, index) {
     const goals = marginsData.goals(row.official || row);
-    const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
+    const result = matchResult(row);
     const label = T('xG'), whole = value => `${value > 0 ? '+' : ''}${value}`;
     return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
       ...(nonPenalty ? [`Non-penalty goals: ${goals[0] === null ? 'Unavailable' : goals.join('–')}`] : []),
@@ -2912,7 +2955,7 @@
   }
   function seasonBalanceInspection(row, index) {
     const goals = marginsData.goals(row.official || row);
-    const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
+    const result = matchResult(row);
     return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
       ...(nonPenalty ? [`Non-penalty goals: ${goals[0] === null ? 'Unavailable' : goals.join('–')}`] : []),
       ...(row.official ? [0, 1].map(side => `${T('Goals')} ${side ? 'against' : 'for'}: ${besideAdjusted(row, match => marginsData.goals(match)[side], String, fixed)}`) : []),
@@ -2920,7 +2963,7 @@
       ...opponentFactorLines(row)]};
   }
   function seasonGoalGapInspection(row, index) {
-    const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
+    const result = matchResult(row);
     return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
       ...goalGapDescription({basisGoals: marginsData.goals(row), xg: marginsData.xg(row), xgLabel: T('xG'), np: nonPenalty})]};
   }
@@ -3010,7 +3053,9 @@
       title: items => items.length ? items[0].chart.inspection(items[0].chart.meetings[items[0].dataIndex], items[0].dataIndex).title : '',
       label: item => item.chart.inspection(item.chart.meetings[item.dataIndex], item.dataIndex).lines,
     };
-    const years = {id: 'headToHeadYears', afterDraw(chart) {
+    // afterDatasetsDraw runs before Chart.js draws the tooltip, so the
+    // tooltip stays above the labels and logos below the plot.
+    const years = {id: 'headToHeadYears', afterDatasetsDraw(chart) {
       const rows = chart.meetings || [], seen = new Set(), ctx = chart.ctx;
       ctx.save(); ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = color('--muted'); ctx.textAlign = 'center';
       const candidates = rows.flatMap((row, index) => {
