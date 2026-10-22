@@ -208,7 +208,7 @@ measures remain visible as comparisons.
 Explore's opponent adjustment (`forecast.OpponentAdjustments`) applies this
 model to completed matches, with an average team in place of the judged team
 and the judged match left out of the fit. A test checks its factors against
-the fitted model. See the
+the fitted model before they are normalized to average 1 across the season. See the
 [Explore guide](explore-guide.md#match-by-match).
 
 ### xG Poisson (npxG strength, schedule load)

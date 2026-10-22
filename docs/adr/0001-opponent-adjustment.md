@@ -22,7 +22,15 @@ to an average opponent at a neutral venue with even rest
   shift slightly as the season goes on.
 - **Leave-one-out.** The judged match is left out of the ratings and the
   league venue rates, so a dominant performance cannot raise its own baseline,
-  and changing a match's xG never changes its own factors.
+  and changing a match's xG never changes its model factors.
+- **Normalized to the season.** Each season's scored factors are divided by
+  their mean over every team's completed matches, as are its allowed factors,
+  so both average 1. The model's league rate pools two previous seasons; in
+  2026, which scores more, raw factors averaged 1.047, shrinking every team's
+  adjusted values by about 4.7% and making an average schedule read as an easy
+  one. Normalizing keeps every ratio between matches. Its divisor includes
+  the judged match, so leave-one-out holds for the ratings, not that one
+  season-wide constant.
 - **One set of factors for both scoring bases.** Factors always use full xG,
   as the model does; excluding penalties changes only the values divided
   (non-penalty goals and npxG). A second, npxG-based rating would make the

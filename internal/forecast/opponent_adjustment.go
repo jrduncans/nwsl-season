@@ -27,7 +27,36 @@ type OpponentAdjustment struct {
 	XGMatches, CompletedMatches int
 }
 
-// OpponentAdjustments applies xg-poisson-schedule-load-v1 as written to each
+// OpponentAdjustments returns modelFactors normalized so that, across every
+// team's completed fixtures, the season's scored factors average one, as do
+// its allowed factors. The average opponent is then this season's: the model's
+// league rate pools two previous seasons, so a higher- or lower-scoring season
+// would otherwise shift every team's adjusted values alike.
+func OpponentAdjustments(input FitInput) (OpponentAdjustment, error) {
+	adjustment, err := modelFactors(input)
+	if err != nil || len(adjustment.Fixtures) == 0 {
+		return adjustment, err
+	}
+	// Sum in fixture order: map order would vary the last bits between calls.
+	var scored, allowed float64
+	for _, game := range input.Games {
+		if fixture, ok := adjustment.Fixtures[game.ID]; ok && game.Status == standings.CompletedStatus {
+			scored += fixture.Home.Scored + fixture.Away.Scored
+			allowed += fixture.Home.Allowed + fixture.Away.Allowed
+		}
+	}
+	appearances := float64(2 * len(adjustment.Fixtures))
+	scored, allowed = scored/appearances, allowed/appearances
+	normalize := func(factors TeamFactors) TeamFactors {
+		return TeamFactors{Scored: factors.Scored / scored, Allowed: factors.Allowed / allowed}
+	}
+	for id, fixture := range adjustment.Fixtures {
+		adjustment.Fixtures[id] = FixtureFactors{Home: normalize(fixture.Home), Away: normalize(fixture.Away)}
+	}
+	return adjustment, nil
+}
+
+// modelFactors applies xg-poisson-schedule-load-v1 as written to each
 // completed fixture, with an average team (attack = defense = 1) in place of
 // the team being judged. A factor is that team's clamped expected rate at the
 // fixture's venue and schedule load, divided by the league rate.
@@ -36,7 +65,7 @@ type OpponentAdjustment struct {
 // one being judged: it is left out of the team ratings and the league venue
 // rates, so a match never sets its own baseline. A fixture without a kickoff
 // has no schedule-load term.
-func OpponentAdjustments(input FitInput) (OpponentAdjustment, error) {
+func modelFactors(input FitInput) (OpponentAdjustment, error) {
 	known, err := validateTeams(input.Teams)
 	if err != nil {
 		return OpponentAdjustment{}, err

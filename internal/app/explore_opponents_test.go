@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -141,4 +142,40 @@ func TestExploreOpponentAdjustmentIsIgnoredWhereHidden(t *testing.T) {
 	requireElements(t, body, "[data-trend-opponents-control][hidden]", "[data-trend-opponents][checked]")
 	forbidText(t, body, "[data-trend-headings]", "Adjusted")
 	forbidText(t, body, "[data-trend-margin-tiles]", "adjusted")
+}
+
+// Normalized factors make the average opponent the season's own, so the
+// league's adjusted totals match its official totals on average.
+func TestExploreOpponentFactorsAverageOneEachSeason(t *testing.T) {
+	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	summaries, err := history.SummarizeScoringBasis(archive, history.AllShots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	teams, err := exploreTeams(url.Values{}, summaries, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, season := range teams.TeamSeasons {
+		if season.Opponents == nil {
+			continue
+		}
+		checked++
+		var scored, allowed float64
+		var count int
+		for _, team := range season.Teams {
+			for _, match := range team.Matches {
+				scored += match.Opponents.Scored
+				allowed += match.Opponents.Allowed
+				count++
+			}
+		}
+		if count == 0 || math.Abs(scored/float64(count)-1) > 1e-9 || math.Abs(allowed/float64(count)-1) > 1e-9 {
+			t.Errorf("%s mean factors = %.6f scored, %.6f allowed over %d matches; want 1", season.Season, scored/float64(count), allowed/float64(count), count)
+		}
+	}
+	if checked != 2 {
+		t.Fatalf("checked %d seasons, want 2025 and 2026", checked)
+	}
 }

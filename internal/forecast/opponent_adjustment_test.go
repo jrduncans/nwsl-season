@@ -40,8 +40,8 @@ func near(t *testing.T, name string, got, want float64) {
 	}
 }
 
-func TestOpponentAdjustmentsMatchHandComputedFactors(t *testing.T) {
-	adjustment, err := OpponentAdjustments(opponentInput())
+func TestModelFactorsMatchHandComputedFactors(t *testing.T) {
+	adjustment, err := modelFactors(opponentInput())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,12 +73,12 @@ func TestOpponentAdjustmentsMatchHandComputedFactors(t *testing.T) {
 // An average team (no matches, so attack = defense = 1) in a rested future
 // fixture gets the default model's rates; each factor must equal that rate
 // over the league rate when the model is fitted without the judged match.
-func TestOpponentAdjustmentsMatchDefaultModelWithoutTheMatch(t *testing.T) {
+func TestModelFactorsMatchDefaultModelWithoutTheMatch(t *testing.T) {
 	input := opponentInput()
 	for index := range input.Games {
 		input.Games[index].Kickoff = opponentStart.Add(time.Duration(index*10) * 24 * time.Hour)
 	}
-	adjustment, err := OpponentAdjustments(input)
+	adjustment, err := modelFactors(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,14 +114,15 @@ func TestOpponentAdjustmentsMatchDefaultModelWithoutTheMatch(t *testing.T) {
 	}
 }
 
-func TestOpponentAdjustmentsLeaveTheJudgedMatchOut(t *testing.T) {
+// Normalization then rescales the whole season, so this holds before it.
+func TestModelFactorsLeaveTheJudgedMatchOut(t *testing.T) {
 	input := opponentInput()
-	before, err := OpponentAdjustments(input)
+	before, err := modelFactors(input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	input.XGoals["g2"] = ExpectedGoals{Home: 4.0, Away: 3.0}
-	after, err := OpponentAdjustments(input)
+	after, err := modelFactors(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,6 +156,38 @@ func TestOpponentAdjustmentsCoverageAndMissingKickoff(t *testing.T) {
 	}
 	if adjustment.Fixtures["g2"] != want.Fixtures["g2"] {
 		t.Fatalf("undated g2 = %+v, want the rested %+v", adjustment.Fixtures["g2"], want.Fixtures["g2"])
+	}
+}
+
+func TestOpponentAdjustmentsNormalizeEachSeasonToAMeanOfOne(t *testing.T) {
+	input := opponentInput()
+	model, err := modelFactors(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adjustment, err := OpponentAdjustments(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scored, allowed, modelScored float64
+	for _, fixture := range adjustment.Fixtures {
+		scored += fixture.Home.Scored + fixture.Away.Scored
+		allowed += fixture.Home.Allowed + fixture.Away.Allowed
+	}
+	for _, fixture := range model.Fixtures {
+		modelScored += fixture.Home.Scored + fixture.Away.Scored
+	}
+	appearances := float64(2 * len(adjustment.Fixtures))
+	near(t, "mean scored factor", scored/appearances, 1)
+	near(t, "mean allowed factor", allowed/appearances, 1)
+	if math.Abs(modelScored/appearances-1) < 0.01 {
+		t.Fatal("fixture no longer exercises normalization")
+	}
+	// One divisor per side keeps the model's ratios between matches.
+	near(t, "scored ratio", adjustment.Fixtures["g1"].Home.Scored/adjustment.Fixtures["g2"].Away.Scored, model.Fixtures["g1"].Home.Scored/model.Fixtures["g2"].Away.Scored)
+	near(t, "allowed ratio", adjustment.Fixtures["g3"].Away.Allowed/adjustment.Fixtures["g1"].Home.Allowed, model.Fixtures["g3"].Away.Allowed/model.Fixtures["g1"].Home.Allowed)
+	if adjustment.XGMatches != model.XGMatches || adjustment.CompletedMatches != model.CompletedMatches {
+		t.Fatal("normalization changed coverage")
 	}
 }
 

@@ -716,12 +716,20 @@ An average team (attack = defense = 1) takes the judged team's place:
 - allowed factor = the opponent's expected goals against the average team, the
   same way, ÷ the league rate.
 
+The model's league rate pools the two previous seasons, so in a season that
+scores more or less than they did, every defense would look weaker or stronger
+than average and every team's values would shrink or grow alike. Each season's
+factors are therefore divided by their mean over every team's completed
+matches, scored and allowed separately, so both average 1: the average opponent
+is that season's. Ratios between matches, including the venue effect, are
+unchanged.
+
 Goals for and xG for are divided by the scored factor, goals against and xG
 against by the allowed factor, and the adjusted margin is their difference.
 Ratings use every completed match of the season (hindsight), so earlier bars
 can shift slightly as the season goes on. The judged match is left out of its
 own ratings and of the league venue rates, so a dominant result cannot raise
-its own baseline. Only matches with xG contribute; a match without a kickoff
+its own baseline; only the season-wide normalizing divisor includes it. Only matches with xG contribute; a match without a kickoff
 has no schedule-load term. Zero stays zero: a goalless match or clean sheet
 earns no credit for the opponent's strength. Both scoring bases use the same
 factors (from full xG); excluding penalties changes only the values divided,
@@ -730,23 +738,24 @@ non-penalty goals and npxG. Points and xPoints stay official. See
 
 When checked, the chart shapes stay the same: unsmoothed Scoring balance keeps
 its mirrored bars and Margins its two bar panels, with titles such as “Adjusted
-goals” and “Adjusted goal margin”. An adjusted goal margin can differ in
-sign from the result, so its direction note reads “Zero: level”. Rolling lines average adjusted values with
-the usual window and lead-in, labeled “Adjusted goals scored” and so on. The
+goals” and “Adjusted goal margin”. An adjusted goal margin can differ in sign
+from the result, so its direction note reads “Zero: level”. Rolling lines
+average adjusted values with the usual window and lead-in, labeled “Adjusted goals scored” and so on. The
 note adds “Adjusted to an average opponent at a neutral venue with even rest.”
 and, when the season's xG coverage is incomplete, for example “Opponent ratings
 use 231 of 232 matches with xG.” Adjusted goals stay fully available; adjusted
 xG has gaps only where that match's own xG is missing.
 
-With smoothing off, the tiles total adjusted goals and xG (“51.88–25.79
-adjusted goals”, “31.97–33.26 adjusted xG”) while W–D–L and points per match
+With smoothing off, the tiles total adjusted goals and xG (for example
+“46.12–39.85 adjusted goals” and “43.40–40.95 adjusted xG”) while W–D–L and points per match
 stay official, under the note “W–D–L and points use official results.” (with
 “, including penalties” when penalties are excluded). The Match values table
 keeps its official columns and adds Adjusted goals for, Adjusted goals against,
 Adjusted xG for and Adjusted xG against, sortable like the other derived
 columns (descending first); with smoothing on, the rolling columns average
 adjusted values. Tooltips and keyboard descriptions show each official value
-beside its adjusted value (“Goals for: 4 · adjusted 2.93”), then both factors:
+beside its adjusted value (for example “Goals for: 4 · adjusted 2.81”), then
+both factors:
 “Opponent defense × venue × rest” (scored) and “Opponent attack × venue ×
 rest” (allowed).
 
