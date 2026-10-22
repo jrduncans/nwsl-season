@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -113,11 +115,13 @@ type exploreScoringPage struct {
 	XGIncomplete        bool
 	Distributions       []exploreDistributionSeason
 	HasDistributionBars bool
-	// Basis is the scoring basis of every figure on the page. PenaltyLinks are
-	// the Included/Excluded choices; each keeps the rest of the selection.
-	Basis        history.ScoringBasis
-	NonPenalty   bool
-	PenaltyLinks []exploreChoice
+	// Basis is the scoring basis of every figure on the page.
+	// PenaltiesFormFields carry the rest of the selection in the GET forms of
+	// views that have no other selection form, so the Exclude penalties
+	// checkbox submits without JavaScript.
+	Basis               history.ScoringBasis
+	NonPenalty          bool
+	PenaltiesFormFields []exploreFormField
 }
 
 // PointsNote says that official points and ASA xPoints keep penalties.
@@ -134,9 +138,19 @@ func (p exploreScoringPage) GoalsWord() string {
 // T rewrites a label for the page's scoring basis.
 func (p exploreScoringPage) T(text string) string { return basisText(p.Basis, text) }
 
-type exploreChoice struct {
-	Label, Path string
-	Selected    bool
+type exploreFormField struct {
+	Name, Value string
+}
+
+// exploreFormFields lists a query as hidden form fields in a stable order.
+func exploreFormFields(values url.Values) []exploreFormField {
+	fields := []exploreFormField{}
+	for _, name := range slices.Sorted(maps.Keys(values)) {
+		for _, value := range values[name] {
+			fields = append(fields, exploreFormField{Name: name, Value: value})
+		}
+	}
+	return fields
 }
 
 type exploreDistributionSeason struct {
@@ -163,11 +177,7 @@ func exploreScoringPageFor(fromPath string, summaries []history.SeasonScoring, b
 		CatalogPage:    true,
 		Basis:          basis,
 		NonPenalty:     basis.ExcludesPenalties(),
-		PenaltyLinks: []exploreChoice{
-			{Label: "Included", Selected: !basis.ExcludesPenalties()},
-			{Label: "Excluded", Selected: basis.ExcludesPenalties()},
-		},
-		Distributions: make([]exploreDistributionSeason, 0, len(summaries)),
+		Distributions:  make([]exploreDistributionSeason, 0, len(summaries)),
 	}
 	active := []string{}
 	for _, summary := range summaries {

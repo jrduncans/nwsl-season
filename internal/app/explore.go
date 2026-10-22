@@ -72,11 +72,9 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreGroupOf(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query()), Views: exploreViewGroups, query: r.URL.Query()}
-	// The Explore workspace keeps its own selection in the query, so the basis
-	// links change only the penalties parameter.
-	for index, choice := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {
-		page.PenaltyLinks[index].Path = "?" + withPenalties(r.URL.Query(), choice).Encode()
-	}
+	// The Explore workspace keeps its own selection in the query, so the
+	// penalties forms change only the penalties parameter.
+	page.PenaltiesFormFields = exploreFormFields(withPenalties(r.URL.Query(), history.AllShots))
 	page.exploreDistributionView, err = exploreDistribution(r.URL.Query(), page.Distributions)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)

@@ -2518,7 +2518,7 @@ func TestExplorePointsOnlyNavigationRestoresMixedViewPenaltyControls(t *testing.
 	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-controls] [data-penalties-selector]", "exclude")
+	setPenalties(t, page, "[data-team-controls] [data-penalties-selector]", true)
 	if err := page.WaitForURL("**penalties=exclude**"); err != nil {
 		t.Fatal(err)
 	}

@@ -1,21 +1,16 @@
 (() => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
-  // Switching the penalties basis is a full server render: follow the hidden
-  // link that carries the current page state with the chosen basis. The capture
-  // phase keeps the view forms' in-page change handlers from also reacting.
+  // Switching the penalties basis is a full server render of the current page
+  // state on the chosen basis. The capture phase keeps the view forms' in-page
+  // change handlers from also reacting.
   document.addEventListener('change', event => {
-    const select = event.target.closest?.('[data-penalties-selector]');
-    if (!select) return;
+    const checkbox = event.target.closest?.('[data-penalties-selector]');
+    if (!checkbox) return;
     event.stopPropagation();
-    const links = [...(select.closest('label')?.parentElement?.querySelectorAll('a[data-penalties-choice]') ?? [])];
-    const choice = links.find(link => link.dataset.penaltiesChoice === select.value);
-    if (choice) choice.click();
-    else {
-      const url = new URL(location.href);
-      if (select.value === 'exclude') url.searchParams.set('penalties', 'exclude'); else url.searchParams.delete('penalties');
-      location.assign(url);
-    }
+    const url = new URL(location.href);
+    if (checkbox.checked) url.searchParams.set('penalties', 'exclude'); else url.searchParams.delete('penalties');
+    location.assign(url);
   }, true);
   // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
@@ -65,7 +60,10 @@
   const goalsColor = color('--chart-actual'), xgColor = color('--chart-expected');
   // The server renders every figure on the chosen penalties basis. This script
   // only has to name that basis: the same label rules as basisText in Go.
-  const nonPenalty = root.dataset.penalties === 'exclude';
+  // BothBases views switch basis in place, so the named basis follows the URL
+  // while renderedNonPenalty stays the basis of the server-rendered figures.
+  const renderedNonPenalty = root.dataset.penalties === 'exclude';
+  let nonPenalty = renderedNonPenalty;
   const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Goal margin|Total goals|Goals)\b/g;
   const basisReplacement = match => ({
     'Expected goals': 'Non-penalty expected goals', 'expected goals': 'non-penalty expected goals',
@@ -73,7 +71,7 @@
     'Total goals': 'Total non-penalty goals', Goals: 'Non-penalty goals',
   })[match] || match.replace(' ', ' non-penalty ');
   const T = text => nonPenalty && !/npxG|on-penalty/.test(text) ? text.replace(basisPattern, basisReplacement) : text;
-  const goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
+  let goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
   const binColors = ['#44504a', '#526d61', color('--green'), color('--hypo'), '#372858'];
   const binLabels = ['0 goals', '1 goal', '2 goals', '3 goals', '4+ goals'].map(T);
   const teamMeasures = {
@@ -2422,7 +2420,7 @@
     const missing = rows.filter(row => scatter ? row.values[measure].expected === null : !rank(row));
     const missingLabel = archiveMissing(measure, np);
     archiveMeasure.value = measureKey; archiveRankBy.value = byKey;
-    archivePenalties.disabled = measureKey === 'points'; archivePenalties.value = np ? 'exclude' : 'include';
+    archivePenalties.disabled = measureKey === 'points'; archivePenalties.checked = np;
     root.querySelector('[data-team-seasons-penalties-control]').hidden = measureKey === 'points';
     root.querySelector('[data-team-seasons-points-note]').hidden = measureKey !== 'points' || params.get('penalties') !== 'exclude';
     const actualLabel = archiveText(archiveLabels[measure], np), expectedLabel = archiveText(['xG', 'xG allowed', 'xGD', 'xPoints'][measure], np);
@@ -2526,7 +2524,7 @@
     const measure = archiveMeasure.value;
     const changes = {view: 'team-seasons', 'team-seasons-measure': measure, 'team-seasons-rank-by': archiveRankBy.value};
     // A measure change resets the basis; a penalties change owns its own value.
-    changes.penalties = measure === 'points' || event.target === archiveMeasure || archivePenalties.value === 'include' ? null : 'exclude';
+    changes.penalties = measure === 'points' || event.target === archiveMeasure || !archivePenalties.checked ? null : 'exclude';
     update(changes);
   };
   archiveControls.addEventListener('submit', event => { event.preventDefault(); changeArchive(event); });
@@ -2682,7 +2680,7 @@
     root.querySelector('[data-h2h-penalties-label]').hidden = pointsView;
     h2hPenalties.disabled = pointsView;
     root.querySelector('[data-h2h-points-title]').hidden = !pointsView;
-    h2hPenalties.value = params.get('penalties') === 'exclude' ? 'exclude' : 'include';
+    h2hPenalties.checked = params.get('penalties') === 'exclude';
     const carriedSeries = root.querySelector('[data-h2h-carried-series]'); carriedSeries.disabled = margins; carriedSeries.value = h2hSeries.value;
     root.querySelector('[data-h2h-goal-title]').hidden = pointsView;
     root.querySelector('[data-h2h-goal-title]').textContent = both ? label('Goals for − xG for') : np ? 'Non-penalty goal margin' : 'Goal margin';
@@ -2979,7 +2977,7 @@
   }
   const changeHeadToHead = event => {
     const changes = {view: 'head-to-head', team: h2hTeam.value, opponent: event.target === h2hTeam || event.target.hasAttribute('data-h2h-team-form') ? null : h2hOpponent.value, 'h2h-series': h2hSeries.value === 'actual' ? null : h2hSeries.value};
-    if (event.target === h2hPenalties) changes.penalties = h2hPenalties.value === 'include' ? null : 'exclude';
+    if (event.target === h2hPenalties) changes.penalties = h2hPenalties.checked ? 'exclude' : null;
     update(changes);
   };
   root.querySelectorAll('[data-h2h-controls]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); changeHeadToHead(event); }));
@@ -2999,9 +2997,11 @@
     if (isPointsOnlySelection(params) && params.get('penalties') === 'exclude') {
       params.delete('penalties');
       history.replaceState(null, '', `?${params}`);
-      if (nonPenalty) { location.assign(location.href); return; }
+      if (renderedNonPenalty) { location.assign(location.href); return; }
     }
-    if (!views.get(view).bothBases && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
+    if (!views.get(view).bothBases && (params.get('penalties') === 'exclude') !== renderedNonPenalty) { location.assign(location.href); return; }
+    nonPenalty = params.get('penalties') === 'exclude';
+    goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
     if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', `?${params}`); }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
@@ -3023,13 +3023,6 @@
     root.querySelectorAll('[data-view-choice]').forEach(link => {
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
-    });
-    // Switching the basis reloads the page, because the server computes every
-    // figure; the links keep whatever the URL currently selects.
-    root.querySelectorAll('[data-penalties-choice]').forEach(link => {
-      const selection = new URLSearchParams(params);
-      if (link.dataset.penaltiesChoice === 'exclude') selection.set('penalties', 'exclude'); else selection.delete('penalties');
-      link.href = `?${selection}`;
     });
     const currentTab = root.querySelector('[data-group-views]:not([hidden]) [aria-current]');
     if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
@@ -3108,7 +3101,7 @@
     Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
     const becomingPointsOnly = isPointsOnlySelection(url.searchParams);
     if (becomingPointsOnly) url.searchParams.delete('penalties');
-    if (becomingPointsOnly && root.dataset.penalties === 'exclude') { location.assign(url); return; }
+    if (becomingPointsOnly && renderedNonPenalty) { location.assign(url); return; }
     if (url.searchParams.get('view') === 'season-trend') {
       const params = url.searchParams;
       if (!trendSortAvailable(params)) {

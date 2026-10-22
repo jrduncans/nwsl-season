@@ -425,7 +425,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if got := assertHeadToHeadTooltip(t, page, 0); got != tooltip {
 		t.Fatal("keyboard expected tooltip differs")
 	}
-	chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+	setPenalties(t, page, "[data-h2h-penalties]", true)
 	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("npxG"); err != nil {
 		t.Fatal(err)
 	}
@@ -460,13 +460,13 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if _, err := page.GoBack(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToHaveValue("include"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).Not().ToBeChecked(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := page.GoForward(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToHaveValue("exclude"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeChecked(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -533,7 +533,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 				t.Fatal(tooltip)
 			}
 		}
-		chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+		setPenalties(t, page, "[data-h2h-penalties]", true)
 		if noScript {
 			if err := page.Locator("[data-h2h-submit]").Click(); err != nil {
 				t.Fatal(err)
@@ -577,16 +577,20 @@ func TestExploreHeadToHeadMarginsAlias(t *testing.T) {
 			visit(t, page, path)
 			defer expectInPlace(t, page, "Margins alias and views")()
 		}
-		choose := func(selector, value string) {
-			chooseOption(t, page, selector, value)
+		submit := func() {
 			if noScript {
 				if err := page.Locator("[data-h2h-submit]").Click(); err != nil {
 					t.Fatal(err)
 				}
 			}
 		}
-		for _, penalties := range []string{"include", "exclude"} {
-			choose("[data-h2h-penalties]", penalties)
+		choose := func(selector, value string) {
+			chooseOption(t, page, selector, value)
+			submit()
+		}
+		for _, exclude := range []bool{false, true} {
+			setPenalties(t, page, "[data-h2h-penalties]", exclude)
+			submit()
 			if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
 				t.Fatal(err)
 			}
@@ -793,7 +797,7 @@ func TestExploreHeadToHeadGoalGapPanels(t *testing.T) {
 		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=both")
 		defer expectInPlace(t, page, "goal gap panel switches")()
 		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
-		chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+		setPenalties(t, page, "[data-h2h-penalties]", true)
 		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
 		chooseOption(t, page, "[data-h2h-series]", "actual")
 		chooseOption(t, page, "[data-h2h-series]", "both")

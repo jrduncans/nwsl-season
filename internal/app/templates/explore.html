@@ -10,7 +10,7 @@
 {{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}{{end}}</nav>
 {{end}}<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
-<div class="explore-heading"><h2 id="explore-trend-title">{{$.T "Goals and chances per match (regular-season)"}}</h2><div class="explore-team-controls"><label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label>{{template "penaltiesSelect" $}}</div></div>
+<div class="explore-heading"><h2 id="explore-trend-title">{{$.T "Goals and chances per match (regular-season)"}}</h2><form method="get" class="explore-team-controls">{{template "penaltiesFormFields" $}}<label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Apply</button></noscript></form></div>
 {{if .HasTrendData}}
 <div class="explore-legend"><span data-series="goals">● {{$.T "Goals"}}</span><span data-series="xg">◆ {{$.T "Expected goals (xG)"}}</span></div>
 <div class="explore-legend explore-gap-legend" data-trend-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>{{$.T "Above xG"}}</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>{{$.T "Below xG"}}</span></div>
@@ -26,7 +26,7 @@
 </section>
 <section data-panel="distribution"{{if ne .View "distribution"}} hidden{{end}} aria-labelledby="explore-distribution-title">
 <div class="explore-heading"><h2 id="explore-distribution-title">Share of regular-season matches {{if eq .DistributionBin "all"}}by total {{$.GoalsWord}}{{else}}with {{if eq .DistributionBin "4"}}{{$.T "4+ goals"}}{{else if eq .DistributionBin "1"}}{{$.T "1 goal"}}{{else}}{{$.T (printf "%s goals" .DistributionBin)}}{{end}}{{end}}</h2>
-{{if .HasDistributionBars}}<form method="get" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}<label>Show <select name="distribution-bin" data-distribution-bin><option value="all"{{if eq .DistributionBin "all"}} selected{{end}}>All goal totals</option><option value="0"{{if eq .DistributionBin "0"}} selected{{end}}>0 goals</option><option value="1"{{if eq .DistributionBin "1"}} selected{{end}}>1 goal</option><option value="2"{{if eq .DistributionBin "2"}} selected{{end}}>2 goals</option><option value="3"{{if eq .DistributionBin "3"}} selected{{end}}>3 goals</option><option value="4"{{if eq .DistributionBin "4"}} selected{{end}}>4+ goals</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{else}}<div class="explore-team-controls">{{template "penaltiesSelect" $}}</div>{{end}}</div>
+{{if .HasDistributionBars}}<form method="get" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution"><label>Show <select name="distribution-bin" data-distribution-bin><option value="all"{{if eq .DistributionBin "all"}} selected{{end}}>All goal totals</option><option value="0"{{if eq .DistributionBin "0"}} selected{{end}}>0 goals</option><option value="1"{{if eq .DistributionBin "1"}} selected{{end}}>1 goal</option><option value="2"{{if eq .DistributionBin "2"}} selected{{end}}>2 goals</option><option value="3"{{if eq .DistributionBin "3"}} selected{{end}}>3 goals</option><option value="4"{{if eq .DistributionBin "4"}} selected{{end}}>4+ goals</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 <p class="note">Both teams combined.{{if $.NonPenalty}} Bins count non-penalty goals per match. Penalty kicks excluded.{{end}}</p>
 {{if .HasDistributionBars}}
 <div data-distribution-stacked-panel{{if ne .DistributionBin "all"}} hidden{{end}}>
@@ -54,7 +54,7 @@
 {{if not .HasDistributionBars}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="home-advantage"{{if ne .View "home-advantage"}} hidden{{end}} aria-labelledby="explore-home-title">
-<div class="explore-heading"><h2 id="explore-home-title">Home advantage per match (regular-season)</h2><div class="explore-team-controls">{{template "penaltiesSelect" $}}</div></div>
+<div class="explore-heading"><h2 id="explore-home-title">Home advantage per match (regular-season)</h2>{{template "penaltiesForm" $}}</div>
 {{if .HomeAdvantageData}}
 <p class="note">Each mark is the home side minus the away side, per played match. Above the zero line the home side did better; below it, the away side did.</p>
 <section data-home-panel="goals">
@@ -90,7 +90,7 @@
 {{template "exploreHeadToHead" .}}
 <section data-panel="parity"{{if ne .View "parity"}} hidden{{end}} aria-labelledby="explore-parity-title">
 <div class="explore-heading"><h2 id="explore-parity-title">How evenly matched teams were (regular-season)</h2>
-{{if .ParityData}}<form method="get" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label><label>Show <select name="parity-series" data-parity-series><option value="actual"{{if eq .ParitySeries "actual"}} selected{{end}}>Points</option><option value="both"{{if eq .ParitySeries "both"}} selected{{end}}>Points and xPoints</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}<div class="explore-team-controls">{{template "penaltiesSelect" $}}</div>{{end}}</div>
+{{if .ParityData}}<form method="get" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label><label>Show <select name="parity-series" data-parity-series><option value="actual"{{if eq .ParitySeries "actual"}} selected{{end}}>Points</option><option value="both"{{if eq .ParitySeries "both"}} selected{{end}}>Points and xPoints</option></select></label>{{template "penaltiesSelect" $}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 {{if .ParityData}}
 <p class="note">The spread is how far teams' points per game (PPG) sit from the league average, measured as a standard deviation. The bigger the spread, the less evenly matched the league.</p>
 <div class="explore-legend"><span class="explore-parity-actual-legend">● PPG spread</span><span class="explore-parity-expected-legend" data-parity-expected-legend{{if ne .ParitySeries "both"}} hidden{{end}}>◆ xPPG spread</span><span class="explore-parity-chance-legend"><i class="explore-parity-chance-swatch" aria-hidden="true"></i>Spread from chance alone</span></div>
@@ -130,7 +130,7 @@
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="table"{{if ne .View "table"}} hidden{{end}} aria-labelledby="explore-table-title">
-<div class="explore-heading"><h2 id="explore-table-title">Scoring by season (regular-season)</h2><div class="explore-team-controls">{{template "penaltiesSelect" $}}</div></div>
+<div class="explore-heading"><h2 id="explore-table-title">Scoring by season (regular-season)</h2>{{template "penaltiesForm" $}}</div>
 {{if .Records}}
 <div class="table-scroll" tabindex="0" role="region" aria-label="Regular-season scoring table"><table class="explore-table"><thead><tr><th scope="col"><button data-sort="0">Season</button></th><th scope="col"><button data-sort="1">Matches</button></th><th scope="col"><button data-sort="2">{{$.T "Goals/match"}}</button></th><th scope="col"><button data-sort="3">{{$.T "xG/match"}}</button></th><th scope="col"><button data-sort="4">{{$.T "Goals − xG/match"}}</button></th></tr></thead>
 <tbody>{{range .Records}}<tr><th scope="row" data-value="{{.Season}}">{{.Season}}</th><td data-value="{{.Played}}">{{.Played}}</td><td class="explore-rate explore-rate-goals" data-value="{{if .Goals}}{{.Goals}}{{end}}"><span>{{.GoalsPerMatch}}</span></td><td class="explore-rate explore-rate-xg" data-value="{{if .XG}}{{.XG}}{{end}}"><span>{{.XGPerMatch}}</span></td><td class="explore-gap" data-value="{{if .Gap}}{{.Gap}}{{end}}"><span>{{.GoalsMinusXGPerMatch}}</span></td></tr>{{end}}</tbody></table></div>
@@ -139,7 +139,7 @@
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
 <div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team (regular-season){{else if eq .TeamDisplay "scatter"}}Actual vs expected by team (regular-season){{else if eq .TeamDisplay "quadrant"}}Scored vs allowed by team (regular-season){{else}}Actual vs expected (regular-season){{end}}</h2>
 <form method="get" data-team-controls class="explore-team-controls">
-<input type="hidden" name="view" value="teams">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
+<input type="hidden" name="view" value="teams">
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
 <input type="hidden" name="team-sort" value="{{.TeamSort}}">
 <input type="hidden" name="team-order" value="{{.TeamOrder}}">
@@ -205,7 +205,7 @@
 <section data-panel="team-rankings"{{if ne .View "team-rankings"}} hidden{{end}} aria-labelledby="explore-team-rankings-title">
 <h2 id="explore-team-rankings-title">Team rankings (regular-season)</h2>
 <form method="get" data-team-rankings-controls class="explore-team-controls">
-<input type="hidden" name="view" value="team-rankings">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
+<input type="hidden" name="view" value="team-rankings">
 <label>Season <select name="season">{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team"{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <label>Values <select name="units"><option value="per-match"{{if eq .TeamUnits "per-match"}} selected{{end}}>Per match</option><option value="total"{{if eq .TeamUnits "total"}} selected{{end}}>Totals</option></select></label>
@@ -227,7 +227,7 @@
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
 <h2 id="explore-team-history-title">Season-by-season {{if eq .TeamMeasure "points"}}points{{else}}scoring{{end}} (regular-season)</h2>
 <form method="get" data-team-history-controls class="explore-team-controls">
-<input type="hidden" name="view" value="team-history">{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
+<input type="hidden" name="view" value="team-history">
 <input type="hidden" name="history-sort" value="{{.HistorySort}}">
 <input type="hidden" name="history-order" value="{{.HistoryOrder}}">
 <label>Team <select name="team" data-history-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
@@ -271,7 +271,7 @@
 <section data-panel="season-trend"{{if ne .View "season-trend"}} hidden{{end}} aria-labelledby="explore-season-trend-title">
 <h2 id="explore-season-trend-title" class="visually-hidden">Match by match</h2>
 <form method="get" id="season-trend-controls" data-season-trend-controls class="explore-team-controls">
-<input type="hidden" name="view" value="season-trend"><input type="hidden" name="trend-sort" value="{{.TrendSort}}"{{if eq .TrendSort "match"}} disabled{{end}}><input type="hidden" name="trend-order" value="{{.TrendOrder}}"{{if eq .TrendOrder "asc"}} disabled{{end}}>{{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
+<input type="hidden" name="view" value="season-trend"><input type="hidden" name="trend-sort" value="{{.TrendSort}}"{{if eq .TrendSort "match"}} disabled{{end}}><input type="hidden" name="trend-order" value="{{.TrendOrder}}"{{if eq .TrendOrder "asc"}} disabled{{end}}>
 <label>Season <select name="season" data-trend-season{{if not .TeamSeasons}} disabled{{end}}>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team" data-trend-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <label>Chart <select name="trend-view" data-trend-view><option value="balance"{{if eq .TrendView "balance"}} selected{{end}}>Scoring balance</option><option value="compare"{{if eq .TrendView "compare"}} selected{{end}}>Goals vs xG</option><option value="difference"{{if eq .TrendView "difference"}} selected{{end}}>Margins</option><option value="points"{{if eq .TrendView "points"}} selected{{end}}>Points vs xPoints</option><option value="relative"{{if eq .TrendView "relative"}} selected{{end}}>Benchmarks</option></select></label>

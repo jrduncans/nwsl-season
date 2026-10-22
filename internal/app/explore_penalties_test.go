@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
@@ -55,32 +57,87 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	_, plain := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025")
 	_, included := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025&penalties=include")
 	// The explicit default differs only in the echoed selection state.
-	requireAttr(t, plain, `select[data-penalties-selector] option[selected]`, "value", "include")
-	requireAttr(t, included, `select[data-penalties-selector] option[selected]`, "value", "include")
+	forbidElements(t, plain, `input[data-penalties-selector][checked]`)
+	forbidElements(t, included, `input[data-penalties-selector][checked]`)
 	if plain != included {
 		t.Error("penalties=include must render exactly as an absent parameter")
 	}
 	forbidRaw(t, plain, "npxG", `data-points-note`, `data-penalties="exclude"`)
 	forbidText(t, plain, `[data-panel="team-history"]`, "Non-penalty")
 	requireAttr(t, plain, `th[data-h2h-basis-column]`, "hidden", "")
-	// Only the Excluded destination names the parameter; default links omit it.
-	// Every view carries its own select and destination links.
-	if got, want := len(find(t, plain, `a[data-penalties-choice=exclude]`)), len(find(t, plain, `select[data-penalties-selector]`)); got != want || want != 9 {
-		t.Errorf("default page has %d Excluded destinations for %d selects, want 9 each", got, want)
+	// The checkbox is last in each view's control row and unchecked by default.
+	if got := len(find(t, plain, `input[data-penalties-selector][name=penalties][value=exclude]`)); got != 9 {
+		t.Errorf("default page has %d penalties checkboxes, want 9", got)
 	}
-	for _, link := range find(t, plain, `a[href*=penalties]`) {
-		if attr(link, "data-penalties-choice") != "exclude" && attr(link, "class") != "button" {
-			t.Errorf("default page link %q names penalties", attr(link, "href"))
+	// Default forms submit no penalties parameter.
+	for _, form := range find(t, plain, `form`) {
+		if got := submittedPenalties(t, form); got != 0 {
+			t.Errorf("default form %q submits %d penalties values", attr(form, "class"), got)
 		}
 	}
-	requireAttr(t, plain, `a[data-penalties-choice=exclude]`, "href", "?penalties=exclude&season=2025&team=alpha&view=team-history")
-	requireAttr(t, plain, `a[data-penalties-choice=include]`, "href", "?season=2025&team=alpha&view=team-history")
-	// The control is a labeled select in the data-control row, never in navigation.
-	requireText(t, plain, "form[data-team-history-controls] label.penalties-select", "Penalties", "Included", "Excluded")
-	requireAttr(t, plain, `select[data-penalties-selector]`, "title", "Excluded removes penalty kicks from both goals and xG.")
+	requireText(t, plain, "form[data-team-history-controls] label.penalties-select", "Exclude penalties")
+	requireAttr(t, plain, `input[data-penalties-selector]`, "title", "Excluding removes penalty kicks from both goals and xG.")
 	forbidRaw(t, plain, "explore-penalties", "data-penalties-control", "Penalty kicks excluded.")
-	if got := len(find(t, plain, `nav a[data-penalties-choice], .explore header ~ a[data-penalties-choice]`)); got != 0 {
-		t.Errorf("%d penalties links in navigation", got)
+	if got := len(find(t, plain, `nav input[data-penalties-selector]`)); got != 0 {
+		t.Errorf("%d penalties checkboxes in navigation", got)
+	}
+}
+
+// submittedPenalties counts the penalties values a native submission of form
+// sends: enabled hidden fields and checked, enabled checkboxes.
+func submittedPenalties(t *testing.T, form *html.Node) int {
+	t.Helper()
+	count := 0
+	for _, input := range findIn(t, form, `input[name=penalties]`) {
+		if _, disabled := lookupAttr(input, "disabled"); disabled {
+			continue
+		}
+		if _, checked := lookupAttr(input, "checked"); attr(input, "type") == "checkbox" && !checked {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+// Views without another selection form wrap the checkbox in a GET form that
+// carries the rest of the selection, so it works without JavaScript.
+func TestExplorePenaltiesCheckboxSubmitsWithoutJavaScript(t *testing.T) {
+	archive := penaltyArchive(t, 20)
+	for _, panel := range []string{"trend", "distribution", "home-advantage", "table"} {
+		t.Run(panel, func(t *testing.T) {
+			_, body := getPage(t, archive, "/explore?view="+panel+"&metric=gap&penalties=exclude")
+			forms := find(t, body, `section[data-panel=`+panel+`] form[method=get]`)
+			var form *html.Node
+			for _, candidate := range forms {
+				if len(findIn(t, candidate, `input[data-penalties-selector][checked]`)) == 1 {
+					form = candidate
+				}
+			}
+			if form == nil {
+				t.Fatalf("%d GET forms, none holds the checked checkbox", len(forms))
+			}
+			fields := map[string]string{}
+			for _, input := range findIn(t, form, `input[type=hidden]`) {
+				fields[attr(input, "name")] = attr(input, "value")
+			}
+			if fields["view"] != panel {
+				t.Errorf("form carries view %q", fields["view"])
+			}
+			if panel != "distribution" && fields["metric"] != "gap" {
+				t.Errorf("form dropped the selection: %v", fields)
+			}
+			if got := submittedPenalties(t, form); got != 1 {
+				t.Errorf("checked form submits %d penalties values, want 1", got)
+			}
+			submit := false
+			for _, noscript := range findIn(t, form, `noscript`) {
+				submit = submit || noscript.FirstChild != nil && strings.Contains(noscript.FirstChild.Data, `type="submit"`)
+			}
+			if !submit {
+				t.Error("form has no submit button without JavaScript")
+			}
+		})
 	}
 }
 
@@ -156,11 +213,11 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 				t.Fatalf("status = %d", code)
 			}
 			requireElements(t, body, `[data-explore][data-penalties=exclude]`)
-			requireAttr(t, body, `select[data-penalties-selector] option[selected]`, "value", "exclude")
 			panel := strings.TrimPrefix(strings.SplitN(view, "&", 2)[0], "view=")
 			if got := len(find(t, body, `section[data-panel=`+panel+`] label.penalties-select`)); got != 1 {
-				t.Errorf("the %s view offers %d Penalties selects, want 1", panel, got)
+				t.Errorf("the %s view offers %d Penalties checkboxes, want 1", panel, got)
 			}
+			requireElements(t, body, `section[data-panel=`+panel+`] input[data-penalties-selector][checked]`)
 			if panel != "trend" && panel != "table" {
 				requireText(t, body, "section[data-panel="+panel+"]", "Penalty kicks excluded.")
 			}
@@ -173,11 +230,21 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 					t.Errorf("link %q lost penalties=exclude: %s", attr(link, "href"), view)
 				}
 			}
+			// Every selection form submits the basis exactly once: through its
+			// checkbox or, without one, a hidden field. Only a disabled
+			// checkbox (a points-only selection) submits none.
 			forms := find(t, body, `form.explore-team-controls`)
-			inputs := find(t, body, `form.explore-team-controls input[name=penalties][value=exclude]`)
-			// Team-seasons and Head to head own selects; other forms carry the basis.
-			if len(forms) == 0 || len(inputs) != len(forms)-2 {
-				t.Errorf("%d selection forms, %d with the hidden penalties input", len(forms), len(inputs))
+			if len(forms) == 0 {
+				t.Fatal("no selection forms")
+			}
+			for _, form := range forms {
+				want := 1
+				if len(findIn(t, form, `input[name=penalties]`)) == len(findIn(t, form, `input[name=penalties][disabled]`)) && len(findIn(t, form, `input[name=penalties]`)) > 0 {
+					want = 0
+				}
+				if got := submittedPenalties(t, form); got != want {
+					t.Errorf("form %q submits %d penalties values, want %d", attr(form, "data-team-controls")+attr(form, "class"), got, want)
+				}
 			}
 		})
 	}
