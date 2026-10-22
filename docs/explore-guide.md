@@ -44,7 +44,8 @@ navigation with Explore marked active.
 
 View and control selections live in the URL and restore through reload and Back/Forward. Scatter point identification is transient and clears on navigation or reload.
 The server renders each view with GET forms, sortable header links and native
-disclosures, so everything works without JavaScript; the script switches views
+disclosures, so everything works without JavaScript except Match by match's
+chart card, whose controls apply only through the script; the script switches views
 and selections in place from the same payload, without another data request.
 Validated view-specific parameters return a 400 "Invalid Explore selection"
 page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
@@ -151,8 +152,8 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. The control is an **Exclude penalties** checkbox, unchecked
-by default; checking it submits `penalties=exclude`. Points-only selections
+`penalties=exclude`. The control is an **Exclude penalties** switch (a checkbox
+with `role="switch"`), off by default; turning it on submits `penalties=exclude`. Points-only selections
 hide the control, ignore and drop a carried basis, and show no points note:
 Compare teams on Points except Table and Scored vs allowed; Season by season on
 Points; Match by match on Points vs xPoints and Benchmarks showing Points or
@@ -167,10 +168,12 @@ and unsupported values still return the standard 400 page. These rules are the
 registry's `PointsOnly` and `PointsNote` rules; `apptest.ExplorePointsOnlyCases`
 checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
-The server-rendered checkbox is last in each view's data-control row and never
-in the navigation. Mixed-view links carry its selection. Every data-control row
-is a GET form, and the checkbox is that form's only penalties field: unchecked,
-the form omits the parameter. Views with no other selection (Scoring trend, Goal
+The server-rendered switch is last in each view's data-control row and never
+in the navigation; on Match by match it heads the chart card's column of
+switches. Mixed-view links carry its selection. Every data-control row is a GET
+form, and the switch is that form's only penalties field: off, the form omits
+the parameter. Match by match's switch sits outside its form and joins it
+through the `form` attribute (`PenaltiesSwitch` names the form). Views with no other selection (Scoring trend, Goal
 distribution without data, Home advantage and Scoring table) wrap the checkbox
 in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
@@ -552,10 +555,29 @@ team's xG coverage is incomplete; goal ranks remain.
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
 | `opponents` | `adjusted` (Scoring balance and Margins) | absent (official values) |
 
-The section has a visually hidden “Match by match” heading; the team name
-follows the controls, with a status line such as “2026 regular season · In
-progress · 27 played”. One Smoothing select offers None or a 3-, 5- or
-10-match average, so the window never wraps away from the mode. Old links
+The section has a visually hidden “Match by match” heading. Season and Team
+selects come first; the team name follows, with a status line such as “2026
+regular season · In progress · 27 played”. The status line appends “·
+non-penalty” and “· adjusted for opponents”, emphasized, while those switches
+are on, so the chart's basis shows without reading the controls.
+
+Everything that changes how the chart is drawn sits in a bordered **chart
+card** above it. The chart choice is a setting on the same matches, not
+navigation, so it is a segmented control rather than a third row of tabs. It
+heads the card without a visible label, since its options name themselves; its
+legend, “Chart”, is visually hidden. A rule separates it from the options row
+below, where every other segmented control has a small muted label above it.
+**Smoothing** offers None, 3, 5 or 10 (each number's accessible name is
+“N-match average”). A divider spanning the row's full height sets off a column
+of switches, one per line and bottom-aligned with the controls: Exclude
+penalties and, where offered, Adjust for opponents. Benchmarks adds a labeled **Show** segmented control (Goals, xG,
+Points, xPoints) before Smoothing, since it picks the data drawn. Its Benchmark
+choice sits in the chart's legend instead, beside the line it draws: a dotted
+“Team average” key, then “Compared with [League average ▾]” keyed in the shown
+series' color. At phone width the legend's select shrinks to fit. Segments are radio groups, so arrow keys move between them. The card's
+controls sit outside the GET form and join it through the `form` attribute;
+they apply immediately and have no submit button, so they need JavaScript. At
+phone width the Chart segments wrap inside the card. Old links
 with `trend-mode` and `window` still validate and redirect to the equivalent
 `smoothing` value, keeping every other selection; an explicit `smoothing`
 wins. The note
@@ -563,7 +585,8 @@ above the chart says only what the controls and panel titles do not: the
 rolling window (“Each point averages the last 5 matches, including that one.”),
 Benchmarks' reference lines (plus “Expected means use available matches.”
 when the selected expected series has gaps), the xPoints definition on Points
-vs xPoints, and “Penalty kicks excluded.” when it applies. With none of these,
+vs xPoints, and the opponent adjustment's method. The status line, not the
+note, states the penalties basis. With none of these,
 the note is hidden. Unsmoothed panel titles carry no “Each match” suffix;
 rolling titles end in “· N-match average”. Direction notes state only the
 above-zero or upward meaning, in sentence case (for example “Up: win · Zero:
@@ -597,7 +620,8 @@ uses the same bar chart without logos.
 
 A rolling average includes the current match and resets each season. Until the
 window fills it averages all matches so far (`min(played, window)`), drawn as a
-dotted lead-in. An xG or xPoints average needs every observation in its exact
+dotted lead-in. The legend has no key for the lead-in; the dotting and the
+tooltip's window description explain it. An xG or xPoints average needs every observation in its exact
 window, so missing expected data breaks that line until it leaves the window;
 it is never interpolated.
 
@@ -621,7 +645,7 @@ or unsupported values return the standard 400 page. Sorting never changes the
 chronological chart or the population used for rolling averages. Smoothing
 changes retain the sort. Switching charts retains shared sorts; a derived sort
 that no longer exists falls back to match order and drops both sort parameters
-from the URL, including on native GET submissions. The native `<details>` opens
+from the URL. The native `<details>` opens
 when either parameter is present and is otherwise closed. The table scrolls
 inside its container on phones, with a scroll hint. The browser renderer also
 falls back to played order if restored history names a column absent from the
@@ -694,11 +718,11 @@ axis; it has no venue tiles. The
 are excluded, the unsmoothed tiles carry
 “W–D–L and points use official results, including penalties.”
 
-**Adjust for opponents** is a checkbox in the data-control row on Scoring
+**Adjust for opponents** is a switch in the chart card on Scoring
 balance and Margins. It answers whether a run of scoring came only from facing
 weak defenses. Checked submits `opponents=adjusted`; unchecked carries no
 parameter. Blank, repeated and unsupported values return the standard 400 page.
-It works through the native GET form, and `explore.js` switches it in place.
+`explore.js` switches it in place.
 Goals vs xG, Points vs xPoints and Benchmarks hide it, as does a season without
 xG; there a carried value is ignored but kept, as `series` is. The view
 registry's `opponentAdjustment` rule decides where it appears, for both the Go
@@ -803,6 +827,11 @@ season: the team's own mean, plus one comparison.
   highest probability, keeping ties), sharing Forecast Lab's executor and cache.
   Means still use recorded matches. When no forecast is available, the
   comparison is unavailable rather than falling back to current standings.
+
+The chart labels each reference line with its value, and the tooltip names the
+teams behind Shield winner and Best team. There is no separate disclosure of
+reference values, coverage counts or group members; when the selected
+comparison is unavailable for a series, the note above the chart says why.
 
 When Benchmarks shows Points or xPoints (`average-series=points|xpoints`), the
 view is points-only and hides Penalties. Carried exclusions are ignored and

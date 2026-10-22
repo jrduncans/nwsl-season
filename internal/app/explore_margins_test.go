@@ -126,7 +126,7 @@ func TestExploreSeasonMarginsTilesAndRolling(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireExact(t, body, "[data-trend-view] option[value=difference]", "Margins")
+	requireExact(t, body, "[data-trend-view] label span", "Margins")
 	forbidElements(t, body, "[data-trend-margin-tiles][hidden]")
 	if len(find(t, body, "[data-trend-margin-tiles] [data-h2h-tile]")) != 3 {
 		t.Fatal("expected three tiles")

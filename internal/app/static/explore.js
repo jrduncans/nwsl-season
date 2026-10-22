@@ -43,7 +43,7 @@
   const historyMeasure = root.querySelector('[data-history-measure]');
   const rankingControls = root.querySelector('[data-team-rankings-controls]');
   const trendControls = root.querySelector('[data-season-trend-controls]');
-  trendControls.querySelector('[data-trend-submit]').hidden = true;
+  const trendPanel = root.querySelector('[data-panel="season-trend"]');
   const metric = root.querySelector('[data-metric]');
   const distributionBin = root.querySelector('[data-distribution-bin]');
   const status = root.querySelector('[data-chart-status]');
@@ -1925,17 +1925,19 @@
     const own = {...seasonMatchMean(matches, measure, expected), label: 'Team average', shortLabel: 'Team', note: 'All recorded matches for this team; expected means use available observations.', names: []};
     const benchmark = season.benchmarks?.find(row => row.key === reference);
     if (!benchmark) return [own];
-    const playoffCut = benchmark.label.match(/\btop (\d+)\b/i)?.[1];
-    const shortLabel = {league: 'League', playoff: playoffCut ? `Top ${playoffCut}` : 'Playoffs', 'top-four': 'Home playoff', shield: 'Shield', best: 'Best'}[reference];
+    const shortLabel = {league: 'League', playoff: 'Playoffs', 'top-four': 'Home playoff', shield: 'Shield', best: 'Best'}[reference];
     return [own, {...benchmark.means[measure][expected ? 1 : 0], label: benchmark.label, shortLabel, note: benchmark.note, identifyTeams: reference === 'shield' || reference === 'best'}];
   }
-  function showTrendReferenceDetails(series) {
-    root.querySelector('[data-trend-reference-values]').replaceChildren(...series.flatMap(dataset => dataset.references.map(reference => {
-      const row = document.createElement('p'), title = document.createElement('strong');
-      title.textContent = `${dataset.label} · ${reference.label}: ${reference.value == null ? 'Unavailable' : fixed(reference.value) + ' per match'}`;
-      row.append(title, document.createElement('br'), `${reference.count} of ${reference.total} team match appearances${reference.names?.length ? ' · ' + reference.names.join(', ') : ''}`, document.createElement('br'), reference.note);
-      return row;
-    })));
+  // Reference lines end in a leader and a label to the right of the plot.
+  const referenceLabelFont = '11px sans-serif';
+  const referenceLabel = reference => `${reference.shortLabel} ${fixed(reference.value)}`;
+  // The right padding fits the widest label after its 14px leader, plus a margin.
+  function referenceLabelGutter(chart) {
+    const ctx = chart.ctx;
+    ctx.save(); ctx.font = referenceLabelFont;
+    const widest = Math.max(0, ...chart.trendPlotReferences.filter(reference => reference.value != null).map(reference => ctx.measureText(referenceLabel(reference)).width));
+    ctx.restore();
+    return Math.ceil(14 + widest + 6);
   }
   function seasonTrendNumber(value, expected, rolling, signedValue = false) {
     if (value == null) return 'Unavailable';
@@ -2004,12 +2006,12 @@
       for (let index = references.length - 1; index >= 0; index--) {
         references[index].labelY = Math.min(references[index].labelY, bottom - 7 - (references.length - 1 - index) * 18);
       }
-      ctx.save(); ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.save(); ctx.font = referenceLabelFont; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       references.forEach(({ink, y, labelY, shortLabel, value}) => {
         ctx.strokeStyle = ink; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(right, y); ctx.lineTo(right + 5, y); ctx.lineTo(right + 10, labelY); ctx.stroke();
         ctx.fillStyle = ink;
-        ctx.fillText(`${shortLabel} ${fixed(value)}`, right + 14, labelY);
+        ctx.fillText(referenceLabel({shortLabel, value}), right + 14, labelY);
       });
       ctx.restore();
     }};
@@ -2021,7 +2023,7 @@
     });
     return chart;
   }
-  // One Smoothing select: none, 3, 5 or 10. Old trend-mode/window history
+  // One Smoothing control: none, 3, 5 or 10. Old trend-mode/window history
   // entries still map onto it; the server redirects such links.
   function trendSmoothing(params) {
     if (['none', '3', '5', '10'].includes(params.get('smoothing'))) return params.get('smoothing');
@@ -2131,11 +2133,11 @@
     const averageSeries = ['goals', 'xg', 'points', 'xpoints'].includes(params.get('average-series')) ? params.get('average-series') : 'goals';
     const averageReference = ['team', 'league', 'playoff', 'top-four', 'shield', 'best'].includes(params.get('average-reference')) ? params.get('average-reference') : 'league';
     const effectiveSeries = relative ? averageSeries : 'both';
-    trendControls.querySelector('[data-penalties-selector]').closest('label').hidden = points || (relative && ['points', 'xpoints'].includes(averageSeries));
+    trendPanel.querySelector('[data-penalties-selector]').closest('label').hidden = points || (relative && ['points', 'xpoints'].includes(averageSeries));
     Object.entries({season, team: teamID, 'trend-view': view, series, 'average-series': averageSeries, 'average-reference': averageReference, smoothing}).forEach(([key, value]) => { control(key).value = value; });
     root.querySelector('[data-trend-average-data-control]').hidden = !relative;
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
-    root.querySelector('[data-trend-reference-details]').hidden = !relative;
+    root.querySelector('[data-trend-reference-key]').dataset.series = ['xg', 'xpoints'].includes(averageSeries) ? 'xg' : 'goals';
     // Elsewhere a carried opponents value is ignored but kept, as series is.
     root.querySelector('[data-trend-opponents-control]').hidden = !trendOpponentsShown(params);
     control('opponents').checked = params.get('opponents') === 'adjusted';
@@ -2154,14 +2156,15 @@
     if (!matches.length) return;
     const shown = adjusted ? matches.map(opponentAdjusted) : matches;
     root.querySelector('[data-trend-team-name]').replaceChildren(teamName(team));
-    root.querySelector('[data-trend-season-status]').textContent = `${season} regular season${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
-    // The note carries only what the controls and panel titles do not already say.
+    root.querySelector('[data-trend-season-summary]').textContent = `${season} regular season${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
+    root.querySelector('[data-trend-basis="non-penalty"]').hidden = !nonPenalty;
+    root.querySelector('[data-trend-basis="opponents"]').hidden = !adjusted;
+    // The note carries only what the controls, status line and panel titles do not already say.
     const missingExpected = relative && matches.some(match => averageSeries === 'xg' ? match.values[0].expected == null || match.values[1].expected == null : averageSeries === 'xpoints' && match.values[3].expected == null);
     const note = [rolling ? `Each point averages the last ${window} matches, including that one.` : '',
       relative ? 'Reference lines show the team’s season average and the selected benchmark.' : '',
       missingExpected ? 'Expected means use available matches.' : '',
       points ? 'xPoints: ASA’s expected points for each match.' : '',
-      nonPenalty ? 'Penalty kicks excluded.' : '',
       adjusted ? 'Adjusted to an average opponent at a neutral venue with even rest.' : '',
       adjusted && selectedSeason.opponents.xgMatches < selectedSeason.opponents.completed ? `Opponent ratings use ${selectedSeason.opponents.xgMatches} of ${selectedSeason.opponents.completed} matches with xG.` : ''].filter(Boolean).join(' ');
     root.querySelector('[data-season-trend-note]').textContent = note;
@@ -2184,7 +2187,6 @@
     if (pointsGap) visible.push({label: 'Points − xPoints', expected: true, gap: true, sortKey: 'points-gap', data: matches.map(match => match.values[3].expected == null ? null : match.values[3].actual - match.values[3].expected)});
     if (view === 'compare' || relative) visible.sort((a, b) => a.measure - b.measure);
     if (goalGaps) [0, 1].forEach(side => visible.push({label: T(side ? 'Goals allowed − xG allowed' : 'Goals − xG'), expected: true, gap: true, measure: side, sortKey: side ? 'allowed-gap' : 'scored-gap', data: matches.map(row => globalThis.NWSLGeometry.goalGap(marginsData.goals(row), marginsData.xg(row), side))}));
-    if (relative) showTrendReferenceDetails(visible);
     const referenceStatus = root.querySelector('[data-trend-reference-status]');
     const missingReference = relative ? visible.filter(dataset => dataset.references[1]?.value == null && dataset.references.length > 1) : [];
     referenceStatus.hidden = !missingReference.length;
@@ -2232,7 +2234,6 @@
       {className: 'explore-actual-key', label: '━ ● Actual'},
       {className: 'explore-expected-key', label: pointsMetric ? '━ ◇ xPoints' : T('━ ◇ xG')},
     ];
-    if (rolling) legend.push({className: 'explore-season-raw-key', label: 'Averages before full window'});
     root.querySelector('[data-trend-legend]').replaceChildren(...legend.map(entry => {
       const key = document.createElement('span'); key.className = entry.className; key.textContent = entry.label; return key;
     }));
@@ -2279,7 +2280,7 @@
       });
       chart.trendPlotReferences = chart.data.datasets.flatMap(dataset => dataset.references.map((reference, index) => ({...reference, ink: index === 0 ? color('--muted') : dataset.borderColor})));
       chart.data.datasets.forEach((_, index) => chart.setDatasetVisibility(index, true));
-      chart.options.layout = {padding: relative ? {top: 12, right: 100} : 0};
+      chart.options.layout = {padding: relative ? {top: 12, right: referenceLabelGutter(chart)} : 0};
       // trendAxis picks the ticks: Chart.js would thin them on short panels.
       chart.options.scales.y = {min: axis.min, max: axis.max, border: {display: false},
         afterBuildTicks: scale => { scale.ticks = axis.ticks.map(value => ({value})); },
@@ -3304,8 +3305,8 @@
     update(selection);
   };
   trendControls.addEventListener('submit', event => { event.preventDefault(); updateSeasonTrend(); });
-  trendControls.addEventListener('change', updateSeasonTrend);
-  root.querySelector('[data-trend-reference]').addEventListener('change', updateSeasonTrend);
+  // The chart card's controls sit outside the form but belong to it.
+  trendPanel.addEventListener('change', event => { if (event.target.form === trendControls) updateSeasonTrend(); });
   const updateRankings = () => update(Object.fromEntries(new FormData(rankingControls)));
   rankingControls.addEventListener('submit', event => { event.preventDefault(); updateRankings(); });
   rankingControls.addEventListener('change', updateRankings);
