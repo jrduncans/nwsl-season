@@ -23,7 +23,7 @@ func (p xgPoissonHomeHistoryV1) Info() Info {
 	return Info{
 		ID:          id,
 		Name:        name,
-		Description: "Simulates remaining games from current-season team xG, with league home and away xG rates pooled across " + scope + ".",
+		Description: "Simulates remaining matches from current-season team xG, with league home and away xG rates pooled across " + scope + ".",
 		Inputs:      "Available ASA xG from " + scope + ", current-season xG, and the remaining schedule.",
 		Assumptions: "League home-field xG is stable enough to pool across prior seasons; team attack and defence are not pooled.",
 	}

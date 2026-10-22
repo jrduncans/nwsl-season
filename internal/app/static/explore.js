@@ -1899,7 +1899,7 @@
     const benchmark = season.benchmarks?.find(row => row.key === reference);
     if (!benchmark) return [own];
     const playoffCut = benchmark.label.match(/\btop (\d+)\b/i)?.[1];
-    const shortLabel = {league: 'League', playoff: playoffCut ? `Top ${playoffCut}` : 'Playoffs', 'top-four': 'Top 4', shield: 'Shield', best: 'Best'}[reference];
+    const shortLabel = {league: 'League', playoff: playoffCut ? `Top ${playoffCut}` : 'Playoffs', 'top-four': 'Home playoff', shield: 'Shield', best: 'Best'}[reference];
     return [own, {...benchmark.means[measure][expected ? 1 : 0], label: benchmark.label, shortLabel, note: benchmark.note, identifyTeams: reference === 'shield' || reference === 'best'}];
   }
   function showTrendReferenceDetails(series) {

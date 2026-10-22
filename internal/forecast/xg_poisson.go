@@ -16,7 +16,7 @@ func NewXGPoissonV1() Model { return xgPoissonV1{} }
 type xgPoissonV1 struct{}
 
 func (xgPoissonV1) Info() Info {
-	return Info{ID: xgPoissonID, Name: "xG Poisson", Description: "Simulates remaining games from each team's xG averages so far, adjusted for home-field advantage.", Inputs: "Available ASA xG for completed matches and the remaining schedule.", Assumptions: "Home-field advantage reflects the league's average xG difference between home and away teams this season. Early results are balanced with league-wide xG; matches without xG are left out."}
+	return Info{ID: xgPoissonID, Name: "xG Poisson", Description: "Simulates remaining matches from each team's xG averages so far, adjusted for home-field advantage.", Inputs: "Available ASA xG for completed matches and the remaining schedule.", Assumptions: "Home-field advantage reflects the league's average xG difference between home and away teams this season. Early results are balanced with league-wide xG; matches without xG are left out."}
 }
 
 type xgTotals struct {

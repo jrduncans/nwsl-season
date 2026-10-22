@@ -57,10 +57,10 @@ func exploreTrendMeanFor(teams []exploreTeamRecord, measure int, expected bool) 
 }
 
 func exploreTrendBenchmarks(season exploreTeamSeason, input cache.HistoricalSeason, projection ...*simulation.Result) []exploreTrendBenchmark {
-	labels := []string{"League average", "Playoff-team average", "Top 4 average", "Shield winner", "Best team average"}
+	labels := []string{"League average", "Playoff-team average", "Home playoff average", "Shield winner", "Best team average"}
 	if season.Active {
 		labels[1] = fmt.Sprintf("Projected top %d average", input.Entry.PlayoffPlaces)
-		labels[2], labels[3] = "Projected top 4 average", "Shield favorite"
+		labels[2], labels[3] = "Projected home playoff average", "Shield favorite"
 	}
 	groups := make(map[string][]exploreTeamRecord)
 	groups["league"] = season.Teams
