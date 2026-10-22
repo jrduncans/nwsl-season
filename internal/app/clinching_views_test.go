@@ -41,13 +41,13 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 			}
 			body := response.Body.String()
 			if strings.Count(body, `class="clinching-path-option"`) != 8 || strings.Contains(body, "View 5 more paths") {
-				t.Fatal("all exact paths should remain available in one disclosure")
+				t.Fatal("all exact scenarios should remain available in one disclosure")
 			}
 			if strings.Count(body, `class="clinching-result-group"`) != 1 {
 				t.Fatal("shared own result should appear once")
 			}
 			if !strings.Contains(body, `class="clinching-summary"`) || !strings.Contains(body, `class="clinching-exact-paths"`) {
-				t.Fatal("visible summary and expandable exact paths are required")
+				t.Fatal("visible summary and expandable exact scenarios are required")
 			}
 			if !strings.Contains(body, "Scenario search was incomplete.") {
 				t.Fatal("incomplete-search notice missing")
@@ -344,7 +344,7 @@ func assertScenarioCoverage(t *testing.T, clauses []scenarios.Clause, groups []c
 		for _, g := range groups {
 			helpMatches := testExpressionMatches(g.Help, assignment, games)
 			if !g.SummaryOverflow && testExpressionMatches(g.Summary, assignment, games) != helpMatches {
-				t.Fatalf("assignment %v: summary and exact paths differ; group=%+v", assignment, g)
+				t.Fatalf("assignment %v: summary and exact scenarios differ; group=%+v", assignment, g)
 			}
 			flatMatches := false
 			matchingPaths := 0
@@ -388,7 +388,7 @@ func TestClinchingSummaryKeepsShortOverlappingAlternatives(t *testing.T) {
 		t.Fatalf("summary = %+v, want independent SEA and KC conditions", summary)
 	}
 	if len(groups[0].Help.Combinations()) != 2 {
-		t.Fatalf("exact paths = %+v", groups[0].Help.Combinations())
+		t.Fatalf("exact scenarios = %+v", groups[0].Help.Combinations())
 	}
 	assertScenarioCoverage(t, clauses, groups, games, true)
 }

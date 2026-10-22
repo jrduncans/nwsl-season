@@ -47,7 +47,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 		t.Errorf("table seasons = %s, want 2026,2019,2018", got)
 	}
 	cells := func(season string) string { return bySeason[season] }
-	// Season, matches, goals, xG, points, xPts, home win–draw–loss share.
+	// Season, matches, goals, xG, points, xPoints, home win–draw–loss share.
 	if got, want := cells("2018"), "2018 20 -1.00 +1.00 -3.00 Unavailable 0% – 0% – 100%"; got != want {
 		t.Errorf("2018 row = %q, want %q", got, want)
 	}
@@ -58,7 +58,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 	requireText(t, body, "[data-panel=home-advantage]",
 		"2026: in progress through 20 matches",
 		"xG is incomplete in 2019, so those seasons have no xG mark.",
-		"xPts is incomplete in 2018, 2019, 2026, so those seasons have no xPts mark.",
+		"xPoints is incomplete in 2018, 2019, 2026, so those seasons have no xPoints mark.",
 		"ASA has no neutral-site flag",
 		"not a cause",
 	)
@@ -80,7 +80,7 @@ func TestExploreHomeAdvantageNonPenaltyBasisChangesOnlyGoalsAndXG(t *testing.T) 
 	// and .76 xG each) leave non-penalty goals at -2 and npxG at +0.24.
 	requireText(t, all, "[data-home-rows]", "-1.00", "+1.00", "-3.00")
 	requireText(t, np, "[data-home-rows]", "-2.00", "+0.24", "-3.00")
-	requireText(t, np, "[data-panel=home-advantage]", "Points include penalties; ASA publishes no non-penalty expected points.")
+	requireText(t, np, "[data-panel=home-advantage]", "Points include penalties; ASA publishes no non-penalty xPoints.")
 	requireText(t, np, "[data-home-rows]", "0% – 0% – 100%")
 	requireExact(t, np, "thead a[data-home-sort=goals]", "Non-penalty goals")
 	requireExact(t, np, "thead a[data-home-sort=xg]", "npxG")

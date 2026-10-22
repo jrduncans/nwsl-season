@@ -234,7 +234,7 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 		items = append(items, struct{ label, path string }{label, base})
 	}
 	if scope.fixturesAvailable() {
-		label := "Results & fixtures"
+		label := "Matches"
 		if presentation.Phase == seasonPhaseUpcoming {
 			label = "Schedule"
 		} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !presentation.HasUpcoming) {

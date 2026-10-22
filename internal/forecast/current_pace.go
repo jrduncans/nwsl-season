@@ -13,7 +13,7 @@ func NewCurrentPaceV1() Model { return currentPaceV1{} }
 type currentPaceV1 struct{}
 
 func (currentPaceV1) Info() Info {
-	return Info{ID: currentPaceID, Name: "Current pace", Description: "Simulates remaining games from each team's points pace so far, adjusted for home-field advantage.", Inputs: "Completed match scores, points earned, and the remaining schedule.", Assumptions: "Home-field advantage reflects the league's average scoring difference between home and away teams this season. It carries current points pace forward without separately adjusting for the strength of past opponents."}
+	return Info{ID: currentPaceID, Name: "Current pace", Description: "Simulates remaining matches from each team's points pace so far, adjusted for home-field advantage.", Inputs: "Completed match scores, points earned, and the remaining schedule.", Assumptions: "Home-field advantage reflects the league's average scoring difference between home and away teams this season. It carries current points pace forward without separately adjusting for the strength of past opponents."}
 }
 
 type paceTotals struct{ played, points int }

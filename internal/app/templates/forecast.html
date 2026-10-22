@@ -43,7 +43,7 @@
   <div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable model comparison">
     <table class="forecast-comparison-table{{if .HasChampionship}} forecast-comparison-with-championship{{end}}" aria-describedby="forecast-comparison-direction forecast-comparison-scroll-hint">
       <caption><span>{{.ComparisonName}} → {{.ModelName}} by team</span></caption>
-      <thead><tr><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoff chance</th><th scope="col">Top 4 chance</th><th scope="col">Shield chance</th>{{if .HasChampionship}}<th scope="col">Championship chance</th>{{end}}</tr></thead>
+      <thead><tr><th scope="col">Team</th><th scope="col">Projected points</th><th scope="col">Playoff chance</th><th scope="col">Home playoff chance</th><th scope="col">Shield chance</th>{{if .HasChampionship}}<th scope="col">Championship chance</th>{{end}}</tr></thead>
       <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td class="comparison-{{.PointsDeltaTone}}"><strong>{{.ExpectedPointsDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ExpectedPoints}} → {{.ExpectedPoints}} pts</span></td><td class="comparison-{{.PlayoffDeltaTone}}"><strong>{{.PlayoffDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.PlayoffChance}} → {{.PlayoffChance}}</span></td><td class="comparison-{{.TopFourDeltaTone}}"><strong>{{.TopFourDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.TopFourChance}} → {{.TopFourChance}}</span></td><td class="comparison-{{.ShieldDeltaTone}}"><strong>{{.ShieldDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ShieldChance}} → {{.ShieldChance}}</span></td>{{if $.HasChampionship}}<td class="comparison-{{.ChampionshipDeltaTone}}"><strong>{{.ChampionshipDelta}}</strong><span class="forecast-comparison-values">{{.Comparison.ChampionshipChance}} → {{.ChampionshipChance}}</span></td>{{end}}</tr>{{end}}</tbody>
     </table>
   </div>
@@ -52,14 +52,14 @@
 
 <section class="forecast-results" aria-labelledby="forecast-title">
   <div class="section-heading">
-    <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by expected points. Playoff chances reflect the full range of simulated finishes. {{if .HasChampionship}}Championship chances include a simulated playoff bracket. {{end}}Expand a team’s finish distribution for its range of outcomes.</p></div>
+    <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by projected points. Playoff chances reflect the full range of simulated finishes. {{if .HasChampionship}}Championship chances include a simulated playoff bracket. {{end}}Expand a team’s finish distribution for its range of outcomes.</p></div>
     <p class="forecast-cutline"><strong>Playoff line:</strong> top {{.PlayoffPlaces}}</p>
   </div>
   <p class="forecast-scroll-hint" id="forecast-scroll-hint">Swipe left on the table to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll forecast-table-scroll" tabindex="0" role="region" aria-label="Scrollable {{.Season}} regular-season forecast">
     <table class="forecast-table{{if .HasChampionship}} forecast-table-with-championship{{end}}" aria-describedby="forecast-scroll-hint">
       <caption><span>{{.Season}} forecast · {{.ModelName}}{{if .ResultsThrough}} · through {{.ResultsThrough}}{{end}}{{if .FixedCount}} · {{.FixedCount}} fixed result{{if ne .FixedCount 1}}s{{end}}{{end}}</span></caption>
-      <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Expected points</th><th scope="col">Playoffs</th><th scope="col">Top 4</th><th class="forecast-shield" scope="col">Shield</th>{{if .HasChampionship}}<th scope="col">Championship</th>{{end}}</tr></thead>
+      <thead><tr><th class="forecast-rank" scope="col">#</th><th scope="col">Team</th><th scope="col">Projected points</th><th scope="col">Playoffs</th><th scope="col">Home playoff</th><th class="forecast-shield" scope="col">Shield</th>{{if .HasChampionship}}<th scope="col">Championship</th>{{end}}</tr></thead>
       <tbody>{{range .Rows}}
         <tr{{if .PlayoffLine}} class="forecast-playoff-line"{{end}}>
           <td class="forecast-rank">{{.Rank}}</td>
@@ -80,11 +80,11 @@
   {{if .Assumptions}}
   <ul class="forecast-assumptions">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · <time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
   <p><a href="{{.ResetPath}}">Reset all assumptions</a></p>
-  {{else}}<p>No fixed results. Every remaining fixture is simulated.</p>{{end}}
+  {{else}}<p>No fixed results. Every remaining match is simulated.</p>{{end}}
 </section>
 
 <section id="forecast-builder" class="forecast-builder" aria-labelledby="assumption-builder-title">
-  <div class="section-heading"><div><h2 id="assumption-builder-title">Build a scenario</h2><p class="note">Choose a fixture and result. Add more if you like, then apply your scenario.</p></div></div>
+  <div class="section-heading"><div><h2 id="assumption-builder-title">Build a scenario</h2><p class="note">Choose a match and result. Add more if you like, then apply your scenario.</p></div></div>
   {{if .CanAdd}}
   <form id="forecast-update" method="get" action="{{.ForecastPath}}">
     <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
@@ -92,21 +92,21 @@
   <form class="forecast-add" method="get" action="{{.ForecastPath}}" data-assumption-builder>
     <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}<input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
     <label for="forecast-team"><span>Filter by team <span class="note">(optional)</span></span><select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-    <label for="forecast-fixture"><span>Choose a fixture</span><select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}{{template "forecastFixtureOption" .}}{{end}}</select></label>
+    <label for="forecast-fixture"><span>Choose a match</span><select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}{{template "forecastFixtureOption" .}}{{end}}</select></label>
     <template id="forecast-all-fixtures">{{range .AllFixtures}}{{template "forecastFixtureOption" .}}{{end}}</template>
     <fieldset class="forecast-outcomes"><legend>Assume result</legend><label><input type="radio" name="outcome" value="h" checked><span data-forecast-outcome="h">{{.DefaultHomeTeam}} win</span></label><label><input type="radio" name="outcome" value="d"><span>Draw</span></label><label><input type="radio" name="outcome" value="a"><span data-forecast-outcome="a">{{.DefaultAwayTeam}} win</span></label></fieldset>
     <button class="button" type="submit">Add result</button>
   </form>
-  <p id="forecast-fixture-empty" class="note" hidden>No unfixed fixtures remain for this team.</p>
+  <p id="forecast-fixture-empty" class="note" hidden>No unfixed matches remain for this team.</p>
   <section id="forecast-pending" class="forecast-pending" aria-labelledby="forecast-pending-title" hidden>
     <h3 id="forecast-pending-title">New assumptions</h3>
     <p id="forecast-pending-status" class="note" role="status" aria-live="polite"></p>
     <ul id="forecast-pending-list" class="forecast-assumptions"></ul>
     <button class="button" id="forecast-update-button" type="submit" form="forecast-update" disabled>Apply scenario</button>
   </section>
-  {{else if .HasTeamFilter}}<p>No unfixed fixtures match this team.</p>
-  {{else if eq .Remaining 0}}<p>No fixtures remain. This is the final table, subject to available tiebreak data.</p>
-  {{else}}<p>All available fixtures are fixed.</p>{{end}}
+  {{else if .HasTeamFilter}}<p>No unfixed matches match this team.</p>
+  {{else if eq .Remaining 0}}<p>No matches remain. This is the final table, subject to available tiebreak data.</p>
+  {{else}}<p>All available matches are fixed.</p>{{end}}
 </section>
 
 <details class="forecast-method"><summary>What this forecast considers</summary>

@@ -83,7 +83,7 @@ func TestTeamSeasonsPPGTiesNamesAndSeparateSeasons(t *testing.T) {
 	if rows[0].TeamID != "c" || rows[0].Season != "2017" || rows[1].TeamID != "d" || rows[2].TeamID != "b" {
 		t.Fatalf("tie ordering: %+v", rows)
 	}
-	// A real PPG tie: Gotham and Washington's 56 / 26, with distinct xPts.
+	// A real PPG tie: Gotham and Washington's 56 / 26, with distinct xPoints.
 	actual := 56.0 / 26
 	summaries := []SeasonScoring{{Season: "2024", Lifecycle: cache.SourceScopeCompleted, Played: 26, Teams: []TeamScoring{
 		{TeamID: "gotham", Played: 26, Points: 56, GoalsCovered: 26}, {TeamID: "spirit", Played: 26, Points: 56, GoalsCovered: 26},

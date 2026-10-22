@@ -1096,7 +1096,7 @@ func TestExploreScoredVsAllowedReversesTheAllowedAxis(t *testing.T) {
 // TestExploreFlagsTeamsWithIncompleteExpectedValues uses the 2026 season, where
 // two teams lack xG and four lack xPoints. Each chart names them and draws no
 // point or bar for them, and the Gap to expected chart paints the
-// "xG incomplete" and "xPts incomplete" labels.
+// "xG incomplete" and "xPoints incomplete" labels.
 func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
@@ -1118,7 +1118,7 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 	}{
 		{"difference", "xG incomplete", []string{"Boston Legacy FC", "Seattle Reign FC"}},
 		{"for", "xG incomplete", []string{"Boston Legacy FC", "Seattle Reign FC"}},
-		{"points", "xPts incomplete", []string{"Bay FC", "Boston Legacy FC", "Seattle Reign FC", "Utah Royals FC"}},
+		{"points", "xPoints incomplete", []string{"Bay FC", "Boston Legacy FC", "Seattle Reign FC", "Utah Royals FC"}},
 	} {
 		t.Run(tc.measure, func(t *testing.T) {
 			path := "explore?view=teams&season=2026&measure=" + tc.measure + "&display="
@@ -1167,7 +1167,7 @@ func TestExploreFlagsTeamsWithIncompleteExpectedValues(t *testing.T) {
 
 	t.Run("table", func(t *testing.T) {
 		gotoInPage(t, page, "explore?view=teams&season=2026&display=table")
-		if err := expect.Locator(page.Locator("[data-team-warning]")).ToContainText("xG and xPts"); err != nil {
+		if err := expect.Locator(page.Locator("[data-team-warning]")).ToContainText("xG and xPoints"); err != nil {
 			t.Errorf("table warning: %v", err)
 		}
 		_, missing := numericCells(t, teamTableColumn(t, page, columnForXG))
@@ -1997,7 +1997,7 @@ func TestExploreHomeAdvantageShowsAlignedPanelsAndSortsInPlace(t *testing.T) {
 			}
 		}
 	}
-	if fmt.Sprint(state.Series["home-goals"]) != "[Goals xG]" || fmt.Sprint(state.Series["home-points"]) != "[Points xPts]" {
+	if fmt.Sprint(state.Series["home-goals"]) != "[Goals xG]" || fmt.Sprint(state.Series["home-points"]) != "[Points xPoints]" {
 		t.Errorf("series = %v", state.Series)
 	}
 	if rows := homeAdvantageSeasons(t, page); len(rows) != 9 || rows[0] != "2025" || rows[8] != "2016" {
@@ -2388,7 +2388,7 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 	// Bay FC's 2026 first home appearance lacks xPoints, even though xG exists.
 	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&smoothing=none")
 	assertPointsChart(t, page, `[data-chart="season-points-gap"]`, `[data-trend-points-tiles]`)
-	if err := expect.Locator(page.Locator("[data-trend-points-tiles] [data-points-tile=All]")).ToContainText("xPts incomplete"); err != nil {
+	if err := expect.Locator(page.Locator("[data-trend-points-tiles] [data-points-tile=All]")).ToContainText("xPoints incomplete"); err != nil {
 		t.Fatal(err)
 	}
 	var missing bool

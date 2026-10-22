@@ -103,7 +103,7 @@ func TestExploreTrendBenchmarksSeasonGroupsAndFallback(t *testing.T) {
 			t.Fatalf("benchmarks = %+v", season.Benchmarks)
 		}
 		league := season.Benchmarks[0]
-		wantTop4, wantShield := "Top 4 average", "Shield winner"
+		wantTop4, wantShield := "Home playoff average", "Shield winner"
 		if season.Benchmarks[2].Label != wantTop4 || season.Benchmarks[3].Label != wantShield {
 			t.Fatalf("comparison labels = %q / %q", season.Benchmarks[2].Label, season.Benchmarks[3].Label)
 		}

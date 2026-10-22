@@ -113,7 +113,7 @@ status alone or expanded minutes. A winner exists only for unequal
 regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
-matches and links to the Fixtures page. At 390px rounds stack with explicit `Advances to`
+matches and links to the Matches page. At 390px rounds stack with explicit `Advances to`
 text.
 
 Group stages render chronological matches with date headings, never

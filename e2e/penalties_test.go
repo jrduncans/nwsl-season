@@ -104,7 +104,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	if got := pointsByTeam(); !maps.Equal(got, defaultPoints) {
 		t.Errorf("points changed with the basis: %v vs %v", got, defaultPoints)
 	}
-	if err := expect.Locator(page.Locator("[data-points-note=teams]")).ToHaveText("Points include penalties; ASA publishes no non-penalty expected points."); err != nil {
+	if err := expect.Locator(page.Locator("[data-points-note=teams]")).ToHaveText("Points include penalties; ASA publishes no non-penalty xPoints."); err != nil {
 		t.Errorf("points note on the table: %v", err)
 	}
 

@@ -348,9 +348,9 @@ of independent per-match percentages.
 
 | Value | Meaning |
 | --- | --- |
-| Expected points | Mean final points across simulated seasons. |
+| Projected points | Mean final points across simulated seasons. |
 | 80% points interval | The 10th through 90th percentile final-points range. |
-| Top 4 | Share of the position distribution that finishes first through fourth. |
+| Home playoff | Share of the position distribution that finishes first through fourth. |
 | Playoffs | Share of the position distribution inside the configured playoff field. |
 | Shield | First-place share of the position distribution. |
 | Championship | Share of simulated seasons in which the team wins the playoff bracket. |
@@ -374,7 +374,7 @@ points (up to 100%); the small 0% and ceiling labels make that scale visible.
 This keeps team comparisons consistent while allowing a certain finish to use
 the full bar width.
 
-The table is sorted by projected points, then playoff chance, then top-four
+The table is sorted by projected points, then playoff chance, then home playoff
 chance, followed by a stable team name/ID order. The full finish distribution
 is available from each team row, so the range of plausible finishes remains
 visible without presenting an average finishing position as a literal outcome.

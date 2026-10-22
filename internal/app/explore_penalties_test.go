@@ -124,7 +124,7 @@ func TestExplorePenaltiesExcludedComputesAndLabelsNonPenaltyBasis(t *testing.T) 
 		t.Fatalf("non-penalty xG for = %v, want 20 x 0.24", got)
 	}
 	if alpha.Totals[3] != official.Totals[3] || alpha.Values[3] != official.Values[3] {
-		t.Fatalf("points and xPts changed with the basis: %+v vs %+v", alpha.Totals[3], official.Totals[3])
+		t.Fatalf("points and xPoints changed with the basis: %+v vs %+v", alpha.Totals[3], official.Totals[3])
 	}
 	if page.TeamActualLabel != "Non-penalty goal differential" || page.TeamXGLabel != "npxG differential" {
 		t.Fatalf("labels = %q / %q", page.TeamActualLabel, page.TeamXGLabel)
@@ -204,7 +204,7 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 	_, defaults := getPage(t, archive, "/explore?view=table")
 	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00", "2.00")
 
-	// The points note appears wherever points or xPts are shown, only on the
+	// The points note appears wherever points or xPoints are shown, only on the
 	// non-penalty basis, and never changes the values.
 	shown := func(target string) bool {
 		_, body := getPage(t, archive, target)
@@ -419,7 +419,7 @@ func TestBasisTextRewritesLabelsOncePerBasis(t *testing.T) {
 		{"Total goals", "Total non-penalty goals"},
 		{"xG differential", "npxG differential"},
 		{"Points", "Points"},
-		{"xPts", "xPts"},
+		{"xPoints", "xPoints"},
 	} {
 		if got := basisText(history.NonPenalty, test.in); got != test.want {
 			t.Errorf("basisText(%q) = %q, want %q", test.in, got, test.want)

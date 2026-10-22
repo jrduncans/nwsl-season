@@ -1,7 +1,7 @@
 {{define "noHelpPath"}}
   {{if .NoHelpFixtures}}
     <details class="clinching-statement">
-      <summary>Season-long path: {{.Team.Name}} can clinch {{.Achievement}} with <span class="clinching-disclosure">{{.NoHelpFixtureCount}} win{{if ne .NoHelpFixtureCount 1}}s{{end}}</span></summary>
+      <summary>No-help scenario: {{.Team.Name}} can clinch {{.Achievement}} with <span class="clinching-disclosure">{{.NoHelpFixtureCount}} win{{if ne .NoHelpFixtureCount 1}}s{{end}}</span></summary>
       <div class="clinching-fixture-list">Win each of these remaining matches: {{.NoHelpFixtures}}.</div>
     </details>
   {{else if .NoHelp}}<p>{{.NoHelp}}</p>{{end}}
@@ -39,9 +39,9 @@
     {{range .Groups}}
       <section class="clinching-result-group">
         <h4>{{.Heading}}</h4>
-        {{if .SummaryOverflow}}<p>Several certified paths. View the exact alternatives below.</p>
+        {{if .SummaryOverflow}}<p>Several certified scenarios. View the exact alternatives below.</p>
         {{else if or .Summary.Conditions .Summary.Alternatives}}<div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>{{end}}
-        {{if .ShowDetails}}<details class="clinching-exact-paths"><summary>View exact paths</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
+        {{if .ShowDetails}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
       </section>
     {{end}}
   {{end}}
@@ -53,9 +53,9 @@
 {{range .AlreadyClinched}}{{$group := .}}<section class="clinching-status-group clinching-status-group-clinched"><h2>Already clinched {{$group.Achievement}}</h2><ul class="clinching-status-list">{{range $group.Teams}}<li class="clinching-status-item" aria-label="{{.Name}} has already clinched {{$group.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .}}</span></li>{{end}}</ul></section>{{end}}
 {{if not .State}}
   {{range .Eliminated}}{{$group := .}}<section class="clinching-status-group clinching-status-group-eliminated"><h2>Already eliminated from {{$group.Achievement}}</h2><ul class="clinching-status-list">{{range $group.Teams}}<li class="clinching-status-item" aria-label="{{.Name}} has already been eliminated from {{$group.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .}}</span></li>{{end}}</ul></section>{{end}}
-  {{if .Actionable}}<section class="clinching-category"><h2>Clinching scenarios</h2>{{range .Actionable}}<article class="clinching-opportunity clinching-opportunity-clinching"><h3 class="clinching-opportunity-heading" aria-label="{{.Team.Name}} can clinch {{.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .Team}}</span><span class="clinching-status-badge">Can clinch {{.Achievement}}</span></h3>{{template "clinchingClauses" .}}{{if .Necessary}}<p>Every clinching path requires:</p><ul>{{range .Necessary}}<li>{{.}}</li>{{end}}</ul>{{end}}{{template "noHelpPath" .}}</article>{{end}}</section>{{end}}
+  {{if .Actionable}}<section class="clinching-category"><h2>Clinching scenarios</h2>{{range .Actionable}}<article class="clinching-opportunity clinching-opportunity-clinching"><h3 class="clinching-opportunity-heading" aria-label="{{.Team.Name}} can clinch {{.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .Team}}</span><span class="clinching-status-badge">Can clinch {{.Achievement}}</span></h3>{{template "clinchingClauses" .}}{{if .Necessary}}<p>Every clinching scenario requires:</p><ul>{{range .Necessary}}<li>{{.}}</li>{{end}}</ul>{{end}}{{template "noHelpPath" .}}</article>{{end}}</section>{{end}}
   {{if .Elimination}}<section class="clinching-category"><h2>Elimination scenarios</h2>{{range .Elimination}}<article class="clinching-opportunity clinching-opportunity-elimination"><h3 class="clinching-opportunity-heading" aria-label="{{.Team.Name}} can be eliminated from {{.Achievement}}"><span class="clinching-team-identity">{{template "teamName" .Team}}</span><span class="clinching-status-badge clinching-status-badge-at-risk">Can be eliminated from {{.Achievement}}</span></h3>{{template "clinchingClauses" .}}</article>{{end}}</section>{{end}}
-  {{if .NoHelpTeams}}<section class="clinching-no-help"><div class="clinching-section-heading"><div><h2>Season-long paths without outside help</h2><p class="note">These paths may include matches after this slate. They depend only on that team’s results; no other match needs a particular outcome.</p></div></div><div class="clinching-team-list">{{range .NoHelpTeams}}<article class="clinching-team-card"><h3>{{template "teamName" .Team}}</h3><ul class="clinching-paths">{{range .Paths}}<li>{{template "noHelpTeamPath" .}}</li>{{end}}</ul></article>{{end}}</div></section>{{end}}
+  {{if .NoHelpTeams}}<section class="clinching-no-help"><div class="clinching-section-heading"><div><h2>No-help scenarios</h2><p class="note">These scenarios may include matches after this slate. They depend only on that team’s results; no other match needs a particular outcome.</p></div></div><div class="clinching-team-list">{{range .NoHelpTeams}}<article class="clinching-team-card"><h3>{{template "teamName" .Team}}</h3><ul class="clinching-paths">{{range .Paths}}<li>{{template "noHelpTeamPath" .}}</li>{{end}}</ul></article>{{end}}</div></section>{{end}}
   {{if not .Actionable}}{{if not .NoHelpTeams}}{{if not .Elimination}}<p>No teams can clinch during this slate.</p>{{end}}{{end}}{{end}}
 {{end}}
 {{template "foot" .}}{{end}}

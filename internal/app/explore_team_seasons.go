@@ -142,7 +142,7 @@ func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (explore
 	ranked = slices.DeleteFunc(ranked, func(row exploreTeamSeasonRow) bool { return row.Rank == 0 })
 	page.TeamSeasonsMore = max(0, len(ranked)-20)
 	page.TeamSeasonsActualLabel = basisText(labelBasis, teamSeasonsMeasureLabels[measure])
-	page.TeamSeasonsExpectedLabel = basisText(labelBasis, []string{"xG", "xG allowed", "xGD", "xPts"}[measure])
+	page.TeamSeasonsExpectedLabel = basisText(labelBasis, []string{"xG", "xG allowed", "xGD", "xPoints"}[measure])
 	page.TeamSeasonsCompanionLabel = page.TeamSeasonsExpectedLabel
 	if by == history.TeamSeasonExpected {
 		page.TeamSeasonsCompanionLabel = page.TeamSeasonsActualLabel
@@ -233,7 +233,7 @@ func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (explore
 
 func teamSeasonsMissingLabel(measure history.TeamSeasonMeasure, basis history.ScoringBasis) string {
 	if measure == history.TeamSeasonPoints {
-		return "xPts incomplete"
+		return "xPoints incomplete"
 	}
 	return basisText(basis, "xG incomplete")
 }

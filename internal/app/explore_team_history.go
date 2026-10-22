@@ -177,7 +177,7 @@ func exploreTeamHistoryColumns(basis history.ScoringBasis) []exploreTeamColumn {
 				if value.key == "actual" {
 					value.label = "Points"
 				} else {
-					value.label = "xPts"
+					value.label = "xPoints"
 				}
 			}
 			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: basisText(basis, value.label), Description: basisText(basis, group.label+": "+value.label)})

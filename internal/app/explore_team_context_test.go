@@ -87,17 +87,17 @@ func TestExplorePointsContextRequiresCompleteXPointsIndependentlyOfXG(t *testing
 		{Season: "2024", Teams: []exploreTeamRecord{team("alpha", 0, &xa), team("bravo", 3, nil)}},
 	}
 	points := exploreTeamContext(seasons)[3]
-	if points.Goals.Label != "Points" || points.XG.Label != "xPts" || points.Goals.High.Value != 3 || points.Goals.High.Holders[0].Season != "2024" {
+	if points.Goals.Label != "Points" || points.XG.Label != "xPoints" || points.Goals.High.Value != 3 || points.Goals.High.Holders[0].Season != "2024" {
 		t.Fatalf("actual points records wrong: %+v", points.Goals)
 	}
 	if !points.XG.Partial || points.XG.Seasons[2].Covered != 1 || points.XG.Seasons[2].High != nil || points.XG.Seasons[2].Low != nil {
-		t.Fatalf("partial xPts produced season range: %+v", points.XG)
+		t.Fatalf("partial xPoints produced season range: %+v", points.XG)
 	}
 	if points.XG.High.Value != xb || points.XG.Low.Value != xa || points.XG.Since != "2025" || points.XG.High.Holders[0].ID != "bravo" {
-		t.Fatalf("xPts records did not use complete covered seasons: %+v", points.XG)
+		t.Fatalf("xPoints records did not use complete covered seasons: %+v", points.XG)
 	}
 	if points.XG.Seasons[0].High.Value != xc || points.XG.High.Value == xc {
-		t.Fatal("active season incorrectly replaced completed xPts record")
+		t.Fatal("active season incorrectly replaced completed xPoints record")
 	}
 }
 

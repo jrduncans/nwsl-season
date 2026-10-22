@@ -57,10 +57,10 @@ func exploreTrendMeanFor(teams []exploreTeamRecord, measure int, expected bool) 
 }
 
 func exploreTrendBenchmarks(season exploreTeamSeason, input cache.HistoricalSeason, projection ...*simulation.Result) []exploreTrendBenchmark {
-	labels := []string{"League average", "Playoff-team average", "Top 4 average", "Shield winner", "Best team average"}
+	labels := []string{"League average", "Playoff-team average", "Home playoff average", "Shield winner", "Best team average"}
 	if season.Active {
 		labels[1] = fmt.Sprintf("Projected top %d average", input.Entry.PlayoffPlaces)
-		labels[2], labels[3] = "Projected top 4 average", "Shield favorite"
+		labels[2], labels[3] = "Projected home playoff average", "Shield favorite"
 	}
 	groups := make(map[string][]exploreTeamRecord)
 	groups["league"] = season.Teams
@@ -74,7 +74,7 @@ func exploreTrendBenchmarks(season exploreTeamSeason, input cache.HistoricalSeas
 	} else if !season.Active && slices.ContainsFunc(input.Data.Games, func(game cache.Game) bool {
 		return game.Status != fixtures.CompletedStatus && game.Status != fixtures.AbandonedStatus
 	}) {
-		groupUnavailable = "Final standings are unavailable while fixtures remain unplayed."
+		groupUnavailable = "Final standings are unavailable while matches remain unplayed."
 	}
 	if groupUnavailable == "" && !season.Active {
 		table := standings.Calculate(input.Data.Teams, standingsGames(input.Data.Games), standings.RulesForSeason(input.Entry.Season, standings.OrderOfficialTotal))

@@ -28,12 +28,12 @@ func explorePointsTiles(matches []exploreMatchRecord, unit string) []explorePoin
 			}
 		}
 		// Coverage is stated only when it qualifies the totals.
-		tile := explorePointsTile{Label: venue, Actual: fmt.Sprintf("%.0f", actual), Expected: "xPts incomplete", Gap: "xPts incomplete"}
+		tile := explorePointsTile{Label: venue, Actual: fmt.Sprintf("%.0f", actual), Expected: "xPoints incomplete", Gap: "xPoints incomplete"}
 		switch {
 		case n == 0:
 			tile.Actual, tile.Expected, tile.Gap = "No "+plural, "", ""
 		case covered == n:
-			tile.Expected = fmt.Sprintf("%.2f xPts", expected)
+			tile.Expected = fmt.Sprintf("%.2f xPoints", expected)
 			gap, direction := actual-expected, "above"
 			if gap < 0 {
 				gap, direction = -gap, "below"

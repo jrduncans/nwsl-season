@@ -36,7 +36,7 @@ type explorePage struct {
 }
 
 // PointsNoteShown reports whether the current view shows official points or
-// ASA xPts beside the non-penalty basis, so it must carry the points note.
+// ASA xPoints beside the non-penalty basis, so it must carry the points note.
 func (p explorePage) PointsNoteShown(panel string) bool {
 	view, _ := exploreViewFor(panel)
 	return p.NonPenalty && p.View == panel && view.PointsNote.matches(p.query, view.Defaults) && !p.PointsOnly

@@ -65,7 +65,7 @@ func cachePages() []cachePage {
 		},
 		seasonHome,
 		{
-			path: season + "fixtures", heading: "Results and fixtures",
+			path: season + "fixtures", heading: "Matches",
 			counts: []selectorCount{{"[data-fixture-home-team]", fixtureGames}},
 		},
 		{

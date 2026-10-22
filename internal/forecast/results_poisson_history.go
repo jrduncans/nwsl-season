@@ -26,7 +26,7 @@ func resultsHomeHistoryInfo(id, name, scope string) Info {
 	return Info{
 		ID:          id,
 		Name:        name,
-		Description: "Simulates remaining games from current-season team scoring and defence, with the league home-field estimate pooled across " + scope + ".",
+		Description: "Simulates remaining matches from current-season team scoring and defence, with the league home-field estimate pooled across " + scope + ".",
 		Inputs:      "Completed match scores from " + scope + ", current-season completed match scores, and the remaining schedule.",
 		Assumptions: "Home-field scoring rates are more stable across seasons than team attack and defence. Historical games are limited to those available before the forecast date.",
 	}

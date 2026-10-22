@@ -93,7 +93,7 @@ var exploreViewGroups = []exploreViewGroup{
 		{Key: "distribution", Label: "Goal distribution"},
 		{Key: "home-advantage", Label: "Home advantage"},
 		{Key: "parity", Label: "Parity", PointsOnly: exploreRule{{}}},
-		{Key: "thresholds", Label: "Shield and playoff thresholds", BothBases: true, SkipsForecast: true},
+		{Key: "thresholds", Label: "Shield and playoff thresholds", PointsOnly: exploreRule{{}}, BothBases: true, SkipsForecast: true},
 		{
 			Key: "team-seasons", Label: "Team-seasons",
 			Defaults:   map[string]string{"team-seasons-measure": "points"},

@@ -42,7 +42,7 @@ Two orderings use the selected criteria:
 - **Total** ranks by the raw values. It is the official final order, and the
   default for complete and historical seasons. The server renders that order even
   without JavaScript; switching statistics back to Goals restores it.
-- **Per game** ranks by each criterion divided by matches played, so the table is
+- **Per match** ranks by each criterion divided by matches played, so the table is
   fair while teams have played different numbers of matches. It is the default
   for an active season.
 

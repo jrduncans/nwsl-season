@@ -29,7 +29,7 @@ type Rules struct {
 }
 
 var regular2026 = Rules{Season: "2026", Stage: "Regular Season", Version: "2026-regular-v2", ExpectedTeams: 16, GamesPerTeam: 30,
-	Achievements: []Achievement{{AchievementShield, "Shield", 1}, {AchievementHomePlayoff, "Top-four seed", 4}, {AchievementPlayoffs, "Playoffs", 8}}}
+	Achievements: []Achievement{{AchievementShield, "Shield", 1}, {AchievementHomePlayoff, "Home playoff game", 4}, {AchievementPlayoffs, "Playoffs", 8}}}
 
 func (r Rules) Validate() error {
 	if r.Season == "" || r.Stage == "" || r.Version == "" || r.ExpectedTeams < 1 || r.GamesPerTeam < 1 {

@@ -179,7 +179,7 @@ func exploreParity(query url.Values, seasons []history.SeasonParity, teamSeasons
 		{Key: "matches", Label: "Matches per team", Description: "average matches per team"},
 		{Key: "spread", Label: "PPG spread", Description: "spread of points per game"},
 		{Key: "chance", Label: "Chance level", Description: "spread expected from chance alone"},
-		{Key: "xspread", Label: "xPPG spread", Description: "spread of expected points per game"},
+		{Key: "xspread", Label: "xPPG spread", Description: "xPPG spread"},
 		{Key: "gap", Label: "Top-to-bottom gap", Description: "best minus worst points per game"},
 		{Key: "iqr", Label: "Middle half (IQR)", Description: "interquartile range of points per game"},
 	}
