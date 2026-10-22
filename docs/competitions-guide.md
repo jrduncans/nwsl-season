@@ -26,9 +26,9 @@ Public stages, in catalog order within a season:
 
 ASA has no 2020 regular season, so the 2020 Challenge Cup group stage is that
 season's primary stage. Historical regular seasons carry only a verified
-playoff cut line (top four 2016–2019, six 2021–2023, eight 2024–2025, from NWSL
+playoff place threshold (top four 2016–2019, six 2021–2023, eight 2024–2025, from NWSL
 records), not inventory, tiebreak or clinching rules. Completed knockout and
-group stages carry exact game counts; 2026 Playoffs has a bracket format but no
+group stages carry exact match counts; 2026 Playoffs has a bracket format but no
 inventory count while publication is incomplete.
 
 ### Capabilities are explicit
@@ -36,18 +36,18 @@ inventory count while publication is incomplete.
 A page or control appears only when the entry lists its exact capability.
 Nothing is inferred from stage kind, rules, inventory, cached rows or another
 capability. Two features also need verified rules: Forecast Lab needs rules
-with a playoff achievement, and clinching needs qualification, scenarios and
+with a playoff season outcome, and clinching needs qualification, scenarios and
 rules. Validation forbids league-only capabilities on non-league stages and
 bracket support without a knockout format.
 
 Where a fact is not verified, the page omits it rather than guessing: no
-playoff line without a cut line, no expected-count claims without inventory,
+playoff line without a verified place threshold, no expected-count claims without inventory,
 and no rule-dependent calculation without rules. An uncataloged season with
-cached games is factual-only: results and fixtures with xG, plus a notice that
+cached matches is factual-only: results and matches with xG, plus a notice that
 the competition format is not verified.
 
 A direct request for an unsupported feature returns a rendered `404` that names
-the feature, keeps the scope's factual navigation, and links back to the
+the feature, keeps the stage's factual navigation, and links back to the
 season. The capability check runs before any cache read or calculation, so an
 unsupported request has no side effects.
 
@@ -62,7 +62,7 @@ stage slug for a cataloged season is a `404`, never a fallback. Every link and
 redirect is relative so the `/nwsl-season/` proxy prefix survives.
 
 `/seasons` is the cache-only archive: every public stage grouped by season with
-its own readiness label. Each season-stage page has an in-page competition
+its own readiness label. Each stage page has an in-page competition
 switcher whose targets are server-rendered relative URLs; the global site
 header gains no season or stage controls.
 
@@ -71,25 +71,25 @@ header gains no season or stage controls.
 `cache.SeasonReadiness` reports two independent facts from one read-only
 snapshot:
 
-- **Readiness**: `available` once any game is cached or ASA discovery found
+- **Readiness**: `available` once any match is cached or ASA discovery found
   inventory, `not_published` when ASA returned no inventory, otherwise
   `unknown`.
-- **Completeness**: compares cached games with the verified inventory; it is
+- **Completeness**: compares cached matches with the verified inventory; it is
   `unknown` without one, otherwise `complete` or `incomplete`.
 
-A public stage with no cached games renders a normal `200` load-state page
+A public stage with no cached matches renders a normal `200` load-state page
 ("not loaded" or "not published") and never contacts ASA.
 
-## Season phase
+## Competition status
 
-The app classifies a loaded league-table scope for presentation only (no cache
+The app classifies a loaded league-table stage for presentation only (no cache
 state):
 
 | Phase | Condition | Presentation |
 | --- | --- | --- |
-| `upcoming` | Only scheduled games | Points to the schedule instead of an all-zero table. |
-| `active` | Completed and scheduled games | The full explorer. |
-| `complete` | Every game terminal and the verified inventory satisfied | `Final standings`, totals by default, no remaining-schedule UI, results without an Upcoming toggle. |
+| `upcoming` | Only scheduled matches | Points to the schedule instead of an all-zero table. |
+| `active` | Completed and scheduled matches | The full explorer. |
+| `complete` | Every match terminal and the verified inventory satisfied | `Final standings`, totals by default, no remaining-schedule UI, results without an Upcoming toggle. |
 | `unknown` | Anything else | Same as active. |
 
 `FullTime` and `Abandoned` are terminal; an unknown status never proves
@@ -104,32 +104,32 @@ A stage with the bracket capability uses its root for the bracket and keeps
 `/fixtures` chronological. The catalog holds each verified, versioned bracket
 topology: rounds, slots, seed pairs, connections, advancement policy (fixed,
 historically reseeded, or single final) and, for 2025 quarterfinals, the order
-in which ASA published the opening games.
+in which ASA published the opening matches.
 
 [`internal/bracket`](../internal/bracket/bracket.go) builds the view from that
-format and cached games. It places games by format, round chronology, game
+format and cached matches. It places matches by format, round chronology, match
 count, observed participants and source order, never by matchday, home venue,
 status alone or expanded minutes. A winner exists only for unequal
 regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
-games and links to fixtures. At 390px rounds stack with explicit `Advances to`
+matches and links to the Fixtures page. At 390px rounds stack with explicit `Advances to`
 text.
 
-Group stages render chronological fixtures with date headings, never
+Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.
 
 ## Derived historical outcomes
 
-Explore thresholds derive official points and games from ASA results, and
-qualification and seed evidence from cached playoff fixtures. The historical
-regular-season archive includes playoff games read in the same SQLite
+Explore thresholds derive official points and matches from ASA results, and
+qualification and seed evidence from cached playoff matches. The historical
+regular-season archive includes playoff matches read in the same SQLite
 transaction; they never contribute to regular-season scoring totals. The
 existing playoff catalog supplies topology, seed pairs and verified source order,
 so formats are not duplicated in a separate outcome catalog.
 
 [`outcome_overrides.json`](../internal/competition/outcome_overrides.json) supplies
-only facts ASA fixtures cannot establish: awarded matches, point deductions and
+only facts ASA matches cannot establish: awarded matches, point deductions and
 otherwise ambiguous tied orders. Ordinary completed seasons require no entry.
 The [exception audit](historical-outcomes-audit.md) explains each current override
 and the evidence constraints. The shared standings module selects the historical policy for each season;

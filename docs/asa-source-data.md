@@ -11,10 +11,10 @@ ASA's NWSL season filters begin in 2016 and use these stages: `Regular Season`,
 `Playoffs`, `NWSL Challenge Cup Group Stage`, `NWSL Challenge Cup Knockout
 Round`, and `NWSL Challenge Cup Final`. `game_id` accepts comma-separated IDs on
 `/nwsl/games` and `/nwsl/games/xgoals`, which is what lets targeted checks batch
-every due game in a scope into a single request.
+every due match in a stage into a single request.
 
 The app calls four endpoints: `/nwsl/teams`, `/nwsl/games`, `/nwsl/games/xgoals`
-and `/nwsl/teams/xgoals`. Player, goalkeeper, shot, game-flow, stadium, manager,
+and `/nwsl/teams/xgoals`. Player, goalkeeper, shot, match-flow, stadium, manager,
 referee, xPass and goals-added resources exist but no feature uses them, so the
 loader does not fetch them.
 
@@ -29,22 +29,22 @@ and so that new upstream fields are not silently lost.
 | `team_name` | `teams.name` | Display name |
 | `team_short_name`, `team_abbreviation` | `short_name`, `abbreviation` | Display fallbacks |
 
-Teams are global, not per season; a season's participants come from its games.
-Game team IDs are foreign keys, so a game write that finds an unknown team
+Teams are global, not per season; a season's participants come from its matches.
+Match team IDs are foreign keys, so a match write that finds an unknown team
 refreshes the catalog once and retries.
 
 ## Games (`/nwsl/games`)
 
 | ASA field | Stored as | Used by |
 | --- | --- | --- |
-| `game_id` | `games.asa_game_id` | Fixture identity and all joins |
+| `game_id` | `games.asa_game_id` | Match identity and all joins |
 | Requested `season_name` / `stage_name` | `games.season`, `games.stage` | Scope isolation (ASA's row has no stage, so the request supplies it) |
 | `date_time_utc` | `kickoff_utc` | Display, result-check scheduling, scenario slates, forecast and backtest cutoffs |
 | `status` | `status` | Completed/remaining split and every calculation boundary |
-| `home_team_id`, `away_team_id` | Same-named columns | Standings, fixtures, schedule strength, forecasts, qualification |
+| `home_team_id`, `away_team_id` | Same-named columns | Standings, matches, schedule strength, forecasts, qualification |
 | `home_score`, `away_score` | Nullable columns | Standings, tiebreaks, venue summaries, models |
 | `matchday` | `matchday` | Regular-season grouping and scenario slates |
-| `last_updated_utc` | `last_updated_utc` | Choosing between two observations of the same game |
+| `last_updated_utc` | `last_updated_utc` | Choosing between two observations of the same match |
 | `knockout_game`, `expanded_minutes` | Same-named columns | Knockout validation and display |
 | `extra_time`, `penalties`, `home_penalties`, `away_penalties` | Same-named nullable columns | Bracket winners and shootout tallies |
 
@@ -56,14 +56,14 @@ in `raw_json`.
 
 | ASA field | Stored as | Used by |
 | --- | --- | --- |
-| `game_id`, `home_team_id`, `away_team_id` | `game_xg` identity columns | Joined to and validated against the game |
-| `home_team_xgoals`, `away_team_xgoals` | `home_xg`, `away_xg` | Standings xG, fixtures, match outlooks, xG forecasts, venue baselines, backtests |
+| `game_id`, `home_team_id`, `away_team_id` | `game_xg` identity columns | Joined to and validated against the match |
+| `home_team_xgoals`, `away_team_xgoals` | `home_xg`, `away_xg` | Standings xG, matches, match outlooks, xG forecasts, venue baselines, backtests |
 | `home_xpoints`, `away_xpoints` | Same-named columns | Expected-points standings |
 
 Team-model xG is the forecasting input. The player-model xG and difference
 fields in the response are not stored.
 
-A completed game missing from a successful full xG response is stored as
+A completed match missing from a successful full xG response is stored as
 explicitly unavailable. xG has no source update timestamp and no finality
 marker, so stable responses never prove a value is final. That is why
 corrections are watched for a fixed window rather than until values stop
@@ -74,7 +74,7 @@ changing.
 With `split_by_games=true&shot_pattern=Penalty` the endpoint returns one row
 per team per game, restricted to penalty shots (zeros when none were taken;
 `xpoints` and `points` are not filtered). Without `shot_pattern` its
-`xgoals_for` equals the game-level team-model xG. It rejects `game_id` with HTTP
+`xgoals_for` equals the match-level team-model xG. It rejects `game_id` with HTTP
 500, but `start_date`/`end_date` with `stage_name` (and no `season_name`) return
 the same rows as a season query. Penalty data exists from 2016. `/nwsl/games/shots`
 sums to the player model and is not used.
@@ -97,12 +97,12 @@ These are computed locally from the source data above, never fetched:
 | Product | Depends on | Recomputed when |
 | --- | --- | --- |
 | Standings | Teams, completed results | On every read |
-| Schedule difficulty | Results, remaining fixtures, venue summary | On read |
-| Forecasts | Fixtures, xG, venue summary | Warmed after a material fixture or xG change |
-| Venue summary | Completed scores and available xG for one scope | A relevant result or xG change |
-| Qualification and clinching scenarios | Fixture snapshot plus versioned rules | A material fixture change or a rules/definition version change |
+| Schedule difficulty | Results, remaining matches, venue summary | On read |
+| Forecasts | Matches, xG, venue summary | Warmed after a material match or xG change |
+| Venue summary | Completed scores and available xG for one stage | A relevant result or xG change |
+| Qualification and clinching scenarios | Match snapshot plus versioned rules | A material match change or a rules/definition version change |
 | Model evaluation | Historical regular seasons and xG | Explicit evidence rebuild |
 
-The fixture snapshot that keys qualification and scenarios excludes team
+The match snapshot that keys qualification and scenarios excludes team
 display text, fetch times, raw JSON and xG, so none of those trigger a
 recalculation.

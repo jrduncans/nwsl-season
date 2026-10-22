@@ -1,22 +1,22 @@
 # How standings and schedule difficulty work
 
-Both are calculated on read from cached fixtures. Neither is stored, and
+Both are calculated on read from cached matches. Neither is stored, and
 schedule difficulty never changes the official standings.
 
 ## Standings
 
 [`internal/standings`](../internal/standings/standings.go) turns completed
-cached games into a table. Unplayed, postponed and abandoned games are ignored;
+cached matches into a table. Unplayed, postponed and abandoned matches are ignored;
 every participating team appears, including teams with zero points.
 
 Regular-season pages and the standings CLI apply the source-backed historical
 awards and point deductions from the competition exception file before ranking.
 Awarded 3–0 matches contribute to P/W/D/L, goals and every tie-break criterion;
 point deductions reduce points and PPG. Awards reconcile against observed
-full-season game counts, skipping awards already counted by ASA and reporting
+full-season match counts, skipping awards already counted by ASA and reporting
 inconsistent counts instead of guessing. These adjustments never change cached
-fixtures, results pages or xG (which describes played matches). Results and
-fixtures remain readable when partial cached data cannot reconcile official
+matches, results pages or xG (which describes played matches). Results and
+matches remain readable when partial cached data cannot reconcile official
 standings adjustments; their xG completeness warnings use raw match records.
 Other pages fall back to the unadjusted table with a note when reconciliation
 fails, rather than failing to render. The standings CLI still reports the error.
@@ -25,7 +25,7 @@ fails, rather than failing to render. The standings CLI still reports the error.
 
 - **2013–2019 and 2021:** head-to-head win–loss record (mini-league PPG for
   three or more clubs), overall goal difference, overall goals scored, then
-  the same three criteria for away games and for home games. If a multi-club
+  the same three criteria for away matches and for home matches. If a multi-club
   group shrinks to two, restart at the two-club head-to-head criterion.
 - **2022 onward:** goal difference, total wins, goals scored, head-to-head
   points among tied teams, then head-to-head goals scored. Remaining subgroups
@@ -42,8 +42,8 @@ Two orderings use the selected criteria:
 - **Total** ranks by the raw values. It is the official final order, and the
   default for complete and historical seasons. The server renders that order even
   without JavaScript; switching statistics back to Goals restores it.
-- **Per game** ranks by each criterion divided by games played, so the table is
-  fair while teams have played different numbers of games. It is the default
+- **Per game** ranks by each criterion divided by matches played, so the table is
+  fair while teams have played different numbers of matches. It is the default
   for an active season.
 
 The modern next tiebreaker, least disciplinary points, needs card data that
@@ -52,15 +52,15 @@ Rows still tied at the first unavailable criterion are marked undetermined,
 naming the rule and the tied teams. Alphabetical order stabilizes display only;
 it never certifies a rank. The clinching guide explains how proofs treat that case.
 
-A playoff line is drawn only when the catalog verifies the cut line (see the
+A playoff line is drawn only when the catalog verifies the playoff place threshold (see the
 [competitions guide](competitions-guide.md)).
 
 Finished-season tables show `Bye · Home` for seeds earning a first-round bye
 and home semifinal, and `Home` for other seeds earning an opening-round home
-game. The existing playoff line marks qualifying places, without repeated
+match. The existing playoff line marks qualifying places, without repeated
 Playoffs badges. Entitlements come from the catalog bracket seed pairs, not
 physical venues, and unresolved ranks receive no entitlement badge. Badges
-follow official total seeds in per-game mode and hide in the xG view. Active
+follow official total seeds in per-match mode and hide in the xG view. Active
 seasons retain the existing clinching badges. A note lists the season
 tie-break order and any official adjustments. In 2022 Houston places fourth
 ahead of Kansas City fifth: both have 36 points, but Houston has +8 goal difference to Kansas City’s 0.
@@ -68,17 +68,17 @@ ahead of Kansas City fifth: both have 36 points, but Houston has +8 goal differe
 ## Remaining schedule difficulty
 
 [`internal/strength`](../internal/strength/strength.go) offers three measures of
-a team's remaining regular-season fixtures, each counting an opponent once per
-fixture:
+a team's remaining regular-season matches, each counting an opponent once per
+match:
 
 1. **Raw opponent PPG**: the mean of each remaining opponent's current-season
    points per game.
 2. **Venue-adjusted**: raw PPG adjusted by half the league's home/away PPG gap
-   (home fixtures easier, away fixtures harder), so raw PPG stays the neutral
+   (home matches easier, away matches harder), so raw PPG stays the neutral
    midpoint. The gap pools completed matches from the current season and up to
    two previous regular seasons; opponent records stay current-season only.
 3. **Schedule-load adjusted** (the primary measure): venue-adjusted PPG scaled
-   per fixture by the same recovery and accumulated-load penalty as the default
+   per match by the same recovery and accumulated-load penalty as the default
    forecast model. The
    [Forecast Lab guide](forecast-lab-guide.md#xg-poisson-schedule-load) defines
    it.
@@ -95,7 +95,7 @@ unavailable, not zero.
 - Labels compare the rounded two-decimal delta with ±0.10 PPG: `Harder`,
   `Easier`, or `Near average`.
 - `/schedule-difficulty` shows toughest and easiest callouts, a sorted dot plot,
-  per-team expansions listing each opponent, venue and fixture contribution,
+  per-team expansions listing each opponent, venue and match contribution,
   and the raw and venue-only measures as comparisons. The page labels every
   value as an estimate, not a forecast, power rating or standings adjustment,
   and works without JavaScript.

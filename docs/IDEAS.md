@@ -51,7 +51,7 @@ travel effects, and true pre-match upsets.
 - Is the two-hour completion grace right for ASA's actual post-match
   publication delay?
 - How do official tiebreak rules differ by season? Historical seasons currently
-  get only a verified cut line, not rules.
+  get only a verified playoff place threshold, not rules.
 - Can a maintainable source supply disciplinary points, the first official
   tiebreaker missing from the cache?
 - Is the dedicated Schedule difficulty page still useful now that the

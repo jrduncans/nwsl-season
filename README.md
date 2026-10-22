@@ -1,7 +1,7 @@
 # NWSL Season Explorer
 
 NWSL Season Explorer is a website built in Go for browsing NWSL seasons,
-standings, fixtures, schedule difficulty, playoff qualification, and
+standings, matches, schedule difficulty, playoff qualification, and
 probabilistic season forecasts.
 
 The application keeps a local SQLite cache of data from [American Soccer
@@ -9,7 +9,7 @@ Analysis (ASA)](https://www.americansocceranalysis.com/), so ordinary page
 requests read locally and do not contact ASA. A background scheduler refreshes
 the configured season and recalculates derived xG, qualification, and
 clinching-scenario data as the cache becomes stale. Standings are calculated
-from the cached fixtures when a season page or CLI report is requested.
+from the cached matches when a season page or CLI report is requested.
 
 ## Features
 
@@ -17,20 +17,20 @@ from the cached fixtures when a season page or CLI report is requested.
 - Public regular seasons, playoffs, Challenge Cup group/knockout stages, and
   2024-2026 Challenge Cup finals, grouped by season with per-stage readiness.
 - Verified source-backed knockout brackets with empty and partial `TBD` slots,
-  extra-time and shootout facts, xG, and chronological fixture fallbacks.
-- Season overview with results, upcoming fixtures, model-based match outlooks, standings, goals, and xG.
-- Per-game and total standings views for seasons with uneven schedules.
-- Standings stat toggle with Goals and xG (ordered by xPts). Non-penalty xG has
-  no standings view: ASA publishes no non-penalty xPts, so npxG lives in Explore,
+  extra-time and shootout facts, xG, and chronological match fallbacks.
+- Season overview with results, upcoming matches, model-based match outlooks, standings, goals, and xG.
+- Per-match and total standings views for seasons with uneven schedules.
+- Standings stat toggle with Goals and xG (ordered by xPoints). Non-penalty xG has
+  no standings view: ASA publishes no non-penalty xPoints, so npxG lives in Explore,
   league history, and match results.
 - Phase-aware presentation: upcoming seasons emphasize the schedule, active
   seasons retain the full explorer, and completed or historical seasons focus
   on standings and results without empty remaining-schedule controls.
-- Verified playoff cut lines: top four for 2016–2019, top six for 2021–2023,
+- Verified playoff place thresholds: top four for 2016–2019, top six for 2021–2023,
   and top eight for 2024–2026.
 - Remaining schedule difficulty with raw, venue-adjusted, and relative
   schedule-load-adjusted comparisons.
-- Qualification proofs for the Shield, top-four seed, and playoff places.
+- Qualification proofs for the Shield, a home playoff game, and the playoffs.
 - Actionable clinching and elimination scenarios for the next slate.
 - Forecast Lab with Current Pace, Results Poisson, and xG Poisson models,
   including the selected recovery-time and accumulated-load adjustment, a
@@ -48,15 +48,15 @@ from the cached fixtures when a season page or CLI report is requested.
 - Health and cache-status endpoints for operators.
 
 The current rules configuration covers the 2026 regular season: 16 teams, 240
-fixtures, and eight playoff places. A refresh rejects an incomplete or uneven
-known fixture inventory, preserving the prior complete cache. On startup, the
+matches, and eight playoff places. A refresh rejects an incomplete or uneven
+known match inventory, preserving the prior complete cache. On startup, the
 scheduler also begins loading any missing public source-backed catalog stages;
 current-season work takes priority and the historical requests are bounded and
 sequential. During that one-time startup bootstrap, follow-on batches wait five
 seconds rather than the normal refresh interval, so an incomplete archive does
-not linger in the UI. For an overdue fixture, the scheduler also checks ASA's
-game-specific endpoint so a result can arrive before the season collection
-catches up. Qualification indicators are suppressed when the cached fixture
+not linger in the UI. For an overdue match, the scheduler also checks ASA's
+match-specific endpoint so a result can arrive before the season collection
+catches up. Qualification indicators are suppressed when the cached match
 inventory is incomplete.
 
 ## Quick start
@@ -96,7 +96,7 @@ seasons, with a sortable season table. Optional league context shows seasonal
 ranges and completed-season records with inspectable holders. Explore's xPoints
 describe recorded matches; they are distinct from Forecast Lab's projected
 final points. A Penalties control (Included or Excluded) switches Explore
-between official goals and xG and non-penalty goals and npxG; points and xPts
+between official goals and xG and non-penalty goals and npxG; points and xPoints
 always include penalties. Completed-match results with a penalty add an npxG
 line beside their xG.
 Match by match follows one team through a regular season. Scoring balance
@@ -107,7 +107,7 @@ panels with All / Home / Away totals when smoothing is off, and keeps paired
 actual and expected lines in rolling mode; Margins pairs goal margin and xG
 margin in two bar panels when smoothing is off, with All / Home / Away record
 and xG tiles. Rolling Margins keeps its two lines. Points vs xPoints compares
-earned match points with ASA's retrospective expected points. Benchmarks shows
+earned match points with ASA's retrospective xPoints. Benchmarks shows
 Goals, xG, Points, or xPoints with a team-average reference plus an optional
 league, playoff-team, top-4, Shield-team, or best-team comparison. Completed
 seasons use final standings groups and the Shield winner. Active seasons use
@@ -126,7 +126,7 @@ Useful endpoints:
 - `/seasons` — current and historical season catalog and no-JavaScript fallback.
 - `/seasons/:season/:stage` — canonical season or factual stage overview;
   bracket-capable stage roots render the verified bracket.
-- `/seasons/:season/:stage/fixtures` — results and remaining fixtures.
+- `/seasons/:season/:stage/fixtures` — results and remaining matches.
 - `/seasons/:season/:stage/schedule-difficulty` — remaining schedule comparison.
 - `/seasons/:season/:stage/clinching` — qualification and slate scenarios.
 - `/seasons/:season/:stage/forecast` — interactive forecast simulation.
@@ -203,10 +203,10 @@ because that repair runs inside the scheduler.
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
 | `NWSL_SYNC_CHECK_INTERVAL` | `5m` | How often the scheduler checks cache freshness. |
-| `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before an unfinished fixture is stale. |
+| `NWSL_SYNC_COMPLETION_GRACE` | `2h` | Time after kickoff before an unfinished match is stale. |
 | `NWSL_SYNC_TIMEOUT` | `2m` | Maximum duration of one ASA refresh and cache transaction. |
 | `NWSL_QUALIFICATION_BUDGET` | `5s` | Maximum time for one qualification calculation batch. |
-| `NWSL_SCENARIO_BUDGET` | `10m` | Maximum time for one clinching-scenario discovery batch; it runs independently after fixture sync and qualification. |
+| `NWSL_SCENARIO_BUDGET` | `10m` | Maximum time for one clinching-scenario discovery batch; it runs independently after match sync and qualification. |
 | `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
 | `NWSL_FORECAST_CONCURRENCY` | `4` | Maximum concurrent uncached Forecast Lab requests. |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |
@@ -223,9 +223,9 @@ computations that exceed their timeout receive `503`. The server also applies
 connection limits independently of any reverse proxy. During startup, it also
 calculates and keeps the zero-assumption result for every Forecast Lab model in
 the process-local result cache, so the initial request for each model can be
-served without running a simulation. A missing or unusable fixture cache only
+served without running a simulation. A missing or unusable match cache only
 skips this warm-up; it does not prevent the server from starting. Later
-successful fixture or xG cache changes refresh those baseline results; no-op
+successful match or xG cache changes refresh those baseline results; no-op
 checks leave the warmed cache intact.
 
 ## Observability
@@ -255,12 +255,12 @@ retryable or partial result are `WARN`; and ordinary context cancellation is
 boundary that actually shuts down the application.
 
 The trace data is deliberately wide rather than pre-aggregated. Page requests
-record the season, stage, fixture snapshot, cache age, fixture inventory, and
+record the season, stage, match snapshot, cache age, match inventory, and
 xG availability. Sync traces include their trigger, data-change counts, and
 independent xG/qualification/scenario outcomes. Forecast spans record the
-selected model plus the iteration, team, fixture, xG-observation, playoff-place,
-and fixed-assumption counts; calculation spans add the scoped fixture and
-achievement counts. They do not include individual assumed results.
+selected model plus the iteration, team, match, xG-observation, playoff-place,
+and fixed-assumption counts; calculation spans add the scoped match and
+season outcome counts. They do not include individual assumed results.
 
 The source-controlled [telemetry catalog](docs/telemetry/README.md) defines the
 intended names, types, and meanings using OpenTelemetry semantic conventions.
@@ -364,7 +364,7 @@ derived-data batches already exist. Use `-require-xg` when an xG refresh
 failure should make the command exit nonzero.
 
 Recalculate qualification and clinching scenarios from the last successful
-fixture snapshot without contacting ASA:
+match snapshot without contacting ASA:
 
 ```sh
 NWSL_QUALIFICATION_BUDGET=10m \
@@ -560,7 +560,7 @@ directory even though the current season data can be rebuilt from ASA.
 - [ASA source data](docs/asa-source-data.md) lists the stored ASA fields and
   what uses each one.
 - [Competitions](docs/competitions-guide.md) explains the season/stage catalog,
-  capabilities, readiness, season phases, and knockout brackets.
+  capabilities, readiness, competition status, and knockout brackets.
 - [How synchronization works](docs/sync-logic-guide.md) diagrams scheduler
   eligibility, ASA requests, targeted result reconciliation, validation, and
   durable cache replacement.
@@ -569,10 +569,10 @@ directory even though the current season data can be rebuilt from ASA.
 - [Standings and schedule difficulty](docs/standings-and-schedule-guide.md)
   explains table ordering, tiebreaks, and the remaining-schedule measures.
 - [How clinching works](docs/clinching-logic-guide.md) explains qualification
-  proofs, conservative tiebreak handling, no-help paths, and slate scenarios;
+  proofs, conservative tiebreak handling, no-help scenarios, and slate scenarios;
   its "Scenario presentation" section is the contract for summaries and
   alternatives.
-- [How Forecast Lab works](docs/forecast-lab-guide.md) explains model presets,
+- [How Forecast Lab works](docs/forecast-lab-guide.md) explains models,
   simulation behavior, fixed outcomes, and shareable scenarios.
 - The [telemetry guide](docs/telemetry/README.md) covers the telemetry
   registry, generated catalog, and Honeycomb queries.
