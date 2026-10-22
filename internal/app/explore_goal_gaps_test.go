@@ -19,7 +19,7 @@ func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireExact(t, body, "[data-trend-view] option[value=compare]", "Goals vs xG")
+	requireExact(t, body, "[data-trend-view] label span", "Goals vs xG")
 	for _, venue := range []string{"All", "Home", "Away"} {
 		requireText(t, body, "[data-trend-goal-gap-tiles]", venue)
 	}

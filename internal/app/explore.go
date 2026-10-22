@@ -35,6 +35,18 @@ type explorePage struct {
 	query url.Values
 }
 
+// explorePenaltiesSwitch is the Exclude penalties switch. Form names the
+// selection form it belongs to when it sits outside that form.
+type explorePenaltiesSwitch struct {
+	PointsOnly, NonPenalty bool
+	Form                   string
+}
+
+// PenaltiesSwitch is the data for the penaltiesSelect template.
+func (p explorePage) PenaltiesSwitch(form string) explorePenaltiesSwitch {
+	return explorePenaltiesSwitch{PointsOnly: p.PointsOnly, NonPenalty: p.NonPenalty, Form: form}
+}
+
 // PointsNoteShown reports whether the current view shows official points or
 // ASA xPoints beside the non-penalty basis, so it must carry the points note.
 func (p explorePage) PointsNoteShown(panel string) bool {

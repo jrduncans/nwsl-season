@@ -71,7 +71,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	// The control is a data control: last in the form row, never in navigation.
 	var last string
 	evalJSON(t, page, `() => { const form = document.querySelector('[data-team-controls]'); return [...form.children].filter((el) => !el.hidden && el.tagName === 'LABEL').pop().className; }`, nil, &last)
-	if last != "penalties-select" {
+	if last != "penalties-select switch" {
 		t.Errorf("last visible label in the row has class %q, want penalties-select", last)
 	}
 	if err := expect.Locator(page.Locator("nav select, nav .penalties-select, header .penalties-select")).ToHaveCount(0); err != nil {
@@ -299,10 +299,18 @@ const controlLayoutScript = `(headingSelector) => {
 	const box = (el) => { const r = el.getBoundingClientRect(); return {X: r.left + scrollX, Y: r.top + scrollY, W: r.width, H: r.height}; };
 	const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 	const heading = document.querySelector(headingSelector);
+	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
 	const controls = [...document.querySelectorAll('main select, .explore select, form select, .explore input[type="checkbox"][name]')]
 		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
-		.map((el, index) => ({Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: box(el), Label: box(el.closest('label') || el)}));
-	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
+		.map((el, index) => {
+			// The status line above Match by match's chart card names the basis and
+			// can wrap on phones, so the card's controls are measured from the card.
+			const card = el.closest('[data-trend-chart-card]');
+			const shift = card ? box(card).Y - headingBottom : 0;
+			const select = box(el), label = box(el.closest('label') || el);
+			select.Y -= shift; label.Y -= shift;
+			return {Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: select, Label: label};
+		});
 	return {AnchorY: headingBottom, HeadingBottom: headingBottom, Controls: controls};
 }`
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
 	"github.com/jrduncans/nwsl-season/internal/standings"
@@ -223,23 +224,23 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 			t.Fatalf("cache-only trend %s: %d %d/%d", path, response.Code, store.archiveCalls, store.seasonCalls)
 		}
-		for _, fragment := range []string{`data-view-choice="season-trend" aria-current="page"`, `data-panel="season-trend" aria-labelledby=`, `Show matches</button>`, `data-trend-rows`, `data-chart="season-trend"`} {
+		for _, fragment := range []string{`data-view-choice="season-trend" aria-current="page"`, `data-panel="season-trend" aria-labelledby=`, `data-trend-chart-card`, `data-trend-rows`, `data-chart="season-trend"`} {
 			if !strings.Contains(body, fragment) {
 				t.Errorf("missing %s", fragment)
 			}
 		}
 		if strings.Contains(path, "trend-view=relative") {
-			for _, fragment := range []string{`value="relative" selected`, `data-trend-average-data-control>`, `Benchmarks</option>`, `Reference lines show the team’s season average`} {
+			for _, fragment := range []string{`value="relative" form="season-trend-controls" checked`, `data-trend-average-data-control>`, `<span>Benchmarks</span>`, `Reference lines show the team’s season average`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("relative fallback missing %s", fragment)
 				}
 			}
-			_, averagePicker, _ := strings.Cut(body, `<select name="average-series" data-trend-average-series>`)
-			averagePicker, _, _ = strings.Cut(averagePicker, `</select>`)
+			_, averagePicker, _ := strings.Cut(body, `data-trend-average-series data-trend-average-data-control>`)
+			averagePicker, _, _ = strings.Cut(averagePicker, `</fieldset>`)
 			if strings.Contains(averagePicker, `value="both"`) || !strings.Contains(averagePicker, `value="goals"`) || !strings.Contains(averagePicker, `value="xg"`) {
 				t.Fatal("Season averages must offer only Goals and xG")
 			}
-			_, referencePicker, _ := strings.Cut(body, `<select name="average-reference" form="season-trend-controls" data-trend-reference>`)
+			_, referencePicker, _ := strings.Cut(body, `<select name="average-reference" form="season-trend-controls" data-trend-reference aria-label="Benchmark">`)
 			referencePicker, _, _ = strings.Cut(referencePicker, `</select>`)
 			reference := "league"
 			if strings.Contains(path, "average-reference=league") {
@@ -268,7 +269,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				}
 			}
 		} else if strings.Contains(path, "series=goals") {
-			for _, fragment := range []string{`data-trend-carried-series value="goals"`, `value="none" selected`} {
+			for _, fragment := range []string{`data-trend-carried-series value="goals"`, `value="none" form="season-trend-controls" checked`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("comparison URL lost hidden Data preference or mode: %s", fragment)
 				}
@@ -291,7 +292,7 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 				t.Fatal("known incomplete inventory must not produce a trend")
 			}
 		} else if strings.Contains(path, "season=2026") {
-			for _, fragment := range []string{`value="10" selected`, `data-trend-carried-series value="xg"`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
+			for _, fragment := range []string{`value="10" form="season-trend-controls" checked`, `data-trend-carried-series value="xg"`, `10-match trailing averages, per match; matches 1–9 use all matches played so far.`, `xG scored`, `xG allowed`, `data-chart="season-trend-xg"`, `data-trend-warning>`, `data-trend-undated>`} {
 				if !strings.Contains(body, fragment) {
 					t.Errorf("direct URL/fallback missing %s", fragment)
 				}
@@ -516,6 +517,44 @@ func TestExploreSeasonTrendLegacySmoothingRedirects(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireAttr(t, body, "[data-trend-smoothing] option[value='10']", "selected", "")
+	requireAttr(t, body, "[data-trend-smoothing] input[value='10']", "checked", "")
 	forbidElements(t, body, "select[name=trend-mode], select[name=window], [data-trend-window-control]")
+}
+
+// The chart card's segmented controls and switches render the URL's selection,
+// and the status line names each active switch.
+func TestExploreSeasonTrendChartCard(t *testing.T) {
+	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	path := "/explore?view=season-trend&season=2025&team=" + opponentsTeam
+	_, plain := getPage(t, archive, path)
+	requireExact(t, plain, "[data-trend-view] legend", "Chart")
+	requireExact(t, plain, "[data-trend-view] label span", "Scoring balance", "Goals vs xG", "Margins", "Points vs xPoints", "Benchmarks")
+	requireAttr(t, plain, "[data-trend-view] input[value=balance]", "checked", "")
+	requireExact(t, plain, "[data-trend-smoothing] legend", "Smoothing")
+	requireExact(t, plain, "[data-trend-smoothing] label span", "None", "3", "5", "10")
+	requireAttr(t, plain, "[data-trend-smoothing] input[value='5']", "checked", "")
+	requireAttr(t, plain, "[data-trend-smoothing] input[value='5']", "aria-label", "5-match average")
+	requireAttr(t, plain, "[data-trend-chart-card] input[data-penalties-selector]", "form", "season-trend-controls")
+	requireAttr(t, plain, "[data-trend-chart-card] input[data-penalties-selector]", "role", "switch")
+	requireAttr(t, plain, "[data-trend-opponents]", "role", "switch")
+	requireElements(t, plain, `[data-trend-basis="non-penalty"][hidden]`, `[data-trend-basis="opponents"][hidden]`)
+	forbidElements(t, plain, "[data-trend-submit]", "[data-season-trend-controls] noscript")
+
+	_, adjusted := getPage(t, archive, path+"&trend-view=difference&smoothing=none&penalties=exclude&opponents=adjusted")
+	requireAttr(t, adjusted, "[data-trend-view] input[value=difference]", "checked", "")
+	requireAttr(t, adjusted, "[data-trend-smoothing] input[value=none]", "checked", "")
+	forbidElements(t, adjusted, `[data-trend-basis][hidden]`)
+	requireText(t, adjusted, "[data-trend-season-status]", "· non-penalty · adjusted for opponents")
+	requireElements(t, adjusted, "[data-trend-average-data-control][hidden]", "[data-trend-reference-control][hidden]")
+
+	// Benchmarks adds Show beside Smoothing and picks the benchmark in the
+	// legend, keyed in the selected series' color.
+	_, relative := getPage(t, archive, path+"&trend-view=relative&average-series=xpoints")
+	forbidElements(t, relative, "[data-trend-average-data-control][hidden]", "[data-trend-reference-control][hidden]")
+	requireExact(t, relative, "[data-trend-average-series] legend", "Show")
+	requireExact(t, relative, "[data-trend-average-series] label span", "Goals", "xG", "Points", "xPoints")
+	requireAttr(t, relative, "[data-trend-average-series] input[value=xpoints]", "checked", "")
+	requireText(t, relative, "[data-trend-reference-control]", "Team average", "Compared with")
+	requireAttr(t, relative, "[data-trend-reference-key]", "data-series", "xg")
+	requireElements(t, relative, "[data-season-trend-plot] [data-trend-reference-control] select[data-trend-reference]")
 }

@@ -123,9 +123,8 @@ func TestExploreTrendBenchmarksSeasonGroupsAndFallback(t *testing.T) {
 				t.Fatalf("Shield favorite/winner = %+v", mean)
 			}
 			query := url.Values{"trend-view": {"relative"}, "average-reference": {benchmark.Key}, "trend-mode": {"match"}}
-			page, err := exploreSeasonTrend(query, teams, teamNameView{ID: "team-9"})
-			if err != nil || len(page.TrendReferences) != 4 {
-				t.Fatalf("references = %+v, %v", page, err)
+			if _, err := exploreSeasonTrend(query, teams, teamNameView{ID: "team-9"}); err != nil {
+				t.Fatalf("benchmark %s: %v", benchmark.Key, err)
 			}
 			query.Del("trend-mode")
 			for _, smoothing := range []string{"none", "5"} {
@@ -137,8 +136,8 @@ func TestExploreTrendBenchmarksSeasonGroupsAndFallback(t *testing.T) {
 				if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 					t.Fatalf("cache-only fallback: %d, %d/%d", response.Code, store.archiveCalls, store.seasonCalls)
 				}
-				if !strings.Contains(body, benchmark.Label) || !strings.Contains(body, "Benchmark values, teams and coverage") || !strings.Contains(body, page.TrendReferences[1].Value+" per match") {
-					t.Fatal("benchmark fallback omitted values or membership")
+				if !strings.Contains(body, `value="`+benchmark.Key+`" selected>`+benchmark.Label) {
+					t.Fatal("benchmark fallback omitted the selected benchmark")
 				}
 			}
 		}
@@ -226,7 +225,7 @@ func TestExploreSeasonTrendPointsCoverageRollingAndBenchmarkSelection(t *testing
 	query.Set("average-series", "xpoints")
 	query.Set("average-reference", "best")
 	page, err = exploreSeasonTrend(query, teams, teamNameView{ID: "team-0"})
-	if err != nil || len(page.TrendColumns) != 1 || page.TrendColumns[0].Label != "xPoints" || len(page.TrendReferences) != 2 || page.TrendReferences[1].Value != "Unavailable" || !strings.Contains(page.TrendReferenceStatus, "Best team average unavailable for xPoints") {
+	if err != nil || len(page.TrendColumns) != 1 || page.TrendColumns[0].Label != "xPoints" || !strings.Contains(page.TrendReferenceStatus, "Best team average unavailable for xPoints") {
 		t.Fatalf("xPoints benchmark must honor independent coverage and selection: %+v, %v", page, err)
 	}
 	response := httptest.NewRecorder()

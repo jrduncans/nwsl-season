@@ -1,5 +1,7 @@
 :root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --scoring-allowed: #a04e20; --chart-actual: #0b5136; --chart-expected: #9061c5; --chart-chance: rgba(95, 110, 102, .16); --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
 * { box-sizing: border-box; }
+/* Keep page width steady when a view grows a scrollbar; phones overlay theirs. */
+@media (min-width: 701px) { html { scrollbar-gutter: stable; } }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.5 system-ui, sans-serif; }
 a { color: var(--green); }
 .site-header, .site-footer { padding: 1rem max(1.25rem, calc((100vw - 72rem)/2)); background: var(--ink); color: white; }
@@ -383,6 +385,40 @@ th:nth-child(2) { text-align: left; }
 .explore-team-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; }
 .explore-team-controls label { display: flex; align-items: center; gap: .5rem; max-width: 100%; }
 .explore-team-controls select { min-width: 0; max-width: 100%; }
+.switch { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
+.switch input[role="switch"] { appearance: none; flex: none; position: relative; width: 2rem; height: 1.15rem; margin: 0; border-radius: 1rem; background: #c3cdc6; cursor: pointer; transition: background-color .15s; }
+.switch input[role="switch"]::after { content: ""; position: absolute; top: .15rem; left: .15rem; width: .85rem; height: .85rem; border-radius: 50%; background: white; transition: transform .15s; }
+.switch input[role="switch"]:checked { background: var(--green); }
+.switch input[role="switch"]:checked::after { transform: translateX(.85rem); }
+.switch input[role="switch"]:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 45%, white); outline-offset: 2px; }
+.switch input[role="switch"]:disabled { cursor: default; opacity: .5; }
+/* The legend floats so it lays out as a flex item: a small label above its options. */
+.segmented { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.segmented legend { float: left; padding: 0; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .02em; }
+.segmented-options { display: inline-flex; flex-wrap: wrap; gap: .15rem; max-width: 100%; padding: .2rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); }
+.segmented-options label { position: relative; display: block; }
+.segmented-options input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.segmented-options span { display: block; padding: .3rem .65rem; border-radius: .3rem; color: var(--muted); font-size: .875rem; font-weight: 700; white-space: nowrap; }
+.segmented-options label:hover span { color: var(--ink); }
+.segmented-options input:checked + span { color: white; background: var(--green); }
+.segmented-options input:focus-visible + span { outline: 3px solid color-mix(in srgb, var(--green) 45%, white); outline-offset: 1px; }
+.explore-chart-card { margin: 1rem 0; padding: .9rem 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.explore-chart-options { display: flex; flex-wrap: wrap; align-items: stretch; gap: .75rem 1.5rem; margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid var(--line); }
+.explore-chart-options select { min-width: 0; max-width: 100%; }
+.explore-chart-switches { display: flex; flex-direction: column; justify-content: flex-end; gap: .4rem; padding: 0 0 .45rem 1.5rem; border-left: 1px solid var(--line); }
+.explore-chart-switches:not(:has(> label:not([hidden]))) { display: none; }
+.explore-basis-tag { color: var(--green); }
+.explore-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; margin: .5rem 0; }
+.explore-legend-row .explore-legend { margin: .25rem 0; }
+.explore-reference-legend { align-items: center; gap: .5rem 1.25rem; min-width: 0; max-width: 100%; }
+.explore-reference-legend label[data-series] { display: flex; align-items: center; gap: .4rem; min-width: 0; max-width: 100%; color: var(--ink); white-space: nowrap; }
+.explore-reference-legend [data-series="goals"] .explore-reference-key { color: var(--chart-actual); }
+.explore-reference-legend [data-series="xg"] .explore-reference-key { color: var(--chart-expected); }
+.explore-reference-legend label select { min-width: 0; max-width: 100%; color: var(--ink); }
+.explore-reference-key { display: inline-block; width: 1.25rem; margin-right: .4rem; border-top: 2px dotted currentColor; vertical-align: middle; }
+.explore-reference-team { color: var(--muted); }
+.explore-reference-legend label .explore-reference-key { margin-right: 0; }
+@media (max-width: 600px) { .explore-chart-card { padding: .75rem; }.explore-chart-switches { padding: 0; border-left: 0; } }
 .explore-actual-key { color: var(--chart-actual); }
 .explore-expected-key { color: var(--chart-expected); }
 :is(.explore-team-table, .explore-team-history-table, .explore-distribution-table) caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
@@ -514,8 +550,6 @@ th:nth-child(2) { text-align: left; }
 
 .explore-season-scored-key { color: var(--chart-actual); }
 .explore-season-allowed-key { color: var(--scoring-allowed); }
-.explore-season-raw-key { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); }
-.explore-season-raw-key::before { content: ""; width: 1.4rem; border-top: 2px dotted currentColor; }
 .explore-season-balance-wrap { height: 260px; }
 @media (max-width: 600px) { .explore-season-balance-wrap { height: 240px; } }
 

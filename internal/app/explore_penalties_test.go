@@ -71,7 +71,7 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	}
 	// Default forms submit no penalties parameter.
 	for _, form := range find(t, plain, `form`) {
-		if got := submittedPenalties(t, form); got != 0 {
+		if got := submittedPenalties(t, plain, form); got != 0 {
 			t.Errorf("default form %q submits %d penalties values", attr(form, "class"), got)
 		}
 	}
@@ -85,10 +85,14 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 
 // submittedPenalties counts the penalties values a native submission of form
 // sends: enabled hidden fields and checked, enabled checkboxes.
-func submittedPenalties(t *testing.T, form *html.Node) int {
+func submittedPenalties(t *testing.T, body string, form *html.Node) int {
 	t.Helper()
 	count := 0
-	for _, input := range findIn(t, form, `input[name=penalties]`) {
+	inputs := findIn(t, form, `input[name=penalties]`)
+	if id := attr(form, "id"); id != "" {
+		inputs = append(inputs, find(t, body, `input[name=penalties][form=`+id+`]`)...)
+	}
+	for _, input := range inputs {
 		if _, disabled := lookupAttr(input, "disabled"); disabled {
 			continue
 		}
@@ -127,7 +131,7 @@ func TestExplorePenaltiesCheckboxSubmitsWithoutJavaScript(t *testing.T) {
 			if panel != "distribution" && fields["metric"] != "gap" {
 				t.Errorf("form dropped the selection: %v", fields)
 			}
-			if got := submittedPenalties(t, form); got != 1 {
+			if got := submittedPenalties(t, body, form); got != 1 {
 				t.Errorf("checked form submits %d penalties values, want 1", got)
 			}
 			submit := false
@@ -218,7 +222,13 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 				t.Errorf("the %s view offers %d Penalties checkboxes, want 1", panel, got)
 			}
 			requireElements(t, body, `section[data-panel=`+panel+`] input[data-penalties-selector][checked]`)
-			if panel != "trend" && panel != "table" {
+			switch panel {
+			case "trend", "table":
+			case "season-trend":
+				// Match by match states the basis in its status line instead.
+				requireText(t, body, "[data-trend-season-status]", "· non-penalty")
+				forbidText(t, body, "section[data-panel=season-trend]", "Penalty kicks excluded.")
+			default:
 				requireText(t, body, "section[data-panel="+panel+"]", "Penalty kicks excluded.")
 			}
 			if got := len(find(t, body, `nav label.penalties-select, nav select`)); got != 0 {
@@ -242,7 +252,7 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 				if len(findIn(t, form, `input[name=penalties]`)) == len(findIn(t, form, `input[name=penalties][disabled]`)) && len(findIn(t, form, `input[name=penalties]`)) > 0 {
 					want = 0
 				}
-				if got := submittedPenalties(t, form); got != want {
+				if got := submittedPenalties(t, body, form); got != want {
 					t.Errorf("form %q submits %d penalties values, want %d", attr(form, "data-team-controls")+attr(form, "class"), got, want)
 				}
 			}

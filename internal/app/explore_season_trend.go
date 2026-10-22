@@ -64,7 +64,6 @@ type exploreSeasonTrendView struct {
 	TrendLegacySmoothing                                                 bool
 	TrendAverageReference                                                string
 	TrendReferenceOptions                                                []exploreTrendReferenceOption
-	TrendReferences                                                      []exploreTrendReferenceView
 	TrendReferenceStatus                                                 string
 	TrendColumns                                                         []exploreTrendColumn
 	TrendTableColumns                                                    []exploreTrendColumn
@@ -86,6 +85,41 @@ type exploreSeasonTrendView struct {
 	// TrendOpponentsShown shows Adjust for opponents; TrendOpponents is its
 	// checked state, kept while hidden; TrendAdjusted applies it.
 	TrendOpponentsShown, TrendOpponents, TrendAdjusted bool
+}
+
+// exploreSegment is one choice in a segmented control. Description, when set,
+// is the accessible name for a terse Label.
+type exploreSegment struct {
+	Value, Label, Description string
+	Selected                  bool
+}
+
+// TrendViewOptions lists the Chart segments in display order.
+func (page exploreSeasonTrendView) TrendViewOptions() []exploreSegment {
+	options := []exploreSegment{{Value: "balance", Label: "Scoring balance"}, {Value: "compare", Label: "Goals vs xG"}, {Value: "difference", Label: "Margins"}, {Value: "points", Label: "Points vs xPoints"}, {Value: "relative", Label: "Benchmarks"}}
+	for i := range options {
+		options[i].Selected = options[i].Value == page.TrendView
+	}
+	return options
+}
+
+// TrendAverageSeriesOptions lists the Benchmarks Show segments.
+func (page exploreSeasonTrendView) TrendAverageSeriesOptions() []exploreSegment {
+	options := []exploreSegment{{Value: "goals", Label: "Goals"}, {Value: "xg", Label: "xG"}, {Value: "points", Label: "Points"}, {Value: "xpoints", Label: "xPoints"}}
+	for i := range options {
+		options[i].Selected = options[i].Value == page.TrendAverageSeries
+	}
+	return options
+}
+
+// TrendSmoothingOptions lists the Smoothing segments; the window sizes are
+// labeled by number and named in full for assistive technology.
+func (page exploreSeasonTrendView) TrendSmoothingOptions() []exploreSegment {
+	options := []exploreSegment{{Value: "none", Label: "None"}, {Value: "3", Label: "3", Description: "3-match average"}, {Value: "5", Label: "5", Description: "5-match average"}, {Value: "10", Label: "10", Description: "10-match average"}}
+	for i := range options {
+		options[i].Selected = options[i].Value == page.TrendSmoothing
+	}
+	return options
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
@@ -238,7 +272,6 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			}
 			page.TrendTeam = teamNameView{ID: team.ID, Name: team.Name, LogoURL: team.LogoURL}
 			if page.TrendView == "relative" {
-				page.TrendReferences = exploreTrendReferenceViews(season, team, page.TrendColumns, page.TrendAverageReference)
 				page.TrendReferenceStatus = exploreTrendUnavailableReference(season, page.TrendColumns, page.TrendAverageReference)
 			}
 			for index, match := range team.Matches {
@@ -255,11 +288,11 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		}
 	}
 	sortExploreTrendRows(page.TrendRows, page.TrendSort, page.TrendOrder)
-	page.TrendNote = exploreSeasonTrendNote(page, basis, coverage)
+	page.TrendNote = exploreSeasonTrendNote(page, coverage)
 	return page, nil
 }
 
-// One Smoothing select covers both the mode and the rolling window. Old
+// One Smoothing control covers both the mode and the rolling window. Old
 // trend-mode and window links still validate; the handler redirects them to
 // the equivalent smoothing value, which wins when both are present.
 func parseTrendSmoothing(query url.Values, page *exploreSeasonTrendView) error {
@@ -297,8 +330,9 @@ func parseTrendSmoothing(query url.Values, page *exploreSeasonTrendView) error {
 	return nil
 }
 
-// The note carries only what the controls and panel titles do not already say.
-func exploreSeasonTrendNote(page exploreSeasonTrendView, basis history.ScoringBasis, coverage *exploreOpponentCoverage) string {
+// The note carries only what the controls, status line and panel titles do not
+// already say.
+func exploreSeasonTrendNote(page exploreSeasonTrendView, coverage *exploreOpponentCoverage) string {
 	var parts []string
 	if page.TrendMode == "rolling" {
 		parts = append(parts, fmt.Sprintf("Each point averages the last %s matches, including that one.", page.TrendWindow))
@@ -311,9 +345,6 @@ func exploreSeasonTrendNote(page exploreSeasonTrendView, basis history.ScoringBa
 	}
 	if page.TrendView == "points" {
 		parts = append(parts, "xPoints: ASA’s expected points for each match.")
-	}
-	if basis.ExcludesPenalties() {
-		parts = append(parts, "Penalty kicks excluded.")
 	}
 	if page.TrendAdjusted {
 		parts = append(parts, opponentAdjustmentNote)

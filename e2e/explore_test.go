@@ -115,15 +115,25 @@ func controlValues(t *testing.T, page playwright.Page, selectors []string) map[s
 	evalJSON(t, page, `(selectors) => Object.fromEntries(selectors.map((selector) => {
 		const control = document.querySelector(selector);
 		if (!control) return [selector, "<missing>"];
+		if (control.tagName === "FIELDSET") return [selector, control.querySelector("input:checked")?.value ?? ""];
 		return [selector, control.type === "checkbox" ? String(control.checked) : control.value];
 	}))`, selectors, &values)
 	return values
 }
 
-// chooseOption picks value in the select matching selector, which fires the
-// same change event a person's choice does.
+// chooseOption picks value in the select or segmented control matching
+// selector, which fires the same change event a person's choice does.
 func chooseOption(t *testing.T, page playwright.Page, selector, value string) {
 	t.Helper()
+	segment := page.Locator(selector + ` input[type=radio][value="` + value + `"]`)
+	if count, err := segment.Count(); err != nil {
+		t.Fatalf("find %q in %s: %v", value, selector, err)
+	} else if count > 0 {
+		if err := segment.Check(); err != nil {
+			t.Fatalf("choose %q in %s: %v", value, selector, err)
+		}
+		return
+	}
 	if _, err := page.Locator(selector).SelectOption(playwright.SelectOptionValues{Values: &[]string{value}}); err != nil {
 		t.Fatalf("choose %q in %s: %v", value, selector, err)
 	}
@@ -1928,20 +1938,6 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 			t.Errorf("season link URL = %v, want 2025 keeping the series", got)
 		}
 	})
-
-	t.Run("match by match form submits a GET", func(t *testing.T) {
-		goTo("explore?view=season-trend&season=2025")
-		chooseOption(t, page, "[data-trend-smoothing]", "none")
-		if err := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Show matches"}).Click(); err != nil {
-			t.Fatalf("submit: %v", err)
-		}
-		if got := queryOf(t, page).Get("smoothing"); got != "none" {
-			t.Errorf("submitted smoothing = %q, want none (%s)", got, page.URL())
-		}
-		if err := expect.Locator(page.Locator("[data-trend-rows] tr")).ToHaveCount(30); err != nil {
-			t.Errorf("match values table rows: %v", err)
-		}
-	})
 }
 
 // homeAdvantageSeasons returns the Season column of the Home advantage table.
@@ -2445,28 +2441,6 @@ func TestExploreSeasonPointsEmptyAndVenueDates(t *testing.T) {
 			}
 			assertNoHorizontalOverflow(t, page)
 		}
-	}
-}
-
-func TestExplorePointsNativeSortURLs(t *testing.T) {
-	t.Parallel()
-	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-	path := "explore?view=season-trend&season=2025&trend-view=points&smoothing=none"
-	visitStatic(t, page, base+path)
-	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
-		t.Fatal(err)
-	}
-	if queryOf(t, page).Has("trend-sort") || queryOf(t, page).Has("trend-order") {
-		t.Fatal("default sort leaked into GET form")
-	}
-	visitStatic(t, page, base+path+"&trend-sort=points-gap&trend-order=desc")
-	chooseOption(t, page, "[data-trend-smoothing]", "5")
-	if err := page.Locator("[data-trend-submit]").Click(); err != nil {
-		t.Fatal(err)
-	}
-	if queryOf(t, page).Get("trend-sort") != "points-gap" || queryOf(t, page).Get("trend-order") != "desc" {
-		t.Fatal("native mode switch lost gap sort")
 	}
 }
 
@@ -3013,6 +2987,80 @@ func TestExploreMatchValuesStaleSort(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+		}
+	}
+}
+
+// TestExploreSeasonTrendChartCardKeyboard steps through the Chart and Smoothing
+// segments with arrow keys, and toggles the penalties switch with Space, which
+// updates the status line.
+func TestExploreSeasonTrendChartCardKeyboard(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		t.Run(vp.Name, func(t *testing.T) {
+			page := explorePage(t, base, vp, "explore?view=season-trend&season=2025")
+			for _, step := range []struct{ selector, param, want string }{
+				{"[data-trend-view] input[value=balance]", "trend-view", "compare"},
+				{"[data-trend-smoothing] input[value='5']", "smoothing", "10"},
+			} {
+				if err := page.Locator(step.selector).Focus(); err != nil {
+					t.Fatal(err)
+				}
+				if err := page.Keyboard().Press("ArrowRight"); err != nil {
+					t.Fatal(err)
+				}
+				if got := queryOf(t, page).Get(step.param); got != step.want {
+					t.Fatalf("ArrowRight from %s: %s = %q, want %q", step.selector, step.param, got, step.want)
+				}
+			}
+			tag := page.Locator(`[data-trend-basis="non-penalty"]`)
+			if err := expect.Locator(tag).ToBeHidden(); err != nil {
+				t.Fatal(err)
+			}
+			if err := page.Locator("[data-trend-chart-card] [data-penalties-selector]").Focus(); err != nil {
+				t.Fatal(err)
+			}
+			if err := page.Keyboard().Press("Space"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(tag).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
+			query := queryOf(t, page)
+			if query.Get("penalties") != "exclude" || query.Get("trend-view") != "compare" || query.Get("smoothing") != "10" {
+				t.Fatalf("penalties switch lost the selection: %s", query.Encode())
+			}
+			assertNoHorizontalOverflow(t, page)
+		})
+	}
+}
+
+// TestExploreBenchmarkLabelsFitTheChart checks that every reference line's
+// end label, drawn right of the plot, ends inside the canvas.
+func TestExploreBenchmarkLabelsFitTheChart(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, vp := range []viewport{Desktop, Mobile} {
+		for _, reference := range []string{"league", "playoff", "top-four", "shield", "best"} {
+			t.Run(vp.Name+"/"+reference, func(t *testing.T) {
+				page := explorePage(t, base, vp, "explore?view=season-trend&season=2025&trend-view=relative&average-reference="+reference)
+				var overflow []string
+				evalJSON(t, page, `() => ['season-trend', 'season-trend-xg'].flatMap(name => {
+					const chart = Chart.getChart(document.querySelector('[data-chart="' + name + '"]'));
+					if (!chart || !chart.chartArea) return [];
+					chart.ctx.save(); chart.ctx.font = '11px sans-serif';
+					const late = chart.trendPlotReferences.filter(r => r.value != null)
+						.map(r => ({label: r.shortLabel + ' ' + r.value.toFixed(2), end: chart.chartArea.right + 14 + chart.ctx.measureText(r.shortLabel + ' ' + r.value.toFixed(2)).width}))
+						.filter(r => r.end > chart.width).map(r => name + ': ' + r.label);
+					chart.ctx.restore();
+					return late;
+				})`, nil, &overflow)
+				if len(overflow) > 0 {
+					t.Fatalf("reference labels cut off at the canvas edge: %v", overflow)
+				}
+			})
 		}
 	}
 }

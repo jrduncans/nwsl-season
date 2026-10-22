@@ -57,6 +57,8 @@ func TestExploreForecastBenchmarksUseDefaultProjectionAndSharedCache(t *testing.
 		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), model.Info().Name) {
 			t.Fatalf("projection unavailable: %d", response.Code)
 		}
+		// Active-season groups name the projected group, not its size.
+		requireExact(t, response.Body.String(), "[data-trend-reference] option", "Projected playoff-team average", "Projected home playoff average", "Shield favorite")
 	}
 	if calls != 1 || store.archiveCalls != 3 || store.seasonCalls != 0 {
 		t.Fatalf("shared cache/snapshot: runs=%d archive=%d season=%d", calls, store.archiveCalls, store.seasonCalls)

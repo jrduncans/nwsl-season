@@ -98,6 +98,9 @@ func TestExploreOpponentAdjustmentTogglesInPlace(t *testing.T) {
 				adjusted.Official != "W–D–L and points use official results." || !strings.Contains(strings.Join(adjusted.Headings, "|"), "Adjusted xG against") {
 				t.Fatalf("adjusted state = %+v", adjusted)
 			}
+			if err := expect.Locator(page.Locator(`[data-trend-basis="opponents"]`)).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
 			if reflect.DeepEqual(seasonTrendBars(t, page), official) {
 				t.Fatal("Scoring balance bars did not change")
 			}
@@ -106,9 +109,7 @@ func TestExploreOpponentAdjustmentTogglesInPlace(t *testing.T) {
 			}
 
 			// Margins keeps it; Goals vs xG hides the control but keeps the value.
-			if _, err := page.Locator("[data-trend-view]").SelectOption(playwright.SelectOptionValues{Values: &[]string{"difference"}}); err != nil {
-				t.Fatal(err)
-			}
+			chooseOption(t, page, "[data-trend-view]", "difference")
 			if err := expect.Locator(page.Locator("[data-trend-margin-title]")).ToHaveText("Adjusted goal margin"); err != nil {
 				t.Fatal(err)
 			}
@@ -116,9 +117,7 @@ func TestExploreOpponentAdjustmentTogglesInPlace(t *testing.T) {
 			if err := expect.Locator(page.Locator("[data-trend-margin-direction]")).ToHaveText("Zero: level"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := page.Locator("[data-trend-view]").SelectOption(playwright.SelectOptionValues{Values: &[]string{"compare"}}); err != nil {
-				t.Fatal(err)
-			}
+			chooseOption(t, page, "[data-trend-view]", "compare")
 			if err := expect.Locator(page.Locator("[data-trend-opponents-control]")).ToBeHidden(); err != nil {
 				t.Fatal(err)
 			}
@@ -169,41 +168,6 @@ func TestExploreOpponentAdjustmentTogglesInPlace(t *testing.T) {
 				t.Fatal("unchecking kept opponents in the URL")
 			}
 		})
-	}
-}
-
-func TestExploreOpponentAdjustmentNativeSubmission(t *testing.T) {
-	t.Parallel()
-	expect := playwright.NewPlaywrightAssertions()
-	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
-	visitStatic(t, page, base+opponentsPath+"&season=2025&smoothing=none")
-	for _, adjusted := range []bool{true, false} {
-		if err := page.Locator("[data-trend-opponents]").SetChecked(adjusted); err != nil {
-			t.Fatal(err)
-		}
-		if err := page.Locator("[data-trend-submit]").Click(); err != nil {
-			t.Fatal(err)
-		}
-		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateLoad}); err != nil {
-			t.Fatal(err)
-		}
-		query := queryOf(t, page)
-		if got := query["opponents"]; adjusted && (len(got) != 1 || got[0] != "adjusted") || !adjusted && len(got) != 0 {
-			t.Fatalf("adjusted=%v submitted opponents %q", adjusted, got)
-		}
-		if query.Get("season") != "2025" || query.Get("team") != "odMX2OJqYL" {
-			t.Fatalf("submission lost the selection: %s", query.Encode())
-		}
-		headings := page.Locator("[data-trend-headings]")
-		if adjusted {
-			err := expect.Locator(headings).ToContainText("Adjusted goals for")
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else if err := expect.Locator(headings).Not().ToContainText("Adjusted"); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 

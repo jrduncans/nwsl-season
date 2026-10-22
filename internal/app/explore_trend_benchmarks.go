@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -27,7 +26,6 @@ type exploreTrendBenchmark struct {
 }
 
 type exploreTrendReferenceOption struct{ Key, Label string }
-type exploreTrendReferenceView struct{ Label, Value, Coverage, Members, Note string }
 
 // Means use raw team match appearances, independent of the chart's window.
 // xG and xPoints have separate coverage; neither is filled from actual results.
@@ -59,8 +57,7 @@ func exploreTrendMeanFor(teams []exploreTeamRecord, measure int, expected bool) 
 func exploreTrendBenchmarks(season exploreTeamSeason, input cache.HistoricalSeason, projection ...*simulation.Result) []exploreTrendBenchmark {
 	labels := []string{"League average", "Playoff-team average", "Home playoff average", "Shield winner", "Best team average"}
 	if season.Active {
-		labels[1] = fmt.Sprintf("Projected top %d average", input.Entry.PlayoffPlaces)
-		labels[2], labels[3] = "Projected home playoff average", "Shield favorite"
+		labels[1], labels[2], labels[3] = "Projected playoff-team average", "Projected home playoff average", "Shield favorite"
 	}
 	groups := make(map[string][]exploreTeamRecord)
 	groups["league"] = season.Teams
@@ -252,29 +249,6 @@ func exploreTrendReferenceOptions(season exploreTeamSeason) []exploreTrendRefere
 		options = append(options, exploreTrendReferenceOption{Key: benchmark.Key, Label: benchmark.Label})
 	}
 	return options
-}
-
-func exploreTrendReferenceViews(season exploreTeamSeason, team exploreTeamRecord, columns []exploreTrendColumn, reference string) []exploreTrendReferenceView {
-	var rows []exploreTrendReferenceView
-	for _, column := range columns {
-		own := exploreTrendMeanFor([]exploreTeamRecord{team}, column.Measure, column.Expected)
-		rows = append(rows, exploreTrendReferenceDisplay(column.Label+" · Team average", own, "All recorded matches for this team; expected means use available observations."))
-		for _, benchmark := range season.Benchmarks {
-			if benchmark.Key != reference {
-				continue
-			}
-			basis := 0
-			if column.Expected {
-				basis = 1
-			}
-			rows = append(rows, exploreTrendReferenceDisplay(column.Label+" · "+benchmark.Label, benchmark.Means[column.Measure][basis], benchmark.Note))
-		}
-	}
-	return rows
-}
-
-func exploreTrendReferenceDisplay(label string, mean exploreTrendMean, note string) exploreTrendReferenceView {
-	return exploreTrendReferenceView{Label: label, Value: exploreTrendNumber(mean.Value), Coverage: fmt.Sprintf("%d of %d team match appearances", mean.Count, mean.Total), Members: strings.Join(mean.Names, ", "), Note: note}
 }
 
 func exploreTrendUnavailableReference(season exploreTeamSeason, columns []exploreTrendColumn, reference string) string {
