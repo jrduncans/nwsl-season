@@ -1,35 +1,35 @@
 # How Forecast Lab works
 
 This guide describes the current **Forecast Lab** implementation at
-`/seasons/{season}/forecast`. It follows a forecast from the cached fixture
-snapshot through a complete simulated season, explains what a fixed result
+`/seasons/{season}/forecast`. It follows a forecast from the cached match
+snapshot through a complete simulated season, explains what a fixed outcome
 does, and draws a clear line between an outlook and a mathematical clinching
 proof.
 
 ## The short version
 
 Forecast Lab completes the season 50,000 times using one selected, versioned
-score model. In every simulated season it preserves played results, samples a
-score for every remaining cached fixture, calculates the regular-season table,
+forecast model. In every simulated season it preserves played results, samples a
+score for every remaining cached match, calculates the regular-season table,
 then plays the configured fixed-seed playoff bracket to a champion. It
 aggregates both regular-season and Championship outcomes.
 
 - Official standings contain only real completed results. A forecast is a
   model-based outlook, not an updated table.
-- A fixed result is a visitor assumption that a particular home win, draw, or
+- A fixed outcome is a visitor assumption that a particular home win, draw, or
   away win occurs. It is not a model prediction and it does not fix an exact
   scoreline.
-- Every model runs against the same fixture snapshot, fixed outcomes, playoff
-  cutoff, and number of simulations. A comparison shows how model assumptions
+- Every model runs against the same match snapshot, fixed outcomes, playoff
+  place threshold, and number of simulations. A comparison shows how model assumptions
   change the outlook.
 - The page is reproducible for unchanged input: its random seed is derived
-  from the selected model, cached fixture data, and fixed assumptions.
+  from the selected model, cached match data, and fixed assumptions.
 
 ```mermaid
 flowchart TD
-    A["Latest successful cached fixture snapshot"] --> B["Select active model and optional comparison"]
+    A["Latest successful cached match snapshot"] --> B["Select active model and optional comparison"]
     B --> C["Fit each model from completed data"]
-    C --> D["Prepare every remaining fixture once"]
+    C --> D["Prepare every remaining match once"]
     D --> E["Sample a complete season 50,000 times"]
     E --> F["Calculate the official total-points table for each season"]
     F --> G["Simulate the fixed-seed playoff bracket"]
@@ -40,7 +40,7 @@ flowchart TD
 The default model is currently **xG Poisson (schedule load)**
 (`xg-poisson-schedule-load-v1`). It starts from the established xG Poisson
 forecast, then adjusts the two teams' relative rates for exact recovery time
-and accumulated fixture load. The frozen adjustment passed the checked-in
+and accumulated load. The frozen adjustment passed the checked-in
 development and final-test protocol; see [Model evaluation
 v1](model-evaluation-v1.md).
 
@@ -48,30 +48,30 @@ v1](model-evaluation-v1.md).
 
 Forecast Lab is a request-time calculation over the latest successful cache;
 an ordinary page request does not call ASA or write a forecast back to SQLite.
-It requires at least one cached fixture and validates the data it uses:
+It requires at least one cached match and validates the data it uses:
 
-- teams and fixture IDs must be unique, and each fixture must reference known
+- teams and match IDs must be unique, and each match must reference known
   teams;
-- completed (`FullTime`) fixtures must have non-negative scores;
-- remaining (`PreMatch`) fixtures must not already have scores; and
-- each fixed assumption must name a still-remaining cached fixture and use a
+- completed (`FullTime`) matches must have non-negative scores;
+- remaining (`PreMatch`) matches must not already have scores; and
+- each fixed assumption must name a still-remaining cached match and use a
   valid home-win, draw, or away-win outcome.
 
-Fixtures with other statuses are not invented into a season result. If the
-cached fixture inventory does not match the configured regular-season size, the
-forecast can still run, but the page warns that it includes only the fixtures
+Matches with other statuses are not invented into a season result. If the
+cached match inventory does not match the configured regular-season size, the
+forecast can still run, but the page warns that it includes only the matches
 currently in the cache.
 
 The xG model reads only validated, available ASA **team-model** xG for
-completed games. The page reports its coverage; a warning appears below 95%.
+completed matches. The page reports its coverage; a warning appears below 95%.
 Missing xG is deliberately not substituted with actual goals.
 
 At server startup, the scheduler begins bootstrapping missing public historical
 regular seasons. The two previous seasons needed by the venue-based models are
 encountered first among the historical inputs, after current-season work. Those
-historical runs persist teams, fixtures, xG, and compact venue summaries, but
+historical runs persist teams, matches, xG, and compact venue summaries, but
 skip qualification and scenario calculations because forecasts consume only
-the historical home/away aggregate. Each successful fixture and xG write
+the historical home/away aggregate. Each successful match and xG write
 updates the summary transactionally, so later forecasts read two small
 aggregate rows rather than recalculating historical seasons on every request.
 See [How synchronization works](sync-logic-guide.md) for the complete refresh
@@ -98,10 +98,10 @@ ID, so a shared URL always says which model produced its outlook.
 | Results Poisson | `results-poisson-home-two-seasons-v1` | Scores | Current-season team attack and goals-conceded rates use league venue rates pooled with the two previous seasons. |
 | xG Poisson | `xg-poisson-home-two-seasons-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
 | xG Poisson (recent form) | `xg-poisson-recent-form-v1` | Available ASA team-model xG and kickoff dates | An experimental alternative: each team's xG attack and defence discount older current-season matches exponentially, while the two-season league home-field baseline stays unchanged. |
-| xG Poisson (schedule load) | `xg-poisson-schedule-load-v1` | Available ASA team-model xG, fixture kickoffs, and the two previous regular seasons | The selected xG Poisson model adjusts relative team strength for short recovery and a third match within nine elapsed days. |
-| xG Poisson (npxG strength, schedule load) | `xg-poisson-npxg-strength-v1` | Available ASA team-model xG and penalty splits, fixture kickoffs, and the two previous regular seasons | The schedule-load model with team attack and defence rated on non-penalty xG; league scoring rates still include penalties. Available for comparison, not the default. |
+| xG Poisson (schedule load) | `xg-poisson-schedule-load-v1` | Available ASA team-model xG, match kickoffs, and the two previous regular seasons | The selected xG Poisson model adjusts relative team strength for short recovery and a third match within nine elapsed days. |
+| xG Poisson (npxG strength, schedule load) | `xg-poisson-npxg-strength-v1` | Available ASA team-model xG and penalty splits, match kickoffs, and the two previous regular seasons | The schedule-load model with team attack and defence rated on non-penalty xG; league scoring rates still include penalties. Available for comparison, not the default. |
 
-All six models turn a fixture into independent home and away Poisson score
+All six models turn a match into independent home and away Poisson score
 distributions. Their scoring rates are bounded between `0.20` and `4.50` goals
 per side, which keeps sparse early-season data from producing implausibly
 extreme scorelines.
@@ -139,7 +139,7 @@ The simulator independently samples `Poisson(lambda_home)` and
 `Poisson(lambda_away)`.
 
 `xg-poisson-home-two-seasons-v1` uses this exact calculation with available
-team-model xG in place of `HG`, `AG`, `GF`, and `GA`. Only completed fixtures
+team-model xG in place of `HG`, `AG`, `GF`, and `GA`. Only completed matches
 with available xG contribute to its fit. Historical xG affects only the league
 home/away rates; each team's attack and defence still use the current season.
 Incomplete xG coverage can make its outlook different from Results Poisson for
@@ -162,7 +162,7 @@ The match at the cutoff has weight 1; a match 60 days old has weight 0.5, and
 one 120 days old has weight 0.25. The weighted xG-for, xG-against, and match
 weight replace `GF`, `GA`, and `P` in the standard eight-match shrinkage
 formula. This smooth decay has no date cliff and does not give an unevenly
-scheduled team an arbitrary fixed number of “recent” games. The 60-day
+scheduled team an arbitrary fixed number of “recent” matches. The 60-day
 half-life is a deliberately fixed experimental constant, not a user control.
 The checked-in historical evaluation found that it did not meet the
 precommitted replacement rule: its final-test match log loss was slightly
@@ -174,9 +174,9 @@ available comparison model.
 `xg-poisson-schedule-load-v1` is the selected default. It first calculates the
 unclamped home and away rates from `xg-poisson-home-two-seasons-v1`. For each
 team, recovery pressure is zero with at least six elapsed days since its prior
-fixture, rises linearly between six and five days, and saturates at one with
+match, rises linearly between six and five days, and saturates at one with
 five days or less. A separate accumulated-load flag is set when the current
-fixture is the team's third or later appearance and its second-prior kickoff
+match is the team's third or later appearance and its second-prior kickoff
 was no more than nine elapsed days earlier.
 
 For recovery pressure `r` and accumulated-load indicator `L`, the congestion
@@ -192,14 +192,14 @@ lambda_away = clamp(base_away * exp(-adjustment), 0.20, 4.50)
 
 This symmetric form preserves the two base rates' geometric mean: equal load
 cancels, while the more congested team becomes relatively weaker. FullTime and
-PreMatch fixtures with valid UTC kickoffs establish the schedule; abandoned or
-unsupported fixtures do not contribute. The constants were strongly shrunk
+PreMatch matches with valid UTC kickoffs establish the schedule; abandoned or
+unsupported matches do not contribute. The constants were strongly shrunk
 and frozen using development seasons before the model was evaluated once on
 the held-out final-test seasons.
 
 The standings indicator and Schedule difficulty page reuse this exact load
 calculation. Their descriptive strength measure starts from venue-adjusted
-opponent PPG and multiplies each fixture by
+opponent PPG and multiplies each match by
 `exp(team_congestion - opponent_congestion)`. Thus the schedule becomes harder
 when the evaluated team is more loaded, easier when its opponent is more
 loaded, and unchanged when their load is equal. The venue-only and raw PPG
@@ -234,7 +234,7 @@ Live forecasts take the league npxG venue rate from the prior-season venue
 summaries, which derive npxG totals from stored penalty splits when read; the
 npxG totals are used only when every prior-season xG match has a split.
 Otherwise the npxG league rate comes from the current season alone. Backtests
-pool the rate from cutoff-safe historical fixtures. Penalty splits and npxG
+pool the rate from cutoff-safe historical matches. Penalty splits and npxG
 totals are part of the forecast result key, so a split that arrives after its
 xG refreshes cached forecasts.
 
@@ -258,11 +258,11 @@ three models usable before teams have completed a match.
 
 ## One simulated season
 
-The simulator fits the selected model once, sorts fixtures by ID, and prepares
-one score distribution for every remaining fixture. Each iteration then:
+The simulator fits the selected model once, sorts matches by ID, and prepares
+one score distribution for every remaining match. Each iteration then:
 
 1. retains all completed cached results;
-2. samples one scoreline for every remaining fixture, honoring any fixed
+2. samples one scoreline for every remaining match, honoring any fixed
    outcome;
 3. calculates a full table using the 2026 official total-points ordering; and
 4. adds each team's points and finishing position to its aggregate; and
@@ -278,7 +278,7 @@ spurious probability advantage.
 
 The production default is 50,000 simulated seasons. The simulator checks the
 HTTP request context at least every 100 iterations, so cancelled requests stop
-instead of continuing to consume CPU. If there are no remaining fixtures, it
+instead of continuing to consume CPU. If there are no remaining matches, it
 reuses the known final table but still samples the playoffs in every iteration.
 A forecast without an eligible fixed bracket retains the single-table shortcut.
 
@@ -298,7 +298,7 @@ The model samples a 90-minute score for each playoff match. When that score is
 tied, it chooses the advancing team according to the model's relative
 90-minute win chances, normalized to exclude draws. This is an approximation
 for extra time and penalties, rather than a separate extra-time or shootout
-model. The selected score model is fitted to completed regular-season data
+model. The selected forecast model is fitted to completed regular-season data
 once. Playoff results do not refit it. The schedule-load model cannot know
 future playoff kickoffs, so its playoff pairings use its underlying xG venue
 rates without a recovery or accumulated-load adjustment.
@@ -311,8 +311,8 @@ fallback as a predictive tiebreak.
 ```mermaid
 flowchart TD
     A["Completed cache results"] --> D["One simulated season"]
-    B["Unfixed fixture"] --> C["Sample from the model score distribution"]
-    E["Fixed H / D / A fixture"] --> F["Sample until its score has that outcome"]
+    B["Unfixed match"] --> C["Sample from the model score distribution"]
+    E["Fixed H / D / A match"] --> F["Sample until its score has that outcome"]
     C --> D
     F --> D
     D --> G["Official total-points standings calculation"]
@@ -326,10 +326,10 @@ flowchart TD
 ## Fixed outcomes are conditional scorelines
 
 The assumption builder accepts only an outcome: home win (`h`), draw (`d`), or
-away win (`a`). It does not replace a fixture with an arbitrary canonical
+away win (`a`). It does not replace a match with an arbitrary canonical
 score such as `1–0` or `0–0`.
 
-Instead, the simulator samples from the selected fixture distribution until it
+Instead, the simulator samples from the selected match distribution until it
 gets a scoreline with the required relationship. This is rejection sampling
 from the model's conditional score distribution. It tries at most 10,000 times
 as a defensive guard; the clamped positive scoring rates make hitting that
@@ -344,7 +344,7 @@ conditional scoreline distributions.
 ## Reading the projected-finish table
 
 Each row combines 50,000 internally consistent seasons; it is not a sequence
-of independent per-fixture percentages.
+of independent per-match percentages.
 
 | Value | Meaning |
 | --- | --- |
@@ -362,7 +362,7 @@ elimination where enough teams already have more points than the team can
 still reach. Playoff elimination also settles the top-four, Shield, and
 Championship columns at `0%`. These proofs come from the real season, so they
 still hold after fixing remaining results in a scenario, and they are shown only
-when the qualification run for the current fixture snapshot completed.
+when the qualification run for the current match snapshot completed.
 Otherwise, a simulated share at or above 99.95% appears as `>99.9%`, and a share
 below 0.05%, including zero simulated seasons, appears as `<0.1%`.
 
@@ -374,7 +374,7 @@ points (up to 100%); the small 0% and ceiling labels make that scale visible.
 This keeps team comparisons consistent while allowing a certain finish to use
 the full bar width.
 
-The table is sorted by expected points, then playoff chance, then top-four
+The table is sorted by projected points, then playoff chance, then top-four
 chance, followed by a stable team name/ID order. The full finish distribution
 is available from each team row, so the range of plausible finishes remains
 visible without presenting an average finishing position as a literal outcome.
@@ -382,7 +382,7 @@ visible without presenting an average finishing position as a literal outcome.
 ### Comparing models
 
 An optional comparison runs the second selected model with the same teams,
-fixtures, fixed outcomes, iteration count, and playoff rules. The table keeps
+matches, fixed outcomes, iteration count, and playoff rules. The table keeps
 the active model as the main row and shows the comparison metrics plus
 `active − comparison` deltas:
 
@@ -406,10 +406,10 @@ Forecast Lab has two URL formats. The current canonical form is:
 - `m` is required and selects the active model.
 - `c` is optional, must be a different supported model, and selects a
   comparison.
-- Each `p` fixes one remaining fixture. Generated links sort these values by
-  game ID.
+- Each `p` fixes one remaining match. Generated links sort these values by
+  match ID.
 - At most 12 fixed outcomes are accepted. Malformed, duplicate, unknown,
-  completed, or otherwise stale fixture assumptions return `400 Bad Request`.
+  completed, or otherwise stale match assumptions return `400 Bad Request`.
 
 The app continues to accept legacy version-1 Results Poisson links, but it
 generates version-2 links. A bare `/forecast` chooses the catalog default;
@@ -419,14 +419,14 @@ presentation filter and is intentionally omitted from share, reset, model, and
 assumption-removal links.
 
 The random seed is the first eight bytes of a SHA-256 hash over the model ID,
-sorted team IDs, sorted cached fixture IDs/statuses/scores, sorted fixed
+sorted team IDs, sorted cached match IDs/statuses/scores, sorted fixed
 outcomes, and model-specific fitted input. The xG models add their xG values;
 date-sensitive models also add the relevant canonical kickoff schedule.
 Display names, refresh times, raw payloads, and unused xG rows do not affect the
 seed.
 
 A URL preserves model choices and assumptions, **not** a historical source
-snapshot. It always uses the latest successful cache. When a fixture later
+snapshot. It always uses the latest successful cache. When a match later
 completes or disappears, an assumption that names it becomes stale and the
 link is rejected rather than silently reinterpreted.
 
@@ -434,7 +434,7 @@ link is rejected rather than silently reinterpreted.
 
 Forecast Lab asks, *what does this model expect over many plausible complete
 seasons?* The clinching system asks, *is there any feasible completion that can
-deny a stated achievement?* They answer different questions:
+deny a stated season outcome?* They answer different questions:
 
 | Forecast Lab | Clinching system |
 | --- | --- |

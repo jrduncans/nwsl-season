@@ -63,12 +63,12 @@ Data:
 - An xG aggregate needs complete xG and an xPoints aggregate needs complete
   xPoints; neither implies the other. Missing values are null, never zero, and
   actual results stay visible when expected data is absent.
-- Never derive expected points from xG, and keep ASA's retrospective xPoints
+- Never derive xPoints from xG, and keep ASA's retrospective xPoints
   separate from Forecast Lab projections.
 - Each view owns its eligibility rule; there is no global sample threshold. An
   active season is legitimate data, shown as a current pace with its matches
   played, and is never presented as its final place in history.
-- Per-match rates adjust for games played, not for opponents or scoring era,
+- Per-match rates adjust for matches played, not for opponents or scoring era,
   so a statistical extreme is not a judgment of the best team.
 - Regular season, playoffs and cups stay separate unless a view explains why
   it combines them.
@@ -102,7 +102,7 @@ Presentation:
   a zero line and a consistent favorable direction. Color is never the only
   signal; no dual axes, unexplained composite scores, or one line per team.
 - Describe gaps as above or below expected, not luck; finishing, goalkeeping,
-  game state, model error and randomness all contribute.
+  match state, model error and randomness all contribute.
 - Put coverage and sample notes next to the result they qualify.
 - Essential detail works by touch and keyboard without hover; on narrow screens
   selected detail goes below the chart.
@@ -118,18 +118,18 @@ coverage, and browser checks at desktop width and 390px.
 ### Matches and seasons
 
 `history.SummarizeScoring` accepts public, source-backed `Regular Season`
-catalog entries with fixture capability and keeps a row for every season,
+catalog entries with the `fixtures` capability and keeps a row for every season,
 including unloaded ones, sorted by season. Cups and playoffs are rejected.
 
 A match is played only when its status is `FullTime` and both scores are
 present and nonnegative. `Abandoned` has its own terminal count; a malformed
-`FullTime` fixture counts as an invalid completed result, not a score; other
+`FullTime` match counts as an invalid completed result, not a score; other
 statuses are pending. Team views orient home and away appearances to each team
-(points are 3/1/0) and require distinct, nonempty team IDs per fixture.
+(points are 3/1/0) and require distinct, nonempty team IDs per match.
 
 ### Expected values
 
-xG and xPoints join a played match by fixture ID and matching home/away teams,
+xG and xPoints join a played match by match ID and matching home/away teams,
 and need the xG capability and an available observation. xG must be finite and
 nonnegative; xPoints must be finite and between 0 and 3. Zero is valid. Coverage
 is counted separately for each. A league or team xG rate exists only when every
@@ -139,7 +139,7 @@ counted match has valid xG; the same holds for xPoints.
 
 A season is plotted only with at least 20 valid played matches, available source
 readiness, a known non-upcoming lifecycle, no invalid completed results, no
-known-incomplete inventory, and no pending fixture in a completed lifecycle.
+known-incomplete inventory, and no pending match in a completed lifecycle.
 Team views use the same checks with a one-result minimum. Unknown inventory
 does not exclude a season. Partial xG never excludes a season's goals.
 
@@ -177,13 +177,13 @@ non-penalty goals are unknown. A season with any played match outside that
 coverage gets `incomplete_non_penalty_data`. Team match records keep the
 official score beside the basis goals.
 
-Official points, ASA xPts, benchmark groups and forecasts never change with the
+Official points, ASA xPoints, benchmark groups and forecasts never change with the
 basis (ASA publishes no non-penalty xPoints). Mixed views that combine points
 with non-penalty goals or xG show the note "Points include penalties; ASA
 publishes no non-penalty expected points." Labels follow the basis (`xG` → `npxG`, `Goals` →
 `Non-penalty goals`, `xGD` → `npxGD`) through `basisText` in Go and `T` in
 `explore.js`; option text and select labels never change, so controls keep
-their size. Fixture results add an `npxG` line when a match had penalty xG.
+their size. Match results add an `npxG` line when a match had penalty xG.
 
 ## League trends
 
@@ -201,7 +201,7 @@ counts and one-decimal shares, sorted by exact share with newest season first
 on ties.
 
 **Home advantage** plots, per eligible season, how much better home sides did
-than away sides per played match: goals against xG and points against xPts, as
+than away sides per played match: goals against xG and points against xPoints, as
 two small multiples that share the season axis. Each mark is home minus away,
 so above the labeled zero line the home side did better. There are no dual
 axes, and missing calendar years, including 2020, are gaps. Each panel's
@@ -209,10 +209,10 @@ expected mark needs complete coverage of its own metric (xG for goals, xPoints
 for points), so one can be missing while the other and the actual values remain;
 a note names the seasons without each. An eligible active season is plotted and
 noted as in progress through N matches. The table lists season, matches,
-home-minus-away goals, xG, points and xPts per match, and the home win, draw and
+home-minus-away goals, xG, points and xPoints per match, and the home win, draw and
 loss share, sorted from unrounded values (`home-sort=season|matches|goals|xg|points|xpoints|results`,
 `home-order=asc|desc`, default season descending, with unavailable values last). `penalties=exclude` switches the goals panel to
-non-penalty goals against npxG; points and xPts never change and carry the
+non-penalty goals against npxG; points and xPoints never change and carry the
 standard points note. Eligibility is the Scoring trend's, including the
 non-penalty coverage rule. The calculation is `history.SummarizeHomeAdvantage`,
 which reads the scoring summaries, not `venue_summaries` (those cover only the
@@ -267,11 +267,11 @@ outcome, team name and PPG; points and match counts live in the
 season cards and outcome-specific table. Missing values and 2020 split
 lines. Active seasons have no final mark.
 
-`history.Thresholds` derives records from all-shots summaries and playoff games
+`history.Thresholds` derives records from all-shots summaries and playoff matches
 in the same coherent SQLite archive read. Team names come from the cached ASA
 identities, as elsewhere in Explore. The existing competition catalog supplies
-qualification places and bracket topology; opening seed pairs supply home and
-bye cutoffs. No full standings, W–D–L records or season formats are duplicated in
+qualification places and bracket topology; opening seed pairs supply home playoff game
+and bye thresholds. No full standings, W–D–L records or season formats are duplicated in
 a threshold catalog, and no extra network request runs during page rendering.
 
 Official records are ranked with the shared season-specific standings policy:
@@ -287,17 +287,17 @@ corroborate computed ranks and constrain any remaining unavailable tiebreaker.
 Verified source order is used only where the bracket catalog explicitly supplies
 it. The neutral final never establishes home entitlement. Contradictory
 playoff evidence is retried per outcome: the Shield uses the regular-season
-order alone, and the home-game, bye and playoff cutoffs each use only their own
+order alone, and the home playoff game, bye and playoff thresholds each use only their own
 evidence, so a conflict withholds just the outcomes it touches. An unresolved
-cutoff or adjacent finisher leaves that boundary as a gap. A tie override is accepted only for a still-unresolved rank,
+threshold or adjacent finisher leaves that boundary as a gap. A tie override is accepted only for a still-unresolved rank,
 never to replace a result the season's computable rules already determine.
 
 A season needs loaded, terminal regular-season results, a complete resolved
-catalog playoff bracket and consistent official game counts across teams after
-awards. Known incomplete inventory withholds all cutoffs. Without verified
-regular-season inventory, equal game counts and a completed postseason are
-closure checks, not an independent audit of every fixture; a uniformly truncated
-archive cannot be ruled out by counts alone. An active scope can enter as soon
+catalog playoff bracket and consistent official match counts across teams after
+awards. Known incomplete inventory withholds all thresholds. Without verified
+regular-season inventory, equal match counts and a completed postseason are
+closure checks, not an independent audit of every match; a uniformly truncated
+archive cannot be ruled out by counts alone. An in-progress season can enter as soon
 as verified regular-season inventory is complete and its postseason is complete,
 without waiting for the calendar to change. Ordinary later seasons need only
 normal ASA synchronization and their normal competition catalog entry, not an
@@ -306,14 +306,14 @@ source-backed exception.
 
 [`outcome_overrides.json`](../internal/competition/outcome_overrides.json) contains
 only facts absent from ASA: awarded matches, deductions and otherwise unresolved
-tied orders. Awards fill observed game-count deficits; if ASA already counts an
+tied orders. Awards fill observed match-count deficits; if ASA already counts an
 award, it is skipped. Asymmetric or unexplained deficits withhold the values.
 Deductions change official points while preserving the played-match record.
 Tie overrides must agree with equal points, unresolved computed ranks and the
 observed seed constraints.
 See [the exception audit](historical-outcomes-audit.md).
 
-PPG is **official points / official games**, including awarded forfeits and
+PPG is **official points / official matches**, including awarded forfeits and
 point deductions. Unrounded ratios are shared by chart, cards and table;
 three-decimal display does not break ties. Portland's 2021 Shield value is 44/24,
 not its played-match 41/23. Details explicitly label equal official points at a
@@ -328,8 +328,8 @@ Season links and Chart.js marks select details below the chart by touch or keybo
 (`threshold-season`, default newest eligible season). JavaScript updates the URL
 and detail visibility in place, restoring reload and Back/Forward. Native
 links, the outcome form and sortable table headers work without scripts. The
-selected season uses compact outcome cards: cutoff team and PPG lead, with rank,
-official points and games underneath; the next official finisher forms a
+selected season uses compact outcome cards: threshold team and PPG lead, with rank,
+official points and matches underneath; the next official finisher forms a
 secondary comparison row. Equal-points boundaries have a visible badge. Outcomes
 that did not apply have no empty card; the season heading says **No byes**.
 Format explanations, earned/official record differences and primary sources live
@@ -337,19 +337,19 @@ in a separate disclosure.
 
 The comparison table shows one outcome at a time (`threshold-outcome`: `shield`,
 `home`, `bye` or `playoffs`, default `playoffs`). Each row is one season's verified
-cutoff team, official points, official games and PPG. Non-applicable and unavailable
-cutoffs have no rows. A bye comparison therefore contains only bye seasons.
+threshold team, official points, official matches and PPG. Non-applicable and unavailable
+thresholds have no rows. A bye comparison therefore contains only bye seasons.
 Headers sort by `threshold-sort` (`season`, `team`, `points`, `played`, `ppg`)
 and `threshold-order` (`asc` or `desc`, default newest season first); PPG sorting
 uses the unrounded ratio, with newest season breaking ties. Outcome selection and
 sorting update the URL in place and restore on reload and Back/Forward. The five
 columns fit desktop and 390px without horizontal scrolling. Season links lead to
-the full adjacent-team comparison. Formats show qualification places, home-game
-cutoff and relevant round, and bye cutoff. Hosting means a seed's entitlement
+the full adjacent-team comparison. Formats show qualification places, home playoff game
+threshold and relevant round, and bye threshold. Hosting means a seed's entitlement
 subject to venue exceptions, excluding neutral finals and hosting conditional on
 an earlier win.
-Historical cutoffs are observations, never future guarantees. PPG normalizes
-games played, not opponents or era.
+Historical thresholds are observations, never future guarantees. PPG normalizes
+matches played, not opponents or era.
 
 ### Team-seasons
 
@@ -395,7 +395,7 @@ applies in all modes. Active bars are hollow and rows say "in progress through
 N matches". Distinct ASA IDs remain separate, with names from that season's
 team list; franchise lineage is not inferred.
 
-Points per match are earned points divided by played matches; expected points
+Points per match are earned points divided by played matches; xPoints per match
 use ASA xPoints divided by the same count. All measures use unrounded values
 for competition ranks and sorting. Ties order newest season first, then team
 name, then ID. Actual rankings require no expected data. Expected and Gap
@@ -556,7 +556,7 @@ so switching views restores that selection. Benchmarks defaults to Goals even
 when a saved URL carries `series=xg`; set `average-series=xg` to select xG.
 
 Matches are numbered by kickoff instant (`fixtures.ParseKickoff` handles both
-RFC 3339 and ASA timestamps), with fixture ID breaking ties; a missing kickoff
+RFC 3339 and ASA timestamps), with match ID breaking ties; a missing kickoff
 sorts last with a warning.
 
 Every chart's tooltip and keyboard description starts with the match number,
@@ -688,7 +688,7 @@ zero, and draws can fall either way, because xPoints is between 0 and 3.
 This points-only view has no Penalties control or points note. Old links with
 `penalties=exclude` are accepted and canonical links and forms drop the value.
 
-Three equal All / Home / Away tiles show points vs xPts totals and the gap as
+Three equal All / Home / Away tiles show points vs xPoints totals and the gap as
 above or below expected. “N of M matches” coverage appears only when xPoints
 is incomplete.
 Home is solid blue (`#1F6FA8`); away is orange (`#CF7424`) diagonal stripes on
@@ -727,7 +727,7 @@ control.
 
 #### Venue-local dates
 
-Match dates show the venue's local calendar day, using the cached fixture's
+Match dates show the venue's local calendar day, using the cached match's
 `stadium_id` and the IANA zone catalog in
 [`internal/fixtures/venues.go`](../internal/fixtures/venues.go). Neither the home
 team, the browser, nor the server picks the zone, and there is no UTC or
@@ -745,7 +745,7 @@ official sources:
 [Seattle's Memorial Stadium history](https://www.reignfc.com/news/letter-njx5x),
 [Fullerton's Titan Stadium](https://fullertontitans.com/sports/2023/8/3/athletics-titan-stadium.aspx),
 [Osceola Heritage Park](https://www.osceola.org/Community/Parks-and-Public-Lands/Park-Hours-Rules-and-Reservations)
-and [Denver's venues](https://www.denversummitfc.com/venues/). Two fixtures
+and [Denver's venues](https://www.denversummitfc.com/venues/). Two matches
 missing a stadium ID are mapped to Inter&Co Stadium from match reports:
 `Xj5YPveRMb` ([May 8, 2026](https://www.orlandocitysc.com/pride/news/match-report-barbra-banda-scores-late-game-winner-as-pride-beat-the-courage-1-0))
 and `KXMeXv6vQ6` ([August 7, 2026](https://www.orlandocitysc.com/pride/news/match-report-orlando-pride-fall-3-1-to-racing-louisville-fc)).
@@ -818,7 +818,7 @@ Away swatches are the venue legend. Non-penalty goals say “np goals”, with
 “N/M with split” for incomplete coverage. xG totals require every match;
 incomplete coverage says “xG incomplete” and “xG N/M meetings” rather than
 summing a partial population as a complete total. Official W–D–L and points
-stay fixed when excluding penalties, with the explanatory note. xPts totals
+stay fixed when excluding penalties, with the explanatory note. xPoints totals
 are available in Points vs xPoints. The former Expected view is accepted as
 an alias for Margins. Requests with `h2h-series=expected` (or explicit
 `actual`) redirect to the same relative URL without `h2h-series`, preserving
@@ -844,7 +844,7 @@ Away tiles show the same totals, gap and coverage rule as Match by match, with
 coverage counted in meetings. Swatches live on these tiles,
 so there is no separate venue legend. Missing xPoints retains its slot without
 a bar, independently of xG or penalty-split coverage. The tooltip, keyboard
-description, no-JavaScript list and values table include points, xPts and the
+description, no-JavaScript list and values table include points, xPoints and the
 signed points − xPoints difference. The panel title reads “Points − xPoints”,
 and the zero-line explanation matches the season chart. This view has no Penalties control or points note;
 a carried penalties parameter has no effect.
@@ -855,9 +855,9 @@ population; Goals vs xG withholds incomplete totals and shows explicit split
 coverage.
 Charts use non-penalty goals and/or npxG on that basis. Meetings without a split retain their
 slot and official result in the tooltip and table but have no non-penalty bar.
-Points and xPts use every meeting and never change. Meeting lists and official
+Points and xPoints use every meeting and never change. Meeting lists and official
 W–D–L also never change. Both goal views show an xG missing-note whenever
-coverage is incomplete. Goals vs xG has no xPts missing-note or points/basis
+coverage is incomplete. Goals vs xG has no xPoints missing-note or points/basis
 note; Margins uses the official-results note.
 Points vs xPoints has neither a penalty-split nor an xG coverage note.
 
@@ -870,7 +870,7 @@ excluded; malformed completed results exclude their season. Distinct ASA IDs
 stay separate, with no franchise lineage inferred (including Utah's gap years).
 Playoff and cup meetings are excluded.
 
-All three views use kickoff-instant order, fixture ID breaking ties and undated
+All three views use kickoff-instant order, match ID breaking ties and undated
 meetings last. Home meetings are solid blue (`#1F6FA8`); away meetings have
 orange (`#CF7424`) diagonal stripes on paper (`#fbfcf8`) with a thin orange
 outline: 1.5px stripes every 3.4px at 45 degrees. Zero values have a short mark.
@@ -921,7 +921,7 @@ on narrow screens, with a scroll hint.
 | `h2h-order` | `asc`, `desc` | `desc` |
 | `penalties` | `include`, `exclude` (two goal views; ignored for points) | `include` |
 
-The payload stores each fixture once with shared team identities and
+The payload stores each match once with shared team identities and
 season-specific names. It carries official scores, both scoring bases and
 independent expected values; the browser derives either team's orientation,
 records, expected totals and comparison totals. An app test bounds the raw
@@ -934,7 +934,7 @@ render for complete xG, incomplete xG and a non-penalty missing-split population
 Tile calculation stays in the browser for in-place team, opponent and basis
 changes. Precomputing formatted tiles for every oriented pair in both bases
 would add a matrix that grows with the square of the team count to the bounded
-fixture archive. Both renderers instead consume explicit per-match goal
+match archive. Both renderers instead consume explicit per-match goal
 coverage from the scoring calculation. That calculation still requires valid
 xG and a consistent penalty split for non-penalty goals: a raw split without
 valid xG, or valid xG without a split, covers neither non-penalty goals nor
@@ -975,14 +975,14 @@ and the current year is active.
 | Scenario | Data |
 |---|---|
 | `default` | 2018, 2019, 2021, 2022 with 20 matches each; xG complete for 2018 and 2021, 19 of 20 for 2019, none for 2022 |
-| `thresholds` | Recorded ASA regular-season score/identity tuples and postseason fixtures for 2016–2025 (no 2020), without xG or penalty splits. Regular-season dates and fixture IDs are synthetic; postseason chronology, shootouts and identities are recorded. Cutoffs derive from results and sparse exceptions, including official 2021 forfeits and inferred 2022/2023 equal-points boundaries |
-| `overview` | 2016–2026 (no 2020), 20 matches each among six clubs covering all five goal bins, a varying home edge, full xG and xPts; 2018 has two teams far behind, 2024 a separate top three, 2025 one runaway leader |
+| `thresholds` | Recorded ASA regular-season score/identity tuples and postseason matches for 2016–2025 (no 2020), without xG or penalty splits. Regular-season dates and match IDs are synthetic; postseason chronology, shootouts and identities are recorded. Thresholds derive from results and sparse exceptions, including official 2021 forfeits and inferred 2022/2023 equal-points boundaries |
+| `overview` | 2016–2026 (no 2020), 20 matches each among six clubs covering all five goal bins, a varying home edge, full xG and xPoints; 2018 has two teams far behind, 2024 a separate top three, 2025 one runaway leader |
 | `empty` | 2024 with 19 matches and no xG, below the 20-match minimum |
 | `single` | 2024 with 20 matches of one goal each and no xG |
-| `teams` | 2025 and 2026, 64 matches among the 16 real clubs; 2026 has one match without xPts and one without xG; 2024 has no fixtures |
+| `teams` | 2025 and 2026, 64 matches among the 16 real clubs; 2026 has one match without xPoints and one without xG; 2024 has no matches |
 | `no-xg` | Like `season-trend`, but only each season's first match has xG, so no team has complete xG |
-| `team-history` | `teams` plus 2016–2023 (no 2020), 96 played matches per loaded season (12 per club), scores varying by year and fixtures dated within their season; 2026 adds 144 pending fixtures to complete its inventory. 144 team-seasons; Portland–Seattle has 26 meetings (13 home, 13 away), other pairs have several meetings, and Portland–Bay has never met. Fixture assignment swaps preserve all team match counts. Missing xPoints with complete xG and the reverse, plus an active season above the ten-match gate. `TeamHistoryBelowGate` marks its last four played rounds pending to test the same scenario at eight matches per club. `TeamHistorySmall` retains only 2025, giving 16 ranked rows for both end labels without a break. The reverse coverage case is in-memory only: SQLite requires both valid xG values to retain an observation, including its xPoints |
-| `season-trend` | 2025 and 2026 as 240-match double round robins; the last eight 2026 matches are unplayed; 2024 has no fixtures |
+| `team-history` | `teams` plus 2016–2023 (no 2020), 96 played matches per loaded season (12 per club), scores varying by year and matches dated within their season; 2026 adds 144 pending matches to complete its inventory. 144 team-seasons; Portland–Seattle has 26 meetings (13 home, 13 away), other pairs have several meetings, and Portland–Bay has never met. Match assignment swaps preserve all team match counts. Missing xPoints with complete xG and the reverse, plus an active season above the ten-match gate. `TeamHistoryBelowGate` marks its last four played rounds pending to test the same scenario at eight matches per club. `TeamHistorySmall` retains only 2025, giving 16 ranked rows for both end labels without a break. The reverse coverage case is in-memory only: SQLite requires both valid xG values to retain an observation, including its xPoints |
+| `season-trend` | 2025 and 2026 as 240-match double round robins; the last eight 2026 matches are unplayed; 2024 has no matches |
 
 For a Team-seasons chart with twenty or fewer rows, run
 `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams` and open
