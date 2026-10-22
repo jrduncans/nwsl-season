@@ -90,7 +90,7 @@ func exploreThresholds(query url.Values, summaries []history.SeasonScoring, arch
 	}
 	outcomeKeys := []string{"shield", "home", "bye", "playoffs"}
 	keys := []string{"season", "team", "points", "played", "ppg"}
-	labels := []string{"Year", "Team", "Points", "Games", "PPG"}
+	labels := []string{"Year", "Team", "Points", "Matches", "PPG"}
 	page.ThresholdOutcome = "playoffs"
 	sortKey, order := "season", "desc"
 	for _, field := range []struct {
@@ -179,4 +179,12 @@ func (exploreThresholdView) ThresholdPPG(value *float64) string {
 		return "Unavailable"
 	}
 	return fmt.Sprintf("%.3f", *value)
+}
+
+// ThresholdFinish formats a team's finish as "Team · 4th · 40 pts · 1.54".
+func (exploreThresholdView) ThresholdFinish(finish history.ThresholdFinish, ppg *float64) string {
+	if ppg == nil {
+		return "Unavailable"
+	}
+	return fmt.Sprintf("%s · %s · %d pts · %.2f", finish.Name, ordinalRank(finish.Place), finish.OfficialPoints, *ppg)
 }

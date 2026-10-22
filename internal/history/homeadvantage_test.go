@@ -39,7 +39,7 @@ func TestHomeAdvantageActualAndExpectedGaps(t *testing.T) {
 	games := homeAdvantageGames()
 	xg := make([]cache.GameXG, 0, len(games))
 	for _, game := range games {
-		// Home 1.5 xG and 2 xPts against away 1.0 xG and 0.5 xPts.
+		// Home 1.5 xG and 2 xPoints against away 1.0 xG and 0.5 xPoints.
 		xg = append(xg, testXG(game, 1.5, 1, true, 2, .5))
 	}
 	got := summarizeHome(t, AllShots, testSeason("2016", games, xg, availableReadiness(cache.SourceScopeCompleted, cache.InventoryCompletenessComplete)))[0]

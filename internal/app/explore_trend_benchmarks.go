@@ -74,7 +74,7 @@ func exploreTrendBenchmarks(season exploreTeamSeason, input cache.HistoricalSeas
 	} else if !season.Active && slices.ContainsFunc(input.Data.Games, func(game cache.Game) bool {
 		return game.Status != fixtures.CompletedStatus && game.Status != fixtures.AbandonedStatus
 	}) {
-		groupUnavailable = "Final standings are unavailable while fixtures remain unplayed."
+		groupUnavailable = "Final standings are unavailable while matches remain unplayed."
 	}
 	if groupUnavailable == "" && !season.Active {
 		table := standings.Calculate(input.Data.Teams, standingsGames(input.Data.Games), standings.RulesForSeason(input.Entry.Season, standings.OrderOfficialTotal))

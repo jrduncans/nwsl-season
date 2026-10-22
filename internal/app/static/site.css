@@ -647,14 +647,8 @@ th:nth-child(2) { text-align: left; }
 .threshold-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 .threshold-card { min-width: 0; border: 1px solid var(--line); border-radius: .5rem; padding: 1rem; background: var(--panel); }
 .threshold-card h4 { margin: 0 0 .75rem; font-size: .95rem; }
-.threshold-team-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; }
-.threshold-team { display: block; font-weight: 700; line-height: 1.35; }
-.threshold-record { display: block; color: var(--muted); font-size: .78rem; margin-top: .2rem; }
-.threshold-rate { font-size: 1.65rem; font-weight: 750; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.threshold-rate small { display: block; font-size: .65rem; font-weight: 500; color: var(--muted); }
-.threshold-next { border-top: 1px solid var(--line); margin-top: .75rem; padding-top: .6rem; }
-.threshold-next .threshold-team { font-size: .875rem; font-weight: 500; }
-.threshold-next .threshold-rate { font-size: 1.1rem; color: var(--muted); }
+.threshold-line { margin: .35rem 0 0; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.threshold-line-label { display: block; color: var(--muted); font-size: .75rem; }
 .threshold-tie { display: inline-block; margin-top: .65rem; padding: .15rem .4rem; background: var(--green-soft); border-radius: .2rem; font-size: .75rem; }
 .threshold-context { margin-top: .75rem; font-size: .85rem; }
 .threshold-context summary { color: var(--muted); }

@@ -80,16 +80,16 @@
     for: {index: 0, actual: T('Goals'), expected: T('xG')},
     against: {index: 1, actual: T('Goals allowed'), expected: T('xG allowed')},
     difference: {index: 2, actual: T('Goal differential'), expected: T('xG differential')},
-    points: {index: 3, actual: 'Points', expected: 'xPts'},
+    points: {index: 3, actual: 'Points', expected: 'xPoints'},
   };
   const tableMeasures = [teamMeasures.difference, teamMeasures.for, teamMeasures.against, teamMeasures.points];
   const scatterMeaning = {
     for: T('Above: more goals scored than xG; below: fewer.'),
     against: T('Above: more goals conceded than xG allowed; below: fewer.'),
     difference: T('Above: higher goal differential than xG differential; below: lower.'),
-    points: 'Above: more points earned than xPts; below: fewer.',
+    points: 'Above: more points earned than xPoints; below: fewer.',
   };
-  // Official points and ASA xPts keep penalties; say so wherever they appear.
+  // Official points and ASA xPoints keep penalties; say so wherever they appear.
   const setPointsNote = (panel, params) => {
     const note = root.querySelector(`[data-points-note="${panel}"]`);
     const view = views.get(panel);
@@ -433,7 +433,7 @@
       ], T('Goals, home − away per match')],
       ['home-points', 'homePoints', [
         {key: 'points', label: 'Points', color: goalsColor, pointStyle: 'circle'},
-        {key: 'xpoints', label: 'xPts', color: xgColor, pointStyle: 'rectRot'},
+        {key: 'xpoints', label: 'xPoints', color: xgColor, pointStyle: 'rectRot'},
       ], 'Points, home − away per match'],
     ];
     panels.forEach(([name, key, series, title]) => {
@@ -452,7 +452,7 @@
   function thresholdDescription(year) {
     const row = thresholdBySeason.get(year);
     return `${year}. ${row.values.map(value => value.ppg == null ? `${value.label}: ${value.reason}`
-      : `${value.label}: ${value.cutoff.name}, place ${value.cutoff.place}, ${value.cutoff.officialPoints} points / ${value.cutoff.officialPlayed} games, ${value.ppg.toFixed(3)} PPG. Next: ${value.next.name}, place ${value.next.place}, ${value.next.officialPoints} points / ${value.next.officialPlayed} games, ${value.nextPPG.toFixed(3)} PPG${value.tied ? '. Equal-points tie across the boundary' : ''}`).join('. ')}`;
+      : `${value.label}: ${value.cutoff.name}, place ${value.cutoff.place}, ${value.cutoff.officialPoints} points / ${value.cutoff.officialPlayed} matches, ${value.ppg.toFixed(3)} PPG. Next: ${value.next.name}, place ${value.next.place}, ${value.next.officialPoints} points / ${value.next.officialPlayed} matches, ${value.nextPPG.toFixed(3)} PPG${value.tied ? '. Equal-points tie across the boundary' : ''}`).join('. ')}`;
   }
   function selectThresholdSeason(year) {
     if (thresholdBySeason.has(year)) update({view: 'thresholds', 'threshold-season': year});
@@ -574,7 +574,7 @@
   function parityDescription(year) {
     const row = parityBySeason.get(year);
     if (!row) return `${year}: no season`;
-    const expected = row.xspread == null ? 'xPPG spread unavailable (xPts incomplete)' : `xPPG spread ${ppg(row.xspread)}`;
+    const expected = row.xspread == null ? 'xPPG spread unavailable (xPoints incomplete)' : `xPPG spread ${ppg(row.xspread)}`;
     return `${year}${inProgress(row)}: PPG spread ${ppg(row.spread)}, ${row.spread > row.chance ? 'above' : 'within'} the chance level of ${ppg(row.chance)}; ${expected}; ${row.teams.length} teams, ${row.matches.toFixed(1)} matches each`;
   }
   function selectParitySeason(year) {
@@ -723,7 +723,7 @@
     note.textContent = note.hidden ? '' : `${requested} is not plotted, so the strip shows ${year}.`;
     root.querySelector('[data-parity-strip-title]').textContent = `Teams in ${year}${inProgress(row)}`;
     root.querySelector('[data-parity-summary]').textContent = paritySummary(row);
-    root.querySelector('[data-parity-team-caption]').textContent = `Points per game and expected points per game for each team in ${year}, highest PPG first.`;
+    root.querySelector('[data-parity-team-caption]').textContent = `PPG and xPPG for each team in ${year}, highest PPG first.`;
     root.querySelector('[data-parity-teams]').replaceChildren(...row.teams.map(team => {
       const tr = document.createElement('tr');
       const name = document.createElement('th'); name.scope = 'row'; name.textContent = team.name;
@@ -868,7 +868,7 @@
           chart.teamRows.forEach((row, index) => {
             const gap = teamValue(row, chart.teamMeasure, 'gap', chart.teamUnits);
             if (gap === null || Math.abs(gap) < .005) {
-              ctx.fillText(gap === null ? (chart.teamMeasure.index === 3 ? 'xPts incomplete' : T('xG incomplete')) : '0.00',
+              ctx.fillText(gap === null ? (chart.teamMeasure.index === 3 ? 'xPoints incomplete' : T('xG incomplete')) : '0.00',
                 gap === null ? chart.chartArea.left + 8 : zero + 8, chart.scales.y.getPixelForValue(index));
             }
           });
@@ -1342,7 +1342,7 @@
     root.querySelector('[data-team-controls] [data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && isPointsMeasure;
     root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
-      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPts from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPoints from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
     setPointsNote('teams', params);
@@ -1354,12 +1354,12 @@
     const missingXG = rows.some(row => row.values[0].expected === null);
     const missingXPoints = rows.some(row => row.values[3].expected === null);
     const warningTypes = display === 'quadrant' ? [] : display === 'table'
-      ? [missingXG && T('xG'), missingXPoints && 'xPts'].filter(Boolean)
-      : [isPointsMeasure ? missingXPoints && 'xPts' : missingXG && T('xG')].filter(Boolean);
+      ? [missingXG && T('xG'), missingXPoints && 'xPoints'].filter(Boolean)
+      : [isPointsMeasure ? missingXPoints && 'xPoints' : missingXG && T('xG')].filter(Boolean);
     const warning = root.querySelector('[data-team-warning]');
     warning.hidden = warningTypes.length === 0;
     warning.textContent = warningTypes.length === 0 ? '' : warningTypes.length === 2
-      ? T('Some match xG and xPts data is missing. Affected comparisons are unavailable.')
+      ? T('Some match xG and xPoints data is missing. Affected comparisons are unavailable.')
       : `Some match ${warningTypes[0]} data is missing. Affected teams have no ${warningTypes[0]} comparison yet.`;
     root.querySelectorAll('[data-team-actual-label]').forEach(label => { label.textContent = measure.actual; });
     root.querySelectorAll('[data-team-xg-label]').forEach(label => { label.textContent = measure.expected; });
@@ -1682,9 +1682,9 @@
     root.querySelector('#explore-team-history-title').textContent =
       `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
     const choices = historySeries.options;
-    choices[0].textContent = isPoints ? 'Points and xPts' : 'Goals and xG';
+    choices[0].textContent = isPoints ? 'Points and xPoints' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
-    choices[2].textContent = isPoints ? 'xPts' : 'xG';
+    choices[2].textContent = isPoints ? 'xPoints' : 'xG';
     setPointsNote('team-history', params);
     root.querySelectorAll('[data-history-key]').forEach(key => { key.hidden = !visible.includes(key.dataset.historyKey); });
     root.querySelector('[data-history-context-details]').hidden = !contextEnabled;
@@ -1692,7 +1692,7 @@
     root.querySelector('[data-history-context-note]').hidden = !contextEnabled;
     showHistoryContextDetails(visible.map(key => context[key]));
     const notes = visible.map(key => context[key].since ? `${context[key].label} records since ${context[key].since}` : `${context[key].label}: no completed-season records`);
-    if (visible.includes('xg') && context.xg.partial) notes.push(`Some season ${isPoints ? 'xPts' : T('xG')} ranges are unavailable because team coverage is incomplete`);
+    if (visible.includes('xg') && context.xg.partial) notes.push(`Some season ${isPoints ? 'xPoints' : T('xG')} ranges are unavailable because team coverage is incomplete`);
     root.querySelector('[data-history-context-note]').textContent = notes.join('. ') + '.';
     const rows = teamSeasons.flatMap(season => {
       const team = (season.teams || []).find(row => row.id === historyTeam.value);
@@ -1705,9 +1705,9 @@
     const warning = root.querySelector('[data-team-history-warning]');
     warning.hidden = !missingXG && !missingXPoints;
     warning.textContent = missingXG && missingXPoints
-      ? T('Some seasons have incomplete xG and xPts for this team; actual values remain available.')
+      ? T('Some seasons have incomplete xG and xPoints for this team; actual values remain available.')
       : missingXPoints
-        ? 'Some seasons have incomplete xPts for this team; earned points remain available.'
+        ? 'Some seasons have incomplete xPoints for this team; earned points remain available.'
         : T('Some seasons have incomplete xG for this team; goals remain available.');
     root.querySelector('[data-history-team-name]').replaceChildren(...(rows.length ? [teamName(rows[0])] : []));
     root.querySelector('[data-history-actual-label]').textContent = measure.actual;
@@ -2289,7 +2289,7 @@
   const archiveLabels = ['Goals scored', 'Goals allowed', 'Goal differential', 'Points'];
   const archiveText = (text, np) => np ? text.replace(basisPattern, basisReplacement) : text;
   const archiveTie = (a, b) => a.season !== b.season ? (a.season > b.season ? -1 : 1) : a.name !== b.name ? (a.name < b.name ? -1 : 1) : a.id < b.id ? -1 : a.id === b.id ? 0 : 1;
-  const archiveMissing = (measure, np) => measure === 3 ? 'xPts incomplete' : archiveText('xG incomplete', np);
+  const archiveMissing = (measure, np) => measure === 3 ? 'xPoints incomplete' : archiveText('xG incomplete', np);
   const archiveLink = (params, changes) => {
     const target = new URLSearchParams(params);
     Object.entries(changes).forEach(([key, value]) => target.set(key, value));
@@ -2425,7 +2425,7 @@
     archivePenalties.disabled = measureKey === 'points'; archivePenalties.value = np ? 'exclude' : 'include';
     root.querySelector('[data-team-seasons-penalties-control]').hidden = measureKey === 'points';
     root.querySelector('[data-team-seasons-points-note]').hidden = measureKey !== 'points' || params.get('penalties') !== 'exclude';
-    const actualLabel = archiveText(archiveLabels[measure], np), expectedLabel = archiveText(['xG', 'xG allowed', 'xGD', 'xPts'][measure], np);
+    const actualLabel = archiveText(archiveLabels[measure], np), expectedLabel = archiveText(['xG', 'xG allowed', 'xGD', 'xPoints'][measure], np);
     const companionLabel = by === 1 ? actualLabel : expectedLabel;
     const headingMeasure = by === 1 ? `Expected ${actualLabel.toLowerCase()}` : by === 2 ? `${actualLabel} compared with expected,` : actualLabel;
     const heading = scatter ? `${actualLabel} vs expected per match, since 2016` : `${headingMeasure} per match, since 2016`;
@@ -2551,9 +2551,9 @@
       if (venue !== 'All') { const swatch = archiveElement('i'); swatch.dataset.h2hEncoding = venue.toLowerCase(); swatch.setAttribute('aria-hidden', 'true'); label.append(swatch); }
       label.append(venue);
       const total = archiveElement('strong', n ? `${actual} ` : unit === 'match' ? 'No matches' : 'No meetings');
-      if (n) total.append(archiveElement('span', `vs ${complete ? fixed(expected) + ' xPts' : 'xPts incomplete'}`));
+      if (n) total.append(archiveElement('span', `vs ${complete ? fixed(expected) + ' xPoints' : 'xPoints incomplete'}`));
       tile.append(label, total);
-      if (n) tile.append(archiveElement('div', complete ? `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected` : 'xPts incomplete'));
+      if (n) tile.append(archiveElement('div', complete ? `${fixed(Math.abs(gap))} ${gap < 0 ? 'below' : 'above'} expected` : 'xPoints incomplete'));
       // Coverage is stated only when it qualifies the totals.
       if (n && !complete) { const coverage = archiveElement('div', `${covered.length} of ${n} ${unit === 'match' ? 'matches' : 'meetings'}`); coverage.className = 'note'; tile.append(coverage); }
       return tile;
@@ -2692,7 +2692,7 @@
     root.querySelector('[data-h2h-direction]').textContent = pointsView ? 'Above zero: more points than xPoints.' : both ? label('Above zero: more goals scored than xG.') : np ? 'Zero: level' : 'Up: win · Zero: draw · Down: loss';
     root.querySelector('th[data-h2h-basis-column]').hidden = !np;
     const headers = root.querySelectorAll('th[data-h2h-expected-column]');
-    [xgLabel + ' for', xgLabel + ' against', 'xPts', pointsView ? 'Points − xPoints' : both ? label('Goals for − xG for') : xgLabel + ' margin', label('Goals against − xG against')].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = i === 4 ? !both : pointsView ? i < 2 : i === 2; });
+    [xgLabel + ' for', xgLabel + ' against', 'xPoints', pointsView ? 'Points − xPoints' : both ? label('Goals for − xG for') : xgLabel + ' margin', label('Goals against − xG against')].forEach((text, i) => { headers[i].textContent = text; headers[i].hidden = i === 4 ? !both : pointsView ? i < 2 : i === 2; });
     const teamIndex = h2hData.teams.findIndex(t => t.ID === (params.get('team') || root.dataset.defaultH2hTeam));
     if (teamIndex < 0) return;
     const data = {team: h2hData.teams[teamIndex]};

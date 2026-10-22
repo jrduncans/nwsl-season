@@ -180,7 +180,7 @@ official score beside the basis goals.
 Official points, ASA xPoints, benchmark groups and forecasts never change with the
 basis (ASA publishes no non-penalty xPoints). Mixed views that combine points
 with non-penalty goals or xG show the note "Points include penalties; ASA
-publishes no non-penalty expected points." Labels follow the basis (`xG` → `npxG`, `Goals` →
+publishes no non-penalty xPoints." Labels follow the basis (`xG` → `npxG`, `Goals` →
 `Non-penalty goals`, `xGD` → `npxGD`) through `basisText` in Go and `T` in
 `explore.js`; option text and select labels never change, so controls keep
 their size. Match results add an `npxG` line when a match had penalty xG.
@@ -245,7 +245,7 @@ values falls back to the default with a note. Selecting a season on the chart
 in place. `parity-series=actual|both` (default `actual`; not `series`, which
 Season by season already owns) adds the xPPG spread series and each team's
 xPPG mark. The xPPG spread needs every team's xPoints for every played match,
-otherwise that season has no xPPG mark and an `xPts incomplete` note. An active
+otherwise that season has no xPPG mark and an `xPoints incomplete` note. An active
 season is plotted hollow with a dashed segment and noted as in progress; its
 chance level uses matches played so far, so it is wider. The values table lists
 season, teams, matches per team, PPG spread, chance level, xPPG spread, gap and
@@ -261,8 +261,10 @@ calculation is `history.SummarizeParity`.
 
 `view=thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
 Shield, Home playoff game, Playoff bye and Playoffs. The series use distinct
-line patterns and markers as well as color. The tooltip title shows the year,
-playoff places and bye count (or **No byes**). Each tooltip row is one line:
+line patterns and markers as well as color. The intro explains what a mark is:
+the points per match of the last team to qualify. The tooltip title shows the
+year, playoff places and bye count (or **No byes**). The chart's keyboard hint
+is screen-reader-only (`aria-describedby`), and the view has no chart note. Each tooltip row is one line:
 outcome, team name and PPG; points and match counts live in the
 season cards and outcome-specific table. Missing values and 2020 split
 lines. Active seasons have no final mark.
@@ -320,7 +322,8 @@ not its played-match 41/23. Details explicitly label equal official points at a
 boundary and disclose differences from the cached played-match record.
 
 No xG, xPoints, penalty split or forecast is required; carried Penalties has no
-effect and there is no Penalties control. A thresholds request skips forecast
+effect and there is no Penalties control (the view is points-only, so the
+"Excluded removes penalty kicks…" help text is not shown). A thresholds request skips forecast
 benchmark warming; entering Match by match from that page reloads its normal
 payload so forecast controls remain available.
 
@@ -328,14 +331,16 @@ Season links and Chart.js marks select details below the chart by touch or keybo
 (`threshold-season`, default newest eligible season). JavaScript updates the URL
 and detail visibility in place, restoring reload and Back/Forward. Native
 links, the outcome form and sortable table headers work without scripts. The
-selected season uses compact outcome cards: threshold team and PPG lead, with rank,
-official points and matches underneath; the next official finisher forms a
-secondary comparison row. Equal-points boundaries have a visible badge. Outcomes
-that did not apply have no empty card; the season heading says **No byes**.
-Format explanations, earned/official record differences and primary sources live
-in a separate disclosure.
+selected season is headed "2025 · 8 playoff teams · no byes" and uses compact
+outcome cards with two lines each: **Last in** and **First out** (for the Shield,
+**Winner** and **Runner-up**). A line reads "Orlando Pride · 4th · 40 pts · 1.54",
+with PPG to two decimals; match counts appear only in the table. Equal-points
+boundaries have a visible badge. Outcomes that did not apply have no empty card.
+A disclosure, "Format, record notes and sources", holds a one-line format such as
+"8 playoff teams · top 4 host · no byes", forfeit and deduction notes (one sentence
+per team, only in seasons that have them) and the sources line.
 
-The comparison table shows one outcome at a time (`threshold-outcome`: `shield`,
+The comparison table, headed **All seasons**, shows one outcome at a time (`threshold-outcome`: `shield`,
 `home`, `bye` or `playoffs`, default `playoffs`). Each row is one season's verified
 threshold team, official points, official matches and PPG. Non-applicable and unavailable
 thresholds have no rows. A bye comparison therefore contains only bye seasons.
@@ -401,7 +406,7 @@ for competition ranks and sorting. Ties order newest season first, then team
 name, then ID. Actual rankings require no expected data. Expected and Gap
 require complete coverage of their own metric: xPoints for Points, xG for
 goals. These are independent. Unrankable team-seasons appear last in the table
-for every sort, labelled `xPts incomplete` or `xG incomplete`; their actual
+for every sort, labelled `xPoints incomplete` or `xG incomplete`; their actual
 values remain visible. The coverage note above the chart gives only the count,
 since the table names those rows. The only other notes above the chart are gap
 direction (when ranking by Gap) and the points note when Points appears beside
@@ -480,7 +485,7 @@ Gap always means actual − expected. Each team needs xG for every one of its
 played matches to show xG and goal gaps, and xPoints for every match to show
 xPoints and the points gap; another team's gaps never hide its values. Teams
 without coverage sort last in both directions, appear last with an
-`xG incomplete` or `xPts incomplete` label on the gap chart, and are named in a
+`xG incomplete` or `xPoints incomplete` label on the gap chart, and are named in a
 note on the scatter plots.
 
 When `measure=points` selects a points-only chart (Actual vs expected, Gap to
@@ -693,7 +698,7 @@ above or below expected. “N of M matches” coverage appears only when xPoints
 is incomplete.
 Home is solid blue (`#1F6FA8`); away is orange (`#CF7424`) diagonal stripes on
 paper with a thin orange outline. Swatches on the Home and Away tiles form the
-venue legend. An incomplete xPoints population says `xPts incomplete`, keeps
+venue legend. An incomplete xPoints population says `xPoints incomplete`, keeps
 actual points, and withholds the expected total and gap.
 A venue with no appearances says “No matches” (“No meetings” in Head to head),
 with zero coverage rather than an incomplete-data warning.

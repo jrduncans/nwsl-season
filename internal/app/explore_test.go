@@ -80,7 +80,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 					}
 				}
 			}
-			for _, label := range []string{"Standings", "Results &amp; fixtures", "Schedule difficulty", "Clinching scenarios", "Forecast lab", "Explore"} {
+			for _, label := range []string{"Standings", "Matches", "Schedule difficulty", "Clinching scenarios", "Forecast lab", "Explore"} {
 				if !strings.Contains(body, ">"+label+"</a>") {
 					t.Errorf("missing main-site navigation %q", label)
 				}
@@ -88,7 +88,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if !strings.Contains(body, `href="explore" aria-current="page">Explore</a>`) {
 				t.Error("Explore is not the active navigation item")
 			}
-			for _, unwanted := range []string{"Current season", "All seasons", "data-close", "data-year-button", "data-readout", "data-bin=", "Inventory verified", "Inventory unverified", "No regular season", "selected-season-heading", "About this data"} {
+			for _, unwanted := range []string{"Current season", "data-close", "data-year-button", "data-readout", "data-bin=", "Inventory verified", "Inventory unverified", "No regular season", "selected-season-heading", "About this data"} {
 				if strings.Contains(body, unwanted) {
 					t.Errorf("unexpected %q", unwanted)
 				}
@@ -400,7 +400,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		observation.HomeXPoints.Float64, observation.HomeXPoints.Valid = 1.4, true
 		observation.AwayXPoints.Float64, observation.AwayXPoints.Valid = 1.6, true
 	}
-	// A missing xG observation must not remove independently covered xPts.
+	// A missing xG observation must not remove independently covered xPoints.
 	archive[0].Data.XGoals[0].HomeXG.Valid = false
 	summaries, err := history.SummarizeScoring(archive)
 	if err != nil {
@@ -411,14 +411,14 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if page.TeamUnits != units || page.TeamActualLabel != "Points" || page.TeamXGLabel != "xPts" || !page.TeamMissingXG || page.TeamMissingXPoints {
+		if page.TeamUnits != units || page.TeamActualLabel != "Points" || page.TeamXGLabel != "xPoints" || !page.TeamMissingXG || page.TeamMissingXPoints {
 			t.Fatalf("points coverage or labels wrong: %+v", page)
 		}
 		if got := page.TeamSeasons[0].Teams[0]; len(got.Values) != 4 || got.XPointsCovered != 20 || got.Values[3].Expected == nil || got.Totals[3].Expected == nil {
 			t.Fatalf("points missing from JSON record: %+v", got)
 		}
 		if page.TeamRows[0].Team.ID != "bravo" {
-			t.Fatalf("points-expected sort did not use xPts: %+v", page.TeamRows)
+			t.Fatalf("points-expected sort did not use xPoints: %+v", page.TeamRows)
 		}
 		want := exploreTeamRowValues{Actual: "3.00", Expected: "1.60", Gap: "+1.40"}
 		if units == "total" {
@@ -436,7 +436,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		want []string
 	}{
 		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`<option value="points" selected>Points</option>`, `<option value="total" selected>Totals</option>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
-		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`<option value="points" selected>Points</option>`, `<option value="xg" selected>xPts</option>`, `data-history-sort="points-expected"`, `<h4>xPts</h4>`}},
+		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`<option value="points" selected>Points</option>`, `<option value="xg" selected>xPoints</option>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
 	} {
 		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()
@@ -465,11 +465,11 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 	}
 	page, err := exploreTeams(url.Values{"measure": {"points"}}, missingSummaries, missingPoints)
 	if err != nil || page.TeamMissingXG || !page.TeamMissingXPoints {
-		t.Fatalf("xPts-only missing data was not independent of xG: %+v, %v", page, err)
+		t.Fatalf("xPoints-only missing data was not independent of xG: %+v, %v", page, err)
 	}
 	historyPage, err := exploreTeamHistory(url.Values{"team": {"alpha"}, "measure": {"points"}}, page.TeamSeasons)
 	if err != nil || historyPage.TeamHistoryMissingXG || !historyPage.TeamHistoryMissingXPoints {
-		t.Fatalf("history xPts warning was not independent of xG: %+v, %v", historyPage, err)
+		t.Fatalf("history xPoints warning was not independent of xG: %+v, %v", historyPage, err)
 	}
 }
 

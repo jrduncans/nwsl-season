@@ -22,10 +22,10 @@ func TestExploreThresholdsUsesOneArchiveAndNativeDetails(t *testing.T) {
 		t.Fatal("not one coherent archive read")
 	}
 	body := response.Body.String()
-	requireText(t, body, "[data-panel=thresholds]", "since 2016", "No byes", "records not loaded", "2020: no regular season")
+	requireText(t, body, "[data-panel=thresholds]", "since 2016", "no byes", "records not loaded")
 	requireAttr(t, body, `[data-threshold-year="2022"]`, "aria-current", "true")
 	requireAttr(t, body, `[data-threshold-detail="2025"]`, "hidden", "")
-	forbidText(t, body, "[data-panel=thresholds]", "Expected points", "xPts incomplete")
+	forbidText(t, body, "[data-panel=thresholds]", "Expected points", "xPoints incomplete")
 	if strings.Contains(text(find(t, body, "[data-panel=thresholds]")[0]), "Penalties Include") {
 		t.Fatal("penalties control in points-only view")
 	}
@@ -85,7 +85,7 @@ func TestExploreThresholdsRecordedArchiveReconcilesAllCutoffs(t *testing.T) {
 		if status != 200 {
 			t.Fatalf("%d", status)
 		}
-		requireText(t, body, `[data-threshold-detail="2023"]`, "Gotham", "Orlando Pride", "31 points", "22 games", "Equal-points tie across the boundary")
+		requireText(t, body, `[data-threshold-detail="2023"]`, "Gotham", "Orlando Pride", "31 pts", "Equal-points tie across the boundary")
 		requireAttr(t, body, `canvas[data-chart="thresholds"]`, "tabindex", "0")
 		if len(find(t, body, `[data-panel="thresholds"] svg`)) > 0 {
 			t.Fatal("Explore trend must use Chart.js")

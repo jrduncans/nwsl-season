@@ -23,16 +23,16 @@ func TestExplorePointsTiles(t *testing.T) {
 	}
 	tiles := explorePointsTiles(matches, "match")
 	want := []explorePointsTile{
-		{"All", "4", "4.00 xPts", "0.00 above expected", ""},
-		{"Home", "3", "1.40 xPts", "1.60 above expected", ""},
-		{"Away", "1", "2.60 xPts", "1.60 below expected", ""},
+		{"All", "4", "4.00 xPoints", "0.00 above expected", ""},
+		{"Home", "3", "1.40 xPoints", "1.60 above expected", ""},
+		{"Away", "1", "2.60 xPoints", "1.60 below expected", ""},
 	}
 	if !reflect.DeepEqual(tiles, want) {
 		t.Fatalf("tiles = %+v", tiles)
 	}
 	matches[0].Values[3].Expected = nil
 	tiles = explorePointsTiles(matches, "match")
-	if tiles[0].Expected != "xPts incomplete" || tiles[0].Gap != "xPts incomplete" || tiles[0].Coverage != "2 of 3 matches" || tiles[1].Expected != "xPts incomplete" || tiles[2] != want[2] {
+	if tiles[0].Expected != "xPoints incomplete" || tiles[0].Gap != "xPoints incomplete" || tiles[0].Coverage != "2 of 3 matches" || tiles[1].Expected != "xPoints incomplete" || tiles[2] != want[2] {
 		t.Fatalf("incomplete tiles: %+v", tiles)
 	}
 }
@@ -61,7 +61,7 @@ func TestExplorePointsTrendFallback(t *testing.T) {
 		}
 	}
 	_, incomplete := getPage(t, archive, strings.Replace(path, "season=2025", "season=2026&team=315VnJ759x", 1))
-	requireText(t, incomplete, "[data-trend-points-tiles] [data-points-tile=All]", "xPts incomplete")
+	requireText(t, incomplete, "[data-trend-points-tiles] [data-points-tile=All]", "xPoints incomplete")
 	requireText(t, incomplete, "[data-trend-points-tiles] [data-points-tile=All]", "28 of 29 matches")
 	for _, key := range []string{"trend-sort", "trend-order"} {
 		requireAttr(t, body, "[data-season-trend-controls] input[name="+key+"]", "disabled", "")
@@ -123,7 +123,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 		}
 	}
 	_, incomplete := getPage(t, archive, path)
-	requireText(t, incomplete, "[data-h2h-points-tiles] [data-points-tile=All]", "xPts incomplete")
+	requireText(t, incomplete, "[data-h2h-points-tiles] [data-points-tile=All]", "xPoints incomplete")
 	requireText(t, incomplete, "[data-h2h-fallback]", "Points − xPoints: Unavailable")
 }
 

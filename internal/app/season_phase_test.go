@@ -82,7 +82,7 @@ func TestUpcomingAndCompleteSeasonPresentation(t *testing.T) {
 
 	complete := completeCatalogSeasonData()
 	completeResponse := renderSeasonRequest(t, complete, "/seasons/2026/regular-season")
-	for _, want := range []string{"Final standings", `>2026 Regular Season final standings</span> · <span data-standings-mode-label data-per-game="per game" data-total="totals">totals</span></span></caption>`, `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, ">Results</a>"} {
+	for _, want := range []string{"Final standings", `>2026 Regular Season final standings</span> · <span data-standings-mode-label data-per-game="per match" data-total="totals">totals</span></span></caption>`, `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, ">Results</a>"} {
 		if !contains(completeResponse, want) {
 			t.Errorf("complete season missing %q", want)
 		}
@@ -94,7 +94,7 @@ func TestUpcomingAndCompleteSeasonPresentation(t *testing.T) {
 	}
 
 	fixturesResponse := renderSeasonRequest(t, complete, "/seasons/2026/regular-season/fixtures")
-	for _, want := range []string{"<h1>Results</h1>", "Show fixtures for"} {
+	for _, want := range []string{"<h1>Results</h1>", "Show matches for"} {
 		if !contains(fixturesResponse, want) {
 			t.Errorf("complete results missing %q", want)
 		}

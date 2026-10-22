@@ -105,7 +105,7 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 	if queryOf(t, page).Has("penalties") {
 		t.Fatal("stale basis")
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-missing]")).ToContainText("team-seasons have xPts incomplete"); err != nil {
+	if err := expect.Locator(page.Locator("[data-team-seasons-missing]")).ToContainText("team-seasons have xPoints incomplete"); err != nil {
 		t.Fatal(err)
 	}
 	button := page.Locator("[data-team-seasons-break] button")
@@ -131,7 +131,7 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-team-seasons-values]")).ToHaveAttribute("open", ""); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr").Last()).ToContainText("xPts incomplete"); err != nil {
+		if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr").Last()).ToContainText("xPoints incomplete"); err != nil {
 			t.Fatal(err)
 		}
 	}

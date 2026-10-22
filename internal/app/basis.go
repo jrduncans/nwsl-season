@@ -18,8 +18,8 @@ const (
 	penaltiesInclude = "include"
 )
 
-// pointsBasisNote explains that official points and ASA xPts keep penalties.
-const pointsBasisNote = "Points include penalties; ASA publishes no non-penalty expected points."
+// pointsBasisNote explains that official points and ASA xPoints keep penalties.
+const pointsBasisNote = "Points include penalties; ASA publishes no non-penalty xPoints."
 
 var errPenaltiesSelection = fmt.Errorf("penalties must be include or exclude")
 

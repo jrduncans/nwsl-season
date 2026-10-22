@@ -219,7 +219,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		fixtureID := query.Get("fixture")
 		outcome := simulation.Outcome(query.Get("outcome"))
 		if !remainingForecastFixture(data, fixtureID) {
-			a.renderScenarioBadRequest(w, r, "Invalid forecast scenario", fmt.Errorf("game is not a remaining fixture: %q", fixtureID))
+			a.renderScenarioBadRequest(w, r, "Invalid forecast scenario", fmt.Errorf("match is not a remaining match: %q", fixtureID))
 			return
 		}
 		state, err = state.With(fixtureID, outcome)
@@ -513,7 +513,7 @@ func forecastScheduleNote(data cache.SeasonData, inventory *competition.Inventor
 		notes = append(notes, "Two-season home/away history is still syncing; venue rates temporarily use this season only.")
 	}
 	if inventory != nil && inventory.Games > 0 && len(data.Games) != inventory.Games {
-		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), inventory.Games))
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season matches.", len(data.Games), inventory.Games))
 	}
 
 	appearances := make(map[string]int, len(data.Teams))
@@ -526,7 +526,7 @@ func forecastScheduleNote(data cache.SeasonData, inventory *competition.Inventor
 		}
 	}
 	if unsupported > 0 {
-		notes = append(notes, fmt.Sprintf("%d fixture(s) have a status that cannot be simulated and are excluded.", unsupported))
+		notes = append(notes, fmt.Sprintf("%d match(es) have a status that cannot be simulated and are excluded.", unsupported))
 	}
 	teamsWithUnexpectedCounts := 0
 	if inventory != nil && inventory.GamesPerTeam > 0 {
@@ -536,7 +536,7 @@ func forecastScheduleNote(data cache.SeasonData, inventory *competition.Inventor
 			}
 		}
 		if teamsWithUnexpectedCounts > 0 {
-			notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", teamsWithUnexpectedCounts, inventory.GamesPerTeam))
+			notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d matches.", teamsWithUnexpectedCounts, inventory.GamesPerTeam))
 		}
 	}
 	return strings.Join(notes, " ")
@@ -545,7 +545,7 @@ func forecastScheduleNote(data cache.SeasonData, inventory *competition.Inventor
 func validateForecastState(data cache.SeasonData, state forecaststate.State) error {
 	for id := range state.Fixed {
 		if !remainingForecastFixture(data, id) {
-			return fmt.Errorf("game is not a remaining fixture: %q", id)
+			return fmt.Errorf("match is not a remaining match: %q", id)
 		}
 	}
 	return nil

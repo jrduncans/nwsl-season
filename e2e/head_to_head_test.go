@@ -493,7 +493,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("xG incomplete"); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).Not().ToContainText("xPts"); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).Not().ToContainText("xPoints"); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-h2h-fallback]")).ToContainText("Unavailable"); err != nil {
@@ -671,7 +671,7 @@ func assertPointsChart(t *testing.T, page playwright.Page, selector, tiles strin
  return nodes.length===3&&nodes.every(tile=>{
  const r=tile.getBoundingClientRect(), meetings=rows.filter(row=>tile.dataset.pointsTile==='All'||row.venue===tile.dataset.pointsTile), n=meetings.length;
  const covered=meetings.filter(row=>row.xpoints!=null), actual=meetings.reduce((s,r)=>s+r.points,0), expected=covered.reduce((s,r)=>s+r.xpoints,0);
- return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&(n&&covered.length<n?tile.textContent.includes(covered.length+' of '+n):!tile.querySelector('.note'))&&tile.querySelector('strong').textContent.trim()===(n?actual+' vs '+(covered.length===n?expected.toFixed(2)+' xPts':'xPts incomplete'):'No meetings');
+ return Math.abs(r.top-first.top)<1&&Math.abs(r.width-first.width)<1&&tile.scrollWidth<=tile.clientWidth&&(n&&covered.length<n?tile.textContent.includes(covered.length+' of '+n):!tile.querySelector('.note'))&&tile.querySelector('strong').textContent.trim()===(n?actual+' vs '+(covered.length===n?expected.toFixed(2)+' xPoints':'xPoints incomplete'):'No meetings');
  });
  }`, map[string]any{"selector": selector, "tiles": tiles}, &agrees)
 	if !agrees {

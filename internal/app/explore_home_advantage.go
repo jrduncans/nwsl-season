@@ -102,7 +102,7 @@ func exploreHomeAdvantage(query url.Values, seasons []history.SeasonHomeAdvantag
 		{Key: "goals", Label: basisText(basis, "Goals"), Description: basisText(basis, "goals, home minus away per match")},
 		{Key: "xg", Label: basisText(basis, "xG"), Description: basisText(basis, "xG, home minus away per match")},
 		{Key: "points", Label: "Points", Description: "points, home minus away per match"},
-		{Key: "xpoints", Label: "xPts", Description: "expected points, home minus away per match"},
+		{Key: "xpoints", Label: "xPoints", Description: "xPoints, home minus away per match"},
 		{Key: "results", Label: "Home W–D–L", Description: "home win share"},
 	}
 	for _, column := range columns {

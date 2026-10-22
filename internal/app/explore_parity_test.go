@@ -33,7 +33,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 		"random results alone if every team were equally good",
 		"2026: in progress through 20 matches (6.7 per team)",
 	)
-	forbidText(t, body, "[data-panel=parity]", "Points include penalties", "xPts incomplete")
+	forbidText(t, body, "[data-panel=parity]", "Points include penalties", "xPoints incomplete")
 
 	// The newest completed season is the default strip, not the active one.
 	seasons, err := history.SummarizeParity(archive, history.AllShots)

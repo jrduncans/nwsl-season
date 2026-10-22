@@ -123,7 +123,7 @@ type forecastChanceText struct {
 }
 
 // forecastChances formats one team's forecast columns. Playoff elimination
-// also rules out a top-four seed, the Shield, and the Championship.
+// also rules out a home playoff game, the Shield, and the Championship.
 func forecastChances(row simulation.TeamResult, playoffPlaces int, certainty forecastCertainty) forecastChanceText {
 	out := certainty.isEliminated(row.Team.ID, playoffPlaces)
 	return forecastChanceText{

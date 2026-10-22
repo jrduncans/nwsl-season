@@ -84,11 +84,11 @@ func TestNonPenaltyArithmeticAndPointsInvariance(t *testing.T) {
 		official := allTeams[id]
 		if team.Points != official.Points || team.Played != official.Played || team.XPointsCovered != official.XPointsCovered ||
 			team.XPoints == nil || official.XPoints == nil || math.Abs(*team.XPoints-*official.XPoints) > 1e-9 {
-			t.Fatalf("%s points or xPts changed with the basis: %+v vs %+v", id, team, official)
+			t.Fatalf("%s points or xPoints changed with the basis: %+v vs %+v", id, team, official)
 		}
 		for index, match := range team.Matches {
 			if match.Points != official.Matches[index].Points || match.XPoints == nil || *match.XPoints != *official.Matches[index].XPoints {
-				t.Fatalf("%s match %d points/xPts changed with the basis", id, index)
+				t.Fatalf("%s match %d points/xPoints changed with the basis", id, index)
 			}
 			if match.ScoreFor != official.Matches[index].GoalsFor || match.ScoreAgainst != official.Matches[index].GoalsAgainst {
 				t.Fatalf("%s match %d official score changed with the basis", id, index)

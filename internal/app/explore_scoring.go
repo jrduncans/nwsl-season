@@ -120,7 +120,7 @@ type exploreScoringPage struct {
 	PenaltyLinks []exploreChoice
 }
 
-// PointsNote says that official points and ASA xPts keep penalties.
+// PointsNote says that official points and ASA xPoints keep penalties.
 func (exploreScoringPage) PointsNote() string { return pointsBasisNote }
 
 // GoalsWord names the goals being counted: "goals" or "non-penalty goals".

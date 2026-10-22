@@ -367,7 +367,7 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	}
 	click(t, perGame)
 	pressed(perGame, true)
-	if err := expect.Locator(modeLabel).ToHaveText("per game"); err != nil {
+	if err := expect.Locator(modeLabel).ToHaveText("per match"); err != nil {
 		t.Error(err)
 	}
 	if got := ids(readStandingsRows(t, page)); !sameStrings(got, ids(initial)) {
@@ -929,7 +929,7 @@ func testFixturesPage(t *testing.T, f *fixture) {
 
 		// The team filter narrows the list to that team's 30 games and back.
 		selectValue(t, page.Locator("#fixture-team"), teamUnderTest)
-		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText("Showing 30 fixtures for Team 0 FC."); err != nil {
+		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText("Showing 30 matches for Team 0 FC."); err != nil {
 			t.Error(err)
 		}
 		if err := expect.Locator(page.Locator("[data-fixture-home-team]:not([hidden])")).ToHaveCount(2 * (fixtureTeams - 1)); err != nil {
@@ -1144,7 +1144,7 @@ func TestPagesClinching(t *testing.T) {
 		}
 
 		if got := assertKeyboardDisclosures(t, page); got < 2 {
-			t.Errorf("clinching page has %d disclosures, want at least the slate and a season-long path", got)
+			t.Errorf("clinching page has %d disclosures, want at least the slate and a no-help scenario", got)
 		}
 		assertNoHorizontalOverflow(t, page)
 	})
@@ -1200,13 +1200,13 @@ func TestPagesClinchingExactPaths(t *testing.T) {
 		expect := playwright.NewPlaywrightAssertions()
 		exact := page.Locator("details.clinching-exact-paths")
 		if n, err := exact.Count(); err != nil || n == 0 {
-			t.Fatalf("no \"View exact paths\" disclosure on the page (%d, %v); the arrangement no longer needs outside results", n, err)
+			t.Fatalf("no \"View exact scenarios\" disclosure on the page (%d, %v); the arrangement no longer needs outside results", n, err)
 		}
 		// The grouped summary sits next to the disclosure, outside it.
 		if err := expect.Locator(page.Locator("section.clinching-result-group .clinching-summary").First()).ToBeVisible(); err != nil {
 			t.Errorf("grouped summary should be visible: %v", err)
 		}
-		if err := expect.Locator(exact.First().Locator("summary")).ToHaveText("View exact paths"); err != nil {
+		if err := expect.Locator(exact.First().Locator("summary")).ToHaveText("View exact scenarios"); err != nil {
 			t.Error(err)
 		}
 		assertKeyboardDisclosures(t, page)

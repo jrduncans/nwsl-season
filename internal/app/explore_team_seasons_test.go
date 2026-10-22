@@ -170,7 +170,7 @@ func TestExploreTeamSeasonsIndependentCoverageAndGate(t *testing.T) {
 	// The reverse case is retained by the in-memory archive; SQLite's validated
 	// observation store cannot retain xPoints when xG is unavailable.
 	for _, tc := range []struct{ id, measure, missing string }{
-		{"315VnJ759x", "points", "xPts incomplete"}, {"odMX2OJqYL", "for", "xG incomplete"},
+		{"315VnJ759x", "points", "xPoints incomplete"}, {"odMX2OJqYL", "for", "xG incomplete"},
 	} {
 		for _, by := range teamSeasonsRankBys {
 			_, body := getPage(t, archive, "/explore?view=team-seasons&team-seasons-measure="+tc.measure+"&team-seasons-rank-by="+by)
@@ -336,7 +336,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 	}
 	// Verify the existing fixture's independent metric coverage is retained.
 	_, body := getPage(t, archive, "/explore?view=team-seasons&team-seasons-display=scatter")
-	requireText(t, body, `[data-team-seasons-rows] tr[data-team-id="315VnJ759x"][data-season="2026"]`, "xPts incomplete")
+	requireText(t, body, `[data-team-seasons-rows] tr[data-team-id="315VnJ759x"][data-season="2026"]`, "xPoints incomplete")
 	_, body = getPage(t, archive, "/explore?view=team-seasons&team-seasons-display=scatter&team-seasons-measure=against&penalties=exclude")
 	requireText(t, body, "[data-team-seasons-scatter-description]", "npxG allowed")
 	requireText(t, body, "[data-team-seasons-scatter-meaning]", "more non-penalty goals allowed than npxG allowed")

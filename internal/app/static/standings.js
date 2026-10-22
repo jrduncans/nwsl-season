@@ -70,7 +70,7 @@ document.addEventListener("click", (event) => {
   });
   display.querySelectorAll("[data-standings-points-label]").forEach((label) => {
     label.textContent = stat === "xg" ? label.dataset.xgLabel : label.dataset.goalsLabel;
-    label.title = stat === "xg" ? "Expected points from ASA's game xG model" : "Official standings points";
+    label.title = stat === "xg" ? "xPoints from ASA's match xG model" : "Official standings points";
   });
   display.querySelectorAll("[data-standings-caption]").forEach((caption) => {
     caption.textContent = stat === "xg" ? caption.dataset.xgLabel : caption.dataset.goalsLabel;
@@ -304,7 +304,7 @@ function setupFixtureTeamFilter() {
       return;
     }
     const teamName = filter.selectedOptions[0]?.textContent ?? "this team";
-    const label = visibleFixtures.length === 1 ? "fixture" : "fixtures";
+    const label = visibleFixtures.length === 1 ? "match" : "matches";
     summary.textContent = `Showing ${visibleFixtures.length} ${label} for ${teamName}.`;
   };
 

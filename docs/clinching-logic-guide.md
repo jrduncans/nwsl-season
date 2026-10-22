@@ -292,7 +292,7 @@ results remain near the top. The page groups confirmed scenarios by the team's o
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
-requirements stay visible, with exact paths in expandable sections. Results
+requirements stay visible, with exact scenarios in expandable sections. Results
 from one match with identical outside help share a heading, such as “draws or
 loses.” Two-match result orderings share a heading only when their outside help
 is identical; for example, “wins one match and loses the other” still names
@@ -303,7 +303,7 @@ the original, potentially overlapping own-result groups to bound expansion.
 Within a group, a visible factored summary puts common requirements once above
 an “any of” list. The summary may contain overlapping alternatives when that
 is shorter and clearer. A group with more than twelve summary scenarios instead
-directs readers to its exact paths, avoiding a large nested list.
+directs readers to its exact scenarios, avoiding a large nested list.
 When different results of one outside match appear in several scenarios, the
 summary groups a repeated result before other shared conditions. If an earlier
 scenario already covers one result of a broader condition, the summary removes
@@ -314,17 +314,17 @@ of conditions are ordered by their displayed result text, keeping repeated
 results such as DEN wins adjacent regardless of match IDs.
 
 Groups with multiple scenarios also offer expandable, complete certified scenarios.
-Each exact path puts its requirements on one compact line, separated by `+`,
+Each exact scenario puts its requirements on one compact line, separated by `+`,
 with a club crest and two- or three-letter team code; each scenario is an `OR`
 alternative to the others. When alternatives for two matches of the same team
 exactly equal a minimum points total, the page names both matches and that
 total. This rewrite checks all nine outcome combinations and never infers an
-uncertified combination from a points total. Both the summary and exact paths
+uncertified combination from a points total. Both the summary and exact scenarios
 preserve the union of stored certified scenarios, including partial results.
 Repeated equivalent scenarios and stronger scenarios already covered by a weaker
 one need not be displayed repeatedly.
 
-The exact-path view subtracts partial overlap between outside-help scenarios before
+The exact-scenario view subtracts partial overlap between outside-help scenarios before
 combining results into points totals. Paths with fewer match requirements
 take precedence, with a stable match-ID and outcome-mask ordering to break
 ties. Each later scenario keeps only outcomes not already represented. For example,
@@ -343,12 +343,12 @@ limits keep presentation work bounded on ordinary cache-only page requests.
 
 Every complete certified scenario remains available in its group's disclosure.
 The visible summary has at most one shared-condition factoring level; the
-exact-path view stays flat.
+exact-scenario view stays flat.
 Unlisted matches are unrestricted. The full included schedule remains collapsed
 below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination scenarios. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
-No-help winning scenarios are labeled season-long because they can include matches
+No-help winning scenarios are labeled “No-help scenario” because they can include matches
 after the displayed slate.
 
 Use `make test-clinching` for focused scenario-proof and presentation checks.

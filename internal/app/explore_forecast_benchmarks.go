@@ -51,7 +51,7 @@ func (a *application) populateExploreForecastBenchmarks(ctx context.Context, tea
 				available, completed := forecastXGCoverage(input.Data)
 				benchmark.Note += fmt.Sprintf(" xG coverage: %d of %d completed matches.", available, completed)
 				if input.Data.LastSuccess != nil {
-					benchmark.Note += " Fixture data updated " + input.Data.LastSuccess.FinishedAt.UTC().Format("2006-01-02 15:04 UTC") + "."
+					benchmark.Note += " Match data updated " + input.Data.LastSuccess.FinishedAt.UTC().Format("2006-01-02 15:04 UTC") + "."
 				}
 				if input.Data.XGStatus.LastSuccess != nil {
 					benchmark.Note += " xG data updated " + input.Data.XGStatus.LastSuccess.FinishedAt.UTC().Format("2006-01-02 15:04 UTC") + "."

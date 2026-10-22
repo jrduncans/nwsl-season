@@ -186,7 +186,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	case "difference":
 		page.TeamActualLabel, page.TeamXGLabel = "Goal differential", "xG differential"
 	case "points":
-		page.TeamActualLabel, page.TeamXGLabel = "Points", "xPts"
+		page.TeamActualLabel, page.TeamXGLabel = "Points", "xPoints"
 	}
 	page.TeamActualLabel, page.TeamXGLabel = t(page.TeamActualLabel), t(page.TeamXGLabel)
 	selection := url.Values{"view": {"teams"}, "season": {page.TeamSeason}, "measure": {page.TeamMeasure}, "display": {page.TeamDisplay}, "team-sort": {page.TeamSort}, "team-order": {page.TeamOrder}, "units": {page.TeamUnits}, "quadrant-data": {page.TeamQuadrantData}}
@@ -201,7 +201,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	for _, group := range []struct{ key, label string }{{"difference", "Goal differential"}, {"for", "Goals scored"}, {"against", "Goals allowed"}, {"points", "Points"}} {
 		for _, value := range []struct{ key, label string }{{"actual", "Actual"}, {"expected", "xG"}, {"gap", "Gap"}} {
 			if group.key == "points" && value.key == "expected" {
-				value.label = "xPts"
+				value.label = "xPoints"
 			}
 			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: t(value.label), Description: t(group.label + ": " + value.label)})
 		}

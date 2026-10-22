@@ -7,7 +7,7 @@ func TestForSeasonReturnsValidatedDefensiveRules(t *testing.T) {
 	if !ok || rules.Validate() != nil || len(rules.Achievements) != 3 {
 		t.Fatalf("rules = %+v, ok=%v", rules, ok)
 	}
-	if rules.Version != "2026-regular-v2" || rules.Achievements[1].Label != "Top-four seed" {
+	if rules.Version != "2026-regular-v2" || rules.Achievements[1].Label != "Home playoff game" {
 		t.Fatalf("2026 qualification semantics = %+v, want v2 top-four seed", rules)
 	}
 	rules.Achievements[0].TopK = 99

@@ -596,7 +596,7 @@ func seasonArchiveItems(from, currentSeason string, readinessByScope map[string]
 		if entry.Supports(competition.CapabilityFixtures) {
 			label := "Results"
 			if item.Current && entry.Primary {
-				label = "Results & fixtures"
+				label = "Matches"
 			}
 			stage.Links = append(stage.Links, navigationItem{Label: label, Path: relativeURL(from, base+"/fixtures")})
 		}
@@ -713,7 +713,7 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !scope.fixturesAvailable() {
-		a.renderUnavailableFeature(w, r, scope, "Results and fixtures")
+		a.renderUnavailableFeature(w, r, scope, "Matches")
 		return
 	}
 	var outlooks func(cache.SeasonData) map[string]fixtureOutlookView
@@ -888,22 +888,22 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		seasonLabel = strings.TrimSpace(season + " " + scope.Stage)
 	}
 	standingsCaption := seasonLabel
-	standingsXGCaption := seasonLabel + " xG, ordered by xPts"
+	standingsXGCaption := seasonLabel + " xG, ordered by xPoints"
 	standingsCaptionSuffix := ""
 	standingsMode := "per-game"
 	if presentation.Phase == seasonPhaseComplete {
 		standingsMode = "total"
 		if presentation.FinalStandingsSafe {
 			standingsCaption = seasonLabel + " final standings"
-			standingsXGCaption = seasonLabel + " final xG standings, ordered by xPts"
+			standingsXGCaption = seasonLabel + " final xG standings, ordered by xPoints"
 		} else {
 			standingsCaption = seasonLabel + " standings"
-			standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
+			standingsXGCaption = seasonLabel + " xG standings, ordered by xPoints"
 		}
 	} else if presentation.Historical && !hasUpcoming {
 		standingsMode = "total"
 		standingsCaption = seasonLabel + " standings"
-		standingsXGCaption = seasonLabel + " xG standings, ordered by xPts"
+		standingsXGCaption = seasonLabel + " xG standings, ordered by xPoints"
 	} else if through, ok := latestCompletedMatchDate(data.Games, a.options.Location); ok {
 		standingsCaptionSuffix = "through " + through
 	}
@@ -914,7 +914,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		sort.SliceStable(standingsView, func(i, j int) bool { return positions[standingsView[i].TeamID] < positions[standingsView[j].TeamID] })
 	}
-	fixturesHeading := "Results and fixtures"
+	fixturesHeading := "Matches"
 	if presentation.Phase == seasonPhaseUpcoming {
 		fixturesHeading = "Schedule"
 	} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !hasUpcoming) {
@@ -1030,7 +1030,7 @@ func seasonFeatureSuffix(requestPath, stageSlug string) (string, bool) {
 }
 
 func (a *application) factualLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
-	notice := scope.Entry.ShortLabel + " fixtures have not been loaded yet."
+	notice := scope.Entry.ShortLabel + " matches have not been loaded yet."
 	if store, ok := a.store.(interface {
 		SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error)
 	}); ok {
@@ -1046,7 +1046,7 @@ func (a *application) factualLoadPage(r *http.Request, scope requestCompetition)
 	if err != nil {
 		return seasonPage{}, err
 	}
-	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Results and fixtures", StandingsMode: "per-game", FormatNotice: notice}, nil
+	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Matches", StandingsMode: "per-game", FormatNotice: notice}, nil
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -1149,7 +1149,7 @@ func scheduleDifficultyNote(data cache.SeasonData, inventory *competition.Invent
 		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected teams.", len(data.Teams), inventory.Teams))
 	}
 	if inventory != nil && inventory.Games > 0 && len(data.Games) != inventory.Games {
-		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season fixtures.", len(data.Games), inventory.Games))
+		notes = append(notes, fmt.Sprintf("Cache has %d of %d expected regular-season matches.", len(data.Games), inventory.Games))
 	}
 
 	appearances := make(map[string]int, len(data.Teams))
@@ -1162,7 +1162,7 @@ func scheduleDifficultyNote(data cache.SeasonData, inventory *competition.Invent
 		}
 	}
 	if unsupported > 0 {
-		notes = append(notes, fmt.Sprintf("%d fixture(s) have a status excluded from schedule difficulty.", unsupported))
+		notes = append(notes, fmt.Sprintf("%d match(es) have a status excluded from schedule difficulty.", unsupported))
 	}
 	uneven := 0
 	if inventory != nil && inventory.GamesPerTeam > 0 {
@@ -1172,7 +1172,7 @@ func scheduleDifficultyNote(data cache.SeasonData, inventory *competition.Invent
 			}
 		}
 		if uneven > 0 {
-			notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d fixtures.", uneven, inventory.GamesPerTeam))
+			notes = append(notes, fmt.Sprintf("%d team(s) do not have the expected %d matches.", uneven, inventory.GamesPerTeam))
 		}
 	}
 	return strings.Join(notes, " ")
@@ -1255,7 +1255,7 @@ func labelAchievement(a competition.AchievementID) string {
 	case competition.AchievementShield:
 		return "Shield"
 	case competition.AchievementHomePlayoff:
-		return "Top-four seed"
+		return "Home playoff game"
 	case competition.AchievementPlayoffs:
 		return "Playoffs"
 	}
@@ -1267,7 +1267,7 @@ func achievementPhrase(a competition.AchievementID) string {
 	case competition.AchievementShield:
 		return "the Shield"
 	case competition.AchievementHomePlayoff:
-		return "a top-four seed"
+		return "a home playoff game"
 	case competition.AchievementPlayoffs:
 		return "the playoffs"
 	}
