@@ -1,18 +1,13 @@
 (() => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
-  // Switching the penalties basis is a full server render: follow the hidden
-  // link that carries the current page state with the chosen basis. The capture
-  // phase keeps the view forms' in-page change handlers from also reacting.
+  // Switching the penalties basis is a full server render of the current page
+  // state on the chosen basis. The capture phase keeps the view forms' in-page
+  // change handlers from also reacting.
   document.addEventListener('change', event => {
     const checkbox = event.target.closest?.('[data-penalties-selector]');
     if (!checkbox) return;
     event.stopPropagation();
-    const view = views.get(requestedView(new URL(location.href).searchParams));
-    if (view?.bothBases) {
-      update({penalties: checkbox.checked ? 'exclude' : null});
-      return;
-    }
     const url = new URL(location.href);
     if (checkbox.checked) url.searchParams.set('penalties', 'exclude'); else url.searchParams.delete('penalties');
     location.assign(url);
@@ -65,7 +60,10 @@
   const goalsColor = color('--chart-actual'), xgColor = color('--chart-expected');
   // The server renders every figure on the chosen penalties basis. This script
   // only has to name that basis: the same label rules as basisText in Go.
-  let nonPenalty = root.dataset.penalties === 'exclude';
+  // BothBases views switch basis in place, so the named basis follows the URL
+  // while renderedNonPenalty stays the basis of the server-rendered figures.
+  const renderedNonPenalty = root.dataset.penalties === 'exclude';
+  let nonPenalty = renderedNonPenalty;
   const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Goal margin|Total goals|Goals)\b/g;
   const basisReplacement = match => ({
     'Expected goals': 'Non-penalty expected goals', 'expected goals': 'non-penalty expected goals',
@@ -2999,9 +2997,9 @@
     if (isPointsOnlySelection(params) && params.get('penalties') === 'exclude') {
       params.delete('penalties');
       history.replaceState(null, '', `?${params}`);
-      if (nonPenalty) { location.assign(location.href); return; }
+      if (renderedNonPenalty) { location.assign(location.href); return; }
     }
-    if (!views.get(view).bothBases && (params.get('penalties') === 'exclude') !== nonPenalty) { location.assign(location.href); return; }
+    if (!views.get(view).bothBases && (params.get('penalties') === 'exclude') !== renderedNonPenalty) { location.assign(location.href); return; }
     nonPenalty = params.get('penalties') === 'exclude';
     goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
     if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', `?${params}`); }
@@ -3025,13 +3023,6 @@
     root.querySelectorAll('[data-view-choice]').forEach(link => {
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
-    });
-    // Switching the basis reloads the page, because the server computes every
-    // figure; the links keep whatever the URL currently selects.
-    root.querySelectorAll('[data-penalties-choice]').forEach(link => {
-      const selection = new URLSearchParams(params);
-      if (link.dataset.penaltiesChoice === 'exclude') selection.set('penalties', 'exclude'); else selection.delete('penalties');
-      link.href = `?${selection}`;
     });
     const currentTab = root.querySelector('[data-group-views]:not([hidden]) [aria-current]');
     if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
@@ -3110,7 +3101,7 @@
     Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
     const becomingPointsOnly = isPointsOnlySelection(url.searchParams);
     if (becomingPointsOnly) url.searchParams.delete('penalties');
-    if (becomingPointsOnly && root.dataset.penalties === 'exclude') { location.assign(url); return; }
+    if (becomingPointsOnly && renderedNonPenalty) { location.assign(url); return; }
     if (url.searchParams.get('view') === 'season-trend') {
       const params = url.searchParams;
       if (!trendSortAvailable(params)) {

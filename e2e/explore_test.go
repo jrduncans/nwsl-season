@@ -124,20 +124,6 @@ func controlValues(t *testing.T, page playwright.Page, selectors []string) map[s
 // same change event a person's choice does.
 func chooseOption(t *testing.T, page playwright.Page, selector, value string) {
 	t.Helper()
-	var checkbox bool
-	selectorForJS := strings.ReplaceAll(selector, ":visible", "")
-	evalJSON(t, page, `(selector) => { const el = document.querySelector(selector); return el?.type === 'checkbox'; }`, selectorForJS, &checkbox)
-	if checkbox {
-		var checked bool
-		evalJSON(t, page, `(selector) => document.querySelector(selector)?.checked ?? false`, selectorForJS, &checked)
-		want := value == "exclude"
-		if checked != want {
-			if err := page.Locator(selector).Click(); err != nil {
-				t.Fatalf("toggle %q in %s: %v", value, selector, err)
-			}
-		}
-		return
-	}
 	if _, err := page.Locator(selector).SelectOption(playwright.SelectOptionValues{Values: &[]string{value}}); err != nil {
 		t.Fatalf("choose %q in %s: %v", value, selector, err)
 	}
@@ -2532,7 +2518,7 @@ func TestExplorePointsOnlyNavigationRestoresMixedViewPenaltyControls(t *testing.
 	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-controls] [data-penalties-selector]", "exclude")
+	setPenalties(t, page, "[data-team-controls] [data-penalties-selector]", true)
 	if err := page.WaitForURL("**penalties=exclude**"); err != nil {
 		t.Fatal(err)
 	}

@@ -60,8 +60,8 @@ func TestExploreMarginsGoBrowserParity(t *testing.T) {
 			// Changing the basis must recompute from the same fixtures without a fetch.
 			if tc.missingSplit {
 				defer expectInPlace(t, page, "both bases of missing-split tiles")()
-				chooseOption(t, page, "[data-h2h-penalties]", "include")
-				chooseOption(t, page, "[data-h2h-penalties]", "exclude")
+				setPenalties(t, page, "[data-h2h-penalties]", false)
+				setPenalties(t, page, "[data-h2h-penalties]", true)
 				evalJSON(t, page, read, tc.tiles, &got)
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("basis toggle changed tiles: %+v != %+v", got, want)

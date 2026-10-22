@@ -151,12 +151,12 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. The control is an **Exclude penalties** checkbox: it is
-unchecked by default, and checking it submits `penalties=exclude`. Points-only selections hide the control, ignore and drop a
-carried basis, and show no points note: Compare teams on Points except Table and
-Scored vs allowed; Season by season on Points; Match by match on Points vs
-xPoints and Benchmarks showing Points or xPoints; Head to head on Points vs
-xPoints; Parity; and Team-seasons on Points. Parity always uses all-shots
+`penalties=exclude`. The control is an **Exclude penalties** checkbox, unchecked
+by default; checking it submits `penalties=exclude`. Points-only selections
+hide the control, ignore and drop a carried basis, and show no points note:
+Compare teams on Points except Table and Scored vs allowed; Season by season on
+Points; Match by match on Points vs xPoints and Benchmarks showing Points or
+xPoints; Head to head on Points vs xPoints; Parity; and Team-seasons on Points. Parity always uses all-shots
 eligibility, even for an old link with `penalties=exclude`. Shield and playoff
 thresholds also always ignore a carried basis and have no Penalties control.
 Mixed views keep the control and the points note when they show points: Compare
@@ -168,9 +168,20 @@ registry's `PointsOnly` and `PointsNote` rules; `apptest.ExplorePointsOnlyCases`
 checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered checkbox is last in each view's data-control row and never
-in the navigation. Mixed-view links and forms carry its selection; unchecked
-forms omit the default parameter. With JavaScript disabled, the checkbox submits
-through the view's GET form.
+in the navigation. Mixed-view links carry its selection. Every data-control row
+is a GET form, and the checkbox is that form's only penalties field: unchecked,
+the form omits the parameter. Views with no other selection (Scoring trend, Goal
+distribution without data, Home advantage and Scoring table) wrap the checkbox
+in a form whose hidden fields carry the rest of the query
+(`PenaltiesFormFields`), so without JavaScript every view switches basis through
+its form's submit button.
+
+With JavaScript, changing the checkbox reloads the page on the new basis,
+because the server computes every figure. Head to head and Team-seasons carry
+both bases, so their own checkboxes switch in place. `explore.js` keeps the
+basis the server rendered (`renderedNonPenalty`) apart from the basis it names
+in labels (`nonPenalty`): entering any other view in place reloads when the URL
+basis differs from the rendered one.
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and
@@ -325,7 +336,7 @@ boundary and disclose differences from the cached played-match record.
 
 No xG, xPoints, penalty split or forecast is required; carried Penalties has no
 effect and there is no Penalties control (the view is points-only, so the
-"Excluded removes penalty kicks…" help text is not shown). A thresholds request skips forecast
+"Excluding removes penalty kicks…" help text is not shown). A thresholds request skips forecast
 benchmark warming; entering Match by match from that page reloads its normal
 payload so forecast controls remain available.
 

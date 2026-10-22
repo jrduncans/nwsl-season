@@ -19,21 +19,28 @@ import (
 // penaltiesSelect is the visible Exclude penalties checkbox of the current view.
 const penaltiesSelect = "input[data-penalties-selector]:visible"
 
-// choosePenalties changes the Penalties select and waits for the full server
-// render on the chosen basis.
+// setPenalties checks or clears the Exclude penalties checkbox at selector,
+// firing the same change event a person's click does.
+func setPenalties(t *testing.T, page playwright.Page, selector string, exclude bool) {
+	t.Helper()
+	if err := page.Locator(selector).SetChecked(exclude); err != nil {
+		t.Fatalf("set %s to %v: %v", selector, exclude, err)
+	}
+}
+
+// choosePenalties changes the Exclude penalties checkbox and waits for the
+// full server render on the chosen basis.
 func choosePenalties(t *testing.T, page playwright.Page, choice string) {
 	t.Helper()
-	chooseOption(t, page, penaltiesSelect, choice)
+	setPenalties(t, page, penaltiesSelect, choice == "exclude")
 	if _, err := page.WaitForFunction(`(want) => (new URLSearchParams(location.search).get('penalties') === 'exclude') === (want === 'exclude')`, choice); err != nil {
 		t.Fatalf("penalties %s did not navigate: %v", choice, err)
 	}
 	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateLoad}); err != nil {
 		t.Fatalf("load after penalties %s: %v", choice, err)
 	}
-	var checked bool
-	evalJSON(t, page, `(selector) => document.querySelector(selector)?.checked ?? false`, strings.ReplaceAll(penaltiesSelect, ":visible", ""), &checked)
-	if checked != (choice == "exclude") {
-		t.Fatalf("penalties checkbox checked = %v after choosing %s", checked, choice)
+	if err := playwright.NewPlaywrightAssertions().Locator(page.Locator(penaltiesSelect)).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(choice == "exclude")}); err != nil {
+		t.Fatalf("penalties %s is not shown after the reload: %v", choice, err)
 	}
 	if err := settle(page); err != nil {
 		t.Fatalf("settle: %v", err)
@@ -58,7 +65,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	if got := textOf(t, page, "label.penalties-select:visible"); got != "Exclude penalties" {
 		t.Fatalf("Penalties control = %q", got)
 	}
-	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveAttribute("title", "Excluded removes penalty kicks from both goals and xG."); err != nil {
+	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveAttribute("title", "Excluding removes penalty kicks from both goals and xG."); err != nil {
 		t.Errorf("Penalties help: %v", err)
 	}
 	// The control is a data control: last in the form row, never in navigation.
@@ -138,10 +145,8 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 				t.Error(err)
 			}
 		} else if carriedExclusion && tab.tab != "Shield and playoff thresholds" {
-			var checked bool
-			evalJSON(t, page, `(selector) => document.querySelector(selector)?.checked ?? false`, strings.ReplaceAll(penaltiesSelect, ":visible", ""), &checked)
-			if !checked {
-				t.Errorf("%s / %s does not offer Exclude penalties checked", tab.group, tab.tab)
+			if err := expect.Locator(page.Locator(penaltiesSelect)).ToBeChecked(); err != nil {
+				t.Errorf("%s / %s does not show Exclude penalties checked: %v", tab.group, tab.tab, err)
 			}
 		}
 		for _, href := range hrefs(t, page, "nav.explore-views a, nav.explore-subviews a") {
@@ -285,13 +290,16 @@ type controlLayout struct {
 	Controls      []controlGeometry
 }
 
-// controlLayoutScript measures every visible selection control in the page's current
-// view, keyed by its position and name so the two bases compare like for like.
+// controlLayoutScript measures every visible data control in the page's
+// current view: the selects and the named checkboxes that submit a selection.
+// Chart display toggles, such as team logos, sit below the chart and are not
+// data controls. Controls are keyed by position and name so the two bases
+// compare like for like.
 const controlLayoutScript = `(headingSelector) => {
 	const box = (el) => { const r = el.getBoundingClientRect(); return {X: r.left + scrollX, Y: r.top + scrollY, W: r.width, H: r.height}; };
 	const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 	const heading = document.querySelector(headingSelector);
-	const controls = [...document.querySelectorAll('main select, .explore select, form select, main input[type="checkbox"], .explore input[type="checkbox"], form input[type="checkbox"]')]
+	const controls = [...document.querySelectorAll('main select, .explore select, form select, .explore input[type="checkbox"][name]')]
 		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
 		.map((el, index) => ({Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: box(el), Label: box(el.closest('label') || el)}));
 	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
@@ -301,7 +309,7 @@ const controlLayoutScript = `(headingSelector) => {
 func closeEnough(a, b float64) bool { return a-b <= 1 && b-a <= 1 }
 
 func sameBox(a, b controlBox) bool {
-	return closeEnough(a.X, b.X) && closeEnough(a.W, b.W) && closeEnough(a.H, b.H)
+	return closeEnough(a.X, b.X) && closeEnough(a.Y, b.Y) && closeEnough(a.W, b.W) && closeEnough(a.H, b.H)
 }
 
 // TestDataControlsKeepTheirGeometryAcrossBases checks that, in every Explore
@@ -379,5 +387,79 @@ func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Head to head switches basis in place, but every other view's figures are
+// the server-rendered basis: leaving Head to head after a switch reloads.
+func TestExplorePenaltiesInPlaceSwitchReloadsOtherViews(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	for _, exclude := range []bool{true, false} {
+		path := "explore?view=head-to-head&opponent=" + seattleH2H
+		if !exclude {
+			path += "&penalties=exclude"
+		}
+		page := explorePage(t, base, Desktop, path)
+		markDocument(t, page)
+		setPenalties(t, page, "[data-h2h-penalties]", exclude)
+		assertSameDocument(t, page, "switching basis in Head to head")
+		if err := page.Locator(`[data-view-choice="team-rankings"]`).Click(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := page.WaitForFunction(`() => window.__documentMarker !== true && document.readyState === 'complete'`, nil); err != nil {
+			t.Fatalf("leaving Head to head on the switched basis did not reload: %v", err)
+		}
+		if got := queryOf(t, page).Get("penalties"); (got == "exclude") != exclude {
+			t.Fatalf("penalties = %q, want exclude %v", got, exclude)
+		}
+		root := expect.Locator(page.Locator("[data-explore]"))
+		if exclude {
+			if err := root.ToHaveAttribute("data-penalties", "exclude"); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := root.Not().ToHaveAttribute("data-penalties", "exclude"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator(penaltiesSelect)).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(exclude)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Without JavaScript the checkbox submits through its view's GET form, both in
+// a view with other selections and in one whose form exists only for it.
+func TestExplorePenaltiesNativeSubmission(t *testing.T) {
+	t.Parallel()
+	expect := playwright.NewPlaywrightAssertions()
+	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	for _, tc := range []struct{ path, panel, kept string }{
+		{"explore?view=teams&display=table&season=2025", "teams", "season"},
+		{"explore?view=trend&metric=gap", "trend", "metric"},
+	} {
+		page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
+		visitStatic(t, page, base+tc.path)
+		want := queryOf(t, page).Get(tc.kept)
+		for _, exclude := range []bool{true, false} {
+			form := page.Locator(`[data-panel="` + tc.panel + `"] form:has(input[data-penalties-selector])`)
+			setPenalties(t, page, `[data-panel="`+tc.panel+`"] input[data-penalties-selector]`, exclude)
+			if err := form.Locator(`button[type=submit]`).Click(); err != nil {
+				t.Fatal(err)
+			}
+			if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateLoad}); err != nil {
+				t.Fatal(err)
+			}
+			query := queryOf(t, page)
+			if got := query["penalties"]; exclude && (len(got) != 1 || got[0] != "exclude") || !exclude && len(got) != 0 {
+				t.Fatalf("%s exclude=%v submitted penalties %q", tc.panel, exclude, got)
+			}
+			if query.Get("view") != tc.panel || query.Get(tc.kept) != want {
+				t.Fatalf("%s submission lost the selection: %s", tc.panel, query.Encode())
+			}
+			if err := expect.Locator(page.Locator(`[data-panel="` + tc.panel + `"] input[data-penalties-selector]`)).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(exclude)}); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }

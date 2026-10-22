@@ -94,7 +94,7 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToHaveValue("expected"); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-seasons-penalties]", "exclude")
+	setPenalties(t, page, "[data-team-seasons-penalties]", true)
 	if err := expect.Locator(page.Locator("[data-team-seasons-title]")).ToHaveText("Expected non-penalty goals scored per match, since 2016"); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-penalties]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-seasons-penalties]", "exclude")
+	setPenalties(t, page, "[data-team-seasons-penalties]", true)
 	if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 				}
 				assertNoHorizontalOverflow(t, page)
 			}
-			chooseOption(t, page, "[data-team-seasons-penalties]", "exclude")
+			setPenalties(t, page, "[data-team-seasons-penalties]", true)
 			var label string
 			evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="team-seasons-scatter"]')).options.scales.x.title.text`, nil, &label)
 			if label != "npxGD per match (expected)" {
