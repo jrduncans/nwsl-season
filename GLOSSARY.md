@@ -59,7 +59,7 @@ _Avoid_: season phase, active
 
 **Match**:
 One contest between two teams, whether scheduled, played or abandoned.
-_Avoid_: game, fixture (the Fixtures page keeps its name)
+_Avoid_: game, fixture
 
 **Matchday**:
 The league's numbered round of regular-season matches, as published by ASA.
