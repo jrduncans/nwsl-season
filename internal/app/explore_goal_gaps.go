@@ -36,7 +36,7 @@ func exploreGoalGapTiles(matches []exploreMatchRecord, basis history.ScoringBasi
 		}
 		// The value line and panel titles carry the basis, so headings stay short.
 		headings := []string{"Scored", "Allowed"}
-		actual := []int64{tile.GoalsFor, tile.GoalsAgainst}
+		actual := []int64{int64(tile.GoalsFor), int64(tile.GoalsAgainst)}
 		expected := []float64{tile.XGFor, tile.XGAgainst}
 		for i, heading := range headings {
 			side := exploreGoalGapSide{Heading: heading}

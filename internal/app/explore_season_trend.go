@@ -33,11 +33,15 @@ type exploreMatchRecord struct {
 	Venue      string               `json:"venue"`
 	Score      string               `json:"score"`
 	Values     [4]exploreTeamValues `json:"values"`
+	// Opponents holds Match by match's opponent-adjustment factors.
+	Opponents *exploreOpponentFactors `json:"opponents,omitempty"`
 }
 
 type exploreSeasonTrendRow struct {
 	Number int
 	exploreMatchRecord
+	// AdjustedMatch is the opponent-adjusted match, for sorting.
+	AdjustedMatch exploreMatchRecord
 	DisplayValues []string
 }
 
@@ -47,6 +51,7 @@ type exploreTrendColumn struct {
 	Expected       bool
 	Gap            bool
 	Rolling        bool
+	Adjusted       bool
 	Field          string
 	URL, Sort, Key string
 }
@@ -78,6 +83,9 @@ type exploreSeasonTrendView struct {
 	TrendMarginTiles      []exploreMarginTileView
 	TrendPointsTiles      []explorePointsTile
 	TrendSort, TrendOrder string
+	// TrendOpponentsShown shows Adjust for opponents; TrendOpponents is its
+	// checked state, kept while hidden; TrendAdjusted applies it.
+	TrendOpponentsShown, TrendOpponents, TrendAdjusted bool
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {
@@ -124,7 +132,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		allowed []string
 	}{
 		{"trend-view", &page.TrendView, []string{"balance", "compare", "difference", "points", "relative"}},
-		{"trend-sort", &page.TrendSort, []string{"match", "venue", "result", "goal-margin", "xg-margin", "points-gap", "scored-gap", "allowed-gap"}},
+		{"trend-sort", &page.TrendSort, []string{"match", "venue", "result", "goal-margin", "xg-margin", "points-gap", "scored-gap", "allowed-gap", "adjusted-goals-for", "adjusted-goals-against", "adjusted-xg-for", "adjusted-xg-against"}},
 		{"trend-order", &page.TrendOrder, []string{"asc", "desc"}},
 		{"average-series", &page.TrendAverageSeries, []string{"goals", "xg", "points", "xpoints"}},
 		{"average-reference", &page.TrendAverageReference, []string{"team", "league", "playoff", "top-four", "shield", "best"}},
@@ -139,6 +147,20 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 	if err := parseTrendSmoothing(query, &page); err != nil {
 		return page, err
 	}
+	if page.TrendOpponents, err = opponentsSelection(query); err != nil {
+		return page, err
+	}
+	var coverage *exploreOpponentCoverage
+	for _, season := range teams.TeamSeasons {
+		if season.Season == teams.TeamSeason {
+			coverage = season.Opponents
+		}
+	}
+	// Every view's payload carries Match by match, so apply its rule whatever
+	// view the request names.
+	trendView, _ := exploreViewFor("season-trend")
+	page.TrendOpponentsShown = coverage != nil && trendView.OpponentAdjustment.matches(query, trendView.Defaults)
+	page.TrendAdjusted = page.TrendOpponentsShown && page.TrendOpponents
 	// Scoring balance always includes actual and xG. The shared series query is
 	// retained for Season by season, but has no effect on Match by match.
 	series := "both"
@@ -161,7 +183,11 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			labels = []string{"xG scored", "xG allowed", "xG margin", "xPoints"}
 		}
 		for _, measure := range measures {
-			page.TrendColumns = append(page.TrendColumns, exploreTrendColumn{Label: basisText(basis, labels[measure]), Measure: measure, Expected: expected})
+			column := exploreTrendColumn{Label: basisText(basis, labels[measure]), Measure: measure, Expected: expected}
+			if page.TrendAdjusted && measure != explorePoints {
+				column.Label, column.Adjusted = adjustedLabel(column.Label), true
+			}
+			page.TrendColumns = append(page.TrendColumns, column)
 		}
 	}
 	if page.TrendView == "compare" || page.TrendView == "relative" {
@@ -196,8 +222,16 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 			if page.TrendGoalGaps {
 				page.TrendGoalGapTiles = exploreGoalGapTiles(team.Matches, basis, "match")
 			}
+			adjusted := team.Matches
+			if page.TrendAdjusted {
+				adjusted = opponentAdjustedMatches(team.Matches)
+			}
 			if page.TrendMargins || page.TrendBalanceBars {
-				page.TrendMarginTiles = formatMarginTiles(exploreMarginTiles(team.Matches), basis, "match")
+				tiles := exploreMarginTiles(team.Matches)
+				if page.TrendAdjusted {
+					tiles = exploreAdjustedMarginTiles(team.Matches, adjusted)
+				}
+				page.TrendMarginTiles = formatMarginTiles(tiles, basis, "match")
 			}
 			if page.TrendPointsGap {
 				page.TrendPointsTiles = explorePointsTiles(team.Matches, "match")
@@ -208,9 +242,9 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 				page.TrendReferenceStatus = exploreTrendUnavailableReference(season, page.TrendColumns, page.TrendAverageReference)
 			}
 			for index, match := range team.Matches {
-				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match}
+				row := exploreSeasonTrendRow{Number: index + 1, exploreMatchRecord: match, AdjustedMatch: adjusted[index]}
 				for _, column := range page.TrendTableColumns {
-					row.DisplayValues = append(row.DisplayValues, exploreTrendCell(column, team.Matches, index, window))
+					row.DisplayValues = append(row.DisplayValues, exploreTrendCell(column, team.Matches, adjusted, index, window))
 				}
 				page.TrendRows = append(page.TrendRows, row)
 				page.TrendMissingXG = page.TrendMissingXG || (measures[0] != 3 && series != "goals" && match.Values[0].Expected == nil)
@@ -221,7 +255,7 @@ func exploreSeasonTrend(query url.Values, teams exploreTeamsView, selected teamN
 		}
 	}
 	sortExploreTrendRows(page.TrendRows, page.TrendSort, page.TrendOrder)
-	page.TrendNote = exploreSeasonTrendNote(page, basis)
+	page.TrendNote = exploreSeasonTrendNote(page, basis, coverage)
 	return page, nil
 }
 
@@ -264,7 +298,7 @@ func parseTrendSmoothing(query url.Values, page *exploreSeasonTrendView) error {
 }
 
 // The note carries only what the controls and panel titles do not already say.
-func exploreSeasonTrendNote(page exploreSeasonTrendView, basis history.ScoringBasis) string {
+func exploreSeasonTrendNote(page exploreSeasonTrendView, basis history.ScoringBasis, coverage *exploreOpponentCoverage) string {
 	var parts []string
 	if page.TrendMode == "rolling" {
 		parts = append(parts, fmt.Sprintf("Each point averages the last %s matches, including that one.", page.TrendWindow))
@@ -280,6 +314,12 @@ func exploreSeasonTrendNote(page exploreSeasonTrendView, basis history.ScoringBa
 	}
 	if basis.ExcludesPenalties() {
 		parts = append(parts, "Penalty kicks excluded.")
+	}
+	if page.TrendAdjusted {
+		parts = append(parts, opponentAdjustmentNote)
+		if note := coverage.Note(); note != "" {
+			parts = append(parts, note)
+		}
 	}
 	return strings.Join(parts, " ")
 }

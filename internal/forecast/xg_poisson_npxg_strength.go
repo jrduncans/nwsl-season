@@ -13,7 +13,7 @@ const npxgStrengthScheduleLoadID = "xg-poisson-npxg-strength-v1"
 func NewNPXGStrengthScheduleLoadV1() Model { return npxgStrengthScheduleLoadV1{} }
 
 // npxgStrengthScheduleLoadV1 separates the strength signal from the scoring
-// level. Team attack and defence multipliers come from non-penalty xG,
+// level. Team attack and defense multipliers come from non-penalty xG,
 // measured against the league npxG mean so they stay centred on one. The
 // multipliers then scale the all-shots league venue rates, so simulated
 // scorelines still include the league's usual penalty goals.

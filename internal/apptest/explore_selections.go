@@ -33,3 +33,25 @@ func ExplorePointsOnlyCases() []ExplorePointsOnlyCase {
 		{Query: "view=home-advantage", Selector: `[data-panel=home-advantage] .penalties-select`},
 	}
 }
+
+// ExploreOpponentCase describes whether one Explore URL offers Adjust for
+// opponents, for a season with opponent ratings.
+type ExploreOpponentCase struct {
+	Query string
+	Shown bool
+}
+
+// ExploreOpponentCases is the shared URL matrix for Explore's Go and JS
+// opponent-adjustment rule.
+func ExploreOpponentCases() []ExploreOpponentCase {
+	return []ExploreOpponentCase{
+		{Query: "view=season-trend", Shown: true},
+		{Query: "view=season-trend&trend-view=balance&smoothing=5", Shown: true},
+		{Query: "view=season-trend&trend-view=difference&opponents=adjusted", Shown: true},
+		{Query: "view=season-trend&trend-view=compare&opponents=adjusted"},
+		{Query: "view=season-trend&trend-view=points"},
+		{Query: "view=season-trend&trend-view=relative"},
+		{Query: "view=team-history"},
+		{Query: ""},
+	}
+}

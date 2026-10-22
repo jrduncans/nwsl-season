@@ -279,6 +279,7 @@
 <label data-trend-average-data-control{{if ne .TrendView "relative"}} hidden{{end}}>Show <select name="average-series" data-trend-average-series><option value="goals"{{if eq .TrendAverageSeries "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .TrendAverageSeries "xg"}} selected{{end}}>xG</option><option value="points"{{if eq .TrendAverageSeries "points"}} selected{{end}}>Points</option><option value="xpoints"{{if eq .TrendAverageSeries "xpoints"}} selected{{end}}>xPoints</option></select></label>
 <label>Smoothing <select name="smoothing" data-trend-smoothing><option value="none"{{if eq .TrendSmoothing "none"}} selected{{end}}>None</option><option value="3"{{if eq .TrendSmoothing "3"}} selected{{end}}>3-match average</option><option value="5"{{if eq .TrendSmoothing "5"}} selected{{end}}>5-match average</option><option value="10"{{if eq .TrendSmoothing "10"}} selected{{end}}>10-match average</option></select></label>
 {{template "penaltiesSelect" $}}
+<label data-trend-opponents-control{{if not .TrendOpponentsShown}} hidden{{end}}><input type="checkbox" name="opponents" value="adjusted" data-trend-opponents{{if .TrendOpponents}} checked{{end}}> Adjust for opponents</label>
 <button class="button" type="submit" data-trend-submit>Show matches</button>
 </form>
 <p class="note" data-season-trend-note{{if not .TrendNote}} hidden{{end}}>{{.TrendNote}}</p>
@@ -299,7 +300,7 @@
 <div class="explore-h2h-record" data-trend-points-tiles{{if not .TrendPointsGap}} hidden{{end}}>{{template "explorePointsTiles" .TrendPointsTiles}}</div>
 <div class="explore-h2h-record" data-trend-goal-gap-tiles{{if not .TrendGoalGaps}} hidden{{end}}>{{template "exploreGoalGapTiles" .TrendGoalGapTiles}}</div>
 <div class="explore-h2h-record" data-trend-margin-tiles{{if not (or .TrendMargins .TrendBalanceBars)}} hidden{{end}}>{{template "exploreMarginTiles" .TrendMarginTiles}}</div>
-<p class="note" data-trend-margin-official{{if or (not (or .TrendMargins .TrendBalanceBars)) (not .NonPenalty)}} hidden{{end}}>W–D–L and points use official results, including penalties.</p>
+<p class="note" data-trend-margin-official{{if or (not (or .TrendMargins .TrendBalanceBars)) (not (or .NonPenalty .TrendAdjusted))}} hidden{{end}}>W–D–L and points use official results{{if .NonPenalty}}, including penalties{{end}}.</p>
 <div data-season-trend-plot hidden>
 <section data-trend-margins-panel hidden>
 <h4 data-trend-margin-title>Goal margin</h4><p class="explore-h2h-direction" data-trend-margin-direction>Up: win · Zero: draw · Down: loss</p>

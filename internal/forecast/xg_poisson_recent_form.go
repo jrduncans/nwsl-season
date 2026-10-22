@@ -21,7 +21,7 @@ const (
 )
 
 // NewXGPoissonRecentFormV1 is an experimental xG model that gives recent
-// current-season matches more influence over a team's attack and defence.
+// current-season matches more influence over a team's attack and defense.
 func NewXGPoissonRecentFormV1() Model { return xgPoissonRecentFormV1{} }
 
 type xgPoissonRecentFormV1 struct{}
@@ -104,15 +104,23 @@ func (xgPoissonRecentFormV1) Fit(input FitInput) (Predictor, error) {
 // recency experiment changes team form only; a small, noisy run of matches
 // should not also redefine league-wide home advantage.
 func fitXGPoissonHomeTwoSeasons(input FitInput) (Predictor, error) {
+	games, xgoals, historical := twoSeasonXGVenueSample(input)
+	return fitXGPoisson(input, games, xgoals, historical)
+}
+
+// twoSeasonXGVenueSample returns the league home and away xG sample: the
+// current season with either the cached totals of the two previous regular
+// seasons or, without them, up to two pooled historical seasons.
+func twoSeasonXGVenueSample(input FitInput) ([]standings.Game, map[string]ExpectedGoals, VenueSample) {
 	if input.HistoricalVenue.XGMatches > 0 {
-		return fitXGPoisson(input, input.Games, input.XGoals, input.HistoricalVenue)
+		return input.Games, input.XGoals, input.HistoricalVenue
 	}
 	history, xgoals := historyPool(input, 2)
 	games := append(history, input.Games...)
 	for id, xg := range input.XGoals {
 		xgoals[id] = xg
 	}
-	return fitXGPoisson(input, games, xgoals, VenueSample{})
+	return games, xgoals, VenueSample{}
 }
 
 func (p recentFormXGPredictor) SeedMaterial() []byte { return append([]byte(nil), p.material...) }
@@ -126,11 +134,11 @@ func (p recentFormXGPredictor) Distribution(game standings.Game) (Distribution, 
 	if !homeKnown || !awayKnown {
 		return nil, fmt.Errorf("fixture %q references an unknown team", game.ID)
 	}
-	homeAttack, homeDefence := weightedXGStrengths(home, p.leagueRate)
-	awayAttack, awayDefence := weightedXGStrengths(away, p.leagueRate)
+	homeAttack, homeDefense := weightedXGStrengths(home, p.leagueRate)
+	awayAttack, awayDefense := weightedXGStrengths(away, p.leagueRate)
 	return poissonDistribution{
-		homeRate: clamp(p.homeRate * homeAttack * awayDefence),
-		awayRate: clamp(p.awayRate * awayAttack * homeDefence),
+		homeRate: clamp(p.homeRate * homeAttack * awayDefense),
+		awayRate: clamp(p.awayRate * awayAttack * homeDefense),
 	}, nil
 }
 
