@@ -51,7 +51,7 @@ func (resultsPoissonV1) Fit(input FitInput) (Predictor, error) {
 	return fitResultsPoisson(input, input.Games, VenueSample{})
 }
 
-// fitResultsPoisson keeps current-season team attack/defence estimates separate
+// fitResultsPoisson keeps current-season team attack/defense estimates separate
 // from the league-wide home and away scoring sample. Evaluation candidates can
 // use completed prior seasons for the latter without treating former players or
 // clubs as part of the current season's team strengths.
@@ -128,18 +128,18 @@ func (p resultsPredictor) Distribution(game standings.Game) (Distribution, error
 	if !homeKnown || !awayKnown {
 		return nil, fmt.Errorf("fixture %q references an unknown team", game.ID)
 	}
-	homeAttack, homeDefence := strengths(home, p.leagueRate)
-	awayAttack, awayDefence := strengths(away, p.leagueRate)
+	homeAttack, homeDefense := strengths(home, p.leagueRate)
+	awayAttack, awayDefense := strengths(away, p.leagueRate)
 	return poissonDistribution{
-		homeRate: clamp(p.homeRate * homeAttack * awayDefence),
-		awayRate: clamp(p.awayRate * awayAttack * homeDefence),
+		homeRate: clamp(p.homeRate * homeAttack * awayDefense),
+		awayRate: clamp(p.awayRate * awayAttack * homeDefense),
 	}, nil
 }
 
-func strengths(t teamTotals, leagueRate float64) (attack, defence float64) {
+func strengths(t teamTotals, leagueRate float64) (attack, defense float64) {
 	attack = ((float64(t.forGoals) + teamPriorGames*leagueRate) / (float64(t.played) + teamPriorGames)) / leagueRate
-	defence = ((float64(t.against) + teamPriorGames*leagueRate) / (float64(t.played) + teamPriorGames)) / leagueRate
-	return attack, defence
+	defense = ((float64(t.against) + teamPriorGames*leagueRate) / (float64(t.played) + teamPriorGames)) / leagueRate
+	return attack, defense
 }
 
 func clamp(value float64) float64 {

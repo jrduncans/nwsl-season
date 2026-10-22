@@ -546,10 +546,11 @@ team's xG coverage is incomplete; goal ranks remain.
 |---|---|---|
 | `trend-view` | `balance` (Scoring balance), `compare` (Goals vs xG), `difference` (Margins), `points` (Points vs xPoints), `relative` (Benchmarks) | `balance` |
 | `smoothing` | `none`, `3`, `5`, `10` (N-match rolling average) | `5` |
-| `trend-sort` | `match`, `venue`, `result`, `goal-margin`, `xg-margin`, `points-gap`, `scored-gap`, `allowed-gap` (derived columns depend on the chart) | `match` |
+| `trend-sort` | `match`, `venue`, `result`, `goal-margin`, `xg-margin`, `points-gap`, `scored-gap`, `allowed-gap`, `adjusted-goals-for`, `adjusted-goals-against`, `adjusted-xg-for`, `adjusted-xg-against` (derived columns depend on the chart and the opponent adjustment) | `match` |
 | `trend-order` | `asc`, `desc` | `asc` |
 | `average-series` | `goals`, `xg`, `points`, `xpoints` (Benchmarks) | `goals` |
 | `average-reference` | `team`, `league`, `playoff`, `top-four`, `shield`, `best` | `league` |
+| `opponents` | `adjusted` (Scoring balance and Margins) | absent (official values) |
 
 The section has a visually hidden “Match by match” heading; the team name
 follows the controls, with a status line such as “2026 regular season · In
@@ -692,6 +693,62 @@ axis; it has no venue tiles. The
 `difference` URL value stays compatible with existing links. When penalties
 are excluded, the unsmoothed tiles carry
 “W–D–L and points use official results, including penalties.”
+
+**Adjust for opponents** is a checkbox in the data-control row on Scoring
+balance and Margins. It answers whether a run of scoring came only from facing
+weak defenses. Checked submits `opponents=adjusted`; unchecked carries no
+parameter. Blank, repeated and unsupported values return the standard 400 page.
+It works through the native GET form, and `explore.js` switches it in place.
+Goals vs xG, Points vs xPoints and Benchmarks hide it, as does a season without
+xG; there a carried value is ignored but kept, as `series` is. The view
+registry's `opponentAdjustment` rule decides where it appears, for both the Go
+and browser renderers.
+
+Each completed match carries two factors for each team (`opponents` in the
+payload), from `forecast.OpponentAdjustments`. They use the default forecast
+model, xG Poisson (schedule load), as written: xG attack and defense ratings
+shrunk with eight prior matches, league home and away rates from the current
+and two previous regular seasons, the schedule-load shift and the rate clamp.
+An average team (attack = defense = 1) takes the judged team's place:
+
+- scored factor = the average team's expected goals against that opponent's
+  defense, at that venue and schedule load, ÷ the league rate;
+- allowed factor = the opponent's expected goals against the average team, the
+  same way, ÷ the league rate.
+
+Goals for and xG for are divided by the scored factor, goals against and xG
+against by the allowed factor, and the adjusted margin is their difference.
+Ratings use every completed match of the season (hindsight), so earlier bars
+can shift slightly as the season goes on. The judged match is left out of its
+own ratings and of the league venue rates, so a dominant result cannot raise
+its own baseline. Only matches with xG contribute; a match without a kickoff
+has no schedule-load term. Zero stays zero: a goalless match or clean sheet
+earns no credit for the opponent's strength. Both scoring bases use the same
+factors (from full xG); excluding penalties changes only the values divided,
+non-penalty goals and npxG. Points and xPoints stay official. See
+[ADR 0001](adr/0001-opponent-adjustment.md).
+
+When checked, the chart shapes stay the same: unsmoothed Scoring balance keeps
+its mirrored bars and Margins its two bar panels, with titles such as “Adjusted
+goals” and “Adjusted goal margin”. An adjusted goal margin can differ in
+sign from the result, so its direction note reads “Zero: level”. Rolling lines average adjusted values with
+the usual window and lead-in, labeled “Adjusted goals scored” and so on. The
+note adds “Adjusted to an average opponent at a neutral venue with even rest.”
+and, when the season's xG coverage is incomplete, for example “Opponent ratings
+use 231 of 232 matches with xG.” Adjusted goals stay fully available; adjusted
+xG has gaps only where that match's own xG is missing.
+
+With smoothing off, the tiles total adjusted goals and xG (“51.88–25.79
+adjusted goals”, “31.97–33.26 adjusted xG”) while W–D–L and points per match
+stay official, under the note “W–D–L and points use official results.” (with
+“, including penalties” when penalties are excluded). The Match values table
+keeps its official columns and adds Adjusted goals for, Adjusted goals against,
+Adjusted xG for and Adjusted xG against, sortable like the other derived
+columns (descending first); with smoothing on, the rolling columns average
+adjusted values. Tooltips and keyboard descriptions show each official value
+beside its adjusted value (“Goals for: 4 · adjusted 2.93”), then both factors:
+“Opponent defense × venue × rest” (scored) and “Opponent attack × venue ×
+rest” (allowed).
 
 **Points vs xPoints** with Smoothing set to None (`trend-view=points&smoothing=none`)
 plots one bar per match of **points − xPoints**, using the shared Head to head

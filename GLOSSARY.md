@@ -157,6 +157,13 @@ since its previous match, and accumulated load from playing several matches in
 a short span.
 _Avoid_: congestion, fixture load
 
+**Opponent adjustment**:
+A team's goals and xG in each played match, rescaled to what they would be
+against an average opponent at a neutral venue with even rest, using the
+default forecast model's opponent ratings. It describes matches already played;
+Schedule difficulty describes remaining ones.
+_Avoid_: strength of schedule, opponent-adjusted form
+
 ## Forecast Lab
 
 **Projected points**:

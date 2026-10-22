@@ -8,7 +8,10 @@ import (
 
 // exploreMarginTile keeps arithmetic and coverage separate from display text.
 // GoalsCovered comes from the scoring calculation, never inferred from xG.
+// Adjusted tiles total opponent-adjusted goals and xG; the record and points
+// stay official.
 type exploreMarginTile struct {
+	Adjusted     bool    `json:"adjusted,omitempty"`
 	Label        string  `json:"label"`
 	Played       int     `json:"played"`
 	Wins         int     `json:"wins"`
@@ -17,8 +20,8 @@ type exploreMarginTile struct {
 	Points       int     `json:"points"`
 	GoalsCovered int     `json:"goalsCovered"`
 	XGCovered    int     `json:"xgCovered"`
-	GoalsFor     int64   `json:"goalsFor"`
-	GoalsAgainst int64   `json:"goalsAgainst"`
+	GoalsFor     float64 `json:"goalsFor"`
+	GoalsAgainst float64 `json:"goalsAgainst"`
 	XGFor        float64 `json:"xgFor"`
 	XGAgainst    float64 `json:"xgAgainst"`
 }
@@ -28,10 +31,20 @@ type exploreMarginTileView struct {
 }
 
 func exploreMarginTiles(matches []exploreMatchRecord) []exploreMarginTile {
-	tiles := []exploreMarginTile{{Label: "All"}, {Label: "Home"}, {Label: "Away"}}
+	return marginTiles(matches, matches, false)
+}
+
+// exploreAdjustedMarginTiles totals adjusted goals and xG beside the official
+// record and points.
+func exploreAdjustedMarginTiles(official, adjusted []exploreMatchRecord) []exploreMarginTile {
+	return marginTiles(official, adjusted, true)
+}
+
+func marginTiles(official, values []exploreMatchRecord, adjusted bool) []exploreMarginTile {
+	tiles := []exploreMarginTile{{Label: "All", Adjusted: adjusted}, {Label: "Home", Adjusted: adjusted}, {Label: "Away", Adjusted: adjusted}}
 	for i := range tiles {
 		tile := &tiles[i]
-		for _, match := range matches {
+		for index, match := range official {
 			if tile.Label != "All" && tile.Label != match.Venue {
 				continue
 			}
@@ -46,15 +59,16 @@ func exploreMarginTiles(matches []exploreMatchRecord) []exploreMarginTile {
 			default:
 				tile.Losses++
 			}
-			if match.GoalsCovered {
+			value := values[index]
+			if value.GoalsCovered {
 				tile.GoalsCovered++
-				tile.GoalsFor += int64(match.Values[exploreScored].Actual)
-				tile.GoalsAgainst += int64(match.Values[exploreAllowed].Actual)
+				tile.GoalsFor += value.Values[exploreScored].Actual
+				tile.GoalsAgainst += value.Values[exploreAllowed].Actual
 			}
-			if match.Values[exploreScored].Expected != nil && match.Values[exploreAllowed].Expected != nil {
+			if value.Values[exploreScored].Expected != nil && value.Values[exploreAllowed].Expected != nil {
 				tile.XGCovered++
-				tile.XGFor += *match.Values[exploreScored].Expected
-				tile.XGAgainst += *match.Values[exploreAllowed].Expected
+				tile.XGFor += *value.Values[exploreScored].Expected
+				tile.XGAgainst += *value.Values[exploreAllowed].Expected
 			}
 		}
 	}
@@ -71,12 +85,17 @@ func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis, un
 	}
 	views := make([]exploreMarginTileView, 0, len(tiles))
 	for _, tile := range tiles {
-		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: fmt.Sprintf("%d–%d goals", tile.GoalsFor, tile.GoalsAgainst), XG: basisText(basis, "xG incomplete"), Matches: exploreCount(tile.Played, unit, noun)}
+		// Official totals are whole goals; adjusted totals are not.
+		totals, adjusted := fmt.Sprintf("%d–%d", int64(tile.GoalsFor), int64(tile.GoalsAgainst)), ""
+		if tile.Adjusted {
+			totals, adjusted = fmt.Sprintf("%.2f–%.2f", tile.GoalsFor, tile.GoalsAgainst), "adjusted "
+		}
+		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: totals + " " + adjusted + "goals", XG: basisText(basis, "xG incomplete"), Matches: exploreCount(tile.Played, unit, noun)}
 		if tile.Played > 0 {
 			view.Rate = fmt.Sprintf("%.2f pts/match", float64(tile.Points)/float64(tile.Played))
 		}
 		if basis.ExcludesPenalties() {
-			view.Goals = fmt.Sprintf("%d–%d np goals", tile.GoalsFor, tile.GoalsAgainst)
+			view.Goals = totals + " " + adjusted + "np goals"
 			if tile.GoalsCovered == 0 {
 				view.Goals = "Goals unavailable"
 			}
@@ -85,7 +104,7 @@ func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis, un
 			}
 		}
 		if tile.XGCovered == tile.Played && tile.Played > 0 {
-			view.XG = fmt.Sprintf("%.2f–%.2f %s", tile.XGFor, tile.XGAgainst, basisText(basis, "xG"))
+			view.XG = fmt.Sprintf("%.2f–%.2f %s%s", tile.XGFor, tile.XGAgainst, adjusted, basisText(basis, "xG"))
 		} else {
 			view.XGCoverage = fmt.Sprintf("%s %d/%d %s", basisText(basis, "xG"), tile.XGCovered, tile.Played, noun)
 		}

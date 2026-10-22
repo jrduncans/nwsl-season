@@ -94,12 +94,12 @@ ID, so a shared URL always says which model produced its outlook.
 
 | Model | ID | Completed-data input | Main assumption |
 | --- | --- | --- | --- |
-| Current pace | `current-pace-v1` | Scores and table points | A team's observed points pace directly scales its future scoring rate. It does not model opponent defence. |
+| Current pace | `current-pace-v1` | Scores and table points | A team's observed points pace directly scales its future scoring rate. It does not model opponent defense. |
 | Results Poisson | `results-poisson-home-two-seasons-v1` | Scores | Current-season team attack and goals-conceded rates use league venue rates pooled with the two previous seasons. |
 | xG Poisson | `xg-poisson-home-two-seasons-v1` | Available ASA team-model xG | The Results Poisson formula applies to available xG rather than goals; missing xG stays missing. |
-| xG Poisson (recent form) | `xg-poisson-recent-form-v1` | Available ASA team-model xG and kickoff dates | An experimental alternative: each team's xG attack and defence discount older current-season matches exponentially, while the two-season league home-field baseline stays unchanged. |
+| xG Poisson (recent form) | `xg-poisson-recent-form-v1` | Available ASA team-model xG and kickoff dates | An experimental alternative: each team's xG attack and defense discount older current-season matches exponentially, while the two-season league home-field baseline stays unchanged. |
 | xG Poisson (schedule load) | `xg-poisson-schedule-load-v1` | Available ASA team-model xG, match kickoffs, and the two previous regular seasons | The selected xG Poisson model adjusts relative team strength for short recovery and a third match within nine elapsed days. |
-| xG Poisson (npxG strength, schedule load) | `xg-poisson-npxg-strength-v1` | Available ASA team-model xG and penalty splits, match kickoffs, and the two previous regular seasons | The schedule-load model with team attack and defence rated on non-penalty xG; league scoring rates still include penalties. Available for comparison, not the default. |
+| xG Poisson (npxG strength, schedule load) | `xg-poisson-npxg-strength-v1` | Available ASA team-model xG and penalty splits, match kickoffs, and the two previous regular seasons | The schedule-load model with team attack and defense rated on non-penalty xG; league scoring rates still include penalties. Available for comparison, not the default. |
 
 All six models turn a match into independent home and away Poisson score
 distributions. Their scoring rates are bounded between `0.20` and `4.50` goals
@@ -124,15 +124,15 @@ the eight-team-match shrinkage produces:
 
 ```text
 attack  = ((GF + 8 * league_rate) / (P + 8)) / league_rate
-defence = ((GA + 8 * league_rate) / (P + 8)) / league_rate
+defense = ((GA + 8 * league_rate) / (P + 8)) / league_rate
 ```
 
-`defence` is a goals-conceded multiplier, so a value above one raises an
+`defense` is a goals-conceded multiplier, so a value above one raises an
 opponent's expected scoring rate. For home team `H` and away team `A`:
 
 ```text
-lambda_home = clamp(league_home * attack_H * defence_A, 0.20, 4.50)
-lambda_away = clamp(league_away * attack_A * defence_H, 0.20, 4.50)
+lambda_home = clamp(league_home * attack_H * defense_A, 0.20, 4.50)
+lambda_away = clamp(league_away * attack_A * defense_H, 0.20, 4.50)
 ```
 
 The simulator independently samples `Poisson(lambda_home)` and
@@ -141,7 +141,7 @@ The simulator independently samples `Poisson(lambda_home)` and
 `xg-poisson-home-two-seasons-v1` uses this exact calculation with available
 team-model xG in place of `HG`, `AG`, `GF`, and `GA`. Only completed matches
 with available xG contribute to its fit. Historical xG affects only the league
-home/away rates; each team's attack and defence still use the current season.
+home/away rates; each team's attack and defense still use the current season.
 Incomplete xG coverage can make its outlook different from Results Poisson for
 two reasons: the input values differ, and the model may have fewer observed
 matches. It does not fall back to results.
@@ -205,10 +205,16 @@ when the evaluated team is more loaded, easier when its opponent is more
 loaded, and unchanged when their load is equal. The venue-only and raw PPG
 measures remain visible as comparisons.
 
+Explore's opponent adjustment (`forecast.OpponentAdjustments`) applies this
+model to completed matches, with an average team in place of the judged team
+and the judged match left out of the fit. A test checks its factors against
+the fitted model. See the
+[Explore guide](explore-guide.md#match-by-match).
+
 ### xG Poisson (npxG strength, schedule load)
 
 `xg-poisson-npxg-strength-v1` is offered in Forecast Lab and the model
-evaluation but is not the default. It is `xg-poisson-schedule-load-v1` with team attack and defence
+evaluation but is not the default. It is `xg-poisson-schedule-load-v1` with team attack and defense
 rated on non-penalty xG: ASA's penalty-kick xG is subtracted from each side of
 every current and historical match, and the multipliers are measured against
 the league npxG mean so they stay centred on one. The league home and away

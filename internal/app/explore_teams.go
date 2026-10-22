@@ -34,6 +34,8 @@ type exploreTeamSeason struct {
 	Active     bool                    `json:"active"`
 	Teams      []exploreTeamRecord     `json:"teams"`
 	Benchmarks []exploreTrendBenchmark `json:"benchmarks"`
+	// Opponents is absent when the season offers no opponent adjustment.
+	Opponents *exploreOpponentCoverage `json:"opponents,omitempty"`
 }
 
 type exploreTeamRow struct {
@@ -158,6 +160,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 		for _, input := range archive {
 			if input.Entry.Season == summary.Season {
 				season.Benchmarks = exploreTrendBenchmarks(season, input)
+				populateExploreOpponentFactors(&season, input.Data)
 				break
 			}
 		}

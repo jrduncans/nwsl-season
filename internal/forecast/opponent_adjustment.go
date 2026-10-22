@@ -1,0 +1,137 @@
+package forecast
+
+import (
+	"fmt"
+	"math"
+
+	"github.com/jrduncans/nwsl-season/internal/scheduleload"
+	"github.com/jrduncans/nwsl-season/internal/standings"
+)
+
+// TeamFactors rescale one team's values in one match to an average opponent
+// at a neutral venue with even rest: divide the team's goals and xG by Scored,
+// and the goals and xG it allowed by Allowed.
+type TeamFactors struct {
+	Scored, Allowed float64
+}
+
+// FixtureFactors are both teams' factors for one completed fixture.
+type FixtureFactors struct {
+	Home, Away TeamFactors
+}
+
+// OpponentAdjustment holds the factors for every completed fixture.
+type OpponentAdjustment struct {
+	Fixtures map[string]FixtureFactors
+	// XGMatches of the CompletedMatches have xG, so contribute to ratings.
+	XGMatches, CompletedMatches int
+}
+
+// OpponentAdjustments applies xg-poisson-schedule-load-v1 as written to each
+// completed fixture, with an average team (attack = defense = 1) in place of
+// the team being judged. A factor is that team's clamped expected rate at the
+// fixture's venue and schedule load, divided by the league rate.
+//
+// Ratings use every completed fixture in the season, in hindsight, except the
+// one being judged: it is left out of the team ratings and the league venue
+// rates, so a match never sets its own baseline. A fixture without a kickoff
+// has no schedule-load term.
+func OpponentAdjustments(input FitInput) (OpponentAdjustment, error) {
+	known, err := validateTeams(input.Teams)
+	if err != nil {
+		return OpponentAdjustment{}, err
+	}
+	leagueGames, leagueXG, historical := twoSeasonXGVenueSample(input)
+	validated := func(game standings.Game, xgoals map[string]ExpectedGoals) (ExpectedGoals, bool, error) {
+		xg, ok := xgoals[game.ID]
+		if !ok || game.Status != standings.CompletedStatus {
+			return xg, false, nil
+		}
+		if xg.GameID != "" && xg.GameID != game.ID {
+			return xg, false, fmt.Errorf("xG game ID %q does not match fixture %q", xg.GameID, game.ID)
+		}
+		if !validXG(xg.Home) || !validXG(xg.Away) {
+			return xg, false, fmt.Errorf("invalid xG for game %q", game.ID)
+		}
+		return xg, true, nil
+	}
+	matches, homeXG, awayXG := historical.XGMatches, historical.HomeXG, historical.AwayXG
+	for _, game := range leagueGames {
+		xg, ok, err := validated(game, leagueXG)
+		if err != nil {
+			return OpponentAdjustment{}, err
+		}
+		if ok {
+			matches++
+			homeXG += xg.Home
+			awayXG += xg.Away
+		}
+	}
+	totals := make(map[string]xgTotals, len(known))
+	scheduled := make([]standings.Game, 0, len(input.Games))
+	result := OpponentAdjustment{Fixtures: map[string]FixtureFactors{}}
+	for _, game := range input.Games {
+		if !game.Kickoff.IsZero() {
+			scheduled = append(scheduled, game)
+		}
+		if game.Status != standings.CompletedStatus {
+			continue
+		}
+		_, homeKnown := known[game.HomeTeamID]
+		_, awayKnown := known[game.AwayTeamID]
+		if !homeKnown || !awayKnown {
+			return OpponentAdjustment{}, fmt.Errorf("completed game %q references an unknown team", game.ID)
+		}
+		result.CompletedMatches++
+		xg, ok, err := validated(game, input.XGoals)
+		if err != nil {
+			return OpponentAdjustment{}, err
+		}
+		if !ok {
+			continue
+		}
+		result.XGMatches++
+		totals[game.HomeTeamID] = addXGTotals(totals[game.HomeTeamID], xg.Home, xg.Away, 1)
+		totals[game.AwayTeamID] = addXGTotals(totals[game.AwayTeamID], xg.Away, xg.Home, 1)
+	}
+	loads, err := scheduleload.Calculate(scheduled)
+	if err != nil {
+		return OpponentAdjustment{}, err
+	}
+	for _, game := range input.Games {
+		if game.Status != standings.CompletedStatus {
+			continue
+		}
+		home, away := totals[game.HomeTeamID], totals[game.AwayTeamID]
+		looMatches, looHome, looAway := matches, homeXG, awayXG
+		if xg, ok, _ := validated(game, input.XGoals); ok {
+			home = addXGTotals(home, -xg.Home, -xg.Away, -1)
+			away = addXGTotals(away, -xg.Away, -xg.Home, -1)
+			looMatches--
+			looHome -= xg.Home
+			looAway -= xg.Away
+		}
+		homeRate := (looHome + leaguePriorGames*priorHomeGoals) / (float64(looMatches) + leaguePriorGames)
+		awayRate := (looAway + leaguePriorGames*priorAwayGoals) / (float64(looMatches) + leaguePriorGames)
+		leagueRate := (homeRate + awayRate) / 2
+		homeAttack, homeDefense := xgStrengths(home, leagueRate)
+		awayAttack, awayDefense := xgStrengths(away, leagueRate)
+		load := loads[game.ID]
+		// The model's schedule-load shift: the home rate's multiplier, and the
+		// away rate's divisor.
+		shift := math.Exp((scheduleload.Congestion(load.Away) - scheduleload.Congestion(load.Home)) / 2)
+		factor := func(rate float64) float64 { return clamp(rate) / leagueRate }
+		result.Fixtures[game.ID] = FixtureFactors{
+			Home: TeamFactors{Scored: factor(homeRate * awayDefense * shift), Allowed: factor(awayRate * awayAttack / shift)},
+			Away: TeamFactors{Scored: factor(awayRate * homeDefense / shift), Allowed: factor(homeRate * homeAttack * shift)},
+		}
+	}
+	return result, nil
+}
+
+func addXGTotals(totals xgTotals, scored, allowed float64, played int) xgTotals {
+	totals.played += played
+	totals.forGoals += scored
+	totals.against += allowed
+	return totals
+}

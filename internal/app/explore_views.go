@@ -48,6 +48,9 @@ type exploreView struct {
 	PointsOnly exploreRule `json:"pointsOnly,omitempty"`
 	// PointsNote matches selections that show points beside the non-penalty basis.
 	PointsNote exploreRule `json:"pointsNote,omitempty"`
+	// OpponentAdjustment matches selections that offer Adjust for opponents.
+	// Elsewhere a carried opponents value is ignored but kept.
+	OpponentAdjustment exploreRule `json:"opponentAdjustment,omitempty"`
 	// BothBases views carry both scoring bases, so switching basis in place
 	// needs no reload.
 	BothBases bool `json:"bothBases,omitempty"`
@@ -81,9 +84,10 @@ var exploreViewGroups = []exploreViewGroup{
 		{Key: "team-rankings", Label: "Rankings"},
 		{
 			Key: "season-trend", Label: "Match by match",
-			Defaults:      map[string]string{"trend-view": "balance", "average-series": "goals"},
-			PointsOnly:    exploreRule{{"trend-view": {"points"}}, {"trend-view": {"relative"}, "average-series": {"points", "xpoints"}}},
-			NeedsForecast: true,
+			Defaults:           map[string]string{"trend-view": "balance", "average-series": "goals"},
+			PointsOnly:         exploreRule{{"trend-view": {"points"}}, {"trend-view": {"relative"}, "average-series": {"points", "xpoints"}}},
+			OpponentAdjustment: exploreRule{{"trend-view": {"balance", "difference"}}},
+			NeedsForecast:      true,
 		},
 		{Key: "team-history", Label: "Season by season", PointsOnly: exploreRule{{"measure": {"points"}}}, PointsNote: exploreRule{{}}},
 		{Key: "head-to-head", Label: "Head to head", PointsOnly: exploreRule{{"h2h-series": {"points"}}}, BothBases: true},
@@ -175,6 +179,13 @@ func exploreRequestedView(query url.Values) string {
 func unknownExploreViewError() error {
 	keys := exploreViewKeys()
 	return fmt.Errorf("view must be %s, or %s", strings.Join(keys[:len(keys)-1], ", "), keys[len(keys)-1])
+}
+
+// opponentAdjustmentSelection reports whether a selection offers Adjust for
+// opponents, given a season with opponent ratings.
+func opponentAdjustmentSelection(query url.Values) bool {
+	view, ok := exploreViewFor(exploreRequestedView(query))
+	return ok && view.OpponentAdjustment.matches(query, view.Defaults)
 }
 
 // pointsOnlyExploreSelection identifies selections where the penalty basis

@@ -94,7 +94,7 @@ func TestScheduleLoadsUsePriorPlayableFixturesAndNineDaySpan(t *testing.T) {
 	}
 }
 
-func TestXGPoissonScheduleLoadAdjustsAttackAndDefence(t *testing.T) {
+func TestXGPoissonScheduleLoadAdjustsAttackAndDefense(t *testing.T) {
 	if got := NewXGPoissonScheduleLoadV1().Info().ID; got != "xg-poisson-schedule-load-v1" {
 		t.Fatalf("model ID = %q; changing frozen behavior requires a new version", got)
 	}

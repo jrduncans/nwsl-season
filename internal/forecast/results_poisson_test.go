@@ -64,9 +64,9 @@ func TestPoissonSampleIsDeterministicForSeed(t *testing.T) {
 }
 
 func TestStrengthsAreNeutralAtPrior(t *testing.T) {
-	attack, defence := strengths(teamTotals{}, 1.35)
-	if math.Abs(attack-1) > 1e-12 || math.Abs(defence-1) > 1e-12 {
-		t.Fatalf("strengths = %.12f, %.12f; want neutral", attack, defence)
+	attack, defense := strengths(teamTotals{}, 1.35)
+	if math.Abs(attack-1) > 1e-12 || math.Abs(defense-1) > 1e-12 {
+		t.Fatalf("strengths = %.12f, %.12f; want neutral", attack, defense)
 	}
 }
 

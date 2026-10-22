@@ -1883,6 +1883,35 @@
     }
     return average;
   }
+  // Mirrors opponentAdjusted in Go: goals and xG divided by the match's
+  // opponent factors, points official. The official match rides along for
+  // tooltips.
+  function opponentAdjusted(match) {
+    const factors = match.opponents, values = [...match.values];
+    if (!factors) {
+      [0, 1, 2].forEach(measure => { values[measure] = {actual: 0, expected: null}; });
+      return {...match, goalsCovered: false, values, official: match};
+    }
+    const divide = (value, factor) => ({actual: value.actual / factor, expected: value.expected == null ? null : value.expected / factor});
+    values[0] = divide(match.values[0], factors.scored);
+    values[1] = divide(match.values[1], factors.allowed);
+    values[2] = {actual: values[0].actual - values[1].actual, expected: values[0].expected == null || values[1].expected == null ? null : values[0].expected - values[1].expected};
+    return {...match, values, official: match};
+  }
+  // "Goals scored" becomes "Adjusted goals scored"; xG and npxG keep their case.
+  const adjustedLabel = label => `Adjusted ${/^(np)?xG/.test(label) ? label : label[0].toLowerCase() + label.slice(1)}`;
+  // The view registry's rule, for a season with opponent ratings.
+  function trendOpponentsShown(params) {
+    const view = views.get('season-trend');
+    const season = teamSeasons.find(row => row.season === (params.get('season') || root.dataset.defaultTeamSeason));
+    return Boolean(season?.opponents) && ruleMatches(view.opponentAdjustment, params, view.defaults);
+  }
+  const trendAdjusted = params => trendOpponentsShown(params) && params.get('opponents') === 'adjusted';
+  function opponentFactorLines(row) {
+    if (!row.official) return [];
+    const factor = value => row.opponents ? value.toFixed(2) : 'Unavailable';
+    return [`Opponent defense × venue × rest: ${factor(row.opponents?.scored)}`, `Opponent attack × venue × rest: ${factor(row.opponents?.allowed)}`];
+  }
   function seasonTrendValue(matches, end, measure, window, expected, rolling) {
     if (rolling) return rollingMatchValue(matches, end, measure, window, expected);
     const metric = matches[end].values[measure];
@@ -1918,8 +1947,10 @@
     const title = `Match ${mark.index + 1} · ${match.date} · ${match.venue} vs ${match.opponent} · ${match.score} · ${{3: 'Win', 1: 'Draw', 0: 'Loss'}[match.values[3].actual]}`;
     const lines = chart.data.datasets.map(series => {
       const value = series.data[mark.index];
-      return `${series.label}: ${seasonTrendNumber(value, series.expected, chart.trendRolling, chart.trendSigned)}${chart.trendRolling && value != null ? ' per match' : ''}`;
+      const official = series.raw ? ` · official ${seasonTrendNumber(series.raw[mark.index], series.expected, chart.trendRolling, chart.trendSigned)}` : '';
+      return `${series.label}: ${seasonTrendNumber(value, series.expected, chart.trendRolling, chart.trendSigned)}${chart.trendRolling && value != null ? ' per match' : ''}${official}`;
     });
+    lines.push(...opponentFactorLines(match));
     if (chart.trendAverage) chart.data.datasets.forEach(series => series.references.forEach(reference => {
       const names = reference.identifyTeams && reference.names?.length ? ` · ${reference.names.join(', ')}` : '';
       lines.push(`${reference.label}${names}: ${reference.value == null ? 'Unavailable' : fixed(reference.value) + ' per match'}`);
@@ -2000,11 +2031,12 @@
   function trendSortAvailable(params) {
     const key = params.get('trend-sort') || 'match', view = params.get('trend-view') || 'balance';
     return ['match', 'venue', 'result'].includes(key) ||
+      (trendAdjusted(params) && ['adjusted-goals-for', 'adjusted-goals-against', 'adjusted-xg-for', 'adjusted-xg-against'].includes(key)) ||
       (view === 'points' && key === 'points-gap') ||
       (view === 'compare' && ['scored-gap', 'allowed-gap'].includes(key)) ||
       (view === 'difference' && ['goal-margin', 'xg-margin'].includes(key));
   }
-  function showSeasonTrendTable(params, matches, series, {view, rolling, window}) {
+  function showSeasonTrendTable(params, matches, series, {view, rolling, window, adjustedRows}) {
     const metric = (label, measure, expected = false, key = '', gap = false) => ({label, key, gap,
       value: row => gap ? measure === 3 ? row.values[3].expected == null ? null : row.values[3].actual - row.values[3].expected : globalThis.NWSLGeometry.goalGap(marginsData.goals(row), marginsData.xg(row), measure) : expected ? row.values[measure].expected : measure !== 3 && !row.goalsCovered ? null : row.values[measure].actual,
       format: value => seasonTrendNumber(value, expected || gap, false, gap),
@@ -2020,11 +2052,20 @@
       ...(nonPenalty ? [{label: 'Non-penalty goals', value: row => row.goalsCovered ? marginsData.goals(row).join('–') : 'Unavailable'}] : []),
       metric(T('xG for'), 0, true), metric(T('xG against'), 1, true), metric('xPoints', 3, true),
     ];
+    // Adjusted columns read the opponent-adjusted rows; the rest read official.
+    const adjustedMetric = (label, measure, expected, key) => ({label, key, adjusted: true,
+      value: (_, index) => expected ? adjustedRows[index].values[measure].expected : adjustedRows[index].goalsCovered ? adjustedRows[index].values[measure].actual : null,
+      format: value => seasonTrendNumber(value, true, false),
+    });
+    if (adjustedRows !== matches) columns.push(
+      adjustedMetric(`Adjusted ${nonPenalty ? 'non-penalty goals' : 'goals'} for`, 0, false, 'adjusted-goals-for'),
+      adjustedMetric(`Adjusted ${nonPenalty ? 'non-penalty goals' : 'goals'} against`, 1, false, 'adjusted-goals-against'),
+      adjustedMetric(T('Adjusted xG for'), 0, true, 'adjusted-xg-for'), adjustedMetric(T('Adjusted xG against'), 1, true, 'adjusted-xg-against'));
     if (view === 'difference') columns.push(metric(T('Goal margin'), 2, false, 'goal-margin'), metric(T('xG margin'), 2, true, 'xg-margin'));
     if (view === 'compare') columns.push(metric(T('Goals − xG'), 0, false, 'scored-gap', true), metric(T('Goals allowed − xG allowed'), 1, false, 'allowed-gap', true));
     if (view === 'points') columns.push(metric('Points − xPoints', 3, false, 'points-gap', true));
     if (rolling) series.forEach(dataset => columns.push({label: `${dataset.label} · ${window}-match average`, value: (_, index) => {
-      if (!dataset.expected && dataset.measure !== 3 && matches.slice(Math.max(0, index + 1 - window), index + 1).some(row => !row.goalsCovered)) return null;
+      if (!dataset.expected && dataset.measure !== 3 && adjustedRows.slice(Math.max(0, index + 1 - window), index + 1).some(row => !row.goalsCovered)) return null;
       return dataset.data[index];
     }, format: value => seasonTrendNumber(value, dataset.expected, true)}));
     const requested = params.get('trend-sort') || 'match';
@@ -2037,7 +2078,7 @@
       if (column.key) {
         const active = key === column.key, target = new URLSearchParams(params);
         if (target.get('penalties') === 'include') target.delete('penalties');
-        const nextDesc = active ? !desc : column.gap || ['goal-margin', 'xg-margin'].includes(column.key);
+        const nextDesc = active ? !desc : column.gap || column.adjusted || ['goal-margin', 'xg-margin'].includes(column.key);
         target.set('trend-sort', column.key); target.delete('trend-order');
         if (nextDesc) target.set('trend-order', 'desc');
         heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
@@ -2095,6 +2136,10 @@
     root.querySelector('[data-trend-average-data-control]').hidden = !relative;
     root.querySelector('[data-trend-reference-control]').hidden = !relative;
     root.querySelector('[data-trend-reference-details]').hidden = !relative;
+    // Elsewhere a carried opponents value is ignored but kept, as series is.
+    root.querySelector('[data-trend-opponents-control]').hidden = !trendOpponentsShown(params);
+    control('opponents').checked = params.get('opponents') === 'adjusted';
+    const adjusted = trendAdjusted(params);
 
     const selectedSeason = teamSeasons.find(row => row.season === season);
     const comparison = root.querySelector('[data-trend-reference]');
@@ -2107,6 +2152,7 @@
     root.querySelector('[data-season-trend-empty]').hidden = matches.length > 0;
     root.querySelector('[data-season-trend-results]').hidden = matches.length === 0;
     if (!matches.length) return;
+    const shown = adjusted ? matches.map(opponentAdjusted) : matches;
     root.querySelector('[data-trend-team-name]').replaceChildren(teamName(team));
     root.querySelector('[data-trend-season-status]').textContent = `${season} regular season${selectedSeason.active ? ' · In progress' : ''} · ${matches.length} played`;
     // The note carries only what the controls and panel titles do not already say.
@@ -2115,7 +2161,9 @@
       relative ? 'Reference lines show the team’s season average and the selected benchmark.' : '',
       missingExpected ? 'Expected means use available matches.' : '',
       points ? 'xPoints: ASA’s expected points for each match.' : '',
-      nonPenalty ? 'Penalty kicks excluded.' : ''].filter(Boolean).join(' ');
+      nonPenalty ? 'Penalty kicks excluded.' : '',
+      adjusted ? 'Adjusted to an average opponent at a neutral venue with even rest.' : '',
+      adjusted && selectedSeason.opponents.xgMatches < selectedSeason.opponents.completed ? `Opponent ratings use ${selectedSeason.opponents.xgMatches} of ${selectedSeason.opponents.completed} matches with xG.` : ''].filter(Boolean).join(' ');
     root.querySelector('[data-season-trend-note]').textContent = note;
     root.querySelector('[data-season-trend-note]').hidden = !note;
     const pointsMetric = points || ['points', 'xpoints'].includes(effectiveSeries);
@@ -2125,10 +2173,12 @@
     root.querySelector('[data-trend-undated]').hidden = !matches.some(match => match.undated);
     const measures = pointsMetric ? [3] : difference ? [2] : [0, 1];
     const visible = (effectiveSeries === 'both' ? [false, true] : [['xg', 'xpoints'].includes(effectiveSeries)]).flatMap(expected => measures.map(measure => {
-      const label = T(expected ? ['xG scored', 'xG allowed', 'xG margin', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal margin', 'Points'][measure]);
+      const official = T(expected ? ['xG scored', 'xG allowed', 'xG margin', 'xPoints'][measure] : ['Goals scored', 'Goals allowed', 'Goal margin', 'Points'][measure]);
       const references = relative ? trendReferences(selectedSeason, matches, measure, expected, averageReference) : [];
-      return {expected, measure, label, references,
-        data: matches.map((_, index) => seasonTrendValue(matches, index, measure, window, expected, rolling)),
+      const rescaled = adjusted && measure !== 3;
+      return {expected, measure, label: rescaled ? adjustedLabel(official) : official, references,
+        data: shown.map((_, index) => seasonTrendValue(shown, index, measure, window, expected, rolling)),
+        ...(rescaled ? {raw: matches.map((_, index) => seasonTrendValue(matches, index, measure, window, expected, rolling))} : {}),
       };
     }));
     if (pointsGap) visible.push({label: 'Points − xPoints', expected: true, gap: true, sortKey: 'points-gap', data: matches.map(match => match.values[3].expected == null ? null : match.values[3].actual - match.values[3].expected)});
@@ -2139,23 +2189,27 @@
     const missingReference = relative ? visible.filter(dataset => dataset.references[1]?.value == null && dataset.references.length > 1) : [];
     referenceStatus.hidden = !missingReference.length;
     referenceStatus.textContent = missingReference.length ? `${missingReference[0].references[1].label} unavailable for ${missingReference.map(dataset => dataset.label).join(', ')}. ${missingReference[0].references[1].note}` : '';
-    showSeasonTrendTable(params, matches, visible.filter(dataset => !dataset.gap), {view, rolling, window});
+    showSeasonTrendTable(params, matches, visible.filter(dataset => !dataset.gap), {view, rolling, window, adjustedRows: shown});
     showPointsTiles(root.querySelector('[data-trend-points-tiles]'), matches.map(match => ({venue: match.venue, points: match.values[3].actual, xpoints: match.values[3].expected})), 'match', pointsGap);
     root.querySelector('[data-trend-margins-panel]').hidden = !(margins || goalGaps || balanceBars);
     showGoalGapTiles(root.querySelector('[data-trend-goal-gap-tiles]'), matches, nonPenalty, 'match', goalGaps);
-    root.querySelector('[data-trend-margin-official]').hidden = !(margins || balanceBars) || !nonPenalty;
-    showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), matches, nonPenalty, margins || balanceBars);
+    const officialNote = root.querySelector('[data-trend-margin-official]');
+    officialNote.hidden = !(margins || balanceBars) || !(nonPenalty || adjusted);
+    officialNote.textContent = `W–D–L and points use official results${nonPenalty ? ', including penalties' : ''}.`;
+    showMarginTiles(root.querySelector('[data-trend-margin-tiles]'), shown, nonPenalty, margins || balanceBars, 'match', adjusted);
     const logos = new Map(selectedSeason.teams.map(row => [row.id, row.logo]));
     const opponentLogos = matches.map(match => logos.get(match.opponentId) || '');
     if (margins || goalGaps || balanceBars) {
       root.querySelector('[data-season-trend-plot]').hidden = false;
       for (const panel of ['goals', 'xg', 'points']) root.querySelector(`[data-trend-${panel}-panel]`).hidden = true;
       root.querySelector('[data-trend-legend]').hidden = true;
-      root.querySelector('[data-trend-margin-title]').textContent = balanceBars ? T('Goals') : goalGaps ? T('Scored · Goals − xG') : nonPenalty ? 'Non-penalty goal margin' : 'Goal margin';
-      root.querySelector('[data-trend-second-title]').textContent = balanceBars ? T('xG') : goalGaps ? T('Allowed · Goals allowed − xG allowed') : T('xG margin');
+      const panelTitle = title => adjusted ? adjustedLabel(title) : title;
+      root.querySelector('[data-trend-margin-title]').textContent = panelTitle(balanceBars ? T('Goals') : goalGaps ? T('Scored · Goals − xG') : nonPenalty ? 'Non-penalty goal margin' : 'Goal margin');
+      root.querySelector('[data-trend-second-title]').textContent = panelTitle(balanceBars ? T('xG') : goalGaps ? T('Allowed · Goals allowed − xG allowed') : T('xG margin'));
       root.querySelector('[data-trend-second-direction]').textContent = balanceBars ? T('Up: xG for · Down: xG allowed') : goalGaps ? T('Above zero: more goals conceded than xG allowed.') : T('Up: more xG for · Zero: level · Down: more xG against');
-      root.querySelector('[data-trend-margin-direction]').textContent = balanceBars ? 'Up: scored · Down: allowed' : goalGaps ? T('Above zero: more goals scored than xG.') : nonPenalty ? 'Zero: level' : 'Up: win · Zero: draw · Down: loss';
-      showMatchBarPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, goalGaps, mirrored: balanceBars, opponentLogos, inspection: balanceBars ? seasonBalanceInspection : goalGaps ? seasonGoalGapInspection : seasonMarginInspection});
+      // Only official goal margins follow the result.
+      root.querySelector('[data-trend-margin-direction]').textContent = balanceBars ? 'Up: scored · Down: allowed' : goalGaps ? T('Above zero: more goals scored than xG.') : nonPenalty || adjusted ? 'Zero: level' : 'Up: win · Zero: draw · Down: loss';
+      showMatchBarPanels({panels: [{canvas: 'season-margin', key: 'season-margin'}, {canvas: 'season-margin-xg', key: 'season-margin-xg'}], matches: shown, description: `${team.name}, ${season}`, nonPenalty, matchNumbers: true, goalGaps, mirrored: balanceBars, adjusted, opponentLogos, inspection: balanceBars ? seasonBalanceInspection : goalGaps ? seasonGoalGapInspection : seasonMarginInspection});
       return;
     }
     root.querySelector('[data-trend-points-panel]').hidden = !pointsGap;
@@ -2212,7 +2266,7 @@
       const canvas = root.querySelector(`[data-chart="${prefix === 'xg' ? 'season-trend-xg' : 'season-trend'}"]`);
       const key = prefix === 'xg' ? 'seasonTrendXG' : 'seasonTrend';
       const chart = charts[key] || (charts[key] = createSeasonTrend(canvas));
-      chart.matchRows = matches; chart.trendRolling = rolling; chart.trendSigned = signedValues; chart.trendAverage = relative; chart.trendReference = averageReference; chart.trendWindow = window;
+      chart.matchRows = shown; chart.trendRolling = rolling; chart.trendSigned = signedValues; chart.trendAverage = relative; chart.trendReference = averageReference; chart.trendWindow = window;
       chart.data.labels = matches.map((_, index) => String(index + 1));
       chart.data.datasets = datasets.map(dataset => {
         const secondary = balance ? dataset.measure === 1 : dataset.expected;
@@ -2557,10 +2611,10 @@
       return tile;
     }));
   }
-  function showMarginTiles(container, matches, np, shown, unit = 'match') {
+  function showMarginTiles(container, matches, np, shown, unit = 'match', adjusted = false) {
     container.hidden = !shown || !matches.length;
     if (!shown) return;
-    const basis = {nonPenalty: np, xgLabel: archiveText('xG', np)};
+    const basis = {nonPenalty: np, xgLabel: archiveText('xG', np), adjusted};
     container.replaceChildren(...marginsData.summarize(matches).map(total => {
       const view = marginsData.format(total, basis, unit), venue = view.label;
       const tile = archiveElement('div'); tile.className = 'explore-h2h-tile explore-margin-tile'; tile.dataset.h2hTile = venue;
@@ -2599,7 +2653,7 @@
   }
   // One entry per bar layout: its series per panel, and the text and tick
   // format each panel carries. `sides` is how many bar series a panel draws.
-  function matchBarMode({goalGaps, mirrored, np, xg}) {
+  function matchBarMode({goalGaps, mirrored, np, xg, adjusted = false}) {
     const {goals, xg: xgPair, goalMargin, xgMargin} = marginsData, {goalGap} = window.NWSLGeometry;
     const signed = (value, decimals) => `${value > 0 ? '+' : ''}${value.toFixed(decimals)}`;
     if (mirrored) {
@@ -2621,13 +2675,14 @@
       series: single.map(read => [read]),
       label: i => goalGaps ? archiveText(i ? 'Goals against − xG against' : 'Goals for − xG for', np) : i ? `${xg} margin` : np ? 'Non-penalty goal margin' : 'Goal margin',
       seriesLabel: label => label,
-      direction: i => goalGaps ? archiveText(i ? 'Above zero: more goals conceded than xG allowed.' : 'Above zero: more goals scored than xG.', np) : i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np ? 'zero: level' : 'up: win; zero: draw; down: loss',
+      direction: i => goalGaps ? archiveText(i ? 'Above zero: more goals conceded than xG allowed.' : 'Above zero: more goals scored than xG.', np) : i ? `up: more ${xg} for; zero: level; down: more ${xg} against` : np || adjusted ? 'zero: level' : 'up: win; zero: draw; down: loss',
       tick: signed,
       grouped: true,
     };
   }
-  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false, opponentLogos = null}) {
-    const xg = archiveText('xG', np), mode = matchBarMode({goalGaps, mirrored, np, xg});
+  function showMatchBarPanels({panels, matches, description, nonPenalty: np, matchNumbers, inspection = headToHeadInspection, goalGaps = false, mirrored = false, adjusted = false, opponentLogos = null}) {
+    const xg = archiveText('xG', np), mode = matchBarMode({goalGaps, mirrored, np, xg, adjusted});
+    if (adjusted) { const label = mode.label; mode.label = i => adjustedLabel(label(i)); }
     const values = mode.series.map(panel => panel.map(read => read(matches)));
     const axis = window.NWSLGeometry.marginAxis(...values.map(panel => panel.flat()));
     panels.forEach(({canvas: name, key}, i) => {
@@ -2837,22 +2892,31 @@
   function headToHeadInspection(row) {
     return {title: row.date, lines: [...(row.active ? ['season in progress'] : []), row.venue, row.opponent, `${row.score} · ${row.result}`, ...headToHeadExpectedDescription(row)]};
   }
+  // An opponent-adjusted row carries its official match: tooltips show the
+  // official value, then the adjusted one, then the factors.
+  const besideAdjusted = (row, read, format, adjustedFormat = format) => {
+    const text = (value, as) => value === null ? 'Unavailable' : as(value);
+    const official = text(read(row.official || row), format);
+    return row.official ? `${official} · adjusted ${text(read(row), adjustedFormat)}` : official;
+  };
   function seasonMarginInspection(row, index) {
-    const goals = marginsData.goals(row), xg = marginsData.xg(row), margin = marginsData.goalMargin(row), expected = marginsData.xgMargin(row);
+    const goals = marginsData.goals(row.official || row);
     const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
-    const label = T('xG');
+    const label = T('xG'), whole = value => `${value > 0 ? '+' : ''}${value}`;
     return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
       ...(nonPenalty ? [`Non-penalty goals: ${goals[0] === null ? 'Unavailable' : goals.join('–')}`] : []),
-      `${T('Goal margin')}: ${margin === null ? 'Unavailable' : `${margin > 0 ? '+' : ''}${margin}`}`,
-      `${label} for: ${xg[0] === null ? 'Unavailable' : fixed(xg[0])}`, `${label} against: ${xg[1] === null ? 'Unavailable' : fixed(xg[1])}`,
-      `${label} margin: ${expected === null ? 'Unavailable' : signed(expected)}`]};
+      `${T('Goal margin')}: ${besideAdjusted(row, marginsData.goalMargin, whole, signed)}`,
+      `${label} for: ${besideAdjusted(row, match => marginsData.xg(match)[0], fixed)}`, `${label} against: ${besideAdjusted(row, match => marginsData.xg(match)[1], fixed)}`,
+      `${label} margin: ${besideAdjusted(row, marginsData.xgMargin, signed)}`, ...opponentFactorLines(row)]};
   }
   function seasonBalanceInspection(row, index) {
-    const goals = marginsData.goals(row), xg = marginsData.xg(row);
+    const goals = marginsData.goals(row.official || row);
     const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
     return {title: `Match ${index + 1} · ${row.date}`, lines: [row.venue, row.opponent, `${row.score} · ${result}`,
       ...(nonPenalty ? [`Non-penalty goals: ${goals[0] === null ? 'Unavailable' : goals.join('–')}`] : []),
-      `${T('xG')} for: ${xg[0] === null ? 'Unavailable' : fixed(xg[0])}`, `${T('xG')} against: ${xg[1] === null ? 'Unavailable' : fixed(xg[1])}`]};
+      ...(row.official ? [0, 1].map(side => `${T('Goals')} ${side ? 'against' : 'for'}: ${besideAdjusted(row, match => marginsData.goals(match)[side], String, fixed)}`) : []),
+      `${T('xG')} for: ${besideAdjusted(row, match => marginsData.xg(match)[0], fixed)}`, `${T('xG')} against: ${besideAdjusted(row, match => marginsData.xg(match)[1], fixed)}`,
+      ...opponentFactorLines(row)]};
   }
   function seasonGoalGapInspection(row, index) {
     const result = {3: 'Win', 1: 'Draw', 0: 'Loss'}[row.values[matchMeasure.points].actual];
@@ -3235,7 +3299,8 @@
   historyTeam.addEventListener('change', () => update({team: historyTeam.value}));
   historyMeasure.addEventListener('change', () => update({measure: historyMeasure.value}));
   const updateSeasonTrend = () => {
-    const selection = {'trend-sort': null, 'trend-order': null, 'trend-mode': null, window: null, ...Object.fromEntries(new FormData(trendControls))};
+    // An unchecked checkbox submits nothing, so clear opponents unless it does.
+    const selection = {'trend-sort': null, 'trend-order': null, 'trend-mode': null, window: null, opponents: null, ...Object.fromEntries(new FormData(trendControls))};
     update(selection);
   };
   trendControls.addEventListener('submit', event => { event.preventDefault(); updateSeasonTrend(); });

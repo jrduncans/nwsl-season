@@ -29,6 +29,18 @@ func exploreTrendTableColumns(page exploreSeasonTrendView, basis history.Scoring
 		exploreTrendColumn{Label: basisText(basis, "xG against"), Measure: exploreAllowed, Expected: true},
 		exploreTrendColumn{Label: "xPoints", Measure: explorePoints, Expected: true},
 	)
+	if page.TrendAdjusted {
+		goals := "goals"
+		if basis.ExcludesPenalties() {
+			goals = "non-penalty goals"
+		}
+		columns = append(columns,
+			exploreTrendColumn{Label: "Adjusted " + goals + " for", Measure: exploreScored, Adjusted: true, Key: "adjusted-goals-for"},
+			exploreTrendColumn{Label: "Adjusted " + goals + " against", Measure: exploreAllowed, Adjusted: true, Key: "adjusted-goals-against"},
+			exploreTrendColumn{Label: basisText(basis, "Adjusted xG for"), Measure: exploreScored, Expected: true, Adjusted: true, Key: "adjusted-xg-for"},
+			exploreTrendColumn{Label: basisText(basis, "Adjusted xG against"), Measure: exploreAllowed, Expected: true, Adjusted: true, Key: "adjusted-xg-against"},
+		)
+	}
 	switch page.TrendView {
 	case "difference":
 		columns = append(columns,
@@ -73,7 +85,7 @@ func exploreTrendSortLinks(columns []exploreTrendColumn, query url.Values, selec
 			if order == "desc" {
 				column.Sort, next = "descending", "asc"
 			}
-		} else if column.Gap || column.Key == "goal-margin" || column.Key == "xg-margin" {
+		} else if column.Gap || column.Adjusted || column.Key == "goal-margin" || column.Key == "xg-margin" {
 			next = "desc"
 		}
 		target.Del("trend-order")
@@ -85,7 +97,12 @@ func exploreTrendSortLinks(columns []exploreTrendColumn, query url.Values, selec
 	return columns
 }
 
-func exploreTrendCell(column exploreTrendColumn, matches []exploreMatchRecord, index, window int) string {
+// Adjusted columns read the opponent-adjusted matches; the rest read official.
+func exploreTrendCell(column exploreTrendColumn, official, adjusted []exploreMatchRecord, index, window int) string {
+	matches := official
+	if column.Adjusted {
+		matches = adjusted
+	}
 	match := matches[index]
 	switch column.Field {
 	case "match":
@@ -120,7 +137,7 @@ func exploreTrendCell(column exploreTrendColumn, matches []exploreMatchRecord, i
 	if column.Gap {
 		return h2hSignedMargin(*value)
 	}
-	if !column.Expected && !column.Rolling {
+	if !column.Expected && !column.Rolling && !column.Adjusted {
 		return strconv.Itoa(int(*value))
 	}
 	return exploreTrendNumber(value)
@@ -173,6 +190,18 @@ func sortExploreTrendRows(rows []exploreSeasonTrendRow, column, order string) {
 			return goalGap(row.exploreMatchRecord, exploreScored)
 		case "allowed-gap":
 			return goalGap(row.exploreMatchRecord, exploreAllowed)
+		case "adjusted-goals-for", "adjusted-goals-against":
+			if !row.AdjustedMatch.GoalsCovered {
+				return nil
+			}
+			if column == "adjusted-goals-for" {
+				return &row.AdjustedMatch.Values[exploreScored].Actual
+			}
+			return &row.AdjustedMatch.Values[exploreAllowed].Actual
+		case "adjusted-xg-for":
+			return row.AdjustedMatch.Values[exploreScored].Expected
+		case "adjusted-xg-against":
+			return row.AdjustedMatch.Values[exploreAllowed].Expected
 		default:
 			return new(float64(row.Number))
 		}
