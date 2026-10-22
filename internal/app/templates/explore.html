@@ -299,12 +299,12 @@
 <div class="explore-h2h-record" data-trend-points-tiles{{if not .TrendPointsGap}} hidden{{end}}>{{template "explorePointsTiles" .TrendPointsTiles}}</div>
 <div class="explore-h2h-record" data-trend-goal-gap-tiles{{if not .TrendGoalGaps}} hidden{{end}}>{{template "exploreGoalGapTiles" .TrendGoalGapTiles}}</div>
 <div class="explore-h2h-record" data-trend-margin-tiles{{if not (or .TrendMargins .TrendBalanceBars)}} hidden{{end}}>{{template "exploreMarginTiles" .TrendMarginTiles}}</div>
-<p class="note" data-trend-margin-official{{if or (not (or .TrendMargins .TrendBalanceBars)) (not (or .NonPenalty .TrendAdjusted))}} hidden{{end}}>W–D–L and points use official results{{if .NonPenalty}}, including penalties{{end}}.</p>
+<p class="note" data-trend-margin-official{{if or (not (or .TrendMargins .TrendBalanceBars)) (not (or .NonPenalty .TrendOpponentsShown))}} hidden{{end}}>W–D–L and points use official results{{if .NonPenalty}}, including penalties{{end}}.</p>
 <div data-season-trend-plot hidden>
 <section data-trend-margins-panel hidden>
-<h4 data-trend-margin-title>Goal margin</h4><p class="explore-h2h-direction" data-trend-margin-direction>Up: win · Zero: draw · Down: loss</p>
+<h4 class="explore-context-heading" data-trend-margin-title>Goal margin</h4><p class="explore-h2h-direction" data-trend-margin-direction>Up: win · Zero: draw · Down: loss</p>
 <div class="explore-h2h-chart"><canvas data-chart="season-margin" tabindex="0" role="img" aria-label="Goal margin by match" aria-describedby="explore-chart-help"></canvas></div>
-<h4 data-trend-second-title>{{$.T "xG margin"}}</h4><p class="explore-h2h-direction" data-trend-second-direction>{{$.T "Up: more xG for · Zero: level · Down: more xG against"}}</p>
+<h4 class="explore-context-heading" data-trend-second-title>{{$.T "xG margin"}}</h4><p class="explore-h2h-direction" data-trend-second-direction>{{$.T "Up: more xG for · Zero: level · Down: more xG against"}}</p>
 <div class="explore-h2h-chart"><canvas data-chart="season-margin-xg" tabindex="0" role="img" aria-label="xG margin by match" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect matches. Escape clears the tooltip.</p>
 </section>

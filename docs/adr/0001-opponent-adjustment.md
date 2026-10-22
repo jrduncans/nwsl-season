@@ -36,5 +36,5 @@ to an average opponent at a neutral venue with even rest
   (non-penalty goals and npxG). A second, npxG-based rating would make the
   same opponent stronger or weaker depending on a display choice.
 
-Points stay official. Opponent-adjusted points are a separate question
-([#193](https://github.com/jrduncans/nwsl-season/issues/193)).
+Points are adjusted additively instead; see
+[ADR 0002](0002-opponent-adjusted-points.md).

@@ -23,9 +23,9 @@ func TestExplorePointsTiles(t *testing.T) {
 	}
 	tiles := explorePointsTiles(matches, "match")
 	want := []explorePointsTile{
-		{"All", "4", "4.00 xPoints", "0.00 above expected", ""},
-		{"Home", "3", "1.40 xPoints", "1.60 above expected", ""},
-		{"Away", "1", "2.60 xPoints", "1.60 below expected", ""},
+		{Label: "All", Actual: "4", Expected: "4.00 xPoints", Gap: "0.00 above expected"},
+		{Label: "Home", Actual: "3", Expected: "1.40 xPoints", Gap: "1.60 above expected"},
+		{Label: "Away", Actual: "1", Expected: "2.60 xPoints", Gap: "1.60 below expected"},
 	}
 	if !reflect.DeepEqual(tiles, want) {
 		t.Fatalf("tiles = %+v", tiles)
@@ -34,6 +34,48 @@ func TestExplorePointsTiles(t *testing.T) {
 	tiles = explorePointsTiles(matches, "match")
 	if tiles[0].Expected != "xPoints incomplete" || tiles[0].Gap != "xPoints incomplete" || tiles[0].Coverage != "2 of 3 matches" || tiles[1].Expected != "xPoints incomplete" || tiles[2] != want[2] {
 		t.Fatalf("incomplete tiles: %+v", tiles)
+	}
+}
+
+// The shift from the season's average match applies to points and xPoints
+// alike, so adjusted tiles keep the official lines and gaps; only totals move.
+func TestExploreAdjustedPointsTiles(t *testing.T) {
+	t.Parallel()
+	matches := []exploreMatchRecord{
+		{ID: "a", Venue: "Home", Values: [4]exploreTeamValues{3: {Actual: 3, Expected: new(.4)}}, Opponents: &exploreOpponentFactors{Scored: 1, Allowed: 1, ExpectedPoints: 1.9}},
+		{ID: "b", Venue: "Away", Values: [4]exploreTeamValues{3: {Actual: 1, Expected: new(2.6)}}, Opponents: &exploreOpponentFactors{Scored: 1, Allowed: 1, ExpectedPoints: .9}},
+	}
+	adjusted := opponentAdjustedMatches(matches, 1.4)
+	near := func(name string, got, want float64) {
+		if math.Abs(got-want) > 1e-12 {
+			t.Errorf("%s = %v, want %v", name, got, want)
+		}
+	}
+	near("easy win", adjusted[0].Values[3].Actual, 2.5)
+	near("easy win xPoints", *adjusted[0].Values[3].Expected, -.1)
+	near("hard draw", adjusted[1].Values[3].Actual, 1.5)
+	near("hard draw xPoints", *adjusted[1].Values[3].Expected, 3.1)
+	tiles := exploreAdjustedPointsTiles(adjusted)
+	official := explorePointsTiles(matches, "match")
+	want := []explorePointsTile{
+		{Label: "All", Actual: "4.00", Expected: "3.00 xPoints", Gap: "1.00 above expected"},
+		{Label: "Home", Actual: "2.50", Expected: "-0.10 xPoints", Gap: "2.60 above expected"},
+		{Label: "Away", Actual: "1.50", Expected: "3.10 xPoints", Gap: "1.60 below expected"},
+	}
+	if !reflect.DeepEqual(tiles, want) {
+		t.Fatalf("adjusted tiles = %+v", tiles)
+	}
+	for index := range tiles {
+		if tiles[index].Gap != official[index].Gap {
+			t.Errorf("%s gap = %q, want the official %q", tiles[index].Label, tiles[index].Gap, official[index].Gap)
+		}
+	}
+	// Without xPoints, coverage qualifies the total; without factors, no total.
+	matches[1].Values[3].Expected = nil
+	matches[0].Opponents = nil
+	tiles = exploreAdjustedPointsTiles(opponentAdjustedMatches(matches, 1.4))
+	if tiles[0].Actual != "Points unavailable" || tiles[1].Actual != "Points unavailable" || tiles[2].Actual != "1.50" || tiles[2].Expected != "xPoints incomplete" {
+		t.Fatalf("partial tiles: %+v", tiles)
 	}
 }
 

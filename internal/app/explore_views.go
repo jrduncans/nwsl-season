@@ -86,7 +86,7 @@ var exploreViewGroups = []exploreViewGroup{
 			Key: "season-trend", Label: "Match by match",
 			Defaults:           map[string]string{"trend-view": "balance", "average-series": "goals"},
 			PointsOnly:         exploreRule{{"trend-view": {"points"}}, {"trend-view": {"relative"}, "average-series": {"points", "xpoints"}}},
-			OpponentAdjustment: exploreRule{{"trend-view": {"balance", "difference"}}},
+			OpponentAdjustment: exploreRule{{"trend-view": {"balance", "difference", "points"}}},
 			NeedsForecast:      true,
 		},
 		{Key: "team-history", Label: "Season by season", PointsOnly: exploreRule{{"measure": {"points"}}}, PointsNote: exploreRule{{}}},

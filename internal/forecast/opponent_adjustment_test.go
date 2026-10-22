@@ -111,6 +111,10 @@ func TestModelFactorsMatchDefaultModelWithoutTheMatch(t *testing.T) {
 		near(t, game.ID+" home allowed", got.Home.Allowed, home.awayRate/base.leagueRate)
 		near(t, game.ID+" away scored", got.Away.Scored, away.awayRate/base.leagueRate)
 		near(t, game.ID+" away allowed", got.Away.Allowed, away.homeRate/base.leagueRate)
+		// Expected points use the same rates: 3 × win + draw.
+		homeOutcomes, awayOutcomes := home.Outcomes(), away.Outcomes()
+		near(t, game.ID+" home expected points", got.Home.ExpectedPoints, 3*homeOutcomes.HomeWin+homeOutcomes.Draw)
+		near(t, game.ID+" away expected points", got.Away.ExpectedPoints, 3*awayOutcomes.AwayWin+awayOutcomes.Draw)
 	}
 }
 
@@ -188,6 +192,31 @@ func TestOpponentAdjustmentsNormalizeEachSeasonToAMeanOfOne(t *testing.T) {
 	near(t, "allowed ratio", adjustment.Fixtures["g3"].Away.Allowed/adjustment.Fixtures["g1"].Home.Allowed, model.Fixtures["g3"].Away.Allowed/model.Fixtures["g1"].Home.Allowed)
 	if adjustment.XGMatches != model.XGMatches || adjustment.CompletedMatches != model.CompletedMatches {
 		t.Fatal("normalization changed coverage")
+	}
+}
+
+func TestOpponentAdjustmentsAverageExpectedPoints(t *testing.T) {
+	input := opponentInput()
+	model, err := modelFactors(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adjustment, err := OpponentAdjustments(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var points float64
+	for id, fixture := range adjustment.Fixtures {
+		// Normalizing rescales factors, never expected points.
+		near(t, id+" home expected points", fixture.Home.ExpectedPoints, model.Fixtures[id].Home.ExpectedPoints)
+		near(t, id+" away expected points", fixture.Away.ExpectedPoints, model.Fixtures[id].Away.ExpectedPoints)
+		points += fixture.Home.ExpectedPoints + fixture.Away.ExpectedPoints
+	}
+	near(t, "average points", adjustment.AveragePoints, points/float64(2*len(adjustment.Fixtures)))
+	// Bravo faces Charlie, whose 40 xG allowed in g3 makes it the weakest
+	// defense, so an average team in Bravo's place expects more than average.
+	if g2 := adjustment.Fixtures["g2"].Home.ExpectedPoints; g2 <= adjustment.AveragePoints || g2 >= 3 {
+		t.Fatalf("g2 home expected points = %.3f, want above the average %.3f", g2, adjustment.AveragePoints)
 	}
 }
 

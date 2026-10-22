@@ -85,17 +85,19 @@ func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis, un
 	}
 	views := make([]exploreMarginTileView, 0, len(tiles))
 	for _, tile := range tiles {
-		// Official totals are whole goals; adjusted totals are not.
-		totals, adjusted := fmt.Sprintf("%d–%d", int64(tile.GoalsFor), int64(tile.GoalsAgainst)), ""
+		// Official totals are whole goals; adjusted totals are not. Adjusted
+		// lines keep the official wording, which the status line and panel
+		// titles qualify, so toggling the switch never wraps a line.
+		totals := fmt.Sprintf("%d–%d", int64(tile.GoalsFor), int64(tile.GoalsAgainst))
 		if tile.Adjusted {
-			totals, adjusted = fmt.Sprintf("%.2f–%.2f", tile.GoalsFor, tile.GoalsAgainst), "adjusted "
+			totals = fmt.Sprintf("%.2f–%.2f", tile.GoalsFor, tile.GoalsAgainst)
 		}
-		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: totals + " " + adjusted + "goals", XG: basisText(basis, "xG incomplete"), Matches: exploreCount(tile.Played, unit, noun)}
+		view := exploreMarginTileView{Label: tile.Label, Record: fmt.Sprintf("%d–%d–%d", tile.Wins, tile.Draws, tile.Losses), RecordLabel: fmt.Sprintf("%d wins, %d draws, %d losses", tile.Wins, tile.Draws, tile.Losses), Rate: "— pts/match", Goals: totals + " goals", XG: basisText(basis, "xG incomplete"), Matches: exploreCount(tile.Played, unit, noun)}
 		if tile.Played > 0 {
 			view.Rate = fmt.Sprintf("%.2f pts/match", float64(tile.Points)/float64(tile.Played))
 		}
 		if basis.ExcludesPenalties() {
-			view.Goals = totals + " " + adjusted + "np goals"
+			view.Goals = totals + " np goals"
 			if tile.GoalsCovered == 0 {
 				view.Goals = "Goals unavailable"
 			}
@@ -104,7 +106,7 @@ func formatMarginTiles(tiles []exploreMarginTile, basis history.ScoringBasis, un
 			}
 		}
 		if tile.XGCovered == tile.Played && tile.Played > 0 {
-			view.XG = fmt.Sprintf("%.2f–%.2f %s%s", tile.XGFor, tile.XGAgainst, adjusted, basisText(basis, "xG"))
+			view.XG = fmt.Sprintf("%.2f–%.2f %s", tile.XGFor, tile.XGAgainst, basisText(basis, "xG"))
 		} else {
 			view.XGCoverage = fmt.Sprintf("%s %d/%d %s", basisText(basis, "xG"), tile.XGCovered, tile.Played, noun)
 		}
