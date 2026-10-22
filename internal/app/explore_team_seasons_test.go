@@ -97,8 +97,8 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 	}
 	requireExact(t, body, "[data-team-seasons-summary]", "Table: all 144 team-seasons")
 	requireAttr(t, body, "[data-team-seasons-penalties]", "disabled", "")
-	if len(find(t, body, "[data-team-seasons-controls] select")) != 3 || len(find(t, body, "[data-team-seasons-controls] select[name=team], [data-team-seasons-controls] select[name=season]")) != 0 {
-		t.Fatal("unexpected controls")
+	if len(find(t, body, "[data-team-seasons-controls] select")) != 2 || len(find(t, body, "[data-team-seasons-controls] select[name=team], [data-team-seasons-controls] select[name=season]")) != 0 {
+		t.Fatalf("unexpected controls: selects=%d forbidden=%d", len(find(t, body, "[data-team-seasons-controls] select")), len(find(t, body, "[data-team-seasons-controls] select[name=team], [data-team-seasons-controls] select[name=season]")))
 	}
 	if len(find(t, body, "[data-team-seasons-row]")) != 20 || len(find(t, body, "[data-team-seasons-rows] tr")) != 144 {
 		t.Fatal("population or top/bottom count")

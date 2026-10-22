@@ -151,7 +151,8 @@ only), `below_minimum_matches`.
 ### Penalties basis
 
 Every view accepts `penalties=include` (default, omitted from URLs) or
-`penalties=exclude`. Points-only selections hide the control, ignore and drop a
+`penalties=exclude`. The control is an **Exclude penalties** checkbox: it is
+unchecked by default, and checking it submits `penalties=exclude`. Points-only selections hide the control, ignore and drop a
 carried basis, and show no points note: Compare teams on Points except Table and
 Scored vs allowed; Season by season on Points; Match by match on Points vs
 xPoints and Benchmarks showing Points or xPoints; Head to head on Points vs
@@ -166,8 +167,10 @@ and unsupported values still return the standard 400 page. These rules are the
 registry's `PointsOnly` and `PointsNote` rules; `apptest.ExplorePointsOnlyCases`
 checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
-The server-rendered Penalties select is last in each view's data-control row
-and never in the navigation; mixed-view links and forms carry its selection.
+The server-rendered checkbox is last in each view's data-control row and never
+in the navigation. Mixed-view links and forms carry its selection; unchecked
+forms omit the default parameter. With JavaScript disabled, the checkbox submits
+through the view's GET form.
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and
@@ -182,8 +185,7 @@ basis (ASA publishes no non-penalty xPoints). Mixed views that combine points
 with non-penalty goals or xG show the note "Points include penalties; ASA
 publishes no non-penalty xPoints." Labels follow the basis (`xG` → `npxG`, `Goals` →
 `Non-penalty goals`, `xGD` → `npxGD`) through `basisText` in Go and `T` in
-`explore.js`; option text and select labels never change, so controls keep
-their size. Match results add an `npxG` line when a match had penalty xG.
+`explore.js`. Match results add an `npxG` line when a match had penalty xG.
 
 ## League trends
 
@@ -459,7 +461,7 @@ collapsed disclosure, sort links and a GET form work without JavaScript.
 
 For goals measures, `penalties=exclude` switches to non-penalty goals and npxG
 through `basisText`, including `incomplete_non_penalty_data` season eligibility.
-For Points the select is absent and penalties never change values or the
+For Points the checkbox is absent and penalties never change values or the
 population. A carried `exclude` is accepted and ignored without a note.
 Changing measure drops stale penalties from forms and links. The scatter remains
 a follow-up.
@@ -489,7 +491,7 @@ without coverage sort last in both directions, appear last with an
 note on the scatter plots.
 
 When `measure=points` selects a points-only chart (Actual vs expected, Gap to
-expected or Outlier plot), the Penalties control and points note are absent.
+expected or Outlier plot), the Exclude penalties checkbox and points note are absent.
 A carried `penalties=exclude` is ignored and dropped from the generated URL,
 forms and links. Table and Scored vs allowed are mixed views and retain the
 control and the points note when the basis is excluded.

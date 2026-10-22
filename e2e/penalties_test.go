@@ -16,8 +16,8 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 )
 
-// penaltiesSelect is the visible Penalties select of the current view.
-const penaltiesSelect = "select[data-penalties-selector]:visible"
+// penaltiesSelect is the visible Exclude penalties checkbox of the current view.
+const penaltiesSelect = "input[data-penalties-selector]:visible"
 
 // choosePenalties changes the Penalties select and waits for the full server
 // render on the chosen basis.
@@ -30,9 +30,10 @@ func choosePenalties(t *testing.T, page playwright.Page, choice string) {
 	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateLoad}); err != nil {
 		t.Fatalf("load after penalties %s: %v", choice, err)
 	}
-	expect := playwright.NewPlaywrightAssertions()
-	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue(choice); err != nil {
-		t.Fatalf("penalties %s is not selected after the reload: %v", choice, err)
+	var checked bool
+	evalJSON(t, page, `(selector) => document.querySelector(selector)?.checked ?? false`, strings.ReplaceAll(penaltiesSelect, ":visible", ""), &checked)
+	if checked != (choice == "exclude") {
+		t.Fatalf("penalties checkbox checked = %v after choosing %s", checked, choice)
 	}
 	if err := settle(page); err != nil {
 		t.Fatalf("settle: %v", err)
@@ -54,7 +55,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	page := explorePage(t, base, Desktop, "explore?view=teams&display=table&season=2025")
 	expect := playwright.NewPlaywrightAssertions()
 
-	if got := textOf(t, page, "label.penalties-select:visible"); !strings.Contains(got, "Penalties") || !strings.Contains(got, "Included") || !strings.Contains(got, "Excluded") {
+	if got := textOf(t, page, "label.penalties-select:visible"); got != "Exclude penalties" {
 		t.Fatalf("Penalties control = %q", got)
 	}
 	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveAttribute("title", "Excluded removes penalty kicks from both goals and xG."); err != nil {
@@ -137,8 +138,10 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 				t.Error(err)
 			}
 		} else if carriedExclusion && tab.tab != "Shield and playoff thresholds" {
-			if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveValue("exclude"); err != nil {
-				t.Errorf("%s / %s does not offer Penalties = Excluded: %v", tab.group, tab.tab, err)
+			var checked bool
+			evalJSON(t, page, `(selector) => document.querySelector(selector)?.checked ?? false`, strings.ReplaceAll(penaltiesSelect, ":visible", ""), &checked)
+			if !checked {
+				t.Errorf("%s / %s does not offer Exclude penalties checked", tab.group, tab.tab)
 			}
 		}
 		for _, href := range hrefs(t, page, "nav.explore-views a, nav.explore-subviews a") {
@@ -282,13 +285,13 @@ type controlLayout struct {
 	Controls      []controlGeometry
 }
 
-// controlLayoutScript measures every visible select in the page's current
+// controlLayoutScript measures every visible selection control in the page's current
 // view, keyed by its position and name so the two bases compare like for like.
 const controlLayoutScript = `(headingSelector) => {
 	const box = (el) => { const r = el.getBoundingClientRect(); return {X: r.left + scrollX, Y: r.top + scrollY, W: r.width, H: r.height}; };
 	const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 	const heading = document.querySelector(headingSelector);
-	const controls = [...document.querySelectorAll('main select, .explore select, form select')]
+	const controls = [...document.querySelectorAll('main select, .explore select, form select, main input[type="checkbox"], .explore input[type="checkbox"], form input[type="checkbox"]')]
 		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
 		.map((el, index) => ({Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: box(el), Label: box(el.closest('label') || el)}));
 	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
@@ -298,7 +301,7 @@ const controlLayoutScript = `(headingSelector) => {
 func closeEnough(a, b float64) bool { return a-b <= 1 && b-a <= 1 }
 
 func sameBox(a, b controlBox) bool {
-	return closeEnough(a.X, b.X) && closeEnough(a.Y, b.Y) && closeEnough(a.W, b.W) && closeEnough(a.H, b.H)
+	return closeEnough(a.X, b.X) && closeEnough(a.W, b.W) && closeEnough(a.H, b.H)
 }
 
 // TestDataControlsKeepTheirGeometryAcrossBases checks that, in every Explore

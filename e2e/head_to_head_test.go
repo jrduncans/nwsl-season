@@ -460,14 +460,17 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if _, err := page.GoBack(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToHaveValue("include"); err != nil {
-		t.Fatal(err)
+	var penaltiesChecked bool
+	evalJSON(t, page, `() => document.querySelector('[data-h2h-penalties]')?.checked ?? false`, nil, &penaltiesChecked)
+	if penaltiesChecked {
+		t.Fatal("Include penalties left the checkbox checked")
 	}
 	if _, err := page.GoForward(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToHaveValue("exclude"); err != nil {
-		t.Fatal(err)
+	evalJSON(t, page, `() => document.querySelector('[data-h2h-penalties]')?.checked ?? false`, nil, &penaltiesChecked)
+	if !penaltiesChecked {
+		t.Fatal("Exclude penalties did not check the box")
 	}
 }
 

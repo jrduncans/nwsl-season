@@ -52,8 +52,8 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 	if len(find(t, body, "[data-h2h-values][open]")) != 0 {
 		t.Fatal("default table open")
 	}
-	if len(find(t, body, "[data-h2h-controls] select")) != 4 || len(find(t, body, "[data-panel=head-to-head] select[name=penalties]")) != 1 {
-		t.Fatal("controls")
+	if len(find(t, body, "[data-h2h-controls] select")) != 3 || len(find(t, body, "[data-h2h-penalties]")) != 1 {
+		t.Fatalf("controls: selects=%d penalties=%d", len(find(t, body, "[data-h2h-controls] select")), len(find(t, body, "[data-h2h-penalties]")))
 	}
 	if len(find(t, body, "[data-h2h-title] img[alt='']")) != 2 || len(find(t, body, "[data-h2h-rows] img, [data-h2h-rows] a, [data-h2h-chart-wrap] a")) != 0 {
 		t.Fatal("logos / click targets")
