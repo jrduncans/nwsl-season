@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -74,8 +75,10 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 	if len(data) != 10 || data[0].Season != "2016" || !data[9].Active {
 		t.Fatalf("chart data = %+v", data)
 	}
+	// Payload values carry six decimal places, so the rounded IQR may differ
+	// from the rounded quartiles' difference in the last place.
 	for _, record := range data {
-		if record.Spread <= 0 || record.Chance <= 0 || record.XSpread == nil || record.IQR != record.Q3-record.Q1 {
+		if record.Spread <= 0 || record.Chance <= 0 || record.XSpread == nil || math.Abs(record.IQR-(record.Q3-record.Q1)) > 2e-6 {
 			t.Errorf("%s record = %+v", record.Season, record)
 		}
 	}
