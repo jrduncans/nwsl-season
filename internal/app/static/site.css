@@ -60,8 +60,8 @@ h2 { margin-top: 3rem; }
 .button-secondary { color: var(--green); border: 1px solid var(--green); background: white; }
 .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .standings-toolbar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .65rem 1rem; margin: 0 0 .55rem; }
-.standings-toolbar .segmented { flex-direction: row; align-items: center; gap: .65rem; }
-.standings-toolbar .segmented legend { font-size: .875rem; letter-spacing: 0; }
+.standings-toolbar .segmented-inline { gap: .65rem; }
+.standings-toolbar .segmented-label { color: var(--muted); font-size: .875rem; font-weight: 700; }
 [data-standings-value] { transition: opacity .12s ease, transform .12s ease; }
 .standings-display.is-switching [data-standings-value] { opacity: .35; transform: translateY(1px); }
 [data-standings-stat="goals"] [data-standings-stat-column="xg"], [data-standings-stat="xg"] [data-standings-stat-column="goals"] { display: none; }
@@ -260,7 +260,10 @@ th:nth-child(2) { text-align: left; }
 .forecast-assumptions li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem 1rem; border-top: 1px solid var(--line); }.forecast-assumptions li:first-child { border-top: 0; }
 .forecast-add { display: grid; grid-template-columns: minmax(12rem, .7fr) minmax(16rem, 1.3fr); align-items: end; gap: .75rem; margin-top: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .forecast-add > label { min-width: 0; }
-.forecast-outcomes { grid-column: 1 / -1; }
+.forecast-outcomes { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; border: 0; }
+.forecast-outcomes legend { width: 100%; margin-bottom: .1rem; color: var(--muted); font-size: .875rem; font-weight: 700; }
+.forecast-outcomes label { display: inline-flex; align-items: center; gap: .35rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: .3rem; background: white; font-size: .9rem; }
+.forecast-outcomes input { accent-color: var(--green); }
 .forecast-pending { margin-top: 1rem; }.forecast-pending h3 { margin-bottom: .25rem; }.forecast-pending p { margin-top: 0; }.forecast-pending .button { margin-top: 1rem; }
 .forecast-method { margin-top: 3rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }.forecast-method[open] summary { margin-bottom: .75rem; }
 .evaluation-intro { max-width: 52rem; margin: .3rem 0 0; color: var(--muted); font-size: 1.1rem; }
@@ -407,8 +410,7 @@ th:nth-child(2) { text-align: left; }
 .explore-chart-options:not(:has(:is(.segmented, .switch):not([hidden]))) { display: none; }
 /* In a top row of labeled selects, a segmented control reads like them: its
    label sits beside the options. */
-.explore-team-controls .segmented, .threshold-table-controls .segmented { flex-direction: row; align-items: center; gap: .5rem; }
-:is(.explore-team-controls, .threshold-table-controls) .segmented legend { color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: 0; }
+.segmented-inline { flex-direction: row; align-items: center; gap: .5rem; }
 .explore-basis-tag { color: var(--green); }
 .explore-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; margin: .5rem 0; }
 .explore-legend-row .explore-legend { margin: .25rem 0; }

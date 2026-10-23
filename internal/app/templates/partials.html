@@ -39,11 +39,11 @@
 {{define "standingsToggle"}}
   <div class="standings-toolbar">
     {{/* Only standings.js can apply these, so they stay disabled until it runs. */}}
-    {{if .HasXG}}<fieldset class="segmented" data-standings-control disabled><legend>Stats</legend><span class="segmented-options">
+    {{if .HasXG}}<fieldset class="segmented segmented-inline" data-standings-control disabled><legend class="visually-hidden">Stats</legend>{{template "segmentedLabel" "Stats"}}<span class="segmented-options">
       <label><input type="radio" name="standings-stat" value="goals" data-standings-stat-value="goals" checked><span>Goals</span></label>
       <label><input type="radio" name="standings-stat" value="xg" data-standings-stat-value="xg"><span>xG</span></label>
     </span></fieldset>{{end}}
-    <fieldset class="segmented" data-standings-control disabled><legend>Values</legend><span class="segmented-options">
+    <fieldset class="segmented segmented-inline" data-standings-control disabled><legend class="visually-hidden">Values</legend>{{template "segmentedLabel" "Values"}}<span class="segmented-options">
       <label><input type="radio" name="standings-mode" value="per-game" data-standings-mode-value="per-game"{{if eq .StandingsMode "per-game"}} checked{{end}}><span>Per match</span></label>
       <label><input type="radio" name="standings-mode" value="total" data-standings-mode-value="total"{{if eq .StandingsMode "total"}} checked{{end}}><span>Totals</span></label>
     </span></fieldset>
@@ -62,4 +62,8 @@
 
 {{define "penaltiesHelp"}}<span id="penalties-help" class="visually-hidden">Excluding removes penalty kicks from both goals and xG.</span>{{end}}
 
-{{define "segmented"}}{{$group := .}}<fieldset class="segmented{{if .Picker}} explore-chart-picker{{end}}" data-segmented="{{.Name}}"{{if .Hidden}} hidden{{end}}><legend{{if .Picker}} class="visually-hidden"{{end}}>{{.Legend}}</legend><span class="segmented-options">{{range .Options}}<label><input type="radio" name="{{$group.Name}}" value="{{.Value}}"{{with $group.Form}} form="{{.}}"{{end}}{{if .Selected}} checked{{end}}{{with .Description}} aria-label="{{.}}"{{end}}><span>{{.Label}}</span></label>{{end}}</span></fieldset>{{end}}
+{{define "segmented"}}{{$group := .}}<fieldset class="segmented{{if .Picker}} explore-chart-picker{{end}}{{if .Inline}} segmented-inline{{end}}" data-segmented="{{.Name}}"{{if .Hidden}} hidden{{end}}><legend{{if or .Picker .Inline}} class="visually-hidden"{{end}}>{{.Legend}}</legend>{{if .Inline}}{{template "segmentedLabel" .Legend}}{{end}}<span class="segmented-options">{{range .Options}}<label><input type="radio" name="{{$group.Name}}" value="{{.Value}}"{{with $group.Form}} form="{{.}}"{{end}}{{if .Selected}} checked{{end}}{{with .Description}} aria-label="{{.}}"{{end}}><span>{{.Label}}</span></label>{{end}}</span></fieldset>{{end}}
+
+{{/* Safari lays out a legend outside the fieldset's flex row, so a label
+     beside the options is this span; the hidden legend names the group. */}}
+{{define "segmentedLabel"}}<span class="segmented-label" aria-hidden="true">{{.}}</span>{{end}}

@@ -99,10 +99,11 @@ type exploreSegment struct {
 // in a chart card can belong to the view's form above it. A Picker chooses
 // the chart and sits at the top of its card with a visually hidden legend.
 // Hidden renders the group hidden for a selection that does not use it.
+// Inline puts the label beside the options, as in a row of labeled selects.
 type exploreSegmentGroup struct {
-	Legend, Name, Form string
-	Picker, Hidden     bool
-	Options            []exploreSegment
+	Legend, Name, Form     string
+	Picker, Hidden, Inline bool
+	Options                []exploreSegment
 }
 
 // exploreSegments marks the option whose Value is selected.

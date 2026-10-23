@@ -333,8 +333,7 @@ flowchart TD
 ## Fixed outcomes are conditional scorelines
 
 The assumption builder accepts only an outcome: home win (`h`), draw (`d`), or
-away win (`a`), chosen with an **Assume result** segmented control whose options
-name the selected match's teams. It does not replace a match with an arbitrary canonical
+away win (`a`). It does not replace a match with an arbitrary canonical
 score such as `1–0` or `0–0`.
 
 Instead, the simulator samples from the selected match distribution until it

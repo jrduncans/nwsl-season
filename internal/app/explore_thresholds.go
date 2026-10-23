@@ -191,7 +191,7 @@ func (exploreThresholdView) ThresholdFinish(finish history.ThresholdFinish, ppg 
 
 // ThresholdOutcomeControl picks the outcome the All seasons table lists.
 func (page exploreThresholdView) ThresholdOutcomeControl() exploreSegmentGroup {
-	return exploreSegmentGroup{Legend: "Outcome", Name: "threshold-outcome", Options: exploreSegments(page.ThresholdOutcome,
+	return exploreSegmentGroup{Legend: "Outcome", Name: "threshold-outcome", Inline: true, Options: exploreSegments(page.ThresholdOutcome,
 		exploreSegment{Value: "shield", Label: "Shield"}, exploreSegment{Value: "home", Label: "Home playoff game"},
 		exploreSegment{Value: "bye", Label: "Playoff bye"}, exploreSegment{Value: "playoffs", Label: "Playoffs"})}
 }

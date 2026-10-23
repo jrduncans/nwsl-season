@@ -122,7 +122,9 @@ Presentation:
   column of switches. A short fixed choice is a segmented control with a
   visible label (the `segmented` template over an `exploreSegmentGroup`), never
   a select; an on/off choice is a switch, never a plain checkbox. A segmented
-  control in the row above has its label beside it, like the selects. Controls
+  control in the row above has its label beside it, like the selects
+  (`Inline`: a visible span, since Safari lays out a legend outside the row,
+  with the legend visually hidden). Controls
   apply as soon as they change; submit buttons appear only without JavaScript.
   On phones a chart card runs to the screen edges.
 
