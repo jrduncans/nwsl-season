@@ -41,8 +41,8 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 	}
 	for _, measure := range []string{"points", "for", "against", "difference"} {
 		for i, by := range []string{"actual", "expected", "gap"} {
-			chooseOption(t, page, "[data-team-seasons-measure]", measure)
-			chooseOption(t, page, "[data-team-seasons-rank-by]", by)
+			chooseOption(t, page, "[data-segmented=team-seasons-measure]", measure)
+			chooseOption(t, page, "[data-segmented=team-seasons-rank-by]", by)
 			heading := headings[measure][i] + " per match, since 2016"
 			if err := expect.Locator(page.Locator("[data-team-seasons-title]")).ToHaveText(heading); err != nil {
 				t.Fatal(err)
@@ -68,30 +68,30 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 		}
 	}
 	// History restores both the measure and ranking mode, from the same payload.
-	chooseOption(t, page, "[data-team-seasons-measure]", "for")
-	chooseOption(t, page, "[data-team-seasons-rank-by]", "expected")
+	chooseOption(t, page, "[data-segmented=team-seasons-measure]", "for")
+	chooseOption(t, page, "[data-segmented=team-seasons-rank-by]", "expected")
 	if _, err := page.GoBack(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToHaveValue("gap"); err != nil {
+	if err := expect.Locator(page.Locator("[data-segmented=team-seasons-rank-by] input:checked")).ToHaveValue("gap"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := page.GoBack(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-measure]")).ToHaveValue("difference"); err != nil {
+	if err := expect.Locator(page.Locator("[data-segmented=team-seasons-measure] input:checked")).ToHaveValue("difference"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := page.GoForward(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-measure]")).ToHaveValue("for"); err != nil {
+	if err := expect.Locator(page.Locator("[data-segmented=team-seasons-measure] input:checked")).ToHaveValue("for"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := page.GoForward(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToHaveValue("expected"); err != nil {
+	if err := expect.Locator(page.Locator("[data-segmented=team-seasons-rank-by] input:checked")).ToHaveValue("expected"); err != nil {
 		t.Fatal(err)
 	}
 	setPenalties(t, page, "[data-team-seasons-penalties]", true)
@@ -101,7 +101,7 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-seasons-measure]", "points")
+	chooseOption(t, page, "[data-segmented=team-seasons-measure]", "points")
 	if queryOf(t, page).Has("penalties") {
 		t.Fatal("stale basis")
 	}
@@ -162,8 +162,8 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-penalties]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-seasons-measure]", "for")
-	chooseOption(t, page, "[data-team-seasons-rank-by]", "expected")
+	chooseOption(t, page, "[data-segmented=team-seasons-measure]", "for")
+	chooseOption(t, page, "[data-segmented=team-seasons-rank-by]", "expected")
 	if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-values]")).ToHaveAttribute("open", ""); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-seasons-measure]", "points")
+	chooseOption(t, page, "[data-segmented=team-seasons-measure]", "points")
 	if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
 		t.Fatal(err)
 	}
@@ -234,8 +234,8 @@ func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(128); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-seasons-measure]", "against")
-	chooseOption(t, page, "[data-team-seasons-rank-by]", "gap")
+	chooseOption(t, page, "[data-segmented=team-seasons-measure]", "against")
+	chooseOption(t, page, "[data-segmented=team-seasons-rank-by]", "gap")
 	if err := expect.Locator(page.Locator(`[data-team-seasons-rows] tr[data-season="2026"]`)).ToHaveCount(0); err != nil {
 		t.Fatal(err)
 	}
@@ -252,12 +252,10 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			defer expectInPlace(t, page, "scatter display, measures, identification and history")()
 			clickDisplay := func(display string) {
 				t.Helper()
-				if err := page.Locator(fmt.Sprintf(`[data-team-seasons-display="%s"]`, display)).Click(); err != nil {
-					t.Fatal(err)
-				}
+				chooseOption(t, page, "[data-segmented=team-seasons-display]", display)
 			}
 			clickDisplay("scatter")
-			if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToBeHidden(); err != nil {
+			if err := expect.Locator(page.Locator("[data-segmented=team-seasons-rank-by]")).ToBeHidden(); err != nil {
 				t.Fatal(err)
 			}
 			if err := expect.Locator(page.Locator("[data-team-seasons-values]")).Not().ToHaveAttribute("open", ""); err != nil {
@@ -269,7 +267,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			const selector = `[data-chart="team-seasons-scatter"]`
 			canvas := page.Locator(selector)
 			for _, measure := range []string{"points", "for", "against", "difference"} {
-				chooseOption(t, page, "[data-team-seasons-measure]", measure)
+				chooseOption(t, page, "[data-segmented=team-seasons-measure]", measure)
 				var correct bool
 				evalJSON(t, page, `() => {
      const chart = Chart.getChart(document.querySelector('[data-chart="team-seasons-scatter"]'));
@@ -295,7 +293,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			if label != "npxGD per match (expected)" {
 				t.Fatalf("basis axis = %s", label)
 			}
-			chooseOption(t, page, "[data-team-seasons-measure]", "points")
+			chooseOption(t, page, "[data-segmented=team-seasons-measure]", "points")
 			// The existing archive has coincident points; identify the same group using
 			// keyboard and pointer rather than inventing a special fixture.
 			var group struct {
@@ -365,7 +363,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			if queryOf(t, page).Has("team-seasons-display") {
 				t.Fatal("ranking default spelled in URL")
 			}
-			if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToHaveValue("gap"); err != nil {
+			if err := expect.Locator(page.Locator("[data-segmented=team-seasons-rank-by] input:checked")).ToHaveValue("gap"); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := page.GoBack(); err != nil {
@@ -405,10 +403,11 @@ func TestExploreTeamSeasonsScatterNoScript(t *testing.T) {
 	for _, vp := range []viewport{Desktop, Mobile} {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
 		visitStatic(t, page, base+"explore?view=team-seasons&team-seasons-rank-by=expected")
-		if err := page.Locator(`[data-team-seasons-display="scatter"]`).Click(); err != nil {
+		chooseOption(t, page, "[data-segmented=team-seasons-display]", "scatter")
+		if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-team-seasons-rank-by]")).ToBeHidden(); err != nil {
+		if err := expect.Locator(page.Locator("[data-segmented=team-seasons-rank-by]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-team-seasons-chart]")).ToBeHidden(); err != nil {
@@ -417,7 +416,7 @@ func TestExploreTeamSeasonsScatterNoScript(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-team-seasons-scatter] noscript p")).ToContainText("table below"); err != nil {
 			t.Fatal(err)
 		}
-		chooseOption(t, page, "[data-team-seasons-measure]", "against")
+		chooseOption(t, page, "[data-segmented=team-seasons-measure]", "against")
 		if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
 			t.Fatal(err)
 		}

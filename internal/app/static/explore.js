@@ -43,18 +43,31 @@
   const historyControls = root.querySelector('[data-team-history-controls]');
   const historySeries = historyControls.elements.namedItem('series');
   const historyContext = root.querySelector('[data-history-context]');
+  // Compare teams' chart card controls submit with the Season form; its
+  // segmented controls are RadioNodeLists.
+  const teamsPanel = root.querySelector('[data-panel="teams"]');
+  const teamControls = root.querySelector('[data-team-controls]');
   const teamSeason = root.querySelector('[data-team-season]');
-  const teamMeasure = root.querySelector('[data-team-measure]');
-  const teamUnits = root.querySelector('[data-team-units]');
-  const quadrantData = root.querySelector('[data-team-quadrant-data]');
+  const teamMeasure = teamControls.elements.namedItem('measure');
+  const teamUnits = teamControls.elements.namedItem('units');
+  const quadrantData = teamControls.elements.namedItem('quadrant-data');
   const quadrantLogoToggle = root.querySelector('[data-team-quadrant-logos]');
   const historyTeam = root.querySelector('[data-history-team]');
   const historyMeasure = historyControls.elements.namedItem('measure');
   const rankingControls = root.querySelector('[data-team-rankings-controls]');
   const trendControls = root.querySelector('[data-season-trend-controls]');
   const trendPanel = root.querySelector('[data-panel="season-trend"]');
-  const metric = root.querySelector('[data-metric]');
-  const distributionBin = root.querySelector('[data-distribution-bin]');
+  // Scoring trend's Show radios join no form (only this script draws the
+  // chart), so metric reads and sets the checked one. It is absent without
+  // trend data.
+  const metricControl = root.querySelector('[data-panel="trend"] [data-segmented="metric"]');
+  const metric = {
+    get value() { return metricControl?.querySelector('input:checked')?.value || 'compare'; },
+    set value(value) { const input = metricControl?.querySelector(`input[value="${value}"]`); if (input) input.checked = true; },
+  };
+  // A RadioNodeList, absent without distribution data.
+  const distributionControls = root.querySelector('[data-distribution-controls]');
+  const distributionBin = distributionControls?.elements.namedItem('distribution-bin');
   const status = root.querySelector('[data-chart-status]');
   const scatterLogoToggle = root.querySelector('[data-team-scatter-logos]');
   const scatterSelection = root.querySelector('[data-team-scatter-selection]');
@@ -622,7 +635,6 @@
     controls.elements['threshold-outcome'].value = outcome;
     controls.elements['threshold-sort'].value = sort;
     controls.elements['threshold-order'].value = order;
-    controls.querySelector('button').hidden = true;
     const body = root.querySelector('[data-threshold-table-rows]');
     const rows = [...body.children];
     rows.sort((a, b) => {
@@ -657,7 +669,8 @@
     : [];
   const parityBySeason = new Map(parityRecords.map(row => [row.season, row]));
   const paritySeasonSelect = root.querySelector('[data-parity-season]');
-  const paritySeriesSelect = root.querySelector('[data-parity-series]');
+  // A RadioNodeList in the chart card, absent without parity data.
+  const paritySeriesControl = root.querySelector('[data-parity-controls]')?.elements.namedItem('parity-series');
   const paritySeason = params => parityBySeason.has(params.get('season')) ? params.get('season') : root.dataset.defaultParitySeason;
   const paritySeries = params => params.get('parity-series') === 'both' ? 'both' : 'actual';
   // The strip's season, which the chart's marks emphasize.
@@ -810,7 +823,7 @@
       chart.update('none');
     }
     paritySeasonSelect.value = year;
-    paritySeriesSelect.value = series;
+    paritySeriesControl.value = series;
     root.querySelector('[data-parity-expected-legend]').hidden = series !== 'both';
     const requested = params.get('season');
     const note = root.querySelector('[data-parity-season-note]');
@@ -1433,9 +1446,11 @@
       ? 'Actual − expected by team (regular-season)'
       : display === 'scatter' ? 'Actual vs expected by team (regular-season)'
       : display === 'quadrant' ? 'Scored vs allowed by team (regular-season)' : 'Actual vs expected (regular-season)';
-    root.querySelector('[data-team-measure-control]').hidden = display === 'table' || display === 'quadrant';
-    root.querySelector('[data-team-controls] [data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && isPointsMeasure;
-    root.querySelector('[data-team-quadrant-control]').hidden = display !== 'quadrant';
+    teamsPanel.querySelector('[data-segmented="measure"]').hidden = display === 'table' || display === 'quadrant';
+    teamsPanel.querySelector('[data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && isPointsMeasure;
+    teamsPanel.querySelector('[data-segmented="quadrant-data"]').hidden = display !== 'quadrant';
+    scatterLogoToggle.closest('label').hidden = display !== 'scatter';
+    quadrantLogoToggle.closest('label').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
       `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPoints from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
@@ -2450,10 +2465,13 @@
   }
   const archivePayload = JSON.parse(root.querySelector('#explore-team-seasons-data').textContent);
   const archiveControls = root.querySelector('[data-team-seasons-controls]');
-  const archiveMeasure = root.querySelector('[data-team-seasons-measure]');
-  const archiveRankBy = root.querySelector('[data-team-seasons-rank-by]');
+  // The chart card's controls submit with the form above them; its segmented
+  // controls are RadioNodeLists.
+  const archivePanel = root.querySelector('[data-panel="team-seasons"]');
+  const archiveDisplay = archiveControls.elements.namedItem('team-seasons-display');
+  const archiveMeasure = archiveControls.elements.namedItem('team-seasons-measure');
+  const archiveRankBy = archiveControls.elements.namedItem('team-seasons-rank-by');
   const archivePenalties = root.querySelector('[data-team-seasons-penalties]');
-  archiveControls.querySelector('[data-team-seasons-submit]').hidden = true;
   const archiveMeasures = ['for', 'against', 'difference', 'points'];
   const archiveRankBys = ['actual', 'expected', 'gap'];
   const archiveLabels = ['Goals scored', 'Goals allowed', 'Goal differential', 'Points'];
@@ -2464,7 +2482,7 @@
     const target = new URLSearchParams(params);
     Object.entries(changes).forEach(([key, value]) => target.set(key, value));
     const measure = target.get('team-seasons-measure') || 'points';
-    if (measure === 'points' && !Object.hasOwn(changes, 'team-seasons-display') || target.get('penalties') === 'include') target.delete('penalties');
+    if (measure === 'points' || target.get('penalties') === 'include') target.delete('penalties');
     if (target.get('team-seasons-display') === 'ranking') target.delete('team-seasons-display');
     return `?${target}`;
   };
@@ -2575,15 +2593,10 @@
     const measureKey = params.get('team-seasons-measure') || 'points', measure = archiveMeasures.indexOf(measureKey);
     const scatter = params.get('team-seasons-display') === 'scatter';
     const byKey = params.get('team-seasons-rank-by') || 'actual', by = scatter ? 0 : archiveRankBys.indexOf(byKey);
-    root.querySelector('[data-team-seasons-rank-control]').hidden = scatter;
+    archivePanel.querySelector('[data-segmented="team-seasons-rank-by"]').hidden = scatter;
     root.querySelector('[data-team-seasons-chart]').hidden = scatter;
     root.querySelector('[data-team-seasons-scatter]').hidden = !scatter;
-    const displayInput = archiveControls.elements.namedItem('team-seasons-display'); displayInput.value = scatter ? 'scatter' : 'ranking'; displayInput.disabled = !scatter;
-    root.querySelectorAll('[data-team-seasons-display]').forEach(link => {
-      const selected = link.dataset.teamSeasonsDisplay === (scatter ? 'scatter' : 'ranking');
-      if (selected) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
-      link.href = archiveLink(params, {view: 'team-seasons', 'team-seasons-display': link.dataset.teamSeasonsDisplay});
-    });
+    archiveDisplay.value = scatter ? 'scatter' : 'ranking';
     const np = measureKey !== 'points' && params.get('penalties') === 'exclude';
     const records = np ? archivePayload.nonPenalty : archivePayload.all;
     const rows = records.filter(row => row.values[measure].eligible);
@@ -2696,13 +2709,16 @@
     const measure = archiveMeasure.value;
     const changes = {view: 'team-seasons', 'team-seasons-measure': measure, 'team-seasons-rank-by': archiveRankBy.value};
     // A measure change resets the basis; a penalties change owns its own value.
-    changes.penalties = measure === 'points' || event.target === archiveMeasure || !archivePenalties.checked ? null : 'exclude';
+    changes.penalties = measure === 'points' || event.target.name === 'team-seasons-measure' || !archivePenalties.checked ? null : 'exclude';
     update(changes);
   };
   archiveControls.addEventListener('submit', event => { event.preventDefault(); changeArchive(event); });
-  archiveMeasure.addEventListener('change', changeArchive);
-  archiveRankBy.addEventListener('change', changeArchive);
-  archivePenalties.addEventListener('change', changeArchive);
+  // The chart choice keeps every other selection; Ranking is the default.
+  archivePanel.addEventListener('change', event => {
+    if (event.target.form !== archiveControls) return;
+    if (event.target.name === 'team-seasons-display') update({view: 'team-seasons', 'team-seasons-display': archiveDisplay.value === 'ranking' ? null : archiveDisplay.value});
+    else changeArchive(event);
+  });
 
   const h2hTeam = root.querySelector('[data-h2h-team]');
   const h2hOpponent = root.querySelector('[data-h2h-opponent]');
@@ -3425,20 +3441,24 @@
   const changeThresholdOutcome = () => update({view: 'thresholds', 'threshold-outcome': thresholdControls.elements['threshold-outcome'].value});
   thresholdControls.addEventListener('change', changeThresholdOutcome);
   thresholdControls.addEventListener('submit', event => { event.preventDefault(); changeThresholdOutcome(); });
-  metric.addEventListener('change', () => update({view: 'trend', metric: metric.value}));
+  metricControl?.addEventListener('change', () => update({view: 'trend', metric: metric.value}));
   if (distributionBin) {
-    distributionBin.addEventListener('change', () => update({'distribution-bin': distributionBin.value}));
-    root.querySelector('[data-distribution-controls]').addEventListener('submit', event => {
+    root.querySelector('[data-panel="distribution"] [data-segmented="distribution-bin"]').addEventListener('change', () => update({'distribution-bin': distributionBin.value}));
+    distributionControls.addEventListener('submit', event => {
       event.preventDefault(); update({'distribution-bin': distributionBin.value});
     });
   }
-  root.querySelector('[data-team-controls]').addEventListener('submit', event => {
+  teamControls.addEventListener('submit', event => {
     event.preventDefault(); update({season: teamSeason.value, measure: teamMeasure.value, units: teamUnits.value, 'quadrant-data': quadrantData.value});
   });
-  teamSeason.addEventListener('change', () => update({season: teamSeason.value}));
-  teamMeasure.addEventListener('change', () => update({measure: teamMeasure.value, 'team-sort': root.querySelector('[name="team-sort"]').value}));
-  teamUnits.addEventListener('change', () => update({units: teamUnits.value}));
-  quadrantData.addEventListener('change', () => update({'quadrant-data': quadrantData.value}));
+  // The chart card's controls sit outside the form but belong to it. A new
+  // measure keeps the sort on the same column of the new measure.
+  teamsPanel.addEventListener('change', event => {
+    if (event.target.form !== teamControls) return;
+    const changes = {[event.target.name]: event.target.value};
+    if (event.target.name === 'measure') changes['team-sort'] = teamControls.elements.namedItem('team-sort').value;
+    update(changes);
+  });
   quadrantLogoToggle.addEventListener('change', () => {
     if (!charts.teamQuadrant) return;
     charts.teamQuadrant.scatterShowLogos = quadrantLogoToggle.checked;
@@ -3471,9 +3491,9 @@
   rankingControls.addEventListener('change', updateRankings);
   if (paritySeasonSelect) {
     paritySeasonSelect.addEventListener('change', () => selectParitySeason(paritySeasonSelect.value));
-    paritySeriesSelect.addEventListener('change', () => update({view: 'parity', 'parity-series': paritySeriesSelect.value}));
+    root.querySelector('[data-panel="parity"] [data-segmented="parity-series"]').addEventListener('change', () => update({view: 'parity', 'parity-series': paritySeriesControl.value}));
     root.querySelector('[data-parity-controls]').addEventListener('submit', event => {
-      event.preventDefault(); update({view: 'parity', season: paritySeasonSelect.value, 'parity-series': paritySeriesSelect.value});
+      event.preventDefault(); update({view: 'parity', season: paritySeasonSelect.value, 'parity-series': paritySeriesControl.value});
     });
   }
   window.addEventListener('popstate', applyURL);

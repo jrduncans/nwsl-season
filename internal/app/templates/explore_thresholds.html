@@ -33,7 +33,7 @@
 <form method="get" class="threshold-table-controls" data-threshold-controls>
 <input type="hidden" name="view" value="thresholds"><input type="hidden" name="threshold-season" value="{{.ThresholdSelected}}">
 <input type="hidden" name="threshold-sort" value="{{.ThresholdSort}}"><input type="hidden" name="threshold-order" value="{{.ThresholdOrder}}">
-<label>Outcome <select name="threshold-outcome"><option value="shield"{{if eq .ThresholdOutcome "shield"}} selected{{end}}>Shield</option><option value="home"{{if eq .ThresholdOutcome "home"}} selected{{end}}>Home playoff game</option><option value="bye"{{if eq .ThresholdOutcome "bye"}} selected{{end}}>Playoff bye</option><option value="playoffs"{{if eq .ThresholdOutcome "playoffs"}} selected{{end}}>Playoffs</option></select></label><button type="submit">Apply</button>
+{{template "segmented" .ThresholdOutcomeControl}}<noscript><button class="button" type="submit">Apply</button></noscript>
 </form>
 <p class="note">Official points and matches, including awards and deductions. Select a season for its adjacent team, format and sources. Only verified, applicable cutoffs are listed.</p>
 <table class="explore-table threshold-table">

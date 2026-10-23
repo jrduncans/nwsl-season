@@ -28,7 +28,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 				t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, body)
 			}
-			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js?v=`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js?v=`} {
+			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `name="metric" value="gap"><span>Goals − xG</span>`, `src="static/explore.js?v=`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js?v=`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)
 				}
@@ -189,7 +189,7 @@ func TestExploreDistributionBinSelection(t *testing.T) {
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 			}
-			if !strings.Contains(response.Body.String(), `<option value="`+bin+`" selected`) {
+			if !strings.Contains(response.Body.String(), `name="distribution-bin" value="`+bin+`" form="distribution-controls" checked`) {
 				t.Errorf("selected bin %q is missing from the rendered control", bin)
 			}
 			if bin == "1" {
@@ -435,7 +435,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		path string
 		want []string
 	}{
-		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`<option value="points" selected>Points</option>`, `<option value="total" selected>Totals</option>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
+		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`name="measure" value="points" form="team-controls" checked><span>Points</span>`, `name="units" value="total" form="team-controls" checked><span>Totals</span>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
 		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`name="measure" value="points" form="team-history-controls" checked><span>Points</span>`, `name="series" value="xg" form="team-history-controls" checked><span>xPoints</span>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
 	} {
 		store := &archiveHTTPStore{archive: archive}
@@ -595,7 +595,7 @@ func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testi
 		`Actual vs expected by team (regular-season)</h2>`,
 		`<input type="hidden" name="display" value="scatter">`,
 		`<option value="2025" selected>2025</option>`,
-		`<option value="against" selected>Goals allowed</option>`,
+		`name="measure" value="against" form="team-controls" checked><span>Goals allowed</span>`,
 		`data-team-scatter-plot`,
 		`data-team-scatter-note`,
 		`data-team-scatter-legend`,
@@ -632,10 +632,10 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 					`data-team-display="quadrant" aria-current="page"`,
 					`Scored vs allowed by team (regular-season)</h2>`,
 					`<input type="hidden" name="display" value="quadrant">`,
-					`<option value="` + mode + `" selected>`,
-					`<option value="` + units + `" selected>`,
-					`data-team-measure-control hidden`,
-					`data-team-quadrant-control>`,
+					`name="quadrant-data" value="` + mode + `" form="team-controls" checked>`,
+					`name="units" value="` + units + `" form="team-controls" checked>`,
+					`data-segmented="measure" hidden`,
+					`data-segmented="quadrant-data"><legend>Show</legend>`,
 					`data-chart="team-quadrant"`,
 					`data-team-quadrant-selection`,
 					`<table class="explore-table explore-team-table">`,

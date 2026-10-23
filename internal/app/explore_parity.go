@@ -267,3 +267,9 @@ func sortExploreParity(rows []exploreParityRow, column, order string) {
 		return a.Season > b.Season
 	})
 }
+
+// ParitySeriesControl adds the xPPG spread beside the PPG spread.
+func (page exploreParityView) ParitySeriesControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Show", Name: "parity-series", Form: "parity-controls", Options: exploreSegments(page.ParitySeries,
+		exploreSegment{Value: "actual", Label: "Points"}, exploreSegment{Value: "both", Label: "Points and xPoints"})}
+}

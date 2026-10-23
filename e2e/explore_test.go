@@ -190,26 +190,26 @@ func exploreViews() []exploreView {
 		{
 			name: "team-seasons", scenario: apptest.ScenarioTeamHistory,
 			path:     "explore?view=team-seasons",
-			controls: []string{"[data-team-seasons-measure]", "[data-team-seasons-rank-by]"},
+			controls: []string{"[data-segmented=team-seasons-measure]", "[data-segmented=team-seasons-rank-by]"},
 			steps: []exploreStep{
-				{selector: "[data-team-seasons-measure]", value: "for", param: "team-seasons-measure"},
-				{selector: "[data-team-seasons-rank-by]", value: "expected", param: "team-seasons-rank-by"},
-				{selector: "[data-team-seasons-measure]", value: "points", param: "team-seasons-measure"},
+				{selector: "[data-segmented=team-seasons-measure]", value: "for", param: "team-seasons-measure"},
+				{selector: "[data-segmented=team-seasons-rank-by]", value: "expected", param: "team-seasons-rank-by"},
+				{selector: "[data-segmented=team-seasons-measure]", value: "points", param: "team-seasons-measure"},
 			},
 		},
 		{
 			name: "team-quadrants", scenario: apptest.ScenarioSeasonTrend,
 			path:     "explore?view=teams&display=quadrant",
-			controls: []string{"[data-team-season]", "[data-team-units]", "[data-team-quadrant-data]"},
+			controls: []string{"[data-team-season]", "[data-panel=teams] [data-segmented=units]", "[data-segmented=quadrant-data]"},
 			steps: []exploreStep{
 				{selector: "[data-team-season]", value: "2026", param: "season"},
-				{selector: "[data-team-units]", value: "total", param: "units"},
-				{selector: "[data-team-quadrant-data]", value: "both", param: "quadrant-data", check: func(t *testing.T, page playwright.Page) {
+				{selector: "[data-panel=teams] [data-segmented=units]", value: "total", param: "units"},
+				{selector: "[data-segmented=quadrant-data]", value: "both", param: "quadrant-data", check: func(t *testing.T, page playwright.Page) {
 					if got := quadrantVisibility(t, page); len(got) != 2 || !got[0] || !got[1] {
 						t.Errorf("Goals and xG visibility = %v, want both shown", got)
 					}
 				}},
-				{selector: "[data-team-quadrant-data]", value: "xg", param: "quadrant-data", check: func(t *testing.T, page playwright.Page) {
+				{selector: "[data-segmented=quadrant-data]", value: "xg", param: "quadrant-data", check: func(t *testing.T, page playwright.Page) {
 					if got := quadrantVisibility(t, page); len(got) != 2 || got[0] || !got[1] {
 						t.Errorf("xG-only visibility = %v, want only xG shown", got)
 					}
@@ -1300,7 +1300,9 @@ func TestExploreSquarePlotsFollowTheViewport(t *testing.T) {
 					t.Errorf("plot is %.1f wide and %.1f tall, want square", size.Canvas, size.Height)
 				}
 				if vp.Width < 600 {
-					if size.Wrap > float64(vp.Width)-40 || size.Wrap < 280 {
+					// The chart card runs to the screen edges on phones, leaving
+					// its own padding as the margin.
+					if size.Wrap > float64(vp.Width)-24 || size.Wrap < 280 {
 						t.Errorf("phone plot is %.1fpx wide in a %dpx viewport, want it to fit with margins", size.Wrap, vp.Width)
 					}
 					return
@@ -1541,7 +1543,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=distribution")
 		defer expectInPlace(t, page, "choosing a goal bin")()
-		chooseOption(t, page, "[data-distribution-bin]", "3")
+		chooseOption(t, page, "[data-segmented=distribution-bin]", "3")
 		if got := queryOf(t, page).Get("distribution-bin"); got != "3" {
 			t.Fatalf("distribution-bin = %q, want 3", got)
 		}
@@ -1567,14 +1569,14 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 			t.Errorf("3-goal shares = %v, want %v and %v", populated, 59.0/240*100, 56.0/232*100)
 		}
 
-		chooseOption(t, page, "[data-distribution-bin]", "0")
+		chooseOption(t, page, "[data-segmented=distribution-bin]", "0")
 		if _, err := page.GoBack(); err != nil {
 			t.Fatalf("back: %v", err)
 		}
 		if got := queryOf(t, page).Get("distribution-bin"); got != "3" {
 			t.Errorf("after Back, distribution-bin = %q, want 3", got)
 		}
-		if got := controlValues(t, page, []string{"[data-distribution-bin]"})["[data-distribution-bin]"]; got != "3" {
+		if got := controlValues(t, page, []string{"[data-segmented=distribution-bin]"})["[data-segmented=distribution-bin]"]; got != "3" {
 			t.Errorf("after Back, the selector shows %q, want 3", got)
 		}
 		if _, err := page.GoBack(); err != nil {
@@ -1586,7 +1588,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		if _, err := page.GoForward(); err != nil {
 			t.Fatalf("forward: %v", err)
 		}
-		if got := controlValues(t, page, []string{"[data-distribution-bin]"})["[data-distribution-bin]"]; got != "3" {
+		if got := controlValues(t, page, []string{"[data-segmented=distribution-bin]"})["[data-segmented=distribution-bin]"]; got != "3" {
 			t.Errorf("after Forward, the selector shows %q, want 3", got)
 		}
 	})
@@ -1595,7 +1597,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=distribution")
 		assertKeyboardInspection(t, page, `[data-chart="distribution"]`, "of 240 matches")
-		chooseOption(t, page, "[data-distribution-bin]", "2")
+		chooseOption(t, page, "[data-segmented=distribution-bin]", "2")
 		assertKeyboardInspection(t, page, `[data-chart="bin-trend"]`, "2 goals")
 	})
 
@@ -1852,7 +1854,7 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 	t.Run("compare teams form submits a GET", func(t *testing.T) {
 		goTo("explore?view=teams&display=table&season=2025")
 		chooseOption(t, page, "[data-team-season]", "2026")
-		chooseOption(t, page, "[data-team-units]", "total")
+		chooseOption(t, page, "[data-panel=teams] [data-segmented=units]", "total")
 		if err := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Show comparison"}).Click(); err != nil {
 			t.Fatalf("submit: %v", err)
 		}
@@ -1916,7 +1918,7 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 			t.Errorf("server-rendered strip: %v", err)
 		}
 		chooseOption(t, page, "[data-parity-season]", "2026")
-		chooseOption(t, page, "[data-parity-series]", "both")
+		chooseOption(t, page, "[data-segmented=parity-series]", "both")
 		if err := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Show season"}).Click(); err != nil {
 			t.Fatalf("submit: %v", err)
 		}
@@ -2117,7 +2119,7 @@ func TestExploreParitySelectsSeasonsInPlace(t *testing.T) {
 		t.Errorf("after Home and Enter: %q", got)
 	}
 
-	chooseOption(t, page, "[data-parity-series]", "both")
+	chooseOption(t, page, "[data-segmented=parity-series]", "both")
 	evalJSON(t, page, `() => document.querySelectorAll('[data-parity-strip] svg .explore-parity-expected').length`, nil, &marks)
 	if marks != 6 {
 		t.Errorf("xPPG marks = %d, want one per team", marks)
@@ -2450,11 +2452,11 @@ func TestExplorePointsOnlySwitchDropsPenaltyBasis(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
 	page := explorePage(t, base, Desktop, "explore?view=teams&measure=for&penalties=exclude")
 	expect := playwright.NewPlaywrightAssertions()
-	chooseOption(t, page, "[data-team-measure]", "points")
+	chooseOption(t, page, "[data-panel=teams] [data-segmented=measure]", "points")
 	if err := page.WaitForURL("**measure=points**"); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-controls] .penalties-select")).ToBeHidden(); err != nil {
+	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
 	if queryOf(t, page).Has("penalties") {
@@ -2463,11 +2465,11 @@ func TestExplorePointsOnlySwitchDropsPenaltyBasis(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-points-note=teams]")).ToBeHidden(); err != nil {
 		t.Fatal(err)
 	}
-	chooseOption(t, page, "[data-team-measure]", "for")
+	chooseOption(t, page, "[data-panel=teams] [data-segmented=measure]", "for")
 	if queryOf(t, page).Has("penalties") {
 		t.Fatalf("switching back to goals did not use Included: %s", page.URL())
 	}
-	if err := expect.Locator(page.Locator("[data-team-controls] .penalties-select")).ToBeVisible(); err != nil {
+	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2493,7 +2495,7 @@ func TestExplorePointsOnlyNavigationRestoresMixedViewPenaltyControls(t *testing.
 	if err := expect.Locator(page.Locator("[data-panel=teams] .penalties-select")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	setPenalties(t, page, "[data-team-controls] [data-penalties-selector]", true)
+	setPenalties(t, page, "[data-panel=teams] [data-penalties-selector]", true)
 	if err := page.WaitForURL("**penalties=exclude**"); err != nil {
 		t.Fatal(err)
 	}

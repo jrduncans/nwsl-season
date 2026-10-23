@@ -391,3 +391,19 @@ func linkExploreTeamMatches(seasons []exploreTeamSeason, data *exploreHeadToHead
 	}
 	return nil
 }
+
+// Compare teams' chart card controls submit with the Season form above them.
+// Compare is unused by the table and Scored vs allowed; Show only by Scored
+// vs allowed.
+func (p explorePage) TeamMeasureControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Compare", Name: "measure", Form: "team-controls", Hidden: p.TeamDisplay == "table" || p.TeamDisplay == "quadrant", Options: exploreMeasureSegments(p.TeamMeasure)}
+}
+
+func (p explorePage) TeamQuadrantControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Show", Name: "quadrant-data", Form: "team-controls", Hidden: p.TeamDisplay != "quadrant", Options: exploreSegments(p.TeamQuadrantData,
+		exploreSegment{Value: "goals", Label: "Goals"}, exploreSegment{Value: "xg", Label: "xG"}, exploreSegment{Value: "both", Label: "Goals and xG"})}
+}
+
+func (p explorePage) TeamUnitsControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Values", Name: "units", Form: "team-controls", Options: exploreUnitsSegments(p.TeamUnits)}
+}

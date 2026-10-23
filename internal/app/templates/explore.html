@@ -10,7 +10,14 @@
 {{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}{{end}}</nav>
 {{end}}<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
-<div class="explore-heading"><h2 id="explore-trend-title">{{template "basisText" ($.Both "Goals and chances per match (regular-season)")}}</h2><form method="get" class="explore-team-controls">{{template "penaltiesFormFields" $}}<label>Show <select data-metric><option value="compare">Goals and xG</option><option value="goals">Goals</option><option value="xg">xG</option><option value="gap">Goals − xG</option></select></label>{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Apply</button></noscript></form></div>
+<div class="explore-heading"><h2 id="explore-trend-title">{{template "basisText" ($.Both "Goals and chances per match (regular-season)")}}</h2><form method="get" id="trend-controls" class="explore-team-controls">{{template "penaltiesFormFields" $}}<noscript><button class="button" type="submit">Apply</button></noscript></form></div>
+<div class="explore-chart-card" data-trend-card>
+<div class="explore-chart-options">
+{{if .HasTrendData}}{{template "segmented" .TrendMetricControl}}{{end}}
+<div class="explore-chart-switches">
+{{template "penaltiesSelect" ($.PenaltiesSwitch "trend-controls")}}
+</div>
+</div>
 {{if .HasTrendData}}
 <div class="explore-legend"><span data-series="goals">● {{template "basisText" ($.Both "Goals")}}</span><span data-series="xg">◆ {{template "basisText" ($.Both "Expected goals (xG)")}}</span></div>
 <div class="explore-legend explore-gap-legend" data-trend-gap-legend hidden><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>{{template "basisText" ($.Both "Above xG")}}</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>{{template "basisText" ($.Both "Below xG")}}</span></div>
@@ -23,12 +30,20 @@
 {{template "basisNote" $.ActiveStatusNote}}
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 {{template "basisNote" $.XGIncompleteNote}}
+</div>
 </section>
 <section data-panel="distribution"{{if ne .View "distribution"}} hidden{{end}} aria-labelledby="explore-distribution-title">
 <div class="explore-heading"><h2 id="explore-distribution-title">Share of regular-season matches {{if eq .DistributionBin "all"}}by total {{$.GoalsWord}}{{else}}with {{if eq .DistributionBin "4"}}{{template "basisText" ($.Both "4+ goals")}}{{else if eq .DistributionBin "1"}}{{template "basisText" ($.Both "1 goal")}}{{else}}{{$.T (printf "%s goals" .DistributionBin)}}{{end}}{{end}}</h2>
-{{if .HasDistributionBars}}<form method="get" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution"><label>Show <select name="distribution-bin" data-distribution-bin><option value="all"{{if eq .DistributionBin "all"}} selected{{end}}>All goal totals</option><option value="0"{{if eq .DistributionBin "0"}} selected{{end}}>0 goals</option><option value="1"{{if eq .DistributionBin "1"}} selected{{end}}>1 goal</option><option value="2"{{if eq .DistributionBin "2"}} selected{{end}}>2 goals</option><option value="3"{{if eq .DistributionBin "3"}} selected{{end}}>3 goals</option><option value="4"{{if eq .DistributionBin "4"}} selected{{end}}>4+ goals</option></select></label>{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
-<p class="note">Both teams combined.<span data-basis-only="non-penalty"> Bins count non-penalty goals per match. Penalty kicks excluded.</span></p>
+{{if .HasDistributionBars}}<form method="get" id="distribution-controls" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution"><noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 {{if .HasDistributionBars}}
+<div class="explore-chart-card" data-distribution-card>
+<div class="explore-chart-options">
+{{template "segmented" .DistributionBinControl}}
+<div class="explore-chart-switches">
+{{template "penaltiesSelect" ($.PenaltiesSwitch "distribution-controls")}}
+</div>
+</div>
+<p class="note">Both teams combined.<span data-basis-only="non-penalty"> Bins count non-penalty goals per match. Penalty kicks excluded.</span></p>
 <div data-distribution-stacked-panel{{if ne .DistributionBin "all"}} hidden{{end}}>
 <div class="explore-legend explore-bin-legend" aria-label="Total {{$.GoalsWord}}" data-aria-all="Total goals" data-aria-np="Total non-penalty goals"><span><i style="background:#44504a"></i>{{template "basisText" ($.Both "0 goals")}}</span><span><i style="background:#526d61"></i>{{template "basisText" ($.Both "1 goal")}}</span><span><i style="background:#136f4a"></i>{{template "basisText" ($.Both "2 goals")}}</span><span><i style="background:#5b3f96"></i>{{template "basisText" ($.Both "3 goals")}}</span><span><i style="background:#372858"></i>{{template "basisText" ($.Both "4+ goals")}}</span></div>
 <div class="explore-chart-wrap explore-distribution-wrap">
@@ -40,6 +55,7 @@
 <p class="note">Each point shows that <span data-basis-only="non-penalty">non-penalty </span>goal total's share of played matches. Missing calendar years leave a gap.</p>
 <div class="explore-chart-wrap"><canvas data-chart="bin-trend" tabindex="0" role="img" aria-label="Share of regular-season matches with the selected {{if $.NonPenalty}}non-penalty {{end}}goal total, by season" data-aria-all="Share of regular-season matches with the selected goal total, by season" data-aria-np="Share of regular-season matches with the selected non-penalty goal total, by season" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect seasons. Escape clears the tooltip.</p>
+</div>
 </div>
 <details class="explore-context-details" data-distribution-values{{if .DistributionExpanded}} open{{end}}>
 <summary>Distribution values</summary>
@@ -88,8 +104,12 @@
 {{template "exploreHeadToHead" .}}
 <section data-panel="parity"{{if ne .View "parity"}} hidden{{end}} aria-labelledby="explore-parity-title">
 <div class="explore-heading"><h2 id="explore-parity-title">How evenly matched teams were (regular-season)</h2>
-{{if .ParityData}}<form method="get" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label><label>Show <select name="parity-series" data-parity-series><option value="actual"{{if eq .ParitySeries "actual"}} selected{{end}}>Points</option><option value="both"{{if eq .ParitySeries "both"}} selected{{end}}>Points and xPoints</option></select></label>{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
+{{if .ParityData}}<form method="get" id="parity-controls" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 {{if .ParityData}}
+<div class="explore-chart-card" data-parity-card>
+<div class="explore-chart-options">
+{{template "segmented" .ParitySeriesControl}}
+</div>
 <p class="note">The spread is how far teams' points per game (PPG) sit from the league average, measured as a standard deviation. The bigger the spread, the less evenly matched the league.</p>
 <div class="explore-legend"><span class="explore-parity-actual-legend">● PPG spread</span><span class="explore-parity-expected-legend" data-parity-expected-legend{{if ne .ParitySeries "both"}} hidden{{end}}>◆ xPPG spread</span><span class="explore-parity-chance-legend"><i class="explore-parity-chance-swatch" aria-hidden="true"></i>Spread from chance alone</span></div>
 <div class="explore-chart-wrap explore-parity-wrap"><canvas data-chart="parity" tabindex="0" role="img" aria-label="Spread of team points per game in each regular season, against the spread expected from chance alone" aria-describedby="explore-chart-help"></canvas></div>
@@ -98,6 +118,7 @@
 {{if .NonPenalty}}<p class="note">{{$.PointsNote}}</p>{{end}}
 {{if .ParityXPointsMissing}}<p class="note" data-parity-xpoints-note>xPoints incomplete in {{.ParityXPointsMissing}}, so those seasons have no xPPG spread.</p>{{end}}
 {{if .ParityActiveStatus}}<p class="note">{{.ParityActiveStatus}}. Fewer matches widen the chance level.</p>{{end}}
+</div>
 {{with .ParitySelected}}
 <section class="explore-parity-season" aria-labelledby="explore-parity-strip-title">
 <h3 class="explore-context-heading" id="explore-parity-strip-title" data-parity-strip-title>Teams in {{.Season}}{{if .Active}} (in progress through {{.Played}} matches){{end}}</h3>
@@ -136,18 +157,25 @@
 </section>
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
 <div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team (regular-season){{else if eq .TeamDisplay "scatter"}}Actual vs expected by team (regular-season){{else if eq .TeamDisplay "quadrant"}}Scored vs allowed by team (regular-season){{else}}Actual vs expected (regular-season){{end}}</h2>
-<form method="get" data-team-controls class="explore-team-controls">
+<form method="get" id="team-controls" data-team-controls class="explore-team-controls">
 <input type="hidden" name="view" value="teams">
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
 <input type="hidden" name="team-sort" value="{{.TeamSort}}">
 <input type="hidden" name="team-order" value="{{.TeamOrder}}">
 <label>Season <select name="season" data-team-season>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
-<label data-team-measure-control{{if or (eq .TeamDisplay "table") (eq .TeamDisplay "quadrant")}} hidden{{end}}>Compare <select name="measure" data-team-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option><option value="points"{{if eq .TeamMeasure "points"}} selected{{end}}>Points</option></select></label>
-<label data-team-quadrant-control{{if ne .TeamDisplay "quadrant"}} hidden{{end}}>Show <select name="quadrant-data" data-team-quadrant-data><option value="goals"{{if eq .TeamQuadrantData "goals"}} selected{{end}}>Goals</option><option value="xg"{{if eq .TeamQuadrantData "xg"}} selected{{end}}>xG</option><option value="both"{{if eq .TeamQuadrantData "both"}} selected{{end}}>Goals and xG</option></select></label>
-<label>Values <select name="units" data-team-units><option value="per-match"{{if eq .TeamUnits "per-match"}} selected{{end}}>Per match</option><option value="total"{{if eq .TeamUnits "total"}} selected{{end}}>Totals</option></select></label>
-{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}
 <noscript><button class="button" type="submit">Show comparison</button></noscript>
 </form></div>
+<div class="explore-chart-card" data-team-chart-card>
+<div class="explore-chart-options">
+{{template "segmented" .TeamMeasureControl}}
+{{template "segmented" .TeamQuadrantControl}}
+{{template "segmented" .TeamUnitsControl}}
+<div class="explore-chart-switches">
+{{template "penaltiesSelect" ($.PenaltiesSwitch "team-controls")}}
+<label class="switch" data-team-scatter-logo-control title="Overlapping logos are hidden."{{if ne .TeamDisplay "scatter"}} hidden{{end}}><input type="checkbox" role="switch" data-team-scatter-logos checked> Team logos</label>
+<label class="switch" data-team-quadrant-logo-control title="Overlapping logos are hidden."{{if ne .TeamDisplay "quadrant"}} hidden{{end}}><input type="checkbox" role="switch" data-team-quadrant-logos checked> Team logos</label>
+</div>
+</div>
 <p class="note" data-team-units-note>{{if eq .TeamUnits "total"}}Totals{{else}}Per match{{end}}, from recorded results. Points compare earned points with ASA xPoints from those matches.<span data-basis-only="non-penalty"> Penalty kicks excluded.</span></p>
 <p class="note" data-points-note="teams"{{if not ($.PointsNoteShown "teams")}} hidden{{end}}>{{$.PointsNote}}</p>
 <p class="note" data-team-empty{{if .TeamRows}} hidden{{end}}>No team comparison is available for this season yet.</p>
@@ -168,7 +196,6 @@
 </div>
 <div data-team-scatter-plot hidden>
 <p class="note" id="explore-team-scatter-note" data-team-scatter-note>One dot per team. Dashed line: actual matches expected. {{template "basisText" ($.Both "Above: higher goal differential than xG differential; below: lower.")}} Farther from the line means a larger gap.</p>
-<label class="explore-scatter-logo-toggle"><input type="checkbox" data-team-scatter-logos checked> Show team logos; hide overlapping logos</label>
 <p class="note" id="explore-team-scatter-missing" data-team-scatter-missing hidden></p>
 <p class="note" data-team-scatter-empty hidden>No teams have complete expected data for this measure yet.</p>
 <div class="explore-chart-wrap explore-team-scatter-wrap" data-team-scatter-chart-wrap hidden><div class="explore-legend explore-gap-legend explore-in-chart-legend explore-team-scatter-legend" id="explore-team-scatter-legend" data-team-scatter-legend><span><i class="explore-gap-swatch explore-gap-positive" aria-hidden="true"></i>Above expected</span><span><i class="explore-gap-swatch explore-gap-negative" aria-hidden="true"></i>Below expected</span><span><i class="explore-scatter-parity" aria-hidden="true"></i>Equal to expected</span></div><div class="explore-team-scatter-chart-area"><canvas data-chart="team-scatter" tabindex="0" role="img" aria-label="Team actual versus expected per match" aria-describedby="explore-chart-help explore-team-scatter-note explore-team-scatter-missing explore-team-scatter-legend"></canvas><div class="explore-scatter-logo-layer" data-team-scatter-logo-layer hidden aria-hidden="true"></div></div></div>
@@ -185,7 +212,6 @@
 <p class="note" data-team-quadrant-average></p>
 <p class="note" id="explore-team-quadrant-missing" data-team-quadrant-missing hidden></p>
 <p class="note" data-team-quadrant-empty hidden>{{template "basisText" ($.Both "No teams have complete xG for this season yet.")}}</p>
-<label class="explore-scatter-logo-toggle" data-team-quadrant-logo-control><input type="checkbox" data-team-quadrant-logos checked> Show team logos; hide overlapping logos</label>
 <div class="explore-chart-wrap explore-team-scatter-wrap explore-team-quadrant-wrap" data-team-quadrant-chart-wrap><div class="explore-team-scatter-chart-area"><div class="explore-legend explore-in-chart-legend explore-team-quadrant-legend" id="explore-team-quadrant-legend" data-team-quadrant-legend><span class="explore-actual-key" data-quadrant-goals-key>● {{template "basisText" ($.Both "Goals")}}</span><span class="explore-expected-key" data-quadrant-xg-key>◆ {{template "basisText" ($.Both "xG")}}</span><span data-quadrant-connection-key><i class="explore-quadrant-line-key" aria-hidden="true"></i>{{template "basisText" ($.Both "Goals ↔ xG pairs")}}</span></div><canvas data-chart="team-quadrant" tabindex="0" role="img" aria-label="Team scored versus allowed" aria-describedby="explore-chart-help explore-team-quadrant-note explore-team-quadrant-missing explore-team-quadrant-legend"></canvas><div class="explore-scatter-logo-layer" data-team-scatter-logo-layer hidden aria-hidden="true"></div></div></div>
 <div class="explore-scatter-selection" data-team-quadrant-selection hidden aria-live="polite" aria-atomic="true"><div class="explore-scatter-selection-heading"><h3>Selected teams</h3><button type="button" class="button" data-team-quadrant-clear>Clear selection</button></div><div class="explore-scatter-selection-teams" data-team-quadrant-selection-teams></div></div>
 <p class="note" data-team-quadrant-hint>Hover or tap a point to inspect it. Click to keep its details. Arrow keys inspect every point; Escape clears the selection.</p>
@@ -197,6 +223,7 @@
 <tr>{{range .TeamColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="3">{{template "basisText" ($.Both "Goal differential")}}</th><th scope="colgroup" colspan="3">{{template "basisText" ($.Both "Goals scored")}}</th><th scope="colgroup" colspan="3">{{template "basisText" ($.Both "Goals allowed")}}</th><th scope="colgroup" colspan="3">Points</th></tr>
 <tr>{{range .TeamColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreTeamColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-rows>{{range .TeamRows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td><td><strong>{{.Gap}}</strong></td>{{end}}</tr>{{end}}</tbody></table></div>
+</div>
 </div>
 </div>
 </section>
