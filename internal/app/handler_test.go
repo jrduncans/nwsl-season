@@ -784,6 +784,8 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	requireText(t, body, ".clinching-opportunity-elimination .clinching-outcome h4", "Can be eliminated from the playoffs")
 	requireText(t, body, ".clinching-result-group h5", "If Alpha & Co <script>alert(1)</script> wins vs Bravo FC", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
 	requireText(t, body, "main .clinching-statement", "with 1 win", "Win each of these remaining matches: vs Bravo FC.")
+	// Inside a team card, the heading and badge already name the team and outcome.
+	requireExact(t, body, ".clinching-outcome .clinching-statement summary", "No-help scenario: 1 win")
 	forbidRaw(t, body, "Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield")
 }
 

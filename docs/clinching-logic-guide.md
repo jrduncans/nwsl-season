@@ -359,7 +359,9 @@ below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination scenarios. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
 No-help winning scenarios are labeled “No-help scenario” because they can include matches
-after the displayed slate.
+after the displayed slate. Inside a team's card the line is just the win count
+("No-help scenario: 2 wins"), since the card heading and badge name the team and
+outcome; it expands to list the matches.
 
 Use `make test-clinching` for focused scenario-proof and presentation checks.
 These checks also run within `make test` and CI, including exhaustive

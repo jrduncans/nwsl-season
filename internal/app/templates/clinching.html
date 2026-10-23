@@ -1,7 +1,7 @@
 {{define "noHelpPath"}}
   {{if .NoHelpFixtures}}
     <details class="clinching-statement">
-      <summary>No-help scenario: {{.Team.Name}} can clinch {{.Achievement}} with <span class="clinching-disclosure">{{.NoHelpFixtureCount}} win{{if ne .NoHelpFixtureCount 1}}s{{end}}</span></summary>
+      <summary>No-help scenario: <span class="clinching-disclosure">{{.NoHelpFixtureCount}} win{{if ne .NoHelpFixtureCount 1}}s{{end}}</span></summary>
       <div class="clinching-fixture-list">Win each of these remaining matches: {{.NoHelpFixtures}}.</div>
     </details>
   {{else if .NoHelp}}<p>{{.NoHelp}}</p>{{end}}
