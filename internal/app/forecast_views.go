@@ -37,7 +37,6 @@ type forecastPage struct {
 	HasComparison       bool
 	ComparisonName      string
 	ComparisonID        string
-	PlayoffPlaces       int
 	HasChampionship     bool
 	XGAvailable         int
 	XGCompleted         int

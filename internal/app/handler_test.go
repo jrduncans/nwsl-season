@@ -1385,7 +1385,9 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	requireAttr(t, body, "#forecast-fixture option", "data-home-label", "Home vs Bravo FC")
 	requireAttr(t, body, "#forecast-fixture option", "data-away-label", "Away at Alpha & Co <script>alert(1)</script>")
 	requireText(t, body, ".forecast-outcomes", "Alpha & Co <script>alert(1)</script> win", "Bravo FC win")
-	requireText(t, body, ".forecast-cutline", "Playoff line: top 1")
+	// The table marks the playoff line itself; there is no separate label.
+	requireElements(t, body, "tr.forecast-playoff-line")
+	forbidRaw(t, body, "Playoff line:")
 	forbidText(t, body, "table.forecast-table thead", "Expected finish")
 	forbidElements(t, body, "[data-auto-submit]", "details.forecast-comparison-control[open]", "[data-fixture-filter]")
 	forbidRaw(t, body, "Show fixtures", "Find fixture", "Add assumption", "Update forecast", "Build a what-if scenario")
@@ -1455,7 +1457,6 @@ func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
 			t.Fatal("forecast cache used the configured current-scope playoff-place count")
 		}
 	}
-	requireText(t, response.Body.String(), ".forecast-cutline", "Playoff line: top 8")
 	requireText(t, response.Body.String(), "main", "6 of 240 expected regular-season matches")
 }
 

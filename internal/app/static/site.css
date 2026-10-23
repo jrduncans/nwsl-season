@@ -210,7 +210,6 @@ th:nth-child(2) { text-align: left; }
 .forecast-meta { display: flex; flex-wrap: wrap; gap: 0; margin: .9rem 0 0; color: var(--muted); font-size: .825rem; }
 .forecast-meta div { display: flex; align-items: baseline; gap: .35rem; padding: 0 .85rem; border-left: 1px solid var(--line); }.forecast-meta div:first-child { padding-left: 0; border-left: 0; }.forecast-meta dt { font-weight: 700; }.forecast-meta dd { margin: 0; color: var(--ink); font-weight: 800; }
 .forecast-results, .forecast-comparison, .forecast-builder { margin-top: 2.25rem; }
-.forecast-cutline { margin: 0 0 .35rem; padding: .3rem .55rem; border-radius: .3rem; color: var(--green); background: var(--green-soft); font-size: .875rem; }
 .forecast-table { min-width: 0; table-layout: auto; }
 .forecast-scroll-hint { display: none; }
 .forecast-table .forecast-rank { width: 3rem; color: var(--muted); text-align: center; }
