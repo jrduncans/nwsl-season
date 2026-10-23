@@ -441,8 +441,7 @@ th:nth-child(2) { text-align: left; }
 .explore-team-table .team-name { gap: .25rem; white-space: normal; }
 .explore-team-table .team-logo { width: 1.1rem; height: 1.1rem; flex-basis: 1.1rem; }
 .explore-table.explore-team-table thead a { padding: .3rem 0; }
-.explore-table.explore-team-table thead a::after { display: none; }
-.explore-table.explore-team-table [aria-sort="ascending"] a::after, .explore-table.explore-team-table [aria-sort="descending"] a::after { display: inline-block; }
+.explore-table.explore-team-table thead a::after { width: auto; margin-left: .1em; }
 :is(.explore-team-table, .explore-team-history-table) thead th[scope="colgroup"] { text-align: center; border-left: 1px solid var(--line); }
 .explore-team-table thead tr:nth-child(2) th { text-align: right; }
 .explore-team-table tbody :is(th, td):nth-child(3n) { border-left: 1px solid var(--line); }

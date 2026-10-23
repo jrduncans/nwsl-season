@@ -997,8 +997,10 @@ every eligible season, reusing Compare teams' rates and coverage.
 | `history-sort` | `season`, `played`, or `<measure>-actual\|expected` | `season` |
 | `history-order` | `asc`, `desc` | `desc` |
 
-The chart is chronological with gaps for missing years; the table sorts from
-unrounded values, with unavailable values last and newest season first on ties.
+The chart is chronological with gaps for missing years. The table sits in a
+**Season values** disclosure below the chart card, closed unless the URL carries
+`history-sort` or `history-order`, like Match by match's Match values. It sorts
+from unrounded values, with unavailable values last and newest season first on ties.
 With `measure=points`, the chart shows Points and/or xPoints only, so Penalties
 is hidden and a carried exclusion is ignored and removed from generated links
 and forms. Other measures retain the control and points note when applicable.

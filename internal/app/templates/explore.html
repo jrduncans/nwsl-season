@@ -301,10 +301,13 @@
 <p class="note">Per match, from eligible recorded results. Historical records use completed seasons. Expected-value ranges require complete coverage for every team in the season comparison. Values are compared before rounding.</p>
 <div data-history-context-values>{{range .HistoryContextDetails}}{{template "exploreContextSeries" .}}{{end}}</div>
 </details>
+<details class="explore-context-details" data-history-values{{if .HistoryExpanded}} open{{end}}>
+<summary>Season values</summary>
 <div class="table-scroll explore-team-history-table-wrap" tabindex="0" role="region" aria-label="{{$.T "Team scoring by season"}}" data-aria-all="Team scoring by season" data-aria-np="{{$.NP "Team scoring by season"}}"><table class="explore-table explore-team-history-table"><caption><span>Regular-season values per match. Differential = scored − allowed.</span></caption><thead>
 <tr>{{range .HistoryColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="2">{{template "basisText" ($.Both "Goal differential")}}</th><th scope="colgroup" colspan="2">{{template "basisText" ($.Both "Goals scored")}}</th><th scope="colgroup" colspan="2">{{template "basisText" ($.Both "Goals allowed")}}</th><th scope="colgroup" colspan="2">Points</th></tr>
 <tr>{{range .HistoryColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}</tr></thead>
 <tbody data-team-history-rows>{{range .TeamHistoryRows}}<tr><th scope="row">{{.Season}}</th><td>{{.Played}}</td>{{range .Values}}<td>{{.Actual}}</td><td>{{.Expected}}</td>{{end}}</tr>{{end}}</tbody></table></div>
+</details>
 </div>
 </section>
 <section data-panel="season-trend"{{if ne .View "season-trend"}} hidden{{end}} aria-labelledby="explore-season-trend-title">

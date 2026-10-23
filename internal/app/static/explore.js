@@ -1594,6 +1594,7 @@
     const order = params.get('history-order') === 'asc' ? 'asc' : 'desc';
     root.querySelector('[name="history-sort"]').value = column;
     root.querySelector('[name="history-order"]').value = order;
+    root.querySelector('[data-history-values]').open = params.has('history-sort') || params.has('history-order');
     links.forEach(link => {
       const key = link.dataset.historySort, selected = key === column;
       link.parentElement.setAttribute('aria-sort', selected ? (order === 'asc' ? 'ascending' : 'descending') : 'none');
