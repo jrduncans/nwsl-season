@@ -15,6 +15,10 @@ Keep each `gosec` suppression narrow and justified.
 Page requests read only the local SQLite cache; only the scheduler and
 `cmd/sync` call ASA.
 
+Production compresses responses at the proxy, so weigh page-size trade-offs
+by compressed (gzip or zstd) size, not raw size. See
+[README "Runtime and deployment"](README.md#runtime-and-deployment).
+
 ## Running the server
 
 Pitchfork already runs the primary checkout's server in watch mode at
