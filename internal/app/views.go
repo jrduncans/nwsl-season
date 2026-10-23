@@ -37,7 +37,6 @@ type seasonPage struct {
 	ForecastPath           string
 	ClinchingPath          string
 	CurrentPath            string
-	SeasonsPath            string
 	Navigation             []navigationItem
 	SeasonSelector         []seasonSelectorItem
 	StageSelector          []seasonSelectorItem
@@ -113,32 +112,6 @@ type seasonPresentation struct {
 	Historical         bool
 	FinalStandingsSafe bool
 	HasUpcoming        bool
-}
-
-type seasonsPage struct {
-	Title             string
-	HomePath          string
-	StylesheetPath    string
-	ScriptPath        string
-	Navigation        []navigationItem
-	Seasons           []seasonArchiveItem
-	CatalogPage       bool
-	Freshness         string
-	FreshnessFallback string
-	HistoryPath       string
-}
-
-type seasonArchiveItem struct {
-	Season  string
-	Current bool
-	Status  string
-	Stages  []seasonArchiveStageItem
-}
-
-type seasonArchiveStageItem struct {
-	Label  string
-	Status string
-	Links  []navigationItem
 }
 
 type navigationItem struct {

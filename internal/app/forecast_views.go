@@ -26,7 +26,6 @@ type forecastPage struct {
 	Navigation          []navigationItem
 	SeasonSelector      []seasonSelectorItem
 	StageSelector       []seasonSelectorItem
-	SeasonsPath         string
 	ForecastPath        string
 	ModelEvaluationPath string
 	CanonicalPath       string

@@ -509,99 +509,25 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	a.redirectToCurrentSeason(w)
+}
+
+// seasons keeps the retired season archive's URL working: like the root, it
+// sends visitors to the current season.
+func (a *application) seasons(w http.ResponseWriter, _ *http.Request) {
+	a.redirectToCurrentSeason(w)
+}
+
+// redirectToCurrentSeason sends a request for "/" or "/seasons" to the current
+// season's primary stage. Both paths resolve the relative target from the site
+// root.
+func (a *application) redirectToCurrentSeason(w http.ResponseWriter) {
 	entry, ok := competition.PrimaryEntry(a.options.CurrentSeason)
 	if !ok {
 		redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/regular-season", http.StatusSeeOther)
 		return
 	}
 	redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/"+entry.Slug, http.StatusSeeOther)
-}
-
-func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
-	readinessByScope := map[string]cache.SeasonReadinessSnapshot{}
-	if store, ok := a.store.(interface {
-		SeasonReadinesses(context.Context) ([]cache.SeasonReadinessSnapshot, error)
-	}); ok {
-		readinesses, err := store.SeasonReadinesses(r.Context())
-		if err != nil {
-			a.renderError(w, r, fmt.Errorf("load season archive readiness: %w", err))
-			return
-		}
-		for _, readiness := range readinesses {
-			readinessByScope[readiness.Scope.Season+"\x00"+readiness.Scope.Stage] = readiness
-		}
-	}
-
-	page := seasonsPage{
-		Title:          "Seasons",
-		HomePath:       relativeURL(r.URL.Path, "/"),
-		StylesheetPath: staticURL(r.URL.Path, "site.css"),
-		ScriptPath:     staticURL(r.URL.Path, "standings.js"),
-		CatalogPage:    true,
-		HistoryPath:    relativeURL(r.URL.Path, "/explore"),
-		Seasons:        seasonArchiveItems(r.URL.Path, a.options.CurrentSeason, readinessByScope),
-	}
-	a.render(w, "seasons", page)
-}
-
-func seasonArchiveItems(from, currentSeason string, readinessByScope map[string]cache.SeasonReadinessSnapshot) []seasonArchiveItem {
-	items := []seasonArchiveItem{}
-	for _, entry := range competition.PublicEntries() {
-		// PublicEntries is already sorted by season and competition family. Keep
-		// one archive card per season while retaining that stage order inside it.
-		itemIndex := -1
-		for i := range items {
-			if items[i].Season == entry.Season {
-				itemIndex = i
-				break
-			}
-		}
-		if itemIndex < 0 {
-			items = append(items, seasonArchiveItem{Season: entry.Season, Current: entry.Season == currentSeason})
-			itemIndex = len(items) - 1
-		}
-		item := &items[itemIndex]
-		if item.Current {
-			item.Status = "Current season"
-		} else {
-			item.Status = "Historical season"
-		}
-		stageStatus := "Not loaded"
-		if readiness, ok := readinessByScope[entry.Season+"\x00"+entry.Stage]; ok {
-			switch readiness.Readiness {
-			case cache.SourceReadinessNotPublished:
-				stageStatus = "Not published"
-			case cache.SourceReadinessUnknown:
-				stageStatus = "Not loaded"
-			case cache.SourceReadinessAvailable:
-				if readiness.Completeness == cache.InventoryCompletenessIncomplete {
-					stageStatus = "Partial data"
-				} else {
-					stageStatus = "Loaded"
-				}
-			}
-		}
-		item.Stages = append(item.Stages, seasonArchiveStageItem{Label: entry.ShortLabel, Status: stageStatus})
-
-		stage := &item.Stages[len(item.Stages)-1]
-		if !competitionStageVisible(entry, readinessByScope) {
-			continue
-		}
-		base := stageURL(entry.Season, entry.Slug)
-		rootLabel := "Competition overview"
-		if entry.Supports(competition.CapabilityStandings) {
-			rootLabel = "Standings"
-		}
-		stage.Links = append(stage.Links, navigationItem{Label: rootLabel, Path: relativeURL(from, base)})
-		if entry.Supports(competition.CapabilityFixtures) {
-			label := "Results"
-			if item.Current && entry.Primary {
-				label = "Matches"
-			}
-			stage.Links = append(stage.Links, navigationItem{Label: label, Path: relativeURL(from, base+"/fixtures")})
-		}
-	}
-	return items
 }
 
 // competitionStageVisible keeps a future knockout stage out of the archive
@@ -931,7 +857,6 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		HomePath:               relativeURL(r.URL.Path, "/"),
 		StylesheetPath:         staticURL(r.URL.Path, "site.css"),
 		ScriptPath:             staticURL(r.URL.Path, "standings.js"),
-		SeasonsPath:            seasonArchiveURL(r.URL.Path),
 		HasStandings:           showStandings,
 		HasFixtures:            scope.fixturesAvailable(),
 		HasXG:                  scope.xgAvailable(),
@@ -1046,7 +971,7 @@ func (a *application) factualLoadPage(r *http.Request, scope requestCompetition)
 	if err != nil {
 		return seasonPage{}, err
 	}
-	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Matches", StandingsMode: "per-game", FormatNotice: notice}, nil
+	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Matches", StandingsMode: "per-game", FormatNotice: notice}, nil
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -1077,7 +1002,6 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 		SeasonPath:      relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
 		FixturesPath:    relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"),
 		CurrentPath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)),
-		SeasonsPath:     seasonArchiveURL(r.URL.Path),
 		SeasonSelector:  seasonChoices,
 		StageSelector:   stageChoices,
 		FormatNotice:    notice,
@@ -1442,10 +1366,6 @@ func relativeURL(fromPath, targetPath string) string {
 		return "."
 	}
 	return strings.Join(parts, "/")
-}
-
-func seasonArchiveURL(fromPath string) string {
-	return path.Join(relativeURL(fromPath, "/seasons"), "..", "seasons")
 }
 
 func redirectRelative(w http.ResponseWriter, location string, status int) {

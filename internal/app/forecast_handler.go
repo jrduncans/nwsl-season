@@ -370,7 +370,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage, ResultsThrough: resultsThrough,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
-		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		SeasonSelector: seasonChoices, StageSelector: stageChoices,
 		Navigation: seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, verified, presentation), ModelEvaluationPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,

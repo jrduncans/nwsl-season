@@ -180,13 +180,6 @@ func TestUnpopulatedKnockoutsAreNotLinkedOrRenderedAsEmptyBrackets(t *testing.T)
 	forbidElements(t, populated.Body.String(), `[href="../2026/playoffs"]`)
 	requireElements(t, populated.Body.String(), `[href="../2026/regular-season"]`)
 
-	archive := httptest.NewRecorder()
-	handler.ServeHTTP(archive, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if archive.Code != http.StatusOK {
-		t.Fatalf("archive = %d %s", archive.Code, archive.Body.String())
-	}
-	forbidElements(t, archive.Body.String(), `[href="seasons/2026/playoffs"]`)
-
 	empty := httptest.NewRecorder()
 	emptyStore := seasonArchiveStore{fakeStore: fakeStore{season: cache.SeasonData{}}, readiness: readiness}
 	NewHandler(emptyStore).ServeHTTP(empty, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs", nil))
@@ -261,70 +254,15 @@ func TestHome(t *testing.T) {
 	}
 }
 
-func TestSeasonArchiveListsPublicSeasonsWithoutChangingGlobalNavigation(t *testing.T) {
-	response := httptest.NewRecorder()
-	NewHandler(fakeStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
-	}
-	body := response.Body.String()
-	requireExact(t, body, "main h1", "Seasons")
-	requireText(t, body, "main", "Current season", "Historical season")
-	requireElements(t, body, `a.brand[href="."]`, `[href="seasons/2026/regular-season"]`, `[href="seasons/2026/regular-season/fixtures"]`)
-	var years []string
-	for _, heading := range find(t, body, "main h2") {
-		years = append(years, text(heading))
-	}
-	if current, historical := slices.Index(years, "2026"), slices.Index(years, "2025"); current < 0 || historical < 0 || current > historical {
-		t.Errorf("season order is not descending: %v", years)
-	}
-	forbidElements(t, body, ".site-nav")
-	forbidRaw(t, body, "Data fetch time unavailable")
-}
-
-func TestSeasonArchiveUsesOptionalReadinessAndReportsReadFailure(t *testing.T) {
-	readiness := []cache.SeasonReadinessSnapshot{
-		{Scope: cache.SourceScope{Season: "2025", Stage: "Regular Season"}, Readiness: cache.SourceReadinessNotPublished},
-		{Scope: cache.SourceScope{Season: "2026", Stage: "Regular Season"}, Readiness: cache.SourceReadinessAvailable, Completeness: cache.InventoryCompletenessIncomplete},
-	}
-	response := httptest.NewRecorder()
-	NewHandler(seasonArchiveStore{readiness: readiness}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
-	}
-	requireText(t, response.Body.String(), ".season-archive-stage", "Not published", "Partial data")
-
-	failure := httptest.NewRecorder()
-	NewHandler(seasonArchiveStore{err: errors.New("readiness failed")}).ServeHTTP(failure, httptest.NewRequest(http.MethodGet, "/seasons", nil))
-	if failure.Code != http.StatusInternalServerError {
-		t.Fatalf("readiness failure = %d %q", failure.Code, failure.Body.String())
-	}
-	requireText(t, failure.Body.String(), "body", "load season archive readiness")
-}
-
-func TestSeasonArchiveGroupsAllPublicStagesInCatalogOrder(t *testing.T) {
-	items := seasonArchiveItems("/seasons", "2026", nil)
-	if len(items) == 0 || items[0].Season != "2026" {
-		t.Fatalf("archive seasons = %+v", items)
-	}
-	var stages []string
-	for _, item := range items {
-		if item.Season == "2026" {
-			for _, stage := range item.Stages {
-				stages = append(stages, stage.Label)
-			}
+func TestSeasonsRedirectsToCurrentSeason(t *testing.T) {
+	for _, path := range []string{"/seasons", "/nwsl-season/seasons"} {
+		response := httptest.NewRecorder()
+		NewHandler(nil).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusSeeOther {
+			t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusSeeOther)
 		}
-	}
-	want := []string{"Regular Season", "Playoffs", "Challenge Cup Final"}
-	if !reflect.DeepEqual(stages, want) {
-		t.Fatalf("2026 stages = %v, want %v", stages, want)
-	}
-	for _, item := range items {
-		for _, stage := range item.Stages {
-			if len(stage.Links) == 0 || stage.Links[0].Path == "" {
-				t.Fatalf("stage %s/%s has no canonical root link", item.Season, stage.Label)
-			}
+		if location := response.Header().Get("Location"); location != "seasons/2026/regular-season" {
+			t.Fatalf("%s location = %q, want current season", path, location)
 		}
 	}
 }
@@ -496,7 +434,7 @@ func TestHistoricalCatalogEmptyCacheRendersLoadState(t *testing.T) {
 			if response.Code != http.StatusOK {
 				t.Fatalf("historical empty response = %d %q", response.Code, response.Body.String())
 			}
-			requireText(t, response.Body.String(), "main", html.UnescapeString(test.notice), "Browse seasons")
+			requireText(t, response.Body.String(), "main", html.UnescapeString(test.notice), `<a href="../../2025/regular-season/fixtures">2025</a>`, `<a href="fixtures" aria-current="page">2018</a>`)
 			requireElements(t, response.Body.String(), "[data-season-selector]")
 		})
 	}
@@ -587,10 +525,9 @@ func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
 	archiveRequest := httptest.NewRequest(http.MethodGet, "/explorer/seasons", nil)
 	archiveResponse := httptest.NewRecorder()
 	handler.ServeHTTP(archiveResponse, archiveRequest)
-	if archiveResponse.Code != http.StatusOK {
-		t.Fatalf("base-path archive = status %d, body %q", archiveResponse.Code, archiveResponse.Body.String())
+	if archiveResponse.Code != http.StatusSeeOther || archiveResponse.Header().Get("Location") != "seasons/2026/regular-season" {
+		t.Fatalf("base-path seasons = status %d, location %q", archiveResponse.Code, archiveResponse.Header().Get("Location"))
 	}
-	requireElements(t, archiveResponse.Body.String(), `[href="seasons/2026/regular-season"]`)
 
 	staticRequest := httptest.NewRequest(http.MethodGet, "/explorer/static/site.css", nil)
 	staticResponse := httptest.NewRecorder()

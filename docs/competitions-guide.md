@@ -56,15 +56,17 @@ unsupported request has no side effects.
 Season pages live at `/seasons/{season}/{stage-slug}` with optional
 `/fixtures`, `/schedule-difficulty`, `/forecast`, `/model-evaluation` and
 `/clinching` suffixes. The root redirects to the configured current season's
-primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar). Season-only
+primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar), and so does
+the retired `/seasons` archive URL. Season-only
 URLs redirect to the primary stage, keeping the suffix and query. An unknown
 stage slug for a cataloged season is a `404`, never a fallback. Every link and
 redirect is relative so the `/nwsl-season/` proxy prefix survives.
 
-`/seasons` is the cache-only archive: every public stage grouped by season with
-its own readiness label. Each stage page has an in-page competition
-switcher whose targets are server-rendered relative URLs; the global site
-header gains no season or stage controls.
+Each stage page has in-page Season and Competition switchers whose targets are
+server-rendered relative URLs; the global site header gains no season or stage
+controls. Without JavaScript the switchers cannot navigate, so a `<noscript>`
+block lists the same targets as plain links, keeping the current page (such as
+`/fixtures`) where the target season has it.
 
 ## Readiness and completeness
 
