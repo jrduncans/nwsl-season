@@ -111,6 +111,10 @@ Presentation:
 - Describe gaps as above or below expected, not luck; finishing, goalkeeping,
   match state, model error and randomness all contribute.
 - Put coverage and sample notes next to the result they qualify.
+- Every data table on the site shares one header row: a pale green band with
+  dark labels. Sortable headers show a faint ↕ until sorted, then ↓ or ↑ (the
+  Thresholds table hides the unsorted mark on phones). Explore table captions
+  are small and muted.
 - Headings name what a view shows, not its competition stage. Each view says
   which matches it uses in a line below its heading (a note, caption or status
   line, such as "Per regular-season match"), so a view that later adds

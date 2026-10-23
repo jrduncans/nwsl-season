@@ -81,6 +81,9 @@ caption { padding: .75rem; text-align: left; font-weight: 800; }
 /* Keep caption text in view while a wide table scrolls sideways; it has no effect when the table fits. */
 caption > span { position: sticky; left: .75rem; display: inline-block; max-width: calc(100vw - 4.5rem); }
 th, td { padding: .55rem .6rem; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
+/* Every data table shares one tinted header row; pinned cells read --cell-bg so they match it. */
+thead { --cell-bg: var(--green-soft); }
+thead th { background: var(--green-soft); border-bottom: 2px solid var(--line); }
 th:nth-child(2) { text-align: left; }
 .team-name { display: inline-flex; align-items: center; gap: .45rem; }
 .team-logo { width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; object-fit: contain; vertical-align: middle; }
@@ -428,7 +431,7 @@ th:nth-child(2) { text-align: left; }
 @media (max-width: 600px) { .explore-chart-card { margin-inline: -1.25rem; padding: .75rem; border-inline: 0; border-radius: 0; }.explore-chart-switches { padding: 0; border-left: 0; } }
 .explore-actual-key { color: var(--chart-actual); }
 .explore-expected-key { color: var(--chart-expected); }
-:is(.explore-team-table, .explore-team-history-table, .explore-distribution-table) caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
+.explore-table caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
 .explore-distribution-table { min-width: 48rem; font-size: .875rem; }
 .explore-team-history-table-wrap { margin-top: 1.5rem; }
 .explore-team-table { font-size: .78rem; }
@@ -496,16 +499,16 @@ th:nth-child(2) { text-align: left; }
 .explore-bin-legend i { width: .8rem; height: .8rem; border-radius: .15rem; }
 .explore-table { --line: #dfe1e3; width: 100%; font-variant-numeric: tabular-nums; border-collapse: separate; border-spacing: 0; }
 .explore-table td, .explore-table th { text-align: right; white-space: nowrap; padding: .9rem 1.1rem; }
-.explore-table thead th { color: var(--muted); font-size: .85rem; background: var(--green-soft); border-bottom: 2px solid var(--line); }
+.explore-table thead th { font-size: .85rem; }
 .explore-table th:first-child, .explore-archive-table th:nth-child(2) { text-align: left; }
 .explore-table tbody th { font-size: 1.05rem; font-weight: 750; border-left: 3px solid var(--line); }
 .explore-table tbody tr { background: #fff; }
 .explore-table tbody tr:nth-child(even) { background: #fafafa; }
 .explore-table tbody tr:hover { background: #eceeef; }
 .explore-table button, .explore-table thead a { border: 0; background: none; color: inherit; font-weight: 700; padding: .5rem 0; text-decoration: none; display: inline-block; }
-.explore-table thead :is(button, a)::after { content: '↓'; display: inline-block; width: 1em; margin-left: .25em; visibility: hidden; }
-.explore-table [aria-sort="descending"] :is(button, a)::after { visibility: visible; }
-.explore-table [aria-sort="ascending"] :is(button, a)::after { content: '↑'; visibility: visible; }
+.explore-table thead :is(button, a)::after { content: '↕'; display: inline-block; width: 1em; margin-left: .25em; opacity: .4; }
+.explore-table [aria-sort="descending"] :is(button, a)::after { content: '↓'; opacity: 1; }
+.explore-table [aria-sort="ascending"] :is(button, a)::after { content: '↑'; opacity: 1; }
 .explore-rate { position: relative; min-width: 9rem; }
 .explore-rate::before { content: ''; position: absolute; bottom: .45rem; left: 1.1rem; width: calc((100% - 2.2rem) * var(--rate-width, 0)); height: 4px; border-radius: 2px; background: #86ada0; }
 .explore-rate-xg::before { background: #a99bc2; }
@@ -542,7 +545,7 @@ th:nth-child(2) { text-align: left; }
   .forecast-table :is(th, td):nth-child(n+4) { min-width: calc(6ch + .7rem); }
   /* Pin rank and team while the remaining columns scroll. Separate borders keep row lines on the pinned cells. */
   :is(.standings, .forecast-table, .forecast-comparison-table) { border-collapse: separate; border-spacing: 0; }
-  :is(.standings :is(th, td):first-child, .forecast-table .forecast-rank, .standings th:nth-child(2), .forecast-table th:nth-child(2), .forecast-comparison-table th:first-child) { position: sticky; z-index: 1; box-sizing: border-box; background: var(--panel); }
+  :is(.standings :is(th, td):first-child, .forecast-table .forecast-rank, .standings th:nth-child(2), .forecast-table th:nth-child(2), .forecast-comparison-table th:first-child) { position: sticky; z-index: 1; box-sizing: border-box; background: var(--cell-bg, var(--panel)); }
   :is(.standings th:nth-child(2), .forecast-table th:nth-child(2), .forecast-comparison-table th:first-child) { box-shadow: inset -1px 0 var(--line); }
   .forecast-table .forecast-rank { left: 0; width: 2rem; min-width: 2rem; max-width: 2rem; }
   /* Size team and projected-points columns so Playoffs fits beside them at 390px. */
@@ -550,7 +553,7 @@ th:nth-child(2) { text-align: left; }
   .forecast-table th:nth-child(3) { min-width: 0; }
   .standings { min-width: 0; }
   /* Pin points to the right edge so the ranking column stays visible while the others scroll. */
-  .standings :is([data-standings-points-label], [data-standings-points]) { position: sticky; right: 0; z-index: 1; background: var(--panel); box-shadow: inset 1px 0 var(--line); }
+  .standings :is([data-standings-points-label], [data-standings-points]) { position: sticky; right: 0; z-index: 1; background: var(--cell-bg, var(--panel)); box-shadow: inset 1px 0 var(--line); }
   .standings :is(th, td):first-child { left: 0; width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem; }
   .standings th:nth-child(2) { left: 2.5rem; width: 9.5rem; min-width: 9.5rem; max-width: 9.5rem; white-space: normal; }
   .standings th:nth-child(2) .standings-team-cell { flex-wrap: wrap; }
@@ -594,7 +597,6 @@ th:nth-child(2) { text-align: left; }
 .explore-parity-expected { fill: var(--chart-expected); stroke: var(--panel); stroke-width: 1; }
 .explore-parity-link { stroke: var(--muted); stroke-width: 1; }
 .explore-parity-table { min-width: 52rem; font-size: .875rem; }
-.explore-parity-table caption, .explore-parity-team-table caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
 .explore-parity-team-table { font-size: .875rem; }
 .explore-parity-table a[aria-current] { font-weight: 800; }
 
@@ -704,8 +706,7 @@ th:nth-child(2) { text-align: left; }
 .threshold-table td:last-child { font-weight: 700; }
 .threshold-table [hidden] { display: none; }
 .threshold-table tbody th { font-size: .9rem; }
-.threshold-table thead a::after { display: none; }
-.threshold-table [aria-sort="ascending"] a::after, .threshold-table [aria-sort="descending"] a::after { display: inline-block; width: auto; margin-left: .1em; }
+.threshold-table thead a::after { width: auto; margin-left: .1em; }
 @media (max-width: 600px) {
  .threshold-cards { grid-template-columns: 1fr; }
  [data-panel="thresholds"] .explore-subviews { column-gap: .6rem; }
@@ -716,6 +717,7 @@ th:nth-child(2) { text-align: left; }
  .threshold-table tbody th { font-size: .75rem; }
  .threshold-table th:first-child { width: 14%; }
  .threshold-table th:nth-child(2) { width: 35%; }
+ .threshold-table thead th:not([aria-sort="ascending"], [aria-sort="descending"]) a::after { display: none; }
 }
 [data-threshold-detail] p { overflow-wrap: anywhere; }
 
