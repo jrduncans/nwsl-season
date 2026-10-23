@@ -220,12 +220,12 @@ func exploreViews() []exploreView {
 			name: "team-rankings", scenario: apptest.ScenarioSeasonTrend,
 			path: "explore?view=team-rankings",
 			controls: []string{
-				"[data-team-rankings-controls] [name=season]", "[data-team-rankings-controls] [name=team]", "[data-team-rankings-controls] [name=units]",
+				"[data-team-rankings-controls] [name=season]", "[data-team-rankings-controls] [name=team]", "[data-team-rankings-controls] [data-segmented=units]",
 			},
 			steps: []exploreStep{
 				{selector: "[data-team-rankings-controls] [name=season]", value: "2025", param: "season"},
 				{selector: "[data-team-rankings-controls] [name=team]", value: teamGotham, param: "team"},
-				{selector: "[data-team-rankings-controls] [name=units]", value: "total", param: "units"},
+				{selector: "[data-team-rankings-controls] [data-segmented=units]", value: "total", param: "units"},
 				{selector: "[data-team-rankings-controls] [name=team]", value: teamPortland, param: "team"},
 			},
 		},
@@ -233,13 +233,13 @@ func exploreViews() []exploreView {
 			name: "team-history", scenario: apptest.ScenarioTeamHistory,
 			path: "explore?view=team-history",
 			controls: []string{
-				"[data-history-team]", "[data-history-measure]", "[data-history-series]", "[data-history-context]",
+				"[data-history-team]", "[data-panel=team-history] [data-segmented=measure]", "[data-panel=team-history] [data-segmented=series]", "[data-history-context]",
 			},
 			steps: []exploreStep{
 				{selector: "[data-history-team]", value: teamGotham, param: "team"},
-				{selector: "[data-history-measure]", value: "points", param: "measure"},
-				{selector: "[data-history-series]", value: "xg", param: "series"},
-				{selector: "[data-history-measure]", value: "for", param: "measure"},
+				{selector: "[data-panel=team-history] [data-segmented=measure]", value: "points", param: "measure"},
+				{selector: "[data-panel=team-history] [data-segmented=series]", value: "xg", param: "series"},
+				{selector: "[data-panel=team-history] [data-segmented=measure]", value: "for", param: "measure"},
 			},
 		},
 		{
@@ -2238,7 +2238,7 @@ func TestExploreSeasonTrendAlwaysShowsBothSeriesAndCarriesSeasonBySeasonChoice(t
 			if got := queryOf(t, page); got.Get("series") != carried || got.Get("view") != "team-history" {
 				t.Fatalf("Season by season URL = %v, want carried series=%s", got, carried)
 			}
-			if err := expect.Locator(page.Locator("[data-history-series]")).ToHaveValue(selection); err != nil {
+			if err := expect.Locator(page.Locator("[data-panel=team-history] [data-segmented=series] input:checked")).ToHaveValue(selection); err != nil {
 				t.Fatal(err)
 			}
 		})

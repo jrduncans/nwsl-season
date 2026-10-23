@@ -52,8 +52,8 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 	if len(find(t, body, "[data-h2h-values][open]")) != 0 {
 		t.Fatal("default table open")
 	}
-	if len(find(t, body, "[data-h2h-controls] select")) != 3 || len(find(t, body, "[data-h2h-penalties]")) != 1 {
-		t.Fatalf("controls: selects=%d penalties=%d", len(find(t, body, "[data-h2h-controls] select")), len(find(t, body, "[data-h2h-penalties]")))
+	if len(find(t, body, "[data-h2h-controls] select")) != 2 || len(find(t, body, `[data-h2h-chart-card] input[name=h2h-series][form=h2h-controls]`)) != 3 || len(find(t, body, "[data-h2h-chart-card] [data-h2h-penalties]")) != 1 {
+		t.Fatalf("controls: selects=%d chart segments=%d penalties=%d", len(find(t, body, "[data-h2h-controls] select")), len(find(t, body, `[data-h2h-chart-card] input[name=h2h-series]`)), len(find(t, body, "[data-h2h-chart-card] [data-h2h-penalties]")))
 	}
 	if len(find(t, body, "[data-h2h-title] img[alt='']")) != 2 || len(find(t, body, "[data-h2h-rows] img, [data-h2h-rows] a, [data-h2h-chart-wrap] a")) != 0 {
 		t.Fatal("logos / click targets")
@@ -424,9 +424,9 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatal(code)
 		}
-		requireExact(t, body, "[data-h2h-series] option[value=actual]", "Margins")
-		requireAttr(t, body, "[data-h2h-series] option[value=actual]", "selected", "")
-		forbidElements(t, body, "[data-h2h-series] option[value=expected], [data-h2h-record][hidden], [data-h2h-xg-panel][hidden]")
+		requireExact(t, body, "[data-segmented=h2h-series] span", "Margins")
+		requireAttr(t, body, "[data-segmented=h2h-series] input[value=actual]", "checked", "")
+		forbidElements(t, body, "[data-segmented=h2h-series] input[value=expected], [data-h2h-record][hidden], [data-h2h-xg-panel][hidden]")
 		requireAttr(t, body, "[data-h2h-comparison]", "hidden", "")
 		requireAttr(t, body, "[data-h2h-carried-series]", "disabled", "")
 		want, err := history.SummarizeHeadToHead(archive, portlandThornsTeamID, h2hSeattleID, basis)

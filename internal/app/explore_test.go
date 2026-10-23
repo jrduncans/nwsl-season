@@ -436,7 +436,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		want []string
 	}{
 		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`<option value="points" selected>Points</option>`, `<option value="total" selected>Totals</option>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
-		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`<option value="points" selected>Points</option>`, `<option value="xg" selected>xPoints</option>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
+		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`name="measure" value="points" form="team-history-controls" checked><span>Points</span>`, `name="series" value="xg" form="team-history-controls" checked><span>xPoints</span>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
 	} {
 		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()

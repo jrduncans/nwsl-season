@@ -481,3 +481,10 @@ func (page *exploreHeadToHeadView) populateHeadToHeadTiles(basis history.Scoring
 	page.H2HGoalGapTiles = exploreGoalGapTiles(matches, basis, "meeting")
 	page.H2HCoverage = h2hCoverage(page.H2HPair, basis, page.H2HSeries)
 }
+
+// H2HChartControl picks the head-to-head chart. Margins keeps the legacy
+// "actual" URL value.
+func (page exploreHeadToHeadView) H2HChartControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Chart", Name: "h2h-series", Form: "h2h-controls", Picker: true, Options: exploreSegments(page.H2HSeries,
+		exploreSegment{Value: "actual", Label: "Margins"}, exploreSegment{Value: "both", Label: "Goals vs xG"}, exploreSegment{Value: "points", Label: "Points vs xPoints"})}
+}

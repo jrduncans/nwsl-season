@@ -66,3 +66,5 @@
 {{define "penaltiesForm"}}<form method="get" class="explore-team-controls">{{template "penaltiesFormFields" .}}{{template "penaltiesSelect" (.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Apply</button></noscript></form>{{end}}
 
 {{define "penaltiesHelp"}}<span id="penalties-help" class="visually-hidden">Excluding removes penalty kicks from both goals and xG.</span>{{end}}
+
+{{define "segmented"}}{{$group := .}}<fieldset class="segmented{{if .Picker}} explore-chart-picker{{end}}" data-segmented="{{.Name}}"><legend{{if .Picker}} class="visually-hidden"{{end}}>{{.Legend}}</legend><span class="segmented-options">{{range .Options}}<label><input type="radio" name="{{$group.Name}}" value="{{.Value}}"{{with $group.Form}} form="{{.}}"{{end}}{{if .Selected}} checked{{end}}{{with .Description}} aria-label="{{.}}"{{end}}><span>{{.Label}}</span></label>{{end}}</span></fieldset>{{end}}

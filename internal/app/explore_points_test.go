@@ -140,7 +140,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
-	requireAttr(t, body, "[data-h2h-series] option[value=points]", "selected", "")
+	requireAttr(t, body, "[data-segmented=h2h-series] input[value=points]", "checked", "")
 	requireAttr(t, body, "[data-h2h-penalties-label]", "hidden", "")
 	requireText(t, body, "[data-h2h-fallback] li", "Points − xPoints:")
 	requireText(t, body, "[data-h2h-fallback] li", "Points:")

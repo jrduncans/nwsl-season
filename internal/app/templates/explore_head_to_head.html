@@ -9,17 +9,22 @@
 <label>Team <select name="team" data-h2h-team>{{range .H2HTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.H2HTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <noscript><button class="button" type="submit" data-h2h-team-submit>Show team</button></noscript>
 </form>
-<form method="get" class="explore-team-controls" data-h2h-controls>
+<form method="get" class="explore-team-controls" id="h2h-controls" data-h2h-controls>
 <input type="hidden" name="view" value="head-to-head"><input type="hidden" name="team" value="{{.H2HTeam.ID}}">
 <input type="hidden" name="h2h-sort" value="{{.H2HSort}}"{{if not .H2HExpanded}} disabled{{end}}><input type="hidden" name="h2h-order" value="{{.H2HOrder}}"{{if not .H2HExpanded}} disabled{{end}}>
 <label>Opponent <select name="opponent" data-h2h-opponent>{{range .H2HOpponents}}<option value="{{.Opponent.ID}}"{{if eq .Opponent.ID $.H2HPair.Opponent.ID}} selected{{end}}>{{.Opponent.Name}} ({{.All.Played}})</option>{{end}}</select></label>
-<label data-h2h-view-label>View <select name="h2h-series" data-h2h-series><option value="actual"{{if .H2HMargins}} selected{{end}}>Margins</option><option value="both"{{if .H2HBoth}} selected{{end}}>Goals vs xG</option><option value="points"{{if .H2HPoints}} selected{{end}}>Points vs xPoints</option></select></label>
-<label class="penalties-select switch" data-h2h-penalties-label{{if .H2HPoints}} hidden{{end}}><input type="checkbox" role="switch" name="penalties" value="exclude" data-h2h-penalties{{if .H2HPoints}} disabled{{end}}{{if .NonPenalty}} checked{{end}} aria-describedby="penalties-help"> Exclude penalties</label>
 <noscript><button class="button" type="submit" data-h2h-submit>Show head to head</button></noscript>
 </form>
 </div>
 <div class="explore-heading"><h2 id="explore-h2h-title" data-h2h-title>{{template "teamName" .H2HTeam}} vs {{template "teamName" .H2HPair.Opponent}}</h2></div>
 <p data-h2h-scope>{{.H2HPair.Scope}}</p>
+<div class="explore-chart-card" data-h2h-chart-card>
+{{template "segmented" .H2HChartControl}}
+<div class="explore-chart-options">
+<div class="explore-chart-switches">
+<label class="penalties-select switch" data-h2h-penalties-label{{if .H2HPoints}} hidden{{end}}><input type="checkbox" role="switch" name="penalties" value="exclude" form="h2h-controls" data-h2h-penalties{{if .H2HPoints}} disabled{{end}}{{if .NonPenalty}} checked{{end}} aria-describedby="penalties-help"> Exclude penalties</label>
+</div>
+</div>
 <div class="explore-h2h-record" data-h2h-record role="group" aria-label="Official regular-season record from {{.H2HTeam.Name}}’s side"{{if or (not .H2HMargins) (not .H2HPair.All.Played)}} hidden{{end}}>
 {{template "exploreMarginTiles" .H2HMarginTiles}}
 </div>
@@ -42,6 +47,7 @@
 <ol class="explore-h2h-fallback" data-h2h-fallback>{{range .H2HPair.Rows}}<li>{{.Date}}{{if .Active}} · season in progress{{end}} · {{.Venue}} · {{.Opponent}} · {{.Score}} · {{.Result}}{{if and $.NonPenalty (not $.H2HPoints)}} · Non-penalty goals: {{.BasisScore}}{{end}}{{if $.H2HPoints}} · Points: {{.Points}} · xPts: {{index .ExpectedValues 2}} · Points − xPoints: {{.PointsGap}}{{else}} · {{$.H2HXGLabel}} for: {{index .ExpectedValues 0}} · {{$.H2HXGLabel}} against: {{index .ExpectedValues 1}}{{if $.H2HBoth}} · {{$.T "Goals for − xG for"}}: {{.ScoredGap}} · {{$.T "Goals against − xG against"}}: {{.AllowedGap}}{{else}} · {{if $.NonPenalty}}Non-penalty goal margin{{else}}Goal margin{{end}}: {{.GoalMargin}} · {{$.H2HXGLabel}} margin: {{.ExpectedMargin}}{{end}}{{end}}</li>{{end}}</ol>
 </div>
 <p class="note" data-h2h-warning{{if not .H2HPair.Warning}} hidden{{end}}>{{.H2HPair.Warning}}</p>
+</div>
 <details class="explore-context-details" data-h2h-values{{if .H2HExpanded}} open{{end}}><summary data-h2h-summary>Table: all {{.H2HPair.All.Played}} meetings</summary>
 <p class="scroll-hint">Scroll horizontally to see all columns.</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Head to head meetings"><table class="explore-table explore-h2h-table"><caption>Official scores from the selected team's side; newest first by default. Records follow ASA team IDs; home is ASA’s designation, including alternate venues.</caption>

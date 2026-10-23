@@ -114,6 +114,17 @@ Presentation:
 - Essential detail works by touch and keyboard without hover; on narrow screens
   selected detail goes below the chart.
 - URLs share the view and its selections, not a frozen answer; data may update.
+- Controls follow Match by match. Choosing what to look at (Season, Team,
+  Opponent) stays in the row above as selects, since those lists are long or
+  vary. Everything that changes how the chart is drawn sits in a bordered
+  **chart card**: a segmented chart picker heads it when the view has several
+  charts, and an options row follows with labeled segmented controls, then a
+  column of switches. A short fixed choice is a segmented control with a
+  visible label (the `segmented` template over an `exploreSegmentGroup`), never
+  a select; an on/off choice is a switch, never a plain checkbox. A segmented
+  control in the row above has its label beside it, like the selects. Controls
+  apply as soon as they change; submit buttons appear only without JavaScript.
+  On phones a chart card runs to the screen edges.
 
 A new view needs a registry entry and a row in the table above, a matching
 `data-panel` section (the registry test checks tabs and panels agree), a pure
@@ -175,11 +186,12 @@ registry's `PointsOnly` and `PointsNote` rules; `apptest.ExplorePointsOnlyCases`
 checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered switch is last in each view's data-control row and never
-in the navigation; on Match by match it heads the chart card's column of
-switches. Mixed-view links carry its selection. Every data-control row is a GET
-form, and the switch is that form's only penalties field: off, the form omits
-the parameter. Match by match's switch sits outside its form and joins it
-through the `form` attribute (`PenaltiesSwitch` names the form). Views with no other selection (Scoring trend, Goal
+in the navigation; in a view with a chart card (Match by match, Season by
+season, Head to head) it sits in the card's column of switches. Mixed-view
+links carry its selection. Every data-control row is a GET form, and the switch
+is that form's only penalties field: off, the form omits the parameter. A chart
+card's switch sits outside its form and joins it through the `form` attribute
+(`PenaltiesSwitch` names the form). Views with no other selection (Scoring trend, Goal
 distribution without data, Home advantage and Scoring table) wrap the checkbox
 in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
@@ -566,7 +578,9 @@ differential, xG, xG allowed and xG differential among every eligible team in
 the season, using `season` and `units`. Lower is better for the two allowed
 stats. Ties share competition rank (1 + the number of strictly better values),
 and later ranks skip places. League xG ranks are withheld for everyone if any
-team's xG coverage is incomplete; goal ranks remain.
+team's xG coverage is incomplete; goal ranks remain. Season and Team selects
+lead the control row, then a **Values** segmented control (Per match, Totals)
+and the Exclude penalties switch; with no chart, the view has no chart card.
 
 ### Match by match
 
@@ -958,6 +972,15 @@ For Goals and xG, Team History still shows official points and xPoints beside
 the selected scoring measure, so its points note remains visible when the
 penalty basis is excluded.
 
+Team is the only select above the chart. A chart card holds **Compare** (Goal
+differential, Goals scored, Goals allowed, Points) and **Show** segmented
+controls, then switches for League context and Exclude penalties. Show's
+options name the measure's own series (Points and xPoints for Points). The
+card's controls join the form through the `form` attribute, so the form's
+submit button applies them without JavaScript. The units and points notes sit
+inside the card below the options, so a note that appears with the penalties
+basis never moves the controls.
+
 League context adds, per season, a bar from the lowest to the highest team rate
 (an expected-value range needs complete coverage for every team that season),
 plus dotted record lines from completed seasons only, labeled with the archive
@@ -967,9 +990,12 @@ start rather than claimed as all-time. Tied holders are all listed in the
 ### Head to head
 
 `view=head-to-head` follows two ASA team IDs across eligible regular seasons.
-Controls are Team, Opponent, View (Margins by default, Goals vs xG,
-Points vs xPoints) and Penalties (Included or Excluded, hidden for
-Points vs xPoints). The opponent list includes clubs met at
+Team and Opponent are selects above the heading. Below the scope line a chart
+card, as on Match by match, is headed by a **Chart** picker (Margins by
+default, Goals vs xG, Points vs xPoints) with an Exclude penalties switch
+below it (hidden for Points vs xPoints); the record tiles, charts and notes
+sit inside the card. The picker and switch join the Opponent form through the
+`form` attribute. The opponent list includes clubs met at
 least once, each as "Name (N)", sorted by the ID's newest name, then ID. The
 default is the most-met opponent, ties broken by newest name, then ID. A valid
 never-met pair remains selected with "X and Y have not met in a regular-season
@@ -977,7 +1003,7 @@ match." and a selected zero-meeting option. Blank, repeated, unknown or
 same-as-team opponents return the standard 400.
 
 The heading shows both clubs with decorative logos (`teamName` and
-`clubLogoURL`); the View select names the selected view, so the heading does
+`clubLogoURL`); the Chart picker names the selected view, so the heading does
 not repeat it. The scope line follows, for example “Regular season 2016–2026 ·
 26 meetings · 2026 in progress”. Small samples show numbers without a
 conclusion. Active-season meetings enter immediately, and the table marks

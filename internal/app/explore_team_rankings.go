@@ -113,3 +113,10 @@ func exploreTeamRankings(teams exploreTeamsView, selected teamNameView) exploreT
 	}
 	return page
 }
+
+// RankingUnitsControl switches the rank cards between per-match and total
+// values.
+func (p explorePage) RankingUnitsControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Values", Name: "units", Options: exploreSegments(p.TeamUnits,
+		exploreSegment{Value: "per-match", Label: "Per match"}, exploreSegment{Value: "total", Label: "Totals"})}
+}

@@ -37,7 +37,11 @@
     Object.entries(alternative).every(([name, allowed]) => allowed.includes(params.get(name) || defaults[name] || '')));
   // Scoring trend was once the default view, so its metric links omitted it.
   const requestedView = params => params.get('view') || (params.has('metric') ? 'trend' : viewGroups[0].views[0].key);
-  const historySeries = root.querySelector('[data-history-series]');
+  // The Season by season chart card's controls submit with the form above it;
+  // its segmented controls are RadioNodeLists.
+  const historyPanel = root.querySelector('[data-panel="team-history"]');
+  const historyControls = root.querySelector('[data-team-history-controls]');
+  const historySeries = historyControls.elements.namedItem('series');
   const historyContext = root.querySelector('[data-history-context]');
   const teamSeason = root.querySelector('[data-team-season]');
   const teamMeasure = root.querySelector('[data-team-measure]');
@@ -45,7 +49,7 @@
   const quadrantData = root.querySelector('[data-team-quadrant-data]');
   const quadrantLogoToggle = root.querySelector('[data-team-quadrant-logos]');
   const historyTeam = root.querySelector('[data-history-team]');
-  const historyMeasure = root.querySelector('[data-history-measure]');
+  const historyMeasure = historyControls.elements.namedItem('measure');
   const rankingControls = root.querySelector('[data-team-rankings-controls]');
   const trendControls = root.querySelector('[data-season-trend-controls]');
   const trendPanel = root.querySelector('[data-panel="season-trend"]');
@@ -1769,10 +1773,10 @@
     const visible = historySeries.value === 'both' ? ['goals', 'xg'] : [historySeries.value];
     const context = historyContextData[measure.index];
     const isPoints = measure === teamMeasures.points;
-    root.querySelector('[data-team-history-controls] [data-penalties-selector]').closest('label').hidden = isPoints;
+    historyPanel.querySelector('[data-penalties-selector]').closest('label').hidden = isPoints;
     root.querySelector('#explore-team-history-title').textContent =
       `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
-    const choices = historySeries.options;
+    const choices = historyPanel.querySelectorAll('[data-segmented="series"] label span');
     choices[0].textContent = isPoints ? 'Points and xPoints' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
     choices[2].textContent = isPoints ? 'xPoints' : 'xG';
@@ -2702,7 +2706,8 @@
 
   const h2hTeam = root.querySelector('[data-h2h-team]');
   const h2hOpponent = root.querySelector('[data-h2h-opponent]');
-  const h2hSeries = root.querySelector('[data-h2h-series]');
+  // A RadioNodeList: the chart picker's radios submit with the pair form.
+  const h2hSeries = root.querySelector('#h2h-controls').elements.namedItem('h2h-series');
   const h2hPenalties = root.querySelector('[data-h2h-penalties]');
   // Adjusted tiles total opponent-adjusted points in the same lines, as
   // exploreAdjustedPointsTiles in Go.
@@ -3187,7 +3192,7 @@
   root.querySelectorAll('[data-h2h-controls]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); changeHeadToHead(event); }));
   h2hTeam.addEventListener('change', changeHeadToHead);
   h2hOpponent.addEventListener('change', changeHeadToHead);
-  h2hSeries.addEventListener('change', changeHeadToHead);
+  root.querySelector('[data-segmented="h2h-series"]').addEventListener('change', changeHeadToHead);
   h2hPenalties.addEventListener('change', changeHeadToHead);
 
 
@@ -3449,13 +3454,10 @@
   root.addEventListener('error', event => {
     if (event.target.matches('.team-logo, .explore-scatter-logo')) event.target.style.visibility = 'hidden';
   }, true);
-  root.querySelector('[data-team-history-controls]').addEventListener('submit', event => {
-    event.preventDefault(); update({team: historyTeam.value, measure: historyMeasure.value, series: historySeries.value, context: historyContext.checked ? 'on' : 'off'});
-  });
-  historySeries.addEventListener('change', () => update({series: historySeries.value}));
-  historyContext.addEventListener('change', () => update({context: historyContext.checked ? 'on' : 'off'}));
-  historyTeam.addEventListener('change', () => update({team: historyTeam.value}));
-  historyMeasure.addEventListener('change', () => update({measure: historyMeasure.value}));
+  const updateTeamHistory = () => update({team: historyTeam.value, measure: historyMeasure.value, series: historySeries.value, context: historyContext.checked ? 'on' : 'off'});
+  historyControls.addEventListener('submit', event => { event.preventDefault(); updateTeamHistory(); });
+  // The chart card's controls sit outside the form but belong to it.
+  historyPanel.addEventListener('change', event => { if (event.target.form === historyControls) updateTeamHistory(); });
   const updateSeasonTrend = () => {
     // An unchecked checkbox submits nothing, so clear opponents unless it does.
     const selection = {'trend-sort': null, 'trend-order': null, 'trend-mode': null, window: null, opponents: null, ...Object.fromEntries(new FormData(trendControls))};
