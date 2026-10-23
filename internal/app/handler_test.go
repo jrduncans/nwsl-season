@@ -414,9 +414,9 @@ func TestCapabilityLimitedPresentationKeepsIndependentControls(t *testing.T) {
 	}
 	body := standings.String()
 	requireText(t, body, "body", "Per match", "Totals")
-	forbidElements(t, body, "[data-standings-stat-button]")
-	for _, button := range find(t, body, "button") {
-		if text(button) == "xG" {
+	forbidElements(t, body, "[data-standings-stat-value]")
+	for _, option := range find(t, body, ".segmented-options span") {
+		if text(option) == "xG" {
 			t.Errorf("score-only standings rendered an xG control: %s", body)
 		}
 	}
@@ -704,7 +704,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	requireText(t, body, ".site-footer", "Data last fetched on Jul 9, 2026 at 8:00 PM UTC.")
 	requireAttr(t, body, ".site-footer time", "datetime", "2026-07-09T20:00:00Z")
 	requireAttr(t, body, ".site-footer time", "data-local-time", "2026-07-09T20:00:00Z")
-	requireText(t, body, "main button", "Goals", "xG", "Per match", "Totals")
+	requireText(t, body, "main .segmented-options span", "Goals", "xG", "Per match", "Totals")
 	requireAttr(t, body, "th[data-standings-stat-column=goals]", "title", "Goals for / against")
 	requireText(t, body, "th[data-standings-stat-column=goals]", "+/-")
 	requireAttr(t, body, "th[data-standings-stat-column=xg]", "title", "Expected goals for / against")

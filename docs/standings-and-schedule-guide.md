@@ -46,6 +46,13 @@ Two orderings use the selected criteria:
   fair while teams have played different numbers of matches. It is the default
   for an active season.
 
+Above the table, **Stats** (Goals, xG) and **Values** (Per match, Totals) are
+segmented controls with their labels beside them, the same control Explore
+uses. Only `standings.js` can re-sort the table, so they render disabled and the
+script enables them. The Matches page's Results | Upcoming control names
+itself, so its legend is visually hidden; it likewise appears only once the
+script runs.
+
 The modern next tiebreaker, least disciplinary points, needs card data that
 ASA does not provide. The earlier policy ends at a coin toss or drawing of lots.
 Rows still tied at the first unavailable criterion are marked undetermined,

@@ -7,10 +7,10 @@
 
 {{template "fixtureFilter" .}}
 
-{{if .ShowFixtureViewToggle}}<div class="fixture-view-toggle" data-fixture-view-toggle hidden role="group" aria-label="Fixture view">
-  <button class="fixture-view-button" type="button" data-fixture-view-button="results" aria-pressed="true">Results</button>
-  <button class="fixture-view-button" type="button" data-fixture-view-button="upcoming" aria-pressed="false">Upcoming</button>
-</div>{{end}}
+{{if .ShowFixtureViewToggle}}<fieldset class="segmented fixture-view-toggle" data-fixture-view-toggle hidden><legend class="visually-hidden">Show</legend><span class="segmented-options">
+  <label><input type="radio" name="fixture-view" value="results" data-fixture-view-button="results" checked><span>Results</span></label>
+  <label><input type="radio" name="fixture-view" value="upcoming" data-fixture-view-button="upcoming"><span>Upcoming</span></label>
+</span></fieldset>{{end}}
 {{template "fixtureLists" .}}
 {{template "foot" .}}{{end}}
 
