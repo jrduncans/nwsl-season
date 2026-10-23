@@ -589,10 +589,13 @@ type clinchingPage struct {
 	AlreadyClinched  []clinchingStatusGroupView
 }
 type clinchingRowView struct {
-	Team                               teamNameView
-	Achievement, Limitation            string
-	Groups                             []clinchingGroupView
-	Necessary                          []string
+	Team                    teamNameView
+	Achievement, Limitation string
+	Groups                  []clinchingGroupView
+	Necessary               []string
+	// Elimination marks a row about being eliminated rather than clinching,
+	// which changes its result labels.
+	Elimination                        bool
 	NoHelp                             string
 	NoHelpFixtures                     string
 	NoHelpFixtureCount                 int

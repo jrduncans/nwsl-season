@@ -63,6 +63,9 @@ type clinchingGroupView struct {
 	SummaryOverflow bool
 	ShowDetails     bool
 	Help            scenarioExpression
+	// Tone colors the group by the team's own result: "win", "draw", "loss"
+	// or "" when the group spans several matches or none.
+	Tone string
 }
 
 const maxScenarioSummaryPaths = 12
@@ -377,7 +380,41 @@ func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, 
 		}
 		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, ShowDetails: len(help) > 1, Help: orderScenarioExpression(factorRequirements(help, 0))})
 	}
-	return combineOwnSingleResults(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games)
+	views = combineOwnSingleResults(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games)
+	for i := range views {
+		views[i].Tone = ownResultTone(views[i], teamID, games)
+	}
+	return views
+}
+
+// ownResultTone names the team's own result in one match: a win, or a win or
+// draw, is "win"; a draw is "draw"; a loss, or a draw or loss, is "loss".
+// Groups over several matches, or with no own result, get "".
+func ownResultTone(group clinchingGroupView, team string, games map[string]cache.Game) string {
+	if len(group.Own) != 1 || len(group.AlternativeOwn) != 0 || group.Own[0].SecondGameID != "" {
+		return ""
+	}
+	own := group.Own[0]
+	game := games[own.GameID]
+	// Mask bits follow scenarioOutcomes: home win, draw, away win.
+	const homeWin, draw, awayWin uint8 = 1, 2, 4
+	win, loss := homeWin, awayWin
+	switch team {
+	case game.HomeTeamID:
+	case game.AwayTeamID:
+		win, loss = awayWin, homeWin
+	default:
+		return ""
+	}
+	switch own.Mask {
+	case win, win | draw:
+		return "win"
+	case draw:
+		return "draw"
+	case loss, loss | draw:
+		return "loss"
+	}
+	return ""
 }
 
 // Merge one-match own results only when their outside help is identical.

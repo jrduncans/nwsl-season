@@ -293,7 +293,13 @@ under its highest clinched outcome, since that outcome implies the lower ones. E
 gets one card: the team's name heads it, and each outcome ("Can clinch a home
 playoff game", "Can clinch the playoffs") is a section under its own badge,
 ordered by outcome rank. Cards follow each team's highest-ranked outcome, then
-standings position. Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
+standings position. Color carries meaning: the team's name sits on a tinted
+band (green for clinching, red for elimination), each outcome badge is solid,
+and each result box is tinted by the team's own result in that match: green for
+a win (or win or draw), gray for a draw, amber for a loss (or draw or loss), and
+neutral when it spans several matches. A box that needs no outside help says
+"✓ Clinches" (or "Eliminated"); otherwise its conditions follow "Clinches if"
+("Eliminated if"), each shown as a pill. Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored

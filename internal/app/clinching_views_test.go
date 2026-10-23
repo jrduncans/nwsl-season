@@ -43,7 +43,7 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 			if strings.Count(body, `class="clinching-path-option"`) != 8 || strings.Contains(body, "View 5 more paths") {
 				t.Fatal("all exact scenarios should remain available in one disclosure")
 			}
-			if strings.Count(body, `class="clinching-result-group"`) != 1 {
+			if strings.Count(body, `class="clinching-result-group`) != 1 {
 				t.Fatal("shared own result should appear once")
 			}
 			if !strings.Contains(body, `class="clinching-summary"`) || !strings.Contains(body, `class="clinching-exact-paths"`) {
@@ -549,4 +549,27 @@ func TestClinchingGroupsCombineSymmetricOwnResults(t *testing.T) {
 		t.Fatal("merged different outside requirements")
 	}
 	assertScenarioEquivalent(t, clauses, groups, games)
+}
+
+func TestOwnResultToneFollowsTheTeamsResult(t *testing.T) {
+	games := map[string]cache.Game{"m": {HomeTeamID: "home", AwayTeamID: "away"}}
+	group := func(mask uint8) clinchingGroupView {
+		return clinchingGroupView{Own: []scenarioRequirement{{GameID: "m", Mask: mask}}}
+	}
+	for _, test := range []struct {
+		team string
+		mask uint8
+		want string
+	}{
+		{"home", 1, "win"}, {"home", 3, "win"}, {"home", 2, "draw"}, {"home", 4, "loss"}, {"home", 6, "loss"},
+		{"away", 4, "win"}, {"away", 6, "win"}, {"away", 1, "loss"}, {"away", 3, "loss"},
+		{"home", 5, ""}, {"other", 1, ""},
+	} {
+		if got := ownResultTone(group(test.mask), test.team, games); got != test.want {
+			t.Errorf("tone(%s, mask %03b) = %q, want %q", test.team, test.mask, got, test.want)
+		}
+	}
+	if got := ownResultTone(clinchingGroupView{}, "home", games); got != "" {
+		t.Errorf("tone with no own result = %q, want empty", got)
+	}
 }

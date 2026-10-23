@@ -242,7 +242,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if v.AlreadyEliminated {
 			eliminatedRows = append(eliminatedRows, clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID]})
 		} else if v.CanBeEliminated {
-			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupsWithHeadingTeams(v.EliminationClauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}}
+			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupsWithHeadingTeams(v.EliminationClauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}, Elimination: true}
 			if v.BudgetLimited() {
 				row.Limitation = "Scenario search was incomplete."
 			}

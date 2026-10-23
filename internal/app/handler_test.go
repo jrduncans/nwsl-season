@@ -785,6 +785,10 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	requireText(t, body, ".clinching-opportunity-elimination h3", "Alpha & Co <script>alert(1)</script>")
 	requireText(t, body, ".clinching-opportunity-elimination .clinching-outcome h4", "Can be eliminated from the playoffs")
 	requireText(t, body, ".clinching-result-group h5", "If Alpha & Co <script>alert(1)</script> wins vs Bravo FC", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	// A result that needs no outside help says so, and boxes are tinted by
+	// the team's own result.
+	requireExact(t, body, ".clinching-opportunity-clinching .clinching-result-win .clinching-result-state", "✓ Clinches")
+	requireExact(t, body, ".clinching-opportunity-elimination .clinching-result-loss .clinching-result-state", "Eliminated")
 	requireText(t, body, "main .clinching-statement", "with 1 win", "Win each of these remaining matches: vs Bravo FC.")
 	// Inside a team card, the heading and badge already name the team and outcome.
 	requireExact(t, body, ".clinching-outcome .clinching-statement summary", "No-help scenario: 1 win")

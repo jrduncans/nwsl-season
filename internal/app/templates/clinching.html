@@ -36,11 +36,13 @@
 {{define "clinchingClauses"}}
   {{if .Groups}}
     {{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}
+    {{$elimination := .Elimination}}
     {{range .Groups}}
-      <section class="clinching-result-group">
+      <section class="clinching-result-group{{with .Tone}} clinching-result-{{.}}{{end}}">
         <h5>{{.Heading}}</h5>
-        {{if .SummaryOverflow}}<p>Several certified scenarios. View the exact alternatives below.</p>
-        {{else if or .Summary.Conditions .Summary.Alternatives}}<div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>{{end}}
+        {{if .SummaryOverflow}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><p>Several certified scenarios. View the exact alternatives below.</p>
+        {{else if or .Summary.Conditions .Summary.Alternatives}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>
+        {{else}}<p class="clinching-result-state clinching-result-state-certain">{{if $elimination}}Eliminated{{else}}✓ Clinches{{end}}</p>{{end}}
         {{if .ShowDetails}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
       </section>
     {{end}}
