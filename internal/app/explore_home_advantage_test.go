@@ -30,7 +30,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 	}
 	requireExact(t, body, "title", "Home advantage · Explore · NWSL Season Explorer")
 	requireAttr(t, body, `a[data-view-choice="home-advantage"]`, "aria-current", "page")
-	requireExact(t, body, "#explore-home-title", "Home advantage per match (regular-season)")
+	requireExact(t, body, "#explore-home-title", "Home advantage per match")
 	requireAttr(t, body, `canvas[data-chart="home-goals"]`, "role", "img")
 	requireAttr(t, body, `canvas[data-chart="home-points"]`, "role", "img")
 

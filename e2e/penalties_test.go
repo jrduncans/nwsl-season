@@ -159,7 +159,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 
 	// The league views name the basis too.
 	gotoInPage(t, page, "explore?view=trend&penalties=exclude")
-	if got := textOf(t, page, "#explore-trend-title"); got != "Non-penalty goals and chances per match (regular-season)" {
+	if got := textOf(t, page, "#explore-trend-title"); got != "Non-penalty goals and chances per match" {
 		t.Errorf("trend title = %q", got)
 	}
 	gotoInPage(t, page, "explore?view=distribution&penalties=exclude")

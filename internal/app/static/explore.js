@@ -1443,16 +1443,16 @@
     root.querySelector('[data-team-controls] [name="team-sort"]').value = column;
     root.querySelector('[data-team-controls] [name="team-order"]').value = order;
     root.querySelector('#explore-teams-title').textContent = display === 'gap'
-      ? 'Actual − expected by team (regular-season)'
-      : display === 'scatter' ? 'Actual vs expected by team (regular-season)'
-      : display === 'quadrant' ? 'Scored vs allowed by team (regular-season)' : 'Actual vs expected (regular-season)';
+      ? 'Actual − expected by team'
+      : display === 'scatter' ? 'Actual vs expected by team'
+      : display === 'quadrant' ? 'Scored vs allowed by team' : 'Actual vs expected';
     teamsPanel.querySelector('[data-segmented="measure"]').hidden = display === 'table' || display === 'quadrant';
     teamsPanel.querySelector('[data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && isPointsMeasure;
     teamsPanel.querySelector('[data-segmented="quadrant-data"]').hidden = display !== 'quadrant';
     scatterLogoToggle.closest('label').hidden = display !== 'scatter';
     quadrantLogoToggle.closest('label').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
-      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPoints from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+      `${units === 'total' ? 'Regular-season totals' : 'Per regular-season match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPoints from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
     setPointsNote('teams', params);
@@ -1790,7 +1790,7 @@
     const isPoints = measure === teamMeasures.points;
     historyPanel.querySelector('[data-penalties-selector]').closest('label').hidden = isPoints;
     root.querySelector('#explore-team-history-title').textContent =
-      `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
+      `Season-by-season ${isPoints ? 'points' : 'scoring'}`;
     const choices = historyPanel.querySelectorAll('[data-segmented="series"] label span');
     choices[0].textContent = isPoints ? 'Points and xPoints' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
@@ -2439,7 +2439,7 @@
     const count = selectedSeason.teams.length;
     root.querySelector('[data-rankings-team]').replaceChildren(teamName(team));
     root.querySelector('[data-rankings-summary]').textContent = `${season} · ${team.played} played · ${count} teams${selectedSeason.active ? ' · In progress' : ''}`;
-    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Regular-season totals' : 'Per regular-season match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-rankings-warning]').hidden = !selectedSeason.teams.some(row => row.values[0].expected === null);
     root.querySelector('[data-rankings-cards]').replaceChildren(...team.rankings[units === 'total' ? 1 : 0].map(row => {
       const card = document.createElement('article'); card.className = 'explore-rank-card';
@@ -2623,7 +2623,7 @@
     const note = root.querySelector('[data-team-seasons-missing]');
     note.hidden = !missing.length;
     note.textContent = missing.length ? `${missing.length} team-seasons have ${missingLabel} ${scatter ? 'and cannot be plotted. Their actual values remain in the table.' : 'and are not ranked. Their actual values appear last in the table.'}` : '';
-    root.querySelector('[data-team-seasons-standing-note]').textContent = `Rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow ${scatter ? 'dots' : 'bars'} are in progress.`;
+    root.querySelector('[data-team-seasons-standing-note]').textContent = `Regular-season rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow ${scatter ? 'dots' : 'bars'} are in progress.`;
     const gapHelp = root.querySelector('[data-team-seasons-gap-help]');
     gapHelp.hidden = scatter || by !== 2;
     gapHelp.textContent = `Gap is actual − expected. Positive means above expected; negative means below expected.${measure === 1 ? ' Fewer goals allowed than expected rank first.' : ''}`;
@@ -3271,7 +3271,7 @@
     if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
     metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
     root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
-      ? T('Goals − xG per match (regular-season)') : T('Goals and chances per match (regular-season)');
+      ? T('Goals − xG per match') : T('Goals and chances per match');
     root.querySelectorAll('[data-series]').forEach(series => {
       series.hidden = metric.value === 'gap' || (metric.value !== 'compare' && series.dataset.series !== metric.value);
     });

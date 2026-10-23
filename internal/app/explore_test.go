@@ -592,7 +592,7 @@ func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testi
 	body := response.Body.String()
 	for _, want := range []string{
 		`data-team-display="scatter" aria-current="page"`,
-		`Actual vs expected by team (regular-season)</h2>`,
+		`Actual vs expected by team</h2>`,
 		`<input type="hidden" name="display" value="scatter">`,
 		`<option value="2025" selected>2025</option>`,
 		`name="measure" value="against" form="team-controls" checked><span>Goals allowed</span>`,
@@ -630,7 +630,7 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 				body := response.Body.String()
 				for _, want := range []string{
 					`data-team-display="quadrant" aria-current="page"`,
-					`Scored vs allowed by team (regular-season)</h2>`,
+					`Scored vs allowed by team</h2>`,
 					`<input type="hidden" name="display" value="quadrant">`,
 					`name="quadrant-data" value="` + mode + `" form="team-controls" checked>`,
 					`name="units" value="` + units + `" form="team-controls" checked>`,

@@ -111,6 +111,10 @@ Presentation:
 - Describe gaps as above or below expected, not luck; finishing, goalkeeping,
   match state, model error and randomness all contribute.
 - Put coverage and sample notes next to the result they qualify.
+- Headings name what a view shows, not its competition stage. Each view says
+  which matches it uses in a line below its heading (a note, caption or status
+  line, such as "Per regular-season match"), so a view that later adds
+  playoffs changes only that line.
 - Essential detail works by touch and keyboard without hover; on narrow screens
   selected detail goes below the chart.
 - URLs share the view and its selections, not a frozen answer; data may update.
