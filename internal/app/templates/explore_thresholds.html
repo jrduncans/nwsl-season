@@ -5,7 +5,7 @@
 <p class="note">Each mark is the regular-season points per match of the last team to qualify, for example the 8th-place team in a season with eight playoff spots.</p>
 <div class="explore-legend threshold-legend" aria-label="Threshold series"><span class="threshold-series-0">● Shield ━</span><span class="threshold-series-1">■ Home playoff game ┄</span><span class="threshold-series-2">◆ Playoff bye ┈</span><span class="threshold-series-3">✚ Playoffs ┅</span></div>
 <div class="explore-chart-wrap"><canvas data-chart="thresholds" tabindex="0" role="img" aria-label="Final regular-season points per game by outcome, since 2016" aria-describedby="threshold-chart-help"></canvas></div>
-<p class="visually-hidden" id="threshold-chart-help">Use arrow keys to inspect seasons, then Enter to show all cutoff details. Tap a season or use the links below. Escape clears the tooltip.</p>
+<p class="visually-hidden" id="threshold-chart-help">Use arrow keys to inspect seasons, then Enter to show all threshold details. Tap a season or use the links below. Escape clears the tooltip.</p>
 </div>
 <noscript><p class="visually-hidden">Use the season links and exact-value table below to inspect thresholds.</p></noscript>
 <nav class="explore-subviews" aria-label="Threshold season details">{{range .ThresholdRows}}<a href="{{.URL}}" data-threshold-year="{{.Season}}"{{if .Selected}} aria-current="true"{{end}}>{{.Season}}</a>{{end}}</nav>
@@ -14,7 +14,7 @@
 <div class="threshold-season-heading"><h3 id="threshold-detail-{{.Season}}">{{.Season}} · {{.Playoffs}} playoff teams · {{if .Bye}}{{.Bye}} byes{{else}}no byes{{end}}</h3></div>
 <div class="threshold-cards">
 {{range $index, $value := .Values}}{{if .Applicable}}
-<article class="threshold-card" aria-label="{{.Label}} cutoff">
+<article class="threshold-card" aria-label="{{.Label}} threshold">
 <h4 class="threshold-series-{{$index}}">{{.Label}}</h4>
 {{if .PPG}}
 <p class="threshold-line"><span class="threshold-line-label">{{if eq $index 0}}Winner{{else}}Last in{{end}}</span>{{$.ThresholdFinish .Cutoff .PPG}}</p>
@@ -31,18 +31,18 @@
 </details>
 </section>
 {{end}}
-<details class="explore-context-details" data-threshold-table{{if .ThresholdTableOpen}} open{{end}}><summary>Table: cutoffs by season</summary>
+<details class="explore-context-details" data-threshold-table{{if .ThresholdTableOpen}} open{{end}}><summary>Table: thresholds by season</summary>
 <form method="get" class="threshold-table-controls" data-threshold-controls>
 <input type="hidden" name="view" value="thresholds"><input type="hidden" name="threshold-season" value="{{.ThresholdSelected}}">
 <input type="hidden" name="threshold-sort" value="{{.ThresholdSort}}"><input type="hidden" name="threshold-order" value="{{.ThresholdOrder}}">
 {{template "segmented" .ThresholdOutcomeControl}}<noscript><button class="button" type="submit">Apply</button></noscript>
 </form>
-<p class="note">Official points and matches, including awards and deductions. Select a season for its adjacent team, format and sources. Only verified, applicable cutoffs are listed.</p>
+<p class="note">Official points and matches, including awards and deductions. Select a season for its adjacent team, format and sources. Only verified, applicable thresholds are listed.</p>
 <table class="explore-table threshold-table">
-<caption>Historical <span data-threshold-table-label>{{if eq .ThresholdOutcome "shield"}}Shield{{else if eq .ThresholdOutcome "home"}}home playoff game{{else if eq .ThresholdOutcome "bye"}}playoff bye{{else}}playoff{{end}}</span> cutoffs · PPG rounded to three decimals</caption>
+<caption>Historical <span data-threshold-table-label>{{if eq .ThresholdOutcome "shield"}}Shield{{else if eq .ThresholdOutcome "home"}}home playoff game{{else if eq .ThresholdOutcome "bye"}}playoff bye{{else}}playoff{{end}}</span> thresholds · PPG rounded to three decimals</caption>
 <thead><tr>{{range .ThresholdHeaders}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-threshold-sort="{{.Key}}">{{.Label}}</a></th>{{end}}</tr></thead>
 <tbody data-threshold-table-rows>{{range .ThresholdTableRows}}<tr data-outcome="{{.Outcome}}" data-season="{{.Season}}" data-team="{{.Cutoff.Name}}" data-points="{{.Cutoff.OfficialPoints}}" data-played="{{.Cutoff.OfficialPlayed}}" data-ppg="{{.PPG}}"{{if .Hidden}} hidden{{end}}><th scope="row"><a href="{{.URL}}" data-threshold-year="{{.Season}}">{{.Season}}</a></th><td>{{.Cutoff.Name}}<small>#{{.Cutoff.Place}}{{if .Tied}} · Points tie{{end}}</small></td><td>{{.Cutoff.OfficialPoints}}</td><td>{{.Cutoff.OfficialPlayed}}</td><td>{{$.ThresholdPPG .PPG}}</td></tr>{{end}}</tbody></table>
-<p class="note" data-threshold-table-empty{{if not .ThresholdTableEmpty}} hidden{{end}}>No verified cutoffs available for this outcome.</p>
+<p class="note" data-threshold-table-empty{{if not .ThresholdTableEmpty}} hidden{{end}}>No verified thresholds available for this outcome.</p>
 </details>
 </section>
 {{end}}
