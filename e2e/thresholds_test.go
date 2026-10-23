@@ -129,10 +129,7 @@ func TestExploreThresholds(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertNoHorizontalOverflow(t, page)
-			outcome := page.Locator(`[data-threshold-controls] select`)
-			if _, err := outcome.SelectOption(playwright.SelectOptionValues{Values: &[]string{"bye"}}); err != nil {
-				t.Fatal(err)
-			}
+			chooseOption(t, page, "[data-threshold-controls] [data-segmented=threshold-outcome]", "bye")
 			if err := expect.Locator(page.Locator(`[data-threshold-table-rows] tr:visible`)).ToHaveCount(3); err != nil {
 				t.Fatal(err)
 			}
@@ -149,7 +146,7 @@ func TestExploreThresholds(t *testing.T) {
 			if _, err := page.Reload(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(outcome).ToHaveValue("bye"); err != nil {
+			if err := expect.Locator(page.Locator("[data-segmented=threshold-outcome] input:checked")).ToHaveValue("bye"); err != nil {
 				t.Fatal(err)
 			}
 			if err := expect.Locator(page.Locator(`[data-threshold-table-rows] tr:visible`)).ToHaveCount(3); err != nil {
@@ -180,9 +177,7 @@ func TestExploreThresholds(t *testing.T) {
 		if err := expect.Locator(page.Locator(`[data-panel="thresholds"] table`)).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := page.Locator(`[data-threshold-controls] select`).SelectOption(playwright.SelectOptionValues{Values: &[]string{"bye"}}); err != nil {
-			t.Fatal(err)
-		}
+		chooseOption(t, page, "[data-threshold-controls] [data-segmented=threshold-outcome]", "bye")
 		if err := page.Locator(`[data-threshold-controls] button`).Click(); err != nil {
 			t.Fatal(err)
 		}

@@ -416,8 +416,8 @@ th:nth-child(2) { text-align: left; }
 .explore-chart-options:not(:has(:is(.segmented, .switch):not([hidden]))) { display: none; }
 /* In a top row of labeled selects, a segmented control reads like them: its
    label sits beside the options. */
-.explore-team-controls .segmented { flex-direction: row; align-items: center; gap: .5rem; }
-.explore-team-controls .segmented legend { color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: 0; }
+.explore-team-controls .segmented, .threshold-table-controls .segmented { flex-direction: row; align-items: center; gap: .5rem; }
+:is(.explore-team-controls, .threshold-table-controls) .segmented legend { color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: 0; }
 .explore-basis-tag { color: var(--green); }
 .explore-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; margin: .5rem 0; }
 .explore-legend-row .explore-legend { margin: .25rem 0; }
@@ -482,8 +482,6 @@ th:nth-child(2) { text-align: left; }
 .explore-quadrant-line-key { display: inline-block; width: 1rem; border-top: 2px solid var(--muted); }
 .explore-scatter-logo-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .explore-scatter-logo { position: absolute; width: 22px; height: 22px; box-sizing: border-box; padding: 2px; object-fit: contain; border: 1px solid var(--line); border-radius: .25rem; background: var(--panel); pointer-events: none; }
-.explore-scatter-logo-toggle { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .9rem; }
-.explore-scatter-logo-toggle input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--green); }
 .explore-scatter-selection { max-width: 38rem; margin-top: 1rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .explore-scatter-selection-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .explore-scatter-selection-heading h3 { margin: 0; font-size: 1rem; }

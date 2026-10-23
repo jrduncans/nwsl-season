@@ -103,3 +103,10 @@ func sortExploreDistributions(rows []exploreDistributionSeason, column, order st
 		return a.Season > b.Season
 	})
 }
+
+// DistributionBinControl picks every goal total or one total's trend.
+func (page exploreDistributionView) DistributionBinControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Goals per match", Name: "distribution-bin", Form: "distribution-controls", Options: exploreSegments(page.DistributionBin,
+		exploreSegment{Value: "all", Label: "All"}, exploreSegment{Value: "0", Label: "0"}, exploreSegment{Value: "1", Label: "1"},
+		exploreSegment{Value: "2", Label: "2"}, exploreSegment{Value: "3", Label: "3"}, exploreSegment{Value: "4", Label: "4+"})}
+}

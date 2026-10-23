@@ -186,12 +186,13 @@ registry's `PointsOnly` and `PointsNote` rules; `apptest.ExplorePointsOnlyCases`
 checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered switch is last in each view's data-control row and never
-in the navigation; in a view with a chart card (Match by match, Season by
-season, Head to head) it sits in the card's column of switches. Mixed-view
-links carry its selection. Every data-control row is a GET form, and the switch
-is that form's only penalties field: off, the form omits the parameter. A chart
-card's switch sits outside its form and joins it through the `form` attribute
-(`PenaltiesSwitch` names the form). Views with no other selection (Scoring trend, Goal
+in the navigation; in a view with a chart card (Compare teams, Scoring trend,
+Goal distribution, Team-seasons, Match by match, Season by season, Head to head)
+it heads the card's column of switches. Mixed-view links carry its selection.
+Every data-control row is a GET form, and the switch is that form's only
+penalties field: off, the form omits the parameter. A chart card's switch sits
+outside its form and joins it through the `form` attribute (`PenaltiesSwitch`
+names the form). Views with no other selection (Scoring trend, Goal
 distribution without data, Home advantage and Scoring table) wrap the checkbox
 in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
@@ -246,14 +247,17 @@ publishes no non-penalty xPoints." Labels follow the basis (`xG` → `npxG`, `Go
 with Goals, xG, Both, and Goals − xG (`metric=goals|xg|compare|gap`, default `compare`). Goals − xG
 uses signed bars around zero; seasons without complete xG have no xG mark.
 Missing calendar years, including 2020, are gaps. An eligible active season is
-plotted and noted as in progress through N matches.
+plotted and noted as in progress through N matches. A chart card holds a **Show**
+segmented control and the Exclude penalties switch. Only `explore.js` draws the
+chart, so Show's radios join no form and the script checks the URL's metric.
 
 **Goal distribution** counts played matches by combined goals in five bins (0,
 1, 2, 3, 4+), which always sum to the played count. The default is a 100%
 stacked bar per season; `distribution-bin=0|1|2|3|4` instead plots one bin's
 share by season on a shared percentage axis. A collapsed values table gives
 counts and one-decimal shares, sorted by exact share with newest season first
-on ties.
+on ties. A chart card holds a **Goals per match** segmented control (All, 0, 1,
+2, 3, 4+) and the Exclude penalties switch; the values table sits below it.
 
 **Home advantage** plots, per eligible season, how much better home sides did
 than away sides per played match: goals against xG and points against xPoints, as
@@ -297,7 +301,9 @@ completed eligible season; the active season is selectable) and is shared with
 Compare teams, so an unknown year is a 400 but a catalog year without parity
 values falls back to the default with a note. Selecting a season on the chart
 (click, or arrow keys then Enter), the select or a table link updates the strip
-in place. `parity-series=actual|both` (default `actual`; not `series`, which
+in place. The Season select stays above the chart; a chart card around the
+trend holds a **Show** segmented control (Points, Points and xPoints) for
+`parity-series=actual|both` (default `actual`; not `series`, which
 Season by season already owns) adds the xPPG spread series and each team's
 xPPG mark. The xPPG spread needs every team's xPoints for every played match,
 otherwise that season has no xPPG mark and an `xPoints incomplete` note. An active
@@ -401,7 +407,9 @@ threshold team, official points, official matches and PPG. Non-applicable and un
 thresholds have no rows. A bye comparison therefore contains only bye seasons.
 Headers sort by `threshold-sort` (`season`, `team`, `points`, `played`, `ppg`)
 and `threshold-order` (`asc` or `desc`, default newest season first); PPG sorting
-uses the unrounded ratio, with newest season breaking ties. Outcome selection and
+uses the unrounded ratio, with newest season breaking ties. **Outcome** is a
+segmented control with its label beside it; its Apply button appears only
+without JavaScript. Outcome selection and
 sorting update the URL in place and restore on reload and Back/Forward. The five
 columns fit desktop and 390px without horizontal scrolling. Season links lead to
 the full adjacent-team comparison. Formats show qualification places, home playoff game
@@ -470,8 +478,13 @@ exclusions are ignored, and there is no points note. One short note below the ch
 qualifications: per-match rates do not adjust for opponents or era and do not
 judge the best team, and active seasons use the ten-match rule.
 
-The **Ranking | Scatter** switch (`team-seasons-display=ranking|scatter`)
-shows the same eligible population. Scatter plots expected per-match values on
+A chart card is headed by a **Ranking | Scatter** chart picker
+(`team-seasons-display=ranking|scatter`), then **Measure** and **Rank by**
+segmented controls and the Exclude penalties switch; the values table sits below
+the card. The picker is a setting on the same team-seasons, so it replaces the
+former third row of tabs. The form above the card has only hidden fields and a
+submit button that appears without JavaScript. Both displays show the same
+eligible population. Scatter plots expected per-match values on
 x against actual on y, with equal numeric axes and a labelled dashed parity
 diagonal. Points uses fixed 0–3 axes; goals measures fit both series with round
 bounds, including negatives for differential. Rank by is hidden and ignored in
@@ -548,6 +561,13 @@ expected or Outlier plot), the Exclude penalties checkbox and points note are ab
 A carried `penalties=exclude` is ignored and dropped from the generated URL,
 forms and links. Table and Scored vs allowed are mixed views and retain the
 control and the points note when the basis is excluded.
+
+Season is the only select above the chart. A chart card holds **Compare**
+(hidden for Table and Scored vs allowed), **Show** (Scored vs allowed only) and
+**Values** segmented controls, then switches: Exclude penalties and, on the
+Outlier plot and Scored vs allowed, **Team logos** (overlapping logos are
+hidden). The units and points notes, the chart and the table sit inside the
+card. The display row stays as navigation, since those are the group's views.
 
 - **Gap to expected** ranks teams by gap, favorable first: positive for goals
   scored, differential and points; negative for goals allowed. Green is above

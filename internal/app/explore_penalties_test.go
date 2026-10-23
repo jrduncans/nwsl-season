@@ -127,7 +127,8 @@ func TestExplorePenaltiesCheckboxSubmitsWithoutJavaScript(t *testing.T) {
 			forms := find(t, body, `section[data-panel=`+panel+`] form[method=get]`)
 			var form *html.Node
 			for _, candidate := range forms {
-				if len(findIn(t, candidate, `input[data-penalties-selector][checked]`)) == 1 {
+				id := attr(candidate, "id")
+				if len(findIn(t, candidate, `input[data-penalties-selector][checked]`)) == 1 || id != "" && len(find(t, body, `input[data-penalties-selector][checked][form=`+id+`]`)) == 1 {
 					form = candidate
 				}
 			}
@@ -261,12 +262,18 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 				t.Fatal("no selection forms")
 			}
 			for _, form := range forms {
+				// A chart card's checkbox joins its form through the form attribute.
+				owned, disabled := findIn(t, form, `input[name=penalties]`), findIn(t, form, `input[name=penalties][disabled]`)
+				if id := attr(form, "id"); id != "" {
+					owned = append(owned, find(t, body, `input[name=penalties][form=`+id+`]`)...)
+					disabled = append(disabled, find(t, body, `input[name=penalties][form=`+id+`][disabled]`)...)
+				}
 				want := 1
-				if len(findIn(t, form, `input[name=penalties]`)) == len(findIn(t, form, `input[name=penalties][disabled]`)) && len(findIn(t, form, `input[name=penalties]`)) > 0 {
+				if len(owned) > 0 && len(owned) == len(disabled) {
 					want = 0
 				}
 				if got := submittedPenalties(t, body, form); got != want {
-					t.Errorf("form %q submits %d penalties values, want %d", attr(form, "data-team-controls")+attr(form, "class"), got, want)
+					t.Errorf("form %q submits %d penalties values, want %d", attr(form, "id")+attr(form, "class"), got, want)
 				}
 			}
 		})

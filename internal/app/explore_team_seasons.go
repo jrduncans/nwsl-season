@@ -17,11 +17,6 @@ var teamSeasonsDisplays = []string{"ranking", "scatter"}
 var teamSeasonsSortKeys = []string{"rank", "team", "season", "played", "actual", "expected", "gap"}
 var teamSeasonsMeasureLabels = []string{"Goals scored", "Goals allowed", "Goal differential", "Points"}
 
-type exploreTeamSeasonsDisplay struct {
-	Value, Label, URL string
-	Selected          bool
-}
-
 type exploreTeamSeasonRecord struct {
 	history.TeamSeason
 	LogoURL string `json:"logo"`
@@ -49,7 +44,6 @@ type exploreTeamSeasonBar struct {
 
 type exploreTeamSeasonsView struct {
 	TeamSeasonsDisplay                                                          string
-	TeamSeasonsDisplays                                                         []exploreTeamSeasonsDisplay
 	TeamSeasonsScatterDescription, TeamSeasonsScatterMeaning                    string
 	TeamSeasonsData                                                             exploreTeamSeasonsPayload
 	TeamSeasonsRows                                                             []exploreTeamSeasonRow
@@ -164,9 +158,6 @@ func exploreTeamSeasons(query url.Values, all, np []history.TeamSeason) (explore
 		more, fewer = "higher", "lower"
 	}
 	page.TeamSeasonsScatterMeaning = fmt.Sprintf("One dot per team-season; hollow dots are in progress. Dashed diagonal: actual matches expected. Above: %s %s than %s; below: %s.", more, strings.ToLower(page.TeamSeasonsActualLabel), page.TeamSeasonsExpectedLabel, fewer)
-	for _, display := range teamSeasonsDisplays {
-		page.TeamSeasonsDisplays = append(page.TeamSeasonsDisplays, exploreTeamSeasonsDisplay{Value: display, Label: map[string]string{"ranking": "Ranking", "scatter": "Scatter"}[display], URL: exploreTeamURL(query, map[string]string{"view": "team-seasons", "team-seasons-display": display}), Selected: page.TeamSeasonsDisplay == display})
-	}
 	page.TeamSeasonsHigh, page.TeamSeasonsLow = teamSeasonsEnds(measure, by, labelBasis)
 	extent := 0.0
 	for _, row := range ranked {
@@ -385,4 +376,22 @@ func (b exploreTeamSeasonBar) CompanionValue() string {
 		return b.MissingLabel
 	}
 	return fmt.Sprintf("%s %.2f", b.CompanionLabel, *b.Companion)
+}
+
+// Team-seasons' chart card controls submit with the form above them. Rank by
+// is unused by the scatter, and penalties by Points.
+func (p exploreTeamSeasonsView) TeamSeasonsDisplayControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Chart", Name: "team-seasons-display", Form: "team-seasons-controls", Picker: true, Options: exploreSegments(p.TeamSeasonsDisplay,
+		exploreSegment{Value: "ranking", Label: "Ranking"}, exploreSegment{Value: "scatter", Label: "Scatter"})}
+}
+
+func (p exploreTeamSeasonsView) TeamSeasonsMeasureControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Measure", Name: "team-seasons-measure", Form: "team-seasons-controls", Options: exploreSegments(p.TeamSeasonsMeasure,
+		exploreSegment{Value: "points", Label: "Points"}, exploreSegment{Value: "for", Label: "Goals scored"},
+		exploreSegment{Value: "against", Label: "Goals allowed"}, exploreSegment{Value: "difference", Label: "Goal differential"})}
+}
+
+func (p exploreTeamSeasonsView) TeamSeasonsRankByControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Rank by", Name: "team-seasons-rank-by", Form: "team-seasons-controls", Hidden: p.TeamSeasonsDisplay == "scatter", Options: exploreSegments(p.TeamSeasonsRankBy,
+		exploreSegment{Value: "actual", Label: "Actual"}, exploreSegment{Value: "expected", Label: "Expected"}, exploreSegment{Value: "gap", Label: "Gap"})}
 }

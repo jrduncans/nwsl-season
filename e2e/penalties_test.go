@@ -68,11 +68,12 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	if err := expect.Locator(page.Locator(penaltiesSelect)).ToHaveAttribute("title", "Excluding removes penalty kicks from both goals and xG."); err != nil {
 		t.Errorf("Penalties help: %v", err)
 	}
-	// The control is a data control: last in the form row, never in navigation.
-	var last string
-	evalJSON(t, page, `() => { const form = document.querySelector('[data-team-controls]'); return [...form.children].filter((el) => !el.hidden && el.tagName === 'LABEL').pop().className; }`, nil, &last)
-	if last != "penalties-select switch" {
-		t.Errorf("last visible label in the row has class %q, want penalties-select", last)
+	// The control is a data control: first in the chart card's switches,
+	// never in navigation.
+	var first string
+	evalJSON(t, page, `() => document.querySelector('[data-team-chart-card] .explore-chart-switches label:not([hidden])').className`, nil, &first)
+	if first != "penalties-select switch" {
+		t.Errorf("first visible switch in the chart card has class %q, want penalties-select", first)
 	}
 	if err := expect.Locator(page.Locator("nav select, nav .penalties-select, header .penalties-select")).ToHaveCount(0); err != nil {
 		t.Errorf("Penalties control found in navigation: %v", err)
@@ -300,7 +301,7 @@ const controlLayoutScript = `(headingSelector) => {
 	const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 	const heading = document.querySelector(headingSelector);
 	const headingBottom = heading ? box(heading).Y + box(heading).H : -1;
-	const controls = [...document.querySelectorAll('main select, .explore select, form select, .explore input[type="checkbox"][name]')]
+	const controls = [...document.querySelectorAll('main select, .explore select, form select, .explore input[type="checkbox"][name], .explore fieldset.segmented')]
 		.filter((el, index, all) => all.indexOf(el) === index && visible(el))
 		.map((el, index) => {
 			// The status line above Match by match's chart card names the basis and
@@ -309,7 +310,7 @@ const controlLayoutScript = `(headingSelector) => {
 			const shift = card ? box(card).Y - headingBottom : 0;
 			const select = box(el), label = box(el.closest('label') || el);
 			select.Y -= shift; label.Y -= shift;
-			return {Key: index + ':' + (el.name || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: select, Label: label};
+			return {Key: index + ':' + (el.name || el.dataset.segmented || el.dataset.penaltiesSelector !== undefined && 'penalties' || el.id), Select: select, Label: label};
 		});
 	return {AnchorY: headingBottom, HeadingBottom: headingBottom, Controls: controls};
 }`
@@ -555,8 +556,14 @@ func TestExplorePenaltiesNativeSubmission(t *testing.T) {
 		visitStatic(t, page, base+tc.path)
 		want := queryOf(t, page).Get(tc.kept)
 		for _, exclude := range []bool{true, false} {
-			form := page.Locator(`[data-panel="` + tc.panel + `"] form:has(input[data-penalties-selector])`)
-			setPenalties(t, page, `[data-panel="`+tc.panel+`"] input[data-penalties-selector]`, exclude)
+			// The switch sits in the chart card and joins its form by id.
+			checkbox := `[data-panel="` + tc.panel + `"] input[data-penalties-selector]`
+			formID, err := page.Locator(checkbox).GetAttribute("form")
+			if err != nil || formID == "" {
+				t.Fatalf("%s: penalties switch names no form: %v", tc.panel, err)
+			}
+			form := page.Locator("#" + formID)
+			setPenalties(t, page, checkbox, exclude)
 			if err := form.Locator(`button[type=submit]`).Click(); err != nil {
 				t.Fatal(err)
 			}

@@ -98,9 +98,10 @@ type exploreSegment struct {
 // "segmented" template. Its radios submit with Form when set, so a control
 // in a chart card can belong to the view's form above it. A Picker chooses
 // the chart and sits at the top of its card with a visually hidden legend.
+// Hidden renders the group hidden for a selection that does not use it.
 type exploreSegmentGroup struct {
 	Legend, Name, Form string
-	Picker             bool
+	Picker, Hidden     bool
 	Options            []exploreSegment
 }
 
@@ -110,6 +111,18 @@ func exploreSegments(selected string, options ...exploreSegment) []exploreSegmen
 		options[i].Selected = options[i].Value == selected
 	}
 	return options
+}
+
+// exploreMeasureSegments are the team measures that Compare teams and Season
+// by season compare.
+func exploreMeasureSegments(selected string) []exploreSegment {
+	return exploreSegments(selected, exploreSegment{Value: "difference", Label: "Goal differential"}, exploreSegment{Value: "for", Label: "Goals scored"},
+		exploreSegment{Value: "against", Label: "Goals allowed"}, exploreSegment{Value: "points", Label: "Points"})
+}
+
+// exploreUnitsSegments switch team values between per-match rates and totals.
+func exploreUnitsSegments(selected string) []exploreSegment {
+	return exploreSegments(selected, exploreSegment{Value: "per-match", Label: "Per match"}, exploreSegment{Value: "total", Label: "Totals"})
 }
 
 // TrendViewOptions lists the Chart segments in display order.

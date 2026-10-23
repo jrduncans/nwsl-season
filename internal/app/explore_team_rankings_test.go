@@ -97,7 +97,7 @@ func TestExploreTeamRankingsFallbackAndEmptySelections(t *testing.T) {
 		want  []string
 	}{
 		{"season=2026&team=alpha", []string{`data-panel="team-rankings" aria-labelledby=`, `data-view-choice="team-rankings" aria-current="page"`, `<input type="hidden" name="view" value="team-rankings">`, `2026 · 20 played · 2 teams · In progress`, `Tied 1st`, ` per match`, `style="left:0.0000%"`, `data-rankings-warning hidden`}},
-		{"season=2025&team=alpha&units=total", []string{`data-rankings-warning>`, `<option value="total" selected>Totals`, ` total`, `League xG ranks are unavailable`, `Unavailable`}},
+		{"season=2025&team=alpha&units=total", []string{`data-rankings-warning>`, `name="units" value="total" checked><span>Totals`, ` total`, `League xG ranks are unavailable`, `Unavailable`}},
 		{"season=2024&team=alpha", []string{`data-rankings-empty>`, `data-rankings-results hidden`}},
 	} {
 		t.Run(tc.query, func(t *testing.T) {

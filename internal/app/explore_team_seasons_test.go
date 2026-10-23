@@ -97,8 +97,9 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 	}
 	requireExact(t, body, "[data-team-seasons-summary]", "Table: all 144 team-seasons")
 	requireAttr(t, body, "[data-team-seasons-penalties]", "disabled", "")
-	if len(find(t, body, "[data-team-seasons-controls] select")) != 2 || len(find(t, body, "[data-team-seasons-controls] select[name=team], [data-team-seasons-controls] select[name=season]")) != 0 {
-		t.Fatalf("unexpected controls: selects=%d forbidden=%d", len(find(t, body, "[data-team-seasons-controls] select")), len(find(t, body, "[data-team-seasons-controls] select[name=team], [data-team-seasons-controls] select[name=season]")))
+	// Every control is a segmented control or switch in the chart card.
+	if len(find(t, body, "[data-panel=team-seasons] select")) != 0 || len(find(t, body, "[data-team-seasons-card] input[type=radio][form=team-seasons-controls]")) != 9 {
+		t.Fatalf("unexpected controls: selects=%d segments=%d", len(find(t, body, "[data-panel=team-seasons] select")), len(find(t, body, "[data-team-seasons-card] input[type=radio][form=team-seasons-controls]")))
 	}
 	if len(find(t, body, "[data-team-seasons-row]")) != 20 || len(find(t, body, "[data-team-seasons-rows] tr")) != 144 {
 		t.Fatal("population or top/bottom count")
@@ -299,9 +300,9 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			if code != http.StatusOK {
 				t.Fatalf("%s: %d", path, code)
 			}
-			requireAttr(t, body, "[data-team-seasons-rank-control]", "hidden", "")
+			requireAttr(t, body, "[data-segmented=team-seasons-rank-by]", "hidden", "")
 			requireAttr(t, body, "[data-team-seasons-chart]", "hidden", "")
-			requireAttr(t, body, `[data-team-seasons-display="scatter"]`, "aria-current", "page")
+			requireAttr(t, body, `[data-segmented=team-seasons-display] input[value="scatter"]`, "checked", "")
 			requireText(t, body, "[data-team-seasons-title]", "vs expected per match, since 2016")
 			var payload exploreTeamSeasonsPayload
 			if err := json.Unmarshal([]byte(text(find(t, body, "#explore-team-seasons-data")[0])), &payload); err != nil {
@@ -328,9 +329,6 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 				if !strings.Contains(attr(link, "href"), "team-seasons-display=scatter") {
 					t.Fatal("sort lost display")
 				}
-			}
-			if strings.Contains(attr(find(t, body, `[data-team-seasons-display="ranking"]`)[0], "href"), "team-seasons-display=") {
-				t.Fatal("ranking default not omitted")
 			}
 		}
 	}

@@ -281,3 +281,11 @@ func binPercent(count, played int) string {
 	}
 	return fmt.Sprintf("%.1f%%", float64(count)/float64(played)*100)
 }
+
+// TrendMetricControl picks Scoring trend's series. Only explore.js draws the
+// chart, so the radios join no form and the script selects the URL's metric.
+func (exploreScoringPage) TrendMetricControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Show", Name: "metric", Options: exploreSegments("compare",
+		exploreSegment{Value: "compare", Label: "Goals and xG"}, exploreSegment{Value: "goals", Label: "Goals"},
+		exploreSegment{Value: "xg", Label: "xG"}, exploreSegment{Value: "gap", Label: "Goals − xG"})}
+}

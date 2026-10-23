@@ -104,7 +104,7 @@ func TestExploreParitySelectsSeasonsAndSeries(t *testing.T) {
 	_, both := getPage(t, archive, "/explore?view=parity&season=2018&parity-series=both")
 	forbidRaw(t, both, `data-parity-expected-legend hidden`)
 	requireText(t, both, ".explore-parity-list", "xPPG")
-	requireAttr(t, both, `[data-parity-series] option[value="both"]`, "selected", "")
+	requireAttr(t, both, `[data-segmented=parity-series] input[value="both"][form=parity-controls]`, "checked", "")
 	// Season links keep the rest of the selection.
 	requireAttr(t, both, `a[data-parity-season-link="2016"]`, "href", "?parity-series=both&season=2016&view=parity")
 	requireAttr(t, both, "thead a[data-parity-sort=spread]", "href", "?parity-order=desc&parity-series=both&parity-sort=spread&season=2018&view=parity")
