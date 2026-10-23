@@ -14,7 +14,7 @@
   <form method="get" action="{{.ForecastPath}}" data-forecast-model-form>
     <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}{{if .FilteredTeam}}<input type="hidden" name="team" value="{{.FilteredTeam}}">{{end}}
     <div class="forecast-control-fields">
-      <label for="forecast-model"><span>Forecast approach</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (Default){{end}}</option>{{end}}</select></label>
+      <label for="forecast-model"><span>Forecast approach</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (default){{end}}</option>{{end}}</select></label>
     </div>
     <details class="forecast-comparison-control"{{if .HasComparison}} open{{end}}>
       <summary>Compare another approach <span class="note">(optional)</span></summary>
