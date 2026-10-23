@@ -111,6 +111,16 @@ Presentation:
 - Describe gaps as above or below expected, not luck; finishing, goalkeeping,
   match state, model error and randomness all contribute.
 - Put coverage and sample notes next to the result they qualify.
+- Every data table on the site shares one header row: a pale green band with
+  dark labels. Sortable headers show a faint ↕ until sorted, then ↓ or ↑ (the
+  Thresholds table hides the unsorted mark on phones). Explore table captions
+  are small and muted. A closed disclosure labeled "Table: all N matches",
+  "Table: all N seasons" (or similar) holds each view's values table, so the
+  label says what opens and how many rows it has.
+- Headings name what a view shows, not its competition stage. Each view says
+  which matches it uses in a line below its heading (a note, caption or status
+  line, such as "Per regular-season match"), so a view that later adds
+  playoffs changes only that line.
 - Essential detail works by touch and keyboard without hover; on narrow screens
   selected detail goes below the chart.
 - URLs share the view and its selections, not a frozen answer; data may update.
@@ -126,7 +136,9 @@ Presentation:
   (`Inline`: a visible span, since Safari lays out a legend outside the row,
   with the legend visually hidden). Controls
   apply as soon as they change; submit buttons appear only without JavaScript.
-  On phones a chart card runs to the screen edges.
+  A chart in a card fills the card's width; outside a card, charts stop at
+  58rem. Square scatter and quadrant plots keep their own sizing. On phones a
+  chart card runs to the screen edges.
 
 A new view needs a registry entry and a row in the table above, a matching
 `data-panel` section (the registry test checks tabs and panels agree), a pure
@@ -189,13 +201,13 @@ checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered switch is last in each view's data-control row and never
 in the navigation; in a view with a chart card (Compare teams, Scoring trend,
-Goal distribution, Team-seasons, Match by match, Season by season, Head to head)
-it heads the card's column of switches. Mixed-view links carry its selection.
+Goal distribution, Home advantage, Team-seasons, Match by match, Season by
+season, Head to head) it heads the card's column of switches. Mixed-view links carry its selection.
 Every data-control row is a GET form, and the switch is that form's only
 penalties field: off, the form omits the parameter. A chart card's switch sits
 outside its form and joins it through the `form` attribute (`PenaltiesSwitch`
 names the form). Views with no other selection (Scoring trend, Goal
-distribution without data, Home advantage and Scoring table) wrap the checkbox
+distribution and Home advantage without data, and Scoring table) wrap the checkbox
 in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
 its form's submit button.
@@ -269,7 +281,8 @@ axes, and missing calendar years, including 2020, are gaps. Each panel's
 expected mark needs complete coverage of its own metric (xG for goals, xPoints
 for points), so one can be missing while the other and the actual values remain;
 a note names the seasons without each. An eligible active season is plotted and
-noted as in progress through N matches. The table lists season, matches,
+noted as in progress through N matches. One chart card holds the Exclude
+penalties switch, both panels and their notes; the values table follows it. The table lists season, matches,
 home-minus-away goals, xG, points and xPoints per match, and the home win, draw and
 loss share, sorted from unrounded values (`home-sort=season|matches|goals|xg|points|xpoints|results`,
 `home-order=asc|desc`, default season descending, with unavailable values last). `penalties=exclude` switches the goals panel to
@@ -323,7 +336,9 @@ calculation is `history.SummarizeParity`.
 ### Shield and playoff thresholds
 
 `view=thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
-Shield, Home playoff game, Playoff bye and Playoffs. The series use distinct
+Shield, Home playoff game, Playoff bye and Playoffs, in a chart card with the
+intro and legend; the season cards follow it, chosen by a **Season** select in
+the heading row, like Parity's. The series use distinct
 line patterns and markers as well as color. The intro explains what a mark is:
 the points per match of the last team to qualify. The tooltip title shows the
 year, playoff places and bye count (or **No byes**). The chart's keyboard hint
@@ -390,10 +405,11 @@ effect and there is no Penalties control (the view is points-only, so the
 benchmark warming; entering Match by match from that page reloads its normal
 payload so forecast controls remain available.
 
-Season links and Chart.js marks select details below the chart by touch or keyboard
+The Season select and Chart.js marks select details below the chart by touch or keyboard
 (`threshold-season`, default newest eligible season). JavaScript updates the URL
-and detail visibility in place, restoring reload and Back/Forward. Native
-links, the outcome form and sortable table headers work without scripts. The
+and detail visibility in place, restoring reload and Back/Forward. Without
+scripts, the select's Show season button, the table's season links, the outcome
+form and sortable table headers all work. The
 selected season is headed "2025 · 8 playoff teams · no byes" and uses compact
 outcome cards with two lines each: **Last in** and **First out** (for the Shield,
 **Winner** and **Runner-up**). A line reads "Orlando Pride · 4th · 40 pts · 1.54",
@@ -603,6 +619,9 @@ and later ranks skip places. League xG ranks are withheld for everyone if any
 team's xG coverage is incomplete; goal ranks remain. Season and Team selects
 lead the control row, then a **Values** segmented control (Per match, Totals)
 and the Exclude penalties switch; with no chart, the view has no chart card.
+Each stat's card shows its rank ("Tied 4th of 16"), value and a marker on an
+unlabeled track; the rank text carries the meaning, so the page adds no tie
+or endpoint explanation.
 
 ### Match by match
 
@@ -689,7 +708,7 @@ tooltip's window description explain it. An xG or xPoints average needs every ob
 window, so missing expected data breaks that line until it leaves the window;
 it is never interpolated.
 
-The **Match values** table always shows individual matches, whatever the chart
+The match table (**Table: all N matches**) always shows individual matches, whatever the chart
 or smoothing selection: Match, Date (venue local), Venue, Opponent, official
 Score, Result, Points, xG for, xG against and xPoints. Excluding penalties adds
 Non-penalty goals and changes xG to npxG, following the selected basis; official
@@ -857,7 +876,7 @@ official lines' wording (for example “46.12–39.85 goals” and “43.40–40
 xG”); the status line and panel titles say they are adjusted. W–D–L and points
 per match stay official, under the note “W–D–L and points use official
 results.” (with “, including penalties” when penalties are excluded), which
-shows wherever the switch does, checked or not. The Match values table
+shows wherever the switch does, checked or not. The match table
 keeps its official columns and adds Adjusted goals for, Adjusted goals against,
 Adjusted xG for and Adjusted xG against, sortable like the other derived
 columns (descending first); with smoothing on, the rolling columns average
@@ -874,7 +893,7 @@ the Points − xPoints panel as it was. Rolling mode keeps its two lines,
 averaging adjusted values under “Adjusted points vs xPoints · N-match average”
 with “Adjusted points” and “Adjusted xPoints” legend keys. Each tile keeps its lines
 and totals adjusted values in place (for example “43.90 vs 39.96 xPoints”);
-the gap matches the official one, since the same shift moves both. The Match values table
+the gap matches the official one, since the same shift moves both. The match table
 adds Adjusted points and Adjusted xPoints instead of the adjusted goal
 columns, and keeps Points − xPoints. Tooltips and keyboard descriptions show
 “Points: 3 · adjusted 3.34”, “xPoints: 0.82 · adjusted 1.16”, then “Average
@@ -985,8 +1004,10 @@ every eligible season, reusing Compare teams' rates and coverage.
 | `history-sort` | `season`, `played`, or `<measure>-actual\|expected` | `season` |
 | `history-order` | `asc`, `desc` | `desc` |
 
-The chart is chronological with gaps for missing years; the table sorts from
-unrounded values, with unavailable values last and newest season first on ties.
+The chart is chronological with gaps for missing years. The table sits in a
+**Table: all N seasons** disclosure below the chart card, closed unless the URL
+carries `history-sort` or `history-order`, like Match by match's match table. It sorts
+from unrounded values, with unavailable values last and newest season first on ties.
 With `measure=points`, the chart shows Points and/or xPoints only, so Penalties
 is hidden and a carried exclusion is ignored and removed from generated links
 and forms. Other measures retain the control and points note when applicable.

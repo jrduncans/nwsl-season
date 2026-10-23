@@ -30,7 +30,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 	requireAttr(t, body, `a[data-view-choice="parity"]`, "aria-current", "page")
 	requireAttr(t, body, `canvas[data-chart="parity"]`, "role", "img")
 	requireText(t, body, "[data-panel=parity]",
-		"how far teams' points per game (PPG) sit from the league average",
+		"how far teams' regular-season points per game (PPG) sit from the league average",
 		"random results alone if every team were equally good",
 		"2026: in progress through 20 matches (6.7 per team)",
 	)

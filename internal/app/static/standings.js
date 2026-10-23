@@ -297,7 +297,7 @@ function setupFixtureTeamFilter() {
     });
     if (!summary) return;
     if (!teamID) {
-      summary.textContent = "All teams shown.";
+      summary.textContent = "";
       return;
     }
     const teamName = filter.selectedOptions[0]?.textContent ?? "this team";
@@ -350,7 +350,65 @@ function setupFixtureViews() {
   show("results");
 }
 
+// Schedule difficulty: the measure switcher re-plots and re-sorts the rows
+// in place. Each row carries "value|delta|label|direction|position|sort" for
+// every measure, and the plot carries "baseline label|position".
+function setupDifficultyMeasure() {
+  const plot = document.querySelector("[data-difficulty]");
+  const controls = plot?.querySelector("[data-difficulty-controls]");
+  const list = plot?.querySelector("[data-difficulty-rows]");
+  if (!controls || !list) return;
+  const datasetKey = (prefix, key) => prefix + key[0].toUpperCase() + key.slice(1);
+
+  controls.addEventListener("change", (event) => {
+    const key = event.target.value;
+    const measure = plot.dataset[datasetKey("measure", key)];
+    if (!measure) return;
+    const [baselineLabel, baselinePosition] = measure.split("|");
+    plot.querySelectorAll("[data-difficulty-note]").forEach((note) => {
+      note.classList.toggle("is-inactive", note.dataset.difficultyNote !== key);
+    });
+    const baseline = plot.querySelector("[data-difficulty-baseline]");
+    if (baseline) {
+      baseline.textContent = baselineLabel;
+      baseline.style.left = `${baselinePosition}%`;
+    }
+
+    const rows = Array.from(list.querySelectorAll("[data-difficulty-row]"));
+    const values = new Map(rows.map((row) => [row, row.dataset[key]?.split("|")]));
+    rows.forEach((row) => {
+      const value = values.get(row);
+      if (!value) return;
+      const [text, delta, label, direction, position] = value;
+      row.querySelector("[data-difficulty-value]").textContent = text;
+      row.querySelector("[data-difficulty-label]").textContent = `${delta} · ${label}`;
+      const dot = row.querySelector(".schedule-dot");
+      if (dot) {
+        dot.className = `schedule-dot schedule-dot-${direction}`;
+        dot.style.left = `${position}%`;
+      }
+      const marker = row.querySelector(".schedule-baseline");
+      if (marker) marker.style.left = `${baselinePosition}%`;
+    });
+    // Match the server: hardest first on unrounded values, ties and
+    // unavailable rows in the original order.
+    rows.sort((left, right) => {
+      const leftValue = values.get(left), rightValue = values.get(right);
+      if (!leftValue !== !rightValue) return leftValue ? -1 : 1;
+      const bySort = leftValue ? Number(rightValue[5]) - Number(leftValue[5]) : 0;
+      return bySort || Number(left.dataset.order) - Number(right.dataset.order);
+    });
+    list.append(...rows);
+
+    const url = new URL(window.location.href);
+    if (key === "adjusted") url.searchParams.delete("difficulty");
+    else url.searchParams.set("difficulty", key);
+    window.history.replaceState(null, "", url);
+  });
+}
+
 localizeTimes();
+setupDifficultyMeasure();
 setupForecastControls();
 setupForecastAssumptionBuilder();
 setupScenarioCopy();

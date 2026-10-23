@@ -288,7 +288,18 @@ necessary.
 
 A line under the page title gives the slate's local date range and expands
 to list its included matches; the list stays collapsed by default so the
-results remain near the top. The page groups confirmed scenarios by the team's own results, in kickoff
+results remain near the top. "Already clinched" boxes list each team once,
+under its highest clinched outcome, since that outcome implies the lower ones. Each team that can clinch, or can be eliminated,
+gets one card: the team's name heads it, and each outcome ("Can clinch a home
+playoff game", "Can clinch the playoffs") is a section under its own badge,
+ordered by outcome rank. Cards follow each team's highest-ranked outcome, then
+standings position. Color carries meaning: the team's name sits on a tinted
+band (green for clinching, red for elimination), each outcome badge is solid,
+and each result box is tinted by the team's own result in that match: green for
+a win (or win or draw), gray for a draw, amber for a loss (or draw or loss), and
+neutral when it spans several matches. A box that needs no outside help says
+"✓ Clinches" (or "Eliminated"); otherwise its conditions follow "Clinches if"
+("Eliminated if"), each shown as a pill. Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
@@ -299,6 +310,11 @@ is identical; for example, “wins one match and loses the other” still names
 the two specific matches.
 For unusual slates with more than four relevant own matches, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
+
+An outcome's "Every clinching scenario requires" note lists outside-match
+conditions shared by all of its scenarios. It leaves out the team's own
+results, which already head every result group, and is hidden when nothing
+else remains.
 
 Within a group, a visible factored summary puts common requirements once above
 an “any of” list. The summary may contain overlapping alternatives when that
@@ -349,7 +365,9 @@ below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination scenarios. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
 No-help winning scenarios are labeled “No-help scenario” because they can include matches
-after the displayed slate.
+after the displayed slate. Inside a team's card the line is just the win count
+("No-help scenario: 2 wins"), since the card heading and badge name the team and
+outcome; it expands to list the matches.
 
 Use `make test-clinching` for focused scenario-proof and presentation checks.
 These checks also run within `make test` and CI, including exhaustive

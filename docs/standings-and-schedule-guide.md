@@ -53,6 +53,10 @@ script enables them. The Matches page's Results | Upcoming control names
 itself, so its legend is visually hidden; it likewise appears only once the
 script runs.
 
+On phones the table scrolls sideways with rank and team pinned on the left and
+Pts (xPts in the xG view) pinned on the right, so the ranking value is always
+visible.
+
 The modern next tiebreaker, least disciplinary points, needs card data that
 ASA does not provide. The earlier policy ends at a coin toss or drawing of lots.
 Rows still tied at the first unavailable criterion are marked undetermined,
@@ -101,11 +105,21 @@ unavailable, not zero.
   and home/away split.
 - Labels compare the rounded two-decimal delta with ±0.10 PPG: `Harder`,
   `Easier`, or `Near average`.
-- `/schedule-difficulty` shows toughest and easiest callouts, a sorted dot plot,
-  per-team expansions listing each opponent, venue and match contribution,
-  and the raw and venue-only measures as comparisons. The page labels every
-  value as an estimate, not a forecast, power rating or standings adjustment,
-  and works without JavaScript.
+- `/schedule-difficulty` is one dot plot, sorted hardest first. An **Adjust
+  for** segmented control picks the measure: **Venue and load** (the
+  schedule-load adjusted default), **Venue only** or **None** (raw opponent
+  PPG). `difficulty=venue|raw` selects it in the URL; the default omits the
+  parameter, and any other value is a `400`. The control switches the plot in
+  place and re-sorts it; without JavaScript an Apply button submits it. Venue
+  only and None need a league comparison, so without one the control is absent
+  and a requested measure falls back to the default.
+- Each measure compares a team with that measure's league baseline or average
+  and labels the delta with the same ±0.10 rule. Unavailable teams sort last.
+- Each plot row is a disclosure: opening it lists the team's remaining
+  opponents, venue and per-match contribution. A "How this is calculated"
+  disclosure explains the adjustments. On phones each row puts the team and its
+  value on one line, with the track beneath.
 
 `internal/strength` is the only place these values are calculated; view code
-formats them.
+formats them and compares the venue-only and raw values with their league
+averages.

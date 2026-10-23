@@ -26,7 +26,6 @@ type forecastPage struct {
 	Navigation          []navigationItem
 	SeasonSelector      []seasonSelectorItem
 	StageSelector       []seasonSelectorItem
-	SeasonsPath         string
 	ForecastPath        string
 	ModelEvaluationPath string
 	CanonicalPath       string
@@ -38,7 +37,6 @@ type forecastPage struct {
 	HasComparison       bool
 	ComparisonName      string
 	ComparisonID        string
-	PlayoffPlaces       int
 	HasChampionship     bool
 	XGAvailable         int
 	XGCompleted         int

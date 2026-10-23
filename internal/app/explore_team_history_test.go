@@ -137,8 +137,8 @@ func TestExploreTeamHistoryHeadingNamesTheView(t *testing.T) {
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})}
 	for query, heading := range map[string]string{
-		"view=team-history":                "Season-by-season scoring (regular-season)</h2>",
-		"view=team-history&measure=points": "Season-by-season points (regular-season)</h2>",
+		"view=team-history":                "Season-by-season scoring</h2>",
+		"view=team-history&measure=points": "Season-by-season points</h2>",
 	} {
 		response := httptest.NewRecorder()
 		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?"+query, nil))

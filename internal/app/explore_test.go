@@ -117,7 +117,7 @@ func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
 	}
 	_, values, found := strings.Cut(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`)
 	values, _, _ = strings.Cut(values, `</details>`)
-	if !found || !strings.Contains(values, `<summary>Distribution values</summary>`) || !strings.Contains(values, `<table class="explore-table explore-distribution-table">`) || !strings.Contains(values, `<caption><span>Count (share of matches).</span></caption>`) {
+	if !found || !strings.Contains(values, `<summary><span data-basis-only="all">Table: all 2 seasons</span>`) || !strings.Contains(values, `<table class="explore-table explore-distribution-table">`) || !strings.Contains(values, `<caption><span>Count (share of matches).</span></caption>`) {
 		t.Fatalf("server-rendered distribution values missing: %s", values)
 	}
 	for _, row := range []string{
@@ -592,7 +592,7 @@ func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testi
 	body := response.Body.String()
 	for _, want := range []string{
 		`data-team-display="scatter" aria-current="page"`,
-		`Actual vs expected by team (regular-season)</h2>`,
+		`Actual vs expected by team</h2>`,
 		`<input type="hidden" name="display" value="scatter">`,
 		`<option value="2025" selected>2025</option>`,
 		`name="measure" value="against" form="team-controls" checked><span>Goals allowed</span>`,
@@ -630,7 +630,7 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 				body := response.Body.String()
 				for _, want := range []string{
 					`data-team-display="quadrant" aria-current="page"`,
-					`Scored vs allowed by team (regular-season)</h2>`,
+					`Scored vs allowed by team</h2>`,
 					`<input type="hidden" name="display" value="quadrant">`,
 					`name="quadrant-data" value="` + mode + `" form="team-controls" checked>`,
 					`name="units" value="` + units + `" form="team-controls" checked>`,
@@ -746,5 +746,21 @@ func TestLinkExploreTeamMatchesReferencesSharedFixtures(t *testing.T) {
 	seasons[0].Teams[0].Matches = append(seasons[0].Teams[0].Matches, exploreMatchRecord{ID: "missing"})
 	if err := linkExploreTeamMatches(seasons, &data); err == nil {
 		t.Error("missing fixture linked without error")
+	}
+}
+
+func TestTableLabel(t *testing.T) {
+	for _, test := range []struct {
+		rows       int
+		noun, want string
+	}{
+		{1, "season", "Table: 1 season"},
+		{10, "season", "Table: all 10 seasons"},
+		{28, "match", "Table: all 28 matches"},
+		{116, "team-season", "Table: all 116 team-seasons"},
+	} {
+		if got := tableLabel(test.rows, test.noun); got != test.want {
+			t.Errorf("tableLabel(%d, %q) = %q, want %q", test.rows, test.noun, got, test.want)
+		}
 	}
 }

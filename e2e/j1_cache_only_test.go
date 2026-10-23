@@ -45,15 +45,14 @@ func cachePages() []cachePage {
 		counts:  []selectorCount{{"table.standings tbody tr", fixtureTeams}},
 		check:   assertStandingsMatchFake,
 	}
-	home, seasonHome := standings, standings
+	home, seasonHome, seasons := standings, standings, standings
 	home.path = ""
 	seasonHome.path = "seasons/" + currentSeason
+	// The retired season archive redirects to the current season.
+	seasons.path = "seasons"
 	return []cachePage{
 		home,
-		{
-			path: "seasons", heading: "Seasons",
-			text: []any{"Current season", "Loaded"},
-		},
+		seasons,
 		{
 			// The retired History page redirects to Explore's Scoring trend.
 			path: "history", heading: "Explore",
@@ -70,7 +69,7 @@ func cachePages() []cachePage {
 		},
 		{
 			path: season + "schedule-difficulty", heading: "Remaining schedule difficulty",
-			text:   []any{"Toughest remaining schedule"},
+			text:   []any{"Adjust for", "League baseline"},
 			absent: []string{"Schedule difficulty is unavailable"},
 		},
 		{

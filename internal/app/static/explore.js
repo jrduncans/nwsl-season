@@ -162,6 +162,8 @@
     xGD: 'npxGD', xG: 'npxG', 'Goal differential': 'Non-penalty goal differential', 'Goal margin': 'Non-penalty goal margin',
     'Total goals': 'Total non-penalty goals', Goals: 'Non-penalty goals',
   })[match] || match.replace(' ', ' non-penalty ');
+  // Mirrors tableLabel in explore.go.
+  const tableLabel = (rows, noun) => rows === 1 ? `Table: 1 ${noun}` : `Table: all ${rows} ${noun}${noun === 'match' ? 'es' : 's'}`;
   const T = text => nonPenalty && !/npxG|on-penalty/.test(text) ? text.replace(basisPattern, basisReplacement) : text;
   let goalsWord;
   const binColors = ['#44504a', '#526d61', color('--green'), color('--hypo'), '#372858'];
@@ -619,6 +621,8 @@
     const requested = params.get('threshold-season');
     thresholdSelected = thresholdBySeason.has(requested) ? requested : root.dataset.defaultThresholdSeason;
     root.querySelectorAll('[data-threshold-detail]').forEach(panel => { panel.hidden = panel.dataset.thresholdDetail !== thresholdSelected; });
+    const seasonSelect = root.querySelector('[data-threshold-season]');
+    if (seasonSelect) seasonSelect.value = thresholdSelected;
     root.querySelectorAll('[data-threshold-year]').forEach(link => {
       if (link.dataset.thresholdYear === thresholdSelected) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
       const selection = new URLSearchParams(params);
@@ -831,6 +835,7 @@
     note.textContent = note.hidden ? '' : `${requested} is not plotted, so the strip shows ${year}.`;
     root.querySelector('[data-parity-strip-title]').textContent = `Teams in ${year}${inProgress(row)}`;
     root.querySelector('[data-parity-summary]').textContent = paritySummary(row);
+    root.querySelector('[data-parity-team-summary]').textContent = `Table: ${year} teams`;
     root.querySelector('[data-parity-team-caption]').textContent = `PPG and xPPG for each team in ${year}, highest PPG first.`;
     root.querySelector('[data-parity-teams]').replaceChildren(...row.teams.map(team => {
       const tr = document.createElement('tr');
@@ -1443,16 +1448,16 @@
     root.querySelector('[data-team-controls] [name="team-sort"]').value = column;
     root.querySelector('[data-team-controls] [name="team-order"]').value = order;
     root.querySelector('#explore-teams-title').textContent = display === 'gap'
-      ? 'Actual − expected by team (regular-season)'
-      : display === 'scatter' ? 'Actual vs expected by team (regular-season)'
-      : display === 'quadrant' ? 'Scored vs allowed by team (regular-season)' : 'Actual vs expected (regular-season)';
+      ? 'Actual − expected by team'
+      : display === 'scatter' ? 'Actual vs expected by team'
+      : display === 'quadrant' ? 'Scored vs allowed by team' : 'Actual vs expected';
     teamsPanel.querySelector('[data-segmented="measure"]').hidden = display === 'table' || display === 'quadrant';
     teamsPanel.querySelector('[data-penalties-selector]').closest('label').hidden = display !== 'table' && display !== 'quadrant' && isPointsMeasure;
     teamsPanel.querySelector('[data-segmented="quadrant-data"]').hidden = display !== 'quadrant';
     scatterLogoToggle.closest('label').hidden = display !== 'scatter';
     quadrantLogoToggle.closest('label').hidden = display !== 'quadrant';
     root.querySelector('[data-team-units-note]').textContent =
-      `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPoints from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+      `${units === 'total' ? 'Regular-season totals' : 'Per regular-season match'}, from recorded results.${display === 'quadrant' ? (season?.active ? ' Season in progress.' : '') : ' Points compare earned points with ASA xPoints from those matches.'}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-team-table-caption]').textContent =
       `${units === 'total' ? 'Totals' : 'Per-match values'}. Gap = actual − expected.`;
     setPointsNote('teams', params);
@@ -1594,6 +1599,7 @@
     const order = params.get('history-order') === 'asc' ? 'asc' : 'desc';
     root.querySelector('[name="history-sort"]').value = column;
     root.querySelector('[name="history-order"]').value = order;
+    root.querySelector('[data-history-values]').open = params.has('history-sort') || params.has('history-order');
     links.forEach(link => {
       const key = link.dataset.historySort, selected = key === column;
       link.parentElement.setAttribute('aria-sort', selected ? (order === 'asc' ? 'ascending' : 'descending') : 'none');
@@ -1790,7 +1796,7 @@
     const isPoints = measure === teamMeasures.points;
     historyPanel.querySelector('[data-penalties-selector]').closest('label').hidden = isPoints;
     root.querySelector('#explore-team-history-title').textContent =
-      `Season-by-season ${isPoints ? 'points' : 'scoring'} (regular-season)`;
+      `Season-by-season ${isPoints ? 'points' : 'scoring'}`;
     const choices = historyPanel.querySelectorAll('[data-segmented="series"] label span');
     choices[0].textContent = isPoints ? 'Points and xPoints' : 'Goals and xG';
     choices[1].textContent = isPoints ? 'Points' : 'Goals';
@@ -1822,6 +1828,7 @@
     root.querySelector('[data-history-team-name]').replaceChildren(...(rows.length ? [teamName(rows[0])] : []));
     root.querySelector('[data-history-actual-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-label]').textContent = measure.expected;
+    root.querySelector('[data-history-summary]').textContent = tableLabel(rows.length, 'season');
     root.querySelector('[data-team-history-rows]').replaceChildren(...sortedTeamHistory(rows, params).map(row => {
       const tr = document.createElement('tr');
       const values = [row.season, row.played];
@@ -2228,6 +2235,7 @@
       input.value = name === 'trend-sort' ? key : desc ? 'desc' : 'asc';
       input.disabled = name === 'trend-sort' ? key === 'match' : !desc;
     }
+    root.querySelector('[data-trend-summary]').textContent = tableLabel(indices.length, 'match');
     root.querySelector('[data-trend-rows]').replaceChildren(...indices.map(index => {
       const row = document.createElement('tr');
       columns.forEach((column, position) => {
@@ -2439,7 +2447,7 @@
     const count = selectedSeason.teams.length;
     root.querySelector('[data-rankings-team]').replaceChildren(teamName(team));
     root.querySelector('[data-rankings-summary]').textContent = `${season} · ${team.played} played · ${count} teams${selectedSeason.active ? ' · In progress' : ''}`;
-    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Totals' : 'Per match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
+    root.querySelector('[data-rankings-units]').textContent = `${units === 'total' ? 'Regular-season totals' : 'Per regular-season match'}, from recorded results. ${T('Lower goals allowed and xG allowed rank better; higher is better for the other stats.')}${nonPenalty ? ' Penalty kicks excluded.' : ''}`;
     root.querySelector('[data-rankings-warning]').hidden = !selectedSeason.teams.some(row => row.values[0].expected === null);
     root.querySelector('[data-rankings-cards]').replaceChildren(...team.rankings[units === 'total' ? 1 : 0].map(row => {
       const card = document.createElement('article'); card.className = 'explore-rank-card';
@@ -2455,10 +2463,7 @@
       if (row.position) {
         const track = document.createElement('div'); track.className = 'explore-rank-track'; track.setAttribute('aria-hidden', 'true');
         const mark = document.createElement('i'); mark.style.left = `${row.position}%`; track.append(mark);
-        const endpoints = document.createElement('div'); endpoints.className = 'explore-rank-endpoints'; endpoints.setAttribute('aria-hidden', 'true');
-        const best = document.createElement('span'); best.textContent = '1st · Best';
-        const last = document.createElement('span'); last.textContent = `${count} · Last`;
-        endpoints.append(best, last); card.append(track, endpoints);
+        card.append(track);
       }
       return card;
     }));
@@ -2623,7 +2628,7 @@
     const note = root.querySelector('[data-team-seasons-missing]');
     note.hidden = !missing.length;
     note.textContent = missing.length ? `${missing.length} team-seasons have ${missingLabel} ${scatter ? 'and cannot be plotted. Their actual values remain in the table.' : 'and are not ranked. Their actual values appear last in the table.'}` : '';
-    root.querySelector('[data-team-seasons-standing-note]').textContent = `Rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow ${scatter ? 'dots' : 'bars'} are in progress.`;
+    root.querySelector('[data-team-seasons-standing-note]').textContent = `Regular-season rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow ${scatter ? 'dots' : 'bars'} are in progress.`;
     const gapHelp = root.querySelector('[data-team-seasons-gap-help]');
     gapHelp.hidden = scatter || by !== 2;
     gapHelp.textContent = `Gap is actual − expected. Positive means above expected; negative means below expected.${measure === 1 ? ' Fewer goals allowed than expected rank first.' : ''}`;
@@ -2639,7 +2644,7 @@
     const numbers = ranked.flatMap(row => by === 2 ? [row.values[measure].gap] : [row.values[measure].actual, row.values[measure].expected]).filter(value => value !== null);
     const domain = window.NWSLGeometry.rankingDomain(numbers, by === 2 || measure === 2, measure === 3 && by !== 2);
     const axis = root.querySelector('[data-team-seasons-axis]');
-    axis.replaceChildren(archiveElement('span', domain.min), archiveElement('span', `Per match · ${domain.min === 0 ? 'starts at 0' : '0 at center'}`), archiveElement('span', domain.max));
+    axis.replaceChildren(archiveElement('span', domain.min), archiveElement('span', domain.min === 0 ? 'Per match' : 'Per match · 0 at center'), archiveElement('span', domain.max));
     root.querySelector('[data-team-seasons-low]').textContent = endText(low);
     const visible = ranked.length > 20 ? [...ranked.slice(0, 10), ...ranked.slice(-10)] : ranked;
     const bars = visible.map(row => {
@@ -2672,7 +2677,7 @@
     });
     breakRow.replaceChildren(breakButton);
     root.querySelector('[data-team-seasons-chart-empty]').hidden = !!ranked.length;
-    root.querySelector('[data-team-seasons-summary]').textContent = `Table: all ${rows.length} team-seasons`;
+    root.querySelector('[data-team-seasons-summary]').textContent = tableLabel(rows.length, 'team-season');
     const expanded = params.has('team-seasons-sort') || params.has('team-seasons-order');
     root.querySelector('[data-team-seasons-values]').open = expanded;
     const column = params.get('team-seasons-sort') || 'rank', order = params.get('team-seasons-order') || 'asc';
@@ -2960,7 +2965,7 @@
     const empty = root.querySelector('[data-h2h-empty]'); empty.hidden = pair.all.Played > 0;
     empty.textContent = `${data.team.Name} and ${pair.opponent.Name} have not met in a regular-season match.`;
     root.querySelector('[data-h2h-chart-wrap]').hidden = !pair.all.Played;
-    root.querySelector('[data-h2h-summary]').textContent = `Table: all ${pair.all.Played} meetings`;
+    root.querySelector('[data-h2h-summary]').textContent = tableLabel(pair.all.Played, 'meeting');
     const expanded = params.has('h2h-sort') || params.has('h2h-order');
     root.querySelector('[data-h2h-values]').open = expanded;
     root.querySelectorAll('[data-h2h-controls] input[name="h2h-sort"], [data-h2h-controls] input[name="h2h-order"]').forEach(input => {
@@ -3271,7 +3276,7 @@
     if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
     metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
     root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
-      ? T('Goals − xG per match (regular-season)') : T('Goals and chances per match (regular-season)');
+      ? T('Goals − xG per match') : T('Goals and chances per match');
     root.querySelectorAll('[data-series]').forEach(series => {
       series.hidden = metric.value === 'gap' || (metric.value !== 'compare' && series.dataset.series !== metric.value);
     });
@@ -3489,6 +3494,12 @@
   const updateRankings = () => update(Object.fromEntries(new FormData(rankingControls)));
   rankingControls.addEventListener('submit', event => { event.preventDefault(); updateRankings(); });
   rankingControls.addEventListener('change', updateRankings);
+  const thresholdSeasonControls = root.querySelector('[data-threshold-season-controls]');
+  if (thresholdSeasonControls) {
+    const select = thresholdSeasonControls.elements.namedItem('threshold-season');
+    select.addEventListener('change', () => selectThresholdSeason(select.value));
+    thresholdSeasonControls.addEventListener('submit', event => { event.preventDefault(); selectThresholdSeason(select.value); });
+  }
   if (paritySeasonSelect) {
     paritySeasonSelect.addEventListener('change', () => selectParitySeason(paritySeasonSelect.value));
     root.querySelector('[data-panel="parity"] [data-segmented="parity-series"]').addEventListener('change', () => update({view: 'parity', 'parity-series': paritySeriesControl.value}));

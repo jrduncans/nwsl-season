@@ -370,13 +370,13 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	page := forecastPage{
 		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage, ResultsThrough: resultsThrough,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
-		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), SeasonsPath: seasonArchiveURL(r.URL.Path), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
+		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		SeasonSelector: seasonChoices, StageSelector: stageChoices,
 		Navigation: seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, verified, presentation), ModelEvaluationPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/model-evaluation"),
 		CanonicalPath: canonical, ResetPath: base,
 		ModelName: result.Model.Name, ModelID: result.Model.ID, ModelDetail: result.Model.Description,
 		Iterations: result.Iterations, FixedCount: result.FixedCount, Remaining: result.Remaining,
-		Rows: rows, PositionScaleMax: positionScaleMax, Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), PlayoffPlaces: playoffPlaces(rules), HasChampionship: result.ChampionshipSimulated,
+		Rows: rows, PositionScaleMax: positionScaleMax, Teams: forecastTeamOptions(data.Teams), FilteredTeam: teamID, HasTeamFilter: teamID != "", StateValues: state.Values(), HasChampionship: result.ChampionshipSimulated,
 	}
 	for _, entry := range forecast.Catalog() {
 		page.Models = append(page.Models, forecastModelView{ID: entry.Model.Info().ID, Name: entry.Model.Info().Name, Default: entry.Default, Selected: entry.Model.Info().ID == state.ModelID, Comparison: entry.Model.Info().ID == state.ComparisonModelID, Detail: entry.Model.Info().Description, Inputs: entry.Model.Info().Inputs, Assumptions: entry.Model.Info().Assumptions})

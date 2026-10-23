@@ -717,7 +717,7 @@ func testForecastAssumptionFlow(t *testing.T, f *fixture) {
 			if got := fixedResults(t, page); got != baseline+1 {
 				t.Errorf("fixed results after apply = %d, want %d", got, baseline+1)
 			}
-			assumptions := page.Locator("section.forecast-scenario .forecast-assumptions li")
+			assumptions := page.Locator(".forecast-scenario .forecast-assumptions li")
 			expectCount(assumptions, 1, "applied assumptions")
 			if err := expect.Locator(assumptions.First()).ToContainText(kept.Away + " win"); err != nil {
 				t.Error(err)
@@ -746,7 +746,7 @@ func testForecastCopyLink(t *testing.T, f *fixture) {
 		t.Fatalf("applying the scenario should navigate to a URL with p=: %v", err)
 	}
 	scenarioURL := page.URL()
-	assumptionText, err := page.Locator("section.forecast-scenario .forecast-assumptions").TextContent()
+	assumptionText, err := page.Locator(".forecast-scenario .forecast-assumptions").TextContent()
 	if err != nil || strings.TrimSpace(assumptionText) == "" {
 		t.Fatalf("applied scenario has no assumption text: %q, %v", assumptionText, err)
 	}
@@ -788,7 +788,7 @@ func testForecastCopyLink(t *testing.T, f *fixture) {
 		t.Fatalf("new page: %v", err)
 	}
 	visit(t, reopened, copied)
-	got, err := reopened.Locator("section.forecast-scenario .forecast-assumptions").TextContent()
+	got, err := reopened.Locator(".forecast-scenario .forecast-assumptions").TextContent()
 	if err != nil {
 		t.Fatalf("read reopened assumptions: %v", err)
 	}
@@ -895,10 +895,10 @@ func testForecastNoScript(t *testing.T, f *fixture) {
 	if err := waitForecastURL(page, assumptionURL); err != nil {
 		t.Fatalf("the plain form should add the assumption on the server: %v", err)
 	}
-	if err := expect.Locator(page.Locator("section.forecast-scenario .forecast-assumptions li")).ToHaveCount(1); err != nil {
+	if err := expect.Locator(page.Locator(".forecast-scenario .forecast-assumptions li")).ToHaveCount(1); err != nil {
 		t.Error(err)
 	}
-	if err := expect.Locator(page.Locator("section.forecast-scenario .forecast-assumptions li").First()).ToContainText("Draw"); err != nil {
+	if err := expect.Locator(page.Locator(".forecast-scenario .forecast-assumptions li").First()).ToContainText("Draw"); err != nil {
 		t.Error(err)
 	}
 	if got := fixedResults(t, page); got != 1 {
@@ -939,7 +939,8 @@ func testFixturesPage(t *testing.T, f *fixture) {
 			t.Error(err)
 		}
 		selectValue(t, page.Locator("#fixture-team"), "")
-		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText("All teams shown."); err != nil {
+		// With every team shown, the select says so; the summary stays empty.
+		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText(""); err != nil {
 			t.Error(err)
 		}
 		assertNoHorizontalOverflow(t, page)
@@ -951,13 +952,38 @@ func testScheduleDifficultyPage(t *testing.T, f *fixture) {
 		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("schedule-difficulty")))
 		expect := playwright.NewPlaywrightAssertions()
-		if err := expect.Locator(page.GetByText("Toughest remaining schedule")).ToBeVisible(); err != nil {
+		rows := page.Locator(".schedule-plot-row")
+		if err := expect.Locator(rows).Not().ToHaveCount(0); err != nil {
+			t.Fatalf("schedule plot has no rows: %v", err)
+		}
+		// Each row opens to that team's remaining matches.
+		if err := rows.First().Locator("summary").Click(); err != nil {
+			t.Fatalf("open first row: %v", err)
+		}
+		if err := expect.Locator(rows.First().Locator(".fixture-detail")).ToBeVisible(); err != nil {
 			t.Error(err)
 		}
-		if err := expect.Locator(page.Locator(".schedule-plot-row")).Not().ToHaveCount(0); err != nil {
-			t.Errorf("schedule plot has no rows: %v", err)
-		}
 		assertNoHorizontalOverflow(t, page)
+
+		// Switching in place shows the same rows, in the same order, as the
+		// server's render of that measure.
+		if err := page.Locator(`[data-difficulty-controls] label:has(input[value="raw"])`).Click(); err != nil {
+			t.Fatalf("choose None: %v", err)
+		}
+		if err := page.WaitForURL("**difficulty=raw"); err != nil {
+			t.Fatal(err)
+		}
+		readRows := func(p playwright.Page) []string {
+			var got []string
+			evalJSON(t, p, `() => [...document.querySelectorAll('[data-difficulty-row]')].map((row) => [row.querySelector('.team-name')?.textContent.trim(), row.querySelector('[data-difficulty-value]')?.textContent, row.querySelector('[data-difficulty-label]')?.textContent].join(' '))`, nil, &got)
+			return got
+		}
+		switched := readRows(page)
+		server := newPageWith(t, pageOptions{Viewport: vp})
+		visit(t, server, f.URL(seasonPath("schedule-difficulty")+"?difficulty=raw"))
+		if rendered := readRows(server); fmt.Sprint(switched) != fmt.Sprint(rendered) {
+			t.Errorf("switched rows = %v\nserver rows = %v", switched, rendered)
+		}
 	})
 }
 
@@ -1117,7 +1143,7 @@ func TestPagesClinching(t *testing.T) {
 		expect := playwright.NewPlaywrightAssertions()
 
 		// Results are grouped under one heading per outcome.
-		groups := page.Locator("section.clinching-result-group h4")
+		groups := page.Locator("section.clinching-result-group h5")
 		headings, err := groups.AllTextContents()
 		if err != nil || len(headings) == 0 {
 			t.Fatalf("no grouped result headings: %v, %v", headings, err)
@@ -1127,7 +1153,12 @@ func TestPagesClinching(t *testing.T) {
 				t.Errorf("group heading %q should start with \"If \"", heading)
 			}
 		}
-		if err := expect.Locator(page.Locator(`h3[aria-label="Team 0 FC can clinch the playoffs"]`)).ToBeVisible(); err != nil {
+		// Each team has one card, with a section per outcome.
+		card := page.Locator(".clinching-opportunity-clinching").Filter(playwright.LocatorFilterOptions{Has: page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Team 0 FC", Exact: playwright.Bool(true)})})
+		if err := expect.Locator(card).ToHaveCount(1); err != nil {
+			t.Error(err)
+		}
+		if err := expect.Locator(card.Locator(".clinching-outcome h4", playwright.LocatorLocatorOptions{HasText: "Can clinch the playoffs"})).ToBeVisible(); err != nil {
 			t.Error(err)
 		}
 

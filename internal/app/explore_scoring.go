@@ -94,7 +94,7 @@ func (a *application) renderExploreError(w http.ResponseWriter, r *http.Request,
 		Title: title, Message: message,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation: []navigationItem{
-			{Label: "Seasons", Path: relativeURL(r.URL.Path, "/seasons")},
+			{Label: "Standings", Path: relativeURL(r.URL.Path, "/")},
 			{Label: "Explore", Path: relativeURL(r.URL.Path, "/explore"), Current: true},
 		},
 		CatalogPage: true,

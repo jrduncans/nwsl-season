@@ -35,12 +35,14 @@ type exploreTeamHistoryRow struct {
 }
 
 type exploreTeamHistoryView struct {
-	HistoryTeam                   teamNameView
-	HistoryTeamOptions            []teamNameView
-	TeamHistoryRows               []exploreTeamHistoryRow
-	TeamHistoryMissingXG          bool
-	TeamHistoryMissingXPoints     bool
-	HistorySort, HistoryOrder     string
+	HistoryTeam               teamNameView
+	HistoryTeamOptions        []teamNameView
+	TeamHistoryRows           []exploreTeamHistoryRow
+	TeamHistoryMissingXG      bool
+	TeamHistoryMissingXPoints bool
+	HistorySort, HistoryOrder string
+	// HistoryExpanded opens the values table when the URL carries its sort.
+	HistoryExpanded               bool
 	HistoryColumns                []exploreTeamColumn
 	HistorySeries, HistoryContext string
 	HistoryContextData            [4]exploreMetricContext
@@ -76,6 +78,7 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 			*field.value = values[0]
 		}
 	}
+	page.HistoryExpanded = query.Has("history-sort") || query.Has("history-order")
 	page.HistoryContextData = exploreHistoryContextData(seasons, basis)
 	measure, _ := exploreTeamSortMetric(query.Get("measure") + "-actual")
 	metric := page.HistoryContextData[measure]

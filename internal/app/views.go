@@ -1,9 +1,11 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"net/url"
+	"slices"
 	"sort"
 	"time"
 
@@ -37,7 +39,6 @@ type seasonPage struct {
 	ForecastPath           string
 	ClinchingPath          string
 	CurrentPath            string
-	SeasonsPath            string
 	Navigation             []navigationItem
 	SeasonSelector         []seasonSelectorItem
 	StageSelector          []seasonSelectorItem
@@ -87,8 +88,8 @@ type bracketRoundView struct {
 
 type bracketSlotView struct {
 	SeedPair   string
-	Home       teamNameView
-	Away       teamNameView
+	Home       fixtureTeamView
+	Away       fixtureTeamView
 	Winner     string
 	AdvancesTo string
 	Game       *bracketGameView
@@ -113,32 +114,6 @@ type seasonPresentation struct {
 	Historical         bool
 	FinalStandingsSafe bool
 	HasUpcoming        bool
-}
-
-type seasonsPage struct {
-	Title             string
-	HomePath          string
-	StylesheetPath    string
-	ScriptPath        string
-	Navigation        []navigationItem
-	Seasons           []seasonArchiveItem
-	CatalogPage       bool
-	Freshness         string
-	FreshnessFallback string
-	HistoryPath       string
-}
-
-type seasonArchiveItem struct {
-	Season  string
-	Current bool
-	Status  string
-	Stages  []seasonArchiveStageItem
-}
-
-type seasonArchiveStageItem struct {
-	Label  string
-	Status string
-	Links  []navigationItem
 }
 
 type navigationItem struct {
@@ -358,9 +333,72 @@ type strengthView struct {
 	HomePPG                string
 	AwayPPG                string
 	VenueGap               string
-	HasCallouts            bool
-	Toughest               strengthRowView
-	Easiest                strengthRowView
+	// Measure is the difficulty measure the plot shows and sorts by; Shown
+	// describes it, and MeasureOptions lists every measure for the switcher.
+	Measure        string
+	Shown          strengthMeasureOption
+	MeasureOptions []strengthMeasureOption
+}
+
+// The difficulty measures the plot can show, from most to least adjusted.
+const (
+	strengthMeasureAdjusted = "adjusted"
+	strengthMeasureVenue    = "venue"
+	strengthMeasureRaw      = "raw"
+)
+
+// strengthMeasureOption is one difficulty measure's league-level values.
+type strengthMeasureOption struct {
+	Key, Label, Note, Baseline, BaselineLabel, BaselinePosition string
+}
+
+// strengthMeasureView is one team's value on one difficulty measure. Delta
+// and Label compare it with that measure's league baseline or average.
+type strengthMeasureView struct {
+	Key, Value, Delta, Label, Direction, Position string
+	SortValue                                     float64
+}
+
+// Segments is the measure switcher's segmented control.
+func (s strengthView) Segments() exploreSegmentGroup {
+	options := make([]exploreSegment, 0, len(s.MeasureOptions))
+	for _, option := range s.MeasureOptions {
+		options = append(options, exploreSegment{Value: option.Key, Label: option.Label, Selected: option.Key == s.Measure})
+	}
+	return exploreSegmentGroup{Legend: "Adjust for", Name: "difficulty", Form: "difficulty-controls", Options: options}
+}
+
+// withMeasure shows key's values and sorts available rows hardest first on
+// it, keeping unavailable rows last in their original order. An unknown key
+// reports false.
+func (s strengthView) withMeasure(key string) (strengthView, bool) {
+	index := slices.IndexFunc(s.MeasureOptions, func(option strengthMeasureOption) bool { return option.Key == key })
+	if index < 0 {
+		return s, false
+	}
+	s.Measure, s.Shown = key, s.MeasureOptions[index]
+	rows := slices.Clone(s.Rows)
+	for i := range rows {
+		for _, measure := range rows[i].Measures {
+			if measure.Key == key {
+				rows[i].Shown = measure
+			}
+		}
+	}
+	slices.SortStableFunc(rows, func(a, b strengthRowView) int {
+		switch {
+		case a.Available != b.Available:
+			if a.Available {
+				return -1
+			}
+			return 1
+		case !a.Available:
+			return 0
+		}
+		return cmp.Compare(b.Shown.SortValue, a.Shown.SortValue)
+	})
+	s.Rows = rows
+	return s, true
 }
 
 type strengthRowView struct {
@@ -387,6 +425,10 @@ type strengthRowView struct {
 	Fixtures                 []strengthFixtureView
 	Available                bool
 	NoRemainingFixtures      bool
+	// Measures holds the row on every difficulty measure; Shown is the one
+	// the plot displays.
+	Measures []strengthMeasureView
+	Shown    strengthMeasureView
 }
 
 type strengthFixtureView struct {
@@ -539,14 +581,21 @@ type clinchingPage struct {
 	NoHelp           []clinchingRowView
 	NoHelpTeams      []clinchingTeamView
 	Elimination      []clinchingRowView
+	// ActionableTeams and EliminationTeams group those rows into one card
+	// per team, ordered by each team's first row.
+	ActionableTeams  []clinchingTeamView
+	EliminationTeams []clinchingTeamView
 	Eliminated       []clinchingStatusGroupView
 	AlreadyClinched  []clinchingStatusGroupView
 }
 type clinchingRowView struct {
-	Team                               teamNameView
-	Achievement, Limitation            string
-	Groups                             []clinchingGroupView
-	Necessary                          []string
+	Team                    teamNameView
+	Achievement, Limitation string
+	Groups                  []clinchingGroupView
+	Necessary               []string
+	// Elimination marks a row about being eliminated rather than clinching,
+	// which changes its result labels.
+	Elimination                        bool
 	NoHelp                             string
 	NoHelpFixtures                     string
 	NoHelpFixtureCount                 int
@@ -799,20 +848,54 @@ func strengthViewFrom(result strength.Result) strengthView {
 		view.VenueBaseline = fmt.Sprintf("%.2f", venueSum/float64(availableCount))
 		view.VenueBaselinePosition = plotPosition(venueSum/float64(availableCount), venueMin, venueMax)
 	}
-	for index := range rows {
-		if !hasBaseline {
-			break
-		}
-		if !rows[index].Available {
-			continue
-		}
-		if !view.HasCallouts {
-			view.Toughest, view.Easiest, view.HasCallouts = rows[index], rows[index], true
-			continue
-		}
-		view.Easiest = rows[index]
+	view.MeasureOptions = []strengthMeasureOption{{
+		Key: strengthMeasureAdjusted, Label: "Venue and load", BaselineLabel: "League baseline",
+		Baseline: view.Baseline, BaselinePosition: view.BaselinePosition,
+		Note: "Each team’s remaining opponents’ points per game, adjusted for home or away and for both teams’ recent schedule load.",
+	}}
+	if hasBaseline {
+		view.MeasureOptions = append(view.MeasureOptions, strengthMeasureOption{
+			Key: strengthMeasureVenue, Label: "Venue only", BaselineLabel: "League average",
+			Baseline: view.VenueBaseline, BaselinePosition: view.VenueBaselinePosition,
+			Note: "Each team’s remaining opponents’ points per game, adjusted for home or away only.",
+		}, strengthMeasureOption{
+			Key: strengthMeasureRaw, Label: "None", BaselineLabel: "League average",
+			Baseline: view.RawBaseline, BaselinePosition: view.RawBaselinePosition,
+			Note: "Each team’s remaining opponents’ points per game, with no adjustment.",
+		})
 	}
+	for index, row := range result.Rows {
+		adjusted := strengthMeasureView{
+			Key: strengthMeasureAdjusted, Value: rows[index].ScheduleAdjustedPPG, Delta: rows[index].DeltaFromBaseline,
+			Label: rows[index].ScheduleLabel, Direction: rows[index].ScheduleDirection, Position: rows[index].PlotPosition,
+			SortValue: row.ScheduleAdjustedPPG,
+		}
+		rows[index].Measures = []strengthMeasureView{adjusted}
+		if hasBaseline && row.Available {
+			rawAverage, venueAverage := rawSum/float64(availableCount), venueSum/float64(availableCount)
+			rows[index].Measures = append(rows[index].Measures,
+				comparedMeasure(strengthMeasureVenue, row.VenueAdjustedOpponentPPG, venueAverage, rows[index].VenuePlotPosition),
+				comparedMeasure(strengthMeasureRaw, row.RawOpponentPPG, rawAverage, rows[index].RawPlotPosition))
+		}
+	}
+	view, _ = view.withMeasure(strengthMeasureAdjusted)
 	return view
+}
+
+// comparedMeasure is a team's value on a measure compared with the league
+// average of that measure, labeled with the same rule as the baseline delta.
+func comparedMeasure(key string, value, average float64, position string) strengthMeasureView {
+	delta := value - average
+	direction := "average"
+	if delta > 0 {
+		direction = "harder"
+	} else if delta < 0 {
+		direction = "easier"
+	}
+	return strengthMeasureView{
+		Key: key, Value: fmt.Sprintf("%.2f", value), Delta: scheduleDeltaText(delta),
+		Label: strength.LabelForDelta(delta), Direction: direction, Position: position, SortValue: value,
+	}
 }
 
 func relativeLoadText(teamCongestion, opponentCongestion float64) string {
@@ -964,8 +1047,10 @@ func fixtureWinner(game cache.Game) string {
 func bracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData) bracketPage {
 	view := bracket.Build(format, data.Games)
 	teams := make(map[string]teamNameView, len(data.Teams))
+	codes := make(map[string]string, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
+		codes[team.ID] = scenarioTeamCode(team)
 	}
 	xgoals := make(map[string]cache.GameXG, len(data.XGoals))
 	for _, value := range data.XGoals {
@@ -997,7 +1082,7 @@ func bracketPageFor(page seasonPage, format competition.BracketFormat, data cach
 	for _, round := range view.Rounds {
 		row := bracketRoundView{Label: round.Label}
 		for _, slot := range round.Slots {
-			item := bracketSlotView{Home: bracketEntrant(slot.Home.TeamID, teams), Away: bracketEntrant(slot.Away.TeamID, teams), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
+			item := bracketSlotView{Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
 			if slot.SeedPair != nil {
 				item.SeedPair = fmt.Sprintf("Seeds %d and %d", slot.SeedPair[0], slot.SeedPair[1])
 			}
@@ -1022,8 +1107,10 @@ func bracketEntrantName(id string, teams map[string]teamNameView) string {
 	return id
 }
 
-func bracketEntrant(id string, teams map[string]teamNameView) teamNameView {
-	return teamNameView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL}
+// bracketEntrant carries the team's short code so narrow bracket cards can
+// show it in place of the full name, as fixture rows do on phones.
+func bracketEntrant(id string, teams map[string]teamNameView, codes map[string]string) fixtureTeamView {
+	return fixtureTeamView{teamNameView: teamNameView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL}, Code: codes[id]}
 }
 
 func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracketGameView {

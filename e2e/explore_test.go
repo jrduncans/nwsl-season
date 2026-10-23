@@ -1453,6 +1453,9 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=team-history")
 		defer expectInPlace(t, page, "sorting Season by season")()
+		if err := page.Locator(`details[data-history-values] summary`).Click(); err != nil {
+			t.Fatalf("open Season table: %v", err)
+		}
 		link := page.Locator(`[data-history-sort="season"]`)
 		for _, want := range [][]string{{"2025", "2026"}, {"2026", "2025"}} {
 			if err := link.Click(); err != nil {
@@ -1606,7 +1609,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		page := explorePage(t, base, Desktop, "explore?view=distribution")
 		defer expectInPlace(t, page, "sorting the distribution table")()
 		if err := page.Locator("[data-distribution-values] summary").Click(); err != nil {
-			t.Fatalf("open Distribution values: %v", err)
+			t.Fatalf("open Distribution table: %v", err)
 		}
 		for _, want := range []struct{ order, seasons string }{{"descending", "2025,2026"}, {"ascending", "2026,2025"}} {
 			if err := page.Locator(`[data-distribution-sort="matches"]`).Click(); err != nil {
@@ -1873,6 +1876,9 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 		goTo("explore?view=team-history")
 		if got := historyTableSeasons(t, page); len(got) != 2 || got[0] != "2026" || got[1] != "2025" {
 			t.Fatalf("default season order = %v, want newest first", got)
+		}
+		if err := page.Locator(`details[data-history-values] summary`).Click(); err != nil {
+			t.Fatalf("open Season table: %v", err)
 		}
 		if err := page.Locator(`[data-history-sort="season"]`).Click(); err != nil {
 			t.Fatalf("click season header: %v", err)

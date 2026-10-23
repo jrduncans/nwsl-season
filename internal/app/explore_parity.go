@@ -2,9 +2,11 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -128,7 +130,7 @@ func exploreParity(query url.Values, seasons []history.SeasonParity, teamSeasons
 		}
 		page.ParityData = append(page.ParityData, record)
 		if record.Active {
-			active = append(active, fmt.Sprintf("%s: in progress through %d matches (%.1f per team)", season.Season, season.Played, season.MatchesPerTeam))
+			active = append(active, fmt.Sprintf("%s: in progress through %d matches (%s per team)", season.Season, season.Played, strconv.FormatFloat(math.Round(season.MatchesPerTeam*10)/10, 'f', -1, 64)))
 		} else {
 			// Seasons arrive oldest first, so the last completed one wins.
 			defaultSeason = season.Season

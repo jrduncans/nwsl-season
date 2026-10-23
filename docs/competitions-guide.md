@@ -56,15 +56,17 @@ unsupported request has no side effects.
 Season pages live at `/seasons/{season}/{stage-slug}` with optional
 `/fixtures`, `/schedule-difficulty`, `/forecast`, `/model-evaluation` and
 `/clinching` suffixes. The root redirects to the configured current season's
-primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar). Season-only
+primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar), and so does
+the retired `/seasons` archive URL. Season-only
 URLs redirect to the primary stage, keeping the suffix and query. An unknown
 stage slug for a cataloged season is a `404`, never a fallback. Every link and
 redirect is relative so the `/nwsl-season/` proxy prefix survives.
 
-`/seasons` is the cache-only archive: every public stage grouped by season with
-its own readiness label. Each stage page has an in-page competition
-switcher whose targets are server-rendered relative URLs; the global site
-header gains no season or stage controls.
+Each stage page has in-page Season and Competition switchers whose targets are
+server-rendered relative URLs; the global site header gains no season or stage
+controls. Without JavaScript the switchers cannot navigate, so a `<noscript>`
+block lists the same targets as plain links, keeping the current page (such as
+`/fixtures`) where the target season has it.
 
 ## Readiness and completeness
 
@@ -114,7 +116,9 @@ regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
 matches and links to the Matches page. At 390px rounds stack with explicit `Advances to`
-text.
+text. When a match card is narrower than 20rem (three columns on a tablet or
+narrow window), each team shows its short code instead of its full name, as
+Matches rows do on phones; the full name stays available to screen readers.
 
 Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.

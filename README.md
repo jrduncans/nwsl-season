@@ -123,7 +123,7 @@ Useful endpoints:
 
 - <http://localhost:8080/healthz> — process health check.
 - <http://localhost:8080/cache/status> — latest cache attempt and success.
-- `/seasons` — current and historical season catalog and no-JavaScript fallback.
+- `/seasons` — redirects to the current season, like `/`.
 - `/seasons/:season/:stage` — canonical season or factual stage overview;
   bracket-capable stage roots render the verified bracket.
 - `/seasons/:season/:stage/fixtures` — results and remaining matches.
