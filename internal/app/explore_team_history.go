@@ -176,7 +176,7 @@ func exploreTeamHistoryColumns(basis history.ScoringBasis) []exploreTeamColumn {
 					value.label = "xPoints"
 				}
 			}
-			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: basisText(basis, value.label), Description: basisText(basis, group.label+": "+value.label)})
+			columns = append(columns, basisColumn(basis, group.key+"-"+value.key, value.label, group.label+": "+value.label))
 		}
 	}
 	return columns

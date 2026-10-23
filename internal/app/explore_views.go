@@ -54,11 +54,6 @@ type exploreView struct {
 	// BothBases views carry both scoring bases, so switching basis in place
 	// needs no reload.
 	BothBases bool `json:"bothBases,omitempty"`
-	// SwitchesBasis matches selections that explore.js redraws entirely from
-	// the page's payloads, so it switches basis in place from the other
-	// basis's payloads (OtherBasis). Other selections reload on the new basis,
-	// since their server-rendered text names the rendered one.
-	SwitchesBasis exploreRule `json:"switchesBasis,omitempty"`
 	// A SkipsForecast request renders no forecast benchmarks, so entering a
 	// NeedsForecast view from it reloads the page.
 	SkipsForecast bool `json:"skipsForecast,omitempty"`
@@ -80,10 +75,9 @@ var exploreViewGroups = []exploreViewGroup{
 				{"chart", "Actual vs expected"}, {"gap", "Gap to expected"}, {"scatter", "Outlier plot"},
 				{"quadrant", "Scored vs allowed"}, {"table", "Table"},
 			},
-			Defaults:      map[string]string{"display": "chart", "measure": "difference"},
-			PointsOnly:    exploreRule{{"display": {"chart", "gap", "scatter"}, "measure": {"points"}}},
-			PointsNote:    exploreRule{{"display": {"table"}}},
-			SwitchesBasis: exploreRule{{"display": {"chart", "gap", "scatter"}}},
+			Defaults:   map[string]string{"display": "chart", "measure": "difference"},
+			PointsOnly: exploreRule{{"display": {"chart", "gap", "scatter"}, "measure": {"points"}}},
+			PointsNote: exploreRule{{"display": {"table"}}},
 		},
 	}},
 	{Key: "profile", Label: "Team profile", Views: []exploreView{
@@ -93,7 +87,6 @@ var exploreViewGroups = []exploreViewGroup{
 			Defaults:           map[string]string{"trend-view": "balance", "average-series": "goals"},
 			PointsOnly:         exploreRule{{"trend-view": {"points"}}, {"trend-view": {"relative"}, "average-series": {"points", "xpoints"}}},
 			OpponentAdjustment: exploreRule{{"trend-view": {"balance", "difference", "points"}}},
-			SwitchesBasis:      exploreRule{{}},
 			NeedsForecast:      true,
 		},
 		{Key: "team-history", Label: "Season by season", PointsOnly: exploreRule{{"measure": {"points"}}}, PointsNote: exploreRule{{}}},

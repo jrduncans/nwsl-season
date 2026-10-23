@@ -107,15 +107,25 @@
   // the next render rebuilds it from them. It reports false when the page
   // lacks that basis, which then needs a server render.
   // The view registry's rule for redrawing a selection on either basis.
-  // A season without teams on the target basis renders differently (no team
-  // choices), so it takes a server render.
+  // Every view redraws from the payloads on either basis, except where the
+  // server renders a different structure for a basis without the data: league
+  // charts and tables, and team choices for a season without teams. Those
+  // take a server render.
   function switchesBasis(params) {
-    const view = views.get(requestedView(params));
-    if (!view || !ruleMatches(view.switchesBasis, params, view.defaults)) return false;
-    const payloads = basisPayloads[params.get('penalties') === 'exclude'];
-    if (!payloads) return false;
-    const season = params.get('season') || payloads.defaults.defaultTeamSeason;
-    return Boolean(payloads.teamSeasons.find(row => row.season === season)?.teams?.length);
+    const target = basisPayloads[params.get('penalties') === 'exclude'];
+    if (!target) return false;
+    const rendered = basisPayloads[renderedNonPenalty];
+    const view = requestedView(params);
+    const hasBars = rows => rows.some(row => row.bins.some(Boolean));
+    if (['trend', 'distribution', 'table'].includes(view)) {
+      return Boolean(target.records.length) === Boolean(rendered.records.length) && hasBars(target.records) === hasBars(rendered.records);
+    }
+    if (view === 'home-advantage') return Boolean(target.homeRecords.length) === Boolean(rendered.homeRecords.length);
+    if (!['teams', 'team-rankings', 'team-history', 'season-trend'].includes(view)) return true;
+    return [target, rendered].every(payloads => {
+      const season = params.get('season') || payloads.defaults.defaultTeamSeason;
+      return Boolean(payloads.teamSeasons.find(row => row.season === season)?.teams?.length);
+    });
   }
   // These charts read only payloads that carry both bases.
   const basisIndependentCharts = new Set(['thresholds', 'parity', 'archiveScatter', 'headToHead', 'headToHeadXG']);
@@ -1837,14 +1847,15 @@
     showHistoryChart('team-history', points, rows, measure, split ? ['goals'] : visible, contextEnabled ? context[visible[0]] : null, domain);
     if (split) showHistoryChart('team-history-xg', points, rows, measure, ['xg'], context.xg, domain);
   }
+  // The table holds both bases' rows; bars scale to the shown basis.
   function styleTable() {
-    const cells = [...root.querySelectorAll('.explore-rate')];
+    const cells = [...root.querySelectorAll('.explore-rate')].filter(cell => cell.closest('tr').dataset.basisOnly === root.dataset.basis);
     const maximum = Math.max(1, ...cells.map(cell => Number(cell.dataset.value)));
     cells.forEach(cell => {
       if (cell.dataset.value !== '') cell.style.setProperty('--rate-width', String(Number(cell.dataset.value) / maximum));
     });
     root.querySelectorAll('.explore-gap').forEach(cell => {
-      if (cell.dataset.value === '') return;
+      if (cell.dataset.value === '' || cell.dataset.direction) return;
       const value = Number(cell.querySelector('span').textContent);
       cell.dataset.direction = value > 0 ? 'positive' : value < 0 ? 'negative' : 'zero';
       if (value > 0) cell.querySelector('span').textContent = `+${cell.querySelector('span').textContent}`;
@@ -3199,6 +3210,20 @@
     if (!views.get(view).bothBases && !useBasis(wanted)) { location.assign(location.href); return; }
     nonPenalty = params.get('penalties') === 'exclude';
     labelBasis();
+    // Server-rendered text on both bases follows the named basis (CSS shows
+    // data-basis-only content for it); accessible names carry both variants.
+    root.dataset.basis = nonPenalty ? 'non-penalty' : 'all';
+    root.querySelectorAll('[data-penalties-selector]').forEach(checkbox => { checkbox.checked = nonPenalty; });
+    // Every in-page link carries the penalties selection, including links in
+    // views the server rendered on the other basis.
+    root.querySelectorAll('a[href^="?"]').forEach(link => {
+      const selection = new URLSearchParams(link.getAttribute('href').slice(1));
+      if ((selection.get('penalties') === 'exclude') === nonPenalty) return;
+      if (nonPenalty) selection.set('penalties', 'exclude'); else selection.delete('penalties');
+      link.setAttribute('href', `?${selection}`);
+    });
+    root.querySelectorAll('[data-aria-all]').forEach(element => element.setAttribute('aria-label', nonPenalty ? element.dataset.ariaNp : element.dataset.ariaAll));
+    styleTable();
     if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', `?${params}`); }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });

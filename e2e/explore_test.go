@@ -1427,7 +1427,7 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 	column := func(page playwright.Page, rows string, index int) []string {
 		t.Helper()
 		var cells []string
-		evalJSON(t, page, `(arg) => [...document.querySelectorAll(arg.rows)].map((row) => row.children[arg.index].textContent.trim())`,
+		evalJSON(t, page, `(arg) => [...document.querySelectorAll(arg.rows)].filter((row) => getComputedStyle(row).display !== 'none').map((row) => row.children[arg.index].textContent.trim())`,
 			map[string]any{"rows": rows, "index": index}, &cells)
 		return cells
 	}
@@ -1466,12 +1466,13 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 	})
 }
 
-// distributionRows returns each Goal distribution table row's cell texts.
+// distributionRows returns each shown Goal distribution table row's cell
+// texts; the table also holds the other basis's rows, hidden.
 func distributionRows(t *testing.T, page playwright.Page) [][]string {
 	t.Helper()
 	var rows [][]string
 	evalJSON(t, page, `() => [...document.querySelectorAll('[data-distribution-rows] tr')]
-		.map((row) => [...row.cells].map((cell) => cell.textContent.trim()))`, nil, &rows)
+		.filter((row) => getComputedStyle(row).display !== 'none').map((row) => [...row.cells].map((cell) => cell.textContent.trim()))`, nil, &rows)
 	return rows
 }
 
@@ -1944,7 +1945,7 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 func homeAdvantageSeasons(t *testing.T, page playwright.Page) []string {
 	t.Helper()
 	var seasons []string
-	evalJSON(t, page, `() => [...document.querySelectorAll('[data-home-rows] tr')].map((row) => row.cells[0].textContent.trim())`, nil, &seasons)
+	evalJSON(t, page, `() => [...document.querySelectorAll('[data-home-rows] tr')].filter((row) => getComputedStyle(row).display !== 'none').map((row) => row.cells[0].textContent.trim())`, nil, &seasons)
 	return seasons
 }
 
@@ -2003,7 +2004,7 @@ func TestExploreHomeAdvantageShowsAlignedPanelsAndSortsInPlace(t *testing.T) {
 	defer expectInPlace(t, page, "sorting Home advantage")()
 	column := func(index int) []string {
 		var cells []string
-		evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-home-rows] tr')].map((row) => row.cells[index].textContent.trim())`, index, &cells)
+		evalJSON(t, page, `(index) => [...document.querySelectorAll('[data-home-rows] tr')].filter((row) => getComputedStyle(row).display !== 'none').map((row) => row.cells[index].textContent.trim())`, index, &cells)
 		return cells
 	}
 	if err := page.Locator(`details[data-home-values] summary`).Click(); err != nil {

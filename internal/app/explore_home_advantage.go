@@ -39,6 +39,8 @@ type exploreHomeAdvantageRecord struct {
 }
 
 type exploreHomeAdvantageRow struct {
+	// Basis is the row's basis key; see tagBasis.
+	Basis                                          string
 	Season                                         string
 	Played                                         int
 	Goals, XG, Points, XPoints                     string
@@ -95,8 +97,8 @@ func exploreHomeAdvantage(query url.Values, seasons []history.SeasonHomeAdvantag
 	columns := []exploreTeamColumn{
 		{Key: "season", Label: "Season", Description: "season"},
 		{Key: "matches", Label: "Matches", Description: "matches played"},
-		{Key: "goals", Label: basisText(basis, "Goals"), Description: basisText(basis, "goals, home minus away per match")},
-		{Key: "xg", Label: basisText(basis, "xG"), Description: basisText(basis, "xG, home minus away per match")},
+		basisColumn(basis, "goals", "Goals", "goals, home minus away per match"),
+		basisColumn(basis, "xg", "xG", "xG, home minus away per match"),
 		{Key: "points", Label: "Points", Description: "points, home minus away per match"},
 		{Key: "xpoints", Label: "xPoints", Description: "xPoints, home minus away per match"},
 		{Key: "results", Label: "Home W–D–L", Description: "home win share"},

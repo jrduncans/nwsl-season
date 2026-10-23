@@ -232,8 +232,13 @@ var inlineTags = map[string]bool{
 // from the text around it.
 func text(n *html.Node) string {
 	var b strings.Builder
+	shown := shownBasis(n)
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
+		// CSS hides text for the basis the page does not show.
+		if only, ok := lookupAttr(n, "data-basis-only"); ok && shown != "" && only != shown {
+			return
+		}
 		if n.Type == html.TextNode {
 			b.WriteString(n.Data)
 		}
@@ -254,6 +259,17 @@ func text(n *html.Node) string {
 
 // scopeText is the collapsed text of every element matching selector. It
 // fails the test when nothing matches.
+// shownBasis is the data-basis of n's nearest ancestor that sets one, or ""
+// outside Explore.
+func shownBasis(n *html.Node) string {
+	for ; n != nil; n = n.Parent {
+		if basis, ok := lookupAttr(n, "data-basis"); ok {
+			return basis
+		}
+	}
+	return ""
+}
+
 func scopeText(t testing.TB, body, selector string) string {
 	t.Helper()
 	nodes := find(t, body, selector)

@@ -121,8 +121,8 @@ func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
 		t.Fatalf("server-rendered distribution values missing: %s", values)
 	}
 	for _, row := range []string{
-		`<tr data-matches="20"><th scope="row" data-value="2025">2025</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td><td data-value="0">0 (0.0%)</td></tr>`,
-		`<tr data-matches="20"><th scope="row" data-value="2026">2026</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td></tr>`,
+		`<tr data-matches="20" data-basis-only="all"><th scope="row" data-value="2025">2025</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td><td data-value="0">0 (0.0%)</td></tr>`,
+		`<tr data-matches="20" data-basis-only="all"><th scope="row" data-value="2026">2026</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td></tr>`,
 	} {
 		if !strings.Contains(values, row) {
 			t.Errorf("missing distribution row %q", row)
@@ -192,8 +192,8 @@ func TestExploreDistributionBinSelection(t *testing.T) {
 			if !strings.Contains(response.Body.String(), `<option value="`+bin+`" selected`) {
 				t.Errorf("selected bin %q is missing from the rendered control", bin)
 			}
-			if bin == "1" && !strings.Contains(response.Body.String(), "Share of regular-season matches with 1 goal</h2>") {
-				t.Error("one-goal chart heading is missing")
+			if bin == "1" {
+				requireExact(t, response.Body.String(), "#explore-distribution-title", "Share of regular-season matches with 1 goal")
 			}
 			if !strings.Contains(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`) {
 				t.Error("selecting a bin alone opened the distribution values table")

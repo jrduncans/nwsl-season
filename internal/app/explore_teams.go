@@ -56,6 +56,19 @@ type exploreTeamColumn struct {
 	Key, Label, URL, Sort string
 	Description           string
 	Leading               bool
+	// Labels and Descriptions carry a basis-dependent column's text on both
+	// bases; they are empty for a column whose text never changes.
+	Labels, Descriptions basisPair
+}
+
+// basisColumn is a sortable column whose label and description name the
+// scoring basis.
+func basisColumn(basis history.ScoringBasis, key, label, description string) exploreTeamColumn {
+	return exploreTeamColumn{
+		Key: key, Label: basisText(basis, label), Description: basisText(basis, description),
+		Labels:       basisPair{All: label, NP: basisText(history.NonPenalty, label)},
+		Descriptions: basisPair{All: description, NP: basisText(history.NonPenalty, description)},
+	}
 }
 
 type exploreTeamsView struct {
@@ -210,7 +223,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 			if group.key == "points" && value.key == "expected" {
 				value.label = "xPoints"
 			}
-			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: t(value.label), Description: t(group.label + ": " + value.label)})
+			columns = append(columns, basisColumn(basis, group.key+"-"+value.key, value.label, group.label+": "+value.label))
 		}
 	}
 	for _, column := range columns {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -36,7 +37,54 @@ type explorePage struct {
 	// was not rendered on, so explore.js switches penalties in place. It is
 	// nil when the selection is invalid on that basis.
 	OtherBasis *exploreBasisData
-	query      url.Values
+	// Other holds the server-rendered text and league rows on that basis,
+	// rendered beside the page's own and shown by CSS after a switch.
+	Other exploreOtherBasisView
+	query url.Values
+}
+
+// exploreOtherBasisView is what the league views render on the other basis.
+// Rows carry their basis key for data-basis-only.
+type exploreOtherBasisView struct {
+	ActiveStatus     string
+	XGIncomplete     bool
+	Records          []exploreRecord
+	DistributionRows []exploreDistributionSeason
+	HomeAdvantage    exploreHomeAdvantageView
+}
+
+// basisKey names a basis in data-basis and data-basis-only.
+func basisKey(basis history.ScoringBasis) string {
+	if basis.ExcludesPenalties() {
+		return "non-penalty"
+	}
+	return "all"
+}
+
+// BasisKey names the page's basis for data-basis.
+func (p explorePage) BasisKey() string { return basisKey(p.Basis) }
+
+// XGIncompleteNote is Scoring trend's incomplete-xG note on both bases.
+func (p explorePage) XGIncompleteNote() basisPair {
+	note := func(incomplete bool, basis history.ScoringBasis) string {
+		if !incomplete {
+			return ""
+		}
+		return basisText(basis, "Some seasons have no complete xG average; their goals remain available.")
+	}
+	return p.otherPair(func(basis history.ScoringBasis, other bool) string {
+		if other {
+			return note(p.Other.XGIncomplete, basis)
+		}
+		return note(p.XGIncomplete, basis)
+	})
+}
+
+func otherBasisOf(basis history.ScoringBasis) history.ScoringBasis {
+	if basis.ExcludesPenalties() {
+		return history.AllShots
+	}
+	return history.NonPenalty
 }
 
 // exploreBasisData is every payload that changes with the scoring basis.
@@ -81,6 +129,8 @@ type exploreChartRecord struct {
 }
 
 type exploreRecord struct {
+	// Basis is the row's basis key; see tagBasis.
+	Basis                                           string
 	Season                                          string
 	Played                                          int
 	GoalsPerMatch, XGPerMatch, GoalsMinusXGPerMatch string
@@ -240,7 +290,22 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		}
 		otherHistory, err = exploreTeamHistory(withPenalties(historyQuery, otherBasis), otherTeams.TeamSeasons)
 	}
+	var otherHome exploreHomeAdvantageView
+	var otherDistribution exploreDistributionView
+	otherScoring := exploreScoringPageFor(r.URL.Path, otherSummaries, otherBasis)
 	if err == nil {
+		otherHome, err = exploreHomeAdvantage(withPenalties(r.URL.Query(), otherBasis), history.HomeAdvantage(otherSummaries), otherBasis)
+	}
+	if err == nil {
+		otherDistribution, err = exploreDistribution(withPenalties(r.URL.Query(), otherBasis), otherScoring.Distributions)
+	}
+	if err == nil {
+		page.Other = exploreOtherBasisView{
+			ActiveStatus: otherScoring.ActiveStatus, XGIncomplete: otherScoring.XGIncomplete,
+			Records: tagBasis(exploreRecords(otherSummaries), otherBasis), DistributionRows: tagBasis(otherDistribution.DistributionRows, otherBasis),
+			HomeAdvantage: otherHome,
+		}
+		page.Other.HomeAdvantage.HomeAdvantageRows = tagBasis(otherHome.HomeAdvantageRows, otherBasis)
 		page.OtherBasis = &exploreBasisData{
 			DefaultTeamSeason: otherTeams.TeamSeason, DefaultHistoryTeam: otherHistory.HistoryTeam.ID,
 			ChartData:      exploreChartRecords(otherSummaries),
@@ -276,17 +341,9 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 
 	// Retain the existing calculation and eligibility rules, while keeping the
 	// public workspace independent of historical selection and inventory styling.
-	for _, summary := range summaries {
-		if !summary.PlotEligible {
-			continue
-		}
-		page.Records = append(page.Records, exploreRecord{
-			Season: summary.Season, Played: summary.Played,
-			GoalsPerMatch: scoringRateText(summary.GoalsPerMatch), XGPerMatch: scoringRateText(summary.XGPerMatch),
-			GoalsMinusXGPerMatch: scoringRateText(summary.GoalsMinusXGPerMatch),
-			Goals:                summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch,
-		})
-	}
+	page.Records = tagBasis(exploreRecords(summaries), basis)
+	page.DistributionRows = tagBasis(page.DistributionRows, basis)
+	page.HomeAdvantageRows = tagBasis(page.HomeAdvantageRows, basis)
 	page.ChartData = exploreChartRecords(summaries)
 	a.render(w, "explore", page)
 }
@@ -303,4 +360,91 @@ func exploreChartRecords(summaries []history.SeasonScoring) []exploreChartRecord
 		}
 	}
 	return records
+}
+
+// exploreRecords is the Scoring table's rows.
+func exploreRecords(summaries []history.SeasonScoring) []exploreRecord {
+	var records []exploreRecord
+	for _, summary := range summaries {
+		if !summary.PlotEligible {
+			continue
+		}
+		records = append(records, exploreRecord{
+			Season: summary.Season, Played: summary.Played,
+			GoalsPerMatch: scoringRateText(summary.GoalsPerMatch), XGPerMatch: scoringRateText(summary.XGPerMatch),
+			GoalsMinusXGPerMatch: scoringRateText(summary.GoalsMinusXGPerMatch),
+			Goals:                summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch,
+		})
+	}
+	return records
+}
+
+// basisRow is a league table row that names its scoring basis.
+type basisRow interface {
+	exploreRecord | exploreDistributionSeason | exploreHomeAdvantageRow
+}
+
+// tagBasis marks league table rows with their basis, so the page can hold
+// both bases' rows and show one.
+func tagBasis[Row basisRow](rows []Row, basis history.ScoringBasis) []Row {
+	key := basisKey(basis)
+	tagged := make([]Row, len(rows))
+	for i, row := range rows {
+		switch typed := any(&row).(type) {
+		case *exploreRecord:
+			typed.Basis = key
+		case *exploreDistributionSeason:
+			typed.Basis = key
+		case *exploreHomeAdvantageRow:
+			typed.Basis = key
+		}
+		tagged[i] = row
+	}
+	return tagged
+}
+
+// otherPair pairs a text built on the page's basis with the same text built
+// on the other basis, which is empty when the page has no other basis.
+func (p explorePage) otherPair(text func(basis history.ScoringBasis, other bool) string) basisPair {
+	other := ""
+	if p.OtherBasis != nil {
+		other = text(otherBasisOf(p.Basis), true)
+	}
+	return p.Pair(text(p.Basis, false), other)
+}
+
+// ActiveStatusNote is Scoring trend's in-progress note on both bases.
+func (p explorePage) ActiveStatusNote() basisPair {
+	return p.otherPair(func(_ history.ScoringBasis, other bool) string {
+		if other {
+			return p.Other.ActiveStatus
+		}
+		return p.ActiveStatus
+	})
+}
+
+// HomeNotes are Home advantage's coverage and in-progress notes on both
+// bases.
+func (p explorePage) HomeNotes() []basisPair {
+	view := func(other bool) exploreHomeAdvantageView {
+		if other {
+			return p.Other.HomeAdvantage
+		}
+		return p.exploreHomeAdvantageView
+	}
+	return []basisPair{
+		p.otherPair(func(basis history.ScoringBasis, other bool) string {
+			if missing := view(other).HomeAdvantageXGMissing; missing != "" {
+				return fmt.Sprintf("%s is incomplete in %s, so those seasons have no %[1]s mark.", basisText(basis, "xG"), missing)
+			}
+			return ""
+		}),
+		p.otherPair(func(_ history.ScoringBasis, other bool) string {
+			if missing := view(other).HomeAdvantageXPointsMissing; missing != "" {
+				return fmt.Sprintf("xPoints is incomplete in %s, so those seasons have no xPoints mark.", missing)
+			}
+			return ""
+		}),
+		p.otherPair(func(_ history.ScoringBasis, other bool) string { return view(other).HomeAdvantageActiveStatus }),
+	}
 }
