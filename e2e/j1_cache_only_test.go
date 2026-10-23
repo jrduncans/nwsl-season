@@ -69,7 +69,7 @@ func cachePages() []cachePage {
 		},
 		{
 			path: season + "schedule-difficulty", heading: "Remaining schedule difficulty",
-			text:   []any{"Toughest remaining schedule"},
+			text:   []any{"Adjust for", "League baseline"},
 			absent: []string{"Schedule difficulty is unavailable"},
 		},
 		{

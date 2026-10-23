@@ -951,13 +951,38 @@ func testScheduleDifficultyPage(t *testing.T, f *fixture) {
 		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("schedule-difficulty")))
 		expect := playwright.NewPlaywrightAssertions()
-		if err := expect.Locator(page.GetByText("Toughest remaining schedule")).ToBeVisible(); err != nil {
+		rows := page.Locator(".schedule-plot-row")
+		if err := expect.Locator(rows).Not().ToHaveCount(0); err != nil {
+			t.Fatalf("schedule plot has no rows: %v", err)
+		}
+		// Each row opens to that team's remaining matches.
+		if err := rows.First().Locator("summary").Click(); err != nil {
+			t.Fatalf("open first row: %v", err)
+		}
+		if err := expect.Locator(rows.First().Locator(".fixture-detail")).ToBeVisible(); err != nil {
 			t.Error(err)
 		}
-		if err := expect.Locator(page.Locator(".schedule-plot-row")).Not().ToHaveCount(0); err != nil {
-			t.Errorf("schedule plot has no rows: %v", err)
-		}
 		assertNoHorizontalOverflow(t, page)
+
+		// Switching in place shows the same rows, in the same order, as the
+		// server's render of that measure.
+		if err := page.Locator(`[data-difficulty-controls] label:has(input[value="raw"])`).Click(); err != nil {
+			t.Fatalf("choose None: %v", err)
+		}
+		if err := page.WaitForURL("**difficulty=raw"); err != nil {
+			t.Fatal(err)
+		}
+		readRows := func(p playwright.Page) []string {
+			var got []string
+			evalJSON(t, p, `() => [...document.querySelectorAll('[data-difficulty-row]')].map((row) => [row.querySelector('.team-name')?.textContent.trim(), row.querySelector('[data-difficulty-value]')?.textContent, row.querySelector('[data-difficulty-label]')?.textContent].join(' '))`, nil, &got)
+			return got
+		}
+		switched := readRows(page)
+		server := newPageWith(t, pageOptions{Viewport: vp})
+		visit(t, server, f.URL(seasonPath("schedule-difficulty")+"?difficulty=raw"))
+		if rendered := readRows(server); fmt.Sprint(switched) != fmt.Sprint(rendered) {
+			t.Errorf("switched rows = %v\nserver rows = %v", switched, rendered)
+		}
 	})
 }
 

@@ -1170,12 +1170,61 @@ func TestScheduleDifficultyRendersComparisonAndFixtureDetails(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	// The "Toughest remaining schedule" overview and the plot rows are exercised by
+	// The plot rows and in-place measure switching are exercised by
 	// testScheduleDifficultyPage in e2e.
-	requireText(t, body, "main", "Remaining schedule difficulty", "Easiest remaining schedule", "Venue- and load-adjusted comparison", "Compare venue-only opponent PPG", "Compare raw opponent PPG", "Team and match detail", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha & Co")
-	requireText(t, body, "main", "adjusts for the two teams’ relative schedule load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects", "shown for comparison")
-	forbidRaw(t, body, "These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is")
-	requireElements(t, body, ".comparison-disclosure", ".team-schedule-detail")
+	requireText(t, body, "main", "Remaining schedule difficulty", "Adjust for", "Venue and load", "Venue only", "None", "League baseline", "Raw opponent PPG", "Relative load", "Final difficulty", "Home", "Away", "Alpha & Co")
+	requireText(t, body, "main", "adjusts for the two teams’ relative schedule load", "between six and five elapsed days", "third or later match within nine elapsed days", "exp(team congestion − opponent congestion)", "same strongly shrunk effects")
+	forbidRaw(t, body, "These estimates do not change the official standings", "recommended venue-adjusted", "Venue-adjusted comparison", "not a forecast, adjusted ranking, or power rating", "The data cutoff is", "Toughest remaining schedule", "Compare raw opponent PPG", "Team and match detail")
+	requireElements(t, body, `[data-difficulty-controls] input[value="adjusted"][checked]`, "details.schedule-plot-row .fixture-detail", ".schedule-method")
+}
+
+func TestScheduleDifficultySelectsMeasureFromQuery(t *testing.T) {
+	handler := NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC})
+	get := func(query string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/schedule-difficulty"+query, nil))
+		return response
+	}
+	raw := get("?difficulty=raw")
+	if raw.Code != http.StatusOK {
+		t.Fatalf("raw status = %d; body=%s", raw.Code, raw.Body.String())
+	}
+	body := raw.Body.String()
+	requireElements(t, body, `[data-difficulty-controls] input[value="raw"][checked]`)
+	requireText(t, body, "[data-difficulty-baseline]", "League average")
+	requireText(t, body, "[data-difficulty-note]", "with no adjustment")
+	requireExact(t, body, ".schedule-plot-row [data-difficulty-value]", "3.00")
+	for _, query := range []string{"?difficulty=bogus", "?difficulty=raw&difficulty=venue"} {
+		if response := get(query); response.Code != http.StatusBadRequest {
+			t.Errorf("%s status = %d, want 400", query, response.Code)
+		}
+	}
+}
+
+func TestStrengthViewWithMeasureSortsAvailableRowsFirst(t *testing.T) {
+	row := func(id string, available bool, adjusted, raw float64) strengthRowView {
+		return strengthRowView{TeamID: id, Available: available, Measures: []strengthMeasureView{
+			{Key: strengthMeasureAdjusted, SortValue: adjusted}, {Key: strengthMeasureRaw, SortValue: raw},
+		}}
+	}
+	view := strengthView{
+		MeasureOptions: []strengthMeasureOption{{Key: strengthMeasureAdjusted}, {Key: strengthMeasureRaw}},
+		Rows:           []strengthRowView{row("a", true, 2, 1), row("gone", false, 0, 0), row("b", true, 1, 3), row("c", true, 1, 1)},
+	}
+	shown, ok := view.withMeasure(strengthMeasureRaw)
+	if !ok {
+		t.Fatal("raw measure unavailable")
+	}
+	var order []string
+	for _, row := range shown.Rows {
+		order = append(order, row.TeamID)
+	}
+	if want := []string{"b", "a", "c", "gone"}; !reflect.DeepEqual(order, want) {
+		t.Errorf("raw order = %v, want %v (ties keep their order, unavailable rows last)", order, want)
+	}
+	if _, ok := view.withMeasure(strengthMeasureVenue); ok {
+		t.Error("withMeasure accepted a measure the view does not offer")
+	}
 }
 
 func TestScheduleDifficultyPreservesUnavailableFixtureDetails(t *testing.T) {
@@ -1211,6 +1260,14 @@ func TestScheduleDifficultySuppressesPartialLeagueComparison(t *testing.T) {
 	}
 	requireText(t, body, "main", "League-wide schedule comparison is unavailable")
 	forbidRaw(t, body, "Toughest remaining schedule", "Venue-adjusted comparison")
+	// Without a league comparison only the default measure exists, so the
+	// switcher is absent and a requested comparison measure falls back.
+	forbidElements(t, body, "[data-difficulty-controls]")
+	fallback := httptest.NewRecorder()
+	NewHandlerWithOptions(fakeStore{season: data}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(fallback, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/schedule-difficulty?difficulty=venue", nil))
+	if fallback.Code != http.StatusOK {
+		t.Fatalf("venue without a comparison = %d", fallback.Code)
+	}
 }
 
 func TestScheduleDifficultyRendersMissingVenueSplitAndNoFixturesAccurately(t *testing.T) {

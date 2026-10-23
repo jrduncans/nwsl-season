@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -676,6 +678,17 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 	if page.Phase == seasonPhaseComplete {
 		a.renderUnavailableFeatureWithNavigation(w, r, scope, "Schedule difficulty", page.Navigation)
 		return
+	}
+	if values, present := r.URL.Query()["difficulty"]; present {
+		if len(values) != 1 || !slices.Contains([]string{strengthMeasureAdjusted, strengthMeasureVenue, strengthMeasureRaw}, values[0]) {
+			a.renderScenarioBadRequest(w, r, "Schedule difficulty unavailable", errors.New("invalid difficulty selection"))
+			return
+		}
+		// Venue-only and raw need a league comparison; without one the page
+		// keeps its default measure.
+		if shown, ok := page.Strength.withMeasure(values[0]); ok {
+			page.Strength = shown
+		}
 	}
 	a.render(w, "schedule-difficulty", page)
 }
