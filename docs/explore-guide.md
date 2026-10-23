@@ -189,13 +189,13 @@ checks them through both the Go and the browser evaluator.
 The other views change goals and xG while official results and points stay fixed.
 The server-rendered switch is last in each view's data-control row and never
 in the navigation; in a view with a chart card (Compare teams, Scoring trend,
-Goal distribution, Team-seasons, Match by match, Season by season, Head to head)
-it heads the card's column of switches. Mixed-view links carry its selection.
+Goal distribution, Home advantage, Team-seasons, Match by match, Season by
+season, Head to head) it heads the card's column of switches. Mixed-view links carry its selection.
 Every data-control row is a GET form, and the switch is that form's only
 penalties field: off, the form omits the parameter. A chart card's switch sits
 outside its form and joins it through the `form` attribute (`PenaltiesSwitch`
 names the form). Views with no other selection (Scoring trend, Goal
-distribution without data, Home advantage and Scoring table) wrap the checkbox
+distribution and Home advantage without data, and Scoring table) wrap the checkbox
 in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
 its form's submit button.
@@ -269,7 +269,8 @@ axes, and missing calendar years, including 2020, are gaps. Each panel's
 expected mark needs complete coverage of its own metric (xG for goals, xPoints
 for points), so one can be missing while the other and the actual values remain;
 a note names the seasons without each. An eligible active season is plotted and
-noted as in progress through N matches. The table lists season, matches,
+noted as in progress through N matches. One chart card holds the Exclude
+penalties switch, both panels and their notes; the values table follows it. The table lists season, matches,
 home-minus-away goals, xG, points and xPoints per match, and the home win, draw and
 loss share, sorted from unrounded values (`home-sort=season|matches|goals|xg|points|xpoints|results`,
 `home-order=asc|desc`, default season descending, with unavailable values last). `penalties=exclude` switches the goals panel to
@@ -323,7 +324,8 @@ calculation is `history.SummarizeParity`.
 ### Shield and playoff thresholds
 
 `view=thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
-Shield, Home playoff game, Playoff bye and Playoffs. The series use distinct
+Shield, Home playoff game, Playoff bye and Playoffs, in a chart card with the
+intro and legend; the season links and cards follow it. The series use distinct
 line patterns and markers as well as color. The intro explains what a mark is:
 the points per match of the last team to qualify. The tooltip title shows the
 year, playoff places and bye count (or **No byes**). The chart's keyboard hint

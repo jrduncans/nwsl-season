@@ -70,8 +70,14 @@
 {{if not .HasDistributionBars}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
 </section>
 <section data-panel="home-advantage"{{if ne .View "home-advantage"}} hidden{{end}} aria-labelledby="explore-home-title">
-<div class="explore-heading"><h2 id="explore-home-title">Home advantage per match (regular-season)</h2>{{template "penaltiesForm" $}}</div>
+<div class="explore-heading"><h2 id="explore-home-title">Home advantage per match (regular-season)</h2>{{if .HomeAdvantageData}}<form method="get" id="home-controls" class="explore-team-controls">{{template "penaltiesFormFields" $}}<noscript><button class="button" type="submit">Apply</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 {{if .HomeAdvantageData}}
+<div class="explore-chart-card" data-home-card>
+<div class="explore-chart-options">
+<div class="explore-chart-switches">
+{{template "penaltiesSelect" ($.PenaltiesSwitch "home-controls")}}
+</div>
+</div>
 <p class="note">Each mark is the home side minus the away side, per played match. Above the zero line the home side did better; below it, the away side did.</p>
 <section data-home-panel="goals">
 <h3 class="explore-context-heading">{{template "basisText" ($.Both "Goals vs xG")}}</h3>
@@ -88,6 +94,7 @@
 <p class="note" data-basis-only="non-penalty">{{$.PointsNote}}</p>
 {{range $.HomeNotes}}{{template "basisNote" .}}{{end}}
 <p class="note">Home is ASA's home designation. ASA has no neutral-site flag, so alternate-venue and neutral matches count as home matches. The gap describes results, not a cause.</p>
+</div>
 <details class="explore-context-details" data-home-values{{if .HomeAdvantageExpanded}} open{{end}}>
 <summary>Home advantage values</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>

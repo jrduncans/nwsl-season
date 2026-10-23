@@ -679,7 +679,7 @@ th:nth-child(2) { text-align: left; }
 .threshold-series-2 { color: #5b3f96; }
 .threshold-series-3 { color: #a44b18; }
 .threshold-legend { flex-wrap: wrap; }
-[data-panel="thresholds"] .explore-subviews { margin-top: 1.25rem; }
+[data-panel="thresholds"] .explore-subviews { margin-top: 0; }
 [data-threshold-detail] { margin: 1rem 0 1.5rem; }
 .threshold-season-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; margin-bottom: .75rem; }
 .threshold-season-heading h3 { margin: 0; }
