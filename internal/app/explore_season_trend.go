@@ -94,32 +94,38 @@ type exploreSegment struct {
 	Selected                  bool
 }
 
-// TrendViewOptions lists the Chart segments in display order.
-func (page exploreSeasonTrendView) TrendViewOptions() []exploreSegment {
-	options := []exploreSegment{{Value: "balance", Label: "Scoring balance"}, {Value: "compare", Label: "Goals vs xG"}, {Value: "difference", Label: "Margins"}, {Value: "points", Label: "Points vs xPoints"}, {Value: "relative", Label: "Benchmarks"}}
+// exploreSegmentGroup is a labeled segmented control, rendered by the
+// "segmented" template. Its radios submit with Form when set, so a control
+// in a chart card can belong to the view's form above it. A Picker chooses
+// the chart and sits at the top of its card with a visually hidden legend.
+type exploreSegmentGroup struct {
+	Legend, Name, Form string
+	Picker             bool
+	Options            []exploreSegment
+}
+
+// exploreSegments marks the option whose Value is selected.
+func exploreSegments(selected string, options ...exploreSegment) []exploreSegment {
 	for i := range options {
-		options[i].Selected = options[i].Value == page.TrendView
+		options[i].Selected = options[i].Value == selected
 	}
 	return options
 }
 
+// TrendViewOptions lists the Chart segments in display order.
+func (page exploreSeasonTrendView) TrendViewOptions() []exploreSegment {
+	return exploreSegments(page.TrendView, exploreSegment{Value: "balance", Label: "Scoring balance"}, exploreSegment{Value: "compare", Label: "Goals vs xG"}, exploreSegment{Value: "difference", Label: "Margins"}, exploreSegment{Value: "points", Label: "Points vs xPoints"}, exploreSegment{Value: "relative", Label: "Benchmarks"})
+}
+
 // TrendAverageSeriesOptions lists the Benchmarks Show segments.
 func (page exploreSeasonTrendView) TrendAverageSeriesOptions() []exploreSegment {
-	options := []exploreSegment{{Value: "goals", Label: "Goals"}, {Value: "xg", Label: "xG"}, {Value: "points", Label: "Points"}, {Value: "xpoints", Label: "xPoints"}}
-	for i := range options {
-		options[i].Selected = options[i].Value == page.TrendAverageSeries
-	}
-	return options
+	return exploreSegments(page.TrendAverageSeries, exploreSegment{Value: "goals", Label: "Goals"}, exploreSegment{Value: "xg", Label: "xG"}, exploreSegment{Value: "points", Label: "Points"}, exploreSegment{Value: "xpoints", Label: "xPoints"})
 }
 
 // TrendSmoothingOptions lists the Smoothing segments; the window sizes are
 // labeled by number and named in full for assistive technology.
 func (page exploreSeasonTrendView) TrendSmoothingOptions() []exploreSegment {
-	options := []exploreSegment{{Value: "none", Label: "None"}, {Value: "3", Label: "3", Description: "3-match average"}, {Value: "5", Label: "5", Description: "5-match average"}, {Value: "10", Label: "10", Description: "10-match average"}}
-	for i := range options {
-		options[i].Selected = options[i].Value == page.TrendSmoothing
-	}
-	return options
+	return exploreSegments(page.TrendSmoothing, exploreSegment{Value: "none", Label: "None"}, exploreSegment{Value: "3", Label: "3", Description: "3-match average"}, exploreSegment{Value: "5", Label: "5", Description: "5-match average"}, exploreSegment{Value: "10", Label: "10", Description: "10-match average"})
 }
 
 func exploreMatches(matches []history.TeamMatch, names map[string]string) []exploreMatchRecord {

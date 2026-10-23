@@ -88,7 +88,7 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 			t.Errorf("default form %q submits %d penalties values", attr(form, "class"), got)
 		}
 	}
-	requireText(t, plain, "form[data-team-history-controls] label.penalties-select", "Exclude penalties")
+	requireText(t, plain, "[data-team-history-chart-card] label.penalties-select", "Exclude penalties")
 	requireAttr(t, plain, `input[data-penalties-selector]`, "title", "Excluding removes penalty kicks from both goals and xG.")
 	forbidRaw(t, plain, "explore-penalties", "data-penalties-control")
 	if got := len(find(t, plain, `nav input[data-penalties-selector]`)); got != 0 {

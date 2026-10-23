@@ -409,6 +409,15 @@ th:nth-child(2) { text-align: left; }
 .explore-chart-options select { min-width: 0; max-width: 100%; }
 .explore-chart-switches { display: flex; flex-direction: column; justify-content: flex-end; gap: .4rem; padding: 0 0 .45rem 1.5rem; border-left: 1px solid var(--line); }
 .explore-chart-switches:not(:has(> label:not([hidden]))) { display: none; }
+/* Without a picker, the options lead the card; without segmented groups, the
+   switches need no divider; with nothing visible, the row disappears. */
+.explore-chart-options:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.explore-chart-switches:first-child { padding-left: 0; border-left: 0; }
+.explore-chart-options:not(:has(:is(.segmented, .switch):not([hidden]))) { display: none; }
+/* In a top row of labeled selects, a segmented control reads like them: its
+   label sits beside the options. */
+.explore-team-controls .segmented { flex-direction: row; align-items: center; gap: .5rem; }
+.explore-team-controls .segmented legend { color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: 0; }
 .explore-basis-tag { color: var(--green); }
 .explore-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; margin: .5rem 0; }
 .explore-legend-row .explore-legend { margin: .25rem 0; }
@@ -420,7 +429,9 @@ th:nth-child(2) { text-align: left; }
 .explore-reference-key { display: inline-block; width: 1.25rem; margin-right: .4rem; border-top: 2px dotted currentColor; vertical-align: middle; }
 .explore-reference-team { color: var(--muted); }
 .explore-reference-legend label .explore-reference-key { margin-right: 0; }
-@media (max-width: 600px) { .explore-chart-card { padding: .75rem; }.explore-chart-switches { padding: 0; border-left: 0; } }
+/* On phones a chart card runs to the screen edges, so its border and padding
+   cost the chart and tiles no width. */
+@media (max-width: 600px) { .explore-chart-card { margin-inline: -1.25rem; padding: .75rem; border-inline: 0; border-radius: 0; }.explore-chart-switches { padding: 0; border-left: 0; } }
 .explore-actual-key { color: var(--chart-actual); }
 .explore-expected-key { color: var(--chart-expected); }
 :is(.explore-team-table, .explore-team-history-table, .explore-distribution-table) caption { padding: .75rem; text-align: left; font-size: .85rem; color: var(--muted); }
@@ -661,10 +672,6 @@ th:nth-child(2) { text-align: left; }
 .explore-h2h-controls form { min-width: 0; max-width: 100%; }
 
 [data-h2h-expected-column][hidden], [data-h2h-basis-column][hidden] { display: none; }
-
-@media (max-width: 450px) {
- .explore-h2h-controls [data-h2h-view-label], .explore-h2h-controls [data-h2h-penalties-label] { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; }
-}
 
 .explore-chart-wrap.explore-archive-scatter-wrap { width: min(100%, 46rem); height: auto; aspect-ratio: 1; }
 .explore-archive-scatter-wrap canvas { position: absolute; inset: 0; }

@@ -372,7 +372,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	page := newPageWith(t, pageOptions{Viewport: Mobile, Touch: true})
 	visit(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
 	defer expectInPlace(t, page, "series, penalties and history from shared payload")()
-	chooseOption(t, page, "[data-h2h-series]", "both")
+	chooseOption(t, page, "[data-segmented=h2h-series]", "both")
 	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertNoHorizontalOverflow(t, page)
-	chooseOption(t, page, "[data-h2h-series]", "actual")
+	chooseOption(t, page, "[data-segmented=h2h-series]", "actual")
 	if queryOf(t, page).Has("h2h-series") {
 		t.Fatal("default series must be omitted")
 	}
@@ -454,7 +454,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if _, err := page.GoBack(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("both"); err != nil {
+	if err := expect.Locator(page.Locator("[data-segmented=h2h-series] input:checked")).ToHaveValue("both"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := page.GoBack(); err != nil {
@@ -545,7 +545,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-h2h-rows] tr")).ToHaveCount(4); err != nil {
 			t.Fatal(err)
 		}
-		chooseOption(t, page, "[data-h2h-series]", "actual")
+		chooseOption(t, page, "[data-segmented=h2h-series]", "actual")
 		if noScript {
 			if err := page.Locator("[data-h2h-submit]").Click(); err != nil {
 				t.Fatal(err)
@@ -594,7 +594,7 @@ func TestExploreHeadToHeadMarginsAlias(t *testing.T) {
 			if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("actual"); err != nil {
+			if err := expect.Locator(page.Locator("[data-segmented=h2h-series] input:checked")).ToHaveValue("actual"); err != nil {
 				t.Fatal(err)
 			}
 			if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeHidden(); err != nil {
@@ -618,11 +618,11 @@ func TestExploreHeadToHeadMarginsAlias(t *testing.T) {
 				}
 			}
 		}
-		choose("[data-h2h-series]", "both")
+		choose("[data-segmented=h2h-series]", "both")
 		if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
-		choose("[data-h2h-series]", "actual")
+		choose("[data-segmented=h2h-series]", "actual")
 		if err := expect.Locator(page.Locator("[data-h2h-record]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
@@ -630,7 +630,7 @@ func TestExploreHeadToHeadMarginsAlias(t *testing.T) {
 			if _, err := page.GoBack(); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("both"); err != nil {
+			if err := expect.Locator(page.Locator("[data-segmented=h2h-series] input:checked")).ToHaveValue("both"); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := page.GoForward(); err != nil {
@@ -710,7 +710,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
 		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&penalties=exclude")
-		chooseOption(t, page, "[data-h2h-series]", "points")
+		chooseOption(t, page, "[data-segmented=h2h-series]", "points")
 		if err := page.WaitForURL("**h2h-series=points**"); err != nil {
 			t.Fatal(err)
 		}
@@ -723,14 +723,14 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 		if queryOf(t, page).Get("h2h-series") != "points" {
 			t.Fatal("URL lost points")
 		}
-		chooseOption(t, page, "[data-h2h-series]", "both")
+		chooseOption(t, page, "[data-segmented=h2h-series]", "both")
 		if err := expect.Locator(page.Locator("[data-h2h-points-tiles]")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := page.GoBack(); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-series]")).ToHaveValue("points"); err != nil {
+		if err := expect.Locator(page.Locator("[data-segmented=h2h-series] input:checked")).ToHaveValue("points"); err != nil {
 			t.Fatal(err)
 		}
 		assertPointsChart(t, page, `[data-chart="head-to-head"]`, `[data-h2h-points-tiles]`)
@@ -799,8 +799,8 @@ func TestExploreHeadToHeadGoalGapPanels(t *testing.T) {
 		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
 		setPenalties(t, page, "[data-h2h-penalties]", true)
 		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
-		chooseOption(t, page, "[data-h2h-series]", "actual")
-		chooseOption(t, page, "[data-h2h-series]", "both")
+		chooseOption(t, page, "[data-segmented=h2h-series]", "actual")
+		chooseOption(t, page, "[data-segmented=h2h-series]", "both")
 		if err := page.Locator("[data-chart=head-to-head-xg]").Press("End"); err != nil {
 			t.Fatal(err)
 		}

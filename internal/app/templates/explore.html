@@ -206,7 +206,7 @@
 <input type="hidden" name="view" value="team-rankings">
 <label>Season <select name="season">{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team"{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-<label>Values <select name="units"><option value="per-match"{{if eq .TeamUnits "per-match"}} selected{{end}}>Per match</option><option value="total"{{if eq .TeamUnits "total"}} selected{{end}}>Totals</option></select></label>
+{{template "segmented" .RankingUnitsControl}}
 {{template "penaltiesSelect" ($.PenaltiesSwitch "")}}
 <noscript><button class="button" type="submit">Show rankings</button></noscript>
 </form>
@@ -224,23 +224,28 @@
 </section>
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
 <h2 id="explore-team-history-title">Season-by-season {{if eq .TeamMeasure "points"}}points{{else}}scoring{{end}} (regular-season)</h2>
-<form method="get" data-team-history-controls class="explore-team-controls">
+<form method="get" id="team-history-controls" data-team-history-controls class="explore-team-controls">
 <input type="hidden" name="view" value="team-history">
 <input type="hidden" name="history-sort" value="{{.HistorySort}}">
 <input type="hidden" name="history-order" value="{{.HistoryOrder}}">
 <label>Team <select name="team" data-history-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-<label>Compare <select name="measure" data-history-measure><option value="difference"{{if eq .TeamMeasure "difference"}} selected{{end}}>Goal differential</option><option value="for"{{if eq .TeamMeasure "for"}} selected{{end}}>Goals scored</option><option value="against"{{if eq .TeamMeasure "against"}} selected{{end}}>Goals allowed</option><option value="points"{{if eq .TeamMeasure "points"}} selected{{end}}>Points</option></select></label>
-<label>Show <select name="series" data-history-series><option value="both"{{if eq .HistorySeries "both"}} selected{{end}}>{{if eq .TeamMeasure "points"}}Points and xPoints{{else}}Goals and xG{{end}}</option><option value="goals"{{if eq .HistorySeries "goals"}} selected{{end}}>{{if eq .TeamMeasure "points"}}Points{{else}}Goals{{end}}</option><option value="xg"{{if eq .HistorySeries "xg"}} selected{{end}}>{{if eq .TeamMeasure "points"}}xPoints{{else}}xG{{end}}</option></select></label>
-<label><input type="checkbox" name="context" value="on" data-history-context{{if eq .HistoryContext "on"}} checked{{end}}> League context</label>
-{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}
 <noscript><button class="button" type="submit">Show team history</button></noscript>
 </form>
-<p class="note">Per match, from recorded results. In-progress seasons include matches played so far.<span data-basis-only="non-penalty"> Penalty kicks excluded.</span></p>
-<p class="note" data-points-note="team-history"{{if not ($.PointsNoteShown "team-history")}} hidden{{end}}>{{$.PointsNote}}</p>
 <p data-team-history-empty{{if .TeamHistoryRows}} hidden{{end}}>No team history is available from the recorded results yet.</p>
 <div data-team-history-results{{if not .TeamHistoryRows}} hidden{{end}}>
 <h3 data-history-team-name>{{template "teamName" .HistoryTeam}}</h3>
 <p class="explore-data-warning" data-team-history-warning{{if not (or .TeamHistoryMissingXG .TeamHistoryMissingXPoints)}} hidden{{end}}>{{if and .TeamHistoryMissingXG .TeamHistoryMissingXPoints}}{{template "basisText" ($.Both "Some seasons have incomplete xG and xPoints for this team; actual values remain available.")}}{{else if .TeamHistoryMissingXPoints}}Some seasons have incomplete xPoints for this team; earned points remain available.{{else}}{{template "basisText" ($.Both "Some seasons have incomplete xG for this team; goals remain available.")}}{{end}}</p>
+<div class="explore-chart-card" data-team-history-chart-card>
+<div class="explore-chart-options">
+{{template "segmented" .HistoryMeasureControl}}
+{{template "segmented" .HistorySeriesControl}}
+<div class="explore-chart-switches">
+<label class="switch"><input type="checkbox" role="switch" name="context" value="on" form="team-history-controls" data-history-context{{if eq .HistoryContext "on"}} checked{{end}}> League context</label>
+{{template "penaltiesSelect" ($.PenaltiesSwitch "team-history-controls")}}
+</div>
+</div>
+<p class="note">Per match, from recorded results. In-progress seasons include matches played so far.<span data-basis-only="non-penalty"> Penalty kicks excluded.</span></p>
+<p class="note" data-points-note="team-history"{{if not ($.PointsNoteShown "team-history")}} hidden{{end}}>{{$.PointsNote}}</p>
 <div data-team-history-plot hidden>
 <div class="explore-legend"><span class="explore-actual-key" data-history-key="goals">● <span data-history-actual-label>{{.TeamActualLabel}}</span></span><span class="explore-expected-key" data-history-key="xg">◆ <span data-history-xg-label>{{.TeamXGLabel}}</span></span></div>
 <div class="explore-legend" data-history-context-legend hidden><span><i class="explore-context-bar"></i>Season high–low range</span><span>⋯ Completed-season records</span></div>
@@ -254,6 +259,7 @@
 <h4 class="explore-context-heading" data-history-xg-panel-label></h4>
 <div class="explore-chart-wrap"><canvas data-chart="team-history-xg" tabindex="0" role="img" aria-label="{{$.T "Team expected goals per match with league context"}}" data-aria-all="Team expected goals per match with league context" data-aria-np="{{$.NP "Team expected goals per match with league context"}}" aria-describedby="explore-chart-help"></canvas></div>
 <p class="explore-keyboard-hint">Use arrow keys to inspect points and record holders. Escape clears the tooltip.</p>
+</div>
 </div>
 <details class="explore-context-details" data-history-context-details{{if eq .HistoryContext "off"}} hidden{{end}}>
 <summary>League records and season ranges</summary>

@@ -167,10 +167,10 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	}
 	gotoInPage(t, page, "explore?view=team-history&penalties=exclude&measure=for")
 	// Option text is basis-independent: the Penalties select states the basis.
-	if got := textOf(t, page, "[data-history-series]"); got != "Goals and xG\nGoals\nxG" {
+	if got := textOf(t, page, "[data-panel=team-history] [data-segmented=series] .segmented-options"); got != "Goals and xG\nGoals\nxG" {
 		t.Errorf("history series choices = %q", got)
 	}
-	if got := textOf(t, page, "[data-history-measure]"); !strings.Contains(got, "Goal differential") || strings.Contains(got, "on-penalty") {
+	if got := textOf(t, page, "[data-panel=team-history] [data-segmented=measure] .segmented-options"); !strings.Contains(got, "Goal differential") || strings.Contains(got, "on-penalty") {
 		t.Errorf("history measure choices = %q", got)
 	}
 

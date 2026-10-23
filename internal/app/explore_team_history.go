@@ -227,3 +227,20 @@ func exploreHistoryContextData(seasons []exploreTeamSeason, basis history.Scorin
 	}
 	return data
 }
+
+// HistoryMeasureControl and HistorySeriesControl sit in the Season by season
+// chart card and submit with its form. Show names the measure's own series.
+func (p explorePage) HistoryMeasureControl() exploreSegmentGroup {
+	return exploreSegmentGroup{Legend: "Compare", Name: "measure", Form: "team-history-controls", Options: exploreSegments(p.TeamMeasure,
+		exploreSegment{Value: "difference", Label: "Goal differential"}, exploreSegment{Value: "for", Label: "Goals scored"},
+		exploreSegment{Value: "against", Label: "Goals allowed"}, exploreSegment{Value: "points", Label: "Points"})}
+}
+
+func (p explorePage) HistorySeriesControl() exploreSegmentGroup {
+	actual, expected := "Goals", "xG"
+	if p.TeamMeasure == "points" {
+		actual, expected = "Points", "xPoints"
+	}
+	return exploreSegmentGroup{Legend: "Show", Name: "series", Form: "team-history-controls", Options: exploreSegments(p.HistorySeries,
+		exploreSegment{Value: "both", Label: actual + " and " + expected}, exploreSegment{Value: "goals", Label: actual}, exploreSegment{Value: "xg", Label: expected})}
+}

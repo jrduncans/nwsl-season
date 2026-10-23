@@ -124,7 +124,7 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	if metrics[0].Goals.High.Value != 2 || len(metrics[0].Goals.High.Holders) != 2 || metrics[0].Goals.Seasons[2].High != nil {
 		t.Fatalf("record payload included excluded results or dropped ties: %+v", metrics[0].Goals)
 	}
-	for _, fragment := range []string{`value="xg" selected`, `type="checkbox" name="context" value="on" data-history-context checked`, `data-history-context-details>`, `explore-context-bar`, `<h4>xG allowed</h4>`, `alpha · 2019 · 20 played`, `bravo · 2025 · 20 played`, `context=on`, `series=xg`} {
+	for _, fragment := range []string{`name="series" value="xg" form="team-history-controls" checked`, `type="checkbox" role="switch" name="context" value="on" form="team-history-controls" data-history-context checked`, `data-history-context-details>`, `explore-context-bar`, `<h4>xG allowed</h4>`, `alpha · 2019 · 20 played`, `bravo · 2025 · 20 played`, `context=on`, `series=xg`} {
 		if !strings.Contains(body, fragment) {
 			t.Errorf("context fallback missing %q", fragment)
 		}
@@ -153,7 +153,7 @@ func TestExploreContextFloatingBarsDirectURLAndSortLinks(t *testing.T) {
 		t.Fatalf("status=%d reads=%d/%d", response.Code, store.archiveCalls, store.seasonCalls)
 	}
 	body := response.Body.String()
-	for _, fragment := range []string{`type="checkbox" name="context" value="on" data-history-context checked`, `data-history-context-details>`, `explore-context-bar`, `context=on`, `history-sort=played`} {
+	for _, fragment := range []string{`type="checkbox" role="switch" name="context" value="on" form="team-history-controls" data-history-context checked`, `data-history-context-details>`, `explore-context-bar`, `context=on`, `history-sort=played`} {
 		if !strings.Contains(body, fragment) {
 			t.Errorf("floating bars direct URL missing %q", fragment)
 		}
@@ -164,7 +164,7 @@ func TestExploreContextFloatingBarsDirectURLAndSortLinks(t *testing.T) {
 	}
 	off := httptest.NewRecorder()
 	handler.ServeHTTP(off, httptest.NewRequest(http.MethodGet, "/explore?view=team-history&team=alpha&context=off", nil))
-	if off.Code != http.StatusOK || !strings.Contains(off.Body.String(), `type="checkbox" name="context" value="on" data-history-context>`) || !strings.Contains(off.Body.String(), `data-history-context-details hidden`) {
+	if off.Code != http.StatusOK || !strings.Contains(off.Body.String(), `type="checkbox" role="switch" name="context" value="on" form="team-history-controls" data-history-context>`) || !strings.Contains(off.Body.String(), `data-history-context-details hidden`) {
 		t.Fatalf("context=off did not leave league context unchecked and hidden: status=%d", off.Code)
 	}
 }
