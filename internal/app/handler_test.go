@@ -864,12 +864,14 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 	}
 	body := response.Body.String()
 	requireText(t, body, "main", "Recalculation pending.")
-	requireText(t, body, ".clinching-status-group-clinched h2", "Already clinched the Shield", "Already clinched the playoffs")
-	if got := len(find(t, body, "li.clinching-status-item")); got != 2 {
-		t.Fatalf("clinched status rows = %d, want one row per achievement group", got)
+	// The Shield implies the playoffs, so Alpha is listed once, under its
+	// highest clinched outcome.
+	requireText(t, body, ".clinching-status-group-clinched h2", "Already clinched the Shield")
+	forbidRaw(t, body, "Already clinched the playoffs")
+	if got := len(find(t, body, "li.clinching-status-item")); got != 1 {
+		t.Fatalf("clinched status rows = %d, want one row for the highest outcome", got)
 	}
 	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Alpha & Co <script>alert(1)</script> has already clinched the Shield")
-	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Alpha & Co <script>alert(1)</script> has already clinched the playoffs")
 }
 
 func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
@@ -2047,5 +2049,19 @@ func TestGroupClinchingRowsByTeamKeepsFirstAppearanceOrder(t *testing.T) {
 	want := []string{"kc: a home playoff game, the playoffs", "ang: the playoffs"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("groups = %v, want %v", got, want)
+	}
+}
+
+func TestHighestClinchedRowsKeepsEachTeamsHighestOutcome(t *testing.T) {
+	row := func(id string, rank int) clinchingRowView {
+		return clinchingRowView{Team: teamNameView{ID: id}, AchievementRank: rank}
+	}
+	kept := highestClinchedRows([]clinchingRowView{row("gotham", 8), row("was", 8), row("gotham", 4), row("gotham", 1)})
+	var got []string
+	for _, row := range kept {
+		got = append(got, fmt.Sprintf("%s:%d", row.Team.ID, row.AchievementRank))
+	}
+	if want := []string{"was:8", "gotham:1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("kept = %v, want %v", got, want)
 	}
 }

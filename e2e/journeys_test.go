@@ -421,10 +421,11 @@ func fixtureCount(t *testing.T, page playwright.Page) int {
 	return count
 }
 
-// clinchedLine is the accessible name the clinching page gives a team already
-// guaranteed a playoff place.
+// clinchedLine starts the accessible name the clinching page gives a team
+// that has already clinched an outcome. Each team is listed once, under its
+// highest clinched outcome, so a playoff team may be listed under a higher one.
 func clinchedLine(teamName string) string {
-	return teamName + " has already clinched the playoffs"
+	return teamName + " has already clinched "
 }
 
 // assertOthersClinched fails unless the standings still show a playoffs
@@ -442,7 +443,7 @@ func assertOthersClinched(t *testing.T, rows []tableRow) {
 // clinched.
 func clinchedOnPage(t *testing.T, page playwright.Page, teamName string) bool {
 	t.Helper()
-	count, err := page.Locator(fmt.Sprintf("li[aria-label=%q]", clinchedLine(teamName))).Count()
+	count, err := page.Locator(fmt.Sprintf("li[aria-label^=%q]", clinchedLine(teamName))).Count()
 	if err != nil {
 		t.Fatalf("count clinched entries: %v", err)
 	}

@@ -288,7 +288,8 @@ necessary.
 
 A line under the page title gives the slate's local date range and expands
 to list its included matches; the list stays collapsed by default so the
-results remain near the top. Each team that can clinch, or can be eliminated,
+results remain near the top. "Already clinched" boxes list each team once,
+under its highest clinched outcome, since that outcome implies the lower ones. Each team that can clinch, or can be eliminated,
 gets one card: the team's name heads it, and each outcome ("Can clinch a home
 playoff game", "Can clinch the playoffs") is a section under its own badge,
 ordered by outcome rank. Cards follow each team's highest-ranked outcome, then

@@ -205,7 +205,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	view.AlreadyClinched = groupClinchingStatusRows(alreadyClinchedRows)
+	view.AlreadyClinched = groupClinchingStatusRows(highestClinchedRows(alreadyClinchedRows))
 	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion)
 	if err != nil {
 		a.renderError(w, r, err)
@@ -335,6 +335,24 @@ func groupClinchingStatusRows(rows []clinchingRowView) []clinchingStatusGroupVie
 		}
 	}
 	return groups
+}
+
+// highestClinchedRows keeps each team's highest clinched outcome, the one
+// with the fewest qualifying places, since it implies every lower one.
+func highestClinchedRows(rows []clinchingRowView) []clinchingRowView {
+	best := map[string]int{}
+	for index, row := range rows {
+		if current, ok := best[row.Team.ID]; !ok || row.AchievementRank < rows[current].AchievementRank {
+			best[row.Team.ID] = index
+		}
+	}
+	kept := make([]clinchingRowView, 0, len(best))
+	for index, row := range rows {
+		if best[row.Team.ID] == index {
+			kept = append(kept, row)
+		}
+	}
+	return kept
 }
 
 // groupClinchingRowsByTeam keeps rows in order and gathers each team's rows
