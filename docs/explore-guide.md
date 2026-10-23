@@ -126,7 +126,9 @@ Presentation:
   (`Inline`: a visible span, since Safari lays out a legend outside the row,
   with the legend visually hidden). Controls
   apply as soon as they change; submit buttons appear only without JavaScript.
-  On phones a chart card runs to the screen edges.
+  A chart in a card fills the card's width; outside a card, charts stop at
+  58rem. Square scatter and quadrant plots keep their own sizing. On phones a
+  chart card runs to the screen edges.
 
 A new view needs a registry entry and a row in the table above, a matching
 `data-panel` section (the registry test checks tabs and panels agree), a pure
