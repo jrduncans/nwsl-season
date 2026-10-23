@@ -455,8 +455,8 @@ func TestStandingsDoNotOfferNonPenaltyXG(t *testing.T) {
 		t.Fatalf("status = %d, want 200", response.Code)
 	}
 	body := response.Body.String()
-	requireElements(t, body, "button[data-standings-stat-value=goals]", "button[data-standings-stat-value=xg]")
-	forbidElements(t, body, "button[data-standings-stat-value=npxg]", "[data-standings-stat-warning]")
+	requireElements(t, body, "input[data-standings-stat-value=goals]", "input[data-standings-stat-value=xg]")
+	forbidElements(t, body, "[data-standings-stat-value=npxg]", "[data-standings-stat-warning]")
 	forbidText(t, body, "table.standings", "npxG", "Non-penalty")
 }
 

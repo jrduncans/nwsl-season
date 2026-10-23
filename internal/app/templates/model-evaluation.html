@@ -5,11 +5,11 @@
 <p class="evaluation-intro">This compares each forecast with the final regular-season table at different points in past seasons. Lower error is better. The default view uses final-test seasons that were held out while the models were designed.</p>
 
 {{if eq .Status "complete"}}<section class="evaluation-chart-panel" data-evaluation-chart data-evaluation='{{.ChartData}}'>
-  <div class="evaluation-controls" aria-label="Chart settings">
-    <label><span>Measure</span><select data-evaluation-metric><option value="points">Final points error</option><option value="position">Final table-position error</option></select></label>
-    <label><span>Show</span><select data-evaluation-scale><option value="relative">Relative to the simple baseline</option><option value="absolute">Average error</option></select></label>
-    <label><span>Seasons</span><select data-evaluation-window><option value="held_out">Final test</option><option value="development">Development</option></select></label>
-  </div>
+  <form class="evaluation-controls" data-evaluation-controls aria-label="Chart settings">
+    <fieldset class="segmented"><legend>Measure</legend><span class="segmented-options"><label><input type="radio" name="metric" value="points" checked><span>Final points error</span></label><label><input type="radio" name="metric" value="position"><span>Final table-position error</span></label></span></fieldset>
+    <fieldset class="segmented"><legend>Show</legend><span class="segmented-options"><label><input type="radio" name="scale" value="relative" checked><span>Relative to the simple baseline</span></label><label><input type="radio" name="scale" value="absolute"><span>Average error</span></label></span></fieldset>
+    <fieldset class="segmented"><legend>Seasons</legend><span class="segmented-options"><label><input type="radio" name="window" value="held_out" checked><span>Final test</span></label><label><input type="radio" name="window" value="development"><span>Development</span></label></span></fieldset>
+  </form>
   <p class="evaluation-chart-summary" id="evaluation-chart-summary" data-evaluation-summary aria-live="polite"></p>
   <div class="evaluation-legend" data-evaluation-legend aria-label="Models shown"></div>
   <div class="evaluation-chart-wrap"><canvas data-evaluation-canvas tabindex="0" role="img" aria-label="Forecast error through the season" aria-describedby="evaluation-chart-summary evaluation-chart-help"></canvas></div>

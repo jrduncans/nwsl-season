@@ -7,9 +7,11 @@
   } catch {
     return;
   }
-  const metricControl = panel.querySelector('[data-evaluation-metric]');
-  const scaleControl = panel.querySelector('[data-evaluation-scale]');
-  const windowControl = panel.querySelector('[data-evaluation-window]');
+  // Segmented controls: each is a RadioNodeList of the settings form.
+  const controls = panel.querySelector('[data-evaluation-controls]');
+  const metricControl = controls?.elements.namedItem('metric');
+  const scaleControl = controls?.elements.namedItem('scale');
+  const windowControl = controls?.elements.namedItem('window');
   const canvas = panel.querySelector('[data-evaluation-canvas]');
   const summary = panel.querySelector('[data-evaluation-summary]');
   const legend = panel.querySelector('[data-evaluation-legend]');
@@ -193,7 +195,7 @@
     chart.options.scales.y.title.text = relative ? 'Error relative to the simple baseline' : `Average error per team (${view.unit})`;
     chart.options.scales.y.ticks.callback = value => relative ? ratio(value) : value.toFixed(1);
     chart.options.scales.y.beginAtZero = !relative;
-    canvas.setAttribute('aria-label', `${measure} through the season, ${windowControl.selectedOptions[0].textContent.toLowerCase()} seasons`);
+    canvas.setAttribute('aria-label', `${measure} through the season, ${controls.querySelector('input[name="window"]:checked + span').textContent.toLowerCase()} seasons`);
     clear();
     chart.update('none');
     renderLegend();
@@ -233,6 +235,6 @@
   });
   canvas.addEventListener('blur', () => { clear(); chart.update('none'); });
 
-  [metricControl, scaleControl, windowControl].forEach(control => control.addEventListener('change', render));
+  controls.addEventListener('change', render);
   render();
 })();

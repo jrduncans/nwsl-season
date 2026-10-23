@@ -33,8 +33,11 @@ document.addEventListener("change", (event) => {
   form.requestSubmit();
 });
 
-document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-standings-mode-button]");
+// The Stats and Values controls are disabled until this script can apply them.
+document.querySelectorAll("[data-standings-control]").forEach((control) => { control.disabled = false; });
+
+document.addEventListener("change", (event) => {
+  const button = event.target.closest("[data-standings-mode-value]");
   if (!button) return;
 
   const display = button.closest("[data-standings]");
@@ -45,9 +48,6 @@ document.addEventListener("click", (event) => {
   requestAnimationFrame(() => {
     display.dataset.standingsMode = mode;
     sortStandings(display, mode, display.dataset.standingsStat);
-    display.querySelectorAll("[data-standings-mode-button]").forEach((candidate) => {
-      candidate.setAttribute("aria-pressed", String(candidate === button));
-    });
     display.querySelectorAll("[data-standings-mode-label]").forEach((label) => {
       label.textContent = mode === "per-game" ? label.dataset.perGame : label.dataset.total;
     });
@@ -56,8 +56,8 @@ document.addEventListener("click", (event) => {
   });
 });
 
-document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-standings-stat-button]");
+document.addEventListener("change", (event) => {
+  const button = event.target.closest("[data-standings-stat-value]");
   if (!button) return;
 
   const display = button.closest("[data-standings]");
@@ -65,9 +65,6 @@ document.addEventListener("click", (event) => {
   if (!display || !["goals", "xg"].includes(stat) || display.dataset.standingsStat === stat) return;
 
   display.dataset.standingsStat = stat;
-  display.querySelectorAll("[data-standings-stat-button]").forEach((candidate) => {
-    candidate.setAttribute("aria-pressed", String(candidate === button));
-  });
   display.querySelectorAll("[data-standings-points-label]").forEach((label) => {
     label.textContent = stat === "xg" ? label.dataset.xgLabel : label.dataset.goalsLabel;
     label.title = stat === "xg" ? "xPoints from ASA's match xG model" : "Official standings points";
@@ -345,12 +342,10 @@ function setupFixtureViews() {
 
   const show = (selected) => {
     views.forEach((view) => { view.hidden = view.dataset.fixtureView !== selected; });
-    buttons.forEach((button) => { button.setAttribute("aria-pressed", String(button.dataset.fixtureViewButton === selected)); });
+    buttons.forEach((button) => { button.checked = button.dataset.fixtureViewButton === selected; });
   };
 
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => show(button.dataset.fixtureViewButton));
-  });
+  toggle.addEventListener("change", (event) => show(event.target.value));
   toggle.hidden = false;
   show("results");
 }

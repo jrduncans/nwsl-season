@@ -94,7 +94,7 @@
     <label for="forecast-team"><span>Filter by team <span class="note">(optional)</span></span><select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
     <label for="forecast-fixture"><span>Choose a match</span><select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}{{template "forecastFixtureOption" .}}{{end}}</select></label>
     <template id="forecast-all-fixtures">{{range .AllFixtures}}{{template "forecastFixtureOption" .}}{{end}}</template>
-    <fieldset class="forecast-outcomes"><legend>Assume result</legend><label><input type="radio" name="outcome" value="h" checked><span data-forecast-outcome="h">{{.DefaultHomeTeam}} win</span></label><label><input type="radio" name="outcome" value="d"><span>Draw</span></label><label><input type="radio" name="outcome" value="a"><span data-forecast-outcome="a">{{.DefaultAwayTeam}} win</span></label></fieldset>
+    <fieldset class="segmented forecast-outcomes"><legend>Assume result</legend><span class="segmented-options"><label><input type="radio" name="outcome" value="h" checked><span data-forecast-outcome="h">{{.DefaultHomeTeam}} win</span></label><label><input type="radio" name="outcome" value="d"><span>Draw</span></label><label><input type="radio" name="outcome" value="a"><span data-forecast-outcome="a">{{.DefaultAwayTeam}} win</span></label></span></fieldset>
     <button class="button" type="submit">Add result</button>
   </form>
   <p id="forecast-fixture-empty" class="note" hidden>No unfixed matches remain for this team.</p>

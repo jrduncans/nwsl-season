@@ -38,20 +38,15 @@
 
 {{define "standingsToggle"}}
   <div class="standings-toolbar">
-    {{if .HasXG}}<div class="standings-toolbar-group">
-      <p class="standings-view-label">Stats</p>
-      <div class="standings-toggle" role="group" aria-label="Standings goal statistics">
-        <button class="standings-toggle-button" type="button" data-standings-stat-button data-standings-stat-value="goals" aria-pressed="true">Goals</button>
-        <button class="standings-toggle-button" type="button" data-standings-stat-button data-standings-stat-value="xg" aria-pressed="false">xG</button>
-      </div>
-    </div>{{end}}
-    <div class="standings-toolbar-group">
-      <p class="standings-view-label">Values</p>
-      <div class="standings-toggle" role="group" aria-label="Standings value display">
-        <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="per-game" aria-pressed="{{if eq .StandingsMode "per-game"}}true{{else}}false{{end}}">Per match</button>
-        <button class="standings-toggle-button" type="button" data-standings-mode-button data-standings-mode-value="total" aria-pressed="{{if eq .StandingsMode "total"}}true{{else}}false{{end}}">Totals</button>
-      </div>
-    </div>
+    {{/* Only standings.js can apply these, so they stay disabled until it runs. */}}
+    {{if .HasXG}}<fieldset class="segmented" data-standings-control disabled><legend>Stats</legend><span class="segmented-options">
+      <label><input type="radio" name="standings-stat" value="goals" data-standings-stat-value="goals" checked><span>Goals</span></label>
+      <label><input type="radio" name="standings-stat" value="xg" data-standings-stat-value="xg"><span>xG</span></label>
+    </span></fieldset>{{end}}
+    <fieldset class="segmented" data-standings-control disabled><legend>Values</legend><span class="segmented-options">
+      <label><input type="radio" name="standings-mode" value="per-game" data-standings-mode-value="per-game"{{if eq .StandingsMode "per-game"}} checked{{end}}><span>Per match</span></label>
+      <label><input type="radio" name="standings-mode" value="total" data-standings-mode-value="total"{{if eq .StandingsMode "total"}} checked{{end}}><span>Totals</span></label>
+    </span></fieldset>
   </div>
 {{end}}
 

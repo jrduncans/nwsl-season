@@ -320,10 +320,10 @@ func testStandingsSorting(t *testing.T, f *fixture) {
 	totals := page.Locator("[data-standings-mode-value=total]")
 	goals := page.Locator("[data-standings-stat-value=goals]")
 	xg := page.Locator("[data-standings-stat-value=xg]")
-	pressed := func(button playwright.Locator, want bool) {
+	pressed := func(option playwright.Locator, want bool) {
 		t.Helper()
-		if err := expect.Locator(button).ToHaveAttribute("aria-pressed", strconv.FormatBool(want)); err != nil {
-			t.Errorf("aria-pressed should be %v: %v", want, err)
+		if err := expect.Locator(option).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(want)}); err != nil {
+			t.Errorf("checked should be %v: %v", want, err)
 		}
 	}
 
@@ -489,13 +489,16 @@ func testStandingsNoScript(t *testing.T, f *fixture) {
 		return order
 	}
 	before := readRows()
-	// The buttons are present but cannot act without the script.
-	click(t, page.Locator("[data-standings-mode-value=total]"))
-	click(t, page.Locator("[data-standings-stat-value=xg]"))
+	// The controls are present but disabled, since only the script can act.
+	for _, selector := range []string{"[data-standings-mode-value=total]", "[data-standings-stat-value=xg]"} {
+		if err := expect.Locator(page.Locator(selector)).ToBeDisabled(); err != nil {
+			t.Errorf("%s should be disabled without script: %v", selector, err)
+		}
+	}
 	if after := readRows(); !sameStrings(after, before) {
 		t.Errorf("order changed without script: %v then %v", before, after)
 	}
-	if err := expect.Locator(page.Locator("[data-standings-mode-value=per-game]")).ToHaveAttribute("aria-pressed", "true"); err != nil {
+	if err := expect.Locator(page.Locator("[data-standings-mode-value=per-game]")).ToBeChecked(); err != nil {
 		t.Error(err)
 	}
 	if err := expect.Locator(page.Locator("th[data-standings-points-label]")).ToHaveText("Pts"); err != nil {
@@ -1003,7 +1006,9 @@ func testModelEvaluationPage(t *testing.T, f *fixture) {
 		if err := expect.Locator(canvas).ToHaveAttribute("aria-label", "Final-points forecast error through the season, final test seasons"); err != nil {
 			t.Error(err)
 		}
-		selectValue(t, page.Locator("[data-evaluation-metric]"), "position")
+		if err := page.Locator("[data-evaluation-controls] input[name=metric][value=position]").Check(); err != nil {
+			t.Fatal(err)
+		}
 		if err := expect.Locator(canvas).ToHaveAttribute("aria-label", "Final table-position forecast error through the season, final test seasons"); err != nil {
 			t.Error(err)
 		}
