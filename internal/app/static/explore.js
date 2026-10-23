@@ -64,6 +64,30 @@
   // while renderedNonPenalty stays the basis of the server-rendered figures.
   const renderedNonPenalty = root.dataset.penalties === 'exclude';
   let nonPenalty = renderedNonPenalty;
+  // Team records name their matches by index into the shared match list,
+  // which stores each match once in home orientation. Expand them into the
+  // records exploreMatches builds in Go, on the rendered basis.
+  const teamMatch = (fixture, teamID) => {
+    const home = h2hData.teams[fixture.home].ID === teamID, side = home ? 0 : 1;
+    const orient = pair => home ? pair : [pair[1], pair[0]];
+    const opponentID = h2hData.teams[home ? fixture.away : fixture.home].ID;
+    const score = orient(fixture.score), xg = orient(renderedNonPenalty ? fixture.npxg : fixture.xg);
+    const goalsCovered = !renderedNonPenalty || fixture.npGoals !== null;
+    const goals = renderedNonPenalty && goalsCovered ? orient(fixture.npGoals) : score;
+    const margin = score[0] - score[1], factors = fixture.opponents?.[side];
+    return {
+      goalsCovered, undated: fixture.undated, venueDateUnavailable: fixture.venueDateUnavailable,
+      id: fixture.id, date: fixture.date, opponent: h2hData.seasons[fixture.season].names[opponentID] || opponentID, opponentId: opponentID,
+      venue: home ? 'Home' : 'Away', score: score.join('–'),
+      values: [{actual: goals[0], expected: xg[0]}, {actual: goals[1], expected: xg[1]},
+        {actual: goals[0] - goals[1], expected: xg[0] === null || xg[1] === null ? null : xg[0] - xg[1]},
+        {actual: margin > 0 ? 3 : margin < 0 ? 0 : 1, expected: fixture.xpoints[side]}],
+      opponents: factors && {scored: factors[0], allowed: factors[1], expectedPoints: factors[2]},
+    };
+  };
+  teamSeasons.forEach(season => (season.teams || []).forEach(team => {
+    team.matches = (team.matches || []).map(index => teamMatch(h2hData.fixtures[index], team.id));
+  }));
   const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Goal margin|Total goals|Goals)\b/g;
   const basisReplacement = match => ({
     'Expected goals': 'Non-penalty expected goals', 'expected goals': 'non-penalty expected goals',

@@ -199,6 +199,10 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if !descriptor.SkipsForecast {
 		a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
 	}
+	if err := linkExploreTeamMatches(teams.TeamSeasons, &page.H2HData); err != nil {
+		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error())
+		return
+	}
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)

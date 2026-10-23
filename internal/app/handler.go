@@ -92,7 +92,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)

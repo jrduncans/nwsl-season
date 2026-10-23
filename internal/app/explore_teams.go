@@ -26,7 +26,11 @@ type exploreTeamRecord struct {
 	Values         [4]exploreTeamValues  `json:"values"`
 	Totals         [4]exploreTeamValues  `json:"totals"`
 	Rankings       [2][6]exploreTeamRank `json:"rankings"`
-	Matches        []exploreMatchRecord  `json:"matches,omitempty"`
+	// Matches renders server-side views. The payload carries MatchRefs
+	// instead: each is an index into the shared match list, which explore.js
+	// expands back into these records. See linkExploreTeamMatches.
+	Matches   []exploreMatchRecord `json:"-"`
+	MatchRefs []int                `json:"matches,omitempty"`
 }
 
 type exploreTeamSeason struct {
@@ -334,4 +338,42 @@ func exploreTeamSortMetric(column string) (int, string) {
 		}
 	}
 	return 2, column
+}
+
+// linkExploreTeamMatches replaces each team's match records in the payload
+// with indexes into the shared match list, and moves the opponent-adjustment
+// factors onto those matches, so the payload stores each match once. Every
+// team-comparison season on either basis is an official one, so the list
+// holds every team match.
+func linkExploreTeamMatches(seasons []exploreTeamSeason, data *exploreHeadToHeadPayload) error {
+	indexes := make(map[string]int, len(data.Fixtures))
+	for i, fixture := range data.Fixtures {
+		indexes[fixture.ID] = i
+	}
+	for s := range seasons {
+		for t := range seasons[s].Teams {
+			team := &seasons[s].Teams[t]
+			team.MatchRefs = make([]int, 0, len(team.Matches))
+			for _, match := range team.Matches {
+				index, ok := indexes[match.ID]
+				if !ok {
+					return fmt.Errorf("team %s match %s is missing from the match list", team.ID, match.ID)
+				}
+				team.MatchRefs = append(team.MatchRefs, index)
+				if match.Opponents == nil {
+					continue
+				}
+				fixture := &data.Fixtures[index]
+				if fixture.Opponents == nil {
+					fixture.Opponents = &[2][3]float64{}
+				}
+				side := 1
+				if match.Venue == "Home" {
+					side = 0
+				}
+				fixture.Opponents[side] = [3]float64{match.Opponents.Scored, match.Opponents.Allowed, match.Opponents.ExpectedPoints}
+			}
+		}
+	}
+	return nil
 }

@@ -348,15 +348,15 @@
 </section>
 <p class="visually-hidden" id="explore-chart-help">Use arrow keys to move between data points, Home or End to jump, and Escape to clear the tooltip.</p>
 <output class="visually-hidden" data-chart-status aria-live="polite" aria-atomic="true"></output>
-<script type="application/json" id="explore-data">{{.ChartData}}</script>
-<script type="application/json" id="explore-team-data">{{.TeamSeasons}}</script>
-<script type="application/json" id="explore-context-data">{{.HistoryContextData}}</script>
-<script type="application/json" id="explore-home-data">{{.HomeAdvantageData}}</script>
-<script type="application/json" id="explore-h2h-data">{{.H2HData}}</script>
-<script type="application/json" id="explore-team-seasons-data">{{.TeamSeasonsData}}</script>
-<script type="application/json" id="explore-threshold-data">{{.ThresholdData}}</script>
-<script type="application/json" id="explore-parity-data">{{.ParityData}}</script>
-<script type="application/json" id="explore-views">{{.Views}}</script>
+<script type="application/json" id="explore-data">{{payload .ChartData}}</script>
+<script type="application/json" id="explore-team-data">{{payload .TeamSeasons}}</script>
+<script type="application/json" id="explore-context-data">{{payload .HistoryContextData}}</script>
+<script type="application/json" id="explore-home-data">{{payload .HomeAdvantageData}}</script>
+<script type="application/json" id="explore-h2h-data">{{payload .H2HData}}</script>
+<script type="application/json" id="explore-team-seasons-data">{{payload .TeamSeasonsData}}</script>
+<script type="application/json" id="explore-threshold-data">{{payload .ThresholdData}}</script>
+<script type="application/json" id="explore-parity-data">{{payload .ParityData}}</script>
+<script type="application/json" id="explore-views">{{payload .Views}}</script>
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>
 <script src="{{.ChartLabelsPath}}" defer></script>

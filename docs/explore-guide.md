@@ -47,6 +47,12 @@ The server renders each view with GET forms, sortable header links and native
 disclosures, so everything works without JavaScript except Match by match's
 chart card, whose controls apply only through the script; the script switches views
 and selections in place from the same payload, without another data request.
+Every view's data rides in that page, so the payload is kept compact. Each
+regular-season match is stored once, in Head to head's match list
+(`explore-h2h-data`); team records list their matches as indexes into it, and
+`explore.js` expands them on the rendered basis into the records Go renders
+from (`linkExploreTeamMatches`). Templates embed payloads through `payload`,
+which rounds fractional numbers to six decimal places.
 Validated view-specific parameters return a 400 "Invalid Explore selection"
 page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
 `internal/app/static/vendor`.
@@ -731,7 +737,7 @@ registry's `opponentAdjustment` rule decides where it appears, for both the Go
 and browser renderers.
 
 Each completed match carries two factors and an expected-points baseline for
-each team (`opponents` in the payload), from `forecast.OpponentAdjustments`. They use the default forecast
+each team (`opponents` on the shared match, home side first), from `forecast.OpponentAdjustments`. They use the default forecast
 model, xG Poisson (schedule load), as written: xG attack and defense ratings
 shrunk with eight prior matches, league home and away rates from the current
 and two previous regular seasons, the schedule-load shift and the rate clamp.

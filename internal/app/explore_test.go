@@ -716,3 +716,35 @@ func TestExploreUnifiedTableIsIndependentOfChartMeasure(t *testing.T) {
 		t.Fatalf("legacy sort lost its metric: %+v, %v", legacy, err)
 	}
 }
+
+func TestLinkExploreTeamMatchesReferencesSharedFixtures(t *testing.T) {
+	data := exploreHeadToHeadPayload{Fixtures: []exploreHeadToHeadFixture{{ID: "m1"}, {ID: "m2"}}}
+	seasons := []exploreTeamSeason{{Teams: []exploreTeamRecord{
+		{ID: "home", Matches: []exploreMatchRecord{{ID: "m2", Venue: "Home", Opponents: &exploreOpponentFactors{Scored: 1.1, Allowed: 0.9, ExpectedPoints: 1.5}}, {ID: "m1", Venue: "Away"}}},
+		{ID: "away", Matches: []exploreMatchRecord{{ID: "m2", Venue: "Away", Opponents: &exploreOpponentFactors{Scored: 0.8, Allowed: 1.2, ExpectedPoints: 1.3}}}},
+	}}}
+	if err := linkExploreTeamMatches(seasons, &data); err != nil {
+		t.Fatal(err)
+	}
+	if got := seasons[0].Teams[0].MatchRefs; !slices.Equal(got, []int{1, 0}) {
+		t.Errorf("home refs = %v, want [1 0]", got)
+	}
+	if got, want := data.Fixtures[1].Opponents, (&[2][3]float64{{1.1, 0.9, 1.5}, {0.8, 1.2, 1.3}}); got == nil || *got != *want {
+		t.Errorf("fixture opponents = %v, want %v", got, want)
+	}
+	if data.Fixtures[0].Opponents != nil {
+		t.Errorf("unadjusted fixture opponents = %v, want none", data.Fixtures[0].Opponents)
+	}
+	payload, err := json.Marshal(seasons[0].Teams[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"matches":[1,0]`) {
+		t.Errorf("team payload = %s, want match indexes", payload)
+	}
+
+	seasons[0].Teams[0].Matches = append(seasons[0].Teams[0].Matches, exploreMatchRecord{ID: "missing"})
+	if err := linkExploreTeamMatches(seasons, &data); err == nil {
+		t.Error("missing fixture linked without error")
+	}
+}
