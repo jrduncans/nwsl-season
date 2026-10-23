@@ -32,7 +32,7 @@ func exploreDistribution(query url.Values, distributions []exploreDistributionSe
 		{Key: "matches", Label: "Matches", Description: "matches played"},
 	}
 	for index, label := range []string{"0 goals", "1 goal", "2 goals", "3 goals", "4+ goals"} {
-		columns = append(columns, exploreTeamColumn{Key: fmt.Sprintf("bin-%d", index), Label: basisText(basis, label), Description: basisText(basis, "share of matches with "+label)})
+		columns = append(columns, basisColumn(basis, fmt.Sprintf("bin-%d", index), label, "share of matches with "+label))
 	}
 	keys := make([]string, 0, len(columns))
 	for _, column := range columns {

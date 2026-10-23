@@ -62,8 +62,21 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	if plain != included {
 		t.Error("penalties=include must render exactly as an absent parameter")
 	}
-	forbidRaw(t, plain, "npxG", `data-points-note`, `data-penalties="exclude"`)
-	forbidText(t, plain, `[data-panel="team-history"]`, "Non-penalty")
+	// The page also carries the other basis, for an in-place switch, but shows
+	// only the default one.
+	requireAttr(t, plain, `[data-explore]`, "data-basis", "all")
+	forbidRaw(t, plain, `data-penalties="exclude"`)
+	// Head to head's own hidden basis column is checked below.
+	for _, panel := range find(t, plain, `[data-panel]`) {
+		if got := text(panel); attr(panel, "data-panel") != "head-to-head" && (strings.Contains(got, "npxG") || strings.Contains(got, "Non-penalty") || strings.Contains(got, "Penalty kicks excluded.")) {
+			t.Errorf("%s shows the non-penalty basis by default", attr(panel, "data-panel"))
+		}
+	}
+	for _, note := range find(t, plain, `[data-points-note]`) {
+		if _, hidden := lookupAttr(note, "hidden"); !hidden {
+			t.Errorf("points note %q is shown on the default basis", attr(note, "data-points-note"))
+		}
+	}
 	requireAttr(t, plain, `th[data-h2h-basis-column]`, "hidden", "")
 	// The checkbox is last in each view's control row and unchecked by default.
 	if got := len(find(t, plain, `input[data-penalties-selector][name=penalties][value=exclude]`)); got != 9 {
@@ -77,7 +90,7 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	}
 	requireText(t, plain, "form[data-team-history-controls] label.penalties-select", "Exclude penalties")
 	requireAttr(t, plain, `input[data-penalties-selector]`, "title", "Excluding removes penalty kicks from both goals and xG.")
-	forbidRaw(t, plain, "explore-penalties", "data-penalties-control", "Penalty kicks excluded.")
+	forbidRaw(t, plain, "explore-penalties", "data-penalties-control")
 	if got := len(find(t, plain, `nav input[data-penalties-selector]`)); got != 0 {
 		t.Errorf("%d penalties checkboxes in navigation", got)
 	}

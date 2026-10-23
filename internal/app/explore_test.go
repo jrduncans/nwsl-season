@@ -28,7 +28,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 				t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, body)
 			}
-			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js?v=`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js"`} {
+			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `<option value="gap">Goals − xG</option>`, `src="static/explore.js?v=`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js?v=`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)
 				}
@@ -121,8 +121,8 @@ func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
 		t.Fatalf("server-rendered distribution values missing: %s", values)
 	}
 	for _, row := range []string{
-		`<tr data-matches="20"><th scope="row" data-value="2025">2025</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td><td data-value="0">0 (0.0%)</td></tr>`,
-		`<tr data-matches="20"><th scope="row" data-value="2026">2026</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td></tr>`,
+		`<tr data-matches="20" data-basis-only="all"><th scope="row" data-value="2025">2025</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td><td data-value="0">0 (0.0%)</td></tr>`,
+		`<tr data-matches="20" data-basis-only="all"><th scope="row" data-value="2026">2026</th><td data-value="20">20</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="0">0 (0.0%)</td><td data-value="20">20 (100.0%)</td></tr>`,
 	} {
 		if !strings.Contains(values, row) {
 			t.Errorf("missing distribution row %q", row)
@@ -192,8 +192,8 @@ func TestExploreDistributionBinSelection(t *testing.T) {
 			if !strings.Contains(response.Body.String(), `<option value="`+bin+`" selected`) {
 				t.Errorf("selected bin %q is missing from the rendered control", bin)
 			}
-			if bin == "1" && !strings.Contains(response.Body.String(), "Share of regular-season matches with 1 goal</h2>") {
-				t.Error("one-goal chart heading is missing")
+			if bin == "1" {
+				requireExact(t, response.Body.String(), "#explore-distribution-title", "Share of regular-season matches with 1 goal")
 			}
 			if !strings.Contains(response.Body.String(), `<details class="explore-context-details" data-distribution-values>`) {
 				t.Error("selecting a bin alone opened the distribution values table")
@@ -714,5 +714,37 @@ func TestExploreUnifiedTableIsIndependentOfChartMeasure(t *testing.T) {
 	legacy, err := exploreTeams(url.Values{"measure": {"against"}, "team-sort": {"gap"}}, summaries, archive)
 	if err != nil || legacy.TeamSort != "against-gap" || legacy.TeamRows[0].Team.ID != "alpha" {
 		t.Fatalf("legacy sort lost its metric: %+v, %v", legacy, err)
+	}
+}
+
+func TestLinkExploreTeamMatchesReferencesSharedFixtures(t *testing.T) {
+	data := exploreHeadToHeadPayload{Fixtures: []exploreHeadToHeadFixture{{ID: "m1"}, {ID: "m2"}}}
+	seasons := []exploreTeamSeason{{Teams: []exploreTeamRecord{
+		{ID: "home", Matches: []exploreMatchRecord{{ID: "m2", Venue: "Home", Opponents: &exploreOpponentFactors{Scored: 1.1, Allowed: 0.9, ExpectedPoints: 1.5}}, {ID: "m1", Venue: "Away"}}},
+		{ID: "away", Matches: []exploreMatchRecord{{ID: "m2", Venue: "Away", Opponents: &exploreOpponentFactors{Scored: 0.8, Allowed: 1.2, ExpectedPoints: 1.3}}}},
+	}}}
+	if err := linkExploreTeamMatches(seasons, &data); err != nil {
+		t.Fatal(err)
+	}
+	if got := seasons[0].Teams[0].MatchRefs; !slices.Equal(got, []int{1, 0}) {
+		t.Errorf("home refs = %v, want [1 0]", got)
+	}
+	if got, want := data.Fixtures[1].Opponents, (&[2][3]float64{{1.1, 0.9, 1.5}, {0.8, 1.2, 1.3}}); got == nil || *got != *want {
+		t.Errorf("fixture opponents = %v, want %v", got, want)
+	}
+	if data.Fixtures[0].Opponents != nil {
+		t.Errorf("unadjusted fixture opponents = %v, want none", data.Fixtures[0].Opponents)
+	}
+	payload, err := json.Marshal(seasons[0].Teams[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"matches":[1,0]`) {
+		t.Errorf("team payload = %s, want match indexes", payload)
+	}
+
+	seasons[0].Teams[0].Matches = append(seasons[0].Teams[0].Matches, exploreMatchRecord{ID: "missing"})
+	if err := linkExploreTeamMatches(seasons, &data); err == nil {
+		t.Error("missing fixture linked without error")
 	}
 }

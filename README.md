@@ -526,6 +526,17 @@ This repository builds the application binaries. A separate deployment
 environment is responsible for machine provisioning, process management,
 proxy/TLS configuration, configuration delivery, and backups.
 
+The server does not compress responses; the TLS-terminating proxy does. In
+production that is Caddy, which serves pages and static files with zstd or
+gzip (checked October 2026; it adds no caching headers). Judge page weight by
+the compressed transfer size, not the raw HTML: Explore is about 1.3 MB raw
+but about 190 KB over the wire. Repeated text such as embedded JSON compresses
+well, so raw size overstates its cost.
+Page links to static files carry a content hash (`?v=`). A request with the
+current hash is cached for a year as `immutable`; any other static request
+revalidates against that hash as its ETag. Pages themselves send no caching
+headers.
+
 The runtime requires:
 
 - Exactly one server instance.

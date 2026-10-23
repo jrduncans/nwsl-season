@@ -138,6 +138,29 @@ func (p exploreScoringPage) GoalsWord() string {
 // T rewrites a label for the page's scoring basis.
 func (p exploreScoringPage) T(text string) string { return basisText(p.Basis, text) }
 
+// basisPair is one text on each scoring basis. The "basisText" template
+// renders both and CSS shows the page's basis (the data-basis attribute
+// explore.js updates when it switches basis in place), so the switch needs no
+// server render.
+type basisPair struct{ All, NP string }
+
+// Both is a label on both bases.
+func (exploreScoringPage) Both(text string) basisPair {
+	return basisPair{All: text, NP: basisText(history.NonPenalty, text)}
+}
+
+// Pair orients a text on the page's basis and the same text on the other
+// basis (from OtherBasis) as a basisPair.
+func (p exploreScoringPage) Pair(current, other string) basisPair {
+	if p.NonPenalty {
+		return basisPair{All: other, NP: current}
+	}
+	return basisPair{All: current, NP: other}
+}
+
+// NP is a label on the non-penalty basis, for data-aria-np.
+func (exploreScoringPage) NP(text string) string { return basisText(history.NonPenalty, text) }
+
 type exploreFormField struct {
 	Name, Value string
 }
@@ -154,6 +177,8 @@ func exploreFormFields(values url.Values) []exploreFormField {
 }
 
 type exploreDistributionSeason struct {
+	// Basis is the row's basis key; see tagBasis.
+	Basis                  string
 	Season, AccessibleName string
 	GoalsName              string
 	Total                  int

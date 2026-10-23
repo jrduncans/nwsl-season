@@ -58,6 +58,10 @@ type exploreHeadToHeadFixture struct {
 	Date                 string      `json:"date"`
 	Undated              bool        `json:"undated,omitempty"`
 	VenueDateUnavailable bool        `json:"venueDateUnavailable,omitempty"`
+	// Opponents holds each side's opponent-adjustment factors, home first, as
+	// scored, allowed and expected points. They do not depend on the scoring
+	// basis.
+	Opponents *[2][3]float64 `json:"opponents,omitempty"`
 }
 type exploreHeadToHeadSeason struct {
 	Year   string            `json:"year"`

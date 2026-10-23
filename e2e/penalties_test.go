@@ -29,7 +29,7 @@ func setPenalties(t *testing.T, page playwright.Page, selector string, exclude b
 }
 
 // choosePenalties changes the Exclude penalties checkbox and waits for the
-// full server render on the chosen basis.
+// page to show the chosen basis, in place or after a server render.
 func choosePenalties(t *testing.T, page playwright.Page, choice string) {
 	t.Helper()
 	setPenalties(t, page, penaltiesSelect, choice == "exclude")
@@ -179,7 +179,7 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	if got := queryOf(t, page); got.Has("penalties") || got.Get("view") != "team-history" || got.Get("measure") != "for" {
 		t.Errorf("URL after including penalties = %v", got)
 	}
-	if err := expect.Locator(page.Locator("[data-penalties=exclude]")).ToHaveCount(0); err != nil {
+	if err := expect.Locator(page.Locator(`[data-explore][data-basis="non-penalty"]`)).ToHaveCount(0); err != nil {
 		t.Errorf("page still on the non-penalty basis: %v", err)
 	}
 }
@@ -398,9 +398,9 @@ func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
 	}
 }
 
-// Head to head switches basis in place, but every other view's figures are
-// the server-rendered basis: leaving Head to head after a switch reloads.
-func TestExplorePenaltiesInPlaceSwitchReloadsOtherViews(t *testing.T) {
+// A basis switched in Head to head's own checkbox carries to the next view,
+// which shows it in place as a server render would.
+func TestExplorePenaltiesSwitchInHeadToHeadCarriesToOtherViews(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
@@ -416,22 +416,127 @@ func TestExplorePenaltiesInPlaceSwitchReloadsOtherViews(t *testing.T) {
 		if err := page.Locator(`[data-view-choice="team-rankings"]`).Click(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := page.WaitForFunction(`() => window.__documentMarker !== true && document.readyState === 'complete'`, nil); err != nil {
-			t.Fatalf("leaving Head to head on the switched basis did not reload: %v", err)
+		if err := expect.Locator(page.Locator(`[data-panel="team-rankings"]`)).ToBeVisible(); err != nil {
+			t.Fatal(err)
 		}
+		assertSameDocument(t, page, "entering Rankings on the switched basis")
 		if got := queryOf(t, page).Get("penalties"); (got == "exclude") != exclude {
 			t.Fatalf("penalties = %q, want exclude %v", got, exclude)
 		}
-		root := expect.Locator(page.Locator("[data-explore]"))
-		if exclude {
-			if err := root.ToHaveAttribute("data-penalties", "exclude"); err != nil {
-				t.Fatal(err)
-			}
-		} else if err := root.Not().ToHaveAttribute("data-penalties", "exclude"); err != nil {
-			t.Fatal(err)
-		}
 		if err := expect.Locator(page.Locator(penaltiesSelect)).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(exclude)}); err != nil {
 			t.Fatal(err)
+		}
+		var got, want []string
+		evalJSON(t, page, basisSnapshot, nil, &got)
+		evalJSON(t, explorePage(t, base, Desktop, strings.TrimPrefix(page.URL(), base)), basisSnapshot, nil, &want)
+		if diff := lineDifferences(got, want); len(diff) > 0 {
+			t.Errorf("Rankings differs from its server render:\n%s", strings.Join(diff, "\n"))
+		}
+	}
+}
+
+// basisSnapshot is what a reader sees of the open view, with its disclosures
+// open: text, accessible labels, visible links (with sorted queries) and chart
+// data, one item per line.
+const basisSnapshot = `() => {
+	const panel = document.querySelector('[data-panel]:not([hidden])');
+	const lines = ['title ' + document.title, ...panel.innerText.split('\n').map((line) => 'text ' + line)];
+	panel.querySelectorAll('[aria-label]').forEach((el) => { if (el.closest('[hidden]') === null) lines.push('label ' + el.getAttribute('aria-label')); });
+	document.querySelectorAll('[data-explore] a[href]').forEach((a) => { if (a.offsetParent) lines.push('link ' + a.textContent.trim() + ' ' + [...new URLSearchParams(a.getAttribute('href').split('?')[1] || '')].sort().join('&')); });
+	panel.querySelectorAll('canvas').forEach((c) => { const chart = Chart.getChart(c); if (chart) lines.push('chart ' + JSON.stringify({labels: chart.data.labels, sets: chart.data.datasets.map((d) => ({label: d.label, data: d.data, hidden: !!d.hidden}))})); });
+	return lines;
+}`
+
+// lineDifferences lists lines whose counts differ, as +got or -want.
+func lineDifferences(got, want []string) []string {
+	counts := map[string]int{}
+	for _, line := range got {
+		counts[line]++
+	}
+	for _, line := range want {
+		counts[line]--
+	}
+	var out []string
+	for line, n := range counts {
+		if n > 0 {
+			out = append(out, "+ "+line)
+		} else if n < 0 {
+			out = append(out, "- "+line)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// Switching penalties in place redraws the open view from the embedded
+// other-basis payloads; the result must equal a server render on the new
+// basis. A season with no teams on the new basis takes that server render.
+func TestExplorePenaltiesSwitchMatchesServerRender(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		scenario, path string
+		inPlace        bool
+	}{
+		{apptest.ScenarioSeasonTrend, "explore?view=teams", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=gap", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=scatter", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=quadrant", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=quadrant&quadrant-data=both", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=table", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=table&units=total&team-sort=for-expected", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=team-rankings", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=season-trend", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=compare&smoothing=none", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=difference&smoothing=none", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=relative", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=balance&smoothing=none&opponents=adjusted", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=team-history", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=team-history&context=on&measure=for", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=trend", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=distribution", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=distribution&distribution-bin=2", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=home-advantage", true},
+		{apptest.ScenarioSeasonTrend, "explore?view=table", true},
+		{apptest.ScenarioTeams, "explore?view=teams&display=table", false},
+	} {
+		for _, exclude := range []bool{true, false} {
+			from, to := tc.path, tc.path+"&penalties=exclude"
+			if !exclude {
+				from, to = to, from
+			}
+			t.Run(tc.scenario+"/"+from, func(t *testing.T) {
+				t.Parallel()
+				base := exploreBase(t, tc.scenario)
+				switched := explorePage(t, base, Desktop, from)
+				markDocument(t, switched)
+				if err := switched.Locator(penaltiesSelect).First().Click(); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := switched.WaitForFunction(`(want) => (new URLSearchParams(location.search).get('penalties') === 'exclude') === want && document.readyState === 'complete'`, exclude); err != nil {
+					t.Fatal(err)
+				}
+				if err := settle(switched); err != nil {
+					t.Fatal(err)
+				}
+				var same bool
+				evalJSON(t, switched, `() => window.__documentMarker === true`, nil, &same)
+				if same != tc.inPlace {
+					t.Errorf("switched in place = %v, want %v", same, tc.inPlace)
+				}
+				snapshot := func(page playwright.Page) []string {
+					evalJSON(t, page, `() => { document.querySelectorAll('[data-panel]:not([hidden]) details').forEach((d) => { d.open = true; }); return true }`, nil, new(bool))
+					if err := settle(page); err != nil {
+						t.Fatal(err)
+					}
+					var lines []string
+					evalJSON(t, page, basisSnapshot, nil, &lines)
+					return lines
+				}
+				got, want := snapshot(switched), snapshot(explorePage(t, base, Desktop, to))
+				if diff := lineDifferences(got, want); len(diff) > 0 {
+					t.Errorf("switched page differs from the server render of %s:\n%s", to, strings.Join(diff, "\n"))
+				}
+			})
 		}
 	}
 }

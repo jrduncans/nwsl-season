@@ -39,6 +39,8 @@ type exploreHomeAdvantageRecord struct {
 }
 
 type exploreHomeAdvantageRow struct {
+	// Basis is the row's basis key; see tagBasis.
+	Basis                                          string
 	Season                                         string
 	Played                                         int
 	Goals, XG, Points, XPoints                     string
@@ -75,11 +77,6 @@ func exploreHomeAdvantage(query url.Values, seasons []history.SeasonHomeAdvantag
 		if !season.PlotEligible || season.Goals == nil {
 			continue
 		}
-		page.HomeAdvantageData = append(page.HomeAdvantageData, exploreHomeAdvantageRecord{
-			Season: season.Season, Played: season.Played, Active: season.Lifecycle == cache.SourceScopeActive,
-			Goals: season.Goals, XG: season.XG, Points: season.Points, XPoints: season.XPoints,
-			HomeWins: season.HomeWins, Draws: season.Draws, AwayWins: season.AwayWins,
-		})
 		page.HomeAdvantageRows = append(page.HomeAdvantageRows, exploreHomeAdvantageRowFor(season))
 		if season.Lifecycle == cache.SourceScopeActive {
 			active = append(active, fmt.Sprintf("%s: in progress through %d matches", season.Season, season.Played))
@@ -91,6 +88,7 @@ func exploreHomeAdvantage(query url.Values, seasons []history.SeasonHomeAdvantag
 			missingXPoints = append(missingXPoints, season.Season)
 		}
 	}
+	page.HomeAdvantageData = exploreHomeAdvantageRecords(seasons)
 	page.HomeAdvantageActiveStatus = strings.Join(active, "; ")
 	page.HomeAdvantageXGMissing = strings.Join(missingXG, ", ")
 	page.HomeAdvantageXPointsMissing = strings.Join(missingXPoints, ", ")
@@ -99,8 +97,8 @@ func exploreHomeAdvantage(query url.Values, seasons []history.SeasonHomeAdvantag
 	columns := []exploreTeamColumn{
 		{Key: "season", Label: "Season", Description: "season"},
 		{Key: "matches", Label: "Matches", Description: "matches played"},
-		{Key: "goals", Label: basisText(basis, "Goals"), Description: basisText(basis, "goals, home minus away per match")},
-		{Key: "xg", Label: basisText(basis, "xG"), Description: basisText(basis, "xG, home minus away per match")},
+		basisColumn(basis, "goals", "Goals", "goals, home minus away per match"),
+		basisColumn(basis, "xg", "xG", "xG, home minus away per match"),
 		{Key: "points", Label: "Points", Description: "points, home minus away per match"},
 		{Key: "xpoints", Label: "xPoints", Description: "xPoints, home minus away per match"},
 		{Key: "results", Label: "Home W–D–L", Description: "home win share"},
@@ -190,4 +188,21 @@ func sortExploreHomeAdvantage(rows []exploreHomeAdvantageRow, column, order stri
 		}
 		return a.Season > b.Season
 	})
+}
+
+// exploreHomeAdvantageRecords is the chart payload: every eligible season
+// with goals, in order.
+func exploreHomeAdvantageRecords(seasons []history.SeasonHomeAdvantage) []exploreHomeAdvantageRecord {
+	var records []exploreHomeAdvantageRecord
+	for _, season := range seasons {
+		if !season.PlotEligible || season.Goals == nil {
+			continue
+		}
+		records = append(records, exploreHomeAdvantageRecord{
+			Season: season.Season, Played: season.Played, Active: season.Lifecycle == cache.SourceScopeActive,
+			Goals: season.Goals, XG: season.XG, Points: season.Points, XPoints: season.XPoints,
+			HomeWins: season.HomeWins, Draws: season.Draws, AwayWins: season.AwayWins,
+		})
+	}
+	return records
 }

@@ -26,7 +26,11 @@ type exploreTeamRecord struct {
 	Values         [4]exploreTeamValues  `json:"values"`
 	Totals         [4]exploreTeamValues  `json:"totals"`
 	Rankings       [2][6]exploreTeamRank `json:"rankings"`
-	Matches        []exploreMatchRecord  `json:"matches,omitempty"`
+	// Matches renders server-side views. The payload carries MatchRefs
+	// instead: each is an index into the shared match list, which explore.js
+	// expands back into these records. See linkExploreTeamMatches.
+	Matches   []exploreMatchRecord `json:"-"`
+	MatchRefs []int                `json:"matches,omitempty"`
 }
 
 type exploreTeamSeason struct {
@@ -52,6 +56,19 @@ type exploreTeamColumn struct {
 	Key, Label, URL, Sort string
 	Description           string
 	Leading               bool
+	// Labels and Descriptions carry a basis-dependent column's text on both
+	// bases; they are empty for a column whose text never changes.
+	Labels, Descriptions basisPair
+}
+
+// basisColumn is a sortable column whose label and description name the
+// scoring basis.
+func basisColumn(basis history.ScoringBasis, key, label, description string) exploreTeamColumn {
+	return exploreTeamColumn{
+		Key: key, Label: basisText(basis, label), Description: basisText(basis, description),
+		Labels:       basisPair{All: label, NP: basisText(history.NonPenalty, label)},
+		Descriptions: basisPair{All: description, NP: basisText(history.NonPenalty, description)},
+	}
 }
 
 type exploreTeamsView struct {
@@ -206,7 +223,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 			if group.key == "points" && value.key == "expected" {
 				value.label = "xPoints"
 			}
-			columns = append(columns, exploreTeamColumn{Key: group.key + "-" + value.key, Label: t(value.label), Description: t(group.label + ": " + value.label)})
+			columns = append(columns, basisColumn(basis, group.key+"-"+value.key, value.label, group.label+": "+value.label))
 		}
 	}
 	for _, column := range columns {
@@ -334,4 +351,43 @@ func exploreTeamSortMetric(column string) (int, string) {
 		}
 	}
 	return 2, column
+}
+
+// linkExploreTeamMatches replaces each team's match records in the payload
+// with indexes into the shared match list, and moves the opponent-adjustment
+// factors onto those matches, so the payload stores each match once. Every
+// team-comparison season on either basis is an official one, so the list
+// holds every team match.
+func linkExploreTeamMatches(seasons []exploreTeamSeason, data *exploreHeadToHeadPayload) error {
+	indexes := make(map[string]int, len(data.Fixtures))
+	for i, fixture := range data.Fixtures {
+		indexes[fixture.ID] = i
+	}
+	for _, season := range seasons {
+		// season is a copy, but its Teams share the caller's backing array.
+		for t := range season.Teams {
+			team := &season.Teams[t]
+			team.MatchRefs = make([]int, 0, len(team.Matches))
+			for _, match := range team.Matches {
+				index, ok := indexes[match.ID]
+				if !ok {
+					return fmt.Errorf("team %s match %s is missing from the match list", team.ID, match.ID)
+				}
+				team.MatchRefs = append(team.MatchRefs, index)
+				if match.Opponents == nil {
+					continue
+				}
+				fixture := &data.Fixtures[index]
+				if fixture.Opponents == nil {
+					fixture.Opponents = &[2][3]float64{}
+				}
+				side := 1
+				if match.Venue == "Home" {
+					side = 0
+				}
+				fixture.Opponents[side] = [3]float64{match.Opponents.Scored, match.Opponents.Allowed, match.Opponents.ExpectedPoints}
+			}
+		}
+	}
+	return nil
 }

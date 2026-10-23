@@ -92,7 +92,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -124,7 +124,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /seasons/{season}/{stage}/clinching", application.clinching)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler(staticFS)))
 	return &Application{handler: withSecurityHeaders(withBasePath(mux)), app: application}
 }
 
@@ -786,7 +786,7 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 	}
 	view.seasonPage = page
 	view.Title = "Model evaluation"
-	view.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
+	view.ChartLibraryPath = staticURL(r.URL.Path, "vendor/chart.js-4.5.1/chart.umd.min.js")
 	view.EvaluationScriptPath = staticURL(r.URL.Path, "model-evaluation.js")
 	a.render(w, "model-evaluation", view)
 }

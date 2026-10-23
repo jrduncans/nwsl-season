@@ -34,7 +34,9 @@ func TestExploreThresholds(t *testing.T) {
 					t.Fatal("2020 bridged")
 				}
 			}
-			if math.Abs(*chart.Values[3][7]-31.0/22) > 1e-12 {
+			// Payloads keep six decimal places (payloadDecimals), well beyond
+			// the two the chart displays.
+			if math.Abs(*chart.Values[3][7]-31.0/22) > 1e-6 {
 				t.Fatal("rounded chart ratio")
 			}
 			if err := expect.Locator(page.Locator(`[data-threshold-detail="2023"]`)).ToContainText("Equal-points tie across the boundary"); err != nil {

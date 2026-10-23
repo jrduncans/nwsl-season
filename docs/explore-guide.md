@@ -47,6 +47,12 @@ The server renders each view with GET forms, sortable header links and native
 disclosures, so everything works without JavaScript except Match by match's
 chart card, whose controls apply only through the script; the script switches views
 and selections in place from the same payload, without another data request.
+Every view's data rides in that page, so the payload is kept compact. Each
+regular-season match is stored once, in Head to head's match list
+(`explore-h2h-data`); team records list their matches as indexes into it, and
+`explore.js` expands them on the rendered basis into the records Go renders
+from (`linkExploreTeamMatches`). Templates embed payloads through `payload`,
+which rounds fractional numbers to six decimal places.
 Validated view-specific parameters return a 400 "Invalid Explore selection"
 page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
 `internal/app/static/vendor`.
@@ -179,12 +185,33 @@ in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
 its form's submit button.
 
-With JavaScript, changing the checkbox reloads the page on the new basis,
-because the server computes every figure. Head to head and Team-seasons carry
-both bases, so their own checkboxes switch in place. `explore.js` keeps the
-basis the server rendered (`renderedNonPenalty`) apart from the basis it names
-in labels (`nonPenalty`): entering any other view in place reloads when the URL
-basis differs from the rendered one.
+The server computes every figure, and each page carries both bases, so with
+JavaScript the checkbox switches basis in place in every view:
+
+- The payloads that change with the basis (Scoring trend and Goal distribution
+  records, team records, Season by season's league context and Home
+  advantage) are also embedded on the other basis (`explore-other-basis`).
+  `explore.js` swaps them in and redraws.
+- Server-rendered text that names the basis is rendered on both bases: labels
+  through the `basisText` template (`Both`), data-dependent notes through
+  `basisNote` (`Pair` with the other basis's view), and sentences such as
+  "Penalty kicks excluded." as `data-basis-only` spans. The Scoring table,
+  Goal distribution and Home advantage tables hold both bases' rows, each
+  tagged `data-basis-only` (`tagBasis`), so sorting works on either. CSS
+  shows the root's `data-basis`, which the server sets and the script
+  updates; accessible names carry both variants (`data-aria-all`,
+  `data-aria-np`) for the script to apply.
+- Every in-page link and every Exclude penalties checkbox follows the URL's
+  basis.
+
+A browser test compares each switch with a server render on the new basis.
+The page still reloads when the server would render a different structure:
+a league view whose new basis gains or loses its chart data, or a team view
+whose season has no teams on either basis. Without JavaScript, CSS shows only
+the rendered basis. Head to head and Team-seasons carry both bases in their own
+payloads. `explore.js` keeps three bases apart: the one the server rendered
+(`renderedNonPenalty`), the one whose payloads are in use (`dataNonPenalty`)
+and the one it names (`nonPenalty`, also `data-basis`).
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and
@@ -731,7 +758,7 @@ registry's `opponentAdjustment` rule decides where it appears, for both the Go
 and browser renderers.
 
 Each completed match carries two factors and an expected-points baseline for
-each team (`opponents` in the payload), from `forecast.OpponentAdjustments`. They use the default forecast
+each team (`opponents` on the shared match, home side first), from `forecast.OpponentAdjustments`. They use the default forecast
 model, xG Poisson (schedule load), as written: xG attack and defense ratings
 shrunk with eight prior matches, league home and away rates from the current
 and two previous regular seasons, the schedule-load shift and the rate clamp.

@@ -374,6 +374,8 @@ th:nth-child(2) { text-align: left; }
 
 /* Explore reuses scoring summaries while keeping one analysis on screen. */
 .explore header h1 { margin-bottom: .4rem; }
+/* The page renders basis-dependent text and league rows on both scoring bases; show the current one. */
+.explore[data-basis="all"] [data-basis-only="non-penalty"], .explore[data-basis="non-penalty"] [data-basis-only="all"] { display: none !important; }
 .explore-views { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0 2rem; border-bottom: 1px solid var(--line); padding-bottom: .75rem; }
 .explore-views a { padding: .6rem .85rem; border-radius: .3rem; font-weight: 700; text-decoration: none; }
 .explore-views a[aria-current] { color: var(--ink); background: var(--green-soft); box-shadow: inset 0 -3px var(--green); }
