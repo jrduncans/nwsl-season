@@ -28,7 +28,7 @@
 <p class="note" data-team-seasons-gap-help{{if or (ne .TeamSeasonsRankBy "gap") (eq .TeamSeasonsDisplay "scatter")}} hidden{{end}}>Gap is actual − expected. Positive means above expected; negative means below expected.{{if eq .TeamSeasonsMeasure "against"}} Fewer goals allowed than expected rank first.{{end}}</p>
 <div class="explore-archive-bars"{{if eq .TeamSeasonsDisplay "scatter"}} hidden{{end}} data-team-seasons-chart aria-label="{{.TeamSeasonsHeading}}, ranked {{.TeamSeasonsRankBy}} values with comparisons">
 <p class="explore-archive-legend" data-team-seasons-legend>{{if eq .TeamSeasonsRankBy "gap"}}Bar: actual − expected{{else}}Bar: {{.TeamSeasonsRankBy}} · <span class="explore-archive-marker-swatch" aria-hidden="true"></span> {{.TeamSeasonsCompanionLabel}}{{end}}</p>
-<div class="explore-archive-axis" data-team-seasons-axis><span>{{printf "%g" .TeamSeasonsScaleMin}}</span><span>Per match · {{if eq .TeamSeasonsZero "0.0000%"}}starts at 0{{else}}0 at center{{end}}</span><span>{{printf "%g" .TeamSeasonsScaleMax}}</span></div>
+<div class="explore-archive-axis" data-team-seasons-axis><span>{{printf "%g" .TeamSeasonsScaleMin}}</span><span>Per match{{if ne .TeamSeasonsZero "0.0000%"}} · 0 at center{{end}}</span><span>{{printf "%g" .TeamSeasonsScaleMax}}</span></div>
 <p class="explore-archive-end" data-team-seasons-high>{{.TeamSeasonsHigh}}</p>
 <ol data-team-seasons-bars="high">{{range .TeamSeasonsTop}}{{template "exploreTeamSeasonBar" .}}{{end}}</ol>
 <p class="explore-archive-break" data-team-seasons-break{{if not .TeamSeasonsMore}} hidden{{end}}>{{.TeamSeasonsMore}} more team-seasons in the table</p>

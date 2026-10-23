@@ -2463,10 +2463,7 @@
       if (row.position) {
         const track = document.createElement('div'); track.className = 'explore-rank-track'; track.setAttribute('aria-hidden', 'true');
         const mark = document.createElement('i'); mark.style.left = `${row.position}%`; track.append(mark);
-        const endpoints = document.createElement('div'); endpoints.className = 'explore-rank-endpoints'; endpoints.setAttribute('aria-hidden', 'true');
-        const best = document.createElement('span'); best.textContent = '1st · Best';
-        const last = document.createElement('span'); last.textContent = `${count} · Last`;
-        endpoints.append(best, last); card.append(track, endpoints);
+        card.append(track);
       }
       return card;
     }));
@@ -2647,7 +2644,7 @@
     const numbers = ranked.flatMap(row => by === 2 ? [row.values[measure].gap] : [row.values[measure].actual, row.values[measure].expected]).filter(value => value !== null);
     const domain = window.NWSLGeometry.rankingDomain(numbers, by === 2 || measure === 2, measure === 3 && by !== 2);
     const axis = root.querySelector('[data-team-seasons-axis]');
-    axis.replaceChildren(archiveElement('span', domain.min), archiveElement('span', `Per match · ${domain.min === 0 ? 'starts at 0' : '0 at center'}`), archiveElement('span', domain.max));
+    axis.replaceChildren(archiveElement('span', domain.min), archiveElement('span', domain.min === 0 ? 'Per match' : 'Per match · 0 at center'), archiveElement('span', domain.max));
     root.querySelector('[data-team-seasons-low]').textContent = endText(low);
     const visible = ranked.length > 20 ? [...ranked.slice(0, 10), ...ranked.slice(-10)] : ranked;
     const bars = visible.map(row => {

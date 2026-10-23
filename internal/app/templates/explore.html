@@ -252,9 +252,8 @@
 <p class="note" data-rankings-units>{{if eq .TeamUnits "total"}}Regular-season totals{{else}}Per regular-season match{{end}}, from recorded results. {{template "basisText" ($.Both "Lower goals allowed and xG allowed rank better; higher is better for the other stats.")}}<span data-basis-only="non-penalty"> Penalty kicks excluded.</span></p>
 <p class="explore-data-warning" data-rankings-warning{{if not .RankingMissingXG}} hidden{{end}}>{{template "basisText" ($.Both "League xG ranks are unavailable until every team's recorded matches have complete xG. Available team values are still shown.")}}</p>
 <div class="explore-rankings" data-rankings-cards>{{range .RankingRows}}
-<article class="explore-rank-card"><h4>{{.Label}}</h4><p class="explore-rank-number">{{.Rank}}{{if .Position}} <span>of {{$.RankingTeamCount}}</span>{{end}}</p><p class="explore-rank-value">{{.Value}}{{if ne .Value "Unavailable"}}{{if eq $.TeamUnits "per-match"}} per match{{else}} total{{end}}{{end}}</p>{{if .Position}}<div class="explore-rank-track" aria-hidden="true"><i style="left:{{.Position}}%"></i></div><div class="explore-rank-endpoints" aria-hidden="true"><span>1st · Best</span><span>{{$.RankingTeamCount}} · Last</span></div>{{end}}</article>
+<article class="explore-rank-card"><h4>{{.Label}}</h4><p class="explore-rank-number">{{.Rank}}{{if .Position}} <span>of {{$.RankingTeamCount}}</span>{{end}}</p><p class="explore-rank-value">{{.Value}}{{if ne .Value "Unavailable"}}{{if eq $.TeamUnits "per-match"}} per match{{else}} total{{end}}{{end}}</p>{{if .Position}}<div class="explore-rank-track" aria-hidden="true"><i style="left:{{.Position}}%"></i></div>{{end}}</article>
 {{end}}</div>
-<p class="note">Ties share a rank; the next rank skips the tied places. Markers show rank within this season, rather than the size of the statistical gap.</p>
 </div>
 </section>
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">

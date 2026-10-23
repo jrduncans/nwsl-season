@@ -939,7 +939,8 @@ func testFixturesPage(t *testing.T, f *fixture) {
 			t.Error(err)
 		}
 		selectValue(t, page.Locator("#fixture-team"), "")
-		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText("All teams shown."); err != nil {
+		// With every team shown, the select says so; the summary stays empty.
+		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText(""); err != nil {
 			t.Error(err)
 		}
 		assertNoHorizontalOverflow(t, page)

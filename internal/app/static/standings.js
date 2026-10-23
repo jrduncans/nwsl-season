@@ -297,7 +297,7 @@ function setupFixtureTeamFilter() {
     });
     if (!summary) return;
     if (!teamID) {
-      summary.textContent = "All teams shown.";
+      summary.textContent = "";
       return;
     }
     const teamName = filter.selectedOptions[0]?.textContent ?? "this team";

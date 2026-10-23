@@ -619,6 +619,9 @@ and later ranks skip places. League xG ranks are withheld for everyone if any
 team's xG coverage is incomplete; goal ranks remain. Season and Team selects
 lead the control row, then a **Values** segmented control (Per match, Totals)
 and the Exclude penalties switch; with no chart, the view has no chart card.
+Each stat's card shows its rank ("Tied 4th of 16"), value and a marker on an
+unlabeled track; the rank text carries the meaning, so the page adds no tie
+or endpoint explanation.
 
 ### Match by match
 
