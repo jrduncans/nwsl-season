@@ -717,7 +717,7 @@ func testForecastAssumptionFlow(t *testing.T, f *fixture) {
 			if got := fixedResults(t, page); got != baseline+1 {
 				t.Errorf("fixed results after apply = %d, want %d", got, baseline+1)
 			}
-			assumptions := page.Locator("section.forecast-scenario .forecast-assumptions li")
+			assumptions := page.Locator(".forecast-scenario .forecast-assumptions li")
 			expectCount(assumptions, 1, "applied assumptions")
 			if err := expect.Locator(assumptions.First()).ToContainText(kept.Away + " win"); err != nil {
 				t.Error(err)
@@ -746,7 +746,7 @@ func testForecastCopyLink(t *testing.T, f *fixture) {
 		t.Fatalf("applying the scenario should navigate to a URL with p=: %v", err)
 	}
 	scenarioURL := page.URL()
-	assumptionText, err := page.Locator("section.forecast-scenario .forecast-assumptions").TextContent()
+	assumptionText, err := page.Locator(".forecast-scenario .forecast-assumptions").TextContent()
 	if err != nil || strings.TrimSpace(assumptionText) == "" {
 		t.Fatalf("applied scenario has no assumption text: %q, %v", assumptionText, err)
 	}
@@ -788,7 +788,7 @@ func testForecastCopyLink(t *testing.T, f *fixture) {
 		t.Fatalf("new page: %v", err)
 	}
 	visit(t, reopened, copied)
-	got, err := reopened.Locator("section.forecast-scenario .forecast-assumptions").TextContent()
+	got, err := reopened.Locator(".forecast-scenario .forecast-assumptions").TextContent()
 	if err != nil {
 		t.Fatalf("read reopened assumptions: %v", err)
 	}
@@ -895,10 +895,10 @@ func testForecastNoScript(t *testing.T, f *fixture) {
 	if err := waitForecastURL(page, assumptionURL); err != nil {
 		t.Fatalf("the plain form should add the assumption on the server: %v", err)
 	}
-	if err := expect.Locator(page.Locator("section.forecast-scenario .forecast-assumptions li")).ToHaveCount(1); err != nil {
+	if err := expect.Locator(page.Locator(".forecast-scenario .forecast-assumptions li")).ToHaveCount(1); err != nil {
 		t.Error(err)
 	}
-	if err := expect.Locator(page.Locator("section.forecast-scenario .forecast-assumptions li").First()).ToContainText("Draw"); err != nil {
+	if err := expect.Locator(page.Locator(".forecast-scenario .forecast-assumptions li").First()).ToContainText("Draw"); err != nil {
 		t.Error(err)
 	}
 	if got := fixedResults(t, page); got != 1 {

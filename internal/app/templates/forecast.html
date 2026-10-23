@@ -75,16 +75,8 @@
   </div>
 </section>
 
-<section class="forecast-scenario" aria-labelledby="assumptions-title">
-  <div class="section-heading"><div><h2 id="assumptions-title">Your scenario</h2></div></div>
-  {{if .Assumptions}}
-  <ul class="forecast-assumptions">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · <time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
-  <p><a href="{{.ResetPath}}">Reset all assumptions</a></p>
-  {{else}}<p>No fixed results. Every remaining match is simulated.</p>{{end}}
-</section>
-
-<section id="forecast-builder" class="forecast-builder" aria-labelledby="assumption-builder-title">
-  <div class="section-heading"><div><h2 id="assumption-builder-title">Build a scenario</h2><p class="note">Choose a match and result. Add more if you like, then apply your scenario.</p></div></div>
+<section id="forecast-builder" class="forecast-builder" aria-labelledby="scenario-title">
+  <div class="section-heading"><div><h2 id="scenario-title">Scenario</h2>{{if .CanAdd}}<p class="note">Choose a match and result. Add more if you like, then apply your scenario.</p>{{end}}</div></div>
   {{if .CanAdd}}
   <form id="forecast-update" method="get" action="{{.ForecastPath}}">
     <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
@@ -107,6 +99,13 @@
   {{else if .HasTeamFilter}}<p>No unfixed matches match this team.</p>
   {{else if eq .Remaining 0}}<p>No matches remain. This is the final table, subject to available tiebreak data.</p>
   {{else}}<p>All available matches are fixed.</p>{{end}}
+  <div class="forecast-scenario">
+  {{if .Assumptions}}
+  <h3 id="assumptions-title">Fixed results</h3>
+  <ul class="forecast-assumptions" aria-labelledby="assumptions-title">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · <time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
+  <p><a href="{{.ResetPath}}">Reset all assumptions</a></p>
+  {{else}}<p class="note">No fixed results. Every remaining match is simulated.</p>{{end}}
+  </div>
 </section>
 
 <details class="forecast-method"><summary>What this forecast considers</summary>

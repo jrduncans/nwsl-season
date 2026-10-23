@@ -332,7 +332,9 @@ flowchart TD
 
 ## Fixed outcomes are conditional scorelines
 
-The assumption builder accepts only an outcome: home win (`h`), draw (`d`), or
+The page's **Scenario** section holds the assumption builder, with the applied
+fixed results listed below it (or a note that every remaining match is
+simulated). The builder accepts only an outcome: home win (`h`), draw (`d`), or
 away win (`a`). It does not replace a match with an arbitrary canonical
 score such as `1–0` or `0–0`.
 
