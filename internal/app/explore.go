@@ -32,7 +32,23 @@ type explorePage struct {
 	MarginsPath  string
 	// Views is the view registry, for the tabs and for explore.js.
 	Views []exploreViewGroup
-	query url.Values
+	// OtherBasis carries the basis-specific payloads on the basis the page
+	// was not rendered on, so explore.js switches penalties in place. It is
+	// nil when the selection is invalid on that basis.
+	OtherBasis *exploreBasisData
+	query      url.Values
+}
+
+// exploreBasisData is every payload that changes with the scoring basis.
+type exploreBasisData struct {
+	// DefaultTeamSeason and DefaultHistoryTeam are the selections an
+	// unspecified season or team takes on this basis.
+	DefaultTeamSeason  string                       `json:"defaultTeamSeason"`
+	DefaultHistoryTeam string                       `json:"defaultHistoryTeam"`
+	ChartData          []exploreChartRecord         `json:"chartData"`
+	TeamSeasons        []exploreTeamSeason          `json:"teamSeasons"`
+	HistoryContext     [4]exploreMetricContext      `json:"historyContext"`
+	HomeAdvantage      []exploreHomeAdvantageRecord `json:"homeAdvantage"`
 }
 
 // explorePenaltiesSwitch is the Exclude penalties switch. Form names the
@@ -203,6 +219,36 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error())
 		return
 	}
+	otherBasis, otherSummaries, otherTeams := history.NonPenalty, npSummaries, exploreTeamsView{}
+	if basis.ExcludesPenalties() {
+		otherBasis, otherSummaries, otherTeams = history.AllShots, allSummaries, officialTeams
+	} else {
+		otherTeams, err = exploreTeams(withPenalties(r.URL.Query(), otherBasis), otherSummaries, archive)
+	}
+	if err == nil {
+		if !descriptor.SkipsForecast {
+			a.populateExploreForecastBenchmarks(r.Context(), &otherTeams, archive)
+		}
+		err = linkExploreTeamMatches(otherTeams.TeamSeasons, &page.H2HData)
+	}
+	var otherHistory exploreTeamHistoryView
+	if err == nil {
+		// Like the page's own attributes, the defaults name any selected team.
+		historyQuery := url.Values{}
+		if view != "head-to-head" && r.URL.Query().Has("team") {
+			historyQuery.Set("team", r.URL.Query().Get("team"))
+		}
+		otherHistory, err = exploreTeamHistory(withPenalties(historyQuery, otherBasis), otherTeams.TeamSeasons)
+	}
+	if err == nil {
+		page.OtherBasis = &exploreBasisData{
+			DefaultTeamSeason: otherTeams.TeamSeason, DefaultHistoryTeam: otherHistory.HistoryTeam.ID,
+			ChartData:      exploreChartRecords(otherSummaries),
+			TeamSeasons:    otherTeams.TeamSeasons,
+			HistoryContext: exploreHistoryContextData(otherTeams.TeamSeasons, otherBasis),
+			HomeAdvantage:  exploreHomeAdvantageRecords(history.HomeAdvantage(otherSummaries)),
+		}
+	}
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
@@ -240,10 +286,21 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			GoalsMinusXGPerMatch: scoringRateText(summary.GoalsMinusXGPerMatch),
 			Goals:                summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch,
 		})
-		page.ChartData = append(page.ChartData, exploreChartRecord{
-			Season: summary.Season, Played: summary.Played, Active: summary.Lifecycle == cache.SourceScopeActive,
-			Goals: summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch, Bins: summary.GoalBins,
-		})
 	}
+	page.ChartData = exploreChartRecords(summaries)
 	a.render(w, "explore", page)
+}
+
+// exploreChartRecords is Scoring trend and Goal distribution's payload.
+func exploreChartRecords(summaries []history.SeasonScoring) []exploreChartRecord {
+	var records []exploreChartRecord
+	for _, summary := range summaries {
+		if summary.PlotEligible {
+			records = append(records, exploreChartRecord{
+				Season: summary.Season, Played: summary.Played, Active: summary.Lifecycle == cache.SourceScopeActive,
+				Goals: summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch, Bins: summary.GoalBins,
+			})
+		}
+	}
+	return records
 }

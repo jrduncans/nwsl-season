@@ -49,7 +49,7 @@ func (p pagePayload) MarshalJSON() ([]byte, error) {
 		}
 		if delim, ok := token.(json.Delim); ok && (delim == '}' || delim == ']') {
 			stack = stack[:len(stack)-1]
-			out.WriteByte(byte(delim))
+			out.WriteRune(rune(delim))
 			continue
 		}
 		if len(stack) > 0 {
@@ -64,7 +64,7 @@ func (p pagePayload) MarshalJSON() ([]byte, error) {
 		}
 		switch value := token.(type) {
 		case json.Delim:
-			out.WriteByte(byte(value))
+			out.WriteRune(rune(value))
 			stack = append(stack, container{object: value == '{'})
 		case json.Number:
 			out.WriteString(roundPayloadNumber(value))

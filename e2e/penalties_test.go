@@ -398,8 +398,9 @@ func TestDataControlsKeepTheirGeometryAcrossBases(t *testing.T) {
 	}
 }
 
-// Head to head switches basis in place, but every other view's figures are
-// the server-rendered basis: leaving Head to head after a switch reloads.
+// Head to head switches basis in place, but views outside the SwitchesBasis
+// rule show the server-rendered basis: leaving Head to head for one of them
+// after a switch reloads.
 func TestExplorePenaltiesInPlaceSwitchReloadsOtherViews(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
@@ -432,6 +433,71 @@ func TestExplorePenaltiesInPlaceSwitchReloadsOtherViews(t *testing.T) {
 		}
 		if err := expect.Locator(page.Locator(penaltiesSelect)).ToBeChecked(playwright.LocatorAssertionsToBeCheckedOptions{Checked: playwright.Bool(exclude)}); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// basisSnapshot is what a reader sees of the open view: its text, visible
+// links (with sorted queries) and chart data.
+const basisSnapshot = `() => {
+	const panel = document.querySelector('[data-panel]:not([hidden])');
+	const charts = [...panel.querySelectorAll('canvas')].map((c) => { const chart = Chart.getChart(c); return chart ? {labels: chart.data.labels, sets: chart.data.datasets.map((d) => ({label: d.label, data: d.data, hidden: !!d.hidden}))} : null; });
+	const links = [...document.querySelectorAll('[data-explore] a[href]')].filter((a) => a.offsetParent).map((a) => a.textContent.trim() + ' ' + [...new URLSearchParams(a.getAttribute('href').split('?')[1] || '')].sort().join('&'));
+	return JSON.stringify({title: document.title, text: panel.innerText, links, charts});
+}`
+
+// Selections the view registry's SwitchesBasis rule matches switch penalties
+// in place from the embedded other-basis payloads; the rest reload. Either way
+// the result must equal a server render on the new basis.
+func TestExplorePenaltiesSwitchMatchesServerRender(t *testing.T) {
+	t.Parallel()
+	base := exploreBase(t, apptest.ScenarioSeasonTrend)
+	for _, tc := range []struct {
+		path    string
+		inPlace bool
+	}{
+		{"explore?view=teams", true},
+		{"explore?view=teams&display=gap", true},
+		{"explore?view=teams&display=scatter", true},
+		{"explore?view=teams&display=table", false},
+		{"explore?view=season-trend", true},
+		{"explore?view=season-trend&trend-view=compare&smoothing=none", true},
+		{"explore?view=season-trend&trend-view=difference&smoothing=none", true},
+		{"explore?view=season-trend&trend-view=relative", true},
+		{"explore?view=season-trend&trend-view=balance&smoothing=none&opponents=adjusted", true},
+		{"explore?view=team-history", false},
+		{"explore?view=distribution", false},
+	} {
+		for _, exclude := range []bool{true, false} {
+			from, to := tc.path, tc.path+"&penalties=exclude"
+			if !exclude {
+				from, to = to, from
+			}
+			t.Run(from, func(t *testing.T) {
+				t.Parallel()
+				switched := explorePage(t, base, Desktop, from)
+				markDocument(t, switched)
+				if err := switched.Locator(penaltiesSelect).First().Click(); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := switched.WaitForFunction(`(want) => (new URLSearchParams(location.search).get('penalties') === 'exclude') === want && document.readyState === 'complete'`, exclude); err != nil {
+					t.Fatal(err)
+				}
+				if err := settle(switched); err != nil {
+					t.Fatal(err)
+				}
+				var same bool
+				evalJSON(t, switched, `() => window.__documentMarker === true`, nil, &same)
+				if same != tc.inPlace {
+					t.Errorf("switched in place = %v, want %v", same, tc.inPlace)
+				}
+				var got, want string
+				evalJSON(t, switched, basisSnapshot, nil, &got)
+				evalJSON(t, explorePage(t, base, Desktop, to), basisSnapshot, nil, &want)
+				if got != want {
+					t.Errorf("switched page differs from the server render of %s:\n got %.2000s\nwant %.2000s", to, got, want)
+				}
+			})
 		}
 	}
 }

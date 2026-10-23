@@ -1,24 +1,29 @@
 (() => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
-  // Switching the penalties basis is a full server render of the current page
-  // state on the chosen basis. The capture phase keeps the view forms' in-page
-  // change handlers from also reacting.
+  // Switching the penalties basis swaps in the other basis's payloads and
+  // redraws in place, or takes a full server render when the page has none.
+  // The capture phase keeps the view forms' in-page change handlers from also
+  // reacting.
   document.addEventListener('change', event => {
     const checkbox = event.target.closest?.('[data-penalties-selector]');
     if (!checkbox) return;
     event.stopPropagation();
     const url = new URL(location.href);
     if (checkbox.checked) url.searchParams.set('penalties', 'exclude'); else url.searchParams.delete('penalties');
-    location.assign(url);
+    if (!switchesBasis(url.searchParams) || !useBasis(checkbox.checked)) { location.assign(url); return; }
+    history.pushState(null, '', url);
+    applyURL();
   }, true);
   // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
-  const records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
-  const teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
+  let records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
+  let teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
   const h2hData = JSON.parse(root.querySelector('#explore-h2h-data').textContent) || [];
-  const historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
-  const homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
+  let historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
+  let homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
+  // The same four payloads on the basis the server did not render, or null.
+  const otherBasis = JSON.parse(root.querySelector('#explore-other-basis').textContent);
   const thresholdRecords = JSON.parse(root.querySelector('#explore-threshold-data').textContent) || [];
   const parityRecords = JSON.parse(root.querySelector('#explore-parity-data').textContent) || [];
   // The view registry (explore_views.go): views in tab order, by group, with
@@ -58,22 +63,23 @@
   const styles = getComputedStyle(root);
   const color = name => styles.getPropertyValue(name).trim();
   const goalsColor = color('--chart-actual'), xgColor = color('--chart-expected');
-  // The server renders every figure on the chosen penalties basis. This script
-  // only has to name that basis: the same label rules as basisText in Go.
-  // BothBases views switch basis in place, so the named basis follows the URL
-  // while renderedNonPenalty stays the basis of the server-rendered figures.
+  // The server renders the page on the chosen penalties basis and embeds the
+  // other basis's payloads; useBasis swaps them in. The script names the basis
+  // with the same label rules as basisText in Go. BothBases views read both
+  // bases from their own payloads, so the named basis (nonPenalty) follows the
+  // URL while dataNonPenalty stays the basis of the payloads in use.
   const renderedNonPenalty = root.dataset.penalties === 'exclude';
-  let nonPenalty = renderedNonPenalty;
+  let nonPenalty = renderedNonPenalty, dataNonPenalty = renderedNonPenalty;
   // Team records name their matches by index into the shared match list,
   // which stores each match once in home orientation. Expand them into the
-  // records exploreMatches builds in Go, on the rendered basis.
-  const teamMatch = (fixture, teamID) => {
+  // records exploreMatches builds in Go, on the payload's basis.
+  const teamMatch = (fixture, teamID, np) => {
     const home = h2hData.teams[fixture.home].ID === teamID, side = home ? 0 : 1;
     const orient = pair => home ? pair : [pair[1], pair[0]];
     const opponentID = h2hData.teams[home ? fixture.away : fixture.home].ID;
-    const score = orient(fixture.score), xg = orient(renderedNonPenalty ? fixture.npxg : fixture.xg);
-    const goalsCovered = !renderedNonPenalty || fixture.npGoals !== null;
-    const goals = renderedNonPenalty && goalsCovered ? orient(fixture.npGoals) : score;
+    const score = orient(fixture.score), xg = orient(np ? fixture.npxg : fixture.xg);
+    const goalsCovered = !np || fixture.npGoals !== null;
+    const goals = np && goalsCovered ? orient(fixture.npGoals) : score;
     const margin = score[0] - score[1], factors = fixture.opponents?.[side];
     return {
       goalsCovered, undated: fixture.undated, venueDateUnavailable: fixture.venueDateUnavailable,
@@ -85,9 +91,44 @@
       opponents: factors && {scored: factors[0], allowed: factors[1], expectedPoints: factors[2]},
     };
   };
-  teamSeasons.forEach(season => (season.teams || []).forEach(team => {
-    team.matches = (team.matches || []).map(index => teamMatch(h2hData.fixtures[index], team.id));
+  const expandTeamMatches = (seasons, np) => seasons.forEach(season => (season.teams || []).forEach(team => {
+    team.matches = (team.matches || []).map(index => teamMatch(h2hData.fixtures[index], team.id, np));
   }));
+  expandTeamMatches(teamSeasons, renderedNonPenalty);
+  const basisPayloads = {[renderedNonPenalty]: {records, teamSeasons, historyContextData, homeRecords,
+    defaults: {defaultTeamSeason: root.dataset.defaultTeamSeason, defaultHistoryTeam: root.dataset.defaultHistoryTeam}}};
+  if (otherBasis) {
+    const payloads = {records: otherBasis.chartData || [], teamSeasons: otherBasis.teamSeasons || [], historyContextData: otherBasis.historyContext, homeRecords: otherBasis.homeAdvantage || [],
+      defaults: {defaultTeamSeason: otherBasis.defaultTeamSeason, defaultHistoryTeam: otherBasis.defaultHistoryTeam}};
+    expandTeamMatches(payloads.teamSeasons, !renderedNonPenalty);
+    basisPayloads[!renderedNonPenalty] = payloads;
+  }
+  // useBasis puts the payloads for one basis in use, dropping every chart so
+  // the next render rebuilds it from them. It reports false when the page
+  // lacks that basis, which then needs a server render.
+  // The view registry's rule for redrawing a selection on either basis.
+  // A season without teams on the target basis renders differently (no team
+  // choices), so it takes a server render.
+  function switchesBasis(params) {
+    const view = views.get(requestedView(params));
+    if (!view || !ruleMatches(view.switchesBasis, params, view.defaults)) return false;
+    const payloads = basisPayloads[params.get('penalties') === 'exclude'];
+    if (!payloads) return false;
+    const season = params.get('season') || payloads.defaults.defaultTeamSeason;
+    return Boolean(payloads.teamSeasons.find(row => row.season === season)?.teams?.length);
+  }
+  // These charts read only payloads that carry both bases.
+  const basisIndependentCharts = new Set(['thresholds', 'parity', 'archiveScatter', 'headToHead', 'headToHeadXG']);
+  function useBasis(np) {
+    if (np === dataNonPenalty) return true;
+    if (!basisPayloads[np]) return false;
+    ({records, teamSeasons, historyContextData, homeRecords} = basisPayloads[np]);
+    Object.assign(root.dataset, basisPayloads[np].defaults);
+    dataNonPenalty = np;
+    indexHomeRecords();
+    Object.keys(charts).filter(key => !basisIndependentCharts.has(key)).forEach(key => { charts[key].destroy(); delete charts[key]; });
+    return true;
+  }
   const basisPattern = /\b(?:\d\+? goals?|Expected goals|expected goals|xGD|xG|Goal differential|Goal margin|Total goals|Goals)\b/g;
   const basisReplacement = match => ({
     'Expected goals': 'Non-penalty expected goals', 'expected goals': 'non-penalty expected goals',
@@ -95,22 +136,28 @@
     'Total goals': 'Total non-penalty goals', Goals: 'Non-penalty goals',
   })[match] || match.replace(' ', ' non-penalty ');
   const T = text => nonPenalty && !/npxG|on-penalty/.test(text) ? text.replace(basisPattern, basisReplacement) : text;
-  let goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
+  let goalsWord;
   const binColors = ['#44504a', '#526d61', color('--green'), color('--hypo'), '#372858'];
-  const binLabels = ['0 goals', '1 goal', '2 goals', '3 goals', '4+ goals'].map(T);
-  const teamMeasures = {
-    for: {index: 0, actual: T('Goals'), expected: T('xG')},
-    against: {index: 1, actual: T('Goals allowed'), expected: T('xG allowed')},
-    difference: {index: 2, actual: T('Goal differential'), expected: T('xG differential')},
-    points: {index: 3, actual: 'Points', expected: 'xPoints'},
-  };
-  const tableMeasures = [teamMeasures.difference, teamMeasures.for, teamMeasures.against, teamMeasures.points];
-  const scatterMeaning = {
-    for: T('Above: more goals scored than xG; below: fewer.'),
-    against: T('Above: more goals conceded than xG allowed; below: fewer.'),
-    difference: T('Above: higher goal differential than xG differential; below: lower.'),
-    points: 'Above: more points earned than xPoints; below: fewer.',
-  };
+  // These labels name the current basis; applyURL relabels after a switch.
+  let binLabels, teamMeasures, tableMeasures, scatterMeaning;
+  function labelBasis() {
+    goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
+    binLabels = ['0 goals', '1 goal', '2 goals', '3 goals', '4+ goals'].map(T);
+    teamMeasures = {
+      for: {index: 0, actual: T('Goals'), expected: T('xG')},
+      against: {index: 1, actual: T('Goals allowed'), expected: T('xG allowed')},
+      difference: {index: 2, actual: T('Goal differential'), expected: T('xG differential')},
+      points: {index: 3, actual: 'Points', expected: 'xPoints'},
+    };
+    tableMeasures = [teamMeasures.difference, teamMeasures.for, teamMeasures.against, teamMeasures.points];
+    scatterMeaning = {
+      for: T('Above: more goals scored than xG; below: fewer.'),
+      against: T('Above: more goals conceded than xG allowed; below: fewer.'),
+      difference: T('Above: higher goal differential than xG differential; below: lower.'),
+      points: 'Above: more points earned than xPoints; below: fewer.',
+    };
+  }
+  labelBasis();
   // Official points and ASA xPoints keep penalties; say so wherever they appear.
   const setPointsNote = (panel, params) => {
     const note = root.querySelector(`[data-points-note="${panel}"]`);
@@ -186,9 +233,17 @@
   }
   // Chart.js owns pointer/touch hit testing and tooltip placement. Its public
   // active-element API also lets keyboard users inspect the same marks.
+  // A basis switch rebuilds charts on the same canvases, so each canvas
+  // listens once and acts on its current chart.
+  const keyboardCanvases = new WeakSet();
   function keyboardAccess(chart, describe, inspectOnFocus = false) {
     const canvas = chart.canvas;
+    chart.keyboardDescribe = describe;
+    if (keyboardCanvases.has(canvas)) return;
+    keyboardCanvases.add(canvas);
     canvas.addEventListener('keydown', event => {
+      const chart = Chart.getChart(canvas);
+      if (!chart) return;
       if (event.key === 'Escape') { dismiss(); return; }
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
@@ -212,12 +267,12 @@
       chart.setActiveElements([mark]);
       chart.tooltip.setActiveElements([mark], element.getCenterPoint());
       chart.update('none');
-      status.textContent = describe(mark);
+      status.textContent = chart.keyboardDescribe(mark);
     });
     if (inspectOnFocus) canvas.addEventListener('focus', () => {
-      if (!chart.getActiveElements().length) canvas.dispatchEvent(new KeyboardEvent('keydown', {key: 'Home'}));
+      if (!Chart.getChart(canvas)?.getActiveElements().length) canvas.dispatchEvent(new KeyboardEvent('keydown', {key: 'Home'}));
     });
-    canvas.addEventListener('blur', () => { clearChart(chart); status.textContent = ''; });
+    canvas.addEventListener('blur', () => { const chart = Chart.getChart(canvas); if (chart) clearChart(chart); status.textContent = ''; });
   }
   function setTrendData(chart, rows) {
     const first = Number(rows[0].season), last = Number(rows.at(-1).season);
@@ -374,10 +429,14 @@
   }
   // Home advantage: one panel per measure, sharing a season axis. Every mark is
   // home minus away per played match, so zero means the sides did equally well.
-  const homeYears = homeRecords.length
-    ? Array.from({length: Number(homeRecords.at(-1).season) - Number(homeRecords[0].season) + 1}, (_, index) => String(Number(homeRecords[0].season) + index))
-    : [];
-  const homeByYear = new Map(homeRecords.map(row => [row.season, row]));
+  let homeYears, homeByYear;
+  function indexHomeRecords() {
+    homeYears = homeRecords.length
+      ? Array.from({length: Number(homeRecords.at(-1).season) - Number(homeRecords[0].season) + 1}, (_, index) => String(Number(homeRecords[0].season) + index))
+      : [];
+    homeByYear = new Map(homeRecords.map(row => [row.season, row]));
+  }
+  indexHomeRecords();
   const homeZeroLabel = {
     id: 'homeZeroLabel',
     afterDatasetsDraw(chart) {
@@ -3131,11 +3190,15 @@
     if (isPointsOnlySelection(params) && params.get('penalties') === 'exclude') {
       params.delete('penalties');
       history.replaceState(null, '', `?${params}`);
-      if (renderedNonPenalty) { location.assign(location.href); return; }
+      if (!useBasis(false)) { location.assign(location.href); return; }
     }
-    if (!views.get(view).bothBases && (params.get('penalties') === 'exclude') !== renderedNonPenalty) { location.assign(location.href); return; }
+    // Server-rendered text names the rendered basis, so only a view redrawn
+    // from the payloads shows another one.
+    const wanted = params.get('penalties') === 'exclude';
+    if (wanted !== renderedNonPenalty && !views.get(view).bothBases && !switchesBasis(params)) { location.assign(location.href); return; }
+    if (!views.get(view).bothBases && !useBasis(wanted)) { location.assign(location.href); return; }
     nonPenalty = params.get('penalties') === 'exclude';
-    goalsWord = nonPenalty ? 'non-penalty goals' : 'goals';
+    labelBasis();
     if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', `?${params}`); }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
@@ -3235,7 +3298,7 @@
     Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
     const becomingPointsOnly = isPointsOnlySelection(url.searchParams);
     if (becomingPointsOnly) url.searchParams.delete('penalties');
-    if (becomingPointsOnly && renderedNonPenalty) { location.assign(url); return; }
+    if (becomingPointsOnly && !useBasis(false)) { location.assign(url); return; }
     if (url.searchParams.get('view') === 'season-trend') {
       const params = url.searchParams;
       if (!trendSortAvailable(params)) {

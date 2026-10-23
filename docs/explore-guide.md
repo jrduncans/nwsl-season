@@ -37,7 +37,8 @@ The view registry, `exploreViewGroups` in `internal/app/explore_views.go`,
 lists every view and Compare teams display in tab order with its label and view
 group, and holds each view's selection rules: points-only selection, points
 note, whether it carries both scoring bases (so switching basis needs no
-reload), and its forecast needs. The server validates views, builds the tabs
+reload), which selections switch basis in place from the other basis's
+payloads, and its forecast needs. The server validates views, builds the tabs
 and applies those rules from it, and emits it as the `explore-views` payload so
 `explore.js` applies the same rules in place. Explore uses the current season's
 navigation with Explore marked active.
@@ -185,12 +186,22 @@ in a form whose hidden fields carry the rest of the query
 (`PenaltiesFormFields`), so without JavaScript every view switches basis through
 its form's submit button.
 
-With JavaScript, changing the checkbox reloads the page on the new basis,
-because the server computes every figure. Head to head and Team-seasons carry
-both bases, so their own checkboxes switch in place. `explore.js` keeps the
-basis the server rendered (`renderedNonPenalty`) apart from the basis it names
-in labels (`nonPenalty`): entering any other view in place reloads when the URL
-basis differs from the rendered one.
+The server computes every figure, and each page also embeds the figures that
+change with the basis (Scoring trend and Goal distribution records, team
+records, Season by season's league context and Home advantage) on the other
+basis (`explore-other-basis`, about 27 KB gzipped). With JavaScript, selections
+that the view registry's `SwitchesBasis` rule matches switch in place from
+those payloads: Actual vs expected, Gap to expected and the outlier plot, and
+every Match by match chart. They are redrawn entirely by the script, so the
+result equals a server render on the new basis. Other selections still show
+server-rendered tables and notes that name the rendered basis, so changing the
+checkbox there reloads the page on the new basis, as does a switch to a season
+with no teams on the new basis. Head to head and Team-seasons carry both bases
+in their own payloads, so their own checkboxes switch in place. `explore.js`
+keeps three bases apart: the one the server rendered (`renderedNonPenalty`),
+the one whose payloads are in use (`dataNonPenalty`) and the one it names in
+labels (`nonPenalty`). Entering a view in place reloads when the URL basis
+differs from the rendered one and the selection cannot switch basis.
 
 `history.ScoringBasis` selects the arithmetic for every consumer. On the
 non-penalty basis, per side: non-penalty goals = goals − penalty goals, and

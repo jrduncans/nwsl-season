@@ -62,7 +62,9 @@ func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	if plain != included {
 		t.Error("penalties=include must render exactly as an absent parameter")
 	}
-	forbidRaw(t, plain, "npxG", `data-points-note`, `data-penalties="exclude"`)
+	// Only the other basis's payload, for an in-place switch, names it.
+	rendered, _, _ := strings.Cut(plain, `<script type="application/json" id="explore-other-basis">`)
+	forbidRaw(t, rendered, "npxG", `data-points-note`, `data-penalties="exclude"`)
 	forbidText(t, plain, `[data-panel="team-history"]`, "Non-penalty")
 	requireAttr(t, plain, `th[data-h2h-basis-column]`, "hidden", "")
 	// The checkbox is last in each view's control row and unchecked by default.

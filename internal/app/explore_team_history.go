@@ -76,11 +76,7 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 			*field.value = values[0]
 		}
 	}
-	page.HistoryContextData = exploreTeamContext(seasons)
-	for index := range page.HistoryContextData {
-		page.HistoryContextData[index].Goals.Label = basisText(basis, page.HistoryContextData[index].Goals.Label)
-		page.HistoryContextData[index].XG.Label = basisText(basis, page.HistoryContextData[index].XG.Label)
-	}
+	page.HistoryContextData = exploreHistoryContextData(seasons, basis)
 	measure, _ := exploreTeamSortMetric(query.Get("measure") + "-actual")
 	metric := page.HistoryContextData[measure]
 	if page.HistorySeries != "xg" {
@@ -219,4 +215,15 @@ func sortExploreTeamHistory(rows []exploreTeamHistoryRecord, column, order strin
 		}
 		return rows[i].Season > rows[j].Season
 	})
+}
+
+// exploreHistoryContextData is Season by season's league context, labeled
+// for basis.
+func exploreHistoryContextData(seasons []exploreTeamSeason, basis history.ScoringBasis) [4]exploreMetricContext {
+	data := exploreTeamContext(seasons)
+	for index := range data {
+		data[index].Goals.Label = basisText(basis, data[index].Goals.Label)
+		data[index].XG.Label = basisText(basis, data[index].XG.Label)
+	}
+	return data
 }

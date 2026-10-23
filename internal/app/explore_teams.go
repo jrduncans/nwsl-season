@@ -350,9 +350,10 @@ func linkExploreTeamMatches(seasons []exploreTeamSeason, data *exploreHeadToHead
 	for i, fixture := range data.Fixtures {
 		indexes[fixture.ID] = i
 	}
-	for s := range seasons {
-		for t := range seasons[s].Teams {
-			team := &seasons[s].Teams[t]
+	for _, season := range seasons {
+		// season is a copy, but its Teams share the caller's backing array.
+		for t := range season.Teams {
+			team := &season.Teams[t]
 			team.MatchRefs = make([]int, 0, len(team.Matches))
 			for _, match := range team.Matches {
 				index, ok := indexes[match.ID]
