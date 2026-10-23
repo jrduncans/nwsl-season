@@ -87,6 +87,8 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
 	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80")
+	// Each entrant carries its full name and a short code for narrow cards.
+	requireElements(t, root.Body.String(), ".bracket-match .fixture-team-full", ".bracket-match .fixture-team-code")
 	fixtures := httptest.NewRecorder()
 	handler.ServeHTTP(fixtures, httptest.NewRequest(http.MethodGet, "/seasons/2024/playoffs/fixtures", nil))
 	if fixtures.Code != http.StatusOK {

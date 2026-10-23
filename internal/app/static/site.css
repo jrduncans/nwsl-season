@@ -353,16 +353,19 @@ th:nth-child(2) { text-align: left; }
 .bracket-round { min-width: 0; }
 .bracket-round h2 { margin: 1rem 0 .65rem; font-size: 1.1rem; }
 .bracket-round-slots { display: grid; gap: 1rem; }
-.bracket-slot { position: relative; min-height: 8rem; padding: .75rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.bracket-slot { position: relative; container-type: inline-size; min-height: 8rem; padding: .75rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .bracket-slot::after { position: absolute; top: 50%; left: calc(100% + .5rem); width: .5rem; border-top: 1px solid var(--line); content: ""; }
 .bracket-round:last-child .bracket-slot::after { display: none; }
 .bracket-seeds, .bracket-kickoff, .bracket-facts, .bracket-advances { margin: 0 0 .35rem; color: var(--muted); font-size: .75rem; }
 .bracket-match { display: grid; grid-template-columns: minmax(0, 1fr) 4.6rem minmax(0, 1fr); align-items: center; gap: .4rem; margin-top: .45rem; }
-.bracket-match-team { min-width: 0; }.bracket-match-team:last-child { text-align: right; }.bracket-match-team .team-name { max-width: 100%; }.bracket-match-team .team-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }.bracket-match-team:last-child .team-name { flex-direction: row-reverse; }.bracket-match .fixture-result { font-size: .95rem; }.bracket-match .fixture-xg { font-size: .68rem; }
+.bracket-match-team { min-width: 0; }.bracket-match-team:last-child { text-align: right; }.bracket-match-team .team-name { max-width: 100%; }.bracket-match-team .fixture-team-full { overflow: hidden; text-overflow: ellipsis; }.bracket-match-team:last-child .team-name { flex-direction: row-reverse; }.bracket-match .fixture-result { font-size: .95rem; }.bracket-match .fixture-xg { font-size: .68rem; }
 .bracket-winner { margin: .5rem 0 0; color: var(--green); font-size: .8rem; font-weight: 800; }
 .bracket-facts { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .45rem; }.bracket-meta-tag { color: var(--green-deep); background: var(--green-soft); }
 .bracket-advances { margin-top: .7rem; color: var(--green); font-weight: 700; }
 .bracket-diagnostics { color: var(--muted); }
+/* A narrow card shows each team's code, like fixture rows on phones; the full
+   name stays for screen readers. */
+@container (max-width: 20rem) { .bracket-match .fixture-team-code { display: inline; }.bracket-match .team-name:has(.fixture-team-code) .fixture-team-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; } }
 @media (max-width: 700px) { .bracket { display: block; overflow: visible; padding: 0; }.bracket-round + .bracket-round { margin-top: 1.5rem; }.bracket-slot::after { display: none; }.bracket-match { grid-template-columns: minmax(0, 1fr) 4.2rem minmax(0, 1fr); }.bracket-match-team .team-name { white-space: normal; } }
 
 /* Explore reuses scoring summaries while keeping one analysis on screen. */

@@ -116,7 +116,9 @@ regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
 matches and links to the Matches page. At 390px rounds stack with explicit `Advances to`
-text.
+text. When a match card is narrower than 20rem (three columns on a tablet or
+narrow window), each team shows its short code instead of its full name, as
+Matches rows do on phones; the full name stays available to screen readers.
 
 Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.

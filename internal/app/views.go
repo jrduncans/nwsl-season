@@ -88,8 +88,8 @@ type bracketRoundView struct {
 
 type bracketSlotView struct {
 	SeedPair   string
-	Home       teamNameView
-	Away       teamNameView
+	Home       fixtureTeamView
+	Away       fixtureTeamView
 	Winner     string
 	AdvancesTo string
 	Game       *bracketGameView
@@ -1044,8 +1044,10 @@ func fixtureWinner(game cache.Game) string {
 func bracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData) bracketPage {
 	view := bracket.Build(format, data.Games)
 	teams := make(map[string]teamNameView, len(data.Teams))
+	codes := make(map[string]string, len(data.Teams))
 	for _, team := range data.Teams {
 		teams[team.ID] = teamName(team)
+		codes[team.ID] = scenarioTeamCode(team)
 	}
 	xgoals := make(map[string]cache.GameXG, len(data.XGoals))
 	for _, value := range data.XGoals {
@@ -1077,7 +1079,7 @@ func bracketPageFor(page seasonPage, format competition.BracketFormat, data cach
 	for _, round := range view.Rounds {
 		row := bracketRoundView{Label: round.Label}
 		for _, slot := range round.Slots {
-			item := bracketSlotView{Home: bracketEntrant(slot.Home.TeamID, teams), Away: bracketEntrant(slot.Away.TeamID, teams), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
+			item := bracketSlotView{Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
 			if slot.SeedPair != nil {
 				item.SeedPair = fmt.Sprintf("Seeds %d and %d", slot.SeedPair[0], slot.SeedPair[1])
 			}
@@ -1102,8 +1104,10 @@ func bracketEntrantName(id string, teams map[string]teamNameView) string {
 	return id
 }
 
-func bracketEntrant(id string, teams map[string]teamNameView) teamNameView {
-	return teamNameView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL}
+// bracketEntrant carries the team's short code so narrow bracket cards can
+// show it in place of the full name, as fixture rows do on phones.
+func bracketEntrant(id string, teams map[string]teamNameView, codes map[string]string) fixtureTeamView {
+	return fixtureTeamView{teamNameView: teamNameView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL}, Code: codes[id]}
 }
 
 func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracketGameView {
