@@ -107,9 +107,7 @@ func TestExploreThresholds(t *testing.T) {
 			if err := expect.Locator(page.Locator(`[data-threshold-detail="2016"]`)).ToBeVisible(); err != nil {
 				t.Fatal(err)
 			}
-			if err := page.Locator(`nav[aria-label="Threshold season details"] a[data-threshold-year="2021"]`).Click(); err != nil {
-				t.Fatal(err)
-			}
+			selectValue(t, page.Locator("[data-threshold-season]"), "2021")
 			if err := expect.Locator(page.Locator(`[data-threshold-detail="2021"]`)).ToContainText("41 earned points / 23 played"); err != nil {
 				t.Fatal(err)
 			}
@@ -165,7 +163,8 @@ func TestExploreThresholds(t *testing.T) {
 		if _, err := page.Goto(base + "explore?view=thresholds"); err != nil {
 			t.Fatal(err)
 		}
-		if err := page.Locator(`nav[aria-label="Threshold season details"] a[data-threshold-year="2022"]`).Click(); err != nil {
+		selectValue(t, page.Locator("[data-threshold-season]"), "2022")
+		if err := page.Locator("[data-threshold-season-controls] button").Click(); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator(`[data-threshold-detail="2022"]`)).ToContainText("Equal-points tie across the boundary"); err != nil {

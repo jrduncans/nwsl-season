@@ -23,7 +23,8 @@ func TestExploreThresholdsUsesOneArchiveAndNativeDetails(t *testing.T) {
 	}
 	body := response.Body.String()
 	requireText(t, body, "[data-panel=thresholds]", "since 2016", "no byes", "records not loaded")
-	requireAttr(t, body, `[data-threshold-year="2022"]`, "aria-current", "true")
+	requireElements(t, body, `[data-threshold-season] option[value="2022"][selected]`)
+	forbidElements(t, body, `nav[aria-label="Threshold season details"]`)
 	requireAttr(t, body, `[data-threshold-detail="2025"]`, "hidden", "")
 	forbidText(t, body, "[data-panel=thresholds]", "Expected points", "xPoints incomplete")
 	if strings.Contains(text(find(t, body, "[data-panel=thresholds]")[0]), "Penalties Include") {

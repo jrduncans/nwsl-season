@@ -678,7 +678,6 @@ th:nth-child(2) { text-align: left; }
 .threshold-series-2 { color: #5b3f96; }
 .threshold-series-3 { color: #a44b18; }
 .threshold-legend { flex-wrap: wrap; }
-[data-panel="thresholds"] .explore-subviews { margin-top: 0; }
 [data-threshold-detail] { margin: 1rem 0 1.5rem; }
 .threshold-season-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; margin-bottom: .75rem; }
 .threshold-season-heading h3 { margin: 0; }
@@ -705,8 +704,6 @@ th:nth-child(2) { text-align: left; }
 .threshold-table thead a::after { width: auto; margin-left: .1em; }
 @media (max-width: 600px) {
  .threshold-cards { grid-template-columns: 1fr; }
- [data-panel="thresholds"] .explore-subviews { column-gap: .6rem; }
- [data-panel="thresholds"] .explore-subviews a { display: inline-flex; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; padding: 0; }
  .threshold-table { font-size: .75rem; }
  .threshold-table :is(th, td) { padding: .65rem .2rem; }
  .threshold-table thead th { font-size: .65rem; }

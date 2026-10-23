@@ -621,6 +621,8 @@
     const requested = params.get('threshold-season');
     thresholdSelected = thresholdBySeason.has(requested) ? requested : root.dataset.defaultThresholdSeason;
     root.querySelectorAll('[data-threshold-detail]').forEach(panel => { panel.hidden = panel.dataset.thresholdDetail !== thresholdSelected; });
+    const seasonSelect = root.querySelector('[data-threshold-season]');
+    if (seasonSelect) seasonSelect.value = thresholdSelected;
     root.querySelectorAll('[data-threshold-year]').forEach(link => {
       if (link.dataset.thresholdYear === thresholdSelected) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
       const selection = new URLSearchParams(params);
@@ -3495,6 +3497,12 @@
   const updateRankings = () => update(Object.fromEntries(new FormData(rankingControls)));
   rankingControls.addEventListener('submit', event => { event.preventDefault(); updateRankings(); });
   rankingControls.addEventListener('change', updateRankings);
+  const thresholdSeasonControls = root.querySelector('[data-threshold-season-controls]');
+  if (thresholdSeasonControls) {
+    const select = thresholdSeasonControls.elements.namedItem('threshold-season');
+    select.addEventListener('change', () => selectThresholdSeason(select.value));
+    thresholdSeasonControls.addEventListener('submit', event => { event.preventDefault(); selectThresholdSeason(select.value); });
+  }
   if (paritySeasonSelect) {
     paritySeasonSelect.addEventListener('change', () => selectParitySeason(paritySeasonSelect.value));
     root.querySelector('[data-panel="parity"] [data-segmented="parity-series"]').addEventListener('change', () => update({view: 'parity', 'parity-series': paritySeriesControl.value}));

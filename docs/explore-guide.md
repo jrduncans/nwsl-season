@@ -337,7 +337,8 @@ calculation is `history.SummarizeParity`.
 
 `view=thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
 Shield, Home playoff game, Playoff bye and Playoffs, in a chart card with the
-intro and legend; the season links and cards follow it. The series use distinct
+intro and legend; the season cards follow it, chosen by a **Season** select in
+the heading row, like Parity's. The series use distinct
 line patterns and markers as well as color. The intro explains what a mark is:
 the points per match of the last team to qualify. The tooltip title shows the
 year, playoff places and bye count (or **No byes**). The chart's keyboard hint
@@ -404,10 +405,11 @@ effect and there is no Penalties control (the view is points-only, so the
 benchmark warming; entering Match by match from that page reloads its normal
 payload so forecast controls remain available.
 
-Season links and Chart.js marks select details below the chart by touch or keyboard
+The Season select and Chart.js marks select details below the chart by touch or keyboard
 (`threshold-season`, default newest eligible season). JavaScript updates the URL
-and detail visibility in place, restoring reload and Back/Forward. Native
-links, the outcome form and sortable table headers work without scripts. The
+and detail visibility in place, restoring reload and Back/Forward. Without
+scripts, the select's Show season button, the table's season links, the outcome
+form and sortable table headers all work. The
 selected season is headed "2025 · 8 playoff teams · no byes" and uses compact
 outcome cards with two lines each: **Last in** and **First out** (for the Shield,
 **Winner** and **Runner-up**). A line reads "Orlando Pride · 4th · 40 pts · 1.54",
