@@ -352,7 +352,7 @@ function setupFixtureViews() {
 
 // Schedule difficulty: the measure switcher re-plots and re-sorts the rows
 // in place. Each row carries "value|delta|label|direction|position|sort" for
-// every measure, and the plot carries "note|baseline label|position".
+// every measure, and the plot carries "baseline label|position".
 function setupDifficultyMeasure() {
   const plot = document.querySelector("[data-difficulty]");
   const controls = plot?.querySelector("[data-difficulty-controls]");
@@ -364,8 +364,10 @@ function setupDifficultyMeasure() {
     const key = event.target.value;
     const measure = plot.dataset[datasetKey("measure", key)];
     if (!measure) return;
-    const [note, baselineLabel, baselinePosition] = measure.split("|");
-    plot.querySelector("[data-difficulty-note]").textContent = note;
+    const [baselineLabel, baselinePosition] = measure.split("|");
+    plot.querySelectorAll("[data-difficulty-note]").forEach((note) => {
+      note.classList.toggle("is-inactive", note.dataset.difficultyNote !== key);
+    });
     const baseline = plot.querySelector("[data-difficulty-baseline]");
     if (baseline) {
       baseline.textContent = baselineLabel;

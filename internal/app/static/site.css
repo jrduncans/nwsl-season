@@ -312,6 +312,11 @@ th:nth-child(2) { text-align: left; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .schedule-plot { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .schedule-controls { margin-bottom: .75rem; }
+/* Every measure's note shares one grid cell, so the cell is as tall as the
+   longest and switching measures never moves the plot. */
+.schedule-measure-notes { display: grid; }
+.schedule-measure-notes > .note { grid-area: 1 / 1; }
+.schedule-measure-notes > .is-inactive { visibility: hidden; }
 .schedule-axis { position: relative; display: flex; justify-content: space-between; margin: 1rem 13rem .8rem 16rem; color: var(--muted); font-size: .8rem; }
 .schedule-axis-baseline { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .schedule-plot-row { border-top: 1px solid var(--line); }

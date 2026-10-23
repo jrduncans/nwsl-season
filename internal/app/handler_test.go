@@ -1192,7 +1192,9 @@ func TestScheduleDifficultySelectsMeasureFromQuery(t *testing.T) {
 	body := raw.Body.String()
 	requireElements(t, body, `[data-difficulty-controls] input[value="raw"][checked]`)
 	requireText(t, body, "[data-difficulty-baseline]", "League average")
-	requireText(t, body, "[data-difficulty-note]", "with no adjustment")
+	requireText(t, body, `[data-difficulty-note="raw"]`, "with no adjustment")
+	requireElements(t, body, `[data-difficulty-note="adjusted"].is-inactive`)
+	forbidElements(t, body, `[data-difficulty-note="raw"].is-inactive`)
 	requireExact(t, body, ".schedule-plot-row [data-difficulty-value]", "3.00")
 	for _, query := range []string{"?difficulty=bogus", "?difficulty=raw&difficulty=venue"} {
 		if response := get(query); response.Code != http.StatusBadRequest {

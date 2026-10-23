@@ -11,10 +11,10 @@
   {{else}}
     <p class="data-warning">Schedule difficulty is unavailable until the remaining opponents have completed-match history.</p>
   {{end}}{{end}}
-  <section class="schedule-plot" aria-labelledby="schedule-plot-title" data-difficulty{{range .Strength.MeasureOptions}} data-measure-{{.Key}}="{{.Note}}|{{.BaselineLabel}} {{.Baseline}}|{{.BaselinePosition}}"{{end}}>
+  <section class="schedule-plot" aria-labelledby="schedule-plot-title" data-difficulty{{range .Strength.MeasureOptions}} data-measure-{{.Key}}="{{.BaselineLabel}} {{.Baseline}}|{{.BaselinePosition}}"{{end}}>
     <h2 id="schedule-plot-title" class="visually-hidden">Remaining schedule by team</h2>
     {{if gt (len .Strength.MeasureOptions) 1}}<form method="get" id="difficulty-controls" class="schedule-controls" data-difficulty-controls>{{template "segmented" .Strength.Segments}}<noscript><button class="button" type="submit">Apply</button></noscript></form>{{end}}
-    <p class="note" id="schedule-definition"><span data-difficulty-note>{{.Strength.Shown.Note}}</span> Higher means a harder remaining schedule. Select a team for its matches.</p>
+    <div class="schedule-measure-notes" id="schedule-definition">{{range .Strength.MeasureOptions}}<p class="note{{if ne .Key $.Strength.Measure}} is-inactive{{end}}" data-difficulty-note="{{.Key}}">{{.Note}} Higher means a harder remaining schedule. Select a team for its matches.</p>{{end}}</div>
     {{if .Strength.HasBaseline}}<div class="schedule-axis" aria-hidden="true"><span>Easier</span><span class="schedule-axis-baseline" data-difficulty-baseline style="left: {{.Strength.Shown.BaselinePosition}}%;">{{.Strength.Shown.BaselineLabel}} {{.Strength.Shown.Baseline}}</span><span>Harder</span></div>{{end}}
     <div data-difficulty-rows>
     {{range .Strength.Rows}}
