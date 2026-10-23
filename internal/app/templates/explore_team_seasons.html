@@ -47,7 +47,7 @@
 </div>
 <p class="note" data-team-seasons-standing-note>Regular-season rates adjust for matches played, not opponents or era; this is not a judgment of the best team. Active seasons enter once every team has 10 valid matches; hollow {{if eq .TeamSeasonsDisplay "scatter"}}dots{{else}}bars{{end}} are in progress.</p>
 </div>
-<details class="explore-context-details" data-team-seasons-values{{if .TeamSeasonsExpanded}} open{{end}}><summary data-team-seasons-summary>Table: all {{len .TeamSeasonsRows}} team-seasons</summary>
+<details class="explore-context-details" data-team-seasons-values{{if .TeamSeasonsExpanded}} open{{end}}><summary data-team-seasons-summary>{{$.TableLabel (len .TeamSeasonsRows) "team-season"}}</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Team-seasons values" data-team-seasons-table><table class="explore-table explore-archive-table"><caption data-team-seasons-table-caption>{{.TeamSeasonsActualLabel}} per match. Expected: {{.TeamSeasonsExpectedLabel}}. Gap: actual − expected. Tied rows share a competition rank.</caption>
 <thead><tr>{{range .TeamSeasonsColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-team-seasons-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>

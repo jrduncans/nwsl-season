@@ -53,6 +53,43 @@ type exploreOtherBasisView struct {
 	HomeAdvantage    exploreHomeAdvantageView
 }
 
+// tableLabel names a values-table disclosure by its row count, such as
+// "Table: all 10 seasons", or "Table: 1 season" for a single row.
+func tableLabel(rows int, noun string) string {
+	if rows == 1 {
+		return "Table: 1 " + noun
+	}
+	plural := noun + "s"
+	if noun == "match" {
+		plural = "matches"
+	}
+	return fmt.Sprintf("Table: all %d %s", rows, plural)
+}
+
+// TableLabel is tableLabel for templates.
+func (explorePage) TableLabel(rows int, noun string) string { return tableLabel(rows, noun) }
+
+// DistributionTableLabel names Goal distribution's values table on both
+// bases, since a season can lack complete non-penalty data.
+func (p explorePage) DistributionTableLabel() basisPair {
+	return p.otherPair(func(_ history.ScoringBasis, other bool) string {
+		if other {
+			return tableLabel(len(p.Other.DistributionRows), "season")
+		}
+		return tableLabel(len(p.DistributionRows), "season")
+	})
+}
+
+// HomeTableLabel names Home advantage's values table on both bases.
+func (p explorePage) HomeTableLabel() basisPair {
+	return p.otherPair(func(_ history.ScoringBasis, other bool) string {
+		if other {
+			return tableLabel(len(p.Other.HomeAdvantage.HomeAdvantageRows), "season")
+		}
+		return tableLabel(len(p.HomeAdvantageRows), "season")
+	})
+}
+
 // basisKey names a basis in data-basis and data-basis-only.
 func basisKey(basis history.ScoringBasis) string {
 	if basis.ExcludesPenalties() {

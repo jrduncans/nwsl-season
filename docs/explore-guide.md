@@ -114,7 +114,9 @@ Presentation:
 - Every data table on the site shares one header row: a pale green band with
   dark labels. Sortable headers show a faint ↕ until sorted, then ↓ or ↑ (the
   Thresholds table hides the unsorted mark on phones). Explore table captions
-  are small and muted.
+  are small and muted. A closed disclosure labeled "Table: all N matches",
+  "Table: all N seasons" (or similar) holds each view's values table, so the
+  label says what opens and how many rows it has.
 - Headings name what a view shows, not its competition stage. Each view says
   which matches it uses in a line below its heading (a note, caption or status
   line, such as "Per regular-season match"), so a view that later adds
@@ -701,7 +703,7 @@ tooltip's window description explain it. An xG or xPoints average needs every ob
 window, so missing expected data breaks that line until it leaves the window;
 it is never interpolated.
 
-The **Match values** table always shows individual matches, whatever the chart
+The match table (**Table: all N matches**) always shows individual matches, whatever the chart
 or smoothing selection: Match, Date (venue local), Venue, Opponent, official
 Score, Result, Points, xG for, xG against and xPoints. Excluding penalties adds
 Non-penalty goals and changes xG to npxG, following the selected basis; official
@@ -869,7 +871,7 @@ official lines' wording (for example “46.12–39.85 goals” and “43.40–40
 xG”); the status line and panel titles say they are adjusted. W–D–L and points
 per match stay official, under the note “W–D–L and points use official
 results.” (with “, including penalties” when penalties are excluded), which
-shows wherever the switch does, checked or not. The Match values table
+shows wherever the switch does, checked or not. The match table
 keeps its official columns and adds Adjusted goals for, Adjusted goals against,
 Adjusted xG for and Adjusted xG against, sortable like the other derived
 columns (descending first); with smoothing on, the rolling columns average
@@ -886,7 +888,7 @@ the Points − xPoints panel as it was. Rolling mode keeps its two lines,
 averaging adjusted values under “Adjusted points vs xPoints · N-match average”
 with “Adjusted points” and “Adjusted xPoints” legend keys. Each tile keeps its lines
 and totals adjusted values in place (for example “43.90 vs 39.96 xPoints”);
-the gap matches the official one, since the same shift moves both. The Match values table
+the gap matches the official one, since the same shift moves both. The match table
 adds Adjusted points and Adjusted xPoints instead of the adjusted goal
 columns, and keeps Points − xPoints. Tooltips and keyboard descriptions show
 “Points: 3 · adjusted 3.34”, “xPoints: 0.82 · adjusted 1.16”, then “Average
@@ -998,8 +1000,8 @@ every eligible season, reusing Compare teams' rates and coverage.
 | `history-order` | `asc`, `desc` | `desc` |
 
 The chart is chronological with gaps for missing years. The table sits in a
-**Season values** disclosure below the chart card, closed unless the URL carries
-`history-sort` or `history-order`, like Match by match's Match values. It sorts
+**Table: all N seasons** disclosure below the chart card, closed unless the URL
+carries `history-sort` or `history-order`, like Match by match's match table. It sorts
 from unrounded values, with unavailable values last and newest season first on ties.
 With `measure=points`, the chart shows Points and/or xPoints only, so Penalties
 is hidden and a carried exclusion is ignored and removed from generated links

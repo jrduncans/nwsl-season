@@ -59,7 +59,7 @@
 </div>
 </div>
 <details class="explore-context-details" data-distribution-values{{if .DistributionExpanded}} open{{end}}>
-<summary>Distribution values</summary>
+<summary>{{template "basisText" $.DistributionTableLabel}}</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="{{if $.NonPenalty}}Non-penalty goal{{else}}Goal{{end}} distribution values" data-aria-all="Goal distribution values" data-aria-np="Non-penalty goal distribution values"><table class="explore-table explore-distribution-table">
 <caption><span>Count (share of matches).</span></caption>
@@ -97,7 +97,7 @@
 <p class="note">Home is ASA's home designation. ASA has no neutral-site flag, so alternate-venue and neutral matches count as home matches. The gap describes results, not a cause.</p>
 </div>
 <details class="explore-context-details" data-home-values{{if .HomeAdvantageExpanded}} open{{end}}>
-<summary>Home advantage values</summary>
+<summary>{{template "basisText" $.HomeTableLabel}}</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Home advantage values"><table class="explore-table explore-home-table">
 <caption><span>Home minus away, per match. Home W–D–L is each result's share of played matches.</span></caption>
@@ -136,7 +136,7 @@
 <ol class="explore-parity-list">{{range .Teams}}<li>{{.Name}}: {{$.ParityValue .PPG}} PPG{{if eq $.ParitySeries "both"}}, {{$.ParityValue .XPPG}} xPPG{{end}}</li>{{end}}</ol>
 </div>
 <details class="explore-context-details" data-parity-team-values>
-<summary>Team values</summary>
+<summary data-parity-team-summary>Table: {{.Season}} teams</summary>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Team points per game"><table class="explore-table explore-parity-team-table">
 <caption><span data-parity-team-caption>PPG and xPPG for each team in {{.Season}}, highest PPG first.</span></caption>
 <thead><tr><th scope="col">Team</th><th scope="col">Played</th><th scope="col">PPG</th><th scope="col">xPPG</th></tr></thead>
@@ -146,7 +146,7 @@
 </section>
 {{end}}
 <details class="explore-context-details" data-parity-values{{if .ParityExpanded}} open{{end}}>
-<summary>Parity values</summary>
+<summary>{{$.TableLabel (len $.ParityRows) "season"}}</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Parity values"><table class="explore-table explore-parity-table">
 <caption><span>Points per game (PPG). Spreads are standard deviations across every team; the chance level is the spread from random results alone. Select a season to show its teams.</span></caption>
@@ -302,7 +302,7 @@
 <div data-history-context-values>{{range .HistoryContextDetails}}{{template "exploreContextSeries" .}}{{end}}</div>
 </details>
 <details class="explore-context-details" data-history-values{{if .HistoryExpanded}} open{{end}}>
-<summary>Season values</summary>
+<summary data-history-summary>{{$.TableLabel (len .TeamHistoryRows) "season"}}</summary>
 <div class="table-scroll explore-team-history-table-wrap" tabindex="0" role="region" aria-label="{{$.T "Team scoring by season"}}" data-aria-all="Team scoring by season" data-aria-np="{{$.NP "Team scoring by season"}}"><table class="explore-table explore-team-history-table"><caption><span>Regular-season values per match. Differential = scored − allowed.</span></caption><thead>
 <tr>{{range .HistoryColumns}}{{if .Leading}}<th scope="col" rowspan="2" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}<th scope="colgroup" colspan="2">{{template "basisText" ($.Both "Goal differential")}}</th><th scope="colgroup" colspan="2">{{template "basisText" ($.Both "Goals scored")}}</th><th scope="colgroup" colspan="2">{{template "basisText" ($.Both "Goals allowed")}}</th><th scope="colgroup" colspan="2">Points</th></tr>
 <tr>{{range .HistoryColumns}}{{if not .Leading}}<th scope="col" aria-sort="{{.Sort}}">{{template "exploreHistoryColumn" .}}</th>{{end}}{{end}}</tr></thead>
@@ -378,7 +378,7 @@
 </div>
 </div>
 <details class="explore-context-details" data-trend-values{{if .TrendExpanded}} open{{end}}>
-<summary>Match values</summary>
+<summary data-trend-summary>{{$.TableLabel (len .TrendRows) "match"}}</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Season trend match values"><table class="explore-table explore-season-trend-table">
 <caption><span data-trend-table-caption>{{.TrendCaption}}</span></caption>

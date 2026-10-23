@@ -162,6 +162,8 @@
     xGD: 'npxGD', xG: 'npxG', 'Goal differential': 'Non-penalty goal differential', 'Goal margin': 'Non-penalty goal margin',
     'Total goals': 'Total non-penalty goals', Goals: 'Non-penalty goals',
   })[match] || match.replace(' ', ' non-penalty ');
+  // Mirrors tableLabel in explore.go.
+  const tableLabel = (rows, noun) => rows === 1 ? `Table: 1 ${noun}` : `Table: all ${rows} ${noun}${noun === 'match' ? 'es' : 's'}`;
   const T = text => nonPenalty && !/npxG|on-penalty/.test(text) ? text.replace(basisPattern, basisReplacement) : text;
   let goalsWord;
   const binColors = ['#44504a', '#526d61', color('--green'), color('--hypo'), '#372858'];
@@ -831,6 +833,7 @@
     note.textContent = note.hidden ? '' : `${requested} is not plotted, so the strip shows ${year}.`;
     root.querySelector('[data-parity-strip-title]').textContent = `Teams in ${year}${inProgress(row)}`;
     root.querySelector('[data-parity-summary]').textContent = paritySummary(row);
+    root.querySelector('[data-parity-team-summary]').textContent = `Table: ${year} teams`;
     root.querySelector('[data-parity-team-caption]').textContent = `PPG and xPPG for each team in ${year}, highest PPG first.`;
     root.querySelector('[data-parity-teams]').replaceChildren(...row.teams.map(team => {
       const tr = document.createElement('tr');
@@ -1823,6 +1826,7 @@
     root.querySelector('[data-history-team-name]').replaceChildren(...(rows.length ? [teamName(rows[0])] : []));
     root.querySelector('[data-history-actual-label]').textContent = measure.actual;
     root.querySelector('[data-history-xg-label]').textContent = measure.expected;
+    root.querySelector('[data-history-summary]').textContent = tableLabel(rows.length, 'season');
     root.querySelector('[data-team-history-rows]').replaceChildren(...sortedTeamHistory(rows, params).map(row => {
       const tr = document.createElement('tr');
       const values = [row.season, row.played];
@@ -2229,6 +2233,7 @@
       input.value = name === 'trend-sort' ? key : desc ? 'desc' : 'asc';
       input.disabled = name === 'trend-sort' ? key === 'match' : !desc;
     }
+    root.querySelector('[data-trend-summary]').textContent = tableLabel(indices.length, 'match');
     root.querySelector('[data-trend-rows]').replaceChildren(...indices.map(index => {
       const row = document.createElement('tr');
       columns.forEach((column, position) => {
@@ -2673,7 +2678,7 @@
     });
     breakRow.replaceChildren(breakButton);
     root.querySelector('[data-team-seasons-chart-empty]').hidden = !!ranked.length;
-    root.querySelector('[data-team-seasons-summary]').textContent = `Table: all ${rows.length} team-seasons`;
+    root.querySelector('[data-team-seasons-summary]').textContent = tableLabel(rows.length, 'team-season');
     const expanded = params.has('team-seasons-sort') || params.has('team-seasons-order');
     root.querySelector('[data-team-seasons-values]').open = expanded;
     const column = params.get('team-seasons-sort') || 'rank', order = params.get('team-seasons-order') || 'asc';
@@ -2961,7 +2966,7 @@
     const empty = root.querySelector('[data-h2h-empty]'); empty.hidden = pair.all.Played > 0;
     empty.textContent = `${data.team.Name} and ${pair.opponent.Name} have not met in a regular-season match.`;
     root.querySelector('[data-h2h-chart-wrap]').hidden = !pair.all.Played;
-    root.querySelector('[data-h2h-summary]').textContent = `Table: all ${pair.all.Played} meetings`;
+    root.querySelector('[data-h2h-summary]').textContent = tableLabel(pair.all.Played, 'meeting');
     const expanded = params.has('h2h-sort') || params.has('h2h-order');
     root.querySelector('[data-h2h-values]').open = expanded;
     root.querySelectorAll('[data-h2h-controls] input[name="h2h-sort"], [data-h2h-controls] input[name="h2h-order"]').forEach(input => {
