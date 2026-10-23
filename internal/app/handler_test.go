@@ -2065,3 +2065,44 @@ func TestHighestClinchedRowsKeepsEachTeamsHighestOutcome(t *testing.T) {
 		t.Errorf("kept = %v, want %v", got, want)
 	}
 }
+
+func TestClinchingRequirementsOmitTheTeamsOwnResults(t *testing.T) {
+	render := func(necessary ...scenarios.FixtureCondition) string {
+		data := testSeasonData()
+		data.FixtureSnapshotID = "snapshot"
+		data.Teams = append(data.Teams, standings.Team{ID: "charlie", Name: "Charlie SC"})
+		data.Games = append(data.Games, cache.Game{
+			ASAID: "other", Season: "2026", Stage: "Regular Season", KickoffUTC: "2026-07-11 22:00:00 UTC",
+			Status: "PreMatch", HomeTeamID: "bravo", AwayTeamID: "charlie", Matchday: sql.NullInt64{Int64: 2, Valid: true},
+		})
+		store := fullFakeStore{
+			fakeStore: fakeStore{season: data},
+			qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
+				{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched},
+			}},
+			scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1", "other"}}}, Results: []cache.ScenarioResult{
+				{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true,
+					Clauses:   []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}, {GameID: "other", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}}},
+					Necessary: necessary}},
+			}},
+		}
+		response := httptest.NewRecorder()
+		NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
+		}
+		return response.Body.String()
+	}
+	own := scenarios.FixtureCondition{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}
+	outside := scenarios.FixtureCondition{GameID: "other", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}
+
+	// Only the team's own result: every result group's heading already says
+	// it, so the note disappears.
+	forbidRaw(t, render(own), "Every clinching scenario requires")
+
+	// An outside condition stays; the team's own result is still left out.
+	body := render(own, outside)
+	requireText(t, body, ".clinching-outcome", "Every clinching scenario requires:")
+	requireText(t, body, ".clinching-outcome li", "Bravo FC wins vs Charlie SC")
+	forbidText(t, body, ".clinching-outcome li", "wins vs Bravo FC")
+}

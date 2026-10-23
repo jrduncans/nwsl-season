@@ -305,6 +305,11 @@ the two specific matches.
 For unusual slates with more than four relevant own matches, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
 
+An outcome's "Every clinching scenario requires" note lists outside-match
+conditions shared by all of its scenarios. It leaves out the team's own
+results, which already head every result group, and is hidden when nothing
+else remains.
+
 Within a group, a visible factored summary puts common requirements once above
 an “any of” list. The summary may contain overlapping alternatives when that
 is shorter and clearer. A group with more than twelve summary scenarios instead

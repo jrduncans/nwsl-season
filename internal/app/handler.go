@@ -265,6 +265,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
 		}
 		for _, n := range v.Necessary {
+			// The team's own results already head every result group.
+			if game := games[n.GameID]; game.HomeTeamID == v.TeamID || game.AwayTeamID == v.TeamID {
+				continue
+			}
 			row.Necessary = append(row.Necessary, conditionText(n, teamLabels, games))
 		}
 		if !v.CanClinch {
