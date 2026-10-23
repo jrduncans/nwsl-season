@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"io/fs"
+	"net/http"
 	"path"
 )
 
@@ -39,4 +40,23 @@ func staticURL(fromPath, name string) string {
 		target += "?v=" + version
 	}
 	return target
+}
+
+// staticHandler serves the embedded static files. A request whose version
+// matches the file's current content is cached for a year without
+// revalidation; any other request, including an unversioned or stale link,
+// revalidates against the content version as its ETag.
+func staticHandler(files fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(files))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if version := staticVersions[r.URL.Path]; version != "" {
+			if r.URL.Query().Get("v") == version {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
+			w.Header().Set("ETag", `"`+version+`"`)
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }

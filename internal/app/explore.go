@@ -210,8 +210,8 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.GeometryPath = staticURL(r.URL.Path, "explore-geometry.js")
 	page.MarginsPath = staticURL(r.URL.Path, "explore-margins.js")
-	page.ChartLibraryPath = relativeURL(r.URL.Path, "/static/vendor/chart.js-4.5.1/chart.umd.min.js")
-	page.ChartLabelsPath = relativeURL(r.URL.Path, "/static/vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")
+	page.ChartLibraryPath = staticURL(r.URL.Path, "vendor/chart.js-4.5.1/chart.umd.min.js")
+	page.ChartLabelsPath = staticURL(r.URL.Path, "vendor/chartjs-plugin-datalabels-2.2.0/chartjs-plugin-datalabels.min.js")
 	scope := a.requestScope(r)
 	rules, verified := a.rulesForSeason(scope.Season, scope.Stage)
 	presentation := seasonPresentation{Phase: seasonPhaseActive}
