@@ -385,6 +385,9 @@ The table is sorted by projected points, then playoff chance, then home playoff
 chance, followed by a stable team name/ID order. The full finish distribution
 is available from each team row, so the range of plausible finishes remains
 visible without presenting an average finishing position as a literal outcome.
+On phones rank and team stay pinned while the other columns scroll; the team
+and projected-points columns are narrow enough that Playoffs fits beside them
+at 390px.
 
 ### Comparing models
 

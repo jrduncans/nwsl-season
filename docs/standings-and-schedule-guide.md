@@ -53,6 +53,10 @@ script enables them. The Matches page's Results | Upcoming control names
 itself, so its legend is visually hidden; it likewise appears only once the
 script runs.
 
+On phones the table scrolls sideways with rank and team pinned on the left and
+Pts (xPts in the xG view) pinned on the right, so the ranking value is always
+visible.
+
 The modern next tiebreaker, least disciplinary points, needs card data that
 ASA does not provide. The earlier policy ends at a coin toss or drawing of lots.
 Rows still tied at the first unavailable criterion are marked undetermined,
@@ -105,7 +109,8 @@ unavailable, not zero.
   per-team expansions listing each opponent, venue and match contribution,
   and the raw and venue-only measures as comparisons. The page labels every
   value as an estimate, not a forecast, power rating or standings adjustment,
-  and works without JavaScript.
+  and works without JavaScript. On phones each plot row puts the team and its
+  value on one line, with the track beneath.
 
 `internal/strength` is the only place these values are calculated; view code
 formats them.
