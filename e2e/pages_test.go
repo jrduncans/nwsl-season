@@ -1142,7 +1142,7 @@ func TestPagesClinching(t *testing.T) {
 		expect := playwright.NewPlaywrightAssertions()
 
 		// Results are grouped under one heading per outcome.
-		groups := page.Locator("section.clinching-result-group h4")
+		groups := page.Locator("section.clinching-result-group h5")
 		headings, err := groups.AllTextContents()
 		if err != nil || len(headings) == 0 {
 			t.Fatalf("no grouped result headings: %v, %v", headings, err)
@@ -1152,7 +1152,12 @@ func TestPagesClinching(t *testing.T) {
 				t.Errorf("group heading %q should start with \"If \"", heading)
 			}
 		}
-		if err := expect.Locator(page.Locator(`h3[aria-label="Team 0 FC can clinch the playoffs"]`)).ToBeVisible(); err != nil {
+		// Each team has one card, with a section per outcome.
+		card := page.Locator(".clinching-opportunity-clinching").Filter(playwright.LocatorFilterOptions{Has: page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Team 0 FC", Exact: playwright.Bool(true)})})
+		if err := expect.Locator(card).ToHaveCount(1); err != nil {
+			t.Error(err)
+		}
+		if err := expect.Locator(card.Locator(".clinching-outcome h4", playwright.LocatorLocatorOptions{HasText: "Can clinch the playoffs"})).ToBeVisible(); err != nil {
 			t.Error(err)
 		}
 

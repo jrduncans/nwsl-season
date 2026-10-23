@@ -780,8 +780,9 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	// The slate disclosure and the "can clinch the playoffs" heading are
 	// exercised by TestPagesClinching in e2e.
 	requireText(t, body, "main h2", "Clinching scenarios", "Elimination scenarios", "No-help scenarios")
-	requireAttr(t, body, ".clinching-opportunity-elimination h3", "aria-label", "Alpha & Co <script>alert(1)</script> can be eliminated from the playoffs")
-	requireText(t, body, ".clinching-result-group h4", "If Alpha & Co <script>alert(1)</script> wins vs Bravo FC", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	requireText(t, body, ".clinching-opportunity-elimination h3", "Alpha & Co <script>alert(1)</script>")
+	requireText(t, body, ".clinching-opportunity-elimination .clinching-outcome h4", "Can be eliminated from the playoffs")
+	requireText(t, body, ".clinching-result-group h5", "If Alpha & Co <script>alert(1)</script> wins vs Bravo FC", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
 	requireText(t, body, "main .clinching-statement", "with 1 win", "Win each of these remaining matches: vs Bravo FC.")
 	forbidRaw(t, body, "Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield")
 }
@@ -935,8 +936,9 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 	body := response.Body.String()
 	requireText(t, body, "main", "Elimination scenarios", "Already eliminated")
 	requireAttr(t, body, "li.clinching-status-item", "aria-label", "Bravo FC has already been eliminated from the playoffs")
-	requireAttr(t, body, ".clinching-opportunity-elimination h3", "aria-label", "Alpha & Co <script>alert(1)</script> can be eliminated from the playoffs")
-	requireText(t, body, ".clinching-result-group h4", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
+	requireText(t, body, ".clinching-opportunity-elimination h3", "Alpha & Co <script>alert(1)</script>")
+	requireText(t, body, ".clinching-opportunity-elimination .clinching-outcome h4", "Can be eliminated from the playoffs")
+	requireText(t, body, ".clinching-result-group h5", "If Alpha & Co <script>alert(1)</script> loses vs Bravo FC")
 	var headings []string
 	for _, heading := range find(t, body, "main h2") {
 		headings = append(headings, text(heading))
@@ -2026,5 +2028,24 @@ func TestFixturesDoNotRequireOfficialStandingsAdjustments(t *testing.T) {
 		requireText(t, body, "main", "2–1")
 		requireElements(t, body, ".fixtures")
 		forbidElements(t, body, "table.standings")
+	}
+}
+
+func TestGroupClinchingRowsByTeamKeepsFirstAppearanceOrder(t *testing.T) {
+	row := func(id, achievement string) clinchingRowView {
+		return clinchingRowView{Team: teamNameView{ID: id}, Achievement: achievement}
+	}
+	groups := groupClinchingRowsByTeam([]clinchingRowView{row("kc", "a home playoff game"), row("ang", "the playoffs"), row("kc", "the playoffs")})
+	var got []string
+	for _, group := range groups {
+		var outcomes []string
+		for _, path := range group.Paths {
+			outcomes = append(outcomes, path.Achievement)
+		}
+		got = append(got, group.Team.ID+": "+strings.Join(outcomes, ", "))
+	}
+	want := []string{"kc: a home playoff game, the playoffs", "ang: the playoffs"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("groups = %v, want %v", got, want)
 	}
 }

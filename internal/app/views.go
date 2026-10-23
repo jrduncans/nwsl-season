@@ -581,6 +581,10 @@ type clinchingPage struct {
 	NoHelp           []clinchingRowView
 	NoHelpTeams      []clinchingTeamView
 	Elimination      []clinchingRowView
+	// ActionableTeams and EliminationTeams group those rows into one card
+	// per team, ordered by each team's first row.
+	ActionableTeams  []clinchingTeamView
+	EliminationTeams []clinchingTeamView
 	Eliminated       []clinchingStatusGroupView
 	AlreadyClinched  []clinchingStatusGroupView
 }

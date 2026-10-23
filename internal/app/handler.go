@@ -280,7 +280,9 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(view.NoHelp, func(i, j int) bool { return clinchingNoHelpRowLess(view.NoHelp[i], view.NoHelp[j]) })
 	sort.Slice(view.Elimination, func(i, j int) bool { return clinchingRowLess(view.Elimination[i], view.Elimination[j]) })
 	view.Eliminated = groupClinchingStatusRows(eliminatedRows)
-	view.NoHelpTeams = groupClinchingNoHelpRows(view.NoHelp)
+	view.NoHelpTeams = groupClinchingRowsByTeam(view.NoHelp)
+	view.ActionableTeams = groupClinchingRowsByTeam(view.Actionable)
+	view.EliminationTeams = groupClinchingRowsByTeam(view.Elimination)
 	a.render(w, "clinching", view)
 }
 
@@ -335,7 +337,9 @@ func groupClinchingStatusRows(rows []clinchingRowView) []clinchingStatusGroupVie
 	return groups
 }
 
-func groupClinchingNoHelpRows(rows []clinchingRowView) []clinchingTeamView {
+// groupClinchingRowsByTeam keeps rows in order and gathers each team's rows
+// under its first appearance.
+func groupClinchingRowsByTeam(rows []clinchingRowView) []clinchingTeamView {
 	groups := []clinchingTeamView{}
 	byTeam := map[string]int{}
 	for _, row := range rows {

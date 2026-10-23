@@ -288,7 +288,11 @@ necessary.
 
 A line under the page title gives the slate's local date range and expands
 to list its included matches; the list stays collapsed by default so the
-results remain near the top. The page groups confirmed scenarios by the team's own results, in kickoff
+results remain near the top. Each team that can clinch, or can be eliminated,
+gets one card: the team's name heads it, and each outcome ("Can clinch a home
+playoff game", "Can clinch the playoffs") is a section under its own badge,
+ordered by outcome rank. Cards follow each team's highest-ranked outcome, then
+standings position. Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
