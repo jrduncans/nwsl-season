@@ -39,6 +39,8 @@ flowchart TD
     D --> H["Calculate optional no-help winning path"]
     B --> I["Search next selected match slate"]
     I --> J["Publish only score-independent clinching conditions"]
+    B --> K["With two or fewer matchdays left, search the rest of the season"]
+    K --> L["Publish results with score conditions from the tiebreakers"]
 ```
 
 The key idea is that the solver gives the target its **worst** remaining results
@@ -303,11 +305,15 @@ neutral when it spans several matches. A box that needs no outside help says
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
-requirements stay visible, with exact scenarios in expandable sections. Results
+requirements stay visible. Only groups whose summary is omitted for size offer
+an expandable scenario list. Results
 from one match with identical outside help share a heading, such as “draws or
 loses.” Two-match result orderings share a heading only when their outside help
 is identical; for example, “wins one match and loses the other” still names
-the two specific matches.
+the two specific matches. Two-match groups with identical outside help also
+merge when together they are exactly every result worth at least some points
+total, every ordering included: five "✓ Clinches" rows for everything but two
+losses become one "earns at least 1 point from these two matches" heading.
 For unusual slates with more than four relevant own matches, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
 
@@ -320,6 +326,8 @@ Within a group, a visible factored summary puts common requirements once above
 an “any of” list. The summary may contain overlapping alternatives when that
 is shorter and clearer. A group with more than twelve summary scenarios instead
 directs readers to its exact scenarios, avoiding a large nested list.
+Every requirement shared by all alternatives, including a score condition,
+appears once at that level; pulling out shared requirements adds no nesting.
 When different results of one outside match appear in several scenarios, the
 summary groups a repeated result before other shared conditions. If an earlier
 scenario already covers one result of a broader condition, the summary removes
@@ -329,7 +337,8 @@ must preserve the certified outcome union. Alternatives with the same number
 of conditions are ordered by their displayed result text, keeping repeated
 results such as DEN wins adjacent regardless of match IDs.
 
-Groups with multiple scenarios also offer expandable, complete certified scenarios.
+Groups whose summary is omitted offer expandable, complete certified scenarios;
+a full visible summary has no duplicate scenario disclosure.
 Each exact scenario puts its requirements on one compact line, separated by `+`,
 with a club crest and two- or three-letter team code; each scenario is an `OR`
 alternative to the others. When alternatives for two matches of the same team
@@ -357,7 +366,8 @@ subtraction is capped at 256 scenarios, including intermediate expansion, and
 retain the original certified alternatives, which can still overlap. These
 limits keep presentation work bounded on ordinary cache-only page requests.
 
-Every complete certified scenario remains available in its group's disclosure.
+Every complete certified scenario is represented by the visible summary, or
+available in its group's disclosure when that summary is omitted.
 The visible summary has at most one shared-condition factoring level; the
 exact-scenario view stays flat.
 Unlisted matches are unrestricted. The full included schedule remains collapsed
@@ -374,6 +384,241 @@ These checks also run within `make test` and CI, including exhaustive
 outcome-equivalence, disjoint detailed alternatives, future-match elimination,
 and summary equivalence; visually verify desktop and 390px layouts, expansion,
 keyboard access, and team filtering when changing the presentation.
+
+## Rest-of-season scenarios
+
+Late in the season the page also answers questions such as "in which scenarios
+does Portland get a home playoff game?" exactly. Once two or fewer matchdays are
+left, a second batch covers **every** remaining regular-season match, so each
+assignment of results is a completed season apart from scores. A points tie that
+straddles a place threshold is then settled by the tiebreakers instead of being
+left unpublished. The season outcomes, card layout and own-result grouping are the
+same as for the next slate, but most groups state what each rival must be held to
+instead of listing scenarios (see [Rival summary](#rival-summary)).
+
+"Matchdays left" counts the distinct matchdays of the pending matches; if any
+pending match lacks a matchday, it is the most matches any team has left.
+
+### Scope and the view switch
+
+| Matchdays left | Page |
+| --- | --- |
+| Three or more | Next-slate scenarios only, as before. |
+| Two (penultimate matchweek) | A segmented control, **Next matchday \| Rest of season**, defaulting to Next matchday. The view is the `view` query value (`next-matchday` or `rest-of-season`). |
+| One (decision day) | Rest of season only, with no control: the next slate is the rest of the season. Decision day means the two slates name the same matches. |
+
+The playoff-elimination cards always come from the next-slate batch. There are no
+"misses out" cards for the rest of the season, and no line claiming the list is
+complete. When the rest-of-season batch for the current snapshot and rules is
+missing, that view says "Recalculation pending."
+
+### Tiebreak order and score conditions
+
+The 2022+ order is points, goal difference, wins, goals scored, head-to-head
+points and head-to-head goals scored; a tied subgroup continues to the next
+criterion without restarting. With the results fixed, wins and head-to-head points
+are known. Only goal difference, goals scored and head-to-head goals scored can
+become **score conditions**.
+
+Every score condition compares two teams level on points, one of them the team
+whose scenario it is, and counts only the remaining matches:
+
+- the **goal-difference gain** is the first team's goal difference in its
+  remaining matches minus the other's in theirs (a match between them counts for
+  both);
+- the **goals-scored gain** is the same for goals scored; and
+- the **head-to-head gain** is the first team's goals minus the other's in their
+  remaining matches against each other.
+
+A condition is a cascade: the gain must be at least a minimum, or exactly one
+less and the next tiebreaker decides. Each result bounds its margin: a win is +1
+or better, a draw exactly 0 with equal goals, and a loss −1 or worse. Many cases
+need no score condition. For example, if Portland and Utah both draw while level
+on +7, goal difference stays level and Utah's extra win decides it: a certain
+miss.
+
+### Head-to-head groups
+
+Head-to-head points count only the teams level after goal difference, wins and
+goals scored, so whether the team beats one rival on head-to-head can depend on
+which other rivals are level too. The search therefore splits each rival that can
+finish level with the team through goals scored into three states: the team
+finishes ahead of it before head-to-head, it finishes ahead of the team, or the
+two finish **level** and the rival joins the team's head-to-head group. For every
+combination of states it ranks the group by head-to-head points among exactly
+those teams, then a subgroup still level by head-to-head goals scored among that
+subgroup, as `standings.Calculate` does. Rivals that can never be level with the
+team are compared pairwise.
+
+The results are joined back into conditions. A rival whose states all give the
+same result needs no condition. When "ahead" and "level" give the same result,
+one "ahead or level" condition covers both, which is the usual two-team case. A
+rival in the "behind" state gets a condition written from its side ("UTA gains
+1+ goal difference on POR"). The level state reads "POR finishes level with UTA
+on goal difference and goals scored", followed by a head-to-head goals condition
+when their remaining matches against each other decide it.
+
+### Wording
+
+The page writes each condition out, with the current gap in brackets. Every
+level is a gain, worded the same way for each measure:
+
+- "POR gains 1+ goal difference on UTA (level at +7 now)"
+- "POR gains 6+ goal difference on KC (KC +5 now)"
+- "UTA gains 6+ goal difference on KC (KC +5 now), or exactly 5 and scores at
+  least 7 more goals (KC +6 now)"
+- "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and scores
+  at least as many goals (level at 48 now)"
+
+A non-positive minimum reads "loses no goal difference to" or "loses at most 2
+goal difference to"; a zero gain before the next level reads "or none and…".
+When the results make a larger gain impossible, the level reads "gains exactly
+2…" or "keeps the same goal difference gap to", or "finishes level with" when
+that gap leaves the two level. When two teams' only remaining matches are
+against each other, every gain follows those margins, so the condition is a
+single goal-difference threshold. When three or more teams are level on points,
+the team must finish ahead of enough of them; each choice of rivals is a scenario
+whose conditions are joined as separate pills (the "and" of the scenario).
+
+Rest-of-season summaries are never replaced by "Several certified scenarios":
+the scenarios are the whole answer, so every group's summary is written out (up
+to 256 paths, the coverage-pass bound). Most groups are shown as a rival summary
+instead (below), which is far shorter.
+
+### Rival summary
+
+Listing scenarios over every remaining match multiplies quickly: one of Gotham's
+2026 Shield groups ran to about 45 lines of nested "any of" lists. The page
+therefore restates each result one rival at a time, which a reader can hold in
+their head:
+
+> **If NJ/NY Gotham FC wins one match and loses the other** — Clinches if all of:
+> - SD takes 3 points or fewer (vs BOS and at BAY), or takes 4 points if NJY
+>   gains 1+ goal difference on SD (level at +13 now)
+> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches if NJY
+>   gains 2+ goal difference on WAS (WAS +1 now)
+
+This is exact, not a simplification, because of two facts:
+
+- **One rival at a time.** With the team's own results fixed, whether it
+  finishes ahead of a rival depends only on the two teams' results and scores:
+  points, goal difference, wins and goals scored are each team's own, and
+  head-to-head between just the two follows from their matches. The team clinches
+  a top-`K` place when at most `K − 1` teams finish ahead of it, so each row
+  says how many of the rivals in doubt it must finish ahead of ("all of", "any
+  of", "at least 2 of"). Other teams finish ahead of it, or behind it, whatever
+  happens, and are not listed.
+- **Points name the record.** A rival finishes behind on points below some total
+  and ahead above it; only the total that leaves the two level needs a score
+  condition. With one or two matches left, a points total also fixes the
+  rival's wins, so "takes 4 points" is a single record. With three or more, a
+  level total names its wins ("takes 3 points with 1 win").
+
+The search builds the summary after it finishes, for each `can_clinch` result:
+it fixes each combination of the team's own results (at most four matches), and
+for every other team walks that team's remaining results (at most six matches),
+comparing the two as the leaf search does. A rival that could finish level
+through goals scored forms a head-to-head group with the team alone, ranked by
+head-to-head points and then head-to-head goals scored.
+
+That last step is the one exception. When **two** rivals could each finish level
+with the team through goals scored, head-to-head among three teams could decide,
+and a pairwise statement could be wrong either way. Such a row is still stated
+when it clinches even if every rival in doubt finishes ahead, or cannot clinch
+even if every rival that could be level finishes behind; otherwise it is
+**withheld**, and the page shows that row's clauses as before (pinning the
+team's own results, so they group as exactly that row). A result with every row
+withheld, or a search that hit its budget, has no summary and shows only clauses.
+The multiway-tie note appears only when the clauses are shown for some row.
+
+Those fallback clauses can still contain independent requirements. Instead of
+repeating every combination, their summary separates them into bulleted groups
+under **Clinches if all of**. Common results and their score conditions stay
+together: "KC loses both matches … and UTA gains …". Each group can contain its
+own alternatives. For example, KC's two-loss case separates Angel City's record
+from the coupled Seattle/Utah tiebreak. Utah's loss at Gotham separates Angel
+City's record from Seattle's result and score condition. Neither case needs to
+repeat the combinations of those independent requirements.
+The selected view explicitly enables this grouping; the summary path limit
+controls only when a summary is omitted for size.
+
+This presentation rewrite checks that the distinct projections' counts multiply
+back to the original number of clauses: every combination must already occur
+in the certified clauses. Score predicates remain unchanged, so a multiway tie
+is never silently replaced by pairwise comparisons. A one-rival group becomes
+a points limit and optional score condition only after checking every result
+of its one or two named matches, including both orderings of a draw and loss.
+If a combination is missing or its score conditions differ, the original
+alternatives remain. The pass applies only within the existing 256-path summary
+bound. A complete grouped summary replaces the duplicate exact-scenario
+disclosure; the disclosure remains available when a summary is omitted for size.
+
+Rows merge under one heading as clause groups do ("wins one match and loses the
+other", "earns at least 1 point from these two matches") when their rivals'
+needs are identical. Rivals are listed in standings order. A row that needs no
+help shows "✓ Clinches".
+
+Inside the named team card, rest-of-season result headings use team codes to
+avoid repeating full club names. Each rival's score-dependent alternative starts
+on a new line. Groups already show no-help paths, so the rest-of-season view
+omits the repeated no-help footer; a single group also omits the redundant
+"Every clinching scenario requires" list. Separate no-help cards remain when
+the search has not published a scenario group.
+Already-clinched and already-eliminated teams sit in one collapsed disclosure
+in this view, keeping the remaining scenarios near the top of the page.
+
+### What is never claimed
+
+- **Disciplinary points.** Teams identical through head-to-head goals scored would
+  next be split on disciplinary points, which ASA doesn't provide. That case is
+  never claimed. When it is reachable, the outcome notes that disciplinary points
+  may decide.
+- **Head-to-head goals among three or more who still play each other.** Three or
+  more teams level through head-to-head points go to head-to-head goals among
+  them. Those are known from completed matches unless two of them still play each
+  other; then the outcome claims only what holds whichever way that goes, and
+  notes that scenarios where three or more teams finish level on points, goal
+  difference, wins, goals scored and head-to-head points, and still play each
+  other, are not listed. The same note covers a leaf with more than six rivals
+  that could be level, or more than 64 ways to choose rivals to finish ahead of.
+- **Compute budget.** The existing "Scenario search was incomplete." note
+  applies when the scenario budget runs out; published scenarios remain valid.
+
+### How the search works
+
+The search fixes results one match at a time: the team's own matches first, then
+those of teams closest to it on points. A team whose points range lies wholly above
+or below the team's cannot change its place, so a match between two such teams is
+left unconstrained. Once every relevant match is fixed, the team's points are
+final and every level rival has played out its season; each level rival is
+compared in a small separate problem over the two teams' remaining matches, with
+the head-to-head states described above.
+Simple count bounds settle subtrees early: enough teams certainly ahead is a miss,
+and too few teams possibly ahead is a clinch.
+
+Outcome cubes merge only when they share the same score conditions and proof
+method, so a score condition stays tied to the results it was derived from. The
+cubes the search emits are disjoint, and merges keep them disjoint.
+
+On the 2026 data with 13 matches left (3¹³ ≈ 1.6 million result assignments),
+the whole rest-of-season batch takes a few milliseconds.
+
+### Proof and storage
+
+Tests build random small leagues and complete the remaining matches with every
+scoreline up to a goal limit. For each one they compare every published scenario
+with the official table from `standings.Calculate`: a scenario must only describe
+scorelines where the team definitely finishes inside the threshold, and when no
+limitation is stated, every such scoreline must be described. A rival summary
+must describe exactly the scorelines where the team definitely finishes inside
+the threshold, deferring to the clauses only in withheld rows. A scoreline where
+disciplinary points decide must carry the disciplinary note.
+
+The rest-of-season batch is stored beside the next-slate batch with its own
+definition version (`rest-of-season-v4`; the next slate is `next-slate-v6`), its
+slate source `rest_of_season`, and a `disciplinary_possible` flag per result.
+Clauses carry their score conditions in `clauses_json`; the rival summary is
+`rivals_json` (`null` when there is none).
 
 ## Playoff-elimination scenarios
 
@@ -418,6 +663,13 @@ recalculated.
 - [`internal/scenarios/search.go`](../internal/scenarios/search.go) traverses
   the next slate; [`coverage_minimize.go`](../internal/scenarios/coverage_minimize.go)
   turns certified assignments into human-sized scenarios.
+- [`internal/scenarios/season.go`](../internal/scenarios/season.go) searches the
+  rest of the season, and
+  [`season_tiebreak.go`](../internal/scenarios/season_tiebreak.go) derives score
+  conditions for one level rival;
+  [`season_rivals.go`](../internal/scenarios/season_rivals.go) builds the rival
+  summary, and [`clinching_rivals.go`](../internal/app/clinching_rivals.go)
+  words it.
 - [`internal/scenariorefresh/refresher.go`](../internal/scenariorefresh/refresher.go)
   stores scenarios only against the matching qualification snapshot.
 

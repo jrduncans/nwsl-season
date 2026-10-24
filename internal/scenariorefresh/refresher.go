@@ -46,7 +46,64 @@ type Progress struct {
 	State        scenarios.OpportunityState
 }
 
-func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (result cache.DerivedRefreshResult, err error) {
+// Refresh stores the next-slate batch and, once two or fewer matchdays are
+// left, a separate rest-of-season batch for the same snapshot. Each batch is
+// skipped when already current, and retried when its budget ran out.
+func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool) (cache.DerivedRefreshResult, error) {
+	result, err := r.refresh(ctx, sync, teams, games, force, nextSlateScope)
+	if err != nil {
+		return result, err
+	}
+	season, err := r.refresh(ctx, sync, teams, games, force, restOfSeasonScope)
+	if season.Recalculated && !result.Recalculated {
+		result.Recalculated, result.Required, result.Reason = true, true, season.Reason
+	}
+	return result, err
+}
+
+// scope is one kind of scenario batch: its definition version, how it
+// chooses its slate, and how it searches for one team.
+type scope struct {
+	definitionVersion string
+	// slate returns false when this kind of batch does not apply yet.
+	slate    func([]scenarios.ScheduledGame) (scenarios.Slate, bool, error)
+	generate func(context.Context, *clinching.Evaluator, scenarios.BatchRequest) (map[competition.AchievementID]scenarios.Result, error)
+}
+
+var nextSlateScope = scope{
+	definitionVersion: scenarios.DefinitionVersion,
+	slate: func(games []scenarios.ScheduledGame) (scenarios.Slate, bool, error) {
+		slate, err := scenarios.DefineSlate(games)
+		return slate, true, err
+	},
+	generate: func(ctx context.Context, evaluator *clinching.Evaluator, request scenarios.BatchRequest) (map[competition.AchievementID]scenarios.Result, error) {
+		request.Evaluator = evaluator
+		return scenarios.GenerateBatch(ctx, request)
+	},
+}
+
+var restOfSeasonScope = scope{
+	definitionVersion: scenarios.SeasonDefinitionVersion,
+	slate: func(games []scenarios.ScheduledGame) (scenarios.Slate, bool, error) {
+		slate, ok := scenarios.DefineSeasonSlate(games)
+		return slate, ok, nil
+	},
+	generate: func(ctx context.Context, _ *clinching.Evaluator, request scenarios.BatchRequest) (map[competition.AchievementID]scenarios.Result, error) {
+		return scenarios.GenerateSeason(ctx, scenarios.SeasonRequest{Teams: request.Teams, Games: request.Games, Slate: request.Slate, TargetTeamID: request.TargetTeamID, Achievements: request.Achievements, Baselines: request.Baselines})
+	},
+}
+
+func (r Refresher) refresh(ctx context.Context, sync cache.SyncRun, teams []cache.Team, games []cache.Game, force bool, kind scope) (result cache.DerivedRefreshResult, err error) {
+	if kind.definitionVersion == scenarios.SeasonDefinitionVersion {
+		// Invalid schedules are reported by the next-slate batch.
+		scheduled, err := scheduledGames(games)
+		if err != nil {
+			return result, nil
+		}
+		if _, ok, _ := kind.slate(scheduled); !ok {
+			return result, nil
+		}
+	}
 	budget := r.Budget
 	if budget <= 0 {
 		budget = 30 * time.Second
@@ -64,14 +121,14 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	if sync.FixtureSnapshotID == "" {
 		return result, recordDecisionException(fmt.Errorf("fixture snapshot ID is required"), telemetry.ErrorTypeInvalidArgument)
 	}
-	snapshot, ok, err := r.Store.ScenarioForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version, scenarios.DefinitionVersion)
+	snapshot, ok, err := r.Store.ScenarioForSnapshot(ctx, sync.FixtureSnapshotID, r.Rules.Version, kind.definitionVersion)
 	if err != nil {
 		return result, recordDecisionException(err, telemetry.ErrorTypeStorageFailure)
 	}
 	result.SnapshotChecked = true
 	result.SnapshotFound = ok
 	result.RulesVersion = r.Rules.Version
-	result.DefinitionVersion = scenarios.DefinitionVersion
+	result.DefinitionVersion = kind.definitionVersion
 	refreshReason := "snapshot_missing"
 	if force {
 		refreshReason = "forced"
@@ -105,8 +162,8 @@ func (r Refresher) Refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	if !ok {
 		return result, recordRefreshException(fmt.Errorf("matching qualification batch is required"), telemetry.ErrorTypeInvalidData)
 	}
-	run := cache.ScenarioRun{FixtureSnapshotID: sync.FixtureSnapshotID, QualificationRunID: q.Run.ID, SourceSyncRunID: sync.ID, Season: sync.Season, Stage: sync.Stage, RulesVersion: r.Rules.Version, DefinitionVersion: scenarios.DefinitionVersion, StartedAt: time.Now().UTC(), ExpectedResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
-	values, err := r.calculate(ctx, teams, games, q)
+	run := cache.ScenarioRun{FixtureSnapshotID: sync.FixtureSnapshotID, QualificationRunID: q.Run.ID, SourceSyncRunID: sync.ID, Season: sync.Season, Stage: sync.Stage, RulesVersion: r.Rules.Version, DefinitionVersion: kind.definitionVersion, StartedAt: time.Now().UTC(), ExpectedResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements), WrittenResults: r.Rules.ExpectedTeams * len(r.Rules.Achievements)}
+	values, err := r.calculate(ctx, teams, games, q, kind)
 	// The search reports unfinished work as budget-limited when its context
 	// ends. That is a valid result for an expired budget, but a shutdown
 	// cancellation must not publish a degraded batch for this snapshot.
@@ -251,7 +308,7 @@ func scenarioSearchDiagnosticsFor(values map[competition.AchievementID]scenarios
 	return result
 }
 
-func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot) (result calculated, err error) {
+func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []cache.Game, q cache.QualificationSnapshot, kind scope) (result calculated, err error) {
 	batchStarted := time.Now()
 	calculation := calculationTelemetry{}
 	span := trace.SpanFromContext(ctx)
@@ -284,31 +341,18 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		domainTeams = append(domainTeams, standings.Team{ID: t.ASAID, Name: t.Name, ShortName: t.ShortName, Abbreviation: t.Abbreviation})
 	}
 	sort.Slice(domainTeams, func(i, j int) bool { return domainTeams[i].ID < domainTeams[j].ID })
-	domainGames := []standings.Game{}
-	scheduled := []scenarios.ScheduledGame{}
-	for _, g := range games {
-		d := standings.Game{ID: g.ASAID, Status: g.Status, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID}
-		if g.HomeScore.Valid {
-			x := int(g.HomeScore.Int64)
-			d.HomeScore = &x
-		}
-		if g.AwayScore.Valid {
-			x := int(g.AwayScore.Int64)
-			d.AwayScore = &x
-		}
-		domainGames = append(domainGames, d)
-		k, err := fixtures.ParseKickoff(g.KickoffUTC)
-		if err != nil {
-			return calculated{}, recordCalculationException(err, telemetry.ErrorTypeInvalidData)
-		}
-		sg := scenarios.ScheduledGame{ID: g.ASAID, Status: g.Status, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID, HomeScore: d.HomeScore, AwayScore: d.AwayScore, KickoffUTC: k}
-		if g.Matchday.Valid {
-			x := int(g.Matchday.Int64)
-			sg.Matchday = &x
-		}
-		scheduled = append(scheduled, sg)
+	scheduled, err := scheduledGames(games)
+	if err != nil {
+		return calculated{}, recordCalculationException(err, telemetry.ErrorTypeInvalidData)
 	}
-	slate, err := scenarios.DefineSlate(scheduled)
+	domainGames := make([]standings.Game, 0, len(scheduled))
+	for _, g := range scheduled {
+		domainGames = append(domainGames, standings.Game{ID: g.ID, Status: g.Status, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID, HomeScore: g.HomeScore, AwayScore: g.AwayScore})
+	}
+	slate, ok, err := kind.slate(scheduled)
+	if err == nil && !ok {
+		err = fmt.Errorf("scenario slate does not apply")
+	}
 	if err != nil {
 		return calculated{}, recordCalculationException(err, telemetry.ErrorTypeInvalidData)
 	}
@@ -352,7 +396,7 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		}
 		probeStarted := time.Now()
 		searchAttributes := scenarioGenerateTeamAttributes(t.Team.ID, ach, games, slate)
-		teamResults, generateErr := scenarios.GenerateBatch(ctx, scenarios.BatchRequest{Evaluator: evaluator, Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
+		teamResults, generateErr := kind.generate(ctx, evaluator, scenarios.BatchRequest{Teams: domainTeams, Games: domainGames, Slate: slate, TargetTeamID: t.Team.ID, Achievements: ach, Baselines: bases})
 		finished := time.Now()
 		duration := finished.Sub(probeStarted)
 		calculation.recordTeamSearch(duration, t.Team.ID, teamResults)
@@ -378,6 +422,33 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 		return rows[i].TeamID < rows[j].TeamID
 	})
 	return calculated{slate: slate, rows: rows}, nil
+}
+
+// scheduledGames converts cached games, with their kickoffs and matchdays,
+// for slate definition.
+func scheduledGames(games []cache.Game) ([]scenarios.ScheduledGame, error) {
+	scheduled := make([]scenarios.ScheduledGame, 0, len(games))
+	for _, g := range games {
+		kickoff, err := fixtures.ParseKickoff(g.KickoffUTC)
+		if err != nil {
+			return nil, err
+		}
+		game := scenarios.ScheduledGame{ID: g.ASAID, Status: g.Status, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID, KickoffUTC: kickoff}
+		if g.HomeScore.Valid {
+			score := int(g.HomeScore.Int64)
+			game.HomeScore = &score
+		}
+		if g.AwayScore.Valid {
+			score := int(g.AwayScore.Int64)
+			game.AwayScore = &score
+		}
+		if g.Matchday.Valid {
+			matchday := int(g.Matchday.Int64)
+			game.Matchday = &matchday
+		}
+		scheduled = append(scheduled, game)
+	}
+	return scheduled, nil
 }
 
 func scenarioGenerateTeamAttributes(teamID string, achievements []competition.Achievement, games []cache.Game, slate scenarios.Slate) []attribute.KeyValue {

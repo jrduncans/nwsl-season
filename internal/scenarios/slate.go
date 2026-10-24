@@ -138,3 +138,81 @@ func slateID(s Slate) string {
 	}
 	return strings.ToLower(fmt.Sprintf("%x", h.Sum(nil)))
 }
+
+// maxSeasonMatchdays is how close to the end of the regular season the
+// rest-of-season scenarios are calculated and shown.
+const maxSeasonMatchdays = 2
+
+// DefineSeasonSlate returns a slate of every remaining match once two or fewer
+// matchdays are left, so each assignment of results is a completed season
+// apart from scores. The second value is false earlier in the season. Games
+// must already be valid for DefineSlate.
+func DefineSeasonSlate(games []ScheduledGame) (Slate, bool) {
+	pending := []ScheduledGame{}
+	for _, g := range games {
+		if g.Status == fixtures.PreMatchStatus {
+			pending = append(pending, g)
+		}
+	}
+	if len(pending) == 0 || remainingMatchdays(pending) > maxSeasonMatchdays {
+		return Slate{}, false
+	}
+	sort.Slice(pending, func(i, j int) bool {
+		if pending[i].KickoffUTC.Equal(pending[j].KickoffUTC) {
+			return pending[i].ID < pending[j].ID
+		}
+		return pending[i].KickoffUTC.Before(pending[j].KickoffUTC)
+	})
+	s := Slate{DefinitionVersion: SeasonDefinitionVersion, State: SlateReady, Source: SourceRestOfSeason, FixtureIDs: make([]string, 0, len(pending))}
+	for _, g := range pending {
+		s.FixtureIDs = append(s.FixtureIDs, g.ID)
+	}
+	s.StartsAtUTC = pending[0].KickoffUTC.UTC()
+	s.LatestKickoffUTC = pending[len(pending)-1].KickoffUTC.UTC()
+	s.CutoffUTC = s.LatestKickoffUTC
+	s.ID = slateID(s)
+	return s, true
+}
+
+// remainingMatchdays counts the distinct matchdays of pending games. When any
+// game lacks a matchday it falls back to the most matches any team has left.
+func remainingMatchdays(pending []ScheduledGame) int {
+	matchdays := map[int]bool{}
+	perTeam := map[string]int{}
+	known := true
+	for _, g := range pending {
+		if g.Matchday == nil || *g.Matchday <= 0 {
+			known = false
+		} else {
+			matchdays[*g.Matchday] = true
+		}
+		perTeam[g.HomeTeamID]++
+		perTeam[g.AwayTeamID]++
+	}
+	if known {
+		return len(matchdays)
+	}
+	most := 0
+	for _, n := range perTeam {
+		most = max(most, n)
+	}
+	return most
+}
+
+// CoversSameFixtures reports whether two slates name the same matches, as the
+// next slate and the rest of the season do on decision day.
+func CoversSameFixtures(a, b Slate) bool {
+	if len(a.FixtureIDs) != len(b.FixtureIDs) {
+		return false
+	}
+	ids := map[string]bool{}
+	for _, id := range a.FixtureIDs {
+		ids[id] = true
+	}
+	for _, id := range b.FixtureIDs {
+		if !ids[id] {
+			return false
+		}
+	}
+	return true
+}

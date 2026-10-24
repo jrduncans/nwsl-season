@@ -56,6 +56,11 @@ func disjointRequirements(clauses [][]scenarioRequirement) [][]scenarioRequireme
 // A missing fixture condition allows all three outcomes. Work on copies so
 // narrowing one path cannot alter another or the cached proof.
 func subtractRequirements(source, covered []scenarioRequirement) [][]scenarioRequirement {
+	// A score condition is not a fixture cube, so removing a path that has
+	// one would need its negation. Keep the overlap instead.
+	if slices.ContainsFunc(covered, func(r scenarioRequirement) bool { return r.Score != nil }) {
+		return [][]scenarioRequirement{source}
+	}
 	for _, want := range covered {
 		if fixtureRequirementMask(source, want.GameID)&want.Mask == 0 {
 			return [][]scenarioRequirement{source}
@@ -76,7 +81,7 @@ func subtractRequirements(source, covered []scenarioRequirement) [][]scenarioReq
 
 func fixtureRequirementMask(conditions []scenarioRequirement, gameID string) uint8 {
 	for _, r := range conditions {
-		if r.GameID == gameID {
+		if r.GameID == gameID && r.Score == nil {
 			return r.Mask
 		}
 	}
@@ -86,7 +91,7 @@ func fixtureRequirementMask(conditions []scenarioRequirement, gameID string) uin
 func withFixtureRequirement(conditions []scenarioRequirement, gameID string, mask uint8) []scenarioRequirement {
 	result := slices.Clone(conditions)
 	for i, r := range result {
-		if r.GameID == gameID {
+		if r.GameID == gameID && r.Score == nil {
 			result[i].Mask = mask
 			return result
 		}

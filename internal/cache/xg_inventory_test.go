@@ -460,7 +460,7 @@ func TestGameXGReadsValidateAndAreScoped(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 15 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 17 {
 		t.Fatalf("schema=%d,%v", version, err)
 	}
 	if _, ok, err := db.GameXGState(ctx, "missing"); err != nil || ok {
@@ -814,7 +814,7 @@ func TestStageXGHasNoSchemaArtifacts(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || schemaVersion != 15 || version != 15 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || schemaVersion != 17 || version != 17 {
 		t.Fatalf("schema version=%d const=%d err=%v", version, schemaVersion, err)
 	}
 	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(game_xg)`)

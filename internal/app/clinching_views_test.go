@@ -18,18 +18,21 @@ import (
 )
 
 func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
-	for _, elimination := range []bool{false, true} {
-		t.Run(fmt.Sprintf("elimination=%t", elimination), func(t *testing.T) {
+	for _, test := range []struct {
+		paths       int
+		elimination bool
+	}{{8, false}, {8, true}, {13, false}, {13, true}} {
+		t.Run(fmt.Sprintf("paths=%d/elimination=%t", test.paths, test.elimination), func(t *testing.T) {
 			data := testSeasonData()
 			data.FixtureSnapshotID = "snapshot"
 			clauses := []scenarios.Clause{}
-			for i := range 8 {
+			for i := range test.paths {
 				id := fmt.Sprintf("other-%d", i)
 				data.Games = append(data.Games, cache.Game{ASAID: id, HomeTeamID: fmt.Sprintf("home-%d", i), AwayTeamID: fmt.Sprintf("away-%d", i)})
 				clauses = append(clauses, scenarios.Clause{Conditions: []scenarios.FixtureCondition{testScenarioCondition("future-1", 1), testScenarioCondition(id, 1)}})
 			}
 			result := scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: clauses, Limitation: scenarios.LimitationBudgetPartial}
-			if elimination {
+			if test.elimination {
 				result.State, result.CanClinch, result.Clauses = scenarios.OpportunityCannotClinch, false, nil
 				result.CanBeEliminated, result.EliminationClauses = true, clauses
 			}
@@ -40,14 +43,15 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 				t.Fatalf("status = %d", response.Code)
 			}
 			body := response.Body.String()
-			if strings.Count(body, `class="clinching-path-option"`) != 8 || strings.Contains(body, "View 5 more paths") {
-				t.Fatal("all exact scenarios should remain available in one disclosure")
-			}
 			if strings.Count(body, `class="clinching-result-group`) != 1 {
 				t.Fatal("shared own result should appear once")
 			}
-			if !strings.Contains(body, `class="clinching-summary"`) || !strings.Contains(body, `class="clinching-exact-paths"`) {
-				t.Fatal("visible summary and expandable exact scenarios are required")
+			if test.paths > maxScenarioSummaryPaths {
+				if strings.Count(body, `class="clinching-path-option"`) != test.paths || !strings.Contains(body, `class="clinching-exact-paths"`) {
+					t.Fatal("an omitted summary must retain every scenario in a disclosure")
+				}
+			} else if !strings.Contains(body, `class="clinching-summary"`) || strings.Contains(body, `class="clinching-exact-paths"`) || strings.Contains(body, `class="clinching-path-option"`) {
+				t.Fatal("a complete visible summary must not repeat its scenarios in a disclosure")
 			}
 			if !strings.Contains(body, "Scenario search was incomplete.") {
 				t.Fatal("incomplete-search notice missing")
@@ -57,7 +61,7 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 			}
 			// The slate's matches sit above the results, so they must stay
 			// collapsed until the reader asks for them.
-			if !strings.Contains(body, `<details class="clinching-slate"><summary>`) || strings.Index(body, `class="clinching-slate"`) > strings.Index(body, `class="clinching-path-option"`) {
+			if !strings.Contains(body, `<details class="clinching-slate"><summary>`) || strings.Index(body, `class="clinching-slate"`) > strings.Index(body, `class="clinching-result-group`) {
 				t.Fatal("collapsed slate matches must precede results")
 			}
 			if strings.Contains(body, "<script>alert(1)</script>") || !strings.Contains(body, "&lt;script&gt;alert(1)&lt;/script&gt;") {
@@ -380,7 +384,7 @@ func TestClinchingSummaryKeepsShortOverlappingAlternatives(t *testing.T) {
 		testScenarioClause(testScenarioCondition("own", 1), testScenarioCondition("kc", 3)),
 	}
 	groups := clinchingGroups(clauses, "lou", map[string]string{"lou": "LOU", "sd": "SD", "sea": "SEA", "bos": "BOS", "kc": "KC", "den": "DEN"}, games)
-	if len(groups) != 1 || !groups[0].ShowDetails {
+	if len(groups) != 1 || groups[0].SummaryOverflow {
 		t.Fatalf("groups = %+v", groups)
 	}
 	summary := groups[0].Summary.Combinations()

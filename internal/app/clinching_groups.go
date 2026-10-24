@@ -21,8 +21,12 @@ type scenarioRequirement struct {
 	Mask                 uint8
 	TeamID, SecondGameID string
 	Points               int
-	Text                 string
-	Parts                []scenarioRequirementPart
+	// Score is a rest-of-season tiebreaker condition. It is opaque to the
+	// fixture-mask rewrites: it never merges, narrows or is subtracted, and a
+	// clause implies it only by containing the same condition.
+	Score *scenarios.ScoreCondition
+	Text  string
+	Parts []scenarioRequirementPart
 }
 
 type scenarioRequirementPart struct {
@@ -60,15 +64,41 @@ type clinchingGroupView struct {
 	Own             []scenarioRequirement
 	AlternativeOwn  []scenarioRequirement
 	Summary         scenarioExpression
+	GroupedSummary  *clinchingGroupedSummary
 	SummaryOverflow bool
-	ShowDetails     bool
 	Help            scenarioExpression
 	// Tone colors the group by the team's own result: "win", "draw", "loss"
 	// or "" when the group spans several matches or none.
 	Tone string
+	// A rest-of-season group with a rival summary states each rival instead
+	// of a summary expression, under RivalState ("Clinches if all of:").
+	// MergeKey stands in for the outside help when merging own results.
+	Rivals     []clinchingRivalView
+	RivalState string
+	MergeKey   string
+}
+
+// mergeKey identifies a group's outside help, so own results with the same
+// help can share a heading.
+func (g clinchingGroupView) mergeKey() string {
+	if g.MergeKey != "" {
+		return g.MergeKey
+	}
+	return expressionKey(g.Help)
 }
 
 const maxScenarioSummaryPaths = 12
+
+// maxSeasonSummaryPaths lets rest-of-season summaries show every scenario,
+// within the same bound as the pairwise coverage pass: those scenarios are
+// the whole answer, so they are written out rather than left to the exact
+// list.
+const maxSeasonSummaryPaths = 256
+
+type clinchingGroupOptions struct {
+	SummaryLimit int
+	RestOfSeason bool
+}
 
 var scenarioOutcomes = []clinching.Outcome{clinching.HomeWin, clinching.Draw, clinching.AwayWin}
 
@@ -83,6 +113,9 @@ func outcomeMask(outcomes []clinching.Outcome) uint8 {
 }
 
 func requirementText(r scenarioRequirement, perspective string, teams map[string]string, games map[string]cache.Game) string {
+	if r.Score != nil {
+		return scoreConditionText(*r.Score, teams)
+	}
 	if r.SecondGameID != "" {
 		unit := "points"
 		if r.Points == 1 {
@@ -131,6 +164,9 @@ func requirementText(r scenarioRequirement, perspective string, teams map[string
 }
 
 func requirementParts(r scenarioRequirement, perspective string, teams map[string]string, games map[string]cache.Game) []scenarioRequirementPart {
+	if r.Score != nil {
+		return scoreConditionParts(*r.Score, teams)
+	}
 	if r.SecondGameID != "" {
 		unit := "points"
 		if r.Points == 1 {
@@ -213,7 +249,11 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 }
 
 func requirementKey(r scenarioRequirement) string {
-	return strconv.Quote(r.GameID) + ":" + strconv.Itoa(int(r.Mask)) + ":" + strconv.Quote(r.TeamID) + ":" + strconv.Quote(r.SecondGameID) + ":" + strconv.Itoa(r.Points)
+	key := strconv.Quote(r.GameID) + ":" + strconv.Itoa(int(r.Mask)) + ":" + strconv.Quote(r.TeamID) + ":" + strconv.Quote(r.SecondGameID) + ":" + strconv.Itoa(r.Points)
+	if r.Score != nil {
+		key += ":" + scoreConditionKey(*r.Score)
+	}
+	return key
 }
 func conjunctionKey(conditions []scenarioRequirement) string {
 	keys := make([]string, len(conditions))
@@ -248,6 +288,12 @@ func clinchingGroups(clauses []scenarios.Clause, teamID string, teams map[string
 // in outside-help paths while using full club names in the unadorned result
 // headings.
 func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, teams, headingTeams map[string]string, games map[string]cache.Game) []clinchingGroupView {
+	return clinchingGroupViews(clauses, teamID, teams, headingTeams, games, clinchingGroupOptions{SummaryLimit: maxScenarioSummaryPaths})
+}
+
+// clinchingGroupViews groups clauses by the team's own results. A group with
+// more than options.SummaryLimit summary paths directs readers to its exact list.
+func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headingTeams map[string]string, games map[string]cache.Game, options clinchingGroupOptions) []clinchingGroupView {
 	ownIDs := []string{}
 	raw := [][]scenarioRequirement{}
 	for _, clause := range clauses {
@@ -263,6 +309,9 @@ func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, 
 			if (g.HomeTeamID == teamID || g.AwayTeamID == teamID) && !slices.Contains(ownIDs, r.GameID) {
 				ownIDs = append(ownIDs, r.GameID)
 			}
+		}
+		for _, condition := range clause.ScoreConditions {
+			c = append(c, scenarioRequirement{Score: &condition})
 		}
 		raw = append(raw, c)
 	}
@@ -359,7 +408,7 @@ func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, 
 			summaryPaths = help
 		}
 		sort.Slice(summaryPaths, func(i, j int) bool { return conjunctionKey(summaryPaths[i]) < conjunctionKey(summaryPaths[j]) })
-		summaryOverflow := len(summaryPaths) > maxScenarioSummaryPaths
+		summaryOverflow := len(summaryPaths) > options.SummaryLimit
 		summary := scenarioExpression{}
 		if !summaryOverflow {
 			for i, c := range summaryPaths {
@@ -378,11 +427,14 @@ func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, 
 				help[i][j].Parts = requirementParts(r, "", teams, games)
 			}
 		}
-		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, ShowDetails: len(help) > 1, Help: orderScenarioExpression(factorRequirements(help, 0))})
+		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, Help: orderScenarioExpression(factorRequirements(help, 0))})
 	}
-	views = combineOwnSingleResults(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games)
+	views = combineOwnSingleResults(combineOwnPointTotals(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games), teamID, headingTeams, games)
 	for i := range views {
 		views[i].Tone = ownResultTone(views[i], teamID, games)
+		if options.RestOfSeason && !views[i].SummaryOverflow {
+			views[i].GroupedSummary = groupSeasonSummary(views[i].Summary, teamID, teams, games)
+		}
 	}
 	return views
 }
@@ -430,7 +482,7 @@ func combineOwnSingleResults(groups []clinchingGroupView, team string, teams map
 		merged := false
 		for i := range out {
 			prior := &out[i]
-			if len(prior.Own) != 1 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || expressionKey(prior.Help) != expressionKey(group.Help) {
+			if len(prior.Own) != 1 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || prior.mergeKey() != group.mergeKey() {
 				continue
 			}
 			prior.Own[0].Mask |= group.Own[0].Mask
@@ -460,7 +512,7 @@ func summaryPathCost(paths [][]scenarioRequirement) int {
 	for _, path := range paths {
 		for _, requirement := range path {
 			cost += 8
-			if requirement.SecondGameID != "" {
+			if requirement.SecondGameID != "" || requirement.Score != nil {
 				cost += 2
 			} else {
 				cost += bits.OnesCount8(requirement.Mask) - 1
@@ -531,7 +583,7 @@ func factorRequirements(clauses [][]scenarioRequirement, depth int) scenarioExpr
 	fixtureMasks := map[string]map[uint8]bool{}
 	for _, c := range clauses {
 		for _, r := range c {
-			if r.SecondGameID == "" {
+			if r.SecondGameID == "" && r.Score == nil {
 				if fixtureMasks[r.GameID] == nil {
 					fixtureMasks[r.GameID] = map[uint8]bool{}
 				}
@@ -551,7 +603,7 @@ func factorRequirements(clauses [][]scenarioRequirement, depth int) scenarioExpr
 			priority := 0
 			if counts[key] == len(clauses) {
 				priority = 2
-			} else if r.SecondGameID == "" && len(fixtureMasks[r.GameID]) > 1 {
+			} else if r.SecondGameID == "" && r.Score == nil && len(fixtureMasks[r.GameID]) > 1 {
 				priority = 1
 			}
 			if priority > bestPriority || (priority == bestPriority && counts[key] > bestCount) {
@@ -560,7 +612,9 @@ func factorRequirements(clauses [][]scenarioRequirement, depth int) scenarioExpr
 			}
 		}
 	}
-	if bestCount == 1 || depth >= 3 {
+	// Shared requirements stay on the same visible level. Pull all of them
+	// out even at the nesting limit, rather than repeating them in every path.
+	if bestCount == 1 || (depth >= 3 && bestPriority != 2) {
 		e := scenarioExpression{}
 		for _, c := range clauses {
 			e.Alternatives = append(e.Alternatives, scenarioExpression{Conditions: c})
@@ -607,7 +661,7 @@ func compactPoints(clauses [][]scenarioRequirement, games map[string]cache.Game)
 	ids := []string{}
 	for _, c := range clauses {
 		for _, r := range c {
-			if !slices.Contains(ids, r.GameID) {
+			if r.Score == nil && !slices.Contains(ids, r.GameID) {
 				ids = append(ids, r.GameID)
 			}
 		}
@@ -744,6 +798,12 @@ func removeCoveredRequirements(clauses [][]scenarioRequirement, games map[string
 
 func requirementsImply(source, target []scenarioRequirement, games map[string]cache.Game) bool {
 	for _, want := range target {
+		if want.Score != nil {
+			if !slices.ContainsFunc(source, func(have scenarioRequirement) bool { return requirementKey(have) == requirementKey(want) }) {
+				return false
+			}
+			continue
+		}
 		for x := range 3 {
 			for y := range 3 {
 				assignment := map[string]int{want.GameID: x}
@@ -752,6 +812,9 @@ func requirementsImply(source, target []scenarioRequirement, games map[string]ca
 				}
 				possible := true
 				for _, have := range source {
+					if have.Score != nil {
+						continue
+					}
 					_, first := assignment[have.GameID]
 					_, second := assignment[have.SecondGameID]
 					if first && (have.SecondGameID == "" || second) && !requirementMatches(have, assignment, games) {
@@ -833,7 +896,7 @@ func combineOwnPairs(groups []clinchingGroupView, team string, teams map[string]
 				if len(prior.Own) != 2 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || prior.Own[1].GameID != group.Own[1].GameID {
 					continue
 				}
-				if ownPoints(prior.Own[0], team, games) != results[1] || ownPoints(prior.Own[1], team, games) != results[0] || expressionKey(prior.Help) != expressionKey(group.Help) {
+				if ownPoints(prior.Own[0], team, games) != results[1] || ownPoints(prior.Own[1], team, games) != results[0] || prior.mergeKey() != group.mergeKey() {
 					continue
 				}
 				prior.AlternativeOwn = group.Own
@@ -849,6 +912,80 @@ func combineOwnPairs(groups []clinchingGroupView, team string, teams map[string]
 	}
 	return out
 }
+
+// combineOwnPointTotals merges two-match result groups with identical
+// outside help when together they are exactly "at least p points from the two
+// matches", as in five "✓ Clinches" rows for every result but two losses.
+// Every ordering of each points total must be present, so the merge adds no
+// outcome.
+func combineOwnPointTotals(groups []clinchingGroupView, team string, teams map[string]string, games map[string]cache.Game) []clinchingGroupView {
+	pair := func(group clinchingGroupView) (string, string, bool) {
+		if len(group.Own) != 2 || !singleResult(group.Own[0].Mask) || !singleResult(group.Own[1].Mask) {
+			return "", "", false
+		}
+		return group.Own[0].GameID, group.Own[1].GameID, true
+	}
+	out := []clinchingGroupView{}
+	used := make([]bool, len(groups))
+	for i, group := range groups {
+		if used[i] {
+			continue
+		}
+		first, second, ok := pair(group)
+		if !ok {
+			out = append(out, group)
+			continue
+		}
+		members := []int{i}
+		for j := i + 1; j < len(groups); j++ {
+			a, b, ok := pair(groups[j])
+			if ok && !used[j] && a == first && b == second && groups[j].mergeKey() == group.mergeKey() {
+				members = append(members, j)
+			}
+		}
+		covered := map[[2]int]bool{}
+		for _, index := range members {
+			for _, own := range [][]scenarioRequirement{groups[index].Own, groups[index].AlternativeOwn} {
+				if len(own) == 2 {
+					covered[[2]int{ownPoints(own[0], team, games), ownPoints(own[1], team, games)}] = true
+				}
+			}
+		}
+		minimum := 6
+		for results := range covered {
+			minimum = min(minimum, results[0]+results[1])
+		}
+		exact := len(members) > 1
+		for _, x := range []int{0, 1, 3} {
+			for _, y := range []int{0, 1, 3} {
+				if (x+y >= minimum) != covered[[2]int{x, y}] {
+					exact = false
+				}
+			}
+		}
+		if !exact {
+			out = append(out, group)
+			continue
+		}
+		for _, index := range members {
+			used[index] = true
+		}
+		group.AlternativeOwn = nil
+		if minimum == 0 {
+			group.Own = nil
+			group.Heading = "Regardless of " + teams[team] + "’s results (" + noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{first, second}}, team, games, teams) + ")"
+		} else {
+			total := scenarioRequirement{GameID: first, SecondGameID: second, TeamID: team, Points: minimum}
+			total.Text = requirementText(total, team, teams, games)
+			total.Parts = requirementParts(total, team, teams, games)
+			group.Own = []scenarioRequirement{total}
+			group.Heading = "If " + total.Text
+		}
+		out = append(out, group)
+	}
+	return out
+}
+
 func singleResult(mask uint8) bool { return mask == 1 || mask == 2 || mask == 4 }
 func ownPoints(r scenarioRequirement, team string, games map[string]cache.Game) int {
 	for i := range 3 {

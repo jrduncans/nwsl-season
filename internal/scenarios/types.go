@@ -4,6 +4,7 @@ package scenarios
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -13,7 +14,12 @@ import (
 
 // DefinitionVersion changes when scenario result semantics change so a prior
 // completed snapshot cannot preserve an obsolete conclusion.
-const DefinitionVersion = "next-slate-v5"
+const DefinitionVersion = "next-slate-v6"
+
+// SeasonDefinitionVersion identifies rest-of-season results, which cover every
+// remaining match and may carry score conditions. They are stored as a
+// separate batch beside the next-slate batch for the same snapshot.
+const SeasonDefinitionVersion = "rest-of-season-v4"
 
 const (
 	LimitationBudgetExhausted = "scenario computation budget exhausted"
@@ -33,6 +39,7 @@ type SlateSource string
 const (
 	SourceMatchday      SlateSource = "matchday"
 	SourceKickoffWindow SlateSource = "kickoff_window"
+	SourceRestOfSeason  SlateSource = "rest_of_season"
 )
 
 type Slate struct {
@@ -68,10 +75,72 @@ type FixtureCondition struct {
 	AllowedOutcomes []clinching.Outcome `json:"allowed_outcomes"`
 }
 type Clause struct {
-	Conditions             []FixtureCondition      `json:"conditions"`
+	Conditions []FixtureCondition `json:"conditions"`
+	// ScoreConditions are added to the results in Conditions; every one must
+	// hold. Only rest-of-season clauses carry them.
+	ScoreConditions        []ScoreCondition        `json:"score_conditions,omitempty"`
 	RepresentedAssignments int                     `json:"represented_assignments"`
 	ProofMethods           []clinching.ProofMethod `json:"proof_methods"`
 }
+
+// ScoreMeasure is a tiebreaker that depends on scores rather than results.
+type ScoreMeasure string
+
+const (
+	MeasureGoalDifference  ScoreMeasure = "goal_difference"
+	MeasureGoalsScored     ScoreMeasure = "goals_scored"
+	MeasureHeadToHeadGoals ScoreMeasure = "head_to_head_goals"
+)
+
+// ScoreCondition says TeamID finishes ahead of RivalID, who ends level with it
+// on points. Gains count only the remaining matches: the goal-difference gain
+// is TeamID's goal difference in them minus RivalID's, and likewise for goals
+// scored; the head-to-head gain is TeamID's goals minus RivalID's in their
+// remaining matches against each other.
+//
+// TeamID may be the rival of the team whose scenario it is: "UTA finishes
+// ahead of POR" excludes the scorelines where the two would be level.
+//
+// Levels form a cascade. A level holds when its gain is at least MinimumGain,
+// or exactly MinimumGain-1 and the next level holds; the last level has no
+// fallback. An ExactOnly level omits the "at least" branch, either because
+// the results make a larger gain impossible or because the condition is that
+// the two finish level on it; an ExactOnly last level holds at exactly
+// MinimumGain-1, so a condition whose levels are all ExactOnly says the two
+// finish level on every measure.
+type ScoreCondition struct {
+	TeamID  string       `json:"team_id"`
+	RivalID string       `json:"rival_id"`
+	Levels  []ScoreLevel `json:"levels"`
+}
+
+// ScoreLevel is one tiebreaker in a ScoreCondition. TeamNow and RivalNow are
+// each team's value before the remaining matches, for display.
+type ScoreLevel struct {
+	Measure     ScoreMeasure `json:"measure"`
+	MinimumGain int          `json:"minimum_gain"`
+	ExactOnly   bool         `json:"exact_only,omitempty"`
+	TeamNow     int          `json:"team_now"`
+	RivalNow    int          `json:"rival_now"`
+}
+
+// Holds reports whether gains, indexed like Levels, satisfy the cascade.
+func (c ScoreCondition) Holds(gains []int) bool {
+	for i, level := range c.Levels {
+		last := i == len(c.Levels)-1
+		if !level.ExactOnly && gains[i] >= level.MinimumGain {
+			return true
+		}
+		if gains[i] != level.MinimumGain-1 {
+			return false
+		}
+		if last {
+			return level.ExactOnly
+		}
+	}
+	return false
+}
+
 type Diagnostics struct {
 	SearchNodes, OracleCalls, OracleCacheHits, GuaranteePrunes, OpportunityPrunes, MinimizationProbes, CombinationProbes, InitialClauses, MinimalClauses, VisitedComplete int
 	ElapsedMicroseconds                                                                                                                                                   int64
@@ -95,6 +164,13 @@ type Result struct {
 	// These fields are populated only for the playoffs.
 	AlreadyEliminated, CanBeEliminated bool
 	EliminationClauses                 []Clause
+	// DisciplinaryPossible marks a rest-of-season outcome where teams could
+	// finish identical through head-to-head goals scored, so unavailable
+	// disciplinary points may decide. That case is never claimed.
+	DisciplinaryPossible bool
+	// Rivals restates a rest-of-season clinch one rival at a time, when that
+	// is exact. It describes the same scorelines as Clauses.
+	Rivals *RivalSummary
 }
 
 // BudgetLimited reports whether a result came from an incomplete search. A
@@ -140,7 +216,11 @@ func (s Slate) Validate() error {
 		}
 		return nil
 	}
-	if s.ID == "" || s.DefinitionVersion != DefinitionVersion || len(s.FixtureIDs) == 0 || s.StartsAtUTC.IsZero() || s.LatestKickoffUTC.IsZero() || s.CutoffUTC.IsZero() {
+	wantVersion := DefinitionVersion
+	if s.Source == SourceRestOfSeason {
+		wantVersion = SeasonDefinitionVersion
+	}
+	if s.ID == "" || s.DefinitionVersion != wantVersion || len(s.FixtureIDs) == 0 || s.StartsAtUTC.IsZero() || s.LatestKickoffUTC.IsZero() || s.CutoffUTC.IsZero() {
 		return fmt.Errorf("invalid ready slate")
 	}
 	switch s.Source {
@@ -148,7 +228,7 @@ func (s Slate) Validate() error {
 		if s.Matchday <= 0 {
 			return fmt.Errorf("matchday slate lacks matchday")
 		}
-	case SourceKickoffWindow:
+	case SourceKickoffWindow, SourceRestOfSeason:
 		if s.Matchday != 0 {
 			return fmt.Errorf("window slate has matchday")
 		}
@@ -195,9 +275,26 @@ func (r Result) Validate(slate Slate) error {
 		if err := validateConditions(c.Conditions, fixture); err != nil {
 			return fmt.Errorf("invalid clause condition: %w", err)
 		}
+		if len(c.ScoreConditions) > 0 && slate.Source != SourceRestOfSeason {
+			return fmt.Errorf("only rest-of-season clauses may carry score conditions")
+		}
+		if err := validateScoreConditions(c.ScoreConditions, r.TeamID); err != nil {
+			return fmt.Errorf("invalid score condition: %w", err)
+		}
 	}
 	if err := validateConditions(r.Necessary, fixture); err != nil {
 		return fmt.Errorf("invalid necessary condition: %w", err)
+	}
+	if r.DisciplinaryPossible && slate.Source != SourceRestOfSeason {
+		return fmt.Errorf("only rest-of-season results may note disciplinary points")
+	}
+	if r.Rivals != nil {
+		if slate.Source != SourceRestOfSeason || r.State != OpportunityCanClinch {
+			return fmt.Errorf("only rest-of-season clinches may carry a rival summary")
+		}
+		if err := r.Rivals.validate(r.TeamID, fixture); err != nil {
+			return err
+		}
 	}
 	if r.Achievement != competition.AchievementPlayoffs && (r.AlreadyEliminated || r.CanBeEliminated || len(r.EliminationClauses) != 0) {
 		return fmt.Errorf("only playoff results may carry elimination data")
@@ -241,6 +338,37 @@ func validateConditions(conditions []FixtureCondition, fixture map[string]bool) 
 	}
 	return nil
 }
+
+var scoreMeasureOrder = []ScoreMeasure{MeasureGoalDifference, MeasureGoalsScored, MeasureHeadToHeadGoals}
+
+func validateScoreConditions(conditions []ScoreCondition, team string) error {
+	rivals := map[string]bool{}
+	for _, condition := range conditions {
+		rival := condition.RivalID
+		if condition.RivalID == team {
+			rival = condition.TeamID
+		} else if condition.TeamID != team {
+			rival = ""
+		}
+		if rival == "" || rival == team || rivals[rival] {
+			return fmt.Errorf("invalid teams %q and %q", condition.TeamID, condition.RivalID)
+		}
+		rivals[rival] = true
+		if len(condition.Levels) == 0 {
+			return fmt.Errorf("condition for %q has no levels", condition.RivalID)
+		}
+		next := 0
+		for _, level := range condition.Levels {
+			index := slices.Index(scoreMeasureOrder, level.Measure)
+			if index < next {
+				return fmt.Errorf("invalid measure order for %q", condition.RivalID)
+			}
+			next = index + 1
+		}
+	}
+	return nil
+}
+
 func sortedMethods(values []clinching.ProofMethod) []clinching.ProofMethod {
 	seen := map[clinching.ProofMethod]bool{}
 	for _, v := range values {

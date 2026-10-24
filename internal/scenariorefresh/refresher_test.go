@@ -68,7 +68,7 @@ func TestCalculateAddsTelemetryToRefreshSpan(t *testing.T) {
 	})
 
 	ctx, span := telemetry.Tracer().Start(context.Background(), "scenario.refresh")
-	_, _ = (Refresher{}).calculate(ctx, nil, nil, cache.QualificationSnapshot{})
+	_, _ = (Refresher{}).calculate(ctx, nil, nil, cache.QualificationSnapshot{}, nextSlateScope)
 	span.End()
 
 	spans := exporter.GetSpans()
@@ -301,5 +301,39 @@ func TestRefreshRecordsStorageFailureWhenReplaceFails(t *testing.T) {
 	}
 	if !errors.Is(store.failures[0], boom) || scenarioErrorType(store.failures[0]) != telemetry.ErrorTypeStorageFailure {
 		t.Errorf("recorded failure = %v (type %q), want storage-classified %v", store.failures[0], scenarioErrorType(store.failures[0]), boom)
+	}
+}
+
+func TestRefreshStoresRestOfSeasonBatchNearTheEnd(t *testing.T) {
+	store := &capturingScenarioStore{}
+	teams := []cache.Team{{ASAID: "a", Name: "A"}, {ASAID: "b", Name: "B"}}
+	result, err := (Refresher{Store: store, Rules: scenarioTestRules()}).Refresh(context.Background(), cache.SyncRun{ID: 7, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}, teams, scenarioTestGames(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Recalculated || result.DefinitionVersion != scenarios.DefinitionVersion {
+		t.Fatalf("result = %+v, want a recalculated next-slate batch", result)
+	}
+	if len(store.replaceRuns) != 2 {
+		t.Fatalf("ReplaceScenario called %d times, want next slate and rest of season", len(store.replaceRuns))
+	}
+	season := store.replaceRuns[1]
+	if season.DefinitionVersion != scenarios.SeasonDefinitionVersion || season.Slate.Source != scenarios.SourceRestOfSeason || len(season.Slate.FixtureIDs) != 2 {
+		t.Fatalf("second run = %+v, want a rest-of-season batch over both matches", season)
+	}
+}
+
+func TestRefreshSkipsRestOfSeasonEarlier(t *testing.T) {
+	store := &capturingScenarioStore{}
+	teams := []cache.Team{{ASAID: "a", Name: "A"}, {ASAID: "b", Name: "B"}}
+	games := scenarioTestGames()
+	games = append(games, cache.Game{ASAID: "g3", Status: fixtures.PreMatchStatus, HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: "2026-11-15T22:00:00Z"})
+	rules := scenarioTestRules()
+	rules.GamesPerTeam = 3
+	if _, err := (Refresher{Store: store, Rules: rules}).Refresh(context.Background(), cache.SyncRun{ID: 7, Season: "2026", Stage: "Regular Season", FixtureSnapshotID: "fixture-1"}, teams, games, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.replaceRuns) != 1 || store.replaceRuns[0].DefinitionVersion != scenarios.DefinitionVersion {
+		t.Fatalf("runs = %+v, want only the next-slate batch with three matchdays left", store.replaceRuns)
 	}
 }

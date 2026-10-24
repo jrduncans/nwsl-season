@@ -1179,22 +1179,22 @@ func TestPagesClinching(t *testing.T) {
 			}
 		}
 
-		if got := assertKeyboardDisclosures(t, page); got < 2 {
-			t.Errorf("clinching page has %d disclosures, want at least the slate and a no-help scenario", got)
+		if got := assertKeyboardDisclosures(t, page); got < 1 {
+			t.Errorf("clinching page has %d disclosures, want at least the slate", got)
 		}
 		assertNoHorizontalOverflow(t, page)
 	})
 }
 
-// TestPagesClinchingExactPaths covers the grouped summary with its "View exact
-// paths" disclosure, which appears only when a result needs one of several
-// outside results. Arrangement after 29 of 30 rounds: team-1..6 are far ahead
-// and the rest far behind; team-0 has 47 points, team-8 46 and team-9 44, and
-// only their last-round games are unplayed. Team-8 and team-9 can each pass
-// team-0 only by winning, and team-0 stays in the top eight unless both do, so
-// a result for team-0 that needs help has two disjoint outside alternatives.
-// The test asserts the page shows the disclosure, not the arithmetic.
-func TestPagesClinchingExactPaths(t *testing.T) {
+// TestPagesClinchingRivalSummary covers the rest-of-season rival summary,
+// which states what each rival must be held to when a result needs outside
+// help. Arrangement after 29 of 30 rounds: team-1..6 are far ahead and the
+// rest far behind; team-0 has 47 points, team-8 46 and team-9 44, and only
+// their last-round games are unplayed. Team-8 and team-9 can each pass team-0
+// only by winning, so a result for team-0 that needs help names them. With one
+// round left it is decision day, so the page shows only the rest of the
+// season. The test asserts the page shows the rival list, not the arithmetic.
+func TestPagesClinchingRivalSummary(t *testing.T) {
 	t.Parallel()
 	order := []string{"team-1", "team-2", "team-3", "team-4", "team-5", "team-6",
 		"team-0", "team-8", "team-9", "team-7", "team-10", "team-11", "team-12", "team-13", "team-14", "team-15"}
@@ -1234,16 +1234,16 @@ func TestPagesClinchingExactPaths(t *testing.T) {
 		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, j.URL(seasonPath("clinching")))
 		expect := playwright.NewPlaywrightAssertions()
-		exact := page.Locator("details.clinching-exact-paths")
-		if n, err := exact.Count(); err != nil || n == 0 {
-			t.Fatalf("no \"View exact scenarios\" disclosure on the page (%d, %v); the arrangement no longer needs outside results", n, err)
+		rivals := page.Locator("section.clinching-result-group ul.clinching-rivals")
+		if n, err := rivals.Count(); err != nil || n == 0 {
+			t.Fatalf("no rival list on the page (%d, %v); the arrangement no longer needs outside results", n, err)
 		}
-		// The grouped summary sits next to the disclosure, outside it.
-		if err := expect.Locator(page.Locator("section.clinching-result-group .clinching-summary").First()).ToBeVisible(); err != nil {
-			t.Errorf("grouped summary should be visible: %v", err)
+		if err := expect.Locator(rivals.First().Locator("li").First()).ToBeVisible(); err != nil {
+			t.Errorf("rival list should be visible: %v", err)
 		}
-		if err := expect.Locator(exact.First().Locator("summary")).ToHaveText("View exact scenarios"); err != nil {
-			t.Error(err)
+		// The rival summary replaces the scenario lists and their disclosure.
+		if n, err := page.Locator("details.clinching-exact-paths").Count(); err != nil || n != 0 {
+			t.Errorf("exact-scenario disclosures = %d, %v; want none beside rival lists", n, err)
 		}
 		assertKeyboardDisclosures(t, page)
 		assertNoHorizontalOverflow(t, page)
