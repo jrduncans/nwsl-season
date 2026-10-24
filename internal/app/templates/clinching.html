@@ -36,6 +36,12 @@
   </div>
 {{end}}
 
+{{define "clinchingRival"}}{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span> {{else}}<span>{{.Text}}</span> {{end}}{{end}}{{range .Ties}}<span{{if .Alternative}} class="clinching-rival-tie"{{end}}>{{if .Lead}}<span>{{.Lead}}</span> {{end}}{{with .Condition}}<span class="clinching-condition clinching-condition-score">{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span>{{else}}<span>{{.Text}}</span>{{end}}{{end}}</span> {{end}}</span>{{end}}{{end}}
+
+{{define "clinchingGroupedSummary"}}
+  <ul class="clinching-rivals clinching-summary-groups">{{range .Groups}}<li>{{if .Rival}}{{template "clinchingRival" .Rival}}{{else}}{{if .Heading}}<h6>{{.Heading}}</h6>{{end}}{{template "clinchingSummaryExpression" .Expression}}{{end}}</li>{{end}}</ul>
+{{end}}
+
 {{define "clinchingClauses"}}
   {{if .Groups}}
     {{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}
@@ -43,11 +49,12 @@
     {{range .Groups}}
       <section class="clinching-result-group{{with .Tone}} clinching-result-{{.}}{{end}}">
         <h5>{{.Heading}}</h5>
-        {{if .RivalState}}<p class="clinching-result-state">{{.RivalState}}</p><ul class="clinching-rivals">{{range .Rivals}}<li>{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span> {{else}}<span>{{.Text}}</span> {{end}}{{end}}{{range .Ties}}<span{{if .Alternative}} class="clinching-rival-tie"{{end}}>{{if .Lead}}<span>{{.Lead}}</span> {{end}}{{with .Condition}}<span class="clinching-condition clinching-condition-score">{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span>{{else}}<span>{{.Text}}</span>{{end}}{{end}}</span> {{end}}</span>{{end}}</li>{{end}}</ul>
+        {{if .RivalState}}<p class="clinching-result-state">{{.RivalState}}</p><ul class="clinching-rivals">{{range .Rivals}}<li>{{template "clinchingRival" .}}</li>{{end}}</ul>
+        {{else if .GroupedSummary}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}} all of:</p><div class="clinching-summary">{{template "clinchingGroupedSummary" .GroupedSummary}}</div>
         {{else if .SummaryOverflow}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><p>Several certified scenarios. View the exact alternatives below.</p>
         {{else if or .Summary.Conditions .Summary.Alternatives}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>
         {{else}}<p class="clinching-result-state clinching-result-state-certain">{{if $elimination}}Eliminated{{else}}✓ Clinches{{end}}</p>{{end}}
-        {{if .ShowDetails}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
+        {{if .SummaryOverflow}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
       </section>
     {{end}}
   {{end}}

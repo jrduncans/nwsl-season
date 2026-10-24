@@ -64,8 +64,8 @@ type clinchingGroupView struct {
 	Own             []scenarioRequirement
 	AlternativeOwn  []scenarioRequirement
 	Summary         scenarioExpression
+	GroupedSummary  *clinchingGroupedSummary
 	SummaryOverflow bool
-	ShowDetails     bool
 	Help            scenarioExpression
 	// Tone colors the group by the team's own result: "win", "draw", "loss"
 	// or "" when the group spans several matches or none.
@@ -94,6 +94,11 @@ const maxScenarioSummaryPaths = 12
 // the whole answer, so they are written out rather than left to the exact
 // list.
 const maxSeasonSummaryPaths = 256
+
+type clinchingGroupOptions struct {
+	SummaryLimit int
+	RestOfSeason bool
+}
 
 var scenarioOutcomes = []clinching.Outcome{clinching.HomeWin, clinching.Draw, clinching.AwayWin}
 
@@ -283,12 +288,12 @@ func clinchingGroups(clauses []scenarios.Clause, teamID string, teams map[string
 // in outside-help paths while using full club names in the unadorned result
 // headings.
 func clinchingGroupsWithHeadingTeams(clauses []scenarios.Clause, teamID string, teams, headingTeams map[string]string, games map[string]cache.Game) []clinchingGroupView {
-	return clinchingGroupViews(clauses, teamID, teams, headingTeams, games, maxScenarioSummaryPaths)
+	return clinchingGroupViews(clauses, teamID, teams, headingTeams, games, clinchingGroupOptions{SummaryLimit: maxScenarioSummaryPaths})
 }
 
 // clinchingGroupViews groups clauses by the team's own results. A group with
-// more than summaryLimit summary paths directs readers to its exact list.
-func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headingTeams map[string]string, games map[string]cache.Game, summaryLimit int) []clinchingGroupView {
+// more than options.SummaryLimit summary paths directs readers to its exact list.
+func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headingTeams map[string]string, games map[string]cache.Game, options clinchingGroupOptions) []clinchingGroupView {
 	ownIDs := []string{}
 	raw := [][]scenarioRequirement{}
 	for _, clause := range clauses {
@@ -403,7 +408,7 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 			summaryPaths = help
 		}
 		sort.Slice(summaryPaths, func(i, j int) bool { return conjunctionKey(summaryPaths[i]) < conjunctionKey(summaryPaths[j]) })
-		summaryOverflow := len(summaryPaths) > summaryLimit
+		summaryOverflow := len(summaryPaths) > options.SummaryLimit
 		summary := scenarioExpression{}
 		if !summaryOverflow {
 			for i, c := range summaryPaths {
@@ -422,11 +427,14 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 				help[i][j].Parts = requirementParts(r, "", teams, games)
 			}
 		}
-		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, ShowDetails: len(help) > 1, Help: orderScenarioExpression(factorRequirements(help, 0))})
+		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, Help: orderScenarioExpression(factorRequirements(help, 0))})
 	}
 	views = combineOwnSingleResults(combineOwnPointTotals(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games), teamID, headingTeams, games)
 	for i := range views {
 		views[i].Tone = ownResultTone(views[i], teamID, games)
+		if options.RestOfSeason && !views[i].SummaryOverflow {
+			views[i].GroupedSummary = groupSeasonSummary(views[i].Summary, teamID, teams, games)
+		}
 	}
 	return views
 }

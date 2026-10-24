@@ -244,10 +244,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 		snapshot = season
 	}
-	summaryLimit := maxScenarioSummaryPaths
+	groupOptions := clinchingGroupOptions{SummaryLimit: maxScenarioSummaryPaths, RestOfSeason: view.RestOfSeason}
 	headingTeams := teamNames
 	if view.RestOfSeason {
-		summaryLimit = maxSeasonSummaryPaths
+		groupOptions.SummaryLimit = maxSeasonSummaryPaths
 		headingTeams = teamLabels
 	}
 	view.Slate = snapshot.Run.Slate
@@ -302,7 +302,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if v.Rivals != nil {
 			row.Groups = rivalGroupViews(v.Result, v.TeamID, teamLabels, headingTeams, games, standingsPositions)
 		} else {
-			row.Groups = clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, headingTeams, games, summaryLimit)
+			row.Groups = clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, headingTeams, games, groupOptions)
 		}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)

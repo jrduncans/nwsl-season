@@ -42,7 +42,7 @@ func rivalGroupViews(result scenarios.Result, teamID string, teams, headingTeams
 	for _, row := range rows {
 		if row.Withheld {
 			if clauses := clausesForOwn(result.Clauses, row.Own); len(clauses) > 0 {
-				views = append(views, clinchingGroupViews(clauses, teamID, teams, headingTeams, games, maxSeasonSummaryPaths)...)
+				views = append(views, clinchingGroupViews(clauses, teamID, teams, headingTeams, games, clinchingGroupOptions{SummaryLimit: maxSeasonSummaryPaths, RestOfSeason: true})...)
 			}
 			continue
 		}

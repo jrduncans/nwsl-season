@@ -143,10 +143,11 @@ th:nth-child(2) { text-align: left; }
 .clinching-outcome-heading { margin: 0 0 .5rem; }
 .clinching-result-group > p { margin: .55rem 0 0; }
 .clinching-summary { margin-top: .55rem; }
+.clinching-summary-groups h6 { margin: 0 0 .3rem; font-size: .9rem; }
 .clinching-rivals { margin: .35rem 0 0; padding: 0; list-style: none; }
-.clinching-rivals li { position: relative; padding-left: .9rem; line-height: 1.7; }
-.clinching-rivals li::before { position: absolute; left: 0; color: var(--muted); content: "•"; }
-.clinching-rivals li + li { margin-top: .45rem; }
+.clinching-rivals > li { position: relative; padding-left: .9rem; line-height: 1.7; }
+.clinching-rivals > li::before { position: absolute; left: 0; color: var(--muted); content: "•"; }
+.clinching-rivals > li + li { margin-top: .45rem; }
 .clinching-rivals .clinching-team-token { vertical-align: -.25rem; }
 .clinching-rivals .clinching-condition-score { display: inline-block; max-width: 100%; margin-top: .15rem; vertical-align: top; }
 .clinching-rival-tie { display: block; }

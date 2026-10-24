@@ -305,7 +305,8 @@ neutral when it spans several matches. A box that needs no outside help says
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
-requirements stay visible, with exact scenarios in expandable sections. Results
+requirements stay visible. Only groups whose summary is omitted for size offer
+an expandable scenario list. Results
 from one match with identical outside help share a heading, such as “draws or
 loses.” Two-match result orderings share a heading only when their outside help
 is identical; for example, “wins one match and loses the other” still names
@@ -336,7 +337,8 @@ must preserve the certified outcome union. Alternatives with the same number
 of conditions are ordered by their displayed result text, keeping repeated
 results such as DEN wins adjacent regardless of match IDs.
 
-Groups with multiple scenarios also offer expandable, complete certified scenarios.
+Groups whose summary is omitted offer expandable, complete certified scenarios;
+a full visible summary has no duplicate scenario disclosure.
 Each exact scenario puts its requirements on one compact line, separated by `+`,
 with a club crest and two- or three-letter team code; each scenario is an `OR`
 alternative to the others. When alternatives for two matches of the same team
@@ -364,7 +366,8 @@ subtraction is capped at 256 scenarios, including intermediate expansion, and
 retain the original certified alternatives, which can still overlap. These
 limits keep presentation work bounded on ordinary cache-only page requests.
 
-Every complete certified scenario remains available in its group's disclosure.
+Every complete certified scenario is represented by the visible summary, or
+available in its group's disclosure when that summary is omitted.
 The visible summary has at most one shared-condition factoring level; the
 exact-scenario view stays flat.
 Unlisted matches are unrestricted. The full included schedule remains collapsed
@@ -527,6 +530,28 @@ even if every rival that could be level finishes behind; otherwise it is
 team's own results, so they group as exactly that row). A result with every row
 withheld, or a search that hit its budget, has no summary and shows only clauses.
 The multiway-tie note appears only when the clauses are shown for some row.
+
+Those fallback clauses can still contain independent requirements. Instead of
+repeating every combination, their summary separates them into bulleted groups
+under **Clinches if all of**. Common results and their score conditions stay
+together: "KC loses both matches … and UTA gains …". Each group can contain its
+own alternatives. For example, KC's two-loss case separates Angel City's record
+from the coupled Seattle/Utah tiebreak. Utah's loss at Gotham separates Angel
+City's record from Seattle's result and score condition. Neither case needs to
+repeat the combinations of those independent requirements.
+The selected view explicitly enables this grouping; the summary path limit
+controls only when a summary is omitted for size.
+
+This presentation rewrite checks that the distinct projections' counts multiply
+back to the original number of clauses: every combination must already occur
+in the certified clauses. Score predicates remain unchanged, so a multiway tie
+is never silently replaced by pairwise comparisons. A one-rival group becomes
+a points limit and optional score condition only after checking every result
+of its one or two named matches, including both orderings of a draw and loss.
+If a combination is missing or its score conditions differ, the original
+alternatives remain. The pass applies only within the existing 256-path summary
+bound. A complete grouped summary replaces the duplicate exact-scenario
+disclosure; the disclosure remains available when a summary is omitted for size.
 
 Rows merge under one heading as clause groups do ("wins one match and loses the
 other", "earns at least 1 point from these two matches") when their rivals'
