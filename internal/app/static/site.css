@@ -148,7 +148,7 @@ th:nth-child(2) { text-align: left; }
 .clinching-rivals > li { position: relative; padding-left: .9rem; line-height: 1.7; }
 .clinching-rivals > li::before { position: absolute; left: 0; color: var(--muted); content: "•"; }
 .clinching-rivals > li + li { margin-top: .45rem; }
-.clinching-rivals .clinching-team-token { vertical-align: -.25rem; }
+.clinching-rivals .clinching-team-token, .clinching-condition-score .clinching-team-token { vertical-align: -.25rem; }
 .clinching-rivals .clinching-condition-score { display: inline-block; max-width: 100%; margin-top: .15rem; vertical-align: top; }
 .clinching-rival-tie { display: block; }
 .clinching-status-overview { margin: 1rem 0; }
