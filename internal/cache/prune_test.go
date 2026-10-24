@@ -127,7 +127,7 @@ func insertPruneScenarioRun(t *testing.T, ctx context.Context, db *DB, snapshot,
 
 func insertPruneScenarioResult(t *testing.T, ctx context.Context, db *DB, runID int64) {
 	t.Helper()
-	if _, err := db.db.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?, 'a','playoffs',1,'cannot_clinch',0,0,'[]','[]','[]','',0,0,0,'{}',0,0,'[]',0,'null')`, runID); err != nil {
+	if _, err := db.db.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?, 'a','playoffs',1,'cannot_clinch',0,0,'[]','[]','[]','',0,0,0,'{}',0,0,'[]',0,'null','null')`, runID); err != nil {
 		t.Fatal(err)
 	}
 }

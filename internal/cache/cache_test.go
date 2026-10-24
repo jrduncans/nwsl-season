@@ -69,7 +69,7 @@ func TestMigrationFourteenAddsOnlyKnockoutSourceColumns(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 17 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 18 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	columns := map[string]struct{}{}
@@ -119,7 +119,7 @@ func TestMigrationThirteenBackfillsLegacySnapshotAndPreservesCurrentRead(t *test
 	if _, err := db.db.ExecContext(ctx, `UPDATE games SET raw_json='{"expanded_minutes":120,"knockout_game":true}' WHERE asa_game_id='playoff'`); err != nil {
 		t.Fatal(err)
 	}
-	for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`, `DELETE FROM schema_migrations WHERE version=14`, `ALTER TABLE games DROP COLUMN expanded_minutes`, `ALTER TABLE games DROP COLUMN knockout_game`, `DELETE FROM schema_migrations WHERE version=13`} {
+	for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=18`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`, `DELETE FROM schema_migrations WHERE version=14`, `ALTER TABLE games DROP COLUMN expanded_minutes`, `ALTER TABLE games DROP COLUMN knockout_game`, `DELETE FROM schema_migrations WHERE version=13`} {
 		if _, err := db.db.ExecContext(ctx, statement); err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestMigrationFourteenBackfillsKnockoutSourceFactsAndRejectsAmbiguity(t *tes
 			t.Fatal(err)
 		}
 	}
-	for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`, `DELETE FROM schema_migrations WHERE version=14`} {
+	for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=18`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`, `DELETE FROM schema_migrations WHERE version=14`} {
 		if _, err := db.db.ExecContext(ctx, statement); err != nil {
 			t.Fatal(err)
 		}
@@ -339,7 +339,7 @@ func TestMigrationFourteenBackfillsKnockoutSourceFactsAndRejectsAmbiguity(t *tes
 		if _, err := invalidDB.db.ExecContext(ctx, `UPDATE games SET raw_json=? WHERE asa_game_id='invalid'`, raw); err != nil {
 			t.Fatal(err)
 		}
-		for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`, `DELETE FROM schema_migrations WHERE version=14`} {
+		for _, statement := range []string{`ALTER TABLE games DROP COLUMN extra_time`, `ALTER TABLE games DROP COLUMN penalties`, `ALTER TABLE games DROP COLUMN home_penalties`, `ALTER TABLE games DROP COLUMN away_penalties`, `DELETE FROM schema_migrations WHERE version=18`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`, `DELETE FROM schema_migrations WHERE version=14`} {
 			if _, err := invalidDB.db.ExecContext(ctx, statement); err != nil {
 				t.Fatal(err)
 			}
@@ -414,7 +414,7 @@ func TestMigrationFourteenIsIdempotentWithExistingColumns(t *testing.T) {
 			if _, err := db.db.ExecContext(ctx, `UPDATE games SET raw_json='{"extra_time":false,"penalties":true,"home_penalties":2,"away_penalties":1}' WHERE asa_game_id='one'`); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version IN (14,15,16,17)`); err != nil {
+			if _, err := db.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version IN (14,15,16,17,18)`); err != nil {
 				t.Fatal(err)
 			}
 			for _, column := range []string{"away_penalties", "home_penalties", "penalties", "extra_time"} {

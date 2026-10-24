@@ -26,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 17
+const schemaVersion = 18
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -799,6 +799,25 @@ func (c *DB) Migrate(ctx context.Context) error {
 			return err
 		}
 	}
+	if version < 18 {
+		table, err := tableHasColumns(ctx, tx, "scenario_results", "scenario_run_id")
+		if err != nil {
+			return err
+		}
+		exists, err := tableHasColumns(ctx, tx, "scenario_results", "seeding_json")
+		if err != nil {
+			return err
+		}
+		if table && !exists {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE scenario_results ADD COLUMN seeding_json TEXT NOT NULL DEFAULT 'null'`); err != nil {
+				return fmt.Errorf("apply migration 18: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 18); err != nil {
+			return err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
@@ -2403,7 +2422,7 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 	if out.Run.FinishedAt, err = time.Parse(time.RFC3339, finished); err != nil {
 		return out, false, err
 	}
-	rows, err := c.db.QueryContext(ctx, `SELECT team_id,achievement,top_k,opportunity_state,already_clinched,can_clinch,clauses_json,necessary_json,proof_methods_json,limitation,total_assignments,certified_assignments,unresolved_assignments,diagnostics_json,already_eliminated,can_be_eliminated,elimination_clauses_json,disciplinary_possible,rivals_json FROM scenario_results WHERE scenario_run_id=? ORDER BY team_id,achievement`, out.Run.ID)
+	rows, err := c.db.QueryContext(ctx, `SELECT team_id,achievement,top_k,opportunity_state,already_clinched,can_clinch,clauses_json,necessary_json,proof_methods_json,limitation,total_assignments,certified_assignments,unresolved_assignments,diagnostics_json,already_eliminated,can_be_eliminated,elimination_clauses_json,disciplinary_possible,rivals_json,seeding_json FROM scenario_results WHERE scenario_run_id=? ORDER BY team_id,achievement`, out.Run.ID)
 	if err != nil {
 		return out, false, err
 	}
@@ -2412,8 +2431,8 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 		var v ScenarioResult
 		var achievement, state string
 		var already, can, alreadyEliminated, canBeEliminated, disciplinary int
-		var clauses, necessary, methods, diag, eliminationClauses, rivals string
-		if err := rows.Scan(&v.TeamID, &achievement, &v.TopK, &state, &already, &can, &clauses, &necessary, &methods, &v.Limitation, &v.TotalAssignments, &v.CertifiedAssignments, &v.UnresolvedAssignments, &diag, &alreadyEliminated, &canBeEliminated, &eliminationClauses, &disciplinary, &rivals); err != nil {
+		var clauses, necessary, methods, diag, eliminationClauses, rivals, seeding string
+		if err := rows.Scan(&v.TeamID, &achievement, &v.TopK, &state, &already, &can, &clauses, &necessary, &methods, &v.Limitation, &v.TotalAssignments, &v.CertifiedAssignments, &v.UnresolvedAssignments, &diag, &alreadyEliminated, &canBeEliminated, &eliminationClauses, &disciplinary, &rivals, &seeding); err != nil {
 			return out, false, err
 		}
 		v.Achievement = competition.AchievementID(achievement)
@@ -2439,6 +2458,9 @@ func (c *DB) loadScenario(ctx context.Context, where string, args ...any) (Scena
 			return out, false, err
 		}
 		if err := json.Unmarshal([]byte(rivals), &v.Rivals); err != nil {
+			return out, false, err
+		}
+		if err := json.Unmarshal([]byte(seeding), &v.Seeding); err != nil {
 			return out, false, err
 		}
 		if v.Clauses == nil {
@@ -2517,7 +2539,8 @@ func (c *DB) ReplaceScenario(ctx context.Context, run ScenarioRun, values []Scen
 		diag, _ := json.Marshal(v.Diagnostics)
 		eliminationClauses, _ := json.Marshal(nonNilClauses(v.EliminationClauses))
 		rivals, _ := json.Marshal(v.Rivals)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, v.TeamID, v.Achievement, v.TopK, v.State, boolInt(v.AlreadyClinched), boolInt(v.CanClinch), string(clauses), string(necessary), string(methods), v.Limitation, v.TotalAssignments, v.CertifiedAssignments, v.UnresolvedAssignments, string(diag), boolInt(v.AlreadyEliminated), boolInt(v.CanBeEliminated), string(eliminationClauses), boolInt(v.DisciplinaryPossible), string(rivals)); err != nil {
+		seeding, _ := json.Marshal(v.Seeding)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO scenario_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, v.TeamID, v.Achievement, v.TopK, v.State, boolInt(v.AlreadyClinched), boolInt(v.CanClinch), string(clauses), string(necessary), string(methods), v.Limitation, v.TotalAssignments, v.CertifiedAssignments, v.UnresolvedAssignments, string(diag), boolInt(v.AlreadyEliminated), boolInt(v.CanBeEliminated), string(eliminationClauses), boolInt(v.DisciplinaryPossible), string(rivals), string(seeding)); err != nil {
 			return ScenarioSnapshot{}, err
 		}
 	}

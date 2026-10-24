@@ -48,6 +48,9 @@ type Request struct {
 	Iterations        int
 	PlayoffPlaces     int
 	PlayoffBracket    *competition.BracketFormat
+	// SeedPairs, when set, also counts each team's first-round pairing under
+	// these bracket seed pairs; see Result.Seedings.
+	SeedPairs [][2]int
 }
 
 // TeamResult contains probability and uncertainty aggregates for one team.
@@ -81,6 +84,8 @@ type Result struct {
 	Remaining             int
 	Teams                 []TeamResult
 	ChampionshipSimulated bool
+	// Seedings is set when the request names SeedPairs, keyed by team ID.
+	Seedings map[string][]SeedingCount
 }
 
 type preparedFixture struct {
@@ -126,9 +131,19 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		byID[team.ID] = &accumulator{team: team, points: map[int]float64{}, positions: make([]float64, len(request.Teams))}
 	}
 
+	var seedings *seedingCounter
+	if len(request.SeedPairs) > 0 {
+		if seedings, err = newSeedingCounter(request.SeedPairs, request.Teams, prepared.remaining); err != nil {
+			return Result{}, err
+		}
+	}
+	outcomes := make([]Outcome, len(prepared.remaining))
 	if len(prepared.remaining) == 0 && playoffs == nil {
 		table := standings.Calculate(request.Teams, prepared.completed, standings.OfficialTotalRules())
 		accumulateTable(table, byID, request.PlayoffPlaces, float64(request.Iterations))
+		if seedings != nil {
+			seedings.add(table, outcomes, float64(request.Iterations))
+		}
 	} else {
 		var knownTable []standings.TableRow
 		if len(prepared.remaining) == 0 {
@@ -147,8 +162,14 @@ func Run(ctx context.Context, request Request) (Result, error) {
 					return Result{}, err
 				}
 				table = standings.Calculate(request.Teams, games, standings.OfficialTotalRules())
+				for i := range outcomes {
+					outcomes[i] = gameOutcome(games[len(prepared.completed)+i])
+				}
 			}
 			accumulateTable(table, byID, request.PlayoffPlaces, 1)
+			if seedings != nil {
+				seedings.add(table, outcomes, 1)
+			}
 			if playoffs != nil {
 				champion := playoffs.champion(table, rng)
 				byID[champion].championships++
@@ -161,7 +182,12 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		rows = append(rows, resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces))
 	}
 	sortTeamResults(rows)
+	var seedingCounts map[string][]SeedingCount
+	if seedings != nil {
+		seedingCounts = seedings.result(prepared.remaining, request.Iterations)
+	}
 	return Result{
+		Seedings:              seedingCounts,
 		Model:                 request.Model.Info(),
 		Iterations:            request.Iterations,
 		Seed:                  seed,

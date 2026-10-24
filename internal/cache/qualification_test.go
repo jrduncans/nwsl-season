@@ -93,6 +93,8 @@ func TestRestOfSeasonScenarioRoundTripKeepsRivalSummary(t *testing.T) {
 	condition := scenarios.ScoreCondition{TeamID: "a", RivalID: "b", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1}}}
 	rivals := &scenarios.RivalSummary{Rows: []scenarios.RivalRow{{Own: win, Need: 1, Rivals: []scenarios.RivalNeed{{RivalID: "b", GameIDs: []string{"h"}, MaxPoints: 2, Ties: []scenarios.RivalTie{{Points: 3, Wins: 1, Condition: &condition}}}}}}}
 	result := ScenarioResult{Result: scenarios.Result{TeamID: "a", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: win, RepresentedAssignments: 3, ProofMethods: []clinching.ProofMethod{clinching.ProofAccessibleTiebreak}}}, Necessary: []scenarios.FixtureCondition{}, ProofMethods: []clinching.ProofMethod{clinching.ProofAccessibleTiebreak}, TotalAssignments: 9, CertifiedAssignments: 3, Rivals: rivals}}
+	result.Seeding = &scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, OpponentSeed: 2, Clauses: result.Clauses, Opponents: []scenarios.SeedOpponent{{TeamID: "b", PossibleResults: result.Clauses}}}}}
+
 	if _, err := db.ReplaceScenario(ctx, ScenarioRun{FixtureSnapshotID: syncRun.FixtureSnapshotID, QualificationRunID: qualification.Run.ID, SourceSyncRunID: syncRun.ID, Season: "2026", Stage: "Regular Season", RulesVersion: "test-v1", DefinitionVersion: scenarios.SeasonDefinitionVersion, Slate: slate, ExpectedResults: 1, WrittenResults: 1}, []ScenarioResult{result}); err != nil {
 		t.Fatal(err)
 	}
@@ -105,6 +107,12 @@ func TestRestOfSeasonScenarioRoundTripKeepsRivalSummary(t *testing.T) {
 	if string(got) != string(want) {
 		t.Fatalf("rivals = %s, want %s", got, want)
 	}
+	got, _ = json.Marshal(snapshot.Results[0].Seeding)
+	want, _ = json.Marshal(result.Seeding)
+	if string(got) != string(want) {
+		t.Fatalf("seeding = %s, want %s", got, want)
+	}
+
 }
 
 func TestQualificationRoundTrip(t *testing.T) {

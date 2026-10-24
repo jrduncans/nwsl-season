@@ -222,14 +222,21 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	snapshot := next
 	seasonSlate, seasonAvailable := scenarios.DefineSeasonSlate(scenarioScheduledGames(data.Games))
 	decisionDay := seasonAvailable && scenarios.CoversSameFixtures(next.Run.Slate, seasonSlate)
-	view.RestOfSeason = decisionDay || (seasonAvailable && r.URL.Query().Get("view") == clinchingViewRestOfSeason)
-	if seasonAvailable && !decisionDay {
+	seeding := seasonAvailable && r.URL.Query().Get("view") == "seeding"
+	view.RestOfSeason = decisionDay || (seasonAvailable && (r.URL.Query().Get("view") == clinchingViewRestOfSeason || seeding))
+	if seasonAvailable {
 		selected := clinchingViewNextMatchday
 		if view.RestOfSeason {
 			selected = clinchingViewRestOfSeason
 		}
-		view.ViewControl = &exploreSegmentGroup{Legend: "Scenarios for", Name: "view", Options: exploreSegments(selected,
-			exploreSegment{Value: clinchingViewNextMatchday, Label: "Next matchday"}, exploreSegment{Value: clinchingViewRestOfSeason, Label: "Rest of season"})}
+		options := []exploreSegment{{Value: clinchingViewRestOfSeason, Label: "Rest of season"}, {Value: "seeding", Label: "Seeding"}}
+		if !decisionDay {
+			options = append([]exploreSegment{{Value: clinchingViewNextMatchday, Label: "Next matchday"}}, options...)
+		}
+		if seeding {
+			selected = "seeding"
+		}
+		view.ViewControl = &exploreSegmentGroup{Legend: "Scenarios for", Name: "view", Options: exploreSegments(selected, options...)}
 	}
 	if view.RestOfSeason {
 		season, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.SeasonDefinitionVersion)
@@ -238,6 +245,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !found {
+			if seeding {
+				a.renderSeeding(w, r, view, rules, data, cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: seasonSlate}}, teamLabels, games)
+				return
+			}
 			view.State = "Recalculation pending."
 			a.render(w, "clinching", view)
 			return
@@ -269,6 +280,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view.SlateGroups = fixtureGroups(slateData, a.options.Location)
+	if seeding {
+		a.renderSeeding(w, r, view, rules, data, snapshot, teamLabels, games)
+		return
+	}
 	// Playoff-elimination scenarios always come from the next slate.
 	eliminatedRows := []clinchingRowView{}
 	for _, v := range next.Results {
