@@ -76,6 +76,9 @@ type clinchingGroupView struct {
 	Rivals     []clinchingRivalView
 	RivalState string
 	MergeKey   string
+	// paths are the group's summary paths, kept even when they overflow the
+	// summary limit so a caller can describe them another way.
+	paths [][]scenarioRequirement
 }
 
 // mergeKey identifies a group's outside help, so own results with the same
@@ -409,6 +412,7 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 		}
 		sort.Slice(summaryPaths, func(i, j int) bool { return conjunctionKey(summaryPaths[i]) < conjunctionKey(summaryPaths[j]) })
 		summaryOverflow := len(summaryPaths) > options.SummaryLimit
+		paths := slices.Clone(summaryPaths)
 		summary := scenarioExpression{}
 		if !summaryOverflow {
 			for i, c := range summaryPaths {
@@ -427,7 +431,7 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 				help[i][j].Parts = requirementParts(r, "", teams, games)
 			}
 		}
-		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, Help: orderScenarioExpression(factorRequirements(help, 0))})
+		views = append(views, clinchingGroupView{Heading: heading, Own: g.own, Summary: summary, SummaryOverflow: summaryOverflow, Help: orderScenarioExpression(factorRequirements(help, 0)), paths: paths})
 	}
 	views = combineOwnSingleResults(combineOwnPointTotals(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games), teamID, headingTeams, games)
 	for i := range views {

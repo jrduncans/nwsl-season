@@ -652,6 +652,23 @@ impossible with that column's results. The Misses the playoffs row says
 "Possible" instead. A cell is exact: some integer scoreline with those results
 (and any fixed results) gives that seed and that opponent.
 
+### Likelihoods
+
+Each row, column and cell also shows a likelihood from Forecast Lab's default
+model, with the fixed results applied. The page runs that forecast through the
+shared forecast executor and its in-memory cache, with the catalog bracket's
+seed pairs; each simulated season records every team's seed, opponent and own
+results. Only exact possibilities are counted: a simulated pairing the exact
+search rules out is ignored, and a simulated finish that disciplinary points
+decide is not counted. A possible finish never shows 0%: under 0.5% shows
+"<1%", and "100%" appears only for the only possible finish. Opponents within a
+cell, and in the selected seed's opponent list, are ordered likeliest first.
+When the forecast is unavailable (busy, timed out, or no fixed bracket), the
+grid shows no likelihoods and says so.
+
+Without `finish`, the page selects the likeliest finish and shows its
+conditions, marked as the most likely; the shared link stays without `finish`.
+
 ### Fixing results
 
 The shared Forecast Lab scenario builder optionally fixes results with the same
@@ -672,9 +689,15 @@ rejected.
 
 Conditions are grouped by the team's own results with the rest-of-season
 presentation (merged results, grouped rival summaries, score conditions written
-out in full). A group lists at most **five alternatives**; a longer group says
-there are too many ways to list and asks for more fixed results. There is no
-paging.
+out in full). A group lists at most **five alternatives**. A longer group
+states how many ways there are and summarizes them instead: the results every
+way needs, then the results each way needs some of ("Each way also needs 2 to
+4 of these"), then the matches whose needed result differs between ways
+("Also depends on KC vs WAS") and whether some need tiebreaker score
+conditions. Each summarized result is the union of what the ways that mention
+its match allow, so the statements are necessary conditions, not a recipe.
+Points totals across a team's two matches stay as they are. The page says to fix results in these matches to see the
+exact ways. There is no paging.
 
 An alternative that needs some team to gain four or more goals on a rival in a
 tiebreaker is a long shot. Long shots are not listed when anything else is
@@ -720,7 +743,8 @@ satisfied result conditions. Score conditions remain, including on fixed
 matches. An opponent disappears when no stored assignment survives; a seed with
 no opponents disappears too. The grid applies each own-result combination the
 same way. The original cached slices are not mutated. Page requests run no
-season search, score solver, simulation or ASA request.
+season search, score solver or ASA request; the only simulation is the Forecast
+Lab one behind the likelihoods, shared and cached as Forecast Lab's own.
 
 Unavailable disciplinary points are never used to assert an exact seed or an
 opponent; reachable affected finishes carry the existing note. A budget-limited

@@ -246,7 +246,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 		if !found {
 			if seeding {
-				a.renderSeeding(w, r, view, data, cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: seasonSlate}}, teamLabels, games)
+				a.renderSeeding(w, r, view, rules, data, cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: seasonSlate}}, teamLabels, games)
 				return
 			}
 			view.State = "Recalculation pending."
@@ -281,7 +281,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	}
 	view.SlateGroups = fixtureGroups(slateData, a.options.Location)
 	if seeding {
-		a.renderSeeding(w, r, view, data, snapshot, teamLabels, games)
+		a.renderSeeding(w, r, view, rules, data, snapshot, teamLabels, games)
 		return
 	}
 	// Playoff-elimination scenarios always come from the next slate.

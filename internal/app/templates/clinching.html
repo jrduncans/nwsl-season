@@ -99,26 +99,34 @@
   {{with .Legend}}<p class="note">{{.}}</p>{{end}}
   <div class="table-scroll seeding-grid-scroll" tabindex="0" role="region" aria-label="Possible finishes and first-round opponents">
   <table class="seeding-grid">
-    <thead><tr><th scope="col">Finish</th>{{range .Columns}}<th scope="col">{{range $i, $line := .Lines}}{{if $i}}<span class="seeding-or">or</span>{{end}}<span class="seeding-own{{if $.Seeding.Legend}} seeding-shorthand{{end}}">{{$line}}</span>{{end}}</th>{{end}}</tr></thead>
+    <thead><tr><th scope="col">Finish</th>{{range .Columns}}<th scope="col">{{range $i, $line := .Lines}}{{if $i}}<span class="seeding-or">or</span>{{end}}<span class="seeding-own{{if $.Seeding.Legend}} seeding-shorthand{{end}}">{{$line}}</span>{{end}}{{with .Likelihood}}<span class="seeding-likelihood">{{.}}</span>{{end}}</th>{{end}}</tr></thead>
     <tbody>{{range .Rows}}<tr{{if .Selected}} class="seeding-selected"{{end}}>
-      <th scope="row"><a href="{{.URL}}"{{if .Selected}} aria-current="true"{{end}}>{{.Heading}}</a>{{with .Detail}}<span class="seeding-detail">{{.}}</span>{{end}}</th>
-      {{range .Cells}}<td>{{if .Opponents}}{{range $i, $o := .Opponents}}{{if $i}}, {{end}}{{$o}}{{end}}{{else if .Possible}}Possible{{else}}<span aria-hidden="true">—</span><span class="visually-hidden">Not possible</span>{{end}}</td>{{end}}
+      <th scope="row"><a href="{{.URL}}"{{if .Selected}} aria-current="true"{{end}}>{{.Heading}}</a>{{with .Detail}}<span class="seeding-detail">{{.}}</span>{{end}}{{with .Likelihood}}<span class="seeding-likelihood">{{.}}</span>{{end}}</th>
+      {{range .Cells}}<td>{{if .Opponents}}{{range $i, $o := .Opponents}}{{if $i}}, {{end}}{{$o}}{{end}}{{with .Likelihood}}<span class="seeding-likelihood">{{.}}</span>{{end}}{{else if .Possible}}{{with .Likelihood}}{{.}}{{else}}Possible{{end}}{{else}}<span aria-hidden="true">—</span><span class="visually-hidden">Not possible</span>{{end}}</td>{{end}}
     </tr>{{end}}</tbody>
   </table>
   </div>
-  <p class="note">Cells list possible first-round opponents. The higher seed normally hosts the first round; venue availability can change hosting. Choose a finish to see how it happens.</p>
+  <p class="note">Cells list possible first-round opponents{{if .LikelihoodModel}}, likeliest first, with the chance of that finish and those results from Forecast Lab’s {{.LikelihoodModel}} forecast{{if .Builder.FixedCount}}, given the fixed results{{end}}{{end}}. Every listed finish is possible, however unlikely. The higher seed normally hosts the first round; venue availability can change hosting. Choose a finish to see how it happens.{{with .LikelihoodNote}} {{.}}{{end}}</p>
   {{else}}<p>No certified finishes match these fixed results.</p>{{end}}
 </section>
 {{with .Conditions}}
 <section id="seeding-conditions" class="seeding-conditions" aria-labelledby="seeding-conditions-title">
   <div class="section-heading"><h2 id="seeding-conditions-title">{{.Heading}}</h2><a href="#seeding-title">All finishes ↑</a></div>
+  {{if .MostLikely}}<p class="seeding-most-likely">Most likely finish. Choose another in the table to see how it happens.</p>{{end}}
   {{if .Unavailable}}<p>Not possible with these results.</p>{{else}}
+  {{if .Opponents}}<p class="seeding-opponents"><strong>First-round opponent:</strong> {{range $i, $o := .Opponents}}{{if $i}}, {{end}}{{$o.Code}}{{with $o.Likelihood}} ({{.}}){{end}}{{end}}</p>{{end}}
   <p class="note">Score conditions count all remaining matches, including fixed results.{{if .OnlyBigSwing}} Every way needs a tiebreaker swing of {{$.Seeding.BigSwingGoals}} or more goals.{{end}}</p>
   {{$state := .State}}
   {{range .Groups}}
     <section class="clinching-result-group{{with .Tone}} clinching-result-{{.}}{{end}}">
       <h3>{{.Heading}}</h3>
-      {{if .SummaryOverflow}}<p class="clinching-result-state">{{$state}} if</p><p>Too many ways to list. Fix more results to narrow them down.</p>
+      {{if .SummaryOverflow}}<p class="clinching-result-state">{{$state}} in {{.Overflow.Ways}} ways</p>
+        {{with .Overflow}}
+        {{if .Always}}<p>Every way needs:</p><div class="clinching-summary">{{template "clinchingCombination" .Always}}</div>{{end}}
+        {{if .Some}}<p>{{.SomeText}}</p><ul class="seeding-some">{{range .Some}}<li>{{template "clinchingCombination" .}}</li>{{end}}</ul>{{end}}
+        {{if .Depends}}<p>Also depends on {{range $i, $m := .Depends}}{{if $i}}, {{end}}{{$m}}{{end}}{{if .Scores}}, and on tiebreaker score conditions{{end}}.</p>{{else if .Scores}}<p>Some ways also need tiebreaker score conditions.</p>{{end}}
+        {{end}}
+        <p class="note">Fix results in these matches to see the exact ways.</p>
       {{else if .GroupedSummary}}<p class="clinching-result-state">{{$state}} if all of:</p><div class="clinching-summary">{{template "clinchingGroupedSummary" .GroupedSummary}}</div>
       {{else if or .Summary.Conditions .Summary.Alternatives}}<p class="clinching-result-state">{{$state}} if</p><div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>
       {{else}}<p class="clinching-result-state clinching-result-state-certain">✓ {{$state}}</p>{{end}}

@@ -19,8 +19,13 @@ func TestPagesClinchingSeeding(t *testing.T) {
 		if err := expect.Locator(page.Locator(".seeding-grid")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
-		if got, err := page.Locator("#seeding-conditions").Count(); err != nil || got != 0 {
-			t.Fatalf("overview eagerly renders conditions: %d %v", got, err)
+		// Without a chosen finish, only the likeliest one's conditions render.
+		conditions, err := page.Locator("#seeding-conditions").Count()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mostLikely, err := page.Locator(".seeding-most-likely").Count(); err != nil || mostLikely != conditions {
+			t.Fatalf("conditions %d, most likely %d, %v", conditions, mostLikely, err)
 		}
 		assertSeedingDOMBudget(t, page)
 		if err := page.Locator(".seeding-grid tbody th a").First().Click(); err != nil {
