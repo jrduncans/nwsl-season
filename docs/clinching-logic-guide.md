@@ -404,8 +404,8 @@ pending match lacks a matchday, it is the most matches any team has left.
 | Matchdays left | Page |
 | --- | --- |
 | Three or more | Next-slate scenarios only, as before. |
-| Two (penultimate matchweek) | A segmented control, **Next matchday \| Rest of season**, defaulting to Next matchday. The view is the `view` query value (`next-matchday` or `rest-of-season`). |
-| One (decision day) | Rest of season only, with no control: the next slate is the rest of the season. Decision day means the two slates name the same matches. |
+| Two (penultimate matchweek) | A segmented control, **Next matchday \| Rest of season \| Seeding**, defaulting to Next matchday. The view is the `view` query value (`next-matchday`, `rest-of-season` or `seeding`). |
+| One (decision day) | **Rest of season \| Seeding**, defaulting to Rest of season: the next slate is the rest of the season. Decision day means the two slates name the same matches. |
 
 The playoff-elimination cards always come from the next-slate batch. There are no
 "misses out" cards for the rest of the season, and no line claiming the list is
@@ -615,10 +615,120 @@ the threshold, deferring to the clauses only in withheld rows. A scoreline where
 disciplinary points decide must carry the disciplinary note.
 
 The rest-of-season batch is stored beside the next-slate batch with its own
-definition version (`rest-of-season-v4`; the next slate is `next-slate-v6`), its
+definition version (`rest-of-season-v7`; the next slate is `next-slate-v6`), its
 slate source `rest_of_season`, and a `disciplinary_possible` flag per result.
 Clauses carry their score conditions in `clauses_json`; the rival summary is
 `rivals_json` (`null` when there is none).
+
+## Per-team seeding scenarios
+
+With two or fewer matchdays left, **Seeding** shows where the selected team can
+still finish in the playoff seeding and who it would play in the first round.
+`view=seeding&team=POR` is shareable; the team parameter uses the displayed team
+code. The picker includes only this season's participants. An omitted team
+selects the first team in the standings.
+
+### Possibilities grid
+
+The page leads with a grid. Each row is a seed the team can still reach, in
+order, with **Misses the playoffs** last when it is possible. The row heading
+states the seed and its catalog bracket pairing ("4th, hosts 5th";
+"5th, at 4th"). Hosting has the same venue-availability caveat as
+the home-playoff outcome.
+
+Each column is a group of the team's own remaining results. The page fixes each
+combination of the team's first three unfixed matches in turn (later matches
+stay open) and lists, per seed, the opponents still possible. Combinations with
+the same cells share a column. With one own match, a column heading writes its
+results in words ("Wins or draws at HOU"). With several, a note names the
+matches in kickoff order and headings use W/D/L shorthand per match ("W/D–L",
+with "any" for an open match), joined by "or" when a column needs several such
+products. A column that is exactly every combination with a points total in a
+range says so instead ("1 to 3 points"). A column covering every result says
+"Any result".
+
+A cell lists the possible first-round opponents, or is empty when the finish is
+impossible with that column's results. The Misses the playoffs row says
+"Possible" instead. A cell is exact: some integer scoreline with those results
+(and any fixed results) gives that seed and that opponent.
+
+### Fixing results
+
+The shared Forecast Lab scenario builder optionally fixes results with the same
+`p={game-id}:{h|d|a}` encoding (and twelve-result limit). Fixing the team's own
+match removes it from the columns; fixing any match removes opponents, cells
+and rows that can no longer happen. A team change, copy link, removal, or reset
+preserves the appropriate scenario state. The selected team and the builder's
+optional match-team filter are separate controls. A fixed win or draw leaves
+its score open.
+
+### Per-seed conditions
+
+A row heading links to that seed's conditions: `finish=4` selects fourth,
+`finish=miss` missing the playoffs. Conditions are for the seed, whoever the
+opponent is; the grid already shows the opponents. A selected finish that
+fixed results make impossible says so rather than failing; a malformed one is
+rejected.
+
+Conditions are grouped by the team's own results with the rest-of-season
+presentation (merged results, grouped rival summaries, score conditions written
+out in full). A group lists at most **five alternatives**; a longer group says
+there are too many ways to list and asks for more fixed results. There is no
+paging.
+
+An alternative that needs some team to gain four or more goals on a rival in a
+tiebreaker is a long shot. Long shots are not listed when anything else is
+possible; a line says other ways need such a swing. Own results that only long
+shots reach get their own heading ("If POR loses at HOU: Only with a tiebreaker
+swing of 4 or more goals"), so every own result the grid shows for the seed is
+accounted for. When every way is a long shot, the long shots are listed under
+the same five-alternative bound, with a note.
+
+The overview renders no conditions, and conditions use the clinching pages'
+compact team tokens only within the five-alternative bound. Browser journeys
+enforce limits on DOM elements and images at desktop width and 390px.
+
+### Calculation, persistence and filtering
+
+The background rest-of-season batch also searches exact ranks for every team,
+including teams whose playoff qualification is already certain. Exact ranks
+require both finishing ahead of enough rivals and behind the rest; they use the
+same symbolic score comparisons and multiway head-to-head handling as the
+threshold search. The missed-playoff calculation proves that at least the
+playoff-place count of rivals finish ahead, without demanding an exact place
+among the eliminated teams.
+
+Each seed stores the team's exact-rank conditions once, dropping alternatives
+that no integer scoreline satisfies. For each bracket seed pair and each
+opponent, the batch intersects the two teams' result assignments and checks
+their score conditions jointly. Remaining home and away goals are nonnegative
+integers, with a positive win margin, equal draw scores, or a negative loss
+margin. Exact Fourier–Motzkin elimination and integer branching handle the
+linear conditions, including the even goal-difference gains from a head-to-head
+match. Coefficient, expansion and work bounds leave a case unpublished with a
+limitation, never a guessed answer.
+
+An opponent stores only the exact union of result assignments with a feasible
+joint scoreline. This support drives the grid; it is not a claim that every
+scoreline with those results gives that pairing. Opponents' own rank conditions
+are not stored, which keeps the cache linear in the number of opponents and
+keeps the page from showing two lists the reader would have to reconcile.
+Missing the playoffs stores its conditions and its own support.
+
+On a page request, fixed results remove contradicting alternatives and drop
+satisfied result conditions. Score conditions remain, including on fixed
+matches. An opponent disappears when no stored assignment survives; a seed with
+no opponents disappears too. The grid applies each own-result combination the
+same way. The original cached slices are not mutated. Page requests run no
+season search, score solver, simulation or ASA request.
+
+Unavailable disciplinary points are never used to assert an exact seed or an
+opponent; reachable affected finishes carry the existing note. A budget-limited
+seeding result carries the additional-scenarios note and makes the batch
+retryable, even if its top-K results were complete. A missing matching batch
+shows **Recalculation pending**. Seeding is persisted in `seeding_json` on the
+playoff result (schema migration 18); the rest-of-season definition version
+invalidates older batches and older seeding shapes.
 
 ## Playoff-elimination scenarios
 

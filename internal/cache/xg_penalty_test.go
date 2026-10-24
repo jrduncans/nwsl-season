@@ -30,7 +30,7 @@ func TestMigrationFifteenKeepsExistingXGWithNullPenalties(t *testing.T) {
 		`ALTER TABLE game_xg DROP COLUMN home_penalty_xg`, `ALTER TABLE game_xg DROP COLUMN away_penalty_xg`,
 		`ALTER TABLE game_xg DROP COLUMN home_penalty_goals`, `ALTER TABLE game_xg DROP COLUMN away_penalty_goals`,
 		`ALTER TABLE game_xg DROP COLUMN home_penalty_shots`, `ALTER TABLE game_xg DROP COLUMN away_penalty_shots`,
-		`ALTER TABLE game_xg DROP COLUMN penalty_raw_json`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`,
+		`ALTER TABLE game_xg DROP COLUMN penalty_raw_json`, `DELETE FROM schema_migrations WHERE version=18`, `DELETE FROM schema_migrations WHERE version=17`, `DELETE FROM schema_migrations WHERE version=16`, `DELETE FROM schema_migrations WHERE version=15`,
 	} {
 		if _, err := db.db.ExecContext(ctx, statement); err != nil {
 			t.Fatalf("%s: %v", statement, err)
@@ -45,7 +45,7 @@ func TestMigrationFifteenKeepsExistingXGWithNullPenalties(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 17 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 18 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	state, ok, err := db.GameXGState(ctx, "one")

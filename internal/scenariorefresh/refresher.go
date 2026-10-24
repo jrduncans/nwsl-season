@@ -415,6 +415,41 @@ func (r Refresher) calculate(ctx context.Context, teams []cache.Team, games []ca
 			r.report(Progress{Phase: "finished", TeamID: t.Team.ID, Achievement: a, Completed: completed, Total: len(table) * len(ach), Elapsed: duration, BatchElapsed: time.Since(batchStarted), State: v.State})
 		}
 	}
+
+	if kind.definitionVersion == scenarios.SeasonDefinitionVersion {
+		if entry, ok := competition.Lookup(r.Rules.Season, "Playoffs"); ok && entry.BracketFormat != nil && entry.BracketFormat.AdvancementPolicy == competition.AdvancementFixed {
+			pairs := [][2]int{}
+			for _, slot := range entry.BracketFormat.Slots {
+				if slot.SeedPair != nil {
+					pairs = append(pairs, *slot.SeedPair)
+				}
+			}
+			// Test/custom rules may have a different playoff threshold from the catalog.
+			places := 0
+			for _, a := range r.Rules.Achievements {
+				if a.ID == competition.AchievementPlayoffs {
+					places = a.TopK
+				}
+			}
+			complete := len(domainTeams) == r.Rules.ExpectedTeams
+			for _, baseline := range q.Statuses {
+				if baseline.Method == clinching.ProofIncompleteSchedule {
+					complete = false
+				}
+			}
+			if complete && places == 2*len(pairs) && len(domainTeams) >= places {
+				seeding, err := scenarios.GenerateSeeding(ctx, domainTeams, domainGames, slate, pairs)
+				if err != nil {
+					return calculated{}, recordCalculationException(err, telemetry.ErrorTypeCalculationFailure)
+				}
+				for i := range rows {
+					if rows[i].Achievement == competition.AchievementPlayoffs {
+						rows[i].Seeding = seeding[rows[i].TeamID]
+					}
+				}
+			}
+		}
+	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].TeamID == rows[j].TeamID {
 			return rows[i].Achievement < rows[j].Achievement

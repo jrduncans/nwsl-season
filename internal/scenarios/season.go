@@ -165,6 +165,9 @@ type seasonGame struct {
 }
 
 type seasonSearch struct {
+	// exact asks for exactly TopK rather than at most TopK.
+	exact     bool
+	minimum   bool
 	ctx       context.Context
 	slateSize int
 	target    int
@@ -357,6 +360,22 @@ func (s *seasonSearch) walk(active uint64) {
 		member := &s.members[i]
 		member.diag.SearchNodes++
 		switch {
+		case s.minimum && certainlyAhead >= member.achievement.TopK:
+			member.emit(s.current, seasonLabel{method: clinching.ProofCheapBound})
+			member.certified += represented
+			active &^= bit
+		case s.minimum && possiblyAhead < member.achievement.TopK:
+			active &^= bit
+		case s.minimum:
+		case s.exact && (certainlyAhead >= member.achievement.TopK || possiblyAhead < member.achievement.TopK-1):
+			member.diag.OpportunityPrunes++
+			active &^= bit
+		case s.exact && certainlyAhead == possiblyAhead && certainlyAhead == member.achievement.TopK-1:
+			member.emit(s.current, seasonLabel{method: clinching.ProofCheapBound})
+			member.certified += represented
+			active &^= bit
+		case s.exact:
+			// The threshold bounds alone cannot settle this exact place.
 		case certainlyAhead >= member.achievement.TopK:
 			member.diag.OpportunityPrunes++
 			active &^= bit
@@ -430,7 +449,9 @@ func (s *seasonSearch) leaf(active uint64, ahead, represented int) {
 		if len(levels) > maxSeasonLevelRivals {
 			// Count every level rival as finishing ahead: what still holds is
 			// certain, and the rest is left unclaimed.
-			set = s.chooseSimple(simple, len(levels), slots)
+			if !s.exact && !s.minimum {
+				set = s.chooseSimple(simple, len(levels), slots)
+			}
 			set.unresolved = true
 		} else {
 			set = s.levelAlternatives(levels, make([]int, 0, len(levels)), simple, slots)

@@ -752,3 +752,30 @@ th:nth-child(2) { text-align: left; }
 .explore-goal-gap-tile > div:not(.explore-h2h-tile-label) { margin-top: .5rem; line-height: 1.4; }
 .explore-goal-gap-side > * { display: block; }
 .explore-goal-gap-heading { color: var(--muted); }
+
+.seeding-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-block: 1rem; }
+.seeding-team-picker { margin: 0; }
+.seeding-team-picker label { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.seeding-team-picker select { max-width: 100%; }
+.seeding-fixed-results { margin-block: 1rem 2rem; }
+.seeding-fixed-results > summary { color: var(--green); cursor: pointer; font-weight: 700; }
+.seeding-results { margin-block-start: 2rem; }
+.seeding-results > h2 { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.seeding-grid { width: 100%; border-collapse: collapse; }
+.seeding-grid th, .seeding-grid td { padding: .6rem .8rem; border-top: 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: normal; }
+.seeding-grid tbody tr:last-child > * { border-bottom: 0; }
+.seeding-grid thead th { font-size: .85rem; }
+.seeding-grid .seeding-own { display: block; }
+.seeding-grid .seeding-shorthand { white-space: nowrap; }
+.seeding-grid .seeding-or { display: block; color: var(--muted); font-weight: 400; }
+.seeding-grid tbody th a { font-weight: 800; white-space: nowrap; }
+.seeding-grid .seeding-detail { display: block; color: var(--muted); font-size: .8rem; font-weight: 400; }
+.seeding-grid tr.seeding-selected > * { background: var(--green-soft); }
+@media (max-width: 40rem) {
+  .seeding-grid th, .seeding-grid td { padding: .5rem .45rem; font-size: .85rem; }
+  .seeding-grid thead th { font-size: .78rem; }
+}
+.seeding-conditions { margin-block: 2rem; scroll-margin-top: 1rem; }
+.seeding-conditions > .section-heading { align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }
+.seeding-conditions > .section-heading h2 { margin: 0; }
+.seeding-conditions .clinching-result-group h3 { margin: 0; color: var(--ink); font-size: 1rem; }

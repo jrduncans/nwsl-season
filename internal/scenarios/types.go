@@ -19,7 +19,7 @@ const DefinitionVersion = "next-slate-v6"
 // SeasonDefinitionVersion identifies rest-of-season results, which cover every
 // remaining match and may carry score conditions. They are stored as a
 // separate batch beside the next-slate batch for the same snapshot.
-const SeasonDefinitionVersion = "rest-of-season-v4"
+const SeasonDefinitionVersion = "rest-of-season-v7"
 
 const (
 	LimitationBudgetExhausted = "scenario computation budget exhausted"
@@ -170,14 +170,15 @@ type Result struct {
 	DisciplinaryPossible bool
 	// Rivals restates a rest-of-season clinch one rival at a time, when that
 	// is exact. It describes the same scorelines as Clauses.
-	Rivals *RivalSummary
+	Seeding *SeedingResult
+	Rivals  *RivalSummary
 }
 
 // BudgetLimited reports whether a result came from an incomplete search. A
 // partial result may still contain sufficient clauses, but is retried so a
 // later run can discover more of them.
 func (r Result) BudgetLimited() bool {
-	return r.Limitation == LimitationBudgetExhausted || r.Limitation == LimitationBudgetPartial
+	return r.Limitation == LimitationBudgetExhausted || r.Limitation == LimitationBudgetPartial || (r.Seeding != nil && r.Seeding.Limitation == LimitationBudgetPartial)
 }
 
 func canonicalOutcomes(in []clinching.Outcome) []clinching.Outcome {
@@ -287,6 +288,14 @@ func (r Result) Validate(slate Slate) error {
 	}
 	if r.DisciplinaryPossible && slate.Source != SourceRestOfSeason {
 		return fmt.Errorf("only rest-of-season results may note disciplinary points")
+	}
+	if r.Seeding != nil {
+		if slate.Source != SourceRestOfSeason || r.Achievement != competition.AchievementPlayoffs {
+			return fmt.Errorf("only season playoff results may carry seeding")
+		}
+		if err := r.Seeding.validate(r.TeamID, fixture); err != nil {
+			return err
+		}
 	}
 	if r.Rivals != nil {
 		if slate.Source != SourceRestOfSeason || r.State != OpportunityCanClinch {

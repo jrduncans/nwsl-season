@@ -276,7 +276,18 @@ func (s *seasonSearch) settleLevels(levels []levelRival, states []int, simple []
 	// condition) can break: claim what holds even if every tied team
 	// finishes ahead, and flag what would hold if none did.
 	tie := func(ahead, level int, unresolved bool) alternativeSet {
+		if s.exact && level > 0 {
+			for extra := ahead; extra <= ahead+level; extra++ {
+				if len(choose(extra).alternatives) > 0 {
+					return alternativeSet{disciplinary: !unresolved, unresolved: unresolved}
+				}
+			}
+			return alternativeSet{}
+		}
 		worst, best := choose(ahead+level), choose(ahead)
+		if s.minimum {
+			worst, best = best, worst
+		}
 		if alternativesKey(worst.alternatives) != alternativesKey(best.alternatives) {
 			if unresolved {
 				worst.unresolved = true
@@ -301,7 +312,27 @@ func (s *seasonSearch) settleLevels(levels []levelRival, states []int, simple []
 		}
 		// Their remaining matches decide head-to-head goals: the target
 		// wins it with a head-to-head gain above -h2hNow.
+		if s.exact {
+			out := alternativeSet{}
+			for _, branch := range []struct{ extra, team, rival, minimum int }{
+				{0, t, lr.rival, -lr.h2hNow + 1},
+				{1, lr.rival, t, lr.h2hNow + 1},
+			} {
+				set := choose(branch.extra)
+				out.unresolved = out.unresolved || set.unresolved
+				for _, alternative := range set.alternatives {
+					out.alternatives = append(out.alternatives, append(s.condition(branch.team, branch.rival, s.level(branch.team, branch.rival, MeasureHeadToHeadGoals, branch.minimum, false)), alternative...))
+				}
+			}
+			out.disciplinary = len(out.alternatives) > 0 && lr.h2hLow <= 0 && lr.h2hHigh >= 0
+			return out
+		}
 		worst, best := choose(1), choose(0)
+		team, rival, minimum := t, lr.rival, -lr.h2hNow+1
+		if s.minimum {
+			worst, best = best, worst
+			team, rival, minimum = lr.rival, t, lr.h2hNow+1
+		}
 		out := worst
 		covered := map[string]bool{}
 		for _, alternative := range worst.alternatives {
@@ -313,7 +344,7 @@ func (s *seasonSearch) settleLevels(levels []levelRival, states []int, simple []
 				continue
 			}
 			extra = true
-			out.alternatives = append(out.alternatives, append(s.condition(t, lr.rival, s.level(t, lr.rival, MeasureHeadToHeadGoals, -lr.h2hNow+1, false)), alternative...))
+			out.alternatives = append(out.alternatives, append(s.condition(team, rival, s.level(team, rival, MeasureHeadToHeadGoals, minimum, false)), alternative...))
 		}
 		out.unresolved = out.unresolved || best.unresolved
 		out.disciplinary = extra && lr.h2hLow <= 0 && lr.h2hHigh >= 0
@@ -361,6 +392,9 @@ func (s *seasonSearch) settleLevels(levels []levelRival, states []int, simple []
 // it must finish ahead of enough of the conditional ones that at most slots
 // teams finish ahead of it, counting extra from the level rivals.
 func (s *seasonSearch) chooseSimple(simple []pairResult, extra, slots int) alternativeSet {
+	if s.exact || s.minimum {
+		return s.chooseExact(simple, extra, slots)
+	}
 	behind, conditional := extra, []ScoreCondition{}
 	for _, pair := range simple {
 		switch pair.verdict {
@@ -424,7 +458,15 @@ func joinHeadToHead(conditions []ScoreCondition) []ScoreCondition {
 	out := make([]ScoreCondition, 0, len(conditions))
 	for _, condition := range conditions {
 		if len(condition.Levels) == 1 && condition.Levels[0].Measure == MeasureHeadToHeadGoals {
-			continue
+			joined := false
+			for _, other := range conditions {
+				if other.TeamID == condition.TeamID && other.RivalID == condition.RivalID && other.Levels[0].Measure != MeasureHeadToHeadGoals {
+					joined = true
+				}
+			}
+			if joined {
+				continue
+			}
 		}
 		for _, other := range conditions {
 			if len(other.Levels) == 1 && other.Levels[0].Measure == MeasureHeadToHeadGoals && other.TeamID == condition.TeamID && other.RivalID == condition.RivalID {

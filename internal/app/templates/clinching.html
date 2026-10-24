@@ -62,8 +62,9 @@
 
 {{define "clinching"}}{{template "head" .}}
 <div class="title-row"><div>{{template "seasonContext" .}}<h1>Clinching scenarios</h1></div></div>
-{{with .ViewControl}}<form method="get" class="clinching-view-controls" data-auto-submit>{{template "segmented" .}}<noscript><button class="button" type="submit">Apply</button></noscript></form>{{end}}
-{{if .State}}<p class="data-warning">{{.State}}</p>{{else if or .Actionable .Elimination}}<details class="clinching-slate"><summary>Scenarios cover {{if not .Slate.StartsAtUTC.IsZero}}<time data-local-date="{{.SlateStartsAtUTC}}">{{.SlateStartDate}}</time>{{if ne .SlateStartDate .SlateLatestDate}} – <time data-local-date="{{.SlateLatestUTC}}">{{.SlateLatestDate}}</time>{{end}} · {{end}}<span class="clinching-slate-toggle">{{len .Slate.FixtureIDs}} match{{if ne (len .Slate.FixtureIDs) 1}}es{{end}}</span></summary>{{range .SlateGroups}}<section class="fixture-group"><h3>{{.Label}}</h3><ul class="fixtures">{{range .Games}}<li><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{if and (not .Remaining) (not .Completed)}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul></section>{{end}}</details>{{end}}
+{{with .ViewControl}}<form method="get" class="clinching-view-controls" data-auto-submit>{{template "segmented" .}}{{with $.Seeding}}<input type="hidden" name="team" value="{{.TeamCode}}">{{range .Builder.StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}{{end}}<noscript><button class="button" type="submit">Apply</button></noscript></form>{{end}}
+{{if .State}}{{if not .Seeding}}<p class="data-warning">{{.State}}</p>{{end}}{{else if or .Actionable .Elimination}}<details class="clinching-slate"><summary>Scenarios cover {{if not .Slate.StartsAtUTC.IsZero}}<time data-local-date="{{.SlateStartsAtUTC}}">{{.SlateStartDate}}</time>{{if ne .SlateStartDate .SlateLatestDate}} – <time data-local-date="{{.SlateLatestUTC}}">{{.SlateLatestDate}}</time>{{end}} · {{end}}<span class="clinching-slate-toggle">{{len .Slate.FixtureIDs}} match{{if ne (len .Slate.FixtureIDs) 1}}es{{end}}</span></summary>{{range .SlateGroups}}<section class="fixture-group"><h3>{{.Label}}</h3><ul class="fixtures">{{range .Games}}<li><time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time>{{template "teamName" .HomeTeam}}<strong>{{if .Completed}}{{.Score}}{{else}}vs{{end}}</strong>{{template "teamName" .AwayTeam}}{{if and (not .Remaining) (not .Completed)}}<span class="scheduled">{{.Status}}</span>{{end}}</li>{{end}}</ul></section>{{end}}</details>{{end}}
+{{if .Seeding}}{{template "clinchingSeeding" .}}{{else}}
 {{if and .RestOfSeason (or .AlreadyClinched .Eliminated)}}<details class="clinching-status-overview"><summary>Already clinched or eliminated</summary><div>{{template "clinchingStatuses" .}}</div></details>{{else}}{{template "clinchingStatuses" .}}{{end}}
 {{if not .State}}
   {{if .Actionable}}<section class="clinching-category"><h2>Clinching scenarios</h2>{{range .ActionableTeams}}<article class="clinching-opportunity clinching-opportunity-clinching"><h3 class="clinching-opportunity-heading"><span class="clinching-team-identity">{{template "teamName" .Team}}</span></h3>{{range .Paths}}<section class="clinching-outcome"><h4 class="clinching-outcome-heading"><span class="clinching-status-badge">Can clinch {{.Achievement}}</span></h4>{{template "clinchingClauses" .}}{{if .Necessary}}<p>Every clinching scenario requires:</p><ul>{{range .Necessary}}<li>{{.}}</li>{{end}}</ul>{{end}}{{if .Disciplinary}}<p class="note">Disciplinary points may decide some finishes; those scenarios are not listed.</p>{{end}}{{template "noHelpPath" .}}</section>{{end}}</article>{{end}}</section>{{end}}
@@ -71,4 +72,62 @@
   {{if .NoHelpTeams}}<section class="clinching-no-help"><div class="clinching-section-heading"><div><h2>No-help scenarios</h2><p class="note">These scenarios may include matches after this slate. They depend only on that team’s results; no other match needs a particular outcome.</p></div></div><div class="clinching-team-list">{{range .NoHelpTeams}}<article class="clinching-team-card"><h3>{{template "teamName" .Team}}</h3><ul class="clinching-paths">{{range .Paths}}<li>{{template "noHelpTeamPath" .}}</li>{{end}}</ul></article>{{end}}</div></section>{{end}}
   {{if not .Actionable}}{{if not .NoHelpTeams}}{{if not .Elimination}}<p>{{if .RestOfSeason}}No teams can clinch in the rest of the season.{{else}}No teams can clinch during this slate.{{end}}</p>{{end}}{{end}}{{end}}
 {{end}}
+{{end}}
 {{template "foot" .}}{{end}}
+
+{{define "clinchingSeeding"}}
+{{with .Seeding}}
+<div class="seeding-controls">
+<form method="get" class="seeding-team-picker" data-auto-submit>
+  <input type="hidden" name="view" value="seeding">{{range .Builder.StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+  <label for="seeding-team">Team <select id="seeding-team" name="team">{{range .Teams}}<option value="{{.ID}}"{{if eq $.Seeding.TeamCode .ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  <noscript><button type="submit" class="button">Show seeding</button></noscript>
+</form>
+<div class="title-actions"><a class="button scenario-copy" href="{{.Builder.CanonicalPath}}" data-copy-scenario><span data-copy-scenario-label>Copy link</span></a><span class="visually-hidden" data-scenario-copy-status role="status" aria-live="polite"></span></div>
+</div>
+<details class="seeding-fixed-results"{{if .Builder.FixedCount}} open{{end}}>
+  <summary>Fix results <span class="note">{{if .Builder.FixedCount}}· {{.Builder.FixedCount}} fixed{{else}}(optional){{end}}</span></summary>
+  {{template "scenarioBuilder" .Builder}}
+</details>
+{{end}}
+{{if .State}}<p class="data-warning">{{.State}}</p>{{else}}{{with .Seeding}}
+<section class="seeding-results" aria-labelledby="seeding-title">
+  <h2 id="seeding-title">{{template "teamName" .Team}}</h2>
+  {{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}
+  {{if .Disciplinary}}<p class="note">Disciplinary points may decide some finishes; those scenarios are not listed.</p>{{end}}
+  {{if .Rows}}
+  {{with .Legend}}<p class="note">{{.}}</p>{{end}}
+  <div class="table-scroll seeding-grid-scroll" tabindex="0" role="region" aria-label="Possible finishes and first-round opponents">
+  <table class="seeding-grid">
+    <thead><tr><th scope="col">Finish</th>{{range .Columns}}<th scope="col">{{range $i, $line := .Lines}}{{if $i}}<span class="seeding-or">or</span>{{end}}<span class="seeding-own{{if $.Seeding.Legend}} seeding-shorthand{{end}}">{{$line}}</span>{{end}}</th>{{end}}</tr></thead>
+    <tbody>{{range .Rows}}<tr{{if .Selected}} class="seeding-selected"{{end}}>
+      <th scope="row"><a href="{{.URL}}"{{if .Selected}} aria-current="true"{{end}}>{{.Heading}}</a>{{with .Detail}}<span class="seeding-detail">{{.}}</span>{{end}}</th>
+      {{range .Cells}}<td>{{if .Opponents}}{{range $i, $o := .Opponents}}{{if $i}}, {{end}}{{$o}}{{end}}{{else if .Possible}}Possible{{else}}<span aria-hidden="true">—</span><span class="visually-hidden">Not possible</span>{{end}}</td>{{end}}
+    </tr>{{end}}</tbody>
+  </table>
+  </div>
+  <p class="note">Cells list possible first-round opponents. The higher seed normally hosts the first round; venue availability can change hosting. Choose a finish to see how it happens.</p>
+  {{else}}<p>No certified finishes match these fixed results.</p>{{end}}
+</section>
+{{with .Conditions}}
+<section id="seeding-conditions" class="seeding-conditions" aria-labelledby="seeding-conditions-title">
+  <div class="section-heading"><h2 id="seeding-conditions-title">{{.Heading}}</h2><a href="#seeding-title">All finishes ↑</a></div>
+  {{if .Unavailable}}<p>Not possible with these results.</p>{{else}}
+  <p class="note">Score conditions count all remaining matches, including fixed results.{{if .OnlyBigSwing}} Every way needs a tiebreaker swing of {{$.Seeding.BigSwingGoals}} or more goals.{{end}}</p>
+  {{$state := .State}}
+  {{range .Groups}}
+    <section class="clinching-result-group{{with .Tone}} clinching-result-{{.}}{{end}}">
+      <h3>{{.Heading}}</h3>
+      {{if .SummaryOverflow}}<p class="clinching-result-state">{{$state}} if</p><p>Too many ways to list. Fix more results to narrow them down.</p>
+      {{else if .GroupedSummary}}<p class="clinching-result-state">{{$state}} if all of:</p><div class="clinching-summary">{{template "clinchingGroupedSummary" .GroupedSummary}}</div>
+      {{else if or .Summary.Conditions .Summary.Alternatives}}<p class="clinching-result-state">{{$state}} if</p><div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>
+      {{else}}<p class="clinching-result-state clinching-result-state-certain">✓ {{$state}}</p>{{end}}
+    </section>
+  {{end}}
+  {{range .LongShotOnly}}<section class="clinching-result-group"><h3>{{.}}</h3><p>Only with a tiebreaker swing of {{$.Seeding.BigSwingGoals}} or more goals.</p></section>{{end}}
+  {{if .BigSwing}}<p class="seeding-big-swing">Other ways need a tiebreaker swing of {{$.Seeding.BigSwingGoals}} or more goals; they aren’t listed.</p>{{end}}
+  {{end}}
+</section>
+{{end}}
+{{end}}{{end}}
+{{end}}

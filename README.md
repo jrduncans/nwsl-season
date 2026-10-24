@@ -31,7 +31,8 @@ from the cached matches when a season page or CLI report is requested.
 - Remaining schedule difficulty with raw, venue-adjusted, and relative
   schedule-load-adjusted comparisons.
 - Qualification proofs for the Shield, a home playoff game, and the playoffs.
-- Actionable clinching and elimination scenarios for the next slate.
+- Actionable clinching and elimination scenarios for the next slate, plus late-season
+  score conditions and per-team playoff seeds and opponents with fixed-result filters.
 - Forecast Lab with Current Pace, Results Poisson, and xG Poisson models,
   including the selected recovery-time and accumulated-load adjustment, a
   non-default variant that rates teams on non-penalty xG, and Championship

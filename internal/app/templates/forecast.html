@@ -74,15 +74,28 @@
   </div>
 </section>
 
+{{template "scenarioBuilder" .}}
+
+<details class="forecast-method"><summary>What this forecast considers</summary>
+  {{range .Models}}{{if .Selected}}<p><strong>Data considered:</strong> {{.Inputs}}</p><p><strong>At a high level:</strong> {{.Assumptions}}</p>{{end}}{{end}}
+  <p>It estimates each remaining match, then summarizes many possible final tables.</p>
+  {{if .HasChampionship}}<p>Championship odds continue each simulated table through the eight-team bracket. The higher seed hosts the quarterfinal and semifinal in the model; the designated-site final averages both home assignments. A match tied after 90 minutes advances a team using the model’s relative win chances as an approximation for extra time and penalties. Future playoff dates and venue changes are not known to the model.</p>{{end}}
+  <p>When you set a win, draw, or loss, the exact score remains open. That can leave tiebreaks uncertain.</p>
+</details>
+{{template "foot" .}}{{end}}
+
+{{define "forecastFixtureOption"}}<option value="{{.ID}}" data-local-time="{{.KickoffUTC}}" data-kickoff-fallback="{{.Kickoff}}" data-home-team-id="{{.HomeTeamID}}" data-away-team-id="{{.AwayTeamID}}" data-home-team="{{.Home.Name}}" data-away-team="{{.Away.Name}}" data-fixture-label="{{.Home.Name}} vs {{.Away.Name}}" data-home-label="Home vs {{.Away.Name}}" data-away-label="Away at {{.Home.Name}}">{{.Kickoff}} · {{.Home.Name}} vs {{.Away.Name}}</option>{{end}}
+
+{{define "scenarioBuilder"}}
 <section id="forecast-builder" class="forecast-builder" aria-labelledby="scenario-title">
   <div class="section-heading"><div><h2 id="scenario-title">Scenario</h2>{{if .CanAdd}}<p class="note">Choose a match and result. Add more if you like, then apply your scenario.</p>{{end}}</div></div>
   {{if .CanAdd}}
   <form id="forecast-update" method="get" action="{{.ForecastPath}}">
-    <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
+    {{if .SeedingTeam}}<input type="hidden" name="view" value="seeding"><input type="hidden" name="team" value="{{.SeedingTeam}}">{{else}}<input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<span id="forecast-pending-values"></span>
   </form>
   <form class="forecast-add" method="get" action="{{.ForecastPath}}" data-assumption-builder>
-    <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}<input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
-    <label for="forecast-team"><span>Filter by team <span class="note">(optional)</span></span><select id="forecast-team" name="team"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    {{if .SeedingTeam}}<input type="hidden" name="view" value="seeding"><input type="hidden" name="team" value="{{.SeedingTeam}}">{{else}}<input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{end}}<input type="hidden" name="action" value="add">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
+    <label for="forecast-team"><span>Filter by team <span class="note">(optional)</span></span><select id="forecast-team" name="{{if .SeedingTeam}}filter{{else}}team{{end}}"><option value="">All teams</option>{{range .Teams}}<option value="{{.ID}}" {{if eq $.FilteredTeam .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
     <label for="forecast-fixture"><span>Choose a match</span><select id="forecast-fixture" name="fixture" required>{{range .Fixtures}}{{template "forecastFixtureOption" .}}{{end}}</select></label>
     <template id="forecast-all-fixtures">{{range .AllFixtures}}{{template "forecastFixtureOption" .}}{{end}}</template>
     <fieldset class="forecast-outcomes"><legend>Assume result</legend><label><input type="radio" name="outcome" value="h" checked><span data-forecast-outcome="h">{{.DefaultHomeTeam}} win</span></label><label><input type="radio" name="outcome" value="d"><span>Draw</span></label><label><input type="radio" name="outcome" value="a"><span data-forecast-outcome="a">{{.DefaultAwayTeam}} win</span></label></fieldset>
@@ -95,6 +108,7 @@
     <ul id="forecast-pending-list" class="forecast-assumptions"></ul>
     <button class="button" id="forecast-update-button" type="submit" form="forecast-update" disabled>Apply scenario</button>
   </section>
+  {{else if .AtFixedLimit}}<p>Twelve results are fixed. Remove a result to choose another match.</p>
   {{else if .HasTeamFilter}}<p>No unfixed matches match this team.</p>
   {{else if eq .Remaining 0}}<p>No matches remain. This is the final table, subject to available tiebreak data.</p>
   {{else}}<p>All available matches are fixed.</p>{{end}}
@@ -103,16 +117,8 @@
   <h3 id="assumptions-title">Fixed results</h3>
   <ul class="forecast-assumptions" aria-labelledby="assumptions-title">{{range .Assumptions}}<li><span><strong>{{.Outcome}}</strong> · <time data-local-time="{{.KickoffUTC}}">{{.Kickoff}}</time> · {{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul>
   <p><a href="{{.ResetPath}}">Reset all assumptions</a></p>
-  {{else}}<p class="note">No fixed results. Every remaining match is simulated.</p>{{end}}
+  {{else}}<p class="note">{{if .SeedingTeam}}No fixed results. Every remaining result is possible.{{else}}No fixed results. Every remaining match is simulated.{{end}}</p>{{end}}
   </div>
 </section>
 
-<details class="forecast-method"><summary>What this forecast considers</summary>
-  {{range .Models}}{{if .Selected}}<p><strong>Data considered:</strong> {{.Inputs}}</p><p><strong>At a high level:</strong> {{.Assumptions}}</p>{{end}}{{end}}
-  <p>It estimates each remaining match, then summarizes many possible final tables.</p>
-  {{if .HasChampionship}}<p>Championship odds continue each simulated table through the eight-team bracket. The higher seed hosts the quarterfinal and semifinal in the model; the designated-site final averages both home assignments. A match tied after 90 minutes advances a team using the model’s relative win chances as an approximation for extra time and penalties. Future playoff dates and venue changes are not known to the model.</p>{{end}}
-  <p>When you set a win, draw, or loss, the exact score remains open. That can leave tiebreaks uncertain.</p>
-</details>
-{{template "foot" .}}{{end}}
-
-{{define "forecastFixtureOption"}}<option value="{{.ID}}" data-local-time="{{.KickoffUTC}}" data-kickoff-fallback="{{.Kickoff}}" data-home-team-id="{{.HomeTeamID}}" data-away-team-id="{{.AwayTeamID}}" data-home-team="{{.Home.Name}}" data-away-team="{{.Away.Name}}" data-fixture-label="{{.Home.Name}} vs {{.Away.Name}}" data-home-label="Home vs {{.Away.Name}}" data-away-label="Away at {{.Home.Name}}">{{.Kickoff}} · {{.Home.Name}} vs {{.Away.Name}}</option>{{end}}
+{{end}}
