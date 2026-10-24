@@ -1926,6 +1926,8 @@ type fullFakeStore struct {
 	qualification cache.QualificationSnapshot
 	scenario      cache.ScenarioSnapshot
 	scenarioFound *bool
+	// seasonScenario is the rest-of-season batch; nil means none is stored.
+	seasonScenario *cache.ScenarioSnapshot
 }
 
 type recordingFullFakeStore struct {
@@ -1957,7 +1959,13 @@ func (f fullFakeStore) QualificationForSnapshot(context.Context, string, string)
 	return f.qualification, true, nil
 }
 
-func (f fullFakeStore) ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error) {
+func (f fullFakeStore) ScenarioForSnapshot(_ context.Context, _, _, definitionVersion string) (cache.ScenarioSnapshot, bool, error) {
+	if definitionVersion == scenarios.SeasonDefinitionVersion {
+		if f.seasonScenario == nil {
+			return cache.ScenarioSnapshot{}, false, nil
+		}
+		return *f.seasonScenario, true, nil
+	}
 	if f.scenarioFound != nil {
 		return f.scenario, *f.scenarioFound, nil
 	}

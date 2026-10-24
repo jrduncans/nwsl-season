@@ -29,7 +29,7 @@ document.addEventListener("change", (event) => {
   }
 
   const form = event.target.closest("form[data-auto-submit]");
-  if (!form || event.target.tagName !== "SELECT") return;
+  if (!form || !(event.target.tagName === "SELECT" || event.target.type === "radio")) return;
   form.requestSubmit();
 });
 

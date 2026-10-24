@@ -128,6 +128,15 @@ One combination of match results that on its own is enough for a team to clinch,
 or be eliminated from, a season outcome. A team can have several.
 _Avoid_: path, clause
 
+**Rest of season**:
+The slate of every remaining regular-season match, used once two or fewer
+matchdays are left. Its scenarios can add score conditions.
+
+**Score condition**:
+A requirement on goals that a rest-of-season scenario adds when a team ends
+level on points with a rival: a goal-difference gain over the remaining matches,
+then goals scored or head-to-head goals scored if that gain is exactly level.
+
 **Outside help**:
 Results a scenario needs from matches the team is not playing in.
 

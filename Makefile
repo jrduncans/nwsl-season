@@ -43,8 +43,8 @@ test-explore:
 # Clinching checks: see docs/clinching-logic-guide.md.
 .PHONY: test-clinching
 test-clinching:
-	go test ./internal/scenarios ./internal/clinching ./internal/qualification
-	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode)'
+	go test ./internal/scenarios ./internal/clinching ./internal/qualification ./internal/scenariorefresh
+	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode|ScoreCondition)'
 
 # Browser journeys (build tag e2e) in headless Chromium; a plain `go test ./...` never needs a browser.
 # Run `make e2e-install` once first (and again after upgrading playwright-go); tests never download anything.

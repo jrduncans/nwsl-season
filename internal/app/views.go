@@ -568,6 +568,10 @@ type errorPage struct {
 }
 type clinchingPage struct {
 	seasonPage
+	// ViewControl switches between next-matchday and rest-of-season
+	// scenarios in the penultimate matchweek; RestOfSeason marks that view.
+	ViewControl      *exploreSegmentGroup
+	RestOfSeason     bool
 	State            string
 	Slate            scenarios.Slate
 	SlateStartsAtUTC string
@@ -600,6 +604,8 @@ type clinchingRowView struct {
 	NoHelpFixtures                     string
 	NoHelpFixtureCount                 int
 	AchievementRank, StandingsPosition int
+	// Disciplinary notes that unavailable disciplinary points may decide.
+	Disciplinary bool
 }
 
 type clinchingTeamView struct {

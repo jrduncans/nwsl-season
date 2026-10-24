@@ -206,7 +206,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view.AlreadyClinched = groupClinchingStatusRows(highestClinchedRows(alreadyClinchedRows))
-	snapshot, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion)
+	next, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.DefinitionVersion)
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -215,6 +215,38 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		view.State = "Recalculation pending."
 		a.render(w, "clinching", view)
 		return
+	}
+	// Rest-of-season scenarios exist once two or fewer matchdays are left. On
+	// decision day the next slate is the rest of the season, so only that
+	// view is shown.
+	snapshot := next
+	seasonSlate, seasonAvailable := scenarios.DefineSeasonSlate(scenarioScheduledGames(data.Games))
+	decisionDay := seasonAvailable && scenarios.CoversSameFixtures(next.Run.Slate, seasonSlate)
+	view.RestOfSeason = decisionDay || (seasonAvailable && r.URL.Query().Get("view") == clinchingViewRestOfSeason)
+	if seasonAvailable && !decisionDay {
+		selected := clinchingViewNextMatchday
+		if view.RestOfSeason {
+			selected = clinchingViewRestOfSeason
+		}
+		view.ViewControl = &exploreSegmentGroup{Legend: "Scenarios for", Name: "view", Options: exploreSegments(selected,
+			exploreSegment{Value: clinchingViewNextMatchday, Label: "Next matchday"}, exploreSegment{Value: clinchingViewRestOfSeason, Label: "Rest of season"})}
+	}
+	if view.RestOfSeason {
+		season, found, err := store.ScenarioForSnapshot(r.Context(), data.FixtureSnapshotID, rules.Version, scenarios.SeasonDefinitionVersion)
+		if err != nil {
+			a.renderError(w, r, err)
+			return
+		}
+		if !found {
+			view.State = "Recalculation pending."
+			a.render(w, "clinching", view)
+			return
+		}
+		snapshot = season
+	}
+	summaryLimit := maxScenarioSummaryPaths
+	if view.RestOfSeason {
+		summaryLimit = maxSeasonSummaryPaths
 	}
 	view.Slate = snapshot.Run.Slate
 	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
@@ -235,8 +267,9 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view.SlateGroups = fixtureGroups(slateData, a.options.Location)
+	// Playoff-elimination scenarios always come from the next slate.
 	eliminatedRows := []clinchingRowView{}
-	for _, v := range snapshot.Results {
+	for _, v := range next.Results {
 		team := teamViews[v.TeamID]
 		achievement := achievementPhrase(v.Achievement)
 		if v.AlreadyEliminated {
@@ -248,6 +281,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			}
 			view.Elimination = append(view.Elimination, row)
 		}
+	}
+	for _, v := range snapshot.Results {
+		team := teamViews[v.TeamID]
+		achievement := achievementPhrase(v.Achievement)
 		noHelp := ""
 		noHelpGuaranteed := false
 		noHelpPath := clinching.NoHelpPath{}
@@ -259,7 +296,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch && !noHelpGuaranteed {
 			continue
 		}
-		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Groups: clinchingGroupsWithHeadingTeams(v.Clauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}}
+		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Groups: clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, teamNames, games, summaryLimit), Necessary: []string{}, Disciplinary: v.DisciplinaryPossible}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
@@ -275,8 +312,11 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			view.NoHelp = append(view.NoHelp, row)
 			continue
 		}
-		if v.BudgetLimited() {
+		switch {
+		case v.BudgetLimited():
 			row.Limitation = "Scenario search was incomplete."
+		case v.Limitation == scenarios.LimitationSeasonMultiwayTie:
+			row.Limitation = "Scenarios where three or more teams finish level on points, goal difference, wins, goals scored and head-to-head points, and still play each other, are not listed."
 		}
 		view.Actionable = append(view.Actionable, row)
 	}
@@ -288,6 +328,31 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	view.ActionableTeams = groupClinchingRowsByTeam(view.Actionable)
 	view.EliminationTeams = groupClinchingRowsByTeam(view.Elimination)
 	a.render(w, "clinching", view)
+}
+
+// The clinching page's view query values.
+const (
+	clinchingViewNextMatchday = "next-matchday"
+	clinchingViewRestOfSeason = "rest-of-season"
+)
+
+// scenarioScheduledGames converts cached games for slate definition. A game
+// with an unreadable kickoff leaves the rest-of-season view unavailable.
+func scenarioScheduledGames(games []cache.Game) []scenarios.ScheduledGame {
+	scheduled := make([]scenarios.ScheduledGame, 0, len(games))
+	for _, g := range games {
+		kickoff, err := fixtures.ParseKickoff(g.KickoffUTC)
+		if err != nil {
+			return nil
+		}
+		game := scenarios.ScheduledGame{ID: g.ASAID, Status: g.Status, HomeTeamID: g.HomeTeamID, AwayTeamID: g.AwayTeamID, KickoffUTC: kickoff}
+		if g.Matchday.Valid {
+			matchday := int(g.Matchday.Int64)
+			game.Matchday = &matchday
+		}
+		scheduled = append(scheduled, game)
+	}
+	return scheduled
 }
 
 func clinchingRowLess(left, right clinchingRowView) bool {

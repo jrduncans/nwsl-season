@@ -884,7 +884,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=15", "DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12", "DROP INDEX game_result_checks_due_idx", "DROP TABLE game_result_checks", "DELETE FROM schema_migrations WHERE version=11"} {
+	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=16", "DELETE FROM schema_migrations WHERE version=15", "DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12", "DROP INDEX game_result_checks_due_idx", "DROP TABLE game_result_checks", "DELETE FROM schema_migrations WHERE version=11"} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
 		}
@@ -911,7 +911,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 15 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 16 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	var index int
