@@ -48,7 +48,7 @@ func TestRivalViewWordsEachRival(t *testing.T) {
 	}{
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 4}, "SD doesn’t win both matches (vs BOS and at BAY)"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 3, Ties: []scenarios.RivalTie{{Points: 4, Wins: 1, Condition: gd}}},
-			"SD takes 3 points or fewer (vs BOS and at BAY), or takes 4 points if [NJY gains 1+ goal difference on SD (level at +13 now)]"},
+			"SD takes 3 points or fewer (vs BOS and at BAY) or takes 4 points if [NJY gains 1+ goal difference on SD (level at +13 now)]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
 			"SD loses both matches (vs BOS and at BAY) and [NJY gains 1+ goal difference on SD (level at +13 now)]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos"}, MaxPoints: 1}, "SD draws or loses vs BOS"},

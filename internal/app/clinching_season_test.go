@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -25,16 +26,16 @@ func TestScoreConditionTextMatchesIssueExamples(t *testing.T) {
 	}{
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{gd(1, 7, 7)}}, "POR gains 1+ goal difference on UTA (level at +7 now)"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 0, 5)}}, "POR gains 6+ goal difference on KC (KC +5 now)"},
-		{scenarios.ScoreCondition{TeamID: "por", RivalID: "la", Levels: []scenarios.ScoreLevel{gd(11, 2, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 0, TeamNow: 40, RivalNow: 40}}}, "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and loses no goals scored (level at 40 now)"},
-		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 7, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 7, TeamNow: 44, RivalNow: 50}}}, "UTA gains 6+ goal difference on KC (KC +5 now), or exactly 5 and gains 7+ goals scored (KC +6 now)"},
-		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "por", Levels: []scenarios.ScoreLevel{gd(1, 7, 7), {Measure: scenarios.MeasureGoalsScored, MinimumGain: -3, TeamNow: 44, RivalNow: 48}}}, "UTA gains 1+ goal difference on POR (level at +7 now), or none and loses at most 3 goals scored (POR +4 now)"},
+		{scenarios.ScoreCondition{TeamID: "por", RivalID: "la", Levels: []scenarios.ScoreLevel{gd(11, 2, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 0, TeamNow: 40, RivalNow: 40}}}, "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and scores at least as many goals (level at 40 now)"},
+		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 7, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 7, TeamNow: 44, RivalNow: 50}}}, "UTA gains 6+ goal difference on KC (KC +5 now), or exactly 5 and scores at least 7 more goals (KC +6 now)"},
+		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "por", Levels: []scenarios.ScoreLevel{gd(1, 7, 7), {Measure: scenarios.MeasureGoalsScored, MinimumGain: -3, TeamNow: 44, RivalNow: 48}}}, "UTA gains 1+ goal difference on POR (level at +7 now), or none and scores no more than 3 fewer goals (POR +4 now)"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1, ExactOnly: true, TeamNow: 7, RivalNow: 7}, {Measure: scenarios.MeasureGoalsScored, MinimumGain: -3, ExactOnly: true, TeamNow: 48, RivalNow: 44}}},
 			"POR finishes level with UTA on goal difference and goals scored (level at +7 now, POR +4 goals scored now)"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1, ExactOnly: true, TeamNow: 7, RivalNow: 7}, {Measure: scenarios.MeasureGoalsScored, MinimumGain: 1, ExactOnly: true, TeamNow: 48, RivalNow: 48}, {Measure: scenarios.MeasureHeadToHeadGoals, MinimumGain: 2, TeamNow: 2, RivalNow: 3}}},
-			"POR finishes level with UTA on goal difference and goals scored (level at +7 now, level at 48 goals scored now), and gains 2+ head-to-head goals (UTA +1 now)"},
+			"POR finishes level with UTA on goal difference and goals scored (level at +7 now, level at 48 goals scored now), and scores at least 2 more head-to-head goals (UTA +1 now)"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{gd(0, 9, 6)}}, "POR loses no goal difference to UTA (POR +3 now)"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1, ExactOnly: true, TeamNow: 7, RivalNow: 7}, {Measure: scenarios.MeasureGoalsScored, MinimumGain: 1, TeamNow: 30, RivalNow: 31}, {Measure: scenarios.MeasureHeadToHeadGoals, MinimumGain: 1, TeamNow: 1, RivalNow: 1}}},
-			"POR finishes level with UTA on goal difference (level at +7 now), and gains 1+ goals scored (UTA +1 now), or none and gains 1+ head-to-head goals (level at 1 now)"},
+			"POR finishes level with UTA on goal difference (level at +7 now), and scores at least 1 more goal (UTA +1 now), or scores as many goals and scores at least 1 more head-to-head goal (level at 1 now)"},
 	} {
 		if got := scoreConditionText(test.condition, teams); got != test.want {
 			t.Errorf("got %q, want %q", got, test.want)
@@ -83,7 +84,13 @@ func getClinching(t *testing.T, store fullFakeStore, query string) string {
 }
 
 func TestClinchingPageSwitchesToRestOfSeason(t *testing.T) {
-	store := seasonScenarioStore(seasonEndData(2), []string{"future-4"}, []string{"future-4", "future-5"}, seasonResult())
+	data := seasonEndData(2)
+	for i := range data.Teams {
+		if data.Teams[i].ID == "alpha" {
+			data.Teams[i].Abbreviation = "ALP"
+		}
+	}
+	store := seasonScenarioStore(data, []string{"future-4"}, []string{"future-4", "future-5"}, seasonResult())
 	next := getClinching(t, store, "")
 	if !strings.Contains(next, `data-segmented="view"`) || !strings.Contains(next, `value="next-matchday" checked`) {
 		t.Fatal("penultimate matchweek should default to Next matchday with a switch")
@@ -99,6 +106,33 @@ func TestClinchingPageSwitchesToRestOfSeason(t *testing.T) {
 		if !strings.Contains(rest, want) {
 			t.Errorf("rest-of-season view lacks %q", want)
 		}
+	}
+	if !strings.Contains(rest, "If ALP wins") || strings.Contains(rest, "If Alpha") {
+		t.Fatal("rest-of-season headings use team codes inside the named card")
+	}
+}
+
+func TestClinchingSummaryStatesEverySharedRequirementOnce(t *testing.T) {
+	shared := []scenarioRequirement{
+		{GameID: "a", Mask: 1},
+		{GameID: "b", Mask: 2},
+		{Score: &scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1}}}},
+	}
+	paths := [][]scenarioRequirement{
+		append(append([]scenarioRequirement{}, shared...), scenarioRequirement{GameID: "c", Mask: 1}),
+		append(append([]scenarioRequirement{}, shared...), scenarioRequirement{GameID: "d", Mask: 4}),
+	}
+	summary := factorRequirements(paths, 2)
+	if len(summary.Conditions) != len(shared) || len(summary.Alternatives) != 2 {
+		t.Fatalf("shared conditions should occupy one level: %+v", summary)
+	}
+	for _, branch := range summary.Alternatives {
+		if len(branch.Conditions) != 1 || len(branch.Alternatives) != 0 {
+			t.Fatalf("only the differing result belongs in an alternative: %+v", branch)
+		}
+	}
+	if !reflect.DeepEqual(uniqueConjunctions(summary.Combinations()), uniqueConjunctions(paths)) {
+		t.Fatal("factoring changed the represented scenarios")
 	}
 }
 

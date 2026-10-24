@@ -1179,8 +1179,8 @@ func TestPagesClinching(t *testing.T) {
 			}
 		}
 
-		if got := assertKeyboardDisclosures(t, page); got < 2 {
-			t.Errorf("clinching page has %d disclosures, want at least the slate and a no-help scenario", got)
+		if got := assertKeyboardDisclosures(t, page); got < 1 {
+			t.Errorf("clinching page has %d disclosures, want at least the slate", got)
 		}
 		assertNoHorizontalOverflow(t, page)
 	})

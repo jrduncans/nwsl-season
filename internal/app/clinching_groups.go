@@ -604,7 +604,9 @@ func factorRequirements(clauses [][]scenarioRequirement, depth int) scenarioExpr
 			}
 		}
 	}
-	if bestCount == 1 || depth >= 3 {
+	// Shared requirements stay on the same visible level. Pull all of them
+	// out even at the nesting limit, rather than repeating them in every path.
+	if bestCount == 1 || (depth >= 3 && bestPriority != 2) {
 		e := scenarioExpression{}
 		for _, c := range clauses {
 			e.Alternatives = append(e.Alternatives, scenarioExpression{Conditions: c})

@@ -149,6 +149,10 @@ th:nth-child(2) { text-align: left; }
 .clinching-rivals li + li { margin-top: .45rem; }
 .clinching-rivals .clinching-team-token { vertical-align: -.25rem; }
 .clinching-rivals .clinching-condition-score { display: inline-block; max-width: 100%; margin-top: .15rem; vertical-align: top; }
+.clinching-rival-tie { display: block; }
+.clinching-status-overview { margin: 1rem 0; }
+.clinching-status-overview > summary { cursor: pointer; color: var(--green); font-weight: 700; }
+.clinching-status-overview > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 .clinching-summary-expression .clinching-combination { margin: .3rem 0; }
 .clinching-summary-alternatives { margin: .45rem 0 0 .4rem; padding-left: .85rem; border-left: 2px solid var(--green-soft); }
 .clinching-summary-alternatives > strong { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }

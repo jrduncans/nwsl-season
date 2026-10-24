@@ -325,6 +325,8 @@ Within a group, a visible factored summary puts common requirements once above
 an “any of” list. The summary may contain overlapping alternatives when that
 is shorter and clearer. A group with more than twelve summary scenarios instead
 directs readers to its exact scenarios, avoiding a large nested list.
+Every requirement shared by all alternatives, including a score condition,
+appears once at that level; pulling out shared requirements adds no nesting.
 When different results of one outside match appear in several scenarios, the
 summary groups a repeated result before other shared conditions. If an earlier
 scenario already covers one result of a broader condition, the summary removes
@@ -460,10 +462,10 @@ level is a gain, worded the same way for each measure:
 
 - "POR gains 1+ goal difference on UTA (level at +7 now)"
 - "POR gains 6+ goal difference on KC (KC +5 now)"
-- "UTA gains 6+ goal difference on KC (KC +5 now), or exactly 5 and gains 7+
-  goals scored (KC +6 now)"
-- "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and loses no
-  goals scored (level at 48 now)"
+- "UTA gains 6+ goal difference on KC (KC +5 now), or exactly 5 and scores at
+  least 7 more goals (KC +6 now)"
+- "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and scores
+  at least as many goals (level at 48 now)"
 
 A non-positive minimum reads "loses no goal difference to" or "loses at most 2
 goal difference to"; a zero gain before the next level reads "or none and…".
@@ -530,6 +532,15 @@ Rows merge under one heading as clause groups do ("wins one match and loses the
 other", "earns at least 1 point from these two matches") when their rivals'
 needs are identical. Rivals are listed in standings order. A row that needs no
 help shows "✓ Clinches".
+
+Inside the named team card, rest-of-season result headings use team codes to
+avoid repeating full club names. Each rival's score-dependent alternative starts
+on a new line. Groups already show no-help paths, so the rest-of-season view
+omits the repeated no-help footer; a single group also omits the redundant
+"Every clinching scenario requires" list. Separate no-help cards remain when
+the search has not published a scenario group.
+Already-clinched and already-eliminated teams sit in one collapsed disclosure
+in this view, keeping the remaining scenarios near the top of the page.
 
 ### What is never claimed
 

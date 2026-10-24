@@ -22,8 +22,9 @@ type clinchingRivalView struct {
 // clinchingRivalTieView is one level-on-points record. Condition is nil when
 // the team finishes ahead whatever the scores.
 type clinchingRivalTieView struct {
-	Lead      string
-	Condition *scenarioRequirement
+	Lead        string
+	Condition   *scenarioRequirement
+	Alternative bool
 }
 
 // rivalGroupViews builds rest-of-season groups from a rival summary: one per
@@ -108,10 +109,6 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 		view.Parts = []scenarioRequirementPart{{Team: &scenarioTeamToken{Code: teams[need.RivalID], LogoURL: clubLogoURL(need.RivalID)}}}
 	}
 	if base != "" {
-		// The comma ends this part, since parts are separated by a space.
-		if len(need.Ties) > 0 {
-			base += ","
-		}
 		view.Parts = append(view.Parts, scenarioRequirementPart{Text: base})
 	}
 	stated := base != ""
@@ -128,7 +125,7 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 		if stated {
 			lead = "or " + record
 		}
-		item := clinchingRivalTieView{Lead: lead}
+		item := clinchingRivalTieView{Lead: lead, Alternative: stated}
 		if tie.Condition != nil {
 			switch {
 			case stated:

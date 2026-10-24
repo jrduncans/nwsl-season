@@ -245,8 +245,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		snapshot = season
 	}
 	summaryLimit := maxScenarioSummaryPaths
+	headingTeams := teamNames
 	if view.RestOfSeason {
 		summaryLimit = maxSeasonSummaryPaths
+		headingTeams = teamLabels
 	}
 	view.Slate = snapshot.Run.Slate
 	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
@@ -298,9 +300,9 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		}
 		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Necessary: []string{}, Disciplinary: v.DisciplinaryPossible}
 		if v.Rivals != nil {
-			row.Groups = rivalGroupViews(v.Result, v.TeamID, teamLabels, teamNames, games, standingsPositions)
+			row.Groups = rivalGroupViews(v.Result, v.TeamID, teamLabels, headingTeams, games, standingsPositions)
 		} else {
-			row.Groups = clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, teamNames, games, summaryLimit)
+			row.Groups = clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, headingTeams, games, summaryLimit)
 		}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
@@ -316,6 +318,14 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch {
 			view.NoHelp = append(view.NoHelp, row)
 			continue
+		}
+		if view.RestOfSeason && len(row.Groups) > 0 {
+			// These groups already show every no-help path. A single group
+			// also states its shared requirements directly.
+			row.NoHelp, row.NoHelpFixtures = "", ""
+			if len(row.Groups) == 1 {
+				row.Necessary = nil
+			}
 		}
 		switch {
 		case v.BudgetLimited():
