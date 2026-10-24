@@ -388,7 +388,8 @@ left, a second batch covers **every** remaining regular-season match, so each
 assignment of results is a completed season apart from scores. A points tie that
 straddles a place threshold is then settled by the tiebreakers instead of being
 left unpublished. The season outcomes, card layout and own-result grouping are the
-same as for the next slate.
+same as for the next slate, but most groups state what each rival must be held to
+instead of listing scenarios (see [Rival summary](#rival-summary)).
 
 "Matchdays left" counts the distinct matchdays of the pending matches; if any
 pending match lacks a matchday, it is the most matches any team has left.
@@ -476,7 +477,59 @@ whose conditions are joined as separate pills (the "and" of the scenario).
 
 Rest-of-season summaries are never replaced by "Several certified scenarios":
 the scenarios are the whole answer, so every group's summary is written out (up
-to 256 paths, the coverage-pass bound).
+to 256 paths, the coverage-pass bound). Most groups are shown as a rival summary
+instead (below), which is far shorter.
+
+### Rival summary
+
+Listing scenarios over every remaining match multiplies quickly: one of Gotham's
+2026 Shield groups ran to about 45 lines of nested "any of" lists. The page
+therefore restates each result one rival at a time, which a reader can hold in
+their head:
+
+> **If NJ/NY Gotham FC wins one match and loses the other** — Clinches if all of:
+> - SD takes 3 points or fewer (vs BOS and at BAY), or takes 4 points if NJY
+>   gains 1+ goal difference on SD (level at +13 now)
+> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches if NJY
+>   gains 2+ goal difference on WAS (WAS +1 now)
+
+This is exact, not a simplification, because of two facts:
+
+- **One rival at a time.** With the team's own results fixed, whether it
+  finishes ahead of a rival depends only on the two teams' results and scores:
+  points, goal difference, wins and goals scored are each team's own, and
+  head-to-head between just the two follows from their matches. The team clinches
+  a top-`K` place when at most `K − 1` teams finish ahead of it, so each row
+  says how many of the rivals in doubt it must finish ahead of ("all of", "any
+  of", "at least 2 of"). Other teams finish ahead of it, or behind it, whatever
+  happens, and are not listed.
+- **Points name the record.** A rival finishes behind on points below some total
+  and ahead above it; only the total that leaves the two level needs a score
+  condition. With one or two matches left, a points total also fixes the
+  rival's wins, so "takes 4 points" is a single record. With three or more, a
+  level total names its wins ("takes 3 points with 1 win").
+
+The search builds the summary after it finishes, for each `can_clinch` result:
+it fixes each combination of the team's own results (at most four matches), and
+for every other team walks that team's remaining results (at most six matches),
+comparing the two as the leaf search does. A rival that could finish level
+through goals scored forms a head-to-head group with the team alone, ranked by
+head-to-head points and then head-to-head goals scored.
+
+That last step is the one exception. When **two** rivals could each finish level
+with the team through goals scored, head-to-head among three teams could decide,
+and a pairwise statement could be wrong either way. Such a row is still stated
+when it clinches even if every rival in doubt finishes ahead, or cannot clinch
+even if every rival that could be level finishes behind; otherwise it is
+**withheld**, and the page shows that row's clauses as before (pinning the
+team's own results, so they group as exactly that row). A result with every row
+withheld, or a search that hit its budget, has no summary and shows only clauses.
+The multiway-tie note appears only when the clauses are shown for some row.
+
+Rows merge under one heading as clause groups do ("wins one match and loses the
+other", "earns at least 1 point from these two matches") when their rivals'
+needs are identical. Rivals are listed in standings order. A row that needs no
+help shows "✓ Clinches".
 
 ### What is never claimed
 
@@ -520,13 +573,16 @@ Tests build random small leagues and complete the remaining matches with every
 scoreline up to a goal limit. For each one they compare every published scenario
 with the official table from `standings.Calculate`: a scenario must only describe
 scorelines where the team definitely finishes inside the threshold, and when no
-limitation is stated, every such scoreline must be described. A scoreline where
+limitation is stated, every such scoreline must be described. A rival summary
+must describe exactly the scorelines where the team definitely finishes inside
+the threshold, deferring to the clauses only in withheld rows. A scoreline where
 disciplinary points decide must carry the disciplinary note.
 
 The rest-of-season batch is stored beside the next-slate batch with its own
-definition version (`rest-of-season-v2`; the next slate is `next-slate-v6`), its
+definition version (`rest-of-season-v4`; the next slate is `next-slate-v6`), its
 slate source `rest_of_season`, and a `disciplinary_possible` flag per result.
-Clauses carry their score conditions in `clauses_json`.
+Clauses carry their score conditions in `clauses_json`; the rival summary is
+`rivals_json` (`null` when there is none).
 
 ## Playoff-elimination scenarios
 
@@ -574,7 +630,10 @@ recalculated.
 - [`internal/scenarios/season.go`](../internal/scenarios/season.go) searches the
   rest of the season, and
   [`season_tiebreak.go`](../internal/scenarios/season_tiebreak.go) derives score
-  conditions for one level rival.
+  conditions for one level rival;
+  [`season_rivals.go`](../internal/scenarios/season_rivals.go) builds the rival
+  summary, and [`clinching_rivals.go`](../internal/app/clinching_rivals.go)
+  words it.
 - [`internal/scenariorefresh/refresher.go`](../internal/scenariorefresh/refresher.go)
   stores scenarios only against the matching qualification snapshot.
 

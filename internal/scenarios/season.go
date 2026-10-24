@@ -113,10 +113,18 @@ func GenerateSeason(ctx context.Context, r SeasonRequest) (map[competition.Achie
 			return nil, search.err
 		}
 		complete := search.err == nil
+		var rows []rivalRow
+		rowsOK := false
+		if complete {
+			rows, rowsOK = search.rivalRows()
+		}
 		for i := range search.members {
 			member := &search.members[i]
-			out := results[member.achievement.ID]
-			results[out.Achievement] = member.finish(ctx, out, r.Slate.FixtureIDs, complete)
+			out := member.finish(ctx, results[member.achievement.ID], r.Slate.FixtureIDs, complete)
+			if rowsOK && out.State == OpportunityCanClinch {
+				out.Rivals = rivalSummary(rows, member.achievement.TopK)
+			}
+			results[out.Achievement] = out
 		}
 	}
 	setBatchElapsed(results, started)

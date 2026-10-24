@@ -40,7 +40,8 @@
     {{range .Groups}}
       <section class="clinching-result-group{{with .Tone}} clinching-result-{{.}}{{end}}">
         <h5>{{.Heading}}</h5>
-        {{if .SummaryOverflow}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><p>Several certified scenarios. View the exact alternatives below.</p>
+        {{if .RivalState}}<p class="clinching-result-state">{{.RivalState}}</p><ul class="clinching-rivals">{{range .Rivals}}<li>{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span> {{else}}<span>{{.Text}}</span> {{end}}{{end}}{{range .Ties}}{{if .Lead}}<span>{{.Lead}}</span> {{end}}{{with .Condition}}<span class="clinching-condition clinching-condition-score">{{range .Parts}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span>{{else}}<span>{{.Text}}</span>{{end}}{{end}}</span> {{end}}{{end}}</li>{{end}}</ul>
+        {{else if .SummaryOverflow}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><p>Several certified scenarios. View the exact alternatives below.</p>
         {{else if or .Summary.Conditions .Summary.Alternatives}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>
         {{else}}<p class="clinching-result-state clinching-result-state-certain">{{if $elimination}}Eliminated{{else}}✓ Clinches{{end}}</p>{{end}}
         {{if .ShowDetails}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}

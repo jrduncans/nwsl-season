@@ -296,7 +296,12 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch && !noHelpGuaranteed {
 			continue
 		}
-		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Groups: clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, teamNames, games, summaryLimit), Necessary: []string{}, Disciplinary: v.DisciplinaryPossible}
+		row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], NoHelp: noHelp, Necessary: []string{}, Disciplinary: v.DisciplinaryPossible}
+		if v.Rivals != nil {
+			row.Groups = rivalGroupViews(v.Result, v.TeamID, teamLabels, teamNames, games, standingsPositions)
+		} else {
+			row.Groups = clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, teamNames, games, summaryLimit)
+		}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
@@ -315,7 +320,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case v.BudgetLimited():
 			row.Limitation = "Scenario search was incomplete."
-		case v.Limitation == scenarios.LimitationSeasonMultiwayTie:
+		case v.Limitation == scenarios.LimitationSeasonMultiwayTie && (v.Rivals == nil || v.Rivals.HasWithheld()):
 			row.Limitation = "Scenarios where three or more teams finish level on points, goal difference, wins, goals scored and head-to-head points, and still play each other, are not listed."
 		}
 		view.Actionable = append(view.Actionable, row)

@@ -19,7 +19,7 @@ const DefinitionVersion = "next-slate-v6"
 // SeasonDefinitionVersion identifies rest-of-season results, which cover every
 // remaining match and may carry score conditions. They are stored as a
 // separate batch beside the next-slate batch for the same snapshot.
-const SeasonDefinitionVersion = "rest-of-season-v2"
+const SeasonDefinitionVersion = "rest-of-season-v4"
 
 const (
 	LimitationBudgetExhausted = "scenario computation budget exhausted"
@@ -168,6 +168,9 @@ type Result struct {
 	// finish identical through head-to-head goals scored, so unavailable
 	// disciplinary points may decide. That case is never claimed.
 	DisciplinaryPossible bool
+	// Rivals restates a rest-of-season clinch one rival at a time, when that
+	// is exact. It describes the same scorelines as Clauses.
+	Rivals *RivalSummary
 }
 
 // BudgetLimited reports whether a result came from an incomplete search. A
@@ -284,6 +287,14 @@ func (r Result) Validate(slate Slate) error {
 	}
 	if r.DisciplinaryPossible && slate.Source != SourceRestOfSeason {
 		return fmt.Errorf("only rest-of-season results may note disciplinary points")
+	}
+	if r.Rivals != nil {
+		if slate.Source != SourceRestOfSeason || r.State != OpportunityCanClinch {
+			return fmt.Errorf("only rest-of-season clinches may carry a rival summary")
+		}
+		if err := r.Rivals.validate(r.TeamID, fixture); err != nil {
+			return err
+		}
 	}
 	if r.Achievement != competition.AchievementPlayoffs && (r.AlreadyEliminated || r.CanBeEliminated || len(r.EliminationClauses) != 0) {
 		return fmt.Errorf("only playoff results may carry elimination data")

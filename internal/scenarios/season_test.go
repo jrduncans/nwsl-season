@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -173,11 +174,68 @@ func (f *seasonFixture) gain(measure ScoreMeasure, team, rival string, scores []
 	return value
 }
 
+// rivalsClinch reports whether a rival summary describes a completed
+// scoreline: its row of own results, then at least Need rivals the team
+// finishes ahead of. A withheld row defers to the clauses, which withheld
+// reports.
+func (f *seasonFixture) rivalsClinch(result Result, scores [][2]int) (clinch, withheld bool) {
+	slot := map[string]int{}
+	for j, index := range f.pending {
+		slot[f.games[index].ID] = j
+	}
+	for _, row := range result.Rivals.Rows {
+		if !f.covers(Clause{Conditions: row.Own}, scores) {
+			continue
+		}
+		if row.Withheld {
+			for _, clause := range result.Clauses {
+				if f.covers(clause, scores) {
+					return true, true
+				}
+			}
+			return false, true
+		}
+		ahead := 0
+		for _, rival := range row.Rivals {
+			points, wins := 0, 0
+			for _, id := range rival.GameIDs {
+				game := f.games[f.pending[slot[id]]]
+				own, other := scores[slot[id]][0], scores[slot[id]][1]
+				if game.AwayTeamID == rival.RivalID {
+					own, other = other, own
+				}
+				switch {
+				case own > other:
+					points, wins = points+3, wins+1
+				case own == other:
+					points++
+				}
+			}
+			if points <= rival.MaxPoints {
+				ahead++
+				continue
+			}
+			for _, tie := range rival.Ties {
+				if tie.Points != points || tie.Wins != wins {
+					continue
+				}
+				if tie.Condition == nil || f.covers(Clause{ScoreConditions: []ScoreCondition{*tie.Condition}}, scores) {
+					ahead++
+				}
+			}
+		}
+		return ahead >= row.Need, false
+	}
+	return false, false
+}
+
 // checkSeasonExhaustively compares every published clause with the official
 // table for every scoreline up to maxGoals: a clause must only describe
 // scorelines where the team definitely finishes in the top K, and when no
-// limitation is stated, every such scoreline must be described.
-func checkSeasonExhaustively(t *testing.T, f *seasonFixture, maxGoals int) {
+// limitation is stated, every such scoreline must be described. A rival
+// summary must describe exactly those scorelines. It returns the number of
+// rival summaries checked.
+func checkSeasonExhaustively(t *testing.T, f *seasonFixture, maxGoals int) int {
 	t.Helper()
 	achievements := []competition.Achievement{}
 	for k := 1; k < len(f.teams); k++ {
@@ -186,6 +244,14 @@ func checkSeasonExhaustively(t *testing.T, f *seasonFixture, maxGoals int) {
 	results := map[string]map[competition.AchievementID]Result{}
 	for _, team := range f.teams {
 		results[team.ID] = f.generate(t, team.ID, achievements)
+	}
+	summaries := 0
+	for _, team := range f.teams {
+		for _, result := range results[team.ID] {
+			if result.Rivals != nil {
+				summaries++
+			}
+		}
 	}
 	disciplinarySeen := map[string]bool{}
 	f.eachScoreline(maxGoals, func(scores [][2]int, place placement) {
@@ -206,6 +272,14 @@ func checkSeasonExhaustively(t *testing.T, f *seasonFixture, maxGoals int) {
 				if definitely && !covered && result.Limitation == "" {
 					t.Fatalf("%s %s: clinch at %v is not described by %+v", team.ID, achievement.ID, scores, result.Clauses)
 				}
+				if result.Rivals != nil {
+					// A withheld row defers to the clauses, which may be
+					// incomplete when a limitation is stated.
+					clinch, withheld := f.rivalsClinch(result, scores)
+					if clinch != definitely && (clinch || !withheld || result.Limitation == "") {
+						t.Fatalf("%s %s: rival summary %+v disagrees with places %d-%d at %v", team.ID, achievement.ID, result.Rivals, place.best[team.ID], place.worst[team.ID], scores)
+					}
+				}
 				if crossing {
 					disciplinarySeen[team.ID+string(achievement.ID)] = true
 					if !result.DisciplinaryPossible && result.Limitation == "" {
@@ -215,6 +289,7 @@ func checkSeasonExhaustively(t *testing.T, f *seasonFixture, maxGoals int) {
 			}
 		}
 	})
+	return summaries
 }
 
 func randomSeasonFixture(random *rand.Rand, teams, remaining, maxScore int) *seasonFixture {
@@ -238,9 +313,13 @@ func randomSeasonFixture(random *rand.Rand, teams, remaining, maxScore int) *sea
 
 func TestSeasonScoreConditionsMatchTheOfficialTable(t *testing.T) {
 	random := rand.New(rand.NewSource(20261024)) // #nosec G404 -- reproducible test leagues, not security randomness.
+	summaries := 0
 	for trial := range 150 {
 		f := randomSeasonFixture(random, 5, 3, 2)
-		t.Run(fmt.Sprint(trial), func(t *testing.T) { checkSeasonExhaustively(t, f, 3) })
+		t.Run(fmt.Sprint(trial), func(t *testing.T) { summaries += checkSeasonExhaustively(t, f, 3) })
+	}
+	if summaries < 100 {
+		t.Fatalf("only %d rival summaries were checked", summaries)
 	}
 }
 
@@ -319,4 +398,71 @@ func TestSeasonThreeWayHeadToHead(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected a scenario with A level with both B and C: %+v", result.Clauses)
+}
+
+func TestSeasonRivalSummaryStatesEachRival(t *testing.T) {
+	// The fixture from TestSeasonGoalDifferenceThenGoalsScored. If A wins,
+	// it clinches unless B wins too; then A needs the larger goal-difference
+	// gain, or an equal one with more goals.
+	f := newSeasonFixture(4)
+	f.played("A", "C", 1, 0)
+	f.played("B", "D", 1, 0)
+	f.played("A", "B", 0, 0)
+	f.played("C", "D", 0, 0)
+	f.upcoming("A", "D")
+	f.upcoming("B", "C")
+	result := f.generate(t, "A", []competition.Achievement{{ID: "top1", TopK: 1}})["top1"]
+	if result.Rivals == nil {
+		t.Fatal("expected a rival summary")
+	}
+	want := RivalRow{
+		Own:  []FixtureCondition{{GameID: "g4", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}},
+		Need: 1,
+		Rivals: []RivalNeed{{RivalID: "B", GameIDs: []string{"g5"}, MaxPoints: 2, Ties: []RivalTie{{Points: 3, Wins: 1, Condition: &ScoreCondition{TeamID: "A", RivalID: "B", Levels: []ScoreLevel{
+			{Measure: MeasureGoalDifference, MinimumGain: 1, TeamNow: 1, RivalNow: 1},
+			{Measure: MeasureGoalsScored, MinimumGain: 1, TeamNow: 1, RivalNow: 1},
+		}}}}}},
+	}
+	for _, row := range result.Rivals.Rows {
+		if fmt.Sprint(row.Own) != fmt.Sprint(want.Own) {
+			continue
+		}
+		got, _ := json.Marshal(row)
+		expected, _ := json.Marshal(want)
+		if string(got) != string(expected) {
+			t.Fatalf("win row = %s, want %s", got, expected)
+		}
+		return
+	}
+	t.Fatalf("no row for an A win: %+v", result.Rivals.Rows)
+}
+
+func TestSeasonRivalSummaryWithholdsThreeWayHeadToHead(t *testing.T) {
+	// The fixture from TestSeasonThreeWayHeadToHead: if A wins, B and C can
+	// both finish level with it through goals scored, so head-to-head among
+	// three teams can decide and that row defers to the clauses.
+	f := newSeasonFixture(5)
+	f.played("A", "B", 0, 1)
+	f.played("A", "C", 1, 0)
+	f.played("C", "A", 0, 1)
+	f.played("B", "C", 0, 1)
+	f.played("B", "D", 1, 0)
+	f.played("C", "E", 1, 0)
+	f.played("D", "E", 0, 0)
+	f.upcoming("A", "D")
+	f.upcoming("B", "E")
+	f.upcoming("C", "D")
+	result := f.generate(t, "A", []competition.Achievement{{ID: "top1", TopK: 1}})["top1"]
+	if result.Rivals == nil {
+		t.Fatal("expected a rival summary")
+	}
+	for _, row := range result.Rivals.Rows {
+		if row.Own[0].AllowedOutcomes[0] == clinching.HomeWin {
+			if !row.Withheld {
+				t.Fatalf("expected the A-win row to be withheld: %+v", row)
+			}
+			return
+		}
+	}
+	t.Fatalf("no row for an A win: %+v", result.Rivals.Rows)
 }

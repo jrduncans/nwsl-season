@@ -132,6 +132,12 @@ _Avoid_: path, clause
 The slate of every remaining regular-season match, used once two or fewer
 matchdays are left. Its scenarios can add score conditions.
 
+**Rival summary**:
+A rest-of-season clinch restated one rival at a time: for each set of the
+team's own results, what each rival must be held to (a points total, plus a
+score condition when they could finish level) and how many of them the team
+must finish ahead of.
+
 **Score condition**:
 A requirement on goals that a rest-of-season scenario adds when a team ends
 level on points with a rival: a goal-difference gain over the remaining matches,

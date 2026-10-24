@@ -70,6 +70,21 @@ type clinchingGroupView struct {
 	// Tone colors the group by the team's own result: "win", "draw", "loss"
 	// or "" when the group spans several matches or none.
 	Tone string
+	// A rest-of-season group with a rival summary states each rival instead
+	// of a summary expression, under RivalState ("Clinches if all of:").
+	// MergeKey stands in for the outside help when merging own results.
+	Rivals     []clinchingRivalView
+	RivalState string
+	MergeKey   string
+}
+
+// mergeKey identifies a group's outside help, so own results with the same
+// help can share a heading.
+func (g clinchingGroupView) mergeKey() string {
+	if g.MergeKey != "" {
+		return g.MergeKey
+	}
+	return expressionKey(g.Help)
 }
 
 const maxScenarioSummaryPaths = 12
@@ -459,7 +474,7 @@ func combineOwnSingleResults(groups []clinchingGroupView, team string, teams map
 		merged := false
 		for i := range out {
 			prior := &out[i]
-			if len(prior.Own) != 1 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || expressionKey(prior.Help) != expressionKey(group.Help) {
+			if len(prior.Own) != 1 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || prior.mergeKey() != group.mergeKey() {
 				continue
 			}
 			prior.Own[0].Mask |= group.Own[0].Mask
@@ -871,7 +886,7 @@ func combineOwnPairs(groups []clinchingGroupView, team string, teams map[string]
 				if len(prior.Own) != 2 || len(prior.AlternativeOwn) != 0 || prior.Own[0].GameID != group.Own[0].GameID || prior.Own[1].GameID != group.Own[1].GameID {
 					continue
 				}
-				if ownPoints(prior.Own[0], team, games) != results[1] || ownPoints(prior.Own[1], team, games) != results[0] || expressionKey(prior.Help) != expressionKey(group.Help) {
+				if ownPoints(prior.Own[0], team, games) != results[1] || ownPoints(prior.Own[1], team, games) != results[0] || prior.mergeKey() != group.mergeKey() {
 					continue
 				}
 				prior.AlternativeOwn = group.Own
@@ -914,7 +929,7 @@ func combineOwnPointTotals(groups []clinchingGroupView, team string, teams map[s
 		members := []int{i}
 		for j := i + 1; j < len(groups); j++ {
 			a, b, ok := pair(groups[j])
-			if ok && !used[j] && a == first && b == second && expressionKey(groups[j].Help) == expressionKey(group.Help) {
+			if ok && !used[j] && a == first && b == second && groups[j].mergeKey() == group.mergeKey() {
 				members = append(members, j)
 			}
 		}
