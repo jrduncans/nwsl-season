@@ -336,6 +336,12 @@ the SEA-win alternatives then name a DEN win where applicable. Each rewrite
 must preserve the certified outcome union. Alternatives with the same number
 of conditions are ordered by their displayed result text, keeping repeated
 results such as DEN wins adjacent regardless of match IDs.
+Alternatives differing only in the allowed results of one match merge into
+one condition: “ORL wins at SEA” or “SEA draws vs ORL” becomes “ORL wins or
+draws at SEA”. All other requirements, including score conditions, must match;
+allowing all three results removes that match's requirement. This merge runs
+before points compaction for both summaries and exact scenarios, with a
+256-path limit to bound presentation work.
 
 Groups whose summary is omitted offer expandable, complete certified scenarios;
 a full visible summary has no duplicate scenario disclosure.

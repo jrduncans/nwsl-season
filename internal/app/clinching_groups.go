@@ -399,9 +399,9 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 		if len(words) > 0 {
 			heading = "If " + joinConditions(words)
 		}
-		summaryPaths := removeCoveredRequirements(uniqueConjunctions(g.help), games)
+		summaryPaths := removeCoveredRequirements(compactFixtureMasks(uniqueConjunctions(g.help)), games)
 		summaryPaths = removeCoveredRequirements(compactPoints(summaryPaths, games), games)
-		help := removeCoveredRequirements(uniqueConjunctions(g.help), games)
+		help := removeCoveredRequirements(compactFixtureMasks(uniqueConjunctions(g.help)), games)
 		help = disjointRequirements(help)
 		help = removeCoveredRequirements(compactPoints(help, games), games)
 		if len(summaryPaths) <= maxScenarioSummaryPaths {
