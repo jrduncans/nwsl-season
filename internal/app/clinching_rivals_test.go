@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,6 +21,61 @@ func rivalTestGames() map[string]cache.Game {
 }
 
 var rivalTestTeams = map[string]string{"njy": "NJY", "orl": "ORL", "uta": "UTA", "sd": "SD", "bos": "BOS", "bay": "BAY"}
+
+func TestClinchingRivalGroupViewsIntersectSharedFixture(t *testing.T) {
+	games := map[string]cache.Game{
+		"sea-orl": {ASAID: "sea-orl", HomeTeamID: "sea", AwayTeamID: "orl"},
+		"nc-den":  {ASAID: "nc-den", HomeTeamID: "nc", AwayTeamID: "den"},
+		"bay-sd":  {ASAID: "bay-sd", HomeTeamID: "bay", AwayTeamID: "sd"},
+	}
+	teams := map[string]string{"sea": "SEA", "orl": "ORL", "nc": "NC", "den": "DEN", "sd": "SD", "bay": "BAY"}
+	nc := scenarios.RivalNeed{RivalID: "nc", GameIDs: []string{"nc-den"}, MaxPoints: 1}
+	den := scenarios.RivalNeed{RivalID: "den", GameIDs: []string{"nc-den"}, MaxPoints: 1}
+	sd := scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"bay-sd"}, MaxPoints: 1}
+	conditional := den
+	conditional.Ties = []scenarios.RivalTie{{Points: 3, Condition: &scenarios.ScoreCondition{TeamID: "sea", RivalID: "den", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1}}}}}
+	unconditional := den
+	unconditional.MaxPoints = 0
+	unconditional.Ties = []scenarios.RivalTie{{Points: 1}}
+	tests := []struct {
+		name   string
+		need   int
+		rivals []scenarios.RivalNeed
+		state  string
+		want   []string
+	}{
+		{"both must drop points", 2, []scenarios.RivalNeed{nc, den}, "Clinches if", []string{"NC draws vs DEN"}},
+		{"unconditional tie", 2, []scenarios.RivalNeed{nc, unconditional}, "Clinches if", []string{"NC draws vs DEN"}},
+		{"independent rival", 3, []scenarios.RivalNeed{nc, den, sd}, "Clinches if all of:", []string{"NC draws vs DEN", "SD draws or loses at BAY"}},
+		{"any rival", 1, []scenarios.RivalNeed{nc, den}, "Clinches if any of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC"}},
+		{"two of three rivals", 2, []scenarios.RivalNeed{nc, den, sd}, "Clinches if at least 2 of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC", "SD draws or loses at BAY"}},
+		{"score condition", 2, []scenarios.RivalNeed{nc, conditional}, "Clinches if all of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC or wins if [SEA gains 1+ goal difference on DEN (level at 0 now)]"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := scenarios.Result{TeamID: "sea", Rivals: &scenarios.RivalSummary{Rows: []scenarios.RivalRow{{
+				Own:  []scenarios.FixtureCondition{{GameID: "sea-orl", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}},
+				Need: tt.need, Rivals: tt.rivals,
+			}}}}
+			before, _ := json.Marshal(result)
+			views := rivalGroupViews(result, "sea", teams, teams, games, map[string]int{"nc": 1, "den": 2, "sd": 3})
+			if len(views) != 1 || views[0].Heading != "If SEA loses vs ORL" || views[0].RivalState != tt.state {
+				t.Fatalf("unexpected group: %+v", views)
+			}
+			got := []string{}
+			for _, rival := range views[0].Rivals {
+				got = append(got, rivalText(rival))
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("rivals = %q, want %q", got, tt.want)
+			}
+			after, _ := json.Marshal(result)
+			if string(before) != string(after) {
+				t.Fatal("presentation mutated the cached result")
+			}
+		})
+	}
+}
 
 func rivalText(view clinchingRivalView) string {
 	words := []string{}

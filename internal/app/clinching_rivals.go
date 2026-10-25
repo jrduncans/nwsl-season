@@ -61,12 +61,10 @@ func rivalGroupViews(result scenarios.Result, teamID string, teams, headingTeams
 		}
 		rivals := slices.Clone(row.Rivals)
 		sort.SliceStable(rivals, func(i, j int) bool { return positions[rivals[i].RivalID] < positions[rivals[j].RivalID] })
-		for _, rival := range rivals {
-			view.Rivals = append(view.Rivals, rivalView(rival, teams, games))
-		}
+		view.Rivals = rivalViews(rivals, row.Need == len(rivals), teams, games)
 		switch {
 		case row.Need == 0:
-		case len(row.Rivals) == 1:
+		case len(view.Rivals) == 1:
 			view.RivalState = "Clinches if"
 		case row.Need == len(row.Rivals):
 			view.RivalState = "Clinches if all of:"
@@ -82,6 +80,65 @@ func rivalGroupViews(result scenarios.Result, teamID string, teams, headingTeams
 		views[i].Tone = ownResultTone(views[i], teamID, games)
 	}
 	return views
+}
+
+// rivalViews intersects outcome-only needs for the same fixture when every
+// rival's need must hold. Counting rivals in an any-of or at-least-N row must
+// retain separate needs; score conditions and multi-match records stay intact.
+func rivalViews(rivals []scenarios.RivalNeed, all bool, teams map[string]string, games map[string]cache.Game) []clinchingRivalView {
+	views := []clinchingRivalView{}
+	used := make([]bool, len(rivals))
+	for i, rival := range rivals {
+		if used[i] {
+			continue
+		}
+		mask, ok := rivalFixtureMask(rival, games)
+		if !all || !ok {
+			views = append(views, rivalView(rival, teams, games))
+			continue
+		}
+		matches := []int{}
+		for j := i + 1; j < len(rivals); j++ {
+			other, ok := rivalFixtureMask(rivals[j], games)
+			if !used[j] && ok && rivals[j].GameIDs[0] == rival.GameIDs[0] {
+				mask &= other
+				matches = append(matches, j)
+			}
+		}
+		if len(matches) == 0 || mask == 0 {
+			views = append(views, rivalView(rival, teams, games))
+			continue
+		}
+		for _, j := range matches {
+			used[j] = true
+		}
+		r := scenarioRequirement{GameID: rival.GameIDs[0], Mask: mask}
+		views = append(views, clinchingRivalView{Parts: requirementParts(r, rival.RivalID, teams, games)})
+	}
+	return views
+}
+
+func rivalFixtureMask(need scenarios.RivalNeed, games map[string]cache.Game) (uint8, bool) {
+	if len(need.GameIDs) != 1 {
+		return 0, false
+	}
+	game, ok := games[need.GameIDs[0]]
+	if !ok || (game.HomeTeamID != need.RivalID && game.AwayTeamID != need.RivalID) {
+		return 0, false
+	}
+	for _, tie := range need.Ties {
+		if tie.Condition != nil {
+			return 0, false
+		}
+	}
+	var mask uint8
+	for outcome := range scenarioOutcomes {
+		points := scenarioPoints(outcome, need.RivalID, game)
+		if points <= need.MaxPoints || slices.ContainsFunc(need.Ties, func(tie scenarios.RivalTie) bool { return tie.Points == points }) {
+			mask |= 1 << outcome
+		}
+	}
+	return mask, true
 }
 
 // rivalView words one rival's need. The rival's results come first ("SD

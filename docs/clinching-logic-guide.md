@@ -514,6 +514,13 @@ This is exact, not a simplification, because of two facts:
   rival's wins, so "takes 4 points" is a single record. With three or more, a
   level total names its wins ("takes 3 points with 1 win").
 
+When every listed rival requirement must hold, outcome-only requirements for
+the same single match are intersected and displayed once. For example, “NC
+draws or loses vs DEN” and “DEN draws or loses at NC” become “NC draws vs DEN”.
+The heading then says “Clinches if” when just one requirement remains. This
+rewrite leaves score conditions, multi-match records, and rows requiring only
+some of the rivals unchanged.
+
 The search builds the summary after it finishes, for each `can_clinch` result:
 it fixes each combination of the team's own results (at most four matches), and
 for every other team walks that team's remaining results (at most six matches),
