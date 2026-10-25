@@ -129,7 +129,7 @@ func TestClinchingOverlapSplitsResidualAndRemovesCollectiveCoverage(t *testing.T
 				testScenarioClause(c("a", 2), c("b", 3)),
 				testScenarioClause(c("a", 3), c("b", 1)),
 			},
-			paths: 2,
+			paths: 1, // The first two paths merge and cover the third.
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
