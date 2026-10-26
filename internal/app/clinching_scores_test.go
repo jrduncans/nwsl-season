@@ -85,7 +85,7 @@ func TestScoreConditionCascadesAndRemainingCounts(t *testing.T) {
 		{Measure: scenarios.MeasureGoalsScored, TeamNow: 30, RivalNow: 35, MinimumGain: 6},
 		{Measure: scenarios.MeasureHeadToHeadGoals, TeamNow: 1, RivalNow: 2, MinimumGain: 1},
 	}}
-	want := "AAA must finish with a higher goal difference than BBB or, if level on goal difference, AAA must finish with more goals than BBB or, if level on goal difference and level on goals scored, AAA must finish with at least as many head-to-head goals as BBB"
+	want := "AAA’s final goal difference must exceed BBB’s or, if level on goal difference, AAA must finish with more goals than BBB or, if level on goal difference and level on goals scored, AAA must finish with at least as many head-to-head goals as BBB"
 	if got := scoreConditionText(c, labels); got != want {
 		t.Fatalf("%q", got)
 	}
@@ -127,7 +127,7 @@ func TestScoreConditionCascadesAndRemainingCounts(t *testing.T) {
 	}
 	c.Levels[0].MinimumGain = 12
 	c.Levels = c.Levels[:1]
-	if got := scoreConditionText(c, labels); got != "AAA must finish with at least the goal difference of BBB" {
+	if got := scoreConditionText(c, labels); got != "AAA’s final goal difference must equal or exceed BBB’s" {
 		t.Fatal(got)
 	}
 }
@@ -143,7 +143,7 @@ func TestScoreHistoricalAnnotationRequiresIndividualMarginAndCompleteHistory(t *
 	games := map[string]cache.Game{"a": {HomeTeamID: "a", AwayTeamID: "x", Status: "PreMatch"}, "b": {HomeTeamID: "b", AwayTeamID: "x", Status: "PreMatch"}}
 	r := scenarioRequirement{Score: &c}
 	presentScore(&r, labels, games, map[string]uint8{"a": 1, "b": 2}, history)
-	if !strings.Contains(r.Historical, "at least 8 goals") || !strings.Contains(r.Historical, "2024") || !strings.Contains(r.Historical, "not an all-time record") {
+	if r.Historical != "A win by 8 goals exceeds the largest margin in our data, 6." {
 		t.Fatalf("annotation: %s", r.Historical)
 	}
 	for _, masks := range []map[string]uint8{{"a": 1, "b": 4}, {"a": 1, "b": 1}, {"a": 1}} {
@@ -325,5 +325,24 @@ func TestHistoricalMarginInventoryRejectsBalancedPartialSeason(t *testing.T) {
 	season.Entry.Season = "2099"
 	if _, complete := historicalMarginInventory(season); complete {
 		t.Fatal("unknown historical inventory accepted")
+	}
+}
+
+func TestScoreConditionTextTotalsAndPossessives(t *testing.T) {
+	labels := map[string]string{"a": "AAA", "b": "BBB"}
+	for _, tt := range []struct {
+		name   string
+		levels []scenarios.ScoreLevel
+		want   string
+	}{
+		{"goal difference then goals scored", []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1}, {Measure: scenarios.MeasureGoalsScored}}, "AAA’s final goal difference must exceed BBB’s; if equal, AAA must have at least as many total goals scored as BBB"},
+		{"nonzero standings", []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, TeamNow: 3, RivalNow: 5, MinimumGain: 3}, {Measure: scenarios.MeasureGoalsScored, TeamNow: 10, RivalNow: 9, MinimumGain: -1}}, "AAA’s final goal difference must exceed BBB’s; if equal, AAA must have at least as many total goals scored as BBB"},
+		{"possessive after an equality", []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalsScored, MinimumGain: 1, ExactOnly: true}, {Measure: scenarios.MeasureGoalDifference}}, "AAA must finish level with BBB on goals scored and AAA’s final goal difference must equal or exceed BBB’s"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := scoreConditionText(scenarios.ScoreCondition{TeamID: "a", RivalID: "b", Levels: tt.levels}, labels); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

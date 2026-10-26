@@ -120,6 +120,23 @@ func teamPart(id string, teams map[string]string) scenarioRequirementPart {
 // Enumerate accepting cascade branches, keeping every preceding equality in
 // that branch. ExactOnly skips the strict branch; it never drops the equality.
 func scoreConditionParts(c scenarios.ScoreCondition, teams map[string]string) []scenarioRequirementPart {
+	if len(c.Levels) == 2 {
+		gd, goals := c.Levels[0], c.Levels[1]
+		if gd.Measure == scenarios.MeasureGoalDifference && !gd.ExactOnly && levelDelta(gd) == 1 && goals.Measure == scenarios.MeasureGoalsScored && !goals.ExactOnly && (levelDelta(goals) == 0 || levelDelta(goals) == 1) {
+			need := "must have at least as many total goals scored as"
+			if levelDelta(goals) == 1 {
+				need = "must have more total goals scored than"
+			}
+			return []scenarioRequirementPart{teamPart(c.TeamID, teams), {Text: "’s final goal difference must exceed", NoSpaceBefore: true}, teamPart(c.RivalID, teams), {Text: "’s; if equal,", NoSpaceBefore: true}, teamPart(c.TeamID, teams), {Text: need}, teamPart(c.RivalID, teams)}
+		}
+	}
+	if len(c.Levels) > 1 && allLevel(c.Levels) {
+		measures := []string{}
+		for _, l := range c.Levels {
+			measures = append(measures, measureNoun(l.Measure))
+		}
+		return []scenarioRequirementPart{teamPart(c.TeamID, teams), {Text: "must finish level with"}, teamPart(c.RivalID, teams), {Text: "on " + joinConditions(measures)}}
+	}
 	parts := []scenarioRequirementPart{}
 	for i, level := range c.Levels {
 		if level.ExactOnly && i < len(c.Levels)-1 {
@@ -136,15 +153,47 @@ func scoreConditionParts(c scenarios.ScoreCondition, teams map[string]string) []
 			}
 			parts = append(parts, scenarioRequirementPart{Text: "if " + joinConditions(previous) + ","})
 		}
-		if !hadBranch {
+		if !hadBranch && i > 0 && allLevel(c.Levels[:i]) {
+			measures := []string{}
+			for _, l := range c.Levels[:i] {
+				measures = append(measures, measureNoun(l.Measure))
+			}
+			parts = append(parts, teamPart(c.TeamID, teams), scenarioRequirementPart{Text: "must finish level with"}, teamPart(c.RivalID, teams), scenarioRequirementPart{Text: "on " + joinConditions(measures) + map[bool]string{true: ", and", false: " and"}[len(measures) > 1]})
+		} else if !hadBranch {
 			for _, previous := range c.Levels[:i] {
 				previous.ExactOnly = true
-				parts = append(parts, teamPart(c.TeamID, teams), scenarioRequirementPart{Text: finalComparison(previous)}, teamPart(c.RivalID, teams), scenarioRequirementPart{Text: "and"})
+				parts = append(parts, comparisonParts(c, previous, teams)...)
+				parts = append(parts, scenarioRequirementPart{Text: "and"})
 			}
 		}
-		parts = append(parts, teamPart(c.TeamID, teams), scenarioRequirementPart{Text: finalComparison(level)}, teamPart(c.RivalID, teams))
+		parts = append(parts, comparisonParts(c, level, teams)...)
 	}
 	return parts
+}
+
+// comparisonParts words one cascade level. Goal difference that only has to
+// match or beat the rival's reads as a possessive comparison; the rest use
+// finalComparison.
+// allLevel reports whether every level only has to finish exactly level.
+func allLevel(levels []scenarios.ScoreLevel) bool {
+	for _, l := range levels {
+		if !l.ExactOnly || levelDelta(l) != 1 {
+			return false
+		}
+	}
+	return true
+}
+
+func levelDelta(l scenarios.ScoreLevel) int { return l.TeamNow - l.RivalNow + l.MinimumGain }
+
+func comparisonParts(c scenarios.ScoreCondition, l scenarios.ScoreLevel, teams map[string]string) []scenarioRequirementPart {
+	if l.Measure == scenarios.MeasureGoalDifference && !l.ExactOnly {
+		verb := map[int]string{0: "must equal or exceed", 1: "must exceed"}[levelDelta(l)]
+		if verb != "" {
+			return []scenarioRequirementPart{teamPart(c.TeamID, teams), {Text: "’s final goal difference " + verb, NoSpaceBefore: true}, teamPart(c.RivalID, teams), {Text: "’s", NoSpaceBefore: true}}
+		}
+	}
+	return []scenarioRequirementPart{teamPart(c.TeamID, teams), {Text: finalComparison(l)}, teamPart(c.RivalID, teams)}
 }
 
 func measureNoun(measure scenarios.ScoreMeasure) string {

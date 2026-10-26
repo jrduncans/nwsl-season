@@ -264,8 +264,8 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	view.Slate = snapshot.Run.Slate
 	view.SlateStartsAtUTC = snapshot.Run.Slate.StartsAtUTC.UTC().Format(time.RFC3339)
 	view.SlateLatestUTC = snapshot.Run.Slate.LatestKickoffUTC.UTC().Format(time.RFC3339)
-	view.SlateStartDate = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Mon, Jan 2")
-	view.SlateLatestDate = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Mon, Jan 2")
+	view.SlateStartDate = snapshot.Run.Slate.StartsAtUTC.In(a.options.Location).Format("Jan 2")
+	view.SlateLatestDate = snapshot.Run.Slate.LatestKickoffUTC.In(a.options.Location).Format("Jan 2")
 	view.SlateCutoffUTC = snapshot.Run.Slate.CutoffUTC.UTC().Format(time.RFC3339)
 	view.SlateCutoff = snapshot.Run.Slate.CutoffUTC.In(a.options.Location).Format("Mon Jan 2, 3:04 PM MST")
 	slateIDs := map[string]bool{}
@@ -294,7 +294,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	eliminatedRows := []clinchingRowView{}
 	for _, v := range next.Results {
 		team := teamViews[v.TeamID]
-		achievement := achievementPhrase(v.Achievement)
+		achievement := eliminationAchievementPhrase(v.Achievement)
 		if v.AlreadyEliminated {
 			eliminatedRows = append(eliminatedRows, clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID]})
 		} else if v.CanBeEliminated {
@@ -341,6 +341,10 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch {
 			view.NoHelp = append(view.NoHelp, row)
 			continue
+		}
+		if len(noHelpPath.FixtureIDs) == 1 && repeatsUnconditionalWin(row.Groups, v.TeamID, noHelpPath.FixtureIDs[0], games) {
+			// The card already lists this win as its own unconditional row.
+			row.NoHelp, row.NoHelpFixtures, row.NoHelpFixtureParts, row.NoHelpFixtureCount = "", "", nil, 0
 		}
 		if view.RestOfSeason && len(row.Groups) > 0 {
 			// These groups already show every no-help path. A single group
@@ -1340,9 +1344,35 @@ func achievementPhrase(a competition.AchievementID) string {
 	case competition.AchievementHomePlayoff:
 		return "a home playoff game"
 	case competition.AchievementPlayoffs:
-		return "the playoffs"
+		return "a playoff spot"
 	}
 	return "the " + strings.ToLower(string(a))
+}
+
+// repeatsUnconditionalWin reports whether a group already says the team clinches
+// by winning gameID, whatever else happens.
+func repeatsUnconditionalWin(groups []clinchingGroupView, team, gameID string, games map[string]cache.Game) bool {
+	game := games[gameID]
+	win := uint8(1) // home win; scenarioOutcomes order is home win, draw, away win
+	if game.AwayTeamID == team {
+		win = 4
+	} else if game.HomeTeamID != team {
+		return false
+	}
+	for _, g := range groups {
+		if len(g.Own) == 1 && len(g.AlternativeOwn) == 0 && g.Own[0].GameID == gameID && g.Own[0].SecondGameID == "" && g.Own[0].Mask == win &&
+			len(g.Summary.Conditions)+len(g.Summary.Alternatives)+len(g.Help.Conditions)+len(g.Help.Alternatives)+len(g.Rivals) == 0 && g.GroupedSummary == nil && !g.SummaryOverflow {
+			return true
+		}
+	}
+	return false
+}
+
+func eliminationAchievementPhrase(a competition.AchievementID) string {
+	if a == competition.AchievementPlayoffs {
+		return "the playoffs"
+	}
+	return achievementPhrase(a)
 }
 
 func standingsGames(games []cache.Game) []standings.Game {

@@ -113,7 +113,7 @@ function localizeTimes() {
   document.querySelectorAll("[data-local-date]").forEach((element) => {
     const date = new Date(element.dataset.localDate);
     if (Number.isNaN(date.getTime())) return;
-    element.textContent = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(date);
+    element.textContent = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
   });
 }
 

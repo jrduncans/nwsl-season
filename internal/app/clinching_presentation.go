@@ -82,9 +82,10 @@ func ownHeadingParts(g clinchingGroupView, team string, teams map[string]string,
 	if len(g.Own) == 2 && (len(g.AlternativeOwn) == 2 || ownPoints(g.Own[0], team, games) == ownPoints(g.Own[1], team, games)) {
 		a, b := ownPoints(g.Own[0], team, games), ownPoints(g.Own[1], team, games)
 		verbs := map[int]string{0: "lose", 1: "draw", 3: "win"}
+		nouns := map[int]string{0: "loss", 1: "draw", 3: "win"}
 		text := verbs[a] + " both matches"
 		if a != b {
-			text = verbs[max(a, b)] + " one match and " + verbs[min(a, b)] + " the other"
+			text = "one " + nouns[max(a, b)] + " and one " + nouns[min(a, b)]
 		}
 		parts := []scenarioRequirementPart{{Text: strings.ToUpper(text[:1]) + text[1:]}}
 		return append(parts, rivalFixtureParts([]string{g.Own[0].GameID, g.Own[1].GameID}, team, teams, games)...)
@@ -95,7 +96,7 @@ func ownHeadingParts(g clinchingGroupView, team string, teams map[string]string,
 			parts = append(parts, scenarioRequirementPart{Text: "and"})
 		}
 		if r.SecondGameID != "" {
-			parts = append(parts, scenarioRequirementPart{Text: fmt.Sprintf("Earn at least %s from these two matches", pointsText(r.Points))})
+			parts = append(parts, scenarioRequirementPart{Text: fmt.Sprintf("Earn at least %s across both matches", pointsText(r.Points))})
 			parts = append(parts, rivalFixtureParts([]string{r.GameID, r.SecondGameID}, team, teams, games)...)
 			continue
 		}

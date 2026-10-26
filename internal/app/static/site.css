@@ -167,6 +167,7 @@ th:nth-child(2) { text-align: left; }
 /* Score sentences wrap naturally and keep their equality branches visible. */
 .clinching-condition-score { min-width: 0; }
 .clinching-condition-score > span + span { margin-left: .2rem; }
+.clinching-condition-score > span.clinching-attached { margin-left: 0; }
 .clinching-condition + .clinching-condition { border-top: 1px solid var(--line); }
 .clinching-condition + .clinching-condition::before { margin-right: .2rem; color: var(--muted); content: "and "; font-size: .75rem; font-weight: 800; }
 .clinching-team-token { display: inline-block; vertical-align: baseline; color: var(--green-deep); font-size: .85rem; font-weight: 800; letter-spacing: .03em; white-space: nowrap; }
@@ -807,7 +808,6 @@ th:nth-child(2) { text-align: left; }
   .seeding-grid-focused .seeding-column-unfocused { display: none; }
 }
 
-.clinching-history { display: block; margin-block: .2rem; }
 .seeding-alternative-pages { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-block: 1rem; }
 .seeding-scenario { margin-block: .75rem; border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .seeding-scenario[open] { border-left-color: var(--green); }

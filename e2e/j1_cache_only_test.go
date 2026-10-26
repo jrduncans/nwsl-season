@@ -84,7 +84,7 @@ func cachePages() []cachePage {
 		},
 		{
 			path: season + "clinching", heading: "Clinching scenarios",
-			text:   []any{"Can clinch the playoffs"},
+			text:   []any{"to clinch a playoff spot"},
 			absent: []string{"Scenario calculations are unavailable.", "Clinching scenarios is unavailable"},
 		},
 	}
