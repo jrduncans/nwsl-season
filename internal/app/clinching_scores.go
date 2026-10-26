@@ -249,6 +249,16 @@ func presentScore(r *scenarioRequirement, labels map[string]string, games map[st
 	if len(parts) > 0 {
 		r.Parts = parts
 	}
+	// An equality branch can still prove a minimum individual win even when
+	// the complete cascade must stay visible rather than becoming a margin sentence.
+	if margin == 0 && c.Levels[0].Measure == scenarios.MeasureGoalDifference && (len(c.Levels) > 1 || c.Levels[0].ExactOnly) {
+		level := c.Levels[0]
+		level.MinimumGain-- // The equality branch is one below the strict threshold.
+		level.ExactOnly = false
+		bound := c
+		bound.Levels = []scenarios.ScoreLevel{level}
+		_, margin = individualMargin(bound, labels, games, assumed)
+	}
 	r.Text = partsText(r.Parts)
 	if margin > history.Maximum && history.Scope != "" {
 		r.Historical = fmt.Sprintf("A win by %d goals exceeds the largest margin in our data, %d.", margin, history.Maximum)

@@ -97,6 +97,19 @@ func TestClinchingEssentialScoreConditionsStayVisible(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := buf.String()
+		if maxPoints == 0 {
+			requireExact(t, body, ".clinching-rival-alternatives strong", "At least one of these conditions:")
+			items := find(t, body, ".clinching-rival-alternatives ul li")
+			if len(items) != 2 {
+				t.Fatalf("expected separate loss and draw alternatives: %s", body)
+			}
+			if got := text(items[0]); got != "SD loses vs BOS" {
+				t.Fatalf("loss should stand alone without a tiebreak: %q", got)
+			}
+			if got := text(items[1]); !strings.HasPrefix(got, "SD draws vs BOS and") || !strings.Contains(got, "Tiebreak details") {
+				t.Fatalf("draw should name the fixture and own its tiebreak details: %q", got)
+			}
+		}
 		requireText(t, body, ".clinching-condition-score", "NJY’s final goal difference must exceed SD’s; if equal, NJY must have more total goals scored than SD")
 		requireExact(t, body, "summary", "Tiebreak details")
 		requireText(t, body, "details div", "SD currently leads by 1", "The teams are currently level on goals scored at 40")

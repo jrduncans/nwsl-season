@@ -177,6 +177,55 @@ func TestScoreHistoricalAnnotationRequiresIndividualMarginAndCompleteHistory(t *
 	}
 }
 
+func TestRivalCascadeHistoricalMarginIncludesEqualityBranch(t *testing.T) {
+	labels := map[string]string{"por": "POR", "la": "LA", "hou": "HOU", "bos": "BOS"}
+	games := map[string]cache.Game{
+		"por": {HomeTeamID: "hou", AwayTeamID: "por", Status: "PreMatch"},
+		"la":  {HomeTeamID: "la", AwayTeamID: "bos", Status: "PreMatch"},
+	}
+	c := scenarios.ScoreCondition{TeamID: "por", RivalID: "la", Levels: []scenarios.ScoreLevel{
+		{Measure: scenarios.MeasureGoalDifference, TeamNow: 0, RivalNow: 12, MinimumGain: 13},
+		{Measure: scenarios.MeasureGoalsScored, TeamNow: 0, RivalNow: 2, MinimumGain: 2},
+	}}
+	for _, tt := range []struct {
+		name    string
+		ownMask uint8
+		points  int
+		history scenarioHistory
+		want    string
+	}{
+		{"win against draw", 4, 1, scenarioHistory{Maximum: 6, Scope: "verified history"}, "A win by 12 goals exceeds the largest margin in our data, 6."},
+		{"rival win has no individual bound", 4, 3, scenarioHistory{Maximum: 6, Scope: "verified history"}, ""},
+		{"rival loss contributes to swing", 4, 0, scenarioHistory{Maximum: 6, Scope: "verified history"}, ""},
+		{"own result unspecified", 7, 1, scenarioHistory{Maximum: 6, Scope: "verified history"}, ""},
+		{"history unavailable", 4, 1, scenarioHistory{}, ""},
+		{"minimum equals historical maximum", 4, 1, scenarioHistory{Maximum: 12, Scope: "verified history"}, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rival := rivalView(scenarios.RivalNeed{RivalID: "la", GameIDs: []string{"la"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: tt.points, Condition: &c}}}, labels, games)
+			groups := []clinchingGroupView{{Own: []scenarioRequirement{{GameID: "por", Mask: tt.ownMask}}, Rivals: []clinchingRivalView{rival}}}
+			presentScenarioGroups(groups, labels, games, nil, tt.history)
+			condition := groups[0].Rivals[0].Ties[0].Condition
+			if condition.Historical != tt.want {
+				t.Fatalf("historical note = %q, want %q", condition.Historical, tt.want)
+			}
+			if condition.Text != scoreConditionText(c, labels) {
+				t.Fatalf("full tiebreak cascade was replaced: %s", condition.Text)
+			}
+		})
+	}
+	// Equality is possible at a 12-goal gain, but still needs enough goals
+	// scored; no accepting branch permits a smaller goal-difference gain.
+	for gain := 0; gain <= 14; gain++ {
+		for goals := 0; goals <= 14; goals++ {
+			want := gain > 12 || gain == 12 && goals >= 2
+			if c.Holds([]int{gain, goals}) != want {
+				t.Fatalf("unexpected cascade at GD gain %d, goals gain %d", gain, goals)
+			}
+		}
+	}
+}
+
 func TestSeedingScenariosKeepCompleteConditionsAndPageState(t *testing.T) {
 	labels := map[string]string{"a": "AAA", "b": "BBB"}
 	conditions := []scenarios.FixtureCondition{}
