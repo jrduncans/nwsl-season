@@ -781,16 +781,15 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	body := response.Body.String()
 	// The slate disclosure and the "can clinch the playoffs" heading are
 	// exercised by TestPagesClinching in e2e.
-	requireText(t, body, "main h2", "Clinching scenarios", "Elimination scenarios", "No-help scenarios")
+	requireText(t, body, "main h2", "Clinching scenarios", "Elimination scenarios", "Clinch without help")
 	requireText(t, body, ".clinching-opportunity-elimination h3", "Alpha & Co <script>alert(1)</script>")
 	requireText(t, body, ".clinching-opportunity-elimination .clinching-outcome h4", "Can be eliminated from the playoffs")
 	requireText(t, body, ".clinching-result-group h5", "Win vs Bravo FC", "Lose vs Bravo FC")
 	// Guaranteed rows end after their heading and retain the result color.
 	requireExact(t, body, ".clinching-opportunity-clinching .clinching-result-win", "Win vs Bravo FC")
 	requireExact(t, body, ".clinching-opportunity-elimination .clinching-result-loss", "Lose vs Bravo FC")
-	requireText(t, body, "main .clinching-statement", "with 1 win", "Win each of these remaining matches: vs Bravo FC.")
-	// Inside a team card, the heading and badge already name the team and outcome.
-	requireExact(t, body, ".clinching-outcome .clinching-statement summary", "No-help scenario: 1 win")
+	// A no-help path that repeats the card's own unconditional win is not shown again.
+	forbidElements(t, body, ".clinching-outcome .clinching-statement")
 	forbidRaw(t, body, "Current opportunities", "All qualification statuses", "Already clinched.", "cannot_clinch", "scenario computation budget exhausted", "can clinch the Shield", "Calculation notes", "Unable to evaluate", "Alpha &amp; Co &lt;script&gt;alert(1)&lt;/script&gt; — the Shield (no-help path)", "Bravo FC — the Shield")
 }
 
@@ -846,7 +845,7 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	requireText(t, body, ".clinching-no-help", "No-help scenarios", "These scenarios may include matches after this slate", "Can clinch the playoffs with 1 win", "Win each of these remaining matches: vs Bravo FC.")
+	requireText(t, body, ".clinching-no-help", "Clinch without help", "Some matches fall after this matchday", "Win 1 match to clinch a playoff spot", "Win each of these remaining matches: vs Bravo FC.")
 	requireAttr(t, body, ".clinching-team-card img", "src", "https://american-soccer-analysis-headshots.s3.amazonaws.com/club_logos/alpha.png")
 	forbidElements(t, body, "[data-clinching-team-filter]", ".clinching-slate")
 	forbidRaw(t, body, "Show scenarios for")
@@ -873,7 +872,7 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 	requireText(t, body, "main", "Recalculation pending.")
 	// The Shield implies the playoffs, so Alpha is listed once, under its
 	// highest clinched outcome.
-	requireText(t, body, ".clinching-status-group-clinched h2", "Already clinched the Shield")
+	requireText(t, body, ".clinching-status-group-clinched h2", "Clinched the Shield")
 	forbidRaw(t, body, "Already clinched the playoffs")
 	if got := len(find(t, body, "li.clinching-status-item")); got != 1 {
 		t.Fatalf("clinched status rows = %d, want one row for the highest outcome", got)
@@ -922,7 +921,7 @@ func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 	for _, path := range findIn(t, cards[0], "summary") {
 		alphaPaths = append(alphaPaths, text(path))
 	}
-	if len(alphaPaths) != 2 || !strings.HasPrefix(alphaPaths[0], "Can clinch the Shield") || !strings.HasPrefix(alphaPaths[1], "Can clinch the playoffs") {
+	if len(alphaPaths) != 2 || !strings.HasSuffix(alphaPaths[0], "to clinch the Shield") || !strings.HasSuffix(alphaPaths[1], "to clinch a playoff spot") {
 		t.Errorf("paths inside a team card are not ordered by relevance: %q", alphaPaths)
 	}
 }

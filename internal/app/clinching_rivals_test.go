@@ -49,7 +49,7 @@ func TestClinchingRivalGroupViewsIntersectSharedFixture(t *testing.T) {
 		{"independent rival", 3, []scenarios.RivalNeed{nc, den, sd}, "Clinches if all of:", []string{"NC draws vs DEN", "SD draws or loses at BAY"}},
 		{"any rival", 1, []scenarios.RivalNeed{nc, den}, "Clinches if any of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC"}},
 		{"two of three rivals", 2, []scenarios.RivalNeed{nc, den, sd}, "Clinches if at least 2 of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC", "SD draws or loses at BAY"}},
-		{"score condition", 2, []scenarios.RivalNeed{nc, conditional}, "Clinches if all of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC or wins if [SEA must finish with a higher goal difference than DEN]"}},
+		{"score condition", 2, []scenarios.RivalNeed{nc, conditional}, "Clinches if all of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC or wins if [SEA’s final goal difference must exceed DEN’s]"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -112,14 +112,14 @@ func TestRivalViewWordsEachRival(t *testing.T) {
 	}{
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 4}, "SD doesn’t win both matches (vs BOS and at BAY)"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 3, Ties: []scenarios.RivalTie{{Points: 4, Wins: 1, Condition: gd}}},
-			"SD takes 3 points or fewer (vs BOS and at BAY) or takes 4 points if [NJY must finish with a higher goal difference than SD]"},
+			"SD earns at most 3 points (vs BOS and at BAY) or earns 4 points if [NJY’s final goal difference must exceed SD’s]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
-			"SD loses both matches (vs BOS and at BAY) and [NJY must finish with a higher goal difference than SD]"},
+			"SD loses both matches (vs BOS and at BAY) and [NJY’s final goal difference must exceed SD’s]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos"}, MaxPoints: 1}, "SD draws or loses vs BOS"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
-			"SD loses vs BOS and [NJY must finish with a higher goal difference than SD]"},
+			"SD loses vs BOS and [NJY’s final goal difference must exceed SD’s]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
-			"[NJY must finish with a higher goal difference than SD]"},
+			"[NJY’s final goal difference must exceed SD’s]"},
 	}
 	for _, test := range tests {
 		if got := rivalText(rivalView(test.need, rivalTestTeams, rivalTestGames())); got != test.want {
@@ -151,7 +151,7 @@ func TestRivalGroupViewsMergeOwnResultsAndFallBackWhenWithheld(t *testing.T) {
 	}
 	want := []string{
 		"If Gotham wins both matches (at Orlando and vs Utah)",
-		"If Gotham wins one match and loses the other (at Orlando and vs Utah)",
+		"If Gotham has one win and one loss (at Orlando and vs Utah)",
 		"If Gotham loses both matches (at Orlando and vs Utah)",
 	}
 	if strings.Join(headings, "\n") != strings.Join(want, "\n") {
@@ -160,7 +160,7 @@ func TestRivalGroupViewsMergeOwnResultsAndFallBackWhenWithheld(t *testing.T) {
 	if views[0].RivalState != "" || len(views[0].Rivals) != 0 {
 		t.Fatalf("two wins should clinch outright: %+v", views[0])
 	}
-	if views[1].RivalState != "Clinches if" || rivalText(views[1].Rivals[0]) != "SD takes 3 points or fewer (vs BOS and at BAY)" {
+	if views[1].RivalState != "Clinches if" || rivalText(views[1].Rivals[0]) != "SD earns at most 3 points (vs BOS and at BAY)" {
 		t.Fatalf("one win and one loss = %q %+v", views[1].RivalState, views[1].Rivals)
 	}
 	if views[2].RivalState != "" || len(views[2].Summary.Conditions)+len(views[2].Summary.Alternatives) == 0 {

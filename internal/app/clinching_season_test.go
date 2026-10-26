@@ -27,18 +27,18 @@ func TestScoreConditionFinalStandingsWording(t *testing.T) {
 		condition scenarios.ScoreCondition
 		want      string
 	}{
-		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{gd(1, 7, 7)}}, "POR must finish with a higher goal difference than UTA"},
-		{scenarios.ScoreCondition{TeamID: "por", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 0, 5)}}, "POR must finish with a higher goal difference than KC"},
-		{scenarios.ScoreCondition{TeamID: "por", RivalID: "la", Levels: []scenarios.ScoreLevel{gd(11, 2, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 0, TeamNow: 40, RivalNow: 40}}}, "POR must finish with a higher goal difference than LA or, if level on goal difference, POR must finish with at least as many goals as LA"},
-		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 7, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 7, TeamNow: 44, RivalNow: 50}}}, "UTA must finish with a higher goal difference than KC or, if level on goal difference, UTA must finish with more goals than KC"},
-		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "por", Levels: []scenarios.ScoreLevel{gd(1, 7, 7), {Measure: scenarios.MeasureGoalsScored, MinimumGain: -3, TeamNow: 44, RivalNow: 48}}}, "UTA must finish with a higher goal difference than POR or, if level on goal difference, UTA must finish with no more than 7 fewer goals than POR"},
+		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{gd(1, 7, 7)}}, "POR’s final goal difference must exceed UTA’s"},
+		{scenarios.ScoreCondition{TeamID: "por", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 0, 5)}}, "POR’s final goal difference must exceed KC’s"},
+		{scenarios.ScoreCondition{TeamID: "por", RivalID: "la", Levels: []scenarios.ScoreLevel{gd(11, 2, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 0, TeamNow: 40, RivalNow: 40}}}, "POR’s final goal difference must exceed LA’s; if equal, POR must have at least as many total goals scored as LA"},
+		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "kc", Levels: []scenarios.ScoreLevel{gd(6, 7, 12), {Measure: scenarios.MeasureGoalsScored, MinimumGain: 7, TeamNow: 44, RivalNow: 50}}}, "UTA’s final goal difference must exceed KC’s; if equal, UTA must have more total goals scored than KC"},
+		{scenarios.ScoreCondition{TeamID: "uta", RivalID: "por", Levels: []scenarios.ScoreLevel{gd(1, 7, 7), {Measure: scenarios.MeasureGoalsScored, MinimumGain: -3, TeamNow: 44, RivalNow: 48}}}, "UTA’s final goal difference must exceed POR’s or, if level on goal difference, UTA must finish with no more than 7 fewer goals than POR"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1, ExactOnly: true, TeamNow: 7, RivalNow: 7}, {Measure: scenarios.MeasureGoalsScored, MinimumGain: -3, ExactOnly: true, TeamNow: 48, RivalNow: 44}}},
-			"POR must finish level on goal difference with UTA and POR must finish level on goals scored with UTA"},
+			"POR must finish level with UTA on goal difference and goals scored"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1, ExactOnly: true, TeamNow: 7, RivalNow: 7}, {Measure: scenarios.MeasureGoalsScored, MinimumGain: 1, ExactOnly: true, TeamNow: 48, RivalNow: 48}, {Measure: scenarios.MeasureHeadToHeadGoals, MinimumGain: 2, TeamNow: 2, RivalNow: 3}}},
-			"POR must finish level on goal difference with UTA and POR must finish level on goals scored with UTA and POR must finish with more head-to-head goals than UTA"},
+			"POR must finish level with UTA on goal difference and goals scored, and POR must finish with more head-to-head goals than UTA"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{gd(0, 9, 6)}}, "POR must finish with a goal difference at least 3 higher than UTA"},
 		{scenarios.ScoreCondition{TeamID: "por", RivalID: "uta", Levels: []scenarios.ScoreLevel{{Measure: scenarios.MeasureGoalDifference, MinimumGain: 1, ExactOnly: true, TeamNow: 7, RivalNow: 7}, {Measure: scenarios.MeasureGoalsScored, MinimumGain: 1, TeamNow: 30, RivalNow: 31}, {Measure: scenarios.MeasureHeadToHeadGoals, MinimumGain: 1, TeamNow: 1, RivalNow: 1}}},
-			"POR must finish level on goal difference with UTA and POR must finish with at least as many goals as UTA or, if level on goal difference and the final goals scored difference is -1, POR must finish with more head-to-head goals than UTA"},
+			"POR must finish level with UTA on goal difference and POR must finish with at least as many goals as UTA or, if level on goal difference and the final goals scored difference is -1, POR must finish with more head-to-head goals than UTA"},
 	} {
 		if got := scoreConditionText(test.condition, teams); got != test.want {
 			t.Errorf("got %q, want %q", got, test.want)
@@ -106,7 +106,7 @@ func TestClinchingPageSwitchesToRestOfSeason(t *testing.T) {
 	if !strings.Contains(rest, `value="rest-of-season" checked`) {
 		t.Fatal("rest-of-season option should be selected")
 	}
-	for _, want := range []string{"must finish with a higher goal difference than", "The teams are currently level on goal difference at 1", "clinching-condition-score", "Disciplinary points may decide", "three or more teams finish level", "2 matches"} {
+	for _, want := range []string{"final goal difference must exceed", "The teams are currently level on goal difference at 1", "clinching-condition-score", "Scenarios requiring the disciplinary-points tiebreaker are omitted", "three or more teams finish level", "2 matches"} {
 		if !strings.Contains(rest, want) {
 			t.Errorf("rest-of-season view lacks %q", want)
 		}
@@ -183,7 +183,7 @@ func TestClinchingGroupsKeepScoreConditionsIntact(t *testing.T) {
 		for _, requirement := range combination {
 			if requirement.Score != nil {
 				withScore++
-				if requirement.Text != "ALP must finish with a higher goal difference than CIT" {
+				if requirement.Text != "ALP’s final goal difference must exceed CIT’s" {
 					t.Errorf("score text = %q", requirement.Text)
 				}
 			}
@@ -209,7 +209,7 @@ func TestClinchingGroupsMergeIdenticalTwoMatchResultsIntoAPointsTotal(t *testing
 		testScenarioClause(c("a", 1), c("b", 4), c("h", 1)),
 	}
 	groups := clinchingGroups(clauses, "was", teams, games)
-	if len(groups) != 2 || groups[0].Heading != "If WAS earns at least 1 point from these two matches: at KC and vs CHI" || len(groups[0].Summary.Combinations()) != 1 || len(groups[0].Summary.Combinations()[0]) != 0 {
+	if len(groups) != 2 || groups[0].Heading != "If WAS earns at least 1 point across both matches: at KC and vs CHI" || len(groups[0].Summary.Combinations()) != 1 || len(groups[0].Summary.Combinations()[0]) != 0 {
 		t.Fatalf("groups = %+v", groups)
 	}
 	assertScenarioCoverage(t, clauses, groups, games, true)
@@ -236,16 +236,16 @@ func TestClinchingSeedingGridAndFixedResults(t *testing.T) {
 	}}
 	store := seasonScenarioStore(seedingTestData(), []string{"future-4"}, []string{"future-4", "future-5"}, snapshot)
 	body := getClinching(t, store, "?view=seeding&team=ALP")
-	for _, want := range []string{`id="seeding-team"`, `value="ALP" selected`, `value="seeding" checked`, "1st", "hosts 2nd", "Misses the playoffs", "W–any", "D/L–any", `data-assumption-builder`, `name="team" value="ALP"`, "Disciplinary points may decide"} {
+	for _, want := range []string{`id="seeding-team"`, `value="ALP" selected`, `value="seeding" checked`, "1st", "hosts 2nd", "Misses the playoffs", "W–any", "D/L–any", `data-assumption-builder`, `name="team" value="ALP"`, "Scenarios requiring the disciplinary-points tiebreaker are omitted"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("seeding view missing %q", want)
 		}
 	}
-	if strings.Contains(body, "must finish with a higher goal difference") || strings.Contains(body, `id="seeding-conditions"`) {
+	if strings.Contains(body, "final goal difference must exceed") || strings.Contains(body, `id="seeding-conditions"`) {
 		t.Fatal("overview must not render scenario conditions")
 	}
 	detail := getClinching(t, store, "?view=seeding&team=ALP&finish=1")
-	for _, want := range []string{"finishes 1st", "must finish with a higher goal difference", `aria-current="true">1st`} {
+	for _, want := range []string{"finishes 1st", "final goal difference must exceed", `aria-current="true">1st`} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("selected finish missing %q", want)
 		}
@@ -254,7 +254,7 @@ func TestClinchingSeedingGridAndFixedResults(t *testing.T) {
 	if strings.Contains(filtered, "Misses the playoffs") || strings.Contains(filtered, "D/L") || strings.Contains(filtered, "in that order") {
 		t.Fatal("contradictory finish or own result remained")
 	}
-	if !strings.Contains(filtered, "must finish with a higher goal difference") || !strings.Contains(filtered, `name="p" value="future-4:h"`) {
+	if !strings.Contains(filtered, "final goal difference must exceed") || !strings.Contains(filtered, `name="p" value="future-4:h"`) {
 		t.Fatal("fixed score conditions or URL state disappeared")
 	}
 	gone := getClinching(t, store, "?view=seeding&team=ALP&finish=miss&p=future-4:h")

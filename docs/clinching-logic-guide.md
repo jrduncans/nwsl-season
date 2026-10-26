@@ -293,7 +293,7 @@ to list its included matches; the list stays collapsed by default so the
 results remain near the top. "Already clinched" boxes list each team once,
 under its highest clinched outcome, since that outcome implies the lower ones. Each team that can clinch, or can be eliminated,
 gets one card: the team's name heads it, and each outcome ("Can clinch a home
-playoff game", "Can clinch the playoffs") is a section under its own badge,
+playoff game", "Can clinch a playoff spot") is a section under its own badge,
 ordered by outcome rank. Cards follow each team's highest-ranked outcome, then
 standings position. Color carries meaning: the team's name sits on a tinted
 band (green for clinching, red for elimination), each outcome badge is solid,
@@ -304,9 +304,11 @@ its heading, with compact padding and no empty body or repeated clinch,
 elimination or finish label. Requirements use the same quiet rows and subtle
 separators in all three views. Logical groups still explicitly say **all of**,
 **any of**, or **at least N**; a conjunction is never flattened into alternatives.
-Requirement rows use fragments without terminal periods, with lowercase “or”
-for alternative continuations, including score-equality branches. Explanatory
-paragraphs use complete sentences with capitals and periods.
+Requirement rows use fragments without terminal periods. Each alternative
+starts on its own “or” line so any following score condition applies only to
+that alternative. Nested groups are labeled “All of:” (only for more than one
+condition), “At least one of these conditions:” and “And at least one of these:”.
+Explanatory paragraphs use complete sentences with capitals and periods.
 Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
@@ -314,8 +316,10 @@ outside help certified for a draw. All own-result group headings and factored
 requirements stay visible. Only groups whose summary is omitted for size offer
 an expandable scenario list. Every essential score requirement, including all
 GD, goals-scored and head-to-head equality branches, is directly visible.
-A separate native **Explanation** control contains only supporting current-gap
-arithmetic and remaining-match counts. Its label contains no football sentence
+A separate native **Tiebreak details** control contains supporting current-gap
+arithmetic and remaining-match counts. When the requirement exceeds every
+historical winning margin, one sentence at the end of that same control says
+so. Its label contains no football sentence
 or team fragments; keyboard focus is visible and its target is at least 44px.
 Without useful supporting context it is omitted. Team crests accompany named
 teams consistently in headings, fixtures, score sentences and alternatives.
@@ -327,11 +331,11 @@ Fixture and score tokens come from stored IDs, never parsed display strings.
 Results
 from one match with identical outside help share a heading, such as “draws or
 loses.” Two-match result orderings share a heading only when their outside help
-is identical; for example, “wins one match and loses the other” still names
+is identical; for example, “one win and one loss” still names
 the two specific matches. Two-match groups with identical outside help also
 merge when together they are exactly every result worth at least some points
 total, every ordering included: five sufficient rows for everything but two
-losses become one "earns at least 1 point from these two matches" heading.
+losses become one "earns at least 1 point across both matches" heading.
 For unusual slates with more than four relevant own matches, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
 
@@ -398,10 +402,11 @@ Unlisted matches are unrestricted. The full included schedule remains collapsed
 below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination scenarios. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
-No-help winning scenarios are labeled “No-help scenario” because they can include matches
-after the displayed slate. Inside a team's card the line is just the win count
-("No-help scenario: 2 wins"), since the card heading and badge name the team and
-outcome; it expands to list the matches.
+No-help paths say “Win N matches to clinch without help” (inside a team's
+section card, “… to clinch” plus the outcome) and expand to list those matches. A one-match path is omitted from a card that already lists
+that win as an unconditional own-result row. The separate “Clinch without help” section explains that
+winning the listed matches guarantees qualification regardless of other results,
+and notes that some matches fall after the current matchday.
 
 Use `make test-clinching` for focused scenario-proof and presentation checks.
 These checks also run within `make test` and CI, including exhaustive
@@ -477,8 +482,8 @@ team are compared pairwise.
 The results are joined back into conditions. A rival whose states all give the
 same result needs no condition. When "ahead" and "level" give the same result,
 one "ahead or level" condition covers both, which is the usual two-team case. A
-rival in the "behind" state gets a condition written from its side ("UTA must
-finish with a higher goal difference than POR"). The level state reads "POR finishes level with UTA
+rival in the "behind" state gets a condition written from its side ("UTA’s
+final goal difference must exceed POR’s"). The level state reads "POR finishes level with UTA
 on goal difference and goals scored", followed by a head-to-head goals condition
 when their remaining matches against each other decide it.
 
@@ -489,13 +494,15 @@ condition with one head-to-head goals level; it must not be appended to itself.
 ### Wording
 
 The page translates each typed score threshold into a comparison of final
-standings totals. A minimum GD gain equal to the current deficit means “must
-finish with at least the goal difference of [rival]”; one greater means “must
-finish with a higher goal difference than [rival]”. Other thresholds retain
-an explicit final difference. Exact-only levels remain equality requirements.
+standings totals. A minimum GD gain equal to the current deficit means “[team]’s
+final goal difference must equal or exceed [rival]’s”; one greater means
+“[team]’s final goal difference must exceed [rival]’s”. Other thresholds retain
+an explicit final difference. Exact-only levels remain equality requirements; consecutive level
+requirements share one sentence: “[team] must finish level with [rival] on goal
+difference and goals scored”.
 Every accepting cascade branch retains all preceding equalities: for example,
-“must finish with a higher goal difference”, followed by “or, if level on goal
-difference, must finish with at least as many goals”. An exact-only prefix is
+“[team]’s final goal difference must exceed [rival]’s; if equal, [team] must
+have at least as many total goals scored as [rival]”. An exact-only prefix is
 an explicit conjunction, never an optional conditional. Multiway head-to-head
 predicates are preserved intact.
 
@@ -528,11 +535,11 @@ Listing scenarios over every remaining match multiplies quickly: one of Gotham's
 therefore restates each result one rival at a time, which a reader can hold in
 their head:
 
-> **Win one match and lose the other (named fixtures)** — Clinches if all of:
-> - SD takes 3 points or fewer (vs BOS and at BAY), or takes 4 points, and NJY
->   must finish with a higher goal difference than SD
-> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches, and NJY
->   must finish with a higher goal difference than WAS
+> **One win and one loss (named fixtures)** — Clinches if all of:
+> - SD earns at most 3 points (vs BOS and at BAY), or earns 4 points, and NJY’s
+>   final goal difference must exceed SD’s
+> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches, and NJY’s
+>   final goal difference must exceed WAS’s
 
 This is exact, not a simplification, because of two facts:
 
@@ -547,8 +554,8 @@ This is exact, not a simplification, because of two facts:
 - **Points name the record.** A rival finishes behind on points below some total
   and ahead above it; only the total that leaves the two level needs a score
   condition. With one or two matches left, a points total also fixes the
-  rival's wins, so "takes 4 points" is a single record. With three or more, a
-  level total names its wins ("takes 3 points with 1 win").
+  rival's wins, so "earns 4 points" is a single record. With three or more, a
+  level total names its wins ("earns 3 points with 1 win").
 
 When every listed rival requirement must hold, outcome-only requirements for
 the same single match are intersected and displayed once. For example, “NC
@@ -597,8 +604,7 @@ alternatives remain. The pass applies only within the existing 256-path summary
 bound. A complete grouped summary replaces the duplicate exact-scenario
 disclosure; the disclosure remains available when a summary is omitted for size.
 
-Rows merge under one heading as clause groups do ("wins one match and loses the
-other", "earns at least 1 point from these two matches") when their rivals'
+Rows merge under one heading as clause groups do ("one win and one loss", "earns at least 1 point from these two matches") when their rivals'
 needs are identical. Rivals are listed in standings order. A row that needs no
 help ends after its heading.
 
@@ -808,10 +814,11 @@ listed in the [competition guide](competitions-guide.md#verified-historical-regu
 Known awarded fixtures reconcile per-team deficits without changing cached
 matches, and their awarded scores contribute to the maximum winning margin.
 Awards already supplied by ASA are not counted twice. The latest included
-match date comes from cached fixtures; no kickoff is invented for an award. The annotation names every
-included season and the latest included match date. It explicitly describes
-a comparison with that scope, never an all-time record. There is no hardcoded
-record or probability label. If no eligible history exists, the page says so.
+match date comes from cached fixtures; no kickoff is invented for an award. The annotation is one sentence inside
+the requirement's Tiebreak details control ("A win by 12 goals exceeds the
+largest margin in our data, 6."). It does not list
+seasons or dates and is never presented as an all-time record. There is no
+hardcoded record or probability label. If no eligible history exists, the page says so.
 
 The annotation uses the proved individual margin from the same typed
 simplification as the visible sentence. A four-goal aggregate swing, a two-goal

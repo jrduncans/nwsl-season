@@ -1158,7 +1158,7 @@ func TestPagesClinching(t *testing.T) {
 		if err := expect.Locator(card).ToHaveCount(1); err != nil {
 			t.Error(err)
 		}
-		if err := expect.Locator(card.Locator(".clinching-outcome h4", playwright.LocatorLocatorOptions{HasText: "Can clinch the playoffs"})).ToBeVisible(); err != nil {
+		if err := expect.Locator(card.Locator(".clinching-outcome h4", playwright.LocatorLocatorOptions{HasText: "Can clinch a playoff spot"})).ToBeVisible(); err != nil {
 			t.Error(err)
 		}
 
@@ -1174,7 +1174,7 @@ func TestPagesClinching(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse %q: %v", date.UTC, err)
 			}
-			if got, want := normalizeSpace(date.Text), localDate(instant, tokyo); got != want {
+			if got, want := normalizeSpace(date.Text), instant.In(tokyo).Format("Jan 2"); got != want {
 				t.Errorf("slate date %s = %q, want %q", date.UTC, got, want)
 			}
 		}

@@ -61,8 +61,8 @@ func TestClinchingRivalFixtureCrests(t *testing.T) {
 	}{
 		{"away loss", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"away"}, MaxPoints: 0}, "KC loses at LOU", []string{"lou"}},
 		{"home result", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home"}, MaxPoints: 1}, "KC draws or loses vs WAS", []string{"was"}},
-		{"multiple fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: 3}, "KC takes 3 points or fewer (vs WAS and at LOU)", []string{"was", "lou"}},
-		{"three fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away", "same-code"}, MaxPoints: 3}, "KC takes 3 points or fewer (vs WAS, at LOU, and at LOU)", []string{"was", "lou", "lou-other"}},
+		{"multiple fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: 3}, "KC earns at most 3 points (vs WAS and at LOU)", []string{"was", "lou"}},
+		{"three fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away", "same-code"}, MaxPoints: 3}, "KC earns at most 3 points (vs WAS, at LOU, and at LOU)", []string{"was", "lou", "lou-other"}},
 		{"mandatory result", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"away"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0}}}, "KC loses at LOU", []string{"lou"}},
 		{"mandatory pair", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0}}}, "KC loses both matches (vs WAS and at LOU)", []string{"was", "lou"}},
 	} {
@@ -97,8 +97,8 @@ func TestClinchingEssentialScoreConditionsStayVisible(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := buf.String()
-		requireText(t, body, ".clinching-condition-score", "NJY must finish with a higher goal difference than SD", "or, if level on goal difference, NJY must finish with more goals than SD")
-		requireExact(t, body, "summary", "Explanation")
+		requireText(t, body, ".clinching-condition-score", "NJY’s final goal difference must exceed SD’s; if equal, NJY must have more total goals scored than SD")
+		requireExact(t, body, "summary", "Tiebreak details")
 		requireText(t, body, "details div", "SD currently leads by 1", "The teams are currently level on goals scored at 40")
 		// Essential text is outside every disclosure, including equality cascades.
 		for _, node := range find(t, body, "details") {
@@ -125,8 +125,8 @@ func TestSeedingOverflowCompactPresentation(t *testing.T) {
 		view seedingOverflowView
 		want []string
 	}{
-		{"no common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "NJY vs UTA"}, Some: [][]scenarioRequirement{{{Text: "KC earns at least 2 points from these two matches: vs WAS and at LOU"}}}, SomeHigh: 1, Scores: true}, []string{"Some paths also need tiebreak scores."}},
-		{"common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "KC vs LOU"}, Always: []scenarioRequirement{{Text: "KC earns at least 2 points from these two matches: vs WAS and vs LOU"}}}, []string{"Common requirements (all of):", "KC earns at least 2 points"}},
+		{"no common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "NJY vs UTA"}, Some: [][]scenarioRequirement{{{Text: "KC earns at least 2 points across both matches: vs WAS and at LOU"}}}, SomeHigh: 1, Scores: true}, []string{"Some paths also need tiebreak scores."}},
+		{"common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "KC vs LOU"}, Always: []scenarioRequirement{{Text: "KC earns at least 2 points across both matches: vs WAS and vs LOU"}}}, []string{"Common requirements (all of):", "KC earns at least 2 points"}},
 		{"positive minimum", seedingOverflowView{SomeLow: 1, SomeHigh: 2, Some: [][]scenarioRequirement{{{Text: "UTA loses at NJY"}}}}, []string{"Each way also needs 1 to 2 of these:", "UTA loses at NJY"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

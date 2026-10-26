@@ -132,7 +132,7 @@ func requirementText(r scenarioRequirement, perspective string, teams map[string
 		if r.Points == 1 {
 			unit = "point"
 		}
-		return fmt.Sprintf("%s earns at least %d %s from these two matches: %s", teams[r.TeamID], r.Points, unit, noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{r.GameID, r.SecondGameID}}, r.TeamID, games, teams))
+		return fmt.Sprintf("%s earns at least %d %s across both matches: %s", teams[r.TeamID], r.Points, unit, noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{r.GameID, r.SecondGameID}}, r.TeamID, games, teams))
 	}
 	outcomes := []clinching.Outcome{}
 	for i, o := range scenarioOutcomes {
@@ -185,7 +185,7 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 		}
 		parts := []scenarioRequirementPart{
 			{Team: &scenarioTeamToken{Code: teams[r.TeamID], LogoURL: clubLogoURL(r.TeamID)}},
-			{Text: fmt.Sprintf("earns at least %d %s from these two matches:", r.Points, unit)},
+			{Text: fmt.Sprintf("earns at least %d %s across both matches:", r.Points, unit)},
 		}
 		fixtures := 0
 		for _, gameID := range []string{r.GameID, r.SecondGameID} {
@@ -921,7 +921,8 @@ func combineOwnPairs(groups []clinchingGroupView, team string, teams map[string]
 					continue
 				}
 				prior.AlternativeOwn = group.Own
-				prior.Heading = fmt.Sprintf("If %s %s one match and %s the other (%s)", teams[team], verbs[max(results[0], results[1])], verbs[min(results[0], results[1])], matches)
+				nouns := map[int]string{0: "loss", 1: "draw", 3: "win"}
+				prior.Heading = fmt.Sprintf("If %s has one %s and one %s (%s)", teams[team], nouns[max(results[0], results[1])], nouns[min(results[0], results[1])], matches)
 				merged = true
 				break
 			}

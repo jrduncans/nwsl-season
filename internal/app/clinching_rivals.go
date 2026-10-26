@@ -149,8 +149,8 @@ func rivalFixtureMask(need scenarios.RivalNeed, games map[string]cache.Game) (ui
 }
 
 // rivalView words one rival's need. The rival's results come first ("SD
-// takes 3 points or fewer (vs BOS and at BAY)"), then each level record and
-// its condition ("or takes 4 points if NJY gains 1+ goal difference on SD").
+// earns at most 3 points (vs BOS and at BAY)"), then each level record and
+// its condition ("or earns 4 points if NJY gains 1+ goal difference on SD").
 func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[string]cache.Game) clinchingRivalView {
 	n := len(need.GameIDs)
 	fixtures := noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: need.GameIDs}, need.RivalID, games, teams)
@@ -167,7 +167,7 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 	case limit == 0:
 		base = "loses " + allMatches(n)
 	default:
-		base = fmt.Sprintf("takes %s or fewer", pointsText(limit))
+		base = fmt.Sprintf("earns at most %s", pointsText(limit))
 	}
 	view := clinchingRivalView{GameIDs: need.GameIDs, RivalID: need.RivalID}
 	if n > 0 {
@@ -273,7 +273,7 @@ func tieRecordText(tie scenarios.RivalTie, matches int) string {
 		case 0:
 			return "loses both matches"
 		}
-		return "takes " + pointsText(tie.Points)
+		return "earns " + pointsText(tie.Points)
 	}
 	if tie.Points == 0 {
 		return "loses " + allMatches(matches)
@@ -282,7 +282,7 @@ func tieRecordText(tie scenarios.RivalTie, matches int) string {
 	if tie.Wins == 1 {
 		wins = "win"
 	}
-	return fmt.Sprintf("takes %s with %d %s", pointsText(tie.Points), tie.Wins, wins)
+	return fmt.Sprintf("earns %s with %d %s", pointsText(tie.Points), tie.Wins, wins)
 }
 
 func pointsText(points int) string {

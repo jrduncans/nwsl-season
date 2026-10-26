@@ -80,8 +80,8 @@ func TestClinchingPageSummarizesSlateBeforeScenarios(t *testing.T) {
 		latest time.Time
 		want   string
 	}{
-		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `<summary>Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> – <time data-local-date="2026-10-18T23:00:00Z">Sun, Oct 18</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
-		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `<summary>Scenarios cover <time data-local-date="2026-10-16T19:00:00Z">Fri, Oct 16</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
+		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `<summary>Remaining matches: <time data-local-date="2026-10-16T19:00:00Z">Oct 16</time>–<time data-local-date="2026-10-18T23:00:00Z">Oct 18</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
+		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `<summary>Remaining matches: <time data-local-date="2026-10-16T19:00:00Z">Oct 16</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			slate := scenarios.Slate{State: scenarios.SlateReady, StartsAtUTC: time.Date(2026, 10, 16, 19, 0, 0, 0, time.UTC), LatestKickoffUTC: test.latest, FixtureIDs: []string{"future-1", "future-2"}}
@@ -202,7 +202,7 @@ func TestPointRequirementPartsUseClubTokens(t *testing.T) {
 			"second": {HomeTeamID: "den", AwayTeamID: "sea"},
 		},
 	)
-	if len(parts) != 6 || parts[0].Team == nil || parts[0].Team.Code != "SEA" || parts[0].Team.LogoURL != clubLogoURL("sea") || parts[1].Text != "earns at least 4 points from these two matches:" || parts[2].Text != "at" || parts[3].Team == nil || parts[3].Team.Code != "LA" || parts[3].Team.LogoURL != clubLogoURL("la") || parts[4].Text != "and at" || parts[5].Team == nil || parts[5].Team.Code != "DEN" || parts[5].Team.LogoURL != clubLogoURL("den") {
+	if len(parts) != 6 || parts[0].Team == nil || parts[0].Team.Code != "SEA" || parts[0].Team.LogoURL != clubLogoURL("sea") || parts[1].Text != "earns at least 4 points across both matches:" || parts[2].Text != "at" || parts[3].Team == nil || parts[3].Team.Code != "LA" || parts[3].Team.LogoURL != clubLogoURL("la") || parts[4].Text != "and at" || parts[5].Team == nil || parts[5].Team.Code != "DEN" || parts[5].Team.LogoURL != clubLogoURL("den") {
 		t.Fatalf("point requirement parts = %#v", parts)
 	}
 }
@@ -231,7 +231,7 @@ func TestClinchingGroupsExposeDrawAndFactorSharedHelp(t *testing.T) {
 		t.Fatalf("draw requirements = %#v", groups[1].Help)
 	}
 	text := fmt.Sprintf("%+v", groups[0].Help)
-	if !strings.Contains(text, "Seattle earns at least 2 points from these two matches") {
+	if !strings.Contains(text, "Seattle earns at least 2 points across both matches") {
 		t.Fatalf("missing exact points simplification: %s", text)
 	}
 	assertScenarioEquivalent(t, clauses, groups, games)
@@ -542,7 +542,7 @@ func TestClinchingGroupsCombineSymmetricOwnResults(t *testing.T) {
 	c := testScenarioCondition
 	clauses := []scenarios.Clause{testScenarioClause(c("one", 4), c("two", 4), c("help", 1)), testScenarioClause(c("one", 1), c("two", 1), c("help", 1)), testScenarioClause(c("one", 1), c("two", 4))}
 	groups := clinchingGroups(clauses, "a", map[string]string{"a": "Alpha", "b": "Bravo", "c": "Charlie"}, games)
-	if len(groups) != 2 || !strings.Contains(groups[0].Heading, "wins one match and loses the other") || !strings.Contains(groups[1].Heading, "loses both matches") {
+	if len(groups) != 2 || !strings.Contains(groups[0].Heading, "has one win and one loss") || !strings.Contains(groups[1].Heading, "loses both matches") {
 		t.Fatalf("groups = %+v", groups)
 	}
 	assertScenarioEquivalent(t, clauses, groups, games)

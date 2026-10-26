@@ -251,7 +251,7 @@ func presentScore(r *scenarioRequirement, labels map[string]string, games map[st
 	}
 	r.Text = partsText(r.Parts)
 	if margin > history.Maximum && history.Scope != "" {
-		r.Historical = fmt.Sprintf("Requires a win by at least %d goals, exceeding the largest winning margin (%d) in complete cached %s, through %s. This is a comparison with that history, not an all-time record.", margin, history.Maximum, history.Scope, history.Cutoff)
+		r.Historical = fmt.Sprintf("A win by %d goals exceeds the largest margin in our data, %d.", margin, history.Maximum)
 	}
 }
 
