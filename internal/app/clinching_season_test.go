@@ -284,15 +284,15 @@ func TestClinchingSeedingAllAlternativesAccessible(t *testing.T) {
 	snapshot.Results[0].Seeding = &scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, OpponentSeed: 2, Clauses: clauses, Opponents: []scenarios.SeedOpponent{{TeamID: "bravo", PossibleResults: []scenarios.Clause{seedingTestClause()}}}}}}
 	store := seasonScenarioStore(seedingTestData(), []string{"future-4"}, []string{"future-4", "future-5"}, snapshot)
 	body := getClinching(t, store, "?view=seeding&team=ALP&finish=1")
-	requireText(t, body, "#seeding-conditions", "300 ways", "Inspect complete certified alternatives", "This summary alone does not guarantee the finish.")
+	requireText(t, body, "#seeding-conditions", "300 ways", "See scenarios for finishing 1st", "This summary alone does not guarantee the finish.")
 	forbidRaw(t, body, "they aren’t listed", "tiebreaker swing", "alternative 300")
 
 	for _, number := range []int{1, 4, 12, 300} {
 		detail := getClinching(t, store, fmt.Sprintf("?view=seeding&team=ALP&finish=1&alternative=%d", number))
-		requireText(t, detail, "#seeding-alternative", fmt.Sprintf("Alternative %d of 300", number), "All 2 requirements must hold")
+		requireText(t, detail, "#seeding-alternative", fmt.Sprintf("Scenario %d of 300", number), "if all 2 conditions happen")
 		requireAttr(t, detail, "a", "href", "?finish=1&team=ALP&view=seeding#seeding-conditions")
-		if strings.Count(detail, "clinching-condition-score") != 1 {
-			t.Fatal("detail must render one cached alternative")
+		if strings.Count(detail, "clinching-condition-score") != seedingScenariosPerPage {
+			t.Fatal("detail must render a bounded page of complete scenarios")
 		}
 	}
 }

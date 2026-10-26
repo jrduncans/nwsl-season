@@ -177,7 +177,7 @@ func TestScoreHistoricalAnnotationRequiresIndividualMarginAndCompleteHistory(t *
 	}
 }
 
-func TestSeedingCompleteAlternativeRequirementPaging(t *testing.T) {
+func TestSeedingScenariosKeepCompleteConditionsAndPageState(t *testing.T) {
 	labels := map[string]string{"a": "AAA", "b": "BBB"}
 	conditions := []scenarios.FixtureCondition{}
 	games := map[string]cache.Game{}
@@ -185,32 +185,33 @@ func TestSeedingCompleteAlternativeRequirementPaging(t *testing.T) {
 		games[id] = cache.Game{HomeTeamID: "a", AwayTeamID: "b", Status: "PreMatch"}
 		conditions = append(conditions, testScenarioCondition(id, 1))
 	}
-	result := scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: []scenarios.Clause{{Conditions: conditions}}}}}
-	query := url.Values{"view": {"seeding"}, "team": {"AAA"}, "finish": {"1"}, "alternative": {"1"}, "p": {"fixed:h"}}
-	seen := 0
-	for part := 0; part < 3; part++ {
-		query.Set("part", string(rune('0'+part)))
-		detail, err := seedingAlternatives(result, 1, query, labels, games, nil, scenarioHistory{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(detail.Conditions) > seedingDetailRequirements || detail.Requirements != 9 {
-			t.Fatalf("unbounded detail: %+v", detail)
-		}
-		seen += len(detail.Conditions)
-		for _, link := range []string{detail.BackURL, detail.NextPart, detail.PreviousPart} {
-			if link != "" && (!strings.Contains(link, "p=fixed%3Ah") || strings.HasPrefix(link, "/")) {
-				t.Fatalf("lost state or relative URL: %s", link)
-			}
+	clauses := make([]scenarios.Clause, 9)
+	for i := range clauses {
+		clauses[i].Conditions = conditions
+	}
+	result := scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: clauses}}}
+	query := url.Values{"view": {"seeding"}, "team": {"AAA"}, "finish": {"1"}, "alternative": {"5"}, "p": {"fixed:h"}, "part": {"1"}}
+	detail, err := seedingAlternatives(result, 1, query, labels, games, nil, scenarioHistory{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.First != 5 || detail.Last != 8 || len(detail.Scenarios) != 4 || !detail.Scenarios[0].Selected {
+		t.Fatalf("wrong scenario page: %+v", detail)
+	}
+	for _, card := range detail.Scenarios {
+		if len(card.Conditions) != 9 || card.Requirements != 9 {
+			t.Fatalf("incomplete scenario: %+v", card)
 		}
 	}
-	if seen != 9 {
-		t.Fatalf("lost requirements: %d", seen)
+	for _, link := range []string{detail.BackURL, detail.Next, detail.Previous} {
+		if !strings.Contains(link, "p=fixed%3Ah") || strings.HasPrefix(link, "/") || strings.Contains(link, "part=") {
+			t.Fatalf("lost state or retained requirement pagination: %s", link)
+		}
 	}
-	for _, value := range []string{"-1", "3", "99999999999999999999"} {
-		query.Set("part", value)
+	for _, value := range []string{"-1", "0", "10", "99999999999999999999"} {
+		query.Set("alternative", value)
 		if _, err := seedingAlternatives(result, 1, query, labels, games, nil, scenarioHistory{}); err == nil {
-			t.Fatalf("invalid part %s accepted", value)
+			t.Fatalf("invalid scenario %s accepted", value)
 		}
 	}
 }

@@ -212,7 +212,14 @@ func TestSeedingScoreGuidanceFollowsSelectedResults(t *testing.T) {
 			if fixed > 0 {
 				want += " Choosing a win, draw or loss does not set the final score."
 			}
-			requireExact(t, buf.String(), ".seeding-score-guidance", want)
+			if name == "clinchingSeeding" {
+				requireExact(t, buf.String(), ".seeding-score-guidance", want)
+			} else {
+				forbidRaw(t, buf.String(), "Score requirements apply across all remaining matches.")
+				if fixed > 0 {
+					requireText(t, buf.String(), "body", "These scenarios include your selected results. Choosing a win, draw or loss does not set the final score.")
+				}
+			}
 			forbidRaw(t, buf.String(), "Fixed results still have open scores.", "Scores remain open.")
 		}
 	}
