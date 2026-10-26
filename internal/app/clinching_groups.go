@@ -236,15 +236,15 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 		switch r.Mask {
 		case outcomeMask([]clinching.Outcome{win}):
 			verb = "wins"
-		case 2:
+		case maskDraw:
 			verb = "draws"
 		case outcomeMask([]clinching.Outcome{win, clinching.Draw}):
 			verb = "wins or draws"
-		case 7:
+		case maskAny:
 			verb = "has any result"
-		case 5:
+		case maskNotDraw:
 			verb = "does not draw"
-		case 2 | (5 ^ outcomeMask([]clinching.Outcome{win})):
+		case maskDraw | (maskNotDraw ^ outcomeMask([]clinching.Outcome{win})):
 			verb = "draws or loses"
 		}
 		return []scenarioRequirementPart{team(perspective), text(verb), text(venue), team(opponent)}

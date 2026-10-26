@@ -284,9 +284,11 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.renderSeeding(w, r, view, rules, data, snapshot, teamLabels, games)
 		return
 	}
-	history := a.scenarioHistory(r.Context(), page.Season)
-	if view.RestOfSeason && history.Scope == "" {
-		view.HistoryNote = "Historical comparison unavailable: no verified complete prior regular seasons in the cache."
+	// Score conditions, and so the archive scan, exist only for the rest of the season.
+	var history scenarioHistory
+	if view.RestOfSeason {
+		history = a.scenarioHistory(r.Context(), page.Season)
+		view.HistoryNote = history.Note()
 	}
 	// Playoff-elimination scenarios always come from the next slate.
 	eliminatedRows := []clinchingRowView{}
@@ -485,6 +487,8 @@ type application struct {
 	options   Options
 	pages     *template.Template
 	forecasts *forecastExecutor
+	// historyCache holds the archive summary behind historical score comparisons.
+	historyCache scenarioHistoryCache
 }
 
 func defaultOptions(options Options) Options {

@@ -97,8 +97,6 @@ func seedingAlternatives(result scenarios.SeedingResult, finish int, query url.V
 	if end < len(requirements) {
 		view.NextPart = seedingAlternativeURL(query, number, part+1)
 	}
-	if history.Scope == "" {
-		view.HistoryNote = "Historical comparison unavailable: no verified complete prior regular seasons in the cache."
-	}
+	view.HistoryNote = history.Note()
 	return view, nil
 }

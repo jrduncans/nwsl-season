@@ -290,9 +290,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		detailQuery.Set("finish", seedingFinishKey(*chosen))
 		seed.Conditions.AlternativesURL = seedingAlternativeURL(detailQuery, 1, 0)
 		history := a.scenarioHistory(r.Context(), view.Season)
-		if history.Scope == "" {
-			seed.HistoryNote = "Historical comparison unavailable: no verified complete prior regular seasons in the cache."
-		}
+		seed.HistoryNote = history.Note()
 		for i := range seed.Conditions.Groups {
 			groups := []clinchingGroupView{seed.Conditions.Groups[i].clinchingGroupView}
 			presentScenarioGroups(groups, labels, games, fixedScenarioMasks(fixed), history)

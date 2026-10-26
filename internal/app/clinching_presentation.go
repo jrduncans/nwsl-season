@@ -7,6 +7,15 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 )
 
+// Outcome masks over the home-win, draw and away-win bits.
+const (
+	maskHomeWin = 1
+	maskDraw    = 2
+	maskAwayWin = 4
+	maskNotDraw = maskHomeWin | maskAwayWin
+	maskAny     = maskNotDraw | maskDraw
+)
+
 // Presentation classifies the finalized, displayed structure without expanding
 // factored alternatives. Overflow keeps its existing bounded fallback.
 func (g clinchingGroupView) Presentation() string {
@@ -91,26 +100,25 @@ func ownHeadingParts(g clinchingGroupView, team string, teams map[string]string,
 			continue
 		}
 		p := requirementParts(r, team, teams, games)[1:]
-		g := games[r.GameID]
-		win := uint8(1)
-		if g.AwayTeamID == team {
-			win = 4
+		win := uint8(maskHomeWin)
+		if games[r.GameID].AwayTeamID == team {
+			win = maskAwayWin
 		}
-		loss := uint8(5) ^ win
+		loss := uint8(maskNotDraw) ^ win
 		switch r.Mask {
 		case win:
 			p[0].Text = "Win"
-		case 2:
+		case maskDraw:
 			p[0].Text = "Draw"
 		case loss:
 			p[0].Text = "Lose"
-		case win | 2:
+		case win | maskDraw:
 			p[0].Text = "Win or draw"
-		case loss | 2:
+		case loss | maskDraw:
 			p[0].Text = "Draw or lose"
-		case 5:
+		case maskNotDraw:
 			p[0].Text = "Win or lose"
-		case 7:
+		case maskAny:
 			p[0].Text = "Any result"
 		}
 		if i > 0 {

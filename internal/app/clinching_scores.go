@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
@@ -20,31 +21,58 @@ type scenarioHistory struct {
 	Scope, Cutoff string
 }
 
-// This is a scoped comparison, never an all-time record. Unknown/incomplete
-// inventories, unfinished seasons and future observations are excluded entirely.
-func scenarioMarginHistory(archive []cache.HistoricalSeason, cutoff string) scenarioHistory {
-	h := scenarioHistory{}
-	seasons := []string{}
+// Note explains the missing comparison; it is empty when a scope exists.
+func (h scenarioHistory) Note() string {
+	if h.Scope != "" {
+		return ""
+	}
+	return "Historical comparison unavailable: no verified complete prior regular seasons in the cache."
+}
+
+// marginSeason is what the comparison keeps of one verified complete prior
+// regular season, so the archive is scanned once rather than per request.
+type marginSeason struct {
+	Season, Latest string
+	Maximum        int
+}
+
+// marginSeasons summarizes every season fit for comparison. Unknown or
+// incomplete inventories and unfinished seasons are excluded entirely.
+func marginSeasons(archive []cache.HistoricalSeason) []marginSeason {
+	out := []marginSeason{}
 	for _, season := range archive {
-		if season.Entry.Season >= cutoff || season.Entry.Stage != "Regular Season" || season.Readiness == nil || season.Readiness.Completeness != cache.InventoryCompletenessComplete || season.Readiness.Scope.Lifecycle != cache.SourceScopeCompleted || len(season.Data.Games) == 0 {
+		if season.Entry.Stage != "Regular Season" || season.Readiness == nil || season.Readiness.Completeness != cache.InventoryCompletenessComplete || season.Readiness.Scope.Lifecycle != cache.SourceScopeCompleted || len(season.Data.Games) == 0 {
 			continue
 		}
-		maximum, latest, valid := 0, "", true
+		summary, valid := marginSeason{Season: season.Entry.Season}, true
 		for _, g := range season.Data.Games {
 			kickoff, err := fixtures.ParseKickoff(g.KickoffUTC)
 			if err != nil || g.Status != standings.CompletedStatus || !g.HomeScore.Valid || !g.AwayScore.Valid || g.HomeScore.Int64 < 0 || g.AwayScore.Int64 < 0 {
 				valid = false
 				break
 			}
-			maximum = max(maximum, absInt(int(g.HomeScore.Int64-g.AwayScore.Int64)))
-			latest = max(latest, kickoff.UTC().Format("2006-01-02"))
+			summary.Maximum = max(summary.Maximum, absInt(int(g.HomeScore.Int64-g.AwayScore.Int64)))
+			summary.Latest = max(summary.Latest, kickoff.UTC().Format("2006-01-02"))
 		}
-		if !valid {
+		if valid {
+			out = append(out, summary)
+		}
+	}
+	return out
+}
+
+// marginHistoryBefore is a scoped comparison, never an all-time record: seasons
+// from cutoff onward are future observations and are excluded.
+func marginHistoryBefore(summaries []marginSeason, cutoff string) scenarioHistory {
+	h := scenarioHistory{}
+	seasons := []string{}
+	for _, s := range summaries {
+		if s.Season >= cutoff {
 			continue
 		}
-		h.Maximum = max(h.Maximum, maximum)
-		h.Cutoff = max(h.Cutoff, latest)
-		seasons = append(seasons, season.Entry.Season)
+		h.Maximum = max(h.Maximum, s.Maximum)
+		h.Cutoff = max(h.Cutoff, s.Latest)
+		seasons = append(seasons, s.Season)
 	}
 	slices.Sort(seasons)
 	if len(seasons) > 0 {
@@ -53,14 +81,55 @@ func scenarioMarginHistory(archive []cache.HistoricalSeason, cutoff string) scen
 	return h
 }
 
-func (a *application) scenarioHistory(ctx context.Context, season string) scenarioHistory {
-	if store, ok := a.store.(historicalStore); ok {
-		archive, err := store.HistoricalRegularSeasons(ctx)
-		if err == nil {
-			return scenarioMarginHistory(archive, season)
-		}
+func scenarioMarginHistory(archive []cache.HistoricalSeason, cutoff string) scenarioHistory {
+	return marginHistoryBefore(marginSeasons(archive), cutoff)
+}
+
+// scenarioHistoryCache holds the archive summary for all seasons. It is filled
+// at startup and after a sync changes fixtures (RefreshScenarioHistory); a
+// request that finds it empty fills it once. The zero value is ready to use.
+type scenarioHistoryCache struct {
+	mu        sync.RWMutex
+	summaries []marginSeason
+	loaded    bool
+}
+
+func (c *scenarioHistoryCache) get() ([]marginSeason, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.summaries, c.loaded
+}
+
+func (c *scenarioHistoryCache) set(summaries []marginSeason) {
+	c.mu.Lock()
+	c.summaries, c.loaded = summaries, true
+	c.mu.Unlock()
+}
+
+// refreshScenarioHistory rereads the archive. A failed or unsupported read
+// keeps whatever was cached before.
+func (a *application) refreshScenarioHistory(ctx context.Context) error {
+	store, ok := a.store.(historicalStore)
+	if !ok {
+		return nil
 	}
-	return scenarioHistory{}
+	archive, err := store.HistoricalRegularSeasons(ctx)
+	if err != nil {
+		return fmt.Errorf("load historical margins: %w", err)
+	}
+	a.historyCache.set(marginSeasons(archive))
+	return nil
+}
+
+func (a *application) scenarioHistory(ctx context.Context, season string) scenarioHistory {
+	summaries, loaded := a.historyCache.get()
+	if !loaded {
+		if a.refreshScenarioHistory(ctx) != nil {
+			return scenarioHistory{}
+		}
+		summaries, _ = a.historyCache.get()
+	}
+	return marginHistoryBefore(summaries, season)
 }
 
 func addAssumptions(base map[string]uint8, requirements []scenarioRequirement) map[string]uint8 {

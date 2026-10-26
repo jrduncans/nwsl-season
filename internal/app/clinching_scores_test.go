@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -209,5 +211,43 @@ func TestSeedingCompleteAlternativeRequirementPaging(t *testing.T) {
 		if _, err := seedingAlternatives(result, 1, query, labels, games, nil, scenarioHistory{}); err == nil {
 			t.Fatalf("invalid part %s accepted", value)
 		}
+	}
+}
+
+func TestScenarioHistoryReadsArchiveOncePerRefresh(t *testing.T) {
+	store := &archiveHTTPStore{}
+	app := &application{store: store}
+	ctx := context.Background()
+
+	app.scenarioHistory(ctx, "2026")
+	app.scenarioHistory(ctx, "2025")
+	app.scenarioHistory(ctx, "2026")
+	if store.archiveCalls != 1 {
+		t.Fatalf("archive reads = %d, want 1 shared by every season", store.archiveCalls)
+	}
+	if err := app.refreshScenarioHistory(ctx); err != nil || store.archiveCalls != 2 {
+		t.Fatalf("refresh = %v after %d reads, want one more read", err, store.archiveCalls)
+	}
+
+	store.err = errors.New("boom")
+	if err := app.refreshScenarioHistory(ctx); err == nil {
+		t.Fatal("failed refresh returned nil")
+	}
+	if _, loaded := app.historyCache.get(); !loaded {
+		t.Fatal("failed refresh discarded the previous summary")
+	}
+}
+
+func TestScenarioHistoryRetriesAfterFailedFirstLoad(t *testing.T) {
+	store := &archiveHTTPStore{err: errors.New("boom")}
+	app := &application{store: store}
+	ctx := context.Background()
+
+	if got := app.scenarioHistory(ctx, "2026"); got.Scope != "" {
+		t.Fatalf("history = %+v, want none after a failed read", got)
+	}
+	app.scenarioHistory(ctx, "2026")
+	if store.archiveCalls != 2 {
+		t.Fatalf("archive reads = %d, want a failed load retried, not cached", store.archiveCalls)
 	}
 }
