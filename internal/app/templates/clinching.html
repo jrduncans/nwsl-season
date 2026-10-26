@@ -119,7 +119,7 @@
   </table>
   </div>
 
-  {{else}}<p>No certified finishes{{if .Builder.FixedCount}} match your selected results{{else}} are available{{end}}.</p>{{end}}
+  {{else}}<p>No confirmed finishes{{if .Builder.FixedCount}} match your selected results{{else}} are available{{end}}.</p>{{end}}
 </section>
 {{with .Conditions}}
 <section id="seeding-conditions" class="seeding-conditions" aria-labelledby="seeding-conditions-title">
@@ -129,7 +129,7 @@
   {{if .Opponents}}<p class="seeding-opponents"><strong>First-round opponent:</strong> {{range $i, $o := .Opponents}}{{if $i}}, {{end}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{$o.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{$o.Code}}</span></span>{{with $o.Likelihood}} ({{.}}){{end}}{{end}}</p>{{end}}
   {{template "seedingScoreGuidance" $.Seeding}}
   {{with $.Seeding.HistoryNote}}<p class="note">{{.}}</p>{{end}}
-  {{with .AlternativesURL}}<p><a class="button" href="{{.}}">Inspect complete certified alternatives</a></p>{{end}}
+  {{with .AlternativesURL}}<p><a href="{{.}}">See scenarios for {{$.Seeding.Conditions.ScenarioLinkText}}</a></p>{{end}}
   {{$state := .State}}
   {{range .Groups}}
     <section class="clinching-result-group clinching-presentation-{{.Presentation}}{{with .Tone}} clinching-result-{{.}}{{end}}">
@@ -152,27 +152,32 @@
   {{if .Always}}<p>Common requirements (all of):</p><div class="clinching-combination">{{range .PreviewAlways}}{{template "clinchingRequirement" .}}{{end}}</div>{{end}}
   {{if .PreviewSome}}<p>{{.SomeText}}</p><ul class="clinching-rivals">{{range .PreviewSome}}<li>{{template "clinchingCombination" .}}</li>{{end}}</ul>{{end}}
   <p>{{if .Matches}}Depends on {{range $i, $parts := .MatchParts}}{{if $i}}, {{end}}{{template "clinchingParts" $parts}}{{end}}{{if .MoreMatches}} and other matches{{end}}.{{end}}{{if .Scores}} Some paths also need tiebreak scores.{{end}}</p>
-  <p class="note">This summary alone does not guarantee the finish. Inspect the complete alternatives for all requirements.</p>
+  <p class="note">This summary alone does not guarantee the finish. See the scenarios for complete combinations of results.</p>
 </div>
 {{end}}
 
 {{define "seedingAlternatives"}}{{template "head" .}}
 {{with .Seeding}}{{with .Details}}
-<h1>Certified seeding alternatives</h1>
+<h1>How {{$.Seeding.Team.Name}} {{.Heading}}</h1>
 <p><a href="{{.BackURL}}">← All finishes and summary</a></p>
 {{with $.Seeding.Limitation}}<p class="data-warning">{{.}}</p>{{end}}
 {{if $.Seeding.Disciplinary}}<p class="note">Disciplinary points may decide some finishes; those scenarios are not listed.</p>{{end}}
-{{template "seedingScoreGuidance" $.Seeding}}
+{{if $.Seeding.Builder.FixedCount}}<p class="note">These scenarios include your selected results. Choosing a win, draw or loss does not set the final score.</p>{{end}}
 <section id="seeding-alternative" class="seeding-conditions">
-<h2><span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span> {{.Finish}}</h2>
-<p>Alternative {{.Number}} of {{.Total}}. Each alternative is sufficient when all of its requirements hold. Other matches are unrestricted.</p>
-{{if .Requirements}}<p>All {{.Requirements}} requirements must hold. Showing {{.First}}–{{.Last}}.</p><div class="clinching-combination">{{range .Conditions}}{{template "clinchingRequirement" .}}{{end}}</div>{{else}}<p>This finish is guaranteed{{if $.Seeding.Builder.FixedCount}} with your selected results{{end}}.</p>{{end}}
-<nav class="seeding-alternative-pages" aria-label="Requirements">{{with .PreviousPart}}<a class="button" href="{{.}}">Previous requirements</a>{{end}}{{with .NextPart}}<a class="button" href="{{.}}">Next requirements</a>{{end}}</nav>
-<form method="get" class="seeding-alternative-picker">
-<input type="hidden" name="view" value="seeding"><input type="hidden" name="team" value="{{$.Seeding.TeamCode}}"><input type="hidden" name="finish" value="{{.FinishKey}}">{{range $.Seeding.Builder.StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}
-<label>Alternative <input type="number" name="alternative" min="1" max="{{.Total}}" value="{{.Number}}" required></label><button type="submit" class="button">Show alternative</button>
-</form>
-<nav class="seeding-alternative-pages" aria-label="Alternatives">{{with .Previous}}<a class="button" href="{{.}}">Previous alternative</a>{{end}}{{with .Next}}<a class="button" href="{{.}}">Next alternative</a>{{end}}</nav>
+<p>Each scenario below is a complete way {{$.Seeding.Team.Name}} {{.Finish}}. All conditions within one scenario must happen.</p>
+{{if gt .Total 4}}<p>Showing scenarios {{.First}}–{{.Last}} of {{.Total}}.</p>{{end}}
+{{range .Scenarios}}
+<details class="seeding-scenario"{{if .Selected}} open{{end}}>
+<summary><strong>Scenario {{.Number}} of {{$.Seeding.Details.Total}}</strong><span class="seeding-scenario-preview">{{if .Preview}}{{.Preview}}{{else}}No additional results needed{{end}}</span></summary>
+<div class="seeding-scenario-body">
+{{if .Requirements}}<p>{{$.Seeding.Team.Name}} {{$.Seeding.Details.Finish}} if all {{.Requirements}} conditions happen:</p>
+<div class="clinching-combination">{{range .Conditions}}{{template "clinchingRequirement" .}}{{end}}</div>
+<p class="note">{{if .Scores}}Other matches can finish any way, provided the tiebreak conditions above are met.{{else}}Other matches can finish any way.{{end}}</p>
+{{else}}<p>This finish is guaranteed{{if $.Seeding.Builder.FixedCount}} with your selected results{{end}}.</p>{{end}}
+</div>
+</details>
+{{end}}
+{{if or .Previous .Next}}<nav class="seeding-alternative-pages" aria-label="More scenarios">{{with .Previous}}<a href="{{.}}">← Previous scenarios</a>{{end}}{{with .Next}}<a href="{{.}}">Next scenarios →</a>{{end}}</nav>{{end}}
 {{with .HistoryNote}}<p class="note">{{.}}</p>{{end}}
 </section>{{end}}{{end}}
 {{template "foot" .}}{{end}}

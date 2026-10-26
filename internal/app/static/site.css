@@ -808,5 +808,16 @@ th:nth-child(2) { text-align: left; }
 }
 
 .clinching-history { display: block; margin-block: .2rem; }
-.seeding-alternative-pages, .seeding-alternative-picker { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block: .75rem; }
-.seeding-alternative-picker input[type="number"] { width: 6rem; }
+.seeding-alternative-pages { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-block: 1rem; }
+.seeding-scenario { margin-block: .75rem; border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.seeding-scenario[open] { border-left-color: var(--green); }
+.seeding-scenario > summary { position: relative; padding: .85rem 1rem .85rem 2.25rem; border-radius: .4rem; color: var(--green-deep); cursor: pointer; list-style: none; }
+.seeding-scenario > summary::-webkit-details-marker { display: none; }
+.seeding-scenario > summary::before { position: absolute; top: 1rem; left: .85rem; content: "▶"; color: var(--green); font-size: .75rem; }
+.seeding-scenario[open] > summary { border-bottom: 1px solid var(--line); border-radius: .4rem .4rem 0 0; background: var(--green-soft); }
+.seeding-scenario[open] > summary::before { content: "▼"; }
+.seeding-scenario > summary:hover { background: var(--green-soft); }
+.seeding-scenario > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
+.seeding-scenario-preview { display: block; margin-top: .3rem; color: var(--muted); font-size: .875rem; }
+.seeding-scenario[open] .seeding-scenario-preview { display: none; }
+.seeding-scenario-body { padding: 0 1rem 1rem; }

@@ -762,16 +762,36 @@ minimum-count list when available, up to four named fixtures and a note about
 score dependencies. These summaries explicitly say they do not guarantee the
 finish. They never masquerade as sufficient recipes.
 
-**Inspect complete certified alternatives** opens one original cached clause at
-a time (`alternative=1`, counted from one). Previous/next controls and a numeric
-picker make every clause accessible. Long conjunctions are paged in groups of
-four requirements (`part=1` selects the second group); the page states the total
-and that **all** requirements must hold. Navigation retains finish, team and
-fixed-result state using relative URLs, including behind a proxy prefix.
-The additional page reads only stored scenario conditions and cached history;
-it returns before grid/forecast calculations and never calls ASA or searches
-season outcomes or scores. No thousands of hidden elements are rendered.
-The existing 1,500-element/250-image browser budgets remain unchanged.
+**See scenarios for finishing 4th** (or the selected finish) opens complete
+scenarios under “How [team] can finish [rank]”. Each scenario is a sufficient
+combination: all its conditions must happen. The UI uses “scenario” rather than
+the internal proof terminology “certified alternative”.
+
+Up to four expandable scenario cards render per page, with the linked scenario
+open. Cards use the shared white panel surface against the off-white page,
+with green disclosure arrows; expanded headings use the pale green surface and
+green left border already used by clinching results. Collapsed cards preview
+up to two conditions, favoring those that differ
+between the scenarios on the page. Every card contains
+all of its match and tiebreak conditions together; only supporting score
+explanations are collapsed. Requirements are never paginated. Previous/next
+text links navigate groups of complete scenarios; there is no numeric picker.
+`alternative=1` remains a shareable, one-based scenario selection. Old `part`
+parameters are ignored so existing requirement-page links show the complete
+scenario. Navigation retains finish, team and fixed-result state using relative
+URLs, including behind a proxy prefix.
+
+Tiebreak conditions appear alongside match results, followed by a reminder that
+other matches are unrestricted only while those conditions hold. Fixed-result
+context explains that selecting an outcome leaves the score open. Calculation
+limits and disciplinary exclusions remain separate notices; the scenario count
+is not a promise that an incomplete search found every possible way.
+
+The page reads only stored scenario conditions and cached history; it returns
+before grid/forecast calculations and never calls ASA or searches season
+outcomes or scores. The number of cards is bounded rather than rendering the
+entire collection. The existing 1,500-element/250-image browser budgets remain
+unchanged.
 
 There is no goal-swing exclusion or probability-based presentation filter.
 Four-goal and larger alternatives remain accessible, and the exact grid,

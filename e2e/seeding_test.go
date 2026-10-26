@@ -201,7 +201,7 @@ func assertSeedingAlternatives(t *testing.T, page playwright.Page) {
 	t.Helper()
 	before := page.URL()
 	expect := playwright.NewPlaywrightAssertions()
-	if err := page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Inspect complete certified alternatives", Exact: playwright.Bool(true)}).Click(); err != nil {
+	if err := page.Locator("#seeding-conditions a").Filter(playwright.LocatorFilterOptions{HasText: "See scenarios for"}).Click(); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("#seeding-alternative")).ToBeVisible(); err != nil {
@@ -210,12 +210,79 @@ func assertSeedingAlternatives(t *testing.T, page playwright.Page) {
 	if !strings.Contains(page.URL(), "alternative=1") {
 		t.Fatalf("missing alternative state: %s", page.URL())
 	}
-	count, err := page.Locator("#seeding-alternative .clinching-condition").Count()
-	if err != nil || count > 4 {
-		t.Fatalf("unbounded requirements: %d, %v", count, err)
+	cards := page.Locator("#seeding-alternative > .seeding-scenario")
+	count, err := cards.Count()
+	if err != nil || count < 1 || count > 4 {
+		t.Fatalf("unbounded scenario cards: %d, %v", count, err)
+	}
+	if err := expect.Locator(cards.First().Locator(".seeding-scenario-body")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("input[name=alternative]")).ToHaveCount(0); err != nil {
+		t.Fatal(err)
+	}
+	if count > 1 {
+		if err := expect.Locator(cards.Nth(1).Locator(".seeding-scenario-body")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if err := cards.Nth(1).Locator("summary").First().Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(cards.Nth(1).Locator(".seeding-scenario-body")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	assertSeedingDOMBudget(t, page)
-	assertKeyboardDisclosures(t, page)
+	// Scenario cards can start open and contain nested score explanations.
+	for i := range count {
+		card := cards.Nth(i)
+		summary := card.Locator("> summary")
+		body := card.Locator(".seeding-scenario-body")
+		visible, err := body.IsVisible()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !visible {
+			if err := summary.Press("Enter"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := expect.Locator(body).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		explanations := card.Locator(".clinching-score-disclosure > summary")
+		explanationCount, err := explanations.Count()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := range explanationCount {
+			explanation := explanations.Nth(j)
+			if err := explanation.Press("Enter"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(explanation.Locator("..")).ToHaveAttribute("open", ""); err != nil {
+				t.Fatal(err)
+			}
+			if err := explanation.Press("Space"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(explanation.Locator("..")).Not().ToHaveAttribute("open", ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := summary.Press("Space"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(body).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		if err := summary.Press("Enter"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(body).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	assertNoHorizontalOverflow(t, page)
 	if err := page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "← All finishes and summary", Exact: playwright.Bool(true)}).Click(); err != nil {
 		t.Fatal(err)

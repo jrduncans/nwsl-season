@@ -74,11 +74,12 @@ type seedingConditionsView struct {
 	MostLikely  bool
 	Unavailable bool
 	// Opponents lists the seed's possible opponents, likeliest first.
-	Opponents       []seedingOpponentView
-	Groups          []seedingGroupView
-	AlternativesURL string
-	Team            scenarioTeamToken
-	FinishText      string
+	Opponents        []seedingOpponentView
+	Groups           []seedingGroupView
+	AlternativesURL  string
+	Team             scenarioTeamToken
+	FinishText       string
+	ScenarioLinkText string
 }
 
 type seedingOpponentView struct {
@@ -288,7 +289,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		seed.Conditions.MostLikely = mostLikely
 		detailQuery := r.URL.Query()
 		detailQuery.Set("finish", seedingFinishKey(*chosen))
-		seed.Conditions.AlternativesURL = seedingAlternativeURL(detailQuery, 1, 0)
+		seed.Conditions.AlternativesURL = seedingAlternativeURL(detailQuery, 1)
 		history := a.scenarioHistory(r.Context(), view.Season)
 		seed.HistoryNote = history.Note()
 		for i := range seed.Conditions.Groups {
@@ -817,9 +818,10 @@ func seedingConditions(filtered scenarios.SeedingResult, seed int, own seedingOw
 		state = "Misses the playoffs"
 		heading = "How " + labels[team] + " misses the playoffs"
 	}
-	view := &seedingConditionsView{Heading: heading, State: state, Team: *teamPart(team, labels).Team, FinishText: "finishes " + ordinalRank(seed)}
+	view := &seedingConditionsView{Heading: heading, State: state, Team: *teamPart(team, labels).Team, FinishText: "finishes " + ordinalRank(seed), ScenarioLinkText: "finishing " + ordinalRank(seed)}
 	if seed == 0 {
 		view.FinishText = "misses the playoffs"
+		view.ScenarioLinkText = "missing the playoffs"
 	}
 	index := slices.IndexFunc(filtered.Seeds, func(s scenarios.SeedFinish) bool { return s.Seed == seed })
 	if index < 0 {
