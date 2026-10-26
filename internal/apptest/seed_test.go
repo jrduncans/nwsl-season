@@ -27,7 +27,7 @@ func scenarioPages() map[string][]pageExpectation {
 		apptest.ScenarioDefault:     {{"/explore?view=table", `<th scope="row" data-value="2018">`}, {"/explore?view=table", `<th scope="row" data-value="2021">`}},
 		apptest.ScenarioOverview:    {{"/explore?view=table", `<th scope="row" data-value="2016">`}},
 		apptest.ScenarioSingle:      {{"/explore?view=table", `<th scope="row" data-value="2024">`}, {"/explore?view=trend", "Some seasons have no complete xG average"}},
-		apptest.ScenarioEmpty:       {{"/explore?view=teams&season=2024&display=table", `title="Alpha"`}},
+		apptest.ScenarioEmpty:       {{"/explore?view=teams&season=2024&display=table", "No team comparison is available for this season yet."}},
 		apptest.ScenarioTeams:       {{"/explore", "Angel City FC"}},
 		apptest.ScenarioNoXG:        {{"/explore", "Angel City FC"}},
 		apptest.ScenarioTeamHistory: {{"/explore?view=team-history", "Angel City FC"}},
@@ -51,7 +51,7 @@ func TestSeedStoresEveryScenario(t *testing.T) {
 			t.Cleanup(func() { _ = db.Close() })
 			apptest.Seed(t, db, name)
 
-			want := apptest.Scenario(t, name)
+			want := apptest.CacheScenario(t, name)
 			stored, err := db.HistoricalRegularSeasons(ctx)
 			if err != nil {
 				t.Fatal(err)

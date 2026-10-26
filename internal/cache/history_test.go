@@ -84,9 +84,9 @@ func TestHistoricalRegularSeasonsPreservesReadinessAndNullableXG(t *testing.T) {
 		readiness    SourceReadiness
 		completeness InventoryCompleteness
 	}{
-		{"2016", SourceScopeCompleted, SourceScopeAvailable, SourceReadinessAvailable, InventoryCompletenessUnknown},
-		{"2017", SourceScopeActive, SourceScopeUnknown, SourceReadinessUnknown, InventoryCompletenessUnknown},
-		{"2018", SourceScopeUpcoming, SourceScopeNotPublished, SourceReadinessNotPublished, InventoryCompletenessUnknown},
+		{"2016", SourceScopeCompleted, SourceScopeAvailable, SourceReadinessAvailable, InventoryCompletenessIncomplete},
+		{"2017", SourceScopeActive, SourceScopeUnknown, SourceReadinessUnknown, InventoryCompletenessIncomplete},
+		{"2018", SourceScopeUpcoming, SourceScopeNotPublished, SourceReadinessNotPublished, InventoryCompletenessIncomplete},
 	} {
 		got := historySeason(t, seasons, want.season).Readiness
 		if got == nil || got.Scope.Season != want.season || got.Scope.Stage != "Regular Season" ||

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
@@ -132,7 +133,7 @@ func TestScoreConditionCascadesAndRemainingCounts(t *testing.T) {
 }
 
 func TestScoreHistoricalAnnotationRequiresIndividualMarginAndCompleteHistory(t *testing.T) {
-	season := cache.HistoricalSeason{Entry: competition.Entry{Season: "2024", Stage: "Regular Season"}, Readiness: &cache.SeasonReadinessSnapshot{Completeness: cache.InventoryCompletenessComplete, Scope: cache.SourceScope{Lifecycle: cache.SourceScopeCompleted}}, Data: cache.SeasonData{Games: []cache.Game{{Status: "FullTime", HomeScore: sql.NullInt64{Int64: 6, Valid: true}, AwayScore: sql.NullInt64{Int64: 0, Valid: true}, KickoffUTC: "2024-10-01 19:00:00 UTC"}}}}
+	season := cache.HistoricalSeason{Entry: competition.Entry{Season: "2024", Stage: "Regular Season", Inventory: &competition.InventoryExpectation{Teams: 2, GamesPerTeam: 1, Games: 1}}, Readiness: &cache.SeasonReadinessSnapshot{Completeness: cache.InventoryCompletenessComplete, Scope: cache.SourceScope{Lifecycle: cache.SourceScopeCompleted}}, Data: cache.SeasonData{Games: []cache.Game{{HomeTeamID: "a", AwayTeamID: "b", Status: "FullTime", HomeScore: sql.NullInt64{Int64: 6, Valid: true}, AwayScore: sql.NullInt64{Int64: 0, Valid: true}, KickoffUTC: "2024-10-01 19:00:00 UTC"}}}}
 	history := scenarioMarginHistory([]cache.HistoricalSeason{season}, "2026")
 	if history.Maximum != 6 || history.Scope != "NWSL regular seasons 2024" || history.Cutoff != "2024-10-01" {
 		t.Fatalf("history: %+v", history)
@@ -161,7 +162,7 @@ func TestScoreHistoricalAnnotationRequiresIndividualMarginAndCompleteHistory(t *
 	}
 	for _, modify := range []func(*cache.HistoricalSeason){
 		func(s *cache.HistoricalSeason) { s.Readiness = nil },
-		func(s *cache.HistoricalSeason) { s.Readiness.Completeness = cache.InventoryCompletenessUnknown },
+		func(s *cache.HistoricalSeason) { s.Readiness.Completeness = cache.InventoryCompletenessIncomplete },
 		func(s *cache.HistoricalSeason) { s.Readiness.Scope.Lifecycle = cache.SourceScopeActive },
 		func(s *cache.HistoricalSeason) { s.Data.Games[0].HomeScore.Valid = false },
 	} {
@@ -249,5 +250,79 @@ func TestScenarioHistoryRetriesAfterFailedFirstLoad(t *testing.T) {
 	app.scenarioHistory(ctx, "2026")
 	if store.archiveCalls != 2 {
 		t.Fatalf("archive reads = %d, want a failed load retried, not cached", store.archiveCalls)
+	}
+}
+
+func TestHistoricalMarginIncludesReconciledAwardScores(t *testing.T) {
+	entry, _ := competition.Lookup("2021", "Regular Season")
+	awards := competition.HistoricalOutcomeOverrides()["2021"].Awards
+	// A small balanced inventory isolates the awarded score from played scores.
+	entry.Inventory = &competition.InventoryExpectation{Teams: 4, GamesPerTeam: 3, Games: 6}
+	reign, portland, spirit := awards[0].Winner, awards[1].Winner, awards[0].Loser
+	games := []cache.Game{}
+	for _, pair := range [][2]string{{reign, portland}, {reign, "other"}, {portland, "other"}, {spirit, "other"}} {
+		games = append(games, cache.Game{HomeTeamID: pair[0], AwayTeamID: pair[1], Status: "FullTime", HomeScore: sql.NullInt64{Valid: true}, AwayScore: sql.NullInt64{Valid: true}, KickoffUTC: "2021-10-31 19:00:00 UTC"})
+	}
+	season := cache.HistoricalSeason{Entry: entry, Readiness: &cache.SeasonReadinessSnapshot{Completeness: cache.InventoryCompletenessComplete, Scope: cache.SourceScope{Lifecycle: cache.SourceScopeCompleted}}, Data: cache.SeasonData{Games: games}}
+	for supplied := 0; supplied <= 2; supplied++ {
+		h := scenarioMarginHistory([]cache.HistoricalSeason{season}, "2026")
+		if h.Maximum != 3 || h.Scope != "NWSL regular seasons 2021" || h.Cutoff != "2021-10-31" {
+			t.Fatalf("%d supplied: %+v", supplied, h)
+		}
+		if supplied < 2 {
+			award := awards[supplied]
+			game := cache.Game{HomeTeamID: award.Winner, AwayTeamID: award.Loser, Status: "FullTime", HomeScore: sql.NullInt64{Int64: 3, Valid: true}, AwayScore: sql.NullInt64{Valid: true}, KickoffUTC: "2021-09-12 19:00:00 UTC"}
+			season.Data.Games = append(season.Data.Games, game)
+		}
+	}
+	if h := scenarioMarginHistory([]cache.HistoricalSeason{season}, "2021"); h.Scope != "" {
+		t.Fatal("comparison includes same season")
+	}
+}
+
+func TestHistoricalMarginsVerifySharedCachedArchiveCompleteness(t *testing.T) {
+	ctx := context.Background()
+	db, err := cache.Open(ctx, t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	apptest.Seed(t, db, apptest.ScenarioThresholds)
+	archive, err := db.HistoricalRegularSeasons(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := scenarioMarginHistory(archive, "2026")
+	want := "NWSL regular seasons 2016, 2017, 2018, 2019, 2021, 2022, 2023, 2024, 2025"
+	if history.Scope != want || history.Maximum < 3 || history.Note() != "" {
+		t.Fatalf("history = %+v", history)
+	}
+	for i := range archive {
+		if archive[i].Entry.Season != "2021" {
+			continue
+		}
+		if archive[i].Readiness.Completeness != cache.InventoryCompletenessComplete || len(archive[i].Data.Games) != 118 {
+			t.Fatal("source readiness or cached counts changed")
+		}
+		// Known awards cannot explain an additional missing ordinary match.
+		archive[i].Data.Games = archive[i].Data.Games[1:]
+	}
+	if got := scenarioMarginHistory(archive, "2026"); strings.Contains(got.Scope, "2021") {
+		t.Fatalf("missing fixture accepted: %+v", got)
+	}
+}
+
+func TestHistoricalMarginInventoryRejectsBalancedPartialSeason(t *testing.T) {
+	// Matching per-team counts is insufficient when the entire archive is short.
+	season := cache.HistoricalSeason{Entry: competition.Entry{Season: "2024", Stage: "Regular Season"}}
+	for i := range 14 {
+		season.Data.Games = append(season.Data.Games, cache.Game{HomeTeamID: string(rune('a' + i)), AwayTeamID: string(rune('a' + (i+1)%14))})
+	}
+	if _, complete := historicalMarginInventory(season); complete {
+		t.Fatal("balanced but partial inventory accepted")
+	}
+	season.Entry.Season = "2099"
+	if _, complete := historicalMarginInventory(season); complete {
+		t.Fatal("unknown historical inventory accepted")
 	}
 }

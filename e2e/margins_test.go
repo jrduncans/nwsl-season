@@ -19,21 +19,21 @@ func TestExploreMarginsGoBrowserParity(t *testing.T) {
 		name, scenario, path, tiles string
 		missingSplit                bool
 	}{
-		{"season goal gaps", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=none", "[data-trend-goal-gap-tiles]", false},
+		{"season goal gaps", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=kRQa8JOqKZ&trend-view=compare&smoothing=none", "[data-trend-goal-gap-tiles]", false},
 		{"season goal gaps incomplete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=compare&smoothing=none", "[data-trend-goal-gap-tiles]", false},
 		{"h2h goal gaps", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps empty venue", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=aDQ0lzvQEv&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps incomplete", apptest.ScenarioTeams, "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both", "[data-h2h-comparison]", false},
 		{"h2h goal gaps missing split", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=both&penalties=exclude", "[data-h2h-comparison]", true},
-		{"season complete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&smoothing=none", "[data-trend-margin-tiles]", false},
+		{"season complete", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=kRQa8JOqKZ&trend-view=difference&smoothing=none", "[data-trend-margin-tiles]", false},
 		{"season incomplete xG", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2026&team=odMX2OJqYL&trend-view=difference&smoothing=none", "[data-trend-margin-tiles]", false},
-		{"season non-penalty", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=difference&smoothing=none&penalties=exclude", "[data-trend-margin-tiles]", false},
+		{"season non-penalty", apptest.ScenarioSeasonTrend, "explore?view=season-trend&season=2025&team=kRQa8JOqKZ&trend-view=difference&smoothing=none&penalties=exclude", "[data-trend-margin-tiles]", false},
 		{"h2h complete", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H, "[data-h2h-record]", false},
 		{"h2h incomplete xG", apptest.ScenarioTeams, "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg", "[data-h2h-record]", false},
 		{"h2h non-penalty missing split", apptest.ScenarioTeamHistory, "explore?view=head-to-head&opponent=" + seattleH2H + "&penalties=exclude", "[data-h2h-record]", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			archive := apptest.Scenario(t, tc.scenario)
+			archive := apptest.CacheScenario(t, tc.scenario)
 			if tc.missingSplit {
 				for i := range archive {
 					for j := range archive[i].Data.XGoals {

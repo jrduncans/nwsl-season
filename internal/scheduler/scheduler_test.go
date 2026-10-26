@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
@@ -1071,4 +1072,22 @@ func (r *blockingRunner) Recalculate(ctx context.Context, _ syncer.RecalculateOp
 	r.started <- struct{}{}
 	<-calculation.Done()
 	return cache.SyncRun{QualificationError: calculation.Err().Error()}, nil
+}
+
+func TestColdGamesRefreshKeepsVerifiedCatalogInventory(t *testing.T) {
+	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
+	entry, _ := competition.Lookup("2021", "Regular Season")
+	for _, dueResource := range []string{"games", "xg"} {
+		scope := coldPlanningScope("2021", timePointer(now.Add(-time.Hour)))
+		scope.Readiness.ExpectedInventory = entry.Inventory
+		if dueResource == "xg" {
+			scope.GamesFull.NextFullDueAt = timePointer(now.Add(time.Hour))
+			scope.XGFull.NextFullDueAt = timePointer(now.Add(-time.Hour))
+			scope.XGFull.LastFullSuccessAt = scope.GamesFull.LastFullSuccessAt
+		}
+		jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
+		if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Expectation == nil || *jobs[0].Operation.Expectation != *entry.Inventory {
+			t.Fatalf("%s due: %+v", dueResource, jobs)
+		}
+	}
 }

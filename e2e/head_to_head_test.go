@@ -89,7 +89,7 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	page := explorePage(t, base, Mobile, "explore?view=head-to-head&opponent="+seattleH2H)
 	defer expectInPlace(t, page, "head-to-head controls, sorts, Back/Forward")()
-	if err := expect.Locator(page.Locator("[data-h2h-summary]")).ToHaveText("Table: all 26 meetings"); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-summary]")).ToHaveText("Table: all 24 meetings"); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-values]")).Not().ToHaveAttribute("open", ""); err != nil {
@@ -104,7 +104,7 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(24); err != nil {
 		t.Fatal(err)
 	}
 	assertHeadToHeadTiles(t, page)
@@ -132,7 +132,7 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-opponent]")).ToHaveValue(seattleH2H); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(24); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := page.GoForward(); err != nil {
@@ -179,7 +179,7 @@ func TestExploreHeadToHeadNoScriptAndEmpty(t *testing.T) {
 	for _, vp := range []viewport{Desktop, Mobile, {Name: "small-phone", Width: 335, Height: 812}} {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
 		visitStatic(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
-		if err := expect.Locator(page.Locator("[data-h2h-fallback] li")).ToHaveCount(26); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-fallback] li")).ToHaveCount(24); err != nil {
 			t.Fatal(err)
 		}
 		assertHeadToHeadTiles(t, page)
@@ -214,16 +214,16 @@ func TestExploreHeadToHeadNoScriptAndEmpty(t *testing.T) {
 	}
 	for _, noScript := range []bool{false, true} {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
-		path := base + "explore?view=head-to-head&opponent=315VnJ759x"
+		path := base + "explore?view=head-to-head&opponent=odMX2OJqYL"
 		if noScript {
 			visitStatic(t, page, path)
 		} else {
 			visit(t, page, path)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-empty]")).ToHaveText("Portland Thorns FC and Bay FC have not met in a regular-season match."); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-empty]")).ToHaveText("Portland Thorns FC and Boston Legacy FC have not met in a regular-season match."); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-opponent]")).ToHaveValue("315VnJ759x"); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-opponent]")).ToHaveValue("odMX2OJqYL"); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-h2h-chart-wrap]")).ToBeHidden(); err != nil {
@@ -348,7 +348,7 @@ func TestExploreHeadToHeadTooltip(t *testing.T) {
 	for _, move := range []struct {
 		key   string
 		index int
-	}{{"ArrowRight", 1}, {"ArrowLeft", 0}, {"End", 25}, {"Home", 0}} {
+	}{{"ArrowRight", 1}, {"ArrowLeft", 0}, {"End", 23}, {"Home", 0}} {
 		if err := canvas.Press(move.key); err != nil {
 			t.Fatal(err)
 		}
@@ -429,7 +429,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-h2h-comparison]")).ToContainText("npxG"); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(26); err != nil {
+	if err := expect.Locator(page.Locator("[data-h2h-mark]")).ToHaveCount(24); err != nil {
 		t.Fatal(err)
 	}
 	assertNoHorizontalOverflow(t, page)
@@ -474,7 +474,27 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
-	base := exploreBase(t, apptest.ScenarioTeams)
+	archive := apptest.CacheScenario(t, apptest.ScenarioTeams)
+	removed := false
+	for i := range archive {
+		if archive[i].Entry.Season != "2025" {
+			continue
+		}
+		observations := archive[i].Data.XGoals[:0]
+		for _, observation := range archive[i].Data.XGoals {
+			pair := observation.HomeTeamID == "315VnJ759x" && observation.AwayTeamID == "4JMAk47qKg" || observation.AwayTeamID == "315VnJ759x" && observation.HomeTeamID == "4JMAk47qKg"
+			if !removed && pair {
+				removed = true
+				continue
+			}
+			observations = append(observations, observation)
+		}
+		archive[i].Data.XGoals = observations
+	}
+	if !removed {
+		t.Fatal("fixture has no covered Bay–Houston meeting")
+	}
+	base := exploreBaseArchive(t, archive)
 	path := "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both"
 	var serverTotals string
 	for _, noScript := range []bool{true, false} {
@@ -539,10 +559,10 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-coverage]")).ToContainText("3 of 4 meetings"); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-coverage]")).ToContainText("1 of 2 meetings"); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-h2h-rows] tr")).ToHaveCount(4); err != nil {
+		if err := expect.Locator(page.Locator("[data-h2h-rows] tr")).ToHaveCount(2); err != nil {
 			t.Fatal(err)
 		}
 		chooseOption(t, page, "[data-segmented=h2h-series]", "actual")
@@ -753,7 +773,29 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 
 func TestExplorePointsTileFormattingParity(t *testing.T) {
 	t.Parallel()
-	base := exploreBase(t, apptest.ScenarioTeamHistory)
+	archive := apptest.CacheScenario(t, apptest.ScenarioTeamHistory)
+	// Give Portland only home meetings with Washington, preserving every team's
+	// fixture count, to exercise an empty Away tile with both renderers.
+	for i := range archive {
+		switched := map[string]bool{}
+		for j := range archive[i].Data.Games {
+			game := &archive[i].Data.Games[j]
+			if game.HomeTeamID == "aDQ0lzvQEv" && game.AwayTeamID == "Pk5LeeNqOW" {
+				game.HomeTeamID, game.AwayTeamID = game.AwayTeamID, game.HomeTeamID
+				game.HomeScore, game.AwayScore = game.AwayScore, game.HomeScore
+				switched[game.ASAID] = true
+			}
+		}
+		for j := range archive[i].Data.XGoals {
+			xg := &archive[i].Data.XGoals[j]
+			if switched[xg.GameID] {
+				xg.HomeTeamID, xg.AwayTeamID = xg.AwayTeamID, xg.HomeTeamID
+				xg.HomeXG, xg.AwayXG = xg.AwayXG, xg.HomeXG
+				xg.HomeXPoints, xg.AwayXPoints = xg.AwayXPoints, xg.HomeXPoints
+			}
+		}
+	}
+	base := exploreBaseArchive(t, archive)
 	for _, path := range []string{
 		"explore?view=head-to-head&h2h-series=points&opponent=" + seattleH2H,
 		"explore?view=head-to-head&h2h-series=points&opponent=aDQ0lzvQEv",

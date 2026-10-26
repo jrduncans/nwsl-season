@@ -60,7 +60,9 @@ Washington 39 / 24. Official PPG uses those totals. Played-match records remain
 41 / 23, 39 / 23 and 39 / 22 respectively and appear in record notes.
 Awards fill deficits relative to the observed full-season match count. An award
 already included by ASA is skipped; inconsistent residual counts withhold the
-season. Awards never mutate the cache or other Explore views.
+season. Awards never mutate the cache. The shared official inventory check used by readiness, Explore, season pages,
+Seeding and refresh validation reconciles these awards; the awarded scores contribute
+to the comparison while observed source counts remain 118.
 
 ## 2024: Angel City's three-point deduction
 
@@ -89,9 +91,8 @@ alone is not proof of seed entitlement.
 
 Known incomplete inventory, nonterminal matches, unresolved postseason results,
 unexplained unequal match counts withhold the whole season. Conflicting seed
-evidence and an ambiguous boundary withhold only the affected outcomes. Historical seasons
-without verified regular-season inventory use balanced match counts and completed
-postseason evidence; these checks cannot detect every uniformly missing set of
-regular-season matches. They must not be described as an independent match
-audit. Team display names follow the cached ASA identities, consistently with
+evidence and an ambiguous boundary withhold only the affected outcomes. Historical regular seasons have verified schedule sizes and per-team counts;
+the shared inventory check rejects uniformly short archives as well as asymmetric
+deficits. Postseason evidence remains required for threshold derivation.
+Inventory verification establishes counts, not an independent match-identity audit. Team display names follow the cached ASA identities, consistently with
 other Explore views.

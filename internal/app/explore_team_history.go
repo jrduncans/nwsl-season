@@ -52,6 +52,12 @@ type exploreTeamHistoryView struct {
 // Reuse the eligible team-season rates so history and season comparisons have
 // identical coverage rules. Identity is ASA's team ID, never a name match.
 func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreTeamHistoryView, error) {
+	return exploreTeamHistoryFor(query, seasons, seasons)
+}
+
+// Identity choices follow the all-shots archive even when the selected basis
+// has no eligible records for a team. Basis switches preserve the same choices.
+func exploreTeamHistoryFor(query url.Values, seasons, identities []exploreTeamSeason) (exploreTeamHistoryView, error) {
 	basis, err := penaltiesBasis(query)
 	if err != nil {
 		return exploreTeamHistoryView{}, err
@@ -90,7 +96,7 @@ func exploreTeamHistory(query url.Values, seasons []exploreTeamSeason) (exploreT
 	}
 	byID := make(map[string]teamNameView)
 	// Seasons arrive newest first; prefer the most recent recorded name.
-	for _, season := range seasons {
+	for _, season := range identities {
 		for _, team := range season.Teams {
 			if _, exists := byID[team.ID]; !exists {
 				byID[team.ID] = teamNameView{ID: team.ID, Name: team.Name, LogoURL: team.LogoURL}

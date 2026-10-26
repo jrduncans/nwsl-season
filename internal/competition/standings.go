@@ -2,6 +2,7 @@ package competition
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/jrduncans/nwsl-season/internal/standings"
 )
@@ -21,18 +22,11 @@ func OfficialStandings(season string, teams []standings.Team, games []standings.
 		played[row.Team.ID] = row.Record.Played
 		expected = max(expected, row.Record.Played)
 	}
-	for _, award := range override.Awards {
-		winner, winOK := played[award.Winner]
-		loser, loseOK := played[award.Loser]
-		if !winOK || !loseOK {
-			return nil, fmt.Errorf("awarded-match participants are missing")
-		}
-		if winner == expected {
-			continue
-		}
-		if loser >= expected {
-			return nil, fmt.Errorf("awarded-match game counts do not reconcile")
-		}
+	awards, err := MissingOutcomeAwards(played, expected, override.Awards)
+	if err != nil {
+		return nil, err
+	}
+	for _, award := range awards {
 		home, away := award.Winner, award.Loser
 		homeScore, awayScore := award.WinnerGoals, award.LoserGoals
 		if award.Home == award.Loser {
@@ -40,15 +34,6 @@ func OfficialStandings(season string, teams []standings.Team, games []standings.
 			homeScore, awayScore = awayScore, homeScore
 		}
 		games = append(games, standings.Game{Status: standings.CompletedStatus, HomeTeamID: home, AwayTeamID: away, HomeScore: &homeScore, AwayScore: &awayScore})
-		played[award.Winner]++
-		played[award.Loser]++
-	}
-	if len(override.Awards) > 0 {
-		for _, count := range played {
-			if count != expected || count == 0 {
-				return nil, fmt.Errorf("game counts do not reconcile after awarded matches")
-			}
-		}
 	}
 	rows = standings.Calculate(teams, games, rules)
 	for _, deduction := range override.Deductions {
@@ -64,4 +49,38 @@ func OfficialStandings(season string, teams []standings.Team, games []standings.
 		}
 	}
 	return standings.Rank(rows, games, rules), nil
+}
+
+// MissingOutcomeAwards reconciles source-backed awards against per-team fixture
+// counts. It returns only absent awards, without changing the supplied counts.
+// Unexplained or asymmetric deficits are rejected; callers still check league
+// totals and participant counts against their verified inventory.
+func MissingOutcomeAwards(appearances map[string]int, expected int, awards []OutcomeAward) ([]OutcomeAward, error) {
+	if len(awards) == 0 {
+		return nil, nil
+	}
+	played := maps.Clone(appearances)
+	missing := []OutcomeAward{}
+	for _, award := range awards {
+		winner, winOK := played[award.Winner]
+		loser, loseOK := played[award.Loser]
+		if !winOK || !loseOK {
+			return nil, fmt.Errorf("awarded-match participants are missing")
+		}
+		if winner == expected {
+			continue
+		}
+		if winner >= expected || loser >= expected {
+			return nil, fmt.Errorf("awarded-match game counts do not reconcile")
+		}
+		missing = append(missing, award)
+		played[award.Winner]++
+		played[award.Loser]++
+	}
+	for _, count := range played {
+		if count != expected || count == 0 {
+			return nil, fmt.Errorf("game counts do not reconcile after awarded matches")
+		}
+	}
+	return missing, nil
 }

@@ -36,7 +36,7 @@ const (
 // active beyond the year this was written for.
 func Seed(t testing.TB, db *cache.DB, scenario string) {
 	t.Helper()
-	SeedArchive(t, db, Scenario(t, scenario))
+	SeedArchive(t, db, CacheScenario(t, scenario))
 }
 
 // SeedArchive stores a scenario variant through the same cache validation as Seed.

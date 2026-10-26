@@ -78,8 +78,10 @@ Missing public source-backed catalog stages are included in the bootstrap
 inventory tier only until their first match inventory is observed. The
 configured current primary stage comes first, followed by current secondary
 stages in catalog order, historical primary stages newest first, then
-historical secondary stages in catalog order. Historical stages use no format
-assumptions, so the planner sends no expected team or match counts for them.
+historical secondary stages in catalog order. Historical stages use verified catalog inventory expectations when available.
+Regular-season validation reconciles documented awards against per-team deficits
+before checking totals. An incomplete source response cannot replace a complete
+inventory; synthetic awarded fixtures are never persisted.
 After inventory is available, initial xG loading proceeds independently; later
 corrections use the archived sweep. A material targeted result in an incomplete
 active bracket also makes its next full-games discovery due immediately; the
@@ -169,7 +171,9 @@ correction polling).
 The operation validates and maps the one ASA response before invoking its
 resource-specific cache API. Full match inventory replacement retains a prior
 complete inventory when an incoming known inventory is incomplete or uneven.
-Targeted operations do not delete unrequested records. If a match write finds
+Archived correction sweeps and command-line full refreshes carry the same
+verified catalog expectations, including award reconciliation. Targeted
+operations do not delete unrequested records. If a match write finds
 unknown teams, the service refreshes the catalog once and retries the same
 validated write without refetching matches.
 
