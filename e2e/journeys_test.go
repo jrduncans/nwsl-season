@@ -978,6 +978,11 @@ func TestJ6ASAErrors(t *testing.T) {
 // CheckNow.
 func TestJ7SchedulerPath(t *testing.T) {
 	t.Parallel()
+	// Derived refreshes share syncer's process-wide calculation lock across
+	// parallel journeys. This includes queueing behind other fixtures' scenario
+	// searches, not just this scheduler's work. CI has exceeded one minute in
+	// that queue; allow five minutes while still returning as soon as ready.
+	const schedulerWait = 5 * time.Minute
 	cfg := lateSeason()
 	cfg.startScheduler = true
 	cfg.checkInterval = 20 * time.Millisecond
@@ -990,10 +995,10 @@ func TestJ7SchedulerPath(t *testing.T) {
 	startupPlanning, resumeStartup := j.Clock.holdNextRead(t)
 	j.Server.Start()
 	// Startup recalculates cached clinching before reading the planning clock;
-	// allow the same budget as publishing below, including under the race detector.
+	// allow the same queueing budget as publishing below.
 	select {
 	case <-startupPlanning:
-	case <-time.After(60 * time.Second):
+	case <-time.After(schedulerWait):
 		t.Fatal("scheduler did not reach startup planning")
 	}
 
@@ -1007,7 +1012,7 @@ func TestJ7SchedulerPath(t *testing.T) {
 	j.Clock.Advance(lateRoundsDue)
 	resumeStartup()
 
-	eventually(t, 60*time.Second, "the scheduler to publish team-0's clinch", func() bool {
+	eventually(t, schedulerWait, "the scheduler to publish team-0's clinch", func() bool {
 		body := httpBody(t, j.fixture, "")
 		i := strings.Index(body, `data-team-id="`+teamZero+`"`)
 		if i < 0 {

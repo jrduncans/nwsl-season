@@ -540,6 +540,10 @@ variation means the roughly 25% average improvement is not a guaranteed gain.
 The `E2E` job uploads its `go test -json` output and lists its slowest tests in
 the job summary. Test durations can overlap and include subtests, so use the
 package duration to compare total suite time.
+The scheduler journey allows up to five minutes for startup planning and
+clinch publication: parallel fixtures share the syncer's calculation lock, so
+these waits include time queued behind other journeys' scenario searches.
+Both waits finish as soon as their condition holds.
 `python3 -m unittest discover -s scripts -p 'test_*.py'` checks the summary
 script, which is also exercised in CI.
 
