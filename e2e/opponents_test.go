@@ -14,7 +14,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/apptest"
 )
 
-const opponentsPath = "explore?view=season-trend&team=odMX2OJqYL"
+const opponentsPath = "explore?view=season-trend&team=kRQa8JOqKZ"
 
 // opponentState reads everything the opponent adjustment changes outside the
 // charts: the control, note, tiles, official-results note and table.

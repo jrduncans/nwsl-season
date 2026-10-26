@@ -532,3 +532,17 @@ func fixedOperationClock(values ...time.Time) func() time.Time {
 		return values[len(values)-1]
 	}
 }
+
+func TestCompatibilityFullRefreshUsesCatalogInventory(t *testing.T) {
+	for _, year := range []string{"2021", "2024", "2025"} {
+		op := compatibilityOperation(OperationGames, OperationFull, RunOptions{Season: year, Stage: "Regular Season"}, cache.SourceTriggerBackfill, time.Now())
+		entry, _ := competition.Lookup(year, "Regular Season")
+		if op.Expectation == nil || *op.Expectation != *entry.Inventory {
+			t.Fatalf("%s refresh expectation: %+v", year, op.Expectation)
+		}
+	}
+	op := compatibilityOperation(OperationGames, OperationFull, RunOptions{Season: "2025", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 1}, cache.SourceTriggerCLI, time.Now())
+	if op.Expectation == nil || op.Expectation.Games != 1 {
+		t.Fatal("explicit expectation was lost")
+	}
+}

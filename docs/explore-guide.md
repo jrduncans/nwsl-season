@@ -172,6 +172,12 @@ counted match has valid xG; the same holds for xPoints.
 A season is plotted only with at least 20 valid played matches, available source
 readiness, a known non-upcoming lifecycle, no invalid completed results, no
 known-incomplete inventory, and no pending match in a completed lifecycle.
+Historical regular seasons now have verified catalog inventory expectations.
+Completeness uses the shared official-inventory check, including known awards
+only when they explain per-team deficits. A genuinely missing fixture excludes
+the season; the 118 played matches plus two awards in 2021 form a complete
+season. Played-match scoring distributions and xG denominators remain 118,
+while official record and threshold calculations include the awards.
 Team views use the same checks with a one-result minimum. Unknown inventory
 does not exclude a season. Partial xG never excludes a season's goals.
 
@@ -606,7 +612,9 @@ Change geometry there, not in `explore.js`.
 The team picker lists ASA team IDs with eligible results across the archive,
 using each ID's newest name; headings and opponents use names from the selected
 season. The default is Portland Thorns FC (`Pk5LeeNqOW`), the site owner's team,
-falling back to the first team by name. A team with no results in the selected
+falling back to the first team by name. Team choices always follow the all-shots
+archive, so excluding penalties keeps the same identities even when that basis
+has no eligible season for a club. A team with no results in the selected
 season stays selected with an empty state.
 
 ### Rankings
@@ -1219,7 +1227,17 @@ keeps repeated page requests practical under the race detector.
 seeded temporary cache under `/nwsl-season/` on loopback and prints a matching
 Explore URL. It starts no scheduler, makes no ASA request, and deletes its
 cache on exit. `-no-script` adds a CSP that blocks page scripts. The same
-scenarios are `apptest.Seed` (cache-backed) and `apptest.Scenario` (in-memory).
+scene patterns are `apptest.Scenario` (compact in-memory snapshots) and
+`apptest.CacheScenario` (full historical inventories), used by `apptest.Seed`.
+Cache scenarios use the recorded historical participant pairings from the
+threshold fixtures, retaining synthetic score and expected-data patterns.
+Empty and explicitly incomplete scenes remain incomplete. Current 2026 scenes
+retain their original schedules. The cache variants have actual historical
+team counts and match counts: 2025 has 14 teams and 182 fixtures, for example;
+2021's 118 source fixtures reconcile with its two documented awards.
+The cache overview retains two tied leaders in 2024, and the season-trend scene
+has two explicit Angel City matches for score/penalty-basis assertions.
+The table below describes the compact in-memory patterns before expansion.
 Seeded lifecycle follows the calendar year, so earlier seasons are completed
 and the current year is active.
 
@@ -1238,7 +1256,7 @@ and the current year is active.
 For a Team-seasons chart with twenty or fewer rows, run
 `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams` and open
 `/nwsl-season/explore?view=team-seasons` on its printed loopback address. Its
-completed 2025 season supplies sixteen ranked rows; 2026 has only eight played
+completed 2025 season supplies fourteen ranked rows; 2026 has only eight played
 matches per team and stays below the active-season gate. Both end labels appear,
 with no break and no duplicated team-season. Use `-no-script` to inspect the
 native disclosure and submit controls with page scripts blocked.

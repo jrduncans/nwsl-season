@@ -19,7 +19,7 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-values]")).Not().ToHaveAttribute("open", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-summary]")).ToHaveText("Table: all 144 team-seasons"); err != nil {
+	if err := expect.Locator(page.Locator("[data-team-seasons-summary]")).ToHaveText("Table: all 102 team-seasons"); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-team-seasons-bars] a, [data-team-seasons-rows] a")).ToHaveCount(0); err != nil {
@@ -153,7 +153,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	if err := expect.Locator(page.Locator("[data-team-seasons-row] img")).ToHaveCount(20); err != nil {
 		t.Fatal(err)
 	}
-	if err := expect.Locator(page.Locator("[data-team-seasons-rows] img")).ToHaveCount(144); err != nil {
+	if err := expect.Locator(page.Locator("[data-team-seasons-rows] img")).ToHaveCount(102); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-team-seasons-points-note]")).ToBeHidden(); err != nil {
@@ -208,7 +208,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
-	small := exploreBaseArchive(t, apptest.TeamHistorySmall(t))
+	small := exploreBaseArchive(t, apptest.CompleteScenarioInventories(t, apptest.TeamHistorySmall(t)))
 	for _, noScript := range []bool{false, true} {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
 		if noScript {
@@ -216,7 +216,7 @@ func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 		} else {
 			visit(t, page, small+"explore?view=team-seasons")
 		}
-		if err := expect.Locator(page.Locator("[data-team-seasons-row]")).ToHaveCount(16); err != nil {
+		if err := expect.Locator(page.Locator("[data-team-seasons-row]")).ToHaveCount(14); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.Locator(page.Locator("[data-team-seasons-high]")).ToBeVisible(); err != nil {
@@ -230,8 +230,8 @@ func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 		}
 		assertNoHorizontalOverflow(t, page)
 	}
-	page := explorePage(t, exploreBaseArchive(t, apptest.TeamHistoryBelowGate(t)), Mobile, "explore?view=team-seasons")
-	if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(128); err != nil {
+	page := explorePage(t, exploreBaseArchive(t, apptest.CompleteScenarioInventories(t, apptest.TeamHistoryBelowGate(t))), Mobile, "explore?view=team-seasons")
+	if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(86); err != nil {
 		t.Fatal(err)
 	}
 	chooseOption(t, page, "[data-segmented=team-seasons-measure]", "against")
@@ -426,7 +426,7 @@ func TestExploreTeamSeasonsScatterNoScript(t *testing.T) {
 		if err := page.Locator("[data-team-seasons-summary]").Click(); err != nil {
 			t.Fatal(err)
 		}
-		if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(144); err != nil {
+		if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(102); err != nil {
 			t.Fatal(err)
 		}
 		if err := page.Locator(`[data-team-seasons-sort="actual"]`).Click(); err != nil {

@@ -32,7 +32,7 @@ import (
 // here can reach ASA.
 func exploreBase(t *testing.T, scenario string) string {
 	t.Helper()
-	return exploreBaseArchive(t, apptest.Scenario(t, scenario))
+	return exploreBaseArchive(t, apptest.CacheScenario(t, scenario))
 }
 
 func exploreBaseArchive(t *testing.T, archive []cache.HistoricalSeason) string {
@@ -1005,7 +1005,7 @@ func TestExploreOutlierPlotUsesEqualAxesAndParityDiagonal(t *testing.T) {
 				if state.X.Reverse || state.Y.Reverse {
 					t.Errorf("Outlier plot reverses an axis: x %v, y %v", state.X.Reverse, state.Y.Reverse)
 				}
-				if len(state.Points) != 1 || len(state.Points[0]) != fixtureTeams {
+				if len(state.Points) != 1 || len(state.Points[0]) != 14 {
 					t.Fatalf("points = %d datasets, want one with %d teams", len(state.Points), fixtureTeams)
 				}
 				for i, point := range state.Points[0] {
@@ -1438,8 +1438,8 @@ func TestExploreSortsScoringAndHistoryTablesInBothDirections(t *testing.T) {
 		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=table")
 		defer expectInPlace(t, page, "sorting the Scoring table")()
-		// Matches: 2025 has 240 completed matches and 2026 has 232.
-		for _, want := range [][]string{{"240", "232"}, {"232", "240"}} {
+		// Matches: 2025 has 182 completed matches and 2026 has 232.
+		for _, want := range [][]string{{"232", "182"}, {"182", "232"}} {
 			if err := page.Locator(`[data-sort="1"]`).Click(); err != nil {
 				t.Fatalf("click Matches header: %v", err)
 			}
@@ -1561,15 +1561,15 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		}
 		var shares []*float64
 		evalJSON(t, page, `() => Chart.getChart(document.querySelector('[data-chart="bin-trend"]')).data.datasets[0].data`, nil, &shares)
-		// The 3-goal bin is 59 of 240 matches in 2025 and 56 of 232 in 2026.
+		// The 3-goal bin is 45 of 182 matches in 2025 and 56 of 232 in 2026.
 		var populated []float64
 		for _, share := range shares {
 			if share != nil {
 				populated = append(populated, *share)
 			}
 		}
-		if len(populated) != 2 || math.Abs(populated[0]-59.0/240*100) > 1e-9 || math.Abs(populated[1]-56.0/232*100) > 1e-9 {
-			t.Errorf("3-goal shares = %v, want %v and %v", populated, 59.0/240*100, 56.0/232*100)
+		if len(populated) != 2 || math.Abs(populated[0]-45.0/182*100) > 1e-9 || math.Abs(populated[1]-56.0/232*100) > 1e-9 {
+			t.Errorf("3-goal shares = %v, want %v and %v", populated, 45.0/182*100, 56.0/232*100)
 		}
 
 		chooseOption(t, page, "[data-segmented=distribution-bin]", "0")
@@ -1599,7 +1599,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 	t.Run("keyboard inspection of both charts", func(t *testing.T) {
 		t.Parallel()
 		page := explorePage(t, base, Desktop, "explore?view=distribution")
-		assertKeyboardInspection(t, page, `[data-chart="distribution"]`, "of 240 matches")
+		assertKeyboardInspection(t, page, `[data-chart="distribution"]`, "of 182 matches")
 		chooseOption(t, page, "[data-segmented=distribution-bin]", "2")
 		assertKeyboardInspection(t, page, `[data-chart="bin-trend"]`, "2 goals")
 	})
@@ -1611,7 +1611,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		if err := page.Locator("[data-distribution-values] summary").Click(); err != nil {
 			t.Fatalf("open Distribution table: %v", err)
 		}
-		for _, want := range []struct{ order, seasons string }{{"descending", "2025,2026"}, {"ascending", "2026,2025"}} {
+		for _, want := range []struct{ order, seasons string }{{"descending", "2026,2025"}, {"ascending", "2025,2026"}} {
 			if err := page.Locator(`[data-distribution-sort="matches"]`).Click(); err != nil {
 				t.Fatalf("click Matches header: %v", err)
 			}
@@ -1628,7 +1628,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		if _, err := page.GoBack(); err != nil {
 			t.Fatalf("back: %v", err)
 		}
-		if got := distributionSeasons(t, page); got != "2025,2026" {
+		if got := distributionSeasons(t, page); got != "2026,2025" {
 			t.Errorf("after Back, seasons = %s, want 2025,2026", got)
 		}
 
@@ -1637,7 +1637,7 @@ func TestExploreGoalDistributionShowsCountsSharesAndBins(t *testing.T) {
 		if err := expect.Locator(direct.Locator("[data-distribution-values]")).ToHaveAttribute("open", ""); err != nil {
 			t.Errorf("disclosure of a directly opened sorted URL: %v", err)
 		}
-		if got := distributionSeasons(t, direct); got != "2026,2025" {
+		if got := distributionSeasons(t, direct); got != "2025,2026" {
 			t.Errorf("directly opened sorted URL shows seasons %s, want 2026,2025", got)
 		}
 	})
@@ -1836,7 +1836,7 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 
 	t.Run("compare teams table sorts through links", func(t *testing.T) {
 		goTo("explore?view=teams&display=table&season=2025")
-		if err := expect.Locator(page.Locator("[data-team-rows] tr")).ToHaveCount(fixtureTeams); err != nil {
+		if err := expect.Locator(page.Locator("[data-team-rows] tr")).ToHaveCount(14); err != nil {
 			t.Fatalf("server-rendered table rows: %v", err)
 		}
 		for _, descending := range []bool{true, false} {
@@ -1920,7 +1920,7 @@ func TestExploreWorksWithoutJavaScript(t *testing.T) {
 		if err := expect.Locator(page.Locator("[data-parity-strip-title]")).ToHaveText("Teams in 2025"); err != nil {
 			t.Fatalf("default strip: %v", err)
 		}
-		if err := expect.Locator(page.Locator(".explore-parity-list li")).ToHaveCount(fixtureTeams); err != nil {
+		if err := expect.Locator(page.Locator(".explore-parity-list li")).ToHaveCount(14); err != nil {
 			t.Errorf("server-rendered strip: %v", err)
 		}
 		chooseOption(t, page, "[data-parity-season]", "2026")
@@ -2086,7 +2086,7 @@ func TestExploreParitySelectsSeasonsInPlace(t *testing.T) {
 	}
 	var marks int
 	evalJSON(t, page, `() => document.querySelectorAll('[data-parity-strip] svg circle').length`, nil, &marks)
-	if marks != 6 {
+	if marks != 14 {
 		t.Errorf("strip marks = %d, want one per team", marks)
 	}
 
@@ -2107,7 +2107,7 @@ func TestExploreParitySelectsSeasonsInPlace(t *testing.T) {
 	// 2024 has two teams tied on the best PPG; the summary names both.
 	var summary string
 	evalJSON(t, page, `() => document.querySelector('[data-parity-summary]').textContent`, nil, &summary)
-	if !regexp.MustCompile(`from [^()]+, [^()]+ \(2\.00\) down to`).MatchString(summary) {
+	if !regexp.MustCompile(`from [^()]+, [^()]+ \(2\.85\) down to`).MatchString(summary) {
 		t.Errorf("2024 summary = %q, want both tied leaders", summary)
 	}
 
@@ -2127,7 +2127,7 @@ func TestExploreParitySelectsSeasonsInPlace(t *testing.T) {
 
 	chooseOption(t, page, "[data-segmented=parity-series]", "both")
 	evalJSON(t, page, `() => document.querySelectorAll('[data-parity-strip] svg .explore-parity-expected').length`, nil, &marks)
-	if marks != 6 {
+	if marks != 10 {
 		t.Errorf("xPPG marks = %d, want one per team", marks)
 	}
 
@@ -2256,9 +2256,9 @@ func TestExploreSeasonTrendAlwaysShowsBothSeriesAndCarriesSeasonBySeasonChoice(t
 func TestExploreSeasonTrendInspectionNumbersAndResult(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	path := "explore?view=season-trend&season=2025&team=odMX2OJqYL"
+	path := "explore?view=season-trend&season=2025&team=kRQa8JOqKZ"
 	page := explorePage(t, base, Mobile, path)
-	// Boston's first match is a 2–0 win with 1.10–0.70 xG and 1.54 xPoints.
+	// Angel City's first match is a 2–0 win with 1.10–0.70 xG and 1.54 xPoints.
 	// Its second match is a 1–0 win from a penalty: excluding penalties leaves
 	// a level goal margin while the official result remains a win.
 	cases := []struct {
@@ -2405,7 +2405,7 @@ func TestExploreSeasonPointsGap(t *testing.T) {
 
 func TestExploreSeasonPointsEmptyAndVenueDates(t *testing.T) {
 	t.Parallel()
-	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	archive := apptest.CacheScenario(t, apptest.ScenarioSeasonTrend)
 	for i := range archive {
 		for j := range archive[i].Data.Games {
 			archive[i].Data.Games[j].RawJSON = `{"stadium_id":"unknown"}`
@@ -2644,7 +2644,7 @@ func TestExploreSeasonTrendGoalGapBars(t *testing.T) {
 func TestExploreSeasonTrendOpponentLogos(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	const team = "explore?view=season-trend&season=2025&team=odMX2OJqYL&smoothing=none&trend-view="
+	const team = "explore?view=season-trend&season=2025&team=kRQa8JOqKZ&smoothing=none&trend-view="
 	// logoRow reports each panel's logo row and checks that the row sits under
 	// the plot and above the match numbers, one logo centered on each slot.
 	logoRow := `(names) => names.map(name => {
@@ -2852,12 +2852,12 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 	}
 	// An entirely uncovered season still renders both panels and lets the
 	// keyboard inspect every empty xG slot.
-	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
+	archive := apptest.CacheScenario(t, apptest.ScenarioSeasonTrend)
 	for i := range archive {
 		archive[i].Data.XGoals = nil
 	}
 	missingBase := exploreBaseArchive(t, archive)
-	missing := explorePage(t, missingBase, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&smoothing=none")
+	missing := explorePage(t, missingBase, Mobile, "explore?view=season-trend&season=2025&team=kRQa8JOqKZ&smoothing=none")
 	for _, name := range []string{"season-margin", "season-margin-xg"} {
 		if err := expect.Locator(missing.Locator("[data-chart=" + name + "]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
@@ -2874,11 +2874,11 @@ func TestExploreSeasonBalanceMirroredBars(t *testing.T) {
 	if err := missing.Locator("[data-chart=season-margin-xg]").Press("End"); err != nil {
 		t.Fatal(err)
 	}
-	if got := chartInspection(t, missing, "[data-chart=season-margin-xg]"); !strings.Contains(got.Status, "Match 30 ·") || !strings.Contains(got.Status, "xG for: Unavailable") {
+	if got := chartInspection(t, missing, "[data-chart=season-margin-xg]"); !strings.Contains(got.Status, "Match 26 ·") || !strings.Contains(got.Status, "xG for: Unavailable") {
 		t.Fatalf("empty xG keyboard inspection: %+v", got)
 	}
 
-	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2025&team=odMX2OJqYL&smoothing=none&penalties=exclude")
+	page := explorePage(t, base, Mobile, "explore?view=season-trend&season=2025&team=kRQa8JOqKZ&smoothing=none&penalties=exclude")
 	canvas := page.Locator("[data-chart=season-margin]")
 	for _, key := range []string{"Home", "ArrowRight"} {
 		if err := canvas.Press(key); err != nil {

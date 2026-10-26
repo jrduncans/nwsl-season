@@ -10,6 +10,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
+	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
@@ -36,8 +37,8 @@ type marginSeason struct {
 	Maximum        int
 }
 
-// marginSeasons summarizes every season fit for comparison. Unknown or
-// incomplete inventories and unfinished seasons are excluded entirely.
+// marginSeasons summarizes seasons with verified official inventories and
+// completed valid results, including source-backed awarded scores.
 func marginSeasons(archive []cache.HistoricalSeason) []marginSeason {
 	out := []marginSeason{}
 	for _, season := range archive {
@@ -54,11 +55,30 @@ func marginSeasons(archive []cache.HistoricalSeason) []marginSeason {
 			summary.Maximum = max(summary.Maximum, absInt(int(g.HomeScore.Int64-g.AwayScore.Int64)))
 			summary.Latest = max(summary.Latest, kickoff.UTC().Format("2006-01-02"))
 		}
+		awards, complete := historicalMarginInventory(season)
+		if !complete {
+			continue
+		}
+		for _, award := range awards {
+			summary.Maximum = max(summary.Maximum, award.WinnerGoals-award.LoserGoals)
+		}
 		if valid {
 			out = append(out, summary)
 		}
 	}
 	return out
+}
+
+// historicalMarginInventory uses the same official inventory policy as cache
+// readiness, source refresh validation and season-page finality.
+func historicalMarginInventory(season cache.HistoricalSeason) ([]competition.OutcomeAward, bool) {
+	appearances := map[string]int{}
+	for _, game := range season.Data.Games {
+		appearances[game.HomeTeamID]++
+		appearances[game.AwayTeamID]++
+	}
+	awards, err := competition.ReconcileInventory(season.Entry.Season, season.Entry.Stage, season.Entry.Inventory, len(season.Data.Games), appearances)
+	return awards, err == nil
 }
 
 // marginHistoryBefore is a scoped comparison, never an all-time record: seasons

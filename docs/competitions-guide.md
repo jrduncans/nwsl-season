@@ -25,11 +25,39 @@ Public stages, in catalog order within a season:
 | Challenge Cup Final | 2024–2026 | knockout | fixtures, xG, bracket |
 
 ASA has no 2020 regular season, so the 2020 Challenge Cup group stage is that
-season's primary stage. Historical regular seasons carry only a verified
+season's primary stage. Historical regular seasons carry verified fixture inventories and a
 playoff place threshold (top four 2016–2019, six 2021–2023, eight 2024–2025, from NWSL
-records), not inventory, tiebreak or clinching rules. Completed knockout and
+records), but no clinching rules. Completed knockout and
 group stages carry exact match counts; 2026 Playoffs has a bracket format but no
 inventory count while publication is incomplete.
+
+### Verified historical regular-season inventories
+
+These are published schedule sizes, not totals inferred from the ASA cache.
+Awarded matches count toward the official inventory.
+
+| Seasons | Teams | Matches per team | Matches | Evidence |
+| --- | --- | --- | --- | --- |
+| 2016 | 10 | 20 | 100 | [Reign schedule](https://medium.com/@ReignFC/the-wait-is-over-2016-season-schedule-released-287b959eea39), [tenth club announcement](https://www.orlandocitysc.com/news/orlando-pride-set-sunday-s-debut-match-portland) |
+| 2017 | 10 | 24 | 120 | [Spirit schedule](https://washingtonspirit.com/2017/03/01/nwsl-announces-washington-spirit-2017-regular-season-schedule/) |
+| 2018 | 9 | 24 | 108 | [League format announcement](https://www.nwslsoccer.com/news/nwsl-announces-boston-breakers-to-cease-operations) |
+| 2019 | 9 | 24 | 108 | [Reign schedule announcement](https://www.reignfc.com/news/2019/2/22/reign-fc-announce-schedule-for-2019-nwsl-season-sp35b) |
+| 2021 | 10 | 24 | 120 | [League schedule](https://www.nwslsoccer.com/news/nwsl-announces-full-2021-regular-season-schedule), [awarded-match evidence](historical-outcomes-audit.md#2021-two-awarded-matches-missing-from-asa) |
+| 2022 | 12 | 22 | 132 | [League schedule](https://www.nwslsoccer.com/news/nwsl-announces-full-2022-regular-season-schedule) |
+| 2023 | 12 | 22 | 132 | [League schedule](https://www.nwslsoccer.com/news/nwsl-announces-full-2023-season-schedule) |
+| 2024 | 14 | 26 | 182 | [League format](https://www.nwslsoccer.com/news/national-womens-soccer-league-announces-2024-schedule-footprint-competition-calendar) |
+| 2025 | 14 | 26 | 182 | [League competition rules](https://images.nwslsoccer.com/image/private/t_q-good/prd/kqbdfpjgywmisiyhhtnp.pdf) |
+
+All completeness consumers use `competition.ReconcileInventory`: cache readiness,
+Explore eligibility, season-page finality, Seeding history and full source-refresh
+validation. Known awards fill only explained per-team deficits; awards already
+represented in the source counts are skipped. Team, match and per-team totals
+must all agree. Unexplained deficits remain incomplete.
+
+Observed counts, cached fixtures and played-match statistics stay source-only.
+For 2021, 118 cached played matches plus two documented awards satisfy the
+120-match official inventory. Scoring distributions and xG averages still use
+the 118 played matches; official standings and historical margins include awards.
 
 ### Capabilities are explicit
 
@@ -95,8 +123,9 @@ state):
 | `unknown` | Anything else | Same as active. |
 
 `FullTime` and `Abandoned` are terminal; an unknown status never proves
-completion. Historical regular seasons have no inventory, so they show
-`Historical standings` with retrospective defaults but never claim finality.
+completion. Historical regular seasons with verified complete inventories and
+terminal results show `Final standings`, including 2021 after award reconciliation.
+Incomplete or unverified historical seasons retain `Historical standings`.
 Presentation may hide a feature that is irrelevant to a complete season, but it
 never enables one the catalog omits.
 

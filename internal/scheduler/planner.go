@@ -132,7 +132,7 @@ func planColdSweep(snapshot cache.PlanningSnapshot, config Config, now time.Time
 		}
 		gamesDue, gamesAt := coldDue(scope.GamesFull, id.Season, id.Stage, config, now)
 		if gamesDue {
-			candidates = append(candidates, coldCandidate{due: gamesAt, job: Job{Kind: JobFullGames, Class: JobCold, Reason: "archived_correction_sweep", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config)}}})
+			candidates = append(candidates, coldCandidate{due: gamesAt, job: Job{Kind: JobFullGames, Class: JobCold, Reason: "archived_correction_sweep", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config), Expectation: scope.Readiness.ExpectedInventory}}})
 			continue
 		}
 		if scope.XGFull == nil || scope.XGFull.LastFullSuccessAt == nil || scope.XGFull.LastFullSuccessAt.Before(*scope.GamesFull.LastFullSuccessAt) {
@@ -141,7 +141,7 @@ func planColdSweep(snapshot cache.PlanningSnapshot, config Config, now time.Time
 		}
 		xgDue, xgAt := coldDue(scope.XGFull, id.Season, id.Stage, config, now)
 		if xgDue {
-			candidates = append(candidates, coldCandidate{due: xgAt, job: Job{Kind: JobFullGames, Class: JobCold, Reason: "archived_correction_sweep", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config)}}})
+			candidates = append(candidates, coldCandidate{due: xgAt, job: Job{Kind: JobFullGames, Class: JobCold, Reason: "archived_correction_sweep", Operation: syncer.Operation{Resource: syncer.OperationGames, Mode: syncer.OperationFull, Season: id.Season, Stage: id.Stage, Trigger: cache.SourceTriggerScheduler, NextFullDueAfter: coldSweepInterval(config), Expectation: scope.Readiness.ExpectedInventory}}})
 		}
 	}
 	if len(candidates) == 0 {

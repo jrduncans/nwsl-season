@@ -729,8 +729,12 @@ func compatibilityOperation(resource OperationResource, mode OperationMode, opti
 		return operation
 	}
 	operation.Season, operation.Stage = options.Season, options.Stage
-	if resource == OperationGames && mode == OperationFull && (options.ExpectedTeams != 0 || options.GamesPerTeam != 0) {
-		operation.Expectation = &competition.InventoryExpectation{Teams: options.ExpectedTeams, GamesPerTeam: options.GamesPerTeam, Games: expectedFixtureCount(options)}
+	if resource == OperationGames && mode == OperationFull {
+		if options.ExpectedTeams != 0 || options.GamesPerTeam != 0 {
+			operation.Expectation = &competition.InventoryExpectation{Teams: options.ExpectedTeams, GamesPerTeam: options.GamesPerTeam, Games: expectedFixtureCount(options)}
+		} else if entry, found := competition.Lookup(options.Season, options.Stage); found {
+			operation.Expectation = entry.Inventory
+		}
 	}
 	return operation
 }

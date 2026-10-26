@@ -164,10 +164,33 @@ func historicalRegularSeasonEntries() []Entry {
 			Primary:         true,
 			SourceAvailable: true,
 			PlayoffPlaces:   historicalPlayoffPlaces[season],
+			Inventory:       HistoricalRegularSeasonInventory(season),
 			Capabilities:    []Capability{CapabilityFixtures, CapabilityStandings, CapabilityXG},
 		})
 	}
 	return entries
+}
+
+// HistoricalRegularSeasonInventory records published official schedule sizes,
+// including awarded fixtures. All inventory consumers reconcile source-backed
+// awards using ReconcileInventory. Sources are in docs/competitions-guide.md.
+func HistoricalRegularSeasonInventory(season string) *InventoryExpectation {
+	teams, perTeam := 0, 0
+	switch season {
+	case "2016":
+		teams, perTeam = 10, 20
+	case "2017", "2021":
+		teams, perTeam = 10, 24
+	case "2018", "2019":
+		teams, perTeam = 9, 24
+	case "2022", "2023":
+		teams, perTeam = 12, 22
+	case "2024", "2025":
+		teams, perTeam = 14, 26
+	default:
+		return nil
+	}
+	return &InventoryExpectation{Teams: teams, GamesPerTeam: perTeam, Games: teams * perTeam / 2}
 }
 
 // historicalPlayoffPlaces records the regular-season postseason cut line
@@ -206,26 +229,11 @@ func (e Entry) Validate() error {
 		return fmt.Errorf("public entry requires an available ASA source")
 	}
 	if e.Inventory != nil {
-		i := e.Inventory
-		if i.Teams < 0 || i.GamesPerTeam < 0 || i.Games < 0 {
-			return fmt.Errorf("entry inventory cannot contain negative values")
-		}
-		if i.Teams == 0 && i.GamesPerTeam == 0 && i.Games == 0 {
-			return fmt.Errorf("entry inventory expectation cannot be all zero")
-		}
-		if (i.Teams == 0) != (i.GamesPerTeam == 0) {
-			return fmt.Errorf("entry inventory must set Teams and GamesPerTeam together")
-		}
-		if i.Teams != 0 {
-			product := i.Teams * i.GamesPerTeam
-			if product%2 != 0 {
-				return fmt.Errorf("entry inventory Teams * GamesPerTeam must be even")
-			}
-			if i.Games != 0 && i.Games != product/2 {
-				return fmt.Errorf("entry inventory Games disagrees with team fields")
-			}
+		if err := e.Inventory.Validate(); err != nil {
+			return fmt.Errorf("entry %w", err)
 		}
 	}
+
 	if e.Rules != nil {
 		if err := e.Rules.Validate(); err != nil {
 			return fmt.Errorf("entry rules are invalid: %w", err)

@@ -255,30 +255,11 @@ func validateInventoryExpectation(games []Game, expected *competition.InventoryE
 	if expected == nil {
 		return nil
 	}
-	if expected.Teams < 0 || expected.GamesPerTeam < 0 || expected.Games < 0 || (expected.Teams == 0 && expected.GamesPerTeam == 0 && expected.Games == 0) || (expected.Teams == 0) != (expected.GamesPerTeam == 0) {
-		return errors.New("invalid inventory expectation")
+	if err := expected.Validate(); err != nil {
+		return err
 	}
-	derived := 0
-	if expected.Teams > 0 {
-		if expected.Teams*expected.GamesPerTeam%2 != 0 {
-			return errors.New("inventory expectation has odd game product")
-		}
-		derived = expected.Teams * expected.GamesPerTeam / 2
-		if expected.Games != 0 && expected.Games != derived {
-			return errors.New("inventory expectation game count disagrees with team appearances")
-		}
-	}
+	// Empty discovery is handled separately and never proves completeness.
 	if len(games) == 0 {
-		return nil
-	}
-	want := expected.Games
-	if want == 0 {
-		want = derived
-	}
-	if want != 0 && len(games) != want {
-		return fmt.Errorf("inventory has %d games, want %d", len(games), want)
-	}
-	if expected.Teams == 0 {
 		return nil
 	}
 	appearances := map[string]int{}
@@ -286,15 +267,8 @@ func validateInventoryExpectation(games []Game, expected *competition.InventoryE
 		appearances[game.HomeTeamID]++
 		appearances[game.AwayTeamID]++
 	}
-	if len(appearances) != expected.Teams {
-		return fmt.Errorf("inventory has %d teams, want %d", len(appearances), expected.Teams)
-	}
-	for id, count := range appearances {
-		if count != expected.GamesPerTeam {
-			return fmt.Errorf("team %q has %d appearances, want %d", id, count, expected.GamesPerTeam)
-		}
-	}
-	return nil
+	_, err := competition.ReconcileInventory(games[0].Season, games[0].Stage, expected, len(games), appearances)
+	return err
 }
 
 func invalidTrimmed(value string) bool {

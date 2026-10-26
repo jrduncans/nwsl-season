@@ -783,7 +783,12 @@ Historical context never removes a certified possibility. The first supported
 case annotates an exact single-match winning-margin requirement only when its
 minimum exceeds the maximum in verified complete prior cached NWSL regular
 seasons. Only completed seasons with complete verified inventories, valid
-completed scores and recorded kickoffs contribute. The annotation names every
+completed scores and recorded kickoffs contribute. Verified inventories are
+listed in the [competition guide](competitions-guide.md#verified-historical-regular-season-inventories).
+Known awarded fixtures reconcile per-team deficits without changing cached
+matches, and their awarded scores contribute to the maximum winning margin.
+Awards already supplied by ASA are not counted twice. The latest included
+match date comes from cached fixtures; no kickoff is invented for an award. The annotation names every
 included season and the latest included match date. It explicitly describes
 a comparison with that scope, never an all-time record. There is no hardcoded
 record or probability label. If no eligible history exists, the page says so.

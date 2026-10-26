@@ -283,32 +283,26 @@ func classifySeasonPhase(data cache.SeasonData, inventory *competition.Inventory
 }
 
 func verifiedInventoryComplete(data cache.SeasonData, inventory *competition.InventoryExpectation) bool {
-	if inventory == nil {
+	if inventory == nil || len(data.Games) == 0 {
 		return false
 	}
-	if inventory.Games > 0 && len(data.Games) != inventory.Games {
-		return false
-	}
-	if inventory.Teams > 0 && len(data.Teams) != inventory.Teams {
-		return false
-	}
-	if inventory.GamesPerTeam == 0 {
-		return true
-	}
-	appearances := make(map[string]int, len(data.Teams))
+	appearances := map[string]int{}
 	for _, game := range data.Games {
 		appearances[game.HomeTeamID]++
 		appearances[game.AwayTeamID]++
 	}
-	if len(appearances) != inventory.Teams {
-		return false
-	}
-	for _, team := range data.Teams {
-		if appearances[team.ID] != inventory.GamesPerTeam {
+	if inventory.Teams > 0 {
+		if len(data.Teams) != inventory.Teams {
 			return false
 		}
+		for _, team := range data.Teams {
+			if appearances[team.ID] == 0 {
+				return false
+			}
+		}
 	}
-	return true
+	_, err := competition.ReconcileInventory(data.Games[0].Season, data.Games[0].Stage, inventory, len(data.Games), appearances)
+	return err == nil
 }
 
 func stageURL(season, slug string) string {

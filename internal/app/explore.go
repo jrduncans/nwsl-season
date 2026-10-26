@@ -220,11 +220,6 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		// choices through its form, but ignores malformed carried values.
 		ignoreInvalidExploreSeries(profileQuery)
 	}
-	page.exploreTeamHistoryView, err = exploreTeamHistory(profileQuery, teams.TeamSeasons)
-	if err != nil {
-		a.renderExploreBadRequest(w, r, err)
-		return
-	}
 	// Both bases share this archive snapshot, allowing Team-seasons to switch
 	// penalties in place. Points always keep all-shots eligibility.
 	allSummaries, npSummaries := summaries, summaries
@@ -258,6 +253,11 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	officialProfile, err := exploreTeamHistory(officialQuery, officialTeams.TeamSeasons)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
+	page.exploreTeamHistoryView, err = exploreTeamHistoryFor(profileQuery, teams.TeamSeasons, officialTeams.TeamSeasons)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return
@@ -325,7 +325,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		if view != "head-to-head" && r.URL.Query().Has("team") {
 			historyQuery.Set("team", r.URL.Query().Get("team"))
 		}
-		otherHistory, err = exploreTeamHistory(withPenalties(historyQuery, otherBasis), otherTeams.TeamSeasons)
+		otherHistory, err = exploreTeamHistoryFor(withPenalties(historyQuery, otherBasis), otherTeams.TeamSeasons, officialTeams.TeamSeasons)
 	}
 	var otherHome exploreHomeAdvantageView
 	var otherDistribution exploreDistributionView

@@ -79,7 +79,7 @@ func TestHistoricalRegularSeasonCatalogIsSourceOnlyAndFactual(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing historical entry %s", season)
 		}
-		if entry.Season != season || entry.Stage != "Regular Season" || !entry.Public || !entry.Primary || !entry.SourceAvailable || entry.Inventory != nil || entry.Rules != nil {
+		if entry.Season != season || entry.Stage != "Regular Season" || !entry.Public || !entry.Primary || !entry.SourceAvailable || entry.Inventory == nil || entry.Rules != nil {
 			t.Fatalf("historical entry %s = %+v", season, entry)
 		}
 		if entry.PlayoffPlaces != wantPlayoffPlaces[season] {
@@ -500,5 +500,25 @@ func TestBracketValidationRestrictsSourceOrderToCompleteOpeningPermutation(t *te
 		if err := format.Validate(); err == nil {
 			t.Fatalf("invalid source order %d accepted", index)
 		}
+	}
+}
+
+func TestHistoricalOfficialInventoryExpectations(t *testing.T) {
+	t.Parallel()
+	for year, want := range map[string]InventoryExpectation{
+		"2016": {10, 20, 100}, "2017": {10, 24, 120}, "2018": {9, 24, 108}, "2019": {9, 24, 108},
+		"2021": {10, 24, 120}, "2022": {12, 22, 132}, "2023": {12, 22, 132}, "2024": {14, 26, 182}, "2025": {14, 26, 182},
+	} {
+		got := HistoricalRegularSeasonInventory(year)
+		if got == nil || *got != want {
+			t.Fatalf("%s official inventory = %+v, want %+v", year, got, want)
+		}
+		got.Games = 0
+		if HistoricalRegularSeasonInventory(year).Games != want.Games {
+			t.Fatal("caller mutated verified inventory")
+		}
+	}
+	if HistoricalRegularSeasonInventory("2020") != nil || HistoricalRegularSeasonInventory("2099") != nil {
+		t.Fatal("invented regular-season inventory")
 	}
 }

@@ -184,21 +184,11 @@ func evaluateSeasonReadiness(scope SourceScope, observed observedInventory, expe
 		return readiness, InventoryCompletenessUnknown, nil
 	}
 
-	complete := (expected.Teams == 0 || observed.teams == expected.Teams) &&
-		(expected.Games == 0 || observed.games == expected.Games)
-	if expected.GamesPerTeam != 0 {
-		if observed.teams != expected.Teams {
-			complete = false
-		}
-		for _, appearances := range observed.appearances {
-			if appearances != expected.GamesPerTeam {
-				complete = false
-			}
-		}
-	}
-	if complete {
+	_, inventoryErr := competition.ReconcileInventory(scope.Season, scope.Stage, expected, observed.games, observed.appearances)
+	if inventoryErr == nil && (expected.Teams == 0 || observed.teams == expected.Teams) {
 		return readiness, InventoryCompletenessComplete, nil
 	}
+
 	return readiness, InventoryCompletenessIncomplete, nil
 }
 
