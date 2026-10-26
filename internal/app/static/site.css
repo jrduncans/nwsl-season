@@ -159,6 +159,8 @@ th:nth-child(2) { text-align: left; }
 .clinching-summary-alternatives li { display: block; }
 
 .clinching-summary-alternatives li + li { padding-top: .3rem; border-top: 1px solid var(--line); }
+.clinching-rival-alternatives { margin: 0; padding: 0; border: 0; }
+.clinching-rival-alternatives > ul { margin-top: .25rem; padding-left: .85rem; border-left: 2px solid var(--green-soft); }
 .clinching-exact-paths { margin-top: .75rem; }
 .clinching-exact-paths > summary { cursor: pointer; color: var(--green); font-weight: 700; font-size: .875rem; }
 .clinching-exact-paths > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }

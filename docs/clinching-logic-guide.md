@@ -306,7 +306,14 @@ separators in all three views. Logical groups still explicitly say **all of**,
 **any of**, or **at least N**; a conjunction is never flattened into alternatives.
 Requirement rows use fragments without terminal periods. Each alternative
 starts on its own “or” line so any following score condition applies only to
-that alternative. Nested groups are labeled “All of:” (only for more than one
+that alternative. Rival results with different tiebreak requirements instead
+use separate, unbulleted rows under “At least one of these conditions:”, with
+the same left rule and subtle separators as other nested alternatives. The
+group label aligns with its sibling requirements under “all of”; only the
+alternative rows are indented. Each item
+repeats the rival and fixtures; its score requirement and Tiebreak details
+belong only to that item. Results with identical requirements can still merge.
+Nested groups are labeled “All of:” (only for more than one
 condition), “At least one of these conditions:” and “And at least one of these:”.
 Explanatory paragraphs use complete sentences with capitals and periods.
 Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
@@ -823,8 +830,12 @@ hardcoded record or probability label. If no eligible history exists, the page s
 The annotation uses the proved individual margin from the same typed
 simplification as the visible sentence. A four-goal aggregate swing, a two-goal
 head-to-head win, and a gain spread over several fixtures do not by themselves
-prove a record-breaking win. Cascades, unspecified results and other cases
-without a proved individual lower bound remain unannotated.
+prove a record-breaking win. A cascade beginning with goal difference can
+also prove an individual lower bound, including its equality branch: a
+12-goal deficit against a drawing rival requires at least a 12-goal win,
+with any goals-scored requirement still shown in full. The note describes
+that necessary minimum, not a sufficient condition. Unspecified results and
+other cases without a proved individual lower bound remain unannotated.
 
 ### Calculation, persistence and filtering
 

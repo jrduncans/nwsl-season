@@ -27,6 +27,8 @@ type clinchingRivalTieView struct {
 	Lead        string
 	Result      string // record and fixtures, without a conjunction or score prose
 	ResultParts []scenarioRequirementPart
+	// FullParts repeats the rival and fixtures for a standalone alternative.
+	FullParts   []scenarioRequirementPart
 	Condition   *scenarioRequirement
 	Alternative bool
 	Points      int
@@ -199,6 +201,13 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 			lead = "or " + record
 		}
 		item := clinchingRivalTieView{Lead: lead, Result: record, ResultParts: resultParts, Alternative: stated, Points: tie.Points}
+		if n > 0 {
+			item.FullParts = append(item.FullParts, teamPart(need.RivalID, teams))
+		}
+		if result := tieRecordText(tie, n); result != "" {
+			item.FullParts = append(item.FullParts, scenarioRequirementPart{Text: result})
+		}
+		item.FullParts = append(item.FullParts, fixtureParts...)
 		if tie.Condition != nil {
 			switch {
 			case stated:

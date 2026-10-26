@@ -56,7 +56,7 @@
   </div>
 {{end}}
 
-{{define "clinchingRival"}}{{template "clinchingParts" .Parts}} {{range .Ties}}<span class="clinching-rival-score{{if .Alternative}} clinching-rival-tie{{end}}">{{if .Alternative}}or {{end}}{{template "clinchingParts" .ResultParts}}{{if .Condition}} and {{template "clinchingRequirement" .Condition}}{{end}}</span>{{end}}{{end}}
+{{define "clinchingRival"}}{{if and .Ties (or (gt (len .Ties) 1) (index .Ties 0).Alternative)}}<div class="clinching-rival-alternatives clinching-summary-alternatives"><strong>At least one of these conditions:</strong><ul>{{if (index .Ties 0).Alternative}}<li>{{template "clinchingParts" .Parts}}</li>{{end}}{{range .Ties}}<li>{{template "clinchingParts" .FullParts}}{{if .Condition}} and {{template "clinchingRequirement" .Condition}}{{end}}</li>{{end}}</ul></div>{{else}}{{template "clinchingParts" .Parts}} {{range .Ties}}<span class="clinching-rival-score">{{template "clinchingParts" .ResultParts}}{{if .Condition}} and {{template "clinchingRequirement" .Condition}}{{end}}</span>{{end}}{{end}}{{end}}
 
 {{define "clinchingGroupedSummary"}}
   <ul class="clinching-rivals clinching-summary-groups">{{range .Groups}}<li>{{if .Rival}}{{template "clinchingRival" .Rival}}{{else}}{{if .Heading}}<h6>{{if .HeadingParts}}{{template "clinchingParts" .HeadingParts}}{{else}}{{.Heading}}{{end}}</h6>{{end}}{{template "clinchingSummaryExpression" .Expression}}{{end}}</li>{{end}}</ul>
