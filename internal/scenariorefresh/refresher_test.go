@@ -11,6 +11,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/scenarios"
+	"github.com/jrduncans/nwsl-season/internal/standings"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -321,6 +322,41 @@ func TestRefreshStoresRestOfSeasonBatchNearTheEnd(t *testing.T) {
 	if season.DefinitionVersion != scenarios.SeasonDefinitionVersion || season.Slate.Source != scenarios.SourceRestOfSeason || len(season.Slate.FixtureIDs) != 2 {
 		t.Fatalf("second run = %+v, want a rest-of-season batch over both matches", season)
 	}
+}
+
+func TestSeasonBatchCalculatesEliminationAcrossRemainingMatches(t *testing.T) {
+	teams := []standings.Team{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}}
+	games := []standings.Game{{ID: "g1", Status: fixtures.PreMatchStatus, HomeTeamID: "a", AwayTeamID: "b"}, {ID: "g2", Status: fixtures.PreMatchStatus, HomeTeamID: "a", AwayTeamID: "b"}}
+	now := time.Date(2026, 11, 1, 22, 0, 0, 0, time.UTC)
+	slate := scenarios.Slate{ID: "season", DefinitionVersion: scenarios.SeasonDefinitionVersion, State: scenarios.SlateReady, Source: scenarios.SourceRestOfSeason, FixtureIDs: []string{"g1", "g2"}, StartsAtUTC: now, LatestKickoffUTC: now, CutoffUTC: now}
+	evaluator, err := clinching.NewEvaluator(teams, games, slate.FixtureIDs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	achievement := competition.Achievement{ID: competition.AchievementPlayoffs, TopK: 1}
+	baseline, err := evaluator.EvaluateStatus(context.Background(), "a", achievement, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, err := restOfSeasonScope.generate(context.Background(), evaluator, scenarios.BatchRequest{Teams: teams, Games: games, Slate: slate, TargetTeamID: "a", Achievements: []competition.Achievement{achievement}, Baselines: map[competition.AchievementID]clinching.AchievementResult{achievement.ID: baseline}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := results[achievement.ID]
+	if err := result.Validate(slate); err != nil {
+		t.Fatal(err)
+	}
+	if !result.CanBeEliminated {
+		t.Fatal("expected elimination scenarios")
+	}
+	for _, clause := range result.EliminationClauses {
+		for _, condition := range clause.Conditions {
+			if condition.GameID == "g2" {
+				return
+			}
+		}
+	}
+	t.Fatalf("elimination scenarios omit the second match: %+v", result.EliminationClauses)
 }
 
 func TestRefreshSkipsRestOfSeasonEarlier(t *testing.T) {

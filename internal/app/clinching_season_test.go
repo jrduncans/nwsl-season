@@ -115,6 +115,18 @@ func TestClinchingPageSwitchesToRestOfSeason(t *testing.T) {
 	forbidText(t, rest, ".clinching-result-header", "If ALP", "Alpha")
 }
 
+func TestEliminationUsesSelectedSlate(t *testing.T) {
+	season := seasonResult()
+	season.Results[0].CanBeEliminated = true
+	season.Results[0].EliminationClauses = []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{testScenarioCondition("future-5", 1)}}}
+	store := seasonScenarioStore(seasonEndData(2), []string{"future-4"}, []string{"future-4", "future-5"}, season)
+	next := getClinching(t, store, "")
+	forbidText(t, next, "main h2", "Elimination scenarios")
+	rest := getClinching(t, store, "?view=rest-of-season")
+	requireText(t, rest, "main h2", "Elimination scenarios")
+	requireText(t, rest, ".clinching-opportunity-elimination", "Can be eliminated from the playoffs")
+}
+
 func TestClinchingSummaryStatesEverySharedRequirementOnce(t *testing.T) {
 	shared := []scenarioRequirement{
 		{GameID: "a", Mask: 1},

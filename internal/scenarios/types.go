@@ -19,7 +19,7 @@ const DefinitionVersion = "next-slate-v6"
 // SeasonDefinitionVersion identifies rest-of-season results, which cover every
 // remaining match and may carry score conditions. They are stored as a
 // separate batch beside the next-slate batch for the same snapshot.
-const SeasonDefinitionVersion = "rest-of-season-v7"
+const SeasonDefinitionVersion = "rest-of-season-v9"
 
 const (
 	LimitationBudgetExhausted = "scenario computation budget exhausted"

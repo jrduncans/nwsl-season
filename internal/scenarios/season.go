@@ -127,6 +127,31 @@ func GenerateSeason(ctx context.Context, r SeasonRequest) (map[competition.Achie
 			results[out.Achievement] = out
 		}
 	}
+	// Search elimination independently with points bounds. Unlike the general
+	// slate search, this does not repeatedly invoke the qualification oracle or
+	// enumerate exact coverage across the full remaining season.
+	if out, ok := results[competition.AchievementPlayoffs]; ok && !out.AlreadyClinched && slateProblem == "" {
+		achievement := competition.Achievement{ID: out.Achievement, TopK: out.TopK}
+		search, err := newSeasonSearch(ctx, r, inSlate, []seasonMember{{achievement: achievement, labels: map[string]int{}}})
+		if err != nil {
+			return nil, err
+		}
+		search.minimum, search.pointsOnly = true, true
+		search.walk(1)
+		proof := search.members[0].finish(ctx, emptyResult(r.TargetTeamID, achievement), r.Slate.FixtureIDs, search.err == nil)
+		for _, clause := range proof.Clauses {
+			if len(clause.Conditions) == 0 {
+				out.AlreadyEliminated = true
+				break
+			}
+			out.EliminationClauses = append(out.EliminationClauses, clause)
+		}
+		out.CanBeEliminated = !out.AlreadyEliminated && len(out.EliminationClauses) > 0
+		if search.err != nil && out.Limitation == "" {
+			out.Limitation = LimitationBudgetPartial
+		}
+		results[out.Achievement] = out
+	}
 	setBatchElapsed(results, started)
 	return results, nil
 }
@@ -166,14 +191,15 @@ type seasonGame struct {
 
 type seasonSearch struct {
 	// exact asks for exactly TopK rather than at most TopK.
-	exact     bool
-	minimum   bool
-	ctx       context.Context
-	slateSize int
-	target    int
-	teamIDs   []string
-	games     []seasonGame
-	outcome   []int8
+	exact      bool
+	minimum    bool
+	pointsOnly bool
+	ctx        context.Context
+	slateSize  int
+	target     int
+	teamIDs    []string
+	games      []seasonGame
+	outcome    []int8
 	// points and wins include completed matches and fixed outcomes;
 	// unfixed counts each team's remaining matches not yet fixed.
 	points, wins, unfixed []int
@@ -391,7 +417,9 @@ func (s *seasonSearch) walk(active uint64) {
 	}
 	next := s.nextRelevant(low, high)
 	if next < 0 {
-		s.leaf(active, certainlyAhead, represented)
+		if !s.pointsOnly {
+			s.leaf(active, certainlyAhead, represented)
+		}
 		return
 	}
 	for outcome := int8(0); outcome < 3; outcome++ {
