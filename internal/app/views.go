@@ -573,6 +573,7 @@ type clinchingPage struct {
 	Seeding          *seedingPage
 	ViewControl      *exploreSegmentGroup
 	RestOfSeason     bool
+	HistoryNote      string
 	State            string
 	Slate            scenarios.Slate
 	SlateStartsAtUTC string
@@ -598,11 +599,13 @@ type clinchingRowView struct {
 	Achievement, Limitation string
 	Groups                  []clinchingGroupView
 	Necessary               []string
+	NecessaryParts          [][]scenarioRequirementPart
 	// Elimination marks a row about being eliminated rather than clinching,
 	// which changes its result labels.
 	Elimination                        bool
 	NoHelp                             string
 	NoHelpFixtures                     string
+	NoHelpFixtureParts                 []scenarioRequirementPart
 	NoHelpFixtureCount                 int
 	AchievementRank, StandingsPosition int
 	// Disciplinary notes that unavailable disciplinary points may decide.

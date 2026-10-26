@@ -49,7 +49,7 @@ func TestClinchingRivalGroupViewsIntersectSharedFixture(t *testing.T) {
 		{"independent rival", 3, []scenarios.RivalNeed{nc, den, sd}, "Clinches if all of:", []string{"NC draws vs DEN", "SD draws or loses at BAY"}},
 		{"any rival", 1, []scenarios.RivalNeed{nc, den}, "Clinches if any of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC"}},
 		{"two of three rivals", 2, []scenarios.RivalNeed{nc, den, sd}, "Clinches if at least 2 of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC", "SD draws or loses at BAY"}},
-		{"score condition", 2, []scenarios.RivalNeed{nc, conditional}, "Clinches if all of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC or wins if [SEA gains 1+ goal difference on DEN (level at 0 now)]"}},
+		{"score condition", 2, []scenarios.RivalNeed{nc, conditional}, "Clinches if all of:", []string{"NC draws or loses vs DEN", "DEN draws or loses at NC or wins if [SEA must finish with a higher goal difference than DEN]"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,12 +79,19 @@ func TestClinchingRivalGroupViewsIntersectSharedFixture(t *testing.T) {
 
 func rivalText(view clinchingRivalView) string {
 	words := []string{}
-	for _, part := range view.Parts {
-		if part.Team != nil {
-			words = append(words, part.Team.Code)
-		} else {
-			words = append(words, part.Text)
+	var result strings.Builder
+	for i, part := range view.Parts {
+		if i > 0 && !part.NoSpaceBefore {
+			result.WriteByte(' ')
 		}
+		if part.Team != nil {
+			result.WriteString(part.Team.Code)
+		} else {
+			result.WriteString(part.Text)
+		}
+	}
+	if result.Len() > 0 {
+		words = append(words, result.String())
 	}
 	for _, tie := range view.Ties {
 		if tie.Lead != "" {
@@ -105,14 +112,14 @@ func TestRivalViewWordsEachRival(t *testing.T) {
 	}{
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 4}, "SD doesn’t win both matches (vs BOS and at BAY)"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 3, Ties: []scenarios.RivalTie{{Points: 4, Wins: 1, Condition: gd}}},
-			"SD takes 3 points or fewer (vs BOS and at BAY) or takes 4 points if [NJY gains 1+ goal difference on SD (level at +13 now)]"},
+			"SD takes 3 points or fewer (vs BOS and at BAY) or takes 4 points if [NJY must finish with a higher goal difference than SD]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
-			"SD loses both matches (vs BOS and at BAY) and [NJY gains 1+ goal difference on SD (level at +13 now)]"},
+			"SD loses both matches (vs BOS and at BAY) and [NJY must finish with a higher goal difference than SD]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos"}, MaxPoints: 1}, "SD draws or loses vs BOS"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
-			"SD loses vs BOS and [NJY gains 1+ goal difference on SD (level at +13 now)]"},
+			"SD loses vs BOS and [NJY must finish with a higher goal difference than SD]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
-			"[NJY gains 1+ goal difference on SD (level at +13 now)]"},
+			"[NJY must finish with a higher goal difference than SD]"},
 	}
 	for _, test := range tests {
 		if got := rivalText(rivalView(test.need, rivalTestTeams, rivalTestGames())); got != test.want {

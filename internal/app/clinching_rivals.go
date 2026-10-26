@@ -15,16 +15,21 @@ import (
 // results that keep the team ahead of it, then each record that leaves the
 // two level on points, with the score condition that decides it.
 type clinchingRivalView struct {
-	Parts []scenarioRequirementPart
-	Ties  []clinchingRivalTieView
+	Parts   []scenarioRequirementPart
+	GameIDs []string
+	RivalID string
+	Ties    []clinchingRivalTieView
 }
 
 // clinchingRivalTieView is one level-on-points record. Condition is nil when
 // the team finishes ahead whatever the scores.
 type clinchingRivalTieView struct {
 	Lead        string
+	Result      string // record and fixtures, without a conjunction or score prose
+	ResultParts []scenarioRequirementPart
 	Condition   *scenarioRequirement
 	Alternative bool
+	Points      int
 }
 
 // rivalGroupViews builds rest-of-season groups from a rival summary: one per
@@ -62,6 +67,7 @@ func rivalGroupViews(result scenarios.Result, teamID string, teams, headingTeams
 		rivals := slices.Clone(row.Rivals)
 		sort.SliceStable(rivals, func(i, j int) bool { return positions[rivals[i].RivalID] < positions[rivals[j].RivalID] })
 		view.Rivals = rivalViews(rivals, row.Need == len(rivals), teams, games)
+		view.RivalChoice = row.Need > 0 && row.Need < len(rivals)
 		switch {
 		case row.Need == 0:
 		case len(view.Rivals) == 1:
@@ -78,6 +84,7 @@ func rivalGroupViews(result scenarios.Result, teamID string, teams, headingTeams
 	views = combineOwnSingleResults(combineOwnPointTotals(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games), teamID, headingTeams, games)
 	for i := range views {
 		views[i].Tone = ownResultTone(views[i], teamID, games)
+		views[i].HeadingParts = ownHeadingParts(views[i], teamID, teams, games)
 	}
 	return views
 }
@@ -147,30 +154,39 @@ func rivalFixtureMask(need scenarios.RivalNeed, games map[string]cache.Game) (ui
 func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[string]cache.Game) clinchingRivalView {
 	n := len(need.GameIDs)
 	fixtures := noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: need.GameIDs}, need.RivalID, games, teams)
+	fixtureParts := rivalFixtureParts(need.GameIDs, need.RivalID, teams, games)
 	base := ""
 	switch limit := need.MaxPoints; {
 	case limit < 0:
 	case n == 1 && limit == 0:
-		base = "loses " + fixtures
+		base = "loses"
 	case n == 1:
-		base = "draws or loses " + fixtures
+		base = "draws or loses"
 	case n == 2 && limit >= 4:
-		base = "doesn’t win both matches (" + fixtures + ")"
+		base = "doesn’t win both matches"
 	case limit == 0:
-		base = "loses " + allMatches(n) + " (" + fixtures + ")"
+		base = "loses " + allMatches(n)
 	default:
-		base = fmt.Sprintf("takes %s or fewer (%s)", pointsText(limit), fixtures)
+		base = fmt.Sprintf("takes %s or fewer", pointsText(limit))
 	}
-	view := clinchingRivalView{}
+	view := clinchingRivalView{GameIDs: need.GameIDs, RivalID: need.RivalID}
 	if n > 0 {
 		view.Parts = []scenarioRequirementPart{{Team: &scenarioTeamToken{Code: teams[need.RivalID], LogoURL: clubLogoURL(need.RivalID)}}}
 	}
 	if base != "" {
 		view.Parts = append(view.Parts, scenarioRequirementPart{Text: base})
+		view.Parts = append(view.Parts, fixtureParts...)
 	}
 	stated := base != ""
 	for _, tie := range need.Ties {
 		record := tieRecordText(tie, n)
+		var resultParts []scenarioRequirementPart
+		if record != "" {
+			resultParts = []scenarioRequirementPart{{Text: record}}
+		}
+		if !stated {
+			resultParts = append(resultParts, fixtureParts...)
+		}
 		switch {
 		case stated:
 		case n == 1:
@@ -182,7 +198,7 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 		if stated {
 			lead = "or " + record
 		}
-		item := clinchingRivalTieView{Lead: lead, Alternative: stated}
+		item := clinchingRivalTieView{Lead: lead, Result: record, ResultParts: resultParts, Alternative: stated, Points: tie.Points}
 		if tie.Condition != nil {
 			switch {
 			case stated:
@@ -199,6 +215,47 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 		stated = true
 	}
 	return view
+}
+
+// rivalFixtureParts keeps fixture identity from IDs, including repeated
+// opponents. Punctuation follows the same list wording as noHelpFixtureText.
+func rivalFixtureParts(ids []string, rival string, teams map[string]string, games map[string]cache.Game) []scenarioRequirementPart {
+	parts := []scenarioRequirementPart{}
+	for _, id := range ids {
+		game, ok := games[id]
+		if !ok {
+			continue
+		}
+		opponent, venue := "", ""
+		switch rival {
+		case game.HomeTeamID:
+			opponent, venue = game.AwayTeamID, "vs"
+		case game.AwayTeamID:
+			opponent, venue = game.HomeTeamID, "at"
+		default:
+			continue
+		}
+		parts = append(parts, scenarioRequirementPart{Text: venue}, scenarioRequirementPart{Team: &scenarioTeamToken{Code: teams[opponent], LogoURL: clubLogoURL(opponent)}})
+	}
+	count := len(parts) / 2
+	for i := range count {
+		switch {
+		case i == 0 && len(ids) > 1:
+			parts[0].Text = "(" + parts[0].Text
+		case i > 0 && count == 2:
+			parts[i*2].Text = "and " + parts[i*2].Text
+		case i > 0 && i == count-1:
+			parts[i*2].Text = ", and " + parts[i*2].Text
+			parts[i*2].NoSpaceBefore = true
+		case i > 0:
+			parts[i*2].Text = ", " + parts[i*2].Text
+			parts[i*2].NoSpaceBefore = true
+		}
+	}
+	if count > 0 && len(ids) > 1 {
+		parts = append(parts, scenarioRequirementPart{Text: ")", NoSpaceBefore: true})
+	}
+	return parts
 }
 
 // tieRecordText names a record from the rival's side: a result for one

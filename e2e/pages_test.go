@@ -1102,14 +1102,14 @@ func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 		if err := expect.Locator(summary).ToBeFocused(); err != nil {
 			t.Errorf("%q should take focus: %v", name, err)
 		}
-		if err := expect.Locator(details).ToHaveJSProperty("open", false); err != nil {
+		if err := expect.Locator(details).Not().ToHaveAttribute("open", ""); err != nil {
 			t.Errorf("%q should start collapsed: %v", name, err)
 		}
 		for _, key := range []string{"Enter", "Space"} {
 			if err := summary.Press(key); err != nil {
 				t.Fatalf("press %s on %q: %v", key, name, err)
 			}
-			if err := expect.Locator(details).ToHaveJSProperty("open", true); err != nil {
+			if err := expect.Locator(details).ToHaveAttribute("open", ""); err != nil {
 				t.Errorf("%s should expand %q: %v", key, name, err)
 			}
 			// The body is shown while expanded.
@@ -1119,7 +1119,7 @@ func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 			if err := summary.Press(key); err != nil {
 				t.Fatalf("press %s on %q: %v", key, name, err)
 			}
-			if err := expect.Locator(details).ToHaveJSProperty("open", false); err != nil {
+			if err := expect.Locator(details).Not().ToHaveAttribute("open", ""); err != nil {
 				t.Errorf("%s should collapse %q: %v", key, name, err)
 			}
 			if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeHidden(); err != nil {
@@ -1149,8 +1149,8 @@ func TestPagesClinching(t *testing.T) {
 			t.Fatalf("no grouped result headings: %v, %v", headings, err)
 		}
 		for _, heading := range headings {
-			if !strings.HasPrefix(heading, "If ") {
-				t.Errorf("group heading %q should start with \"If \"", heading)
+			if strings.HasPrefix(heading, "If ") {
+				t.Errorf("redundant subject in heading %q", heading)
 			}
 		}
 		// Each team has one card, with a section per outcome.
@@ -1241,12 +1241,29 @@ func TestPagesClinchingRivalSummary(t *testing.T) {
 		if err := expect.Locator(rivals.First().Locator("li").First()).ToBeVisible(); err != nil {
 			t.Errorf("rival list should be visible: %v", err)
 		}
+		scores, err := page.Locator(".clinching-score-disclosure").Count()
+		if err != nil || scores == 0 {
+			t.Fatalf("fixture must exercise score disclosures: %d, %v", scores, err)
+		}
+		for i := range scores {
+			summary := page.Locator(".clinching-score-disclosure > summary").Nth(i)
+			box, err := summary.BoundingBox()
+			if err != nil || box == nil || box.Height < 44 {
+				t.Fatalf("tiebreak disclosure needs a 44px click target: %+v, %v", box, err)
+			}
+		}
 		// The rival summary replaces the scenario lists and their disclosure.
 		if n, err := page.Locator("details.clinching-exact-paths").Count(); err != nil || n != 0 {
 			t.Errorf("exact-scenario disclosures = %d, %v; want none beside rival lists", n, err)
 		}
 		assertKeyboardDisclosures(t, page)
 		assertNoHorizontalOverflow(t, page)
+		static := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
+		visitStatic(t, static, j.URL(seasonPath("clinching")))
+		if err := expect.Locator(static.Locator(".clinching-score-disclosure")).ToHaveCount(scores); err != nil {
+			t.Fatal(err)
+		}
+		assertKeyboardDisclosures(t, static)
 	})
 }
 

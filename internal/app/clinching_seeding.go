@@ -30,16 +30,20 @@ type seedingPage struct {
 	Disciplinary bool
 	// The grid has a row per reachable seed and a column per group of the
 	// team's own results that leads to the same possible finishes.
-	Columns []seedingColumnView
-	Legend  string
+	Columns     []seedingColumnView
+	Legend      string
+	LegendParts []scenarioRequirementPart
 	// LikelihoodModel names the forecast behind the likelihoods; without one,
 	// LikelihoodNote says why there are none.
 	LikelihoodModel, LikelihoodNote string
 	Rows                            []seedingRowView
 	Conditions                      *seedingConditionsView
+	Details                         *seedingAlternativesView
+	HistoryNote                     string
 }
 type seedingColumnView struct {
 	Lines      []string
+	TokenLines [][]scenarioRequirementPart
 	Likelihood string
 	combos     [][]int
 }
@@ -54,9 +58,10 @@ type seedingRowView struct {
 	opponentLikelihoods  map[string]float64
 }
 type seedingCellView struct {
-	Possible   bool
-	Opponents  []string
-	Likelihood string
+	Possible      bool
+	Opponents     []string
+	OpponentLogos []string
+	Likelihood    string
 	// opponentIDs parallels Opponents.
 	opponentIDs []string
 }
@@ -69,16 +74,16 @@ type seedingConditionsView struct {
 	MostLikely  bool
 	Unavailable bool
 	// Opponents lists the seed's possible opponents, likeliest first.
-	Opponents []seedingOpponentView
-	Groups    []seedingGroupView
-	// BigSwing notes unlisted alternatives that need a large tiebreaker swing;
-	// OnlyBigSwing says every listed alternative needs one.
-	BigSwing, OnlyBigSwing bool
-	LongShotOnly           []string
+	Opponents       []seedingOpponentView
+	Groups          []seedingGroupView
+	AlternativesURL string
+	Team            scenarioTeamToken
+	FinishText      string
 }
 
 type seedingOpponentView struct {
 	Code, Likelihood string
+	Team             scenarioTeamToken
 }
 
 // seedingGroupView adds a summary to a group with too many ways to list.
@@ -100,16 +105,17 @@ type seedingOverflowView struct {
 	SomeLow, SomeHigh int
 	// Depends names matches whose needed result differs between ways.
 	Depends []string
-	Scores  bool
+	// Matches names every fixture involved, including optional requirements
+	// omitted from the compact summary when their minimum count is zero.
+	Matches     []string
+	Scores      bool
+	MatchParts  [][]scenarioRequirementPart
+	MoreMatches bool
 }
 
 // seedingMaxAlternatives bounds each own-result group's listed alternatives;
 // longer lists are not readable, so the page asks for more fixed results.
 const seedingMaxAlternatives = 5
-
-// seedingBigSwing is the tiebreaker gain, in goals over the remaining
-// matches, from which an alternative counts as a long shot.
-const seedingBigSwing = 4
 
 // seedingOwnMatchLimit bounds the grid's columns: the team's later matches
 // stay open, which keeps every cell exact.
@@ -239,9 +245,28 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 	if filtered.Limitation == scenarios.LimitationBudgetPartial {
 		seed.Limitation = "Scenario search was incomplete; additional scenarios may exist."
 	}
+	if q.Get("alternative") != "" {
+		if finish == nil {
+			a.renderScenarioBadRequest(w, r, "Invalid seeding scenario", fmt.Errorf("choose a finish"))
+			return
+		}
+		details, err := seedingAlternatives(filtered, *finish, q, labels, games, fixedScenarioMasks(fixed), a.scenarioHistory(r.Context(), view.Season))
+		if err != nil {
+			a.renderScenarioBadRequest(w, r, "Invalid seeding scenario", err)
+			return
+		}
+		details.Team = *teamPart(teamID, labels).Team
+		seed.Details = details
+		a.render(w, "seedingAlternatives", view)
+		return
+	}
 	own := newSeedingOwnMatches(teamID, snapshot.Run.Slate.FixtureIDs, fixed, games)
 	seed.Columns, seed.Rows = seedingGrid(filtered, fixed, own, labels, games)
 	seed.Legend = own.legend(labels, games)
+	if seed.Legend != "" {
+		seed.LegendParts = append([]scenarioRequirementPart{{Text: "Columns show your results"}}, rivalFixtureParts(own.ids, teamID, labels, games)...)
+		seed.LegendParts = append(seed.LegendParts, scenarioRequirementPart{Text: ", in that order: W win, D draw, L loss.", NoSpaceBefore: true})
+	}
 	counts, model := a.seedingLikelihoods(r.Context(), data, view.Season, rules, state)
 	if counts != nil {
 		seed.LikelihoodModel = model
@@ -261,6 +286,18 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 	if chosen != nil {
 		seed.Conditions = seedingConditions(filtered, *chosen, own, labels, games)
 		seed.Conditions.MostLikely = mostLikely
+		detailQuery := r.URL.Query()
+		detailQuery.Set("finish", seedingFinishKey(*chosen))
+		seed.Conditions.AlternativesURL = seedingAlternativeURL(detailQuery, 1, 0)
+		history := a.scenarioHistory(r.Context(), view.Season)
+		if history.Scope == "" {
+			seed.HistoryNote = "Historical comparison unavailable: no verified complete prior regular seasons in the cache."
+		}
+		for i := range seed.Conditions.Groups {
+			groups := []clinchingGroupView{seed.Conditions.Groups[i].clinchingGroupView}
+			presentScenarioGroups(groups, labels, games, fixedScenarioMasks(fixed), history)
+			seed.Conditions.Groups[i].clinchingGroupView = groups[0]
+		}
 		for _, row := range seed.Rows {
 			if row.seed != *chosen {
 				continue
@@ -268,7 +305,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 			ids := slices.Clone(row.opponentIDs)
 			sort.SliceStable(ids, func(a, b int) bool { return row.opponentLikelihoods[ids[a]] > row.opponentLikelihoods[ids[b]] })
 			for _, id := range ids {
-				seed.Conditions.Opponents = append(seed.Conditions.Opponents, seedingOpponentView{Code: labels[id], Likelihood: row.opponentLikelihood(id, counts != nil)})
+				seed.Conditions.Opponents = append(seed.Conditions.Opponents, seedingOpponentView{Code: labels[id], Team: *teamPart(id, labels).Team, Likelihood: row.opponentLikelihood(id, counts != nil)})
 			}
 		}
 	}
@@ -367,8 +404,10 @@ func applySeedingLikelihoods(columns []seedingColumnView, rows []seedingRowView,
 			}
 			cell.opponentIDs = order
 			cell.Opponents = cell.Opponents[:0]
+			cell.OpponentLogos = nil
 			for _, id := range order {
 				cell.Opponents = append(cell.Opponents, labels[id])
+				cell.OpponentLogos = append(cell.OpponentLogos, clubLogoURL(id))
 			}
 		}
 	}
@@ -501,6 +540,7 @@ func seedingGrid(filtered scenarios.SeedingResult, fixed map[string]clinching.Ou
 				sort.Slice(cells[i].opponentIDs, func(a, b int) bool { return labels[cells[i].opponentIDs[a]] < labels[cells[i].opponentIDs[b]] })
 				for _, id := range cells[i].opponentIDs {
 					cells[i].Opponents = append(cells[i].Opponents, labels[id])
+					cells[i].OpponentLogos = append(cells[i].OpponentLogos, clubLogoURL(id))
 				}
 			}
 		}
@@ -516,6 +556,17 @@ func seedingGrid(filtered scenarios.SeedingResult, fixed map[string]clinching.Ou
 	views := make([]seedingColumnView, len(columns))
 	for i, c := range columns {
 		views[i].combos = c.combos
+		if len(m.ids) == 1 {
+			for _, cube := range seedingCover(c.combos, 1) {
+				mask := uint8(0)
+				for r := range 3 {
+					if cube[0]&(1<<r) != 0 {
+						mask |= m.results[0][r]
+					}
+				}
+				views[i].TokenLines = append(views[i].TokenLines, ownHeadingParts(clinchingGroupView{Own: []scenarioRequirement{{GameID: m.ids[0], Mask: mask}}}, m.team, labels, games))
+			}
+		}
 		lines := m.describe(c.combos, labels, games)
 		if len(m.ids) > 1 {
 			lines = m.shorthand(c.combos)
@@ -580,16 +631,6 @@ func newSeedingOwnMatches(team string, fixtureIDs []string, fixed map[string]cli
 		m.combos = next
 	}
 	return m
-}
-
-// allows reports whether a clause permits the team's results in combo.
-func (m seedingOwnMatches) allows(clause scenarios.Clause, combo []int) bool {
-	for _, c := range clause.Conditions {
-		if j := slices.Index(m.ids, c.GameID); j >= 0 && outcomeMask(c.AllowedOutcomes)&m.results[j][combo[j]] == 0 {
-			return false
-		}
-	}
-	return true
 }
 
 // describe writes a set of combinations as lowercase phrases ("wins or draws
@@ -778,46 +819,24 @@ func seedingConditions(filtered scenarios.SeedingResult, seed int, own seedingOw
 		state = "Misses the playoffs"
 		heading = "How " + labels[team] + " misses the playoffs"
 	}
-	view := &seedingConditionsView{Heading: heading, State: state}
+	view := &seedingConditionsView{Heading: heading, State: state, Team: *teamPart(team, labels).Team, FinishText: "finishes " + ordinalRank(seed)}
+	if seed == 0 {
+		view.FinishText = "misses the playoffs"
+	}
 	index := slices.IndexFunc(filtered.Seeds, func(s scenarios.SeedFinish) bool { return s.Seed == seed })
 	if index < 0 {
 		view.Unavailable = true
 		return view
 	}
-	listed, big := []scenarios.Clause{}, []scenarios.Clause{}
-	for _, clause := range filtered.Seeds[index].Clauses {
-		if needsBigSwing(clause) {
-			big = append(big, clause)
-		} else {
-			listed = append(listed, clause)
-		}
+	listed := filtered.Seeds[index].Clauses
+	limit := seedingMaxAlternatives
+	if len(listed) > seedingMaxAlternatives {
+		limit = 0
 	}
-	if len(listed) == 0 {
-		listed, big, view.OnlyBigSwing = big, nil, true
-	}
-	// Own results that only long shots reach get a heading of their own, so
-	// every own result the grid shows for this seed is accounted for.
-	longShotOnly := [][]int{}
-	for _, combo := range own.combos {
-		reaches := func(clauses []scenarios.Clause) bool {
-			return slices.ContainsFunc(clauses, func(c scenarios.Clause) bool { return own.allows(c, combo) })
+	for _, group := range clinchingGroupViews(listed, team, labels, labels, games, clinchingGroupOptions{SummaryLimit: limit, RestOfSeason: true}) {
+		if len(group.paths) == 1 && len(group.paths[0]) == 0 {
+			group.SummaryOverflow = false
 		}
-		if !reaches(listed) && reaches(big) {
-			longShotOnly = append(longShotOnly, combo)
-		} else if reaches(big) {
-			view.BigSwing = true
-		}
-	}
-	if len(longShotOnly) > 0 {
-		for _, line := range own.describe(longShotOnly, labels, games) {
-			heading := "Regardless of " + labels[team] + "’s results"
-			if line != "" {
-				heading = "If " + labels[team] + " " + line
-			}
-			view.LongShotOnly = append(view.LongShotOnly, heading)
-		}
-	}
-	for _, group := range clinchingGroupViews(listed, team, labels, labels, games, clinchingGroupOptions{SummaryLimit: seedingMaxAlternatives, RestOfSeason: true}) {
 		g := seedingGroupView{clinchingGroupView: group}
 		if group.SummaryOverflow {
 			g.Overflow = seedingOverflow(group.paths, labels, games)
@@ -872,9 +891,23 @@ func seedingOverflow(paths [][]scenarioRequirement, labels map[string]string, ga
 		return x.KickoffUTC < y.KickoffUTC
 	})
 	some := map[string]bool{}
+	seenMatches := map[string]bool{}
 	for _, key := range order {
 		it := items[key]
 		r := it.requirement
+		for _, id := range []string{r.GameID, r.SecondGameID} {
+			if id == "" || seenMatches[id] {
+				continue
+			}
+			seenMatches[id] = true
+			g := games[id]
+			view.Matches = append(view.Matches, labels[g.HomeTeamID]+" vs "+labels[g.AwayTeamID])
+			if len(view.MatchParts) < 4 {
+				view.MatchParts = append(view.MatchParts, []scenarioRequirementPart{teamPart(g.HomeTeamID, labels), {Text: "vs"}, teamPart(g.AwayTeamID, labels)})
+			} else {
+				view.MoreMatches = true
+			}
+		}
 		if r.SecondGameID == "" && r.Mask == 7 {
 			g := games[r.GameID]
 			view.Depends = append(view.Depends, labels[g.HomeTeamID]+" vs "+labels[g.AwayTeamID])
@@ -904,33 +937,21 @@ func seedingOverflow(paths [][]scenarioRequirement, labels map[string]string, ga
 
 // SomeText introduces the results each way needs some of.
 func (v seedingOverflowView) SomeText() string {
+	if v.SomeLow == 0 {
+		return ""
+	}
 	if v.SomeLow == v.SomeHigh {
 		return fmt.Sprintf("Each way also needs %d of these:", v.SomeLow)
-	}
-	if v.SomeLow == 0 {
-		return fmt.Sprintf("Some ways also need up to %d of these:", v.SomeHigh)
 	}
 	return fmt.Sprintf("Each way also needs %d to %d of these:", v.SomeLow, v.SomeHigh)
 }
 
-// needsBigSwing reports whether an alternative needs some team to gain at
-// least seedingBigSwing on a rival in a tiebreaker.
-func needsBigSwing(clause scenarios.Clause) bool {
-	for _, score := range clause.ScoreConditions {
-		if len(score.Levels) == 0 {
-			continue
-		}
-		level := score.Levels[0]
-		gain := level.MinimumGain
-		if level.ExactOnly {
-			gain--
-		}
-		if gain >= seedingBigSwing {
-			return true
-		}
-	}
-	return false
+func (v seedingOverflowView) PreviewAlways() []scenarioRequirement {
+	return v.Always[:min(3, len(v.Always))]
 }
-
-// BigSwingGoals is the long-shot threshold, for the page's wording.
-func (seedingPage) BigSwingGoals() int { return seedingBigSwing }
+func (v seedingOverflowView) PreviewSome() [][]scenarioRequirement {
+	if len(v.Some) > 3 || v.SomeLow == 0 {
+		return nil
+	}
+	return v.Some
+}

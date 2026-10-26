@@ -92,71 +92,59 @@ func scoreConditionKey(c scenarios.ScoreCondition) string {
 	return strings.Join(parts, "|")
 }
 
-// scoreConditionText writes a score condition out in full, for example
-// "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and scores
-// at least as many goals (level at 48 now)". Gains count only remaining matches.
+// Score wording compares final totals. The threshold is translated algebraically,
+// including nonstandard thresholds retained by the general fallback.
 func scoreConditionText(c scenarios.ScoreCondition, teams map[string]string) string {
-	lead, tail := scoreConditionPhrases(c, teams)
-	return teams[c.TeamID] + " " + lead + " " + teams[c.RivalID] + tail
+	return partsText(scoreConditionParts(c, teams))
 }
 
+func partsText(parts []scenarioRequirementPart) string {
+	var out strings.Builder
+	for i, p := range parts {
+		if i > 0 && !p.NoSpaceBefore {
+			out.WriteByte(' ')
+		}
+		if p.Team != nil {
+			out.WriteString(p.Team.Code)
+		} else {
+			out.WriteString(p.Text)
+		}
+	}
+	return out.String()
+}
+
+func teamPart(id string, teams map[string]string) scenarioRequirementPart {
+	return scenarioRequirementPart{Team: &scenarioTeamToken{Code: teams[id], LogoURL: clubLogoURL(id)}}
+}
+
+// Enumerate accepting cascade branches, keeping every preceding equality in
+// that branch. ExactOnly skips the strict branch; it never drops the equality.
 func scoreConditionParts(c scenarios.ScoreCondition, teams map[string]string) []scenarioRequirementPart {
-	lead, tail := scoreConditionPhrases(c, teams)
-	return []scenarioRequirementPart{
-		{Team: &scenarioTeamToken{Code: teams[c.TeamID], LogoURL: clubLogoURL(c.TeamID)}},
-		{Text: lead},
-		{Team: &scenarioTeamToken{Code: teams[c.RivalID], LogoURL: clubLogoURL(c.RivalID)}},
-		{Text: strings.TrimPrefix(tail, " ")},
-	}
-}
-
-// scoreConditionPhrases returns the words before the rival's name and those
-// after it. Leading levels that leave the two level read "finishes level
-// with … on goal difference and goals scored"; other levels compare gains
-// in goal difference or goals scored ("scores at least 7 more goals"). A later
-// level applies when the one before it is exactly one short of its minimum.
-func scoreConditionPhrases(c scenarios.ScoreCondition, teams map[string]string) (string, string) {
-	if len(c.Levels) == 0 {
-		return "finishes ahead of", ""
-	}
-	team, rival := teams[c.TeamID], teams[c.RivalID]
-	level := 0
-	for level < len(c.Levels) && c.Levels[level].ExactOnly && finishesLevel(c.Levels[level]) {
-		level++
-	}
-	var lead, tail string
-	next := level
-	if level > 0 {
-		names, gaps := []string{}, []string{}
-		for _, l := range c.Levels[:level] {
-			names = append(names, measureNoun(l.Measure))
-			gaps = append(gaps, scoreGap(l, team, rival, level > 1))
+	parts := []scenarioRequirementPart{}
+	for i, level := range c.Levels {
+		if level.ExactOnly && i < len(c.Levels)-1 {
+			continue
 		}
-		lead = "finishes level with"
-		tail = " on " + strings.Join(names, " and ") + " (" + strings.Join(gaps, ", ") + ")"
-		if level < len(c.Levels) {
-			tail += ", and " + gainPhrase(c.Levels[level], false) + " (" + scoreGap(c.Levels[level], team, rival, false) + ")"
-			next = level + 1
+		hadBranch := len(parts) > 0
+		if hadBranch {
+			parts = append(parts, scenarioRequirementPart{Text: "or,", BreakBefore: true})
 		}
-	} else {
-		lead = gainPhrase(c.Levels[0], true)
-		tail = " (" + scoreGap(c.Levels[0], team, rival, false) + ")"
-		next = 1
-	}
-	for i := next; i < len(c.Levels); i++ {
-		previous, l := c.Levels[i-1], c.Levels[i]
-		joiner := ", or " + exactlyPhrase(previous) + " and "
-		if previous.ExactOnly {
-			joiner = " and "
+		if i > 0 && hadBranch {
+			previous := []string{}
+			for _, l := range c.Levels[:i] {
+				previous = append(previous, equalityDescription(l))
+			}
+			parts = append(parts, scenarioRequirementPart{Text: "if " + joinConditions(previous) + ","})
 		}
-		tail += joiner + gainPhrase(l, false) + " (" + scoreGap(l, team, rival, false) + ")"
+		if !hadBranch {
+			for _, previous := range c.Levels[:i] {
+				previous.ExactOnly = true
+				parts = append(parts, teamPart(c.TeamID, teams), scenarioRequirementPart{Text: finalComparison(previous)}, teamPart(c.RivalID, teams), scenarioRequirementPart{Text: "and"})
+			}
+		}
+		parts = append(parts, teamPart(c.TeamID, teams), scenarioRequirementPart{Text: finalComparison(level)}, teamPart(c.RivalID, teams))
 	}
-	return lead, tail
-}
-
-// finishesLevel reports whether an exact gain leaves the two level.
-func finishesLevel(level scenarios.ScoreLevel) bool {
-	return level.MinimumGain-1 == level.RivalNow-level.TeamNow
+	return parts
 }
 
 func measureNoun(measure scenarios.ScoreMeasure) string {
@@ -165,120 +153,63 @@ func measureNoun(measure scenarios.ScoreMeasure) string {
 		return "goals scored"
 	case scenarios.MeasureHeadToHeadGoals:
 		return "head-to-head goals"
+	default:
+		return "goal difference"
 	}
-	return "goal difference"
 }
 
-// gainPhrase words one level as a gain, ending in "on" or "to" when the
-// rival's name follows.
-func gainPhrase(level scenarios.ScoreLevel, rivalFollows bool) string {
-	if level.Measure != scenarios.MeasureGoalDifference {
-		return goalsPhrase(level, rivalFollows)
+func equalityDescription(l scenarios.ScoreLevel) string {
+	delta := l.TeamNow - l.RivalNow + l.MinimumGain - 1
+	if delta == 0 {
+		return "level on " + measureNoun(l.Measure)
 	}
-	noun := measureNoun(level.Measure)
-	on, to := "", ""
-	if rivalFollows {
-		on, to = " on", " to"
+	return fmt.Sprintf("the final %s difference is %d", measureNoun(l.Measure), delta)
+}
+
+func finalComparison(l scenarios.ScoreLevel) string {
+	noun := measureNoun(l.Measure)
+	if l.Measure == scenarios.MeasureGoalsScored {
+		noun = "goals"
 	}
-	if level.ExactOnly {
-		switch exact := level.MinimumGain - 1; {
-		case exact > 0:
-			return fmt.Sprintf("gains exactly %d %s%s", exact, noun, on)
-		case exact < 0:
-			return fmt.Sprintf("loses exactly %d %s%s", -exact, noun, to)
+	delta := l.TeamNow - l.RivalNow + l.MinimumGain
+	if l.ExactOnly {
+		delta--
+		if delta == 0 {
+			return "must finish level on " + measureNoun(l.Measure) + " with"
 		}
-		return "keeps the same " + noun + " gap" + to
+		if l.Measure == scenarios.MeasureGoalDifference {
+			return fmt.Sprintf("must finish with a goal difference exactly %d %s than", absInt(delta), map[bool]string{true: "higher", false: "lower"}[delta > 0])
+		}
+		return fmt.Sprintf("must finish with exactly %d %s %s", absInt(delta), map[bool]string{true: "more", false: "fewer"}[delta > 0], noun) + " than"
 	}
-	switch n := level.MinimumGain; {
-	case n > 0:
-		return fmt.Sprintf("gains %d+ %s%s", n, noun, on)
-	case n < 0:
-		return fmt.Sprintf("loses at most %d %s%s", -n, noun, to)
-	}
-	return "loses no " + noun + to
-}
-
-func goalsPhrase(level scenarios.ScoreLevel, rivalFollows bool) string {
-	noun := "goals"
-	n := level.MinimumGain
-	quantity := n
-	if level.ExactOnly {
-		quantity--
-	}
-	if quantity == 1 || quantity == -1 {
-		noun = "goal"
-	}
-	if level.Measure == scenarios.MeasureHeadToHeadGoals {
-		noun = "head-to-head " + noun
-	}
-	comparison := " than"
-	var phrase string
-	if level.ExactOnly {
-		switch exact := n - 1; {
-		case exact > 0:
-			phrase = fmt.Sprintf("scores exactly %d more %s", exact, noun)
-		case exact < 0:
-			phrase = fmt.Sprintf("scores exactly %d fewer %s", -exact, noun)
+	if l.Measure == scenarios.MeasureGoalDifference {
+		switch delta {
+		case 0:
+			return "must finish with at least the goal difference of"
+		case 1:
+			return "must finish with a higher goal difference than"
 		default:
-			phrase, comparison = "scores as many "+noun, " as"
-		}
-	} else {
-		switch {
-		case n > 0:
-			phrase = fmt.Sprintf("scores at least %d more %s", n, noun)
-		case n < 0:
-			phrase = fmt.Sprintf("scores no more than %d fewer %s", -n, noun)
-		default:
-			phrase, comparison = "scores at least as many "+noun, " as"
+			if delta > 0 {
+				return fmt.Sprintf("must finish with a goal difference at least %d higher than", delta)
+			}
+			return fmt.Sprintf("must finish with a goal difference no more than %d lower than", -delta)
 		}
 	}
-	if rivalFollows {
-		phrase += comparison
+	switch {
+	case delta == 0:
+		return "must finish with at least as many " + noun + " as"
+	case delta == 1:
+		return "must finish with more " + noun + " than"
+	case delta > 0:
+		return fmt.Sprintf("must finish with at least %d more %s than", delta, noun)
+	default:
+		return fmt.Sprintf("must finish with no more than %d fewer %s than", -delta, noun)
 	}
-	return phrase
 }
 
-// exactlyPhrase names the one gain that passes to the next tiebreaker.
-func exactlyPhrase(level scenarios.ScoreLevel) string {
-	if level.Measure != scenarios.MeasureGoalDifference {
-		level.ExactOnly = true
-		return goalsPhrase(level, false)
+func absInt(n int) int {
+	if n < 0 {
+		return -n
 	}
-	switch exact := level.MinimumGain - 1; {
-	case exact > 0:
-		return fmt.Sprintf("exactly %d", exact)
-	case exact < 0:
-		return fmt.Sprintf("loses exactly %d", -exact)
-	}
-	return "none"
-}
-
-// scoreGap describes the current difference, as "level at +7 now" or
-// "LA +10 now" for goal difference and "KC +6 now" or "level at 48 now" for
-// goals. named adds the measure, for a list of several.
-func scoreGap(level scenarios.ScoreLevel, team, rival string, named bool) string {
-	gap := level.TeamNow - level.RivalNow
-	value := fmt.Sprint(level.TeamNow)
-	if level.Measure == scenarios.MeasureGoalDifference {
-		value = signedNumber(level.TeamNow)
-	}
-	suffix := ""
-	if named && level.Measure != scenarios.MeasureGoalDifference {
-		suffix = " " + measureNoun(level.Measure)
-	}
-	if gap == 0 {
-		return "level at " + value + suffix + " now"
-	}
-	leader := team
-	if gap < 0 {
-		leader, gap = rival, -gap
-	}
-	return fmt.Sprintf("%s +%d%s now", leader, gap, suffix)
-}
-
-func signedNumber(v int) string {
-	if v > 0 {
-		return fmt.Sprintf("+%d", v)
-	}
-	return fmt.Sprint(v)
+	return n
 }

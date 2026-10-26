@@ -453,3 +453,20 @@ function sortStandings(display, mode, stat) {
     }
   });
 }
+
+// Focus the existing seeding matrix locally; scenario and forecast state stay
+// in the server forms. CSS restores the full matrix above the mobile breakpoint.
+document.querySelectorAll("[data-seeding-focus-control]").forEach((control) => {
+  const select = control.querySelector("select");
+  const grid = control.parentElement.querySelector(".seeding-grid");
+  if (!select || !grid) return;
+  const update = () => {
+    grid.classList.toggle("seeding-grid-focused", select.value !== "all");
+    grid.querySelectorAll("[data-seeding-column]").forEach((cell) => {
+      cell.classList.toggle("seeding-column-unfocused", select.value !== "all" && cell.dataset.seedingColumn !== select.value);
+    });
+  };
+  select.addEventListener("change", update);
+  control.hidden = false;
+  update();
+});

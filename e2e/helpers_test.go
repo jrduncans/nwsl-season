@@ -319,6 +319,11 @@ func logNavigationTiming(t *testing.T, page playwright.Page) {
 // viewport, which would make it scroll sideways.
 func assertNoHorizontalOverflow(t *testing.T, page playwright.Page) {
 	t.Helper()
+	// URL and locator assertions can succeed during a navigation. Measure only
+	// after the new document's stylesheet has loaded, including without script.
+	if err := page.WaitForLoadState(); err != nil {
+		t.Fatalf("wait for layout on %s: %v", page.URL(), err)
+	}
 	result, err := page.Evaluate(`() => ({
 		scroll: document.documentElement.scrollWidth,
 		client: document.documentElement.clientWidth,

@@ -31,6 +31,9 @@ func TestPagesClinchingSeeding(t *testing.T) {
 		if err := page.Locator(".seeding-grid tbody th a").First().Click(); err != nil {
 			t.Fatal(err)
 		}
+		if err := page.WaitForURL("**/clinching?**finish=**"); err != nil {
+			t.Fatal(err)
+		}
 		if err := expect.Locator(page.Locator("#seeding-conditions")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
@@ -38,6 +41,8 @@ func TestPagesClinchingSeeding(t *testing.T) {
 			t.Fatalf("finish selection missing from URL: %s", page.URL())
 		}
 		assertSeedingDOMBudget(t, page)
+		assertSeedingAlternatives(t, page)
+		assertSeedingFocus(t, page, vp)
 		if err := page.Locator(".seeding-fixed-results > summary").Click(); err != nil {
 			t.Fatal(err)
 		}
@@ -84,6 +89,140 @@ func TestPagesClinchingSeeding(t *testing.T) {
 			t.Fatalf("team switch lost fixed result: %s", page.URL())
 		}
 	})
+}
+
+func assertSeedingFocus(t *testing.T, page playwright.Page, vp viewport) {
+	t.Helper()
+	expect := playwright.NewPlaywrightAssertions()
+	url := page.URL()
+	conditions, err := page.Locator("#seeding-conditions").InnerHTML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := page.Locator(".seeding-grid tbody tr").Count()
+	if err != nil {
+		t.Fatal(err)
+	}
+	columns, err := page.Locator(".seeding-grid thead th").Count()
+	if err != nil || columns < 2 {
+		t.Fatalf("columns = %d, %v", columns, err)
+	}
+	if err := page.SetViewportSize(390, 844); err != nil {
+		t.Fatal(err)
+	}
+	focus := page.Locator("#seeding-focus")
+	if err := expect.Locator(focus).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := focus.InputValue(); err != nil || value != "all" {
+		t.Fatalf("initial focus = %q, %v", value, err)
+	}
+	for _, selected := range []string{"0", "all", "0"} {
+		selectValue(t, focus, selected)
+		want := 2
+		if selected == "all" {
+			want = columns
+		}
+		if err := expect.Locator(page.Locator(".seeding-grid thead th:visible")).ToHaveCount(want); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator(".seeding-grid tbody tr:visible")).ToHaveCount(rows); err != nil {
+			t.Fatal(err)
+		}
+		if selected != "all" {
+			if n, err := page.Locator(".seeding-joint-heading:visible").Count(); err != nil || n != 1 {
+				t.Fatalf("focused chance labels = %d, %v", n, err)
+			}
+		}
+	}
+	if err := page.SetViewportSize(1280, 800); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(focus).ToBeHidden(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator(".seeding-grid thead th:visible")).ToHaveCount(columns); err != nil {
+		t.Fatal(err)
+	}
+	if err := page.SetViewportSize(390, 844); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator(".seeding-grid thead th:visible")).ToHaveCount(2); err != nil {
+		t.Fatal(err)
+	}
+	selectValue(t, focus, "all")
+	after, err := page.Locator("#seeding-conditions").InnerHTML()
+	if err != nil || after != conditions || page.URL() != url {
+		t.Fatalf("table focus changed scenario state: %s, %v", page.URL(), err)
+	}
+	if err := expect.Locator(page.Locator(".seeding-grid")).ToHaveCount(1); err != nil {
+		t.Fatal(err)
+	}
+	assertKeyboardDisclosures(t, page)
+	assertNoHorizontalOverflow(t, page)
+	if err := page.SetViewportSize(vp.Width, vp.Height); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPagesClinchingSeedingNoScript(t *testing.T) {
+	t.Parallel()
+	j := newJourney(t, lateSeason())
+	forEachViewport(t, func(t *testing.T, vp viewport) {
+		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
+		visitStatic(t, page, j.URL(seasonPath("clinching")+"?view=seeding"))
+		expect := playwright.NewPlaywrightAssertions()
+		if err := expect.Locator(page.Locator("#seeding-focus")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		columns, err := page.Locator(".seeding-grid thead th").Count()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator(".seeding-grid thead th:visible")).ToHaveCount(columns); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.Locator(".seeding-grid tbody th a").First().Click(); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.WaitForURL("**/clinching?**finish=**"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("#seeding-conditions")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		assertKeyboardDisclosures(t, page)
+		assertSeedingDOMBudget(t, page)
+		assertSeedingAlternatives(t, page)
+	})
+}
+
+func assertSeedingAlternatives(t *testing.T, page playwright.Page) {
+	t.Helper()
+	before := page.URL()
+	expect := playwright.NewPlaywrightAssertions()
+	if err := page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Inspect complete certified alternatives", Exact: playwright.Bool(true)}).Click(); err != nil {
+		t.Fatal(err)
+	}
+	if err := expect.Locator(page.Locator("#seeding-alternative")).ToBeVisible(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page.URL(), "alternative=1") {
+		t.Fatalf("missing alternative state: %s", page.URL())
+	}
+	count, err := page.Locator("#seeding-alternative .clinching-condition").Count()
+	if err != nil || count > 4 {
+		t.Fatalf("unbounded requirements: %d, %v", count, err)
+	}
+	assertSeedingDOMBudget(t, page)
+	assertKeyboardDisclosures(t, page)
+	assertNoHorizontalOverflow(t, page)
+	if err := page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "← All finishes and summary", Exact: playwright.Bool(true)}).Click(); err != nil {
+		t.Fatal(err)
+	}
+	if page.URL() != before {
+		t.Fatalf("alternative navigation changed selected scenario: %s => %s", before, page.URL())
+	}
 }
 
 // Catch a return to eagerly rendering every cached alternative.
