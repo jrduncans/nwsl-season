@@ -66,6 +66,8 @@ func (e scenarioExpression) Combinations() [][]scenarioRequirement {
 
 type clinchingGroupView struct {
 	Heading         string
+	ScenariosURL    string
+	OverviewAnchor  string
 	HeadingParts    []scenarioRequirementPart
 	UnrestrictedOwn []string
 	Own             []scenarioRequirement

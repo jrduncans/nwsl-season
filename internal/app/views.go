@@ -565,6 +565,7 @@ type clinchingPage struct {
 	// ViewControl switches between next-matchday and rest-of-season
 	// scenarios in the penultimate matchweek; RestOfSeason marks that view.
 	Seeding          *seedingPage
+	ClinchingDetails *clinchingDetailsView
 	ViewControl      *exploreSegmentGroup
 	RestOfSeason     bool
 	HistoryNote      string

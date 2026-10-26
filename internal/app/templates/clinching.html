@@ -67,14 +67,15 @@
     {{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}
     {{$elimination := .Elimination}}
     {{range .Groups}}
-      <section class="clinching-result-group clinching-presentation-{{.Presentation}}{{with .Tone}} clinching-result-{{.}}{{end}}">
+      <section{{with .OverviewAnchor}} id="{{.}}"{{end}} class="clinching-result-group clinching-presentation-{{.Presentation}}{{with .Tone}} clinching-result-{{.}}{{end}}">
         <div class="clinching-result-header"><h5>{{template "clinchingOwnHeading" .}}</h5></div>
-        {{if .RivalState}}<p class="clinching-result-state">{{.RivalState}}</p><ul class="clinching-rivals">{{range .Rivals}}<li>{{template "clinchingRival" .}}</li>{{end}}</ul>
+        {{if .ScenariosURL}}<p><a href="{{.ScenariosURL}}">See scenarios for clinching with these results</a></p>
+        {{else if .RivalState}}<p class="clinching-result-state">{{.RivalState}}</p><ul class="clinching-rivals">{{range .Rivals}}<li>{{template "clinchingRival" .}}</li>{{end}}</ul>
         {{else if .GroupedSummary}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}} all of:</p><div class="clinching-summary">{{template "clinchingGroupedSummary" .GroupedSummary}}</div>
         {{else if .SummaryOverflow}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}</p><p>Several certified scenarios. View the exact alternatives below.</p>
         {{else if or .Summary.Conditions .Summary.Alternatives}}<p class="clinching-result-state">{{if $elimination}}Eliminated if{{else}}Clinches if{{end}}{{if or (gt (len .Summary.Conditions) 1) (and .Summary.Conditions .Summary.Alternatives)}} all of:{{end}}</p><div class="clinching-summary">{{template "clinchingSummaryExpression" .Summary}}</div>
         {{end}}
-        {{if .SummaryOverflow}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
+        {{if and .SummaryOverflow (not .ScenariosURL)}}<details class="clinching-exact-paths"><summary>View exact scenarios</summary>{{template "clinchingExpression" .Help}}</details>{{end}}
       </section>
     {{end}}
   {{end}}
@@ -195,3 +196,21 @@
 {{template "foot" .}}{{end}}
 
 {{define "seedingScoreGuidance"}}<p class="note seeding-score-guidance">Score requirements apply across all remaining matches.{{if .Builder.FixedCount}} Choosing a win, draw or loss does not set the final score.{{end}}</p>{{end}}
+
+{{define "clinchingAlternatives"}}{{template "head" .}}
+{{with .ClinchingDetails}}
+<h1>How {{.Team}} can clinch {{.Achievement}}</h1>
+<p><a href="{{.Cards.BackURL}}">← Back to clinching overview</a></p>
+<h2>{{template "clinchingOwnHeading" .Group}}</h2>
+{{with .Limitation}}<p class="data-warning">{{.}}</p>{{end}}
+{{if .Disciplinary}}<p class="note">Scenarios requiring the disciplinary-points tiebreaker are omitted.</p>{{end}}
+<section id="clinching-scenarios" class="seeding-conditions">
+<p>Each scenario is a complete way to clinch with these results. All conditions within one scenario must happen.</p>
+{{with .Cards}}
+{{if gt .Total 4}}<p>Showing scenarios {{.First}}–{{.Last}} of {{.Total}}.</p>{{end}}
+{{range .Scenarios}}<details class="seeding-scenario"{{if .Selected}} open{{end}}>
+<summary><strong>Scenario {{.Number}} of {{$.ClinchingDetails.Cards.Total}}</strong><span class="seeding-scenario-preview">{{if .Preview}}{{.Preview}}{{else}}No additional results needed{{end}}</span></summary>
+<div class="seeding-scenario-body"><p>All {{.Requirements}} conditions must happen:</p><div class="clinching-combination">{{range .Conditions}}{{template "clinchingRequirement" .}}{{end}}</div><p class="note">{{if .Scores}}Other matches can finish any way, provided the tiebreak conditions above are met.{{else}}Other matches can finish any way.{{end}}</p></div></details>{{end}}
+{{if or .Previous .Next}}<nav class="seeding-alternative-pages" aria-label="More scenarios">{{with .Previous}}<a href="{{.}}">← Previous scenarios</a>{{end}}{{with .Next}}<a href="{{.}}">Next scenarios →</a>{{end}}</nav>{{end}}
+{{with .HistoryNote}}<p class="note">{{.}}</p>{{end}}
+{{end}}</section>{{end}}{{template "foot" .}}{{end}}
