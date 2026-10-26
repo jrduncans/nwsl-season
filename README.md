@@ -191,6 +191,40 @@ worktree server, run `scripts/dev-data --refresh`, and start it again. A
 worktree server never recalculates derived data such as clinching scenarios,
 because that repair runs inside the scheduler.
 
+### Matchday 25 clinching sandbox
+
+`pitchfork start server-md25` runs a second, watched server against the manually
+prepared `data/matchday25/nwsl-season.sqlite` cache. It reserves port 8081 (with
+automatic bumping); `pitchfork status server-md25` prints its browser URL.
+It skips `config.env` and disables the scheduler, so it never syncs newer results.
+The daemon requires the database to exist and does not seed or reset it.
+
+Prepare this cache separately using SQLite's backup API (`sqlite3 -readonly
+data/nwsl-season.sqlite ".backup 'data/matchday25/nwsl-season.sqlite'"` after
+creating the directory). For the 2026 Regular Season, keep results through
+Matchday 25 and reset later fixtures to `PreMatch` with no scores, played
+minutes, or xG. Keep the full fixture inventory: deleting later fixtures would
+make qualification report an incomplete schedule. Clear copied qualification
+and scenario history for that stage and publish the edited fixtures through
+`cache.DB.ReplaceSeason` to rebuild their snapshot identity and venue summary;
+direct SQL fixture edits alone fail the cache's snapshot consistency check.
+This reconstructs results using the current fixture schedule, rather than
+recovering exactly what ASA published at that historical moment.
+
+After preparing the copy, or after changing clinching logic, recalculate its
+derived data without contacting ASA:
+
+```sh
+NWSL_CONFIG_FILE=/dev/null NWSL_DATA_DIR=data/matchday25 \
+  go run ./cmd/sync -season 2026 -recalculate -force
+pitchfork restart server-md25
+```
+
+Calculation budgets still apply; set `NWSL_QUALIFICATION_BUDGET` and
+`NWSL_SCENARIO_BUDGET` on that command when an experiment needs more time.
+Restarting reloads the server's in-memory scenario history after recalculation.
+Use `pitchfork stop server-md25` when finished.
+
 ## Configuration
 
 | Environment variable | Default | Purpose |
