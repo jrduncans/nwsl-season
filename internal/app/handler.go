@@ -324,6 +324,48 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		} else {
 			row.Groups = clinchingGroupViews(v.Clauses, v.TeamID, teamLabels, headingTeams, games, groupOptions)
 		}
+		if view.RestOfSeason {
+			for i := range row.Groups {
+				if oversizedGroup(row.Groups[i]) {
+					row.Groups[i].OverviewAnchor = fmt.Sprintf("clinching-%s-%s-%d", v.TeamID, v.Achievement, i+1)
+					row.Groups[i].ScenariosURL = clinchingScenarioURL(r.URL.Query(), v.TeamID, string(v.Achievement), i+1, 1)
+				}
+			}
+			if r.URL.Query().Get("scenario_team") == v.TeamID && r.URL.Query().Get("achievement") == string(v.Achievement) {
+				i, err := parseGroup(r.URL.Query(), len(row.Groups))
+				if err != nil || row.Groups[i].ScenariosURL == "" {
+					a.renderScenarioBadRequest(w, r, "Invalid clinching scenario", fmt.Errorf("invalid scenario group"))
+					return
+				}
+				clauses := clausesForGroup(v.Clauses, row.Groups[i], v.TeamID, games)
+				cached := scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: clauses}}}
+				cards, err := seedingAlternatives(cached, 1, r.URL.Query(), teamLabels, games, nil, history)
+				if err != nil {
+					a.renderScenarioBadRequest(w, r, "Invalid clinching scenario", err)
+					return
+				}
+				back := cloneQuery(r.URL.Query())
+				for _, key := range []string{"scenario_team", "achievement", "group", "alternative", "part"} {
+					back.Del(key)
+				}
+				cards.BackURL = "?" + back.Encode() + "#" + row.Groups[i].OverviewAnchor
+				if cards.Previous != "" {
+					cards.Previous = clinchingScenarioURL(r.URL.Query(), v.TeamID, string(v.Achievement), i+1, cards.First-seedingScenariosPerPage)
+				}
+				if cards.Next != "" {
+					cards.Next = clinchingScenarioURL(r.URL.Query(), v.TeamID, string(v.Achievement), i+1, cards.Last+1)
+				}
+				details := &clinchingDetailsView{Team: team.Name, Achievement: achievement, Group: row.Groups[i], Cards: cards, Disciplinary: v.DisciplinaryPossible}
+				if v.BudgetLimited() {
+					details.Limitation = "Scenario search was incomplete; additional scenarios may exist."
+				} else if v.Limitation == scenarios.LimitationSeasonMultiwayTie {
+					details.Limitation = "Some multiway tiebreak scenarios are not listed."
+				}
+				view.ClinchingDetails = details
+				a.render(w, "clinchingAlternatives", view)
+				return
+			}
+		}
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
@@ -362,7 +404,11 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		view.Actionable = append(view.Actionable, row)
 	}
 	for i := range view.Actionable {
-		presentScenarioGroups(view.Actionable[i].Groups, teamLabels, games, nil, history)
+		for j := range view.Actionable[i].Groups {
+			if view.Actionable[i].Groups[j].ScenariosURL == "" {
+				presentScenarioGroups(view.Actionable[i].Groups[j:j+1], teamLabels, games, nil, history)
+			}
+		}
 	}
 	sort.Slice(view.Actionable, func(i, j int) bool { return clinchingRowLess(view.Actionable[i], view.Actionable[j]) })
 	sort.Slice(view.NoHelp, func(i, j int) bool { return clinchingNoHelpRowLess(view.NoHelp[i], view.NoHelp[j]) })

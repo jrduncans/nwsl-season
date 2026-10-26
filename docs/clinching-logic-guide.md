@@ -320,7 +320,14 @@ Within an outcome, the page groups confirmed scenarios by the team's own results
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
-requirements stay visible. Only groups whose summary is omitted for size offer
+requirements stay visible, except that an oversized rest-of-season group links
+to a focused scenario page. The exception applies when its rendered condition
+tree exceeds 30 units: each requirement, alternative and score-cascade level
+counts as one, as does each grouped-summary or rival row. The heading and
+outcome remain on the overview. The linked page uses the same four-card
+pagination, disclosures and complete stored clauses as Seeding; it pins the
+own results into each complete scenario and preserves all score conditions.
+Navigation and the return link retain the overview query and group context. Only groups whose summary is omitted for size offer
 an expandable scenario list. Every essential score requirement, including all
 GD, goals-scored and head-to-head equality branches, is directly visible.
 A separate native **Tiebreak details** control contains supporting current-gap
