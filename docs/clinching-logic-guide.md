@@ -443,10 +443,10 @@ pending match lacks a matchday, it is the most matches any team has left.
 | Two (penultimate matchweek) | A segmented control, **Next matchday \| Rest of season \| Seeding**, defaulting to Next matchday. The view is the `view` query value (`next-matchday`, `rest-of-season` or `seeding`). |
 | One (decision day) | **Rest of season \| Seeding**, defaulting to Rest of season: the next slate is the rest of the season. Decision day means the two slates name the same matches. |
 
-The playoff-elimination cards always come from the next-slate batch. There are no
-"misses out" cards for the rest of the season, and no line claiming the list is
-complete. When the rest-of-season batch for the current snapshot and rules is
-missing, that view says "Recalculation pending."
+Playoff-elimination cards use the selected slate, including all remaining matches
+in the rest-of-season view. There is no line claiming the list is complete. When
+the rest-of-season batch for the current snapshot and rules is missing, that view
+says "Recalculation pending."
 
 ### Tiebreak order and score conditions
 
@@ -890,6 +890,10 @@ ceiling. When that alone does not prove elimination, it asks whether any legal
 completion of the other remaining matches can keep at least eight opponents
 at or below the ceiling. If no such completion exists, future head-to-head
 matches force an eighth opponent above it and the slate condition is certified.
+The rest-of-season search instead uses points bounds over all remaining
+matches: it certifies a condition when eight opponents are already strictly
+above the target's maximum possible final points. It does not publish
+eliminations that require a score tiebreak or a coupled-match proof.
 
 For a fixed candidate set of opponents to keep below the ceiling, a match
 against anyone outside the set can award the outsider the win. Only matches

@@ -290,15 +290,14 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		history = a.scenarioHistory(r.Context(), page.Season)
 		view.HistoryNote = history.Note()
 	}
-	// Playoff-elimination scenarios always come from the next slate.
 	eliminatedRows := []clinchingRowView{}
-	for _, v := range next.Results {
+	for _, v := range snapshot.Results {
 		team := teamViews[v.TeamID]
 		achievement := eliminationAchievementPhrase(v.Achievement)
 		if v.AlreadyEliminated {
 			eliminatedRows = append(eliminatedRows, clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID]})
 		} else if v.CanBeEliminated {
-			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupsWithHeadingTeams(v.EliminationClauses, v.TeamID, teamLabels, teamNames, games), Necessary: []string{}, Elimination: true}
+			row := clinchingRowView{Team: team, Achievement: achievement, AchievementRank: v.TopK, StandingsPosition: standingsPositions[v.TeamID], Groups: clinchingGroupViews(v.EliminationClauses, v.TeamID, teamLabels, headingTeams, games, groupOptions), Necessary: []string{}, Elimination: true}
 			if v.BudgetLimited() {
 				row.Limitation = "Scenario search was incomplete."
 			}
