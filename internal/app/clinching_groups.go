@@ -24,14 +24,19 @@ type scenarioRequirement struct {
 	// Score is a rest-of-season tiebreaker condition. It is opaque to the
 	// fixture-mask rewrites: it never merges, narrows or is subtracted, and a
 	// clause implies it only by containing the same condition.
-	Score *scenarios.ScoreCondition
-	Text  string
-	Parts []scenarioRequirementPart
+	Score       *scenarios.ScoreCondition
+	Text        string
+	Parts       []scenarioRequirementPart
+	Explanation []scenarioRequirementPart
+	Historical  string
 }
 
 type scenarioRequirementPart struct {
 	Text string
 	Team *scenarioTeamToken
+	// NoSpaceBefore attaches punctuation to the preceding team token.
+	NoSpaceBefore bool
+	BreakBefore   bool
 }
 
 type scenarioTeamToken struct {
@@ -61,6 +66,8 @@ func (e scenarioExpression) Combinations() [][]scenarioRequirement {
 
 type clinchingGroupView struct {
 	Heading         string
+	HeadingParts    []scenarioRequirementPart
+	UnrestrictedOwn []string
 	Own             []scenarioRequirement
 	AlternativeOwn  []scenarioRequirement
 	Summary         scenarioExpression
@@ -73,9 +80,10 @@ type clinchingGroupView struct {
 	// A rest-of-season group with a rival summary states each rival instead
 	// of a summary expression, under RivalState ("Clinches if all of:").
 	// MergeKey stands in for the outside help when merging own results.
-	Rivals     []clinchingRivalView
-	RivalState string
-	MergeKey   string
+	Rivals      []clinchingRivalView
+	RivalState  string
+	RivalChoice bool // only some of the rival requirements need to hold
+	MergeKey    string
 	// paths are the group's summary paths, kept even when they overflow the
 	// summary limit so a caller can describe them another way.
 	paths [][]scenarioRequirement
@@ -217,7 +225,7 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 		return scenarioRequirementPart{Team: &scenarioTeamToken{Code: teams[id], LogoURL: clubLogoURL(id)}}
 	}
 	text := func(value string) scenarioRequirementPart { return scenarioRequirementPart{Text: value} }
-	if perspective != "" && len(outcomes) == 1 {
+	if perspective != "" {
 		opponent, win := g.AwayTeamID, clinching.HomeWin
 		venue := "vs"
 		if g.AwayTeamID == perspective {
@@ -225,11 +233,19 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 			venue = "at"
 		}
 		verb := "loses"
-		switch outcomes[0] {
-		case win:
+		switch r.Mask {
+		case outcomeMask([]clinching.Outcome{win}):
 			verb = "wins"
-		case clinching.Draw:
+		case maskDraw:
 			verb = "draws"
+		case outcomeMask([]clinching.Outcome{win, clinching.Draw}):
+			verb = "wins or draws"
+		case maskAny:
+			verb = "has any result"
+		case maskNotDraw:
+			verb = "does not draw"
+		case maskDraw | (maskNotDraw ^ outcomeMask([]clinching.Outcome{win})):
+			verb = "draws or loses"
 		}
 		return []scenarioRequirementPart{team(perspective), text(verb), text(venue), team(opponent)}
 	}
@@ -436,6 +452,7 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 	views = combineOwnSingleResults(combineOwnPointTotals(combineOwnPairs(views, teamID, headingTeams, games), teamID, headingTeams, games), teamID, headingTeams, games)
 	for i := range views {
 		views[i].Tone = ownResultTone(views[i], teamID, games)
+		views[i].HeadingParts = ownHeadingParts(views[i], teamID, teams, games)
 		if options.RestOfSeason && !views[i].SummaryOverflow {
 			views[i].GroupedSummary = groupSeasonSummary(views[i].Summary, teamID, teams, games)
 		}
@@ -976,6 +993,7 @@ func combineOwnPointTotals(groups []clinchingGroupView, team string, teams map[s
 		}
 		group.AlternativeOwn = nil
 		if minimum == 0 {
+			group.UnrestrictedOwn = []string{first, second}
 			group.Own = nil
 			group.Heading = "Regardless of " + teams[team] + "’s results (" + noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{first, second}}, team, games, teams) + ")"
 		} else {

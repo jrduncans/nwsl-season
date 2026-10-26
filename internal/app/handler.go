@@ -284,6 +284,12 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		a.renderSeeding(w, r, view, rules, data, snapshot, teamLabels, games)
 		return
 	}
+	// Score conditions, and so the archive scan, exist only for the rest of the season.
+	var history scenarioHistory
+	if view.RestOfSeason {
+		history = a.scenarioHistory(r.Context(), page.Season)
+		view.HistoryNote = history.Note()
+	}
 	// Playoff-elimination scenarios always come from the next slate.
 	eliminatedRows := []clinchingRowView{}
 	for _, v := range next.Results {
@@ -322,6 +328,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if noHelpGuaranteed {
 			row.NoHelpFixtures = noHelpFixtureText(noHelpPath, v.TeamID, games, teamLabels)
 			row.NoHelpFixtureCount = len(noHelpPath.FixtureIDs)
+			row.NoHelpFixtureParts = rivalFixtureParts(noHelpPath.FixtureIDs, v.TeamID, teamLabels, games)
 		}
 		for _, n := range v.Necessary {
 			// The team's own results already head every result group.
@@ -329,6 +336,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			row.Necessary = append(row.Necessary, conditionText(n, teamLabels, games))
+			row.NecessaryParts = append(row.NecessaryParts, requirementParts(scenarioRequirement{GameID: n.GameID, Mask: outcomeMask(n.AllowedOutcomes)}, "", teamLabels, games))
 		}
 		if !v.CanClinch {
 			view.NoHelp = append(view.NoHelp, row)
@@ -349,6 +357,9 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 			row.Limitation = "Scenarios where three or more teams finish level on points, goal difference, wins, goals scored and head-to-head points, and still play each other, are not listed."
 		}
 		view.Actionable = append(view.Actionable, row)
+	}
+	for i := range view.Actionable {
+		presentScenarioGroups(view.Actionable[i].Groups, teamLabels, games, nil, history)
 	}
 	sort.Slice(view.Actionable, func(i, j int) bool { return clinchingRowLess(view.Actionable[i], view.Actionable[j]) })
 	sort.Slice(view.NoHelp, func(i, j int) bool { return clinchingNoHelpRowLess(view.NoHelp[i], view.NoHelp[j]) })
@@ -476,6 +487,8 @@ type application struct {
 	options   Options
 	pages     *template.Template
 	forecasts *forecastExecutor
+	// historyCache holds the archive summary behind historical score comparisons.
+	historyCache scenarioHistoryCache
 }
 
 func defaultOptions(options Options) Options {

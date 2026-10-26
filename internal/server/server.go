@@ -129,6 +129,9 @@ func build(ctx context.Context, db *cache.DB, cfg config.Config, opts Options, l
 	if err != nil {
 		return nil, fmt.Errorf("create refresh scheduler: %w", err)
 	}
+	if err := application.RefreshScenarioHistory(ctx); err != nil && ctx.Err() == nil {
+		logger.Warn("load scenario history", "error", err)
+	}
 	if err := application.PrecacheForecastsWithTrigger(ctx, "startup"); err != nil && ctx.Err() == nil {
 		logger.Warn("pre-cache baseline forecasts", "season", cfg.SyncSeason, "stage", cfg.SyncStage, "error", err)
 	} else if ctx.Err() == nil {

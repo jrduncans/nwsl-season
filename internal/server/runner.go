@@ -30,6 +30,9 @@ func (r forecastWarmingRunner) Execute(ctx context.Context, operation syncer.Ope
 		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeNotRun)
 		return result, err
 	}
+	if result.FixtureInputsChanged {
+		r.refreshScenarioHistory(ctx)
+	}
 	if !r.forecastInputsForScope(operation.Season, operation.Stage) || (!result.FixtureInputsChanged && !result.XGInputsChanged) {
 		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeNotNeeded)
 		return result, nil
@@ -58,6 +61,18 @@ func (r forecastWarmingRunner) warmForecasts(ctx context.Context, trigger string
 		return nwslconv.SchedulerForecastWarmOutcomeFailed, err
 	default:
 		return nwslconv.SchedulerForecastWarmOutcomeComplete, nil
+	}
+}
+
+// refreshScenarioHistory rebuilds the clinching pages' historical comparison
+// after fixtures change. Any scope can matter, since the archive spans every
+// finished season. A failure keeps the previous summary and must not fail the
+// sync.
+func (r forecastWarmingRunner) refreshScenarioHistory(ctx context.Context) {
+	refreshCtx, cancel := lifetime.Detach(ctx)
+	defer cancel()
+	if err := r.application.RefreshScenarioHistory(refreshCtx); err != nil && refreshCtx.Err() == nil {
+		r.logger.Warn("refresh scenario history after data refresh", "error", err)
 	}
 }
 
@@ -90,6 +105,7 @@ func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOption
 		setSchedulerForecastWarmOutcome(ctx, nwslconv.SchedulerForecastWarmOutcomeNotNeeded)
 		return run, err
 	}
+	r.refreshScenarioHistory(ctx)
 	outcome, err := r.warmForecasts(ctx, "post_sync")
 	setSchedulerForecastWarmOutcome(ctx, outcome)
 	if err != nil {

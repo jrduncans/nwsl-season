@@ -45,6 +45,13 @@ func forecastPlayoffBracket(season string, places int) *competition.BracketForma
 	return entry.BracketFormat
 }
 
+// RefreshScenarioHistory rereads the historical archive behind the clinching
+// pages' score comparisons. Call it at startup and after a sync changes
+// fixtures; until then pages keep the last summary.
+func (a *Application) RefreshScenarioHistory(ctx context.Context) error {
+	return a.app.refreshScenarioHistory(ctx)
+}
+
 // PrecacheForecasts calculates the baseline (zero fixed assumptions) result
 // for every Forecast Lab model and stores each result in this application's
 // process-local forecast cache. It is intended for server startup; individual

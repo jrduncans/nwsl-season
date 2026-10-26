@@ -299,20 +299,38 @@ standings position. Color carries meaning: the team's name sits on a tinted
 band (green for clinching, red for elimination), each outcome badge is solid,
 and each result box is tinted by the team's own result in that match: green for
 a win (or win or draw), gray for a draw, amber for a loss (or draw or loss), and
-neutral when it spans several matches. A box that needs no outside help says
-"✓ Clinches" (or "Eliminated"); otherwise its conditions follow "Clinches if"
-("Eliminated if"), each shown as a pill. Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
+neutral when it spans several matches. A sufficient own-result row ends after
+its heading, with compact padding and no empty body or repeated clinch,
+elimination or finish label. Requirements use the same quiet rows and subtle
+separators in all three views. Logical groups still explicitly say **all of**,
+**any of**, or **at least N**; a conjunction is never flattened into alternatives.
+Requirement rows use fragments without terminal periods, with lowercase “or”
+for alternative continuations, including score-equality branches. Explanatory
+paragraphs use complete sentences with capitals and periods.
+Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
 “win” and “win or draw” are split so the draw group includes exactly the
 outside help certified for a draw. All own-result group headings and factored
 requirements stay visible. Only groups whose summary is omitted for size offer
-an expandable scenario list. Results
+an expandable scenario list. Every essential score requirement, including all
+GD, goals-scored and head-to-head equality branches, is directly visible.
+A separate native **Explanation** control contains only supporting current-gap
+arithmetic and remaining-match counts. Its label contains no football sentence
+or team fragments; keyboard focus is visible and its target is at least 44px.
+Without useful supporting context it is omitted. Team crests accompany named
+teams consistently in headings, fixtures, score sentences and alternatives.
+Inline team codes share the surrounding sentence’s text baseline; crests are
+centered beside the code without shifting neighboring words.
+Inside an already named card, own-result headings omit the subject: “Win at
+[HOU token]”. Multiple fixtures retain their venues and chronological order.
+Fixture and score tokens come from stored IDs, never parsed display strings.
+Results
 from one match with identical outside help share a heading, such as “draws or
 loses.” Two-match result orderings share a heading only when their outside help
 is identical; for example, “wins one match and loses the other” still names
 the two specific matches. Two-match groups with identical outside help also
 merge when together they are exactly every result worth at least some points
-total, every ordering included: five "✓ Clinches" rows for everything but two
+total, every ordering included: five sufficient rows for everything but two
 losses become one "earns at least 1 point from these two matches" heading.
 For unusual slates with more than four relevant own matches, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
@@ -345,7 +363,7 @@ before points compaction for both summaries and exact scenarios, with a
 
 Groups whose summary is omitted offer expandable, complete certified scenarios;
 a full visible summary has no duplicate scenario disclosure.
-Each exact scenario puts its requirements on one compact line, separated by `+`,
+Each exact scenario puts its requirements in separated rows joined by `AND`,
 with a club crest and two- or three-letter team code; each scenario is an `OR`
 alternative to the others. When alternatives for two matches of the same team
 exactly equal a minimum points total, the page names both matches and that
@@ -459,32 +477,40 @@ team are compared pairwise.
 The results are joined back into conditions. A rival whose states all give the
 same result needs no condition. When "ahead" and "level" give the same result,
 one "ahead or level" condition covers both, which is the usual two-team case. A
-rival in the "behind" state gets a condition written from its side ("UTA gains
-1+ goal difference on POR"). The level state reads "POR finishes level with UTA
+rival in the "behind" state gets a condition written from its side ("UTA must
+finish with a higher goal difference than POR"). The level state reads "POR finishes level with UTA
 on goal difference and goals scored", followed by a head-to-head goals condition
 when their remaining matches against each other decide it.
 
 ### Wording
 
-The page writes each condition out, with the current gap in brackets. Every
-level is a gain, worded the same way for each measure:
+The page translates each typed score threshold into a comparison of final
+standings totals. A minimum GD gain equal to the current deficit means “must
+finish with at least the goal difference of [rival]”; one greater means “must
+finish with a higher goal difference than [rival]”. Other thresholds retain
+an explicit final difference. Exact-only levels remain equality requirements.
+Every accepting cascade branch retains all preceding equalities: for example,
+“must finish with a higher goal difference”, followed by “or, if level on goal
+difference, must finish with at least as many goals”. An exact-only prefix is
+an explicit conjunction, never an optional conditional. Multiway head-to-head
+predicates are preserved intact.
 
-- "POR gains 1+ goal difference on UTA (level at +7 now)"
-- "POR gains 6+ goal difference on KC (KC +5 now)"
-- "UTA gains 6+ goal difference on KC (KC +5 now), or exactly 5 and scores at
-  least 7 more goals (KC +6 now)"
-- "POR gains 11+ goal difference on LA (LA +10 now), or exactly 10 and scores
-  at least as many goals (level at 48 now)"
+Supporting current gaps and remaining-match counts live in **Explanation**.
+Shared explanations describe only current statistics and remaining matches.
+Seeding explains that choosing a win, draw or loss does not set the final score
+only when the user has selected results, in both its summary and complete
+alternatives. The wording works for one or two matches and unequal remaining
+inventories.
 
-A non-positive minimum reads "loses no goal difference to" or "loses at most 2
-goal difference to"; a zero gain before the next level reads "or none and…".
-When the results make a larger gain impossible, the level reads "gains exactly
-2…" or "keeps the same goal difference gap to", or "finishes level with" when
-that gap leaves the two level. When two teams' only remaining matches are
-against each other, every gain follows those margins, so the condition is a
-single goal-difference threshold. When three or more teams are level on points,
-the team must finish ahead of enough of them; each choice of rivals is a scenario
-whose conditions are joined as separate pills (the "and" of the scenario).
+A single GD threshold can become match-margin language only when the typed
+fixtures and assumed outcomes prove equivalence: one target win with all rival
+matches drawn, one head-to-head win, or two separate single-match wins requiring
+a larger (or at least equal) winning margin. A head-to-head margin contributes
+twice to the relative GD change. Additional fixed draws do not change a margin
+threshold. Multiple open margins, mixed results, exact-only
+levels and equality cascades keep the accurate final-standings wording unless
+that equivalence is proved. No score solver is added and no displayed string
+is parsed to infer a predicate.
 
 Rest-of-season summaries are never replaced by "Several certified scenarios":
 the scenarios are the whole answer, so every group's summary is written out (up
@@ -498,11 +524,11 @@ Listing scenarios over every remaining match multiplies quickly: one of Gotham's
 therefore restates each result one rival at a time, which a reader can hold in
 their head:
 
-> **If NJ/NY Gotham FC wins one match and loses the other** — Clinches if all of:
-> - SD takes 3 points or fewer (vs BOS and at BAY), or takes 4 points if NJY
->   gains 1+ goal difference on SD (level at +13 now)
-> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches if NJY
->   gains 2+ goal difference on WAS (WAS +1 now)
+> **Win one match and lose the other (named fixtures)** — Clinches if all of:
+> - SD takes 3 points or fewer (vs BOS and at BAY), or takes 4 points, and NJY
+>   must finish with a higher goal difference than SD
+> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches, and NJY
+>   must finish with a higher goal difference than WAS
 
 This is exact, not a simplification, because of two facts:
 
@@ -545,9 +571,10 @@ withheld, or a search that hit its budget, has no summary and shows only clauses
 The multiway-tie note appears only when the clauses are shown for some row.
 
 Those fallback clauses can still contain independent requirements. Instead of
-repeating every combination, their summary separates them into bulleted groups
+repeating every combination, their summary separates them into requirement groups
 under **Clinches if all of**. Common results and their score conditions stay
-together: "KC loses both matches … and UTA gains …". Each group can contain its
+together: "KC loses both matches … and UTA must finish with a higher goal
+difference …". Each group can contain its
 own alternatives. For example, KC's two-loss case separates Angel City's record
 from the coupled Seattle/Utah tiebreak. Utah's loss at Gotham separates Angel
 City's record from Seattle's result and score condition. Neither case needs to
@@ -569,10 +596,11 @@ disclosure; the disclosure remains available when a summary is omitted for size.
 Rows merge under one heading as clause groups do ("wins one match and loses the
 other", "earns at least 1 point from these two matches") when their rivals'
 needs are identical. Rivals are listed in standings order. A row that needs no
-help shows "✓ Clinches".
+help ends after its heading.
 
-Inside the named team card, rest-of-season result headings use team codes to
-avoid repeating full club names. Each rival's score-dependent alternative starts
+Inside the named team card, result headings omit the redundant subject and
+use crest-and-code tokens for named opponents. Each rival's score-dependent
+alternative starts
 on a new line. Groups already show no-help paths, so the rest-of-season view
 omits the repeated no-help footer; a single group also omits the redundant
 "Every clinching scenario requires" list. Separate no-help cards remain when
@@ -665,7 +693,29 @@ impossible with that column's results. The Misses the playoffs row says
 "Possible" instead. A cell is exact: some integer scoreline with those results
 (and any fixed results) gives that seed and that opponent.
 
+At 700px or less, JavaScript enables a local "Team results" selector with
+"All results" selected initially and one option per grouped column, using its
+existing labels. Choosing a column shows it beside the finish column using the
+same table nodes. All reachable seed rows and impossible-cell dashes remain.
+The control only focuses the table: it does not fix results, change the URL,
+select a seed, rerun forecasts or filter the conditions. Desktop always shows
+the full matrix; without JavaScript the control stays hidden and the full
+matrix remains available. The table's supporting disclosure explains that
+Fix results changes the scenario while Team results only focuses the table.
+
 ### Likelihoods
+
+Table headings explain percentages once: the finish column says "Overall
+chance", while each own-result column labels its cells "Finish + these
+results" beneath its own-results percentage. Cells show only their numeric
+percentage. A single native "About chances and the table" disclosure holds
+supporting explanations, focus instructions, forecast and venue limitations.
+Rows show the overall finish chance; columns show the chance of those own
+results among counted forecasts; cells show the joint chance of that finish
+and those results. Forecast-unavailable notices remain visible.
+Opponent percentages below the selected finish are the chance of that finish
+AND opponent, not the opponent chance conditional on that seed. Rounded chances
+are not normalized. Venue and forecast limitations remain available.
 
 Each row, column and cell also shows a likelihood from Forecast Lab's default
 model, with the fixed results applied. The page runs that forecast through the
@@ -700,29 +750,45 @@ opponent is; the grid already shows the opponents. A selected finish that
 fixed results make impossible says so rather than failing; a malformed one is
 rejected.
 
-Conditions are grouped by the team's own results with the rest-of-season
-presentation (merged results, grouped rival summaries, score conditions written
-out in full). A group lists at most **five alternatives**. A longer group
-states how many ways there are and summarizes them instead: the results every
-way needs, then the results each way needs some of ("Each way also needs 2 to
-4 of these"), then the matches whose needed result differs between ways
-("Also depends on KC vs WAS") and whether some need tiebreaker score
-conditions. Each summarized result is the union of what the ways that mention
-its match allow, so the statements are necessary conditions, not a recipe.
-Points totals across a team's two matches stay as they are. The page says to fix results in these matches to see the
-exact ways. There is no paging.
+Conditions are grouped by the team's own results, preserving team cards and
+result colors. Essential scores and equality continuations stay visible.
+Small outputs list up to five alternatives. Larger outputs retain a compact
+necessary-condition summary: up to three common requirements, a short positive
+minimum-count list when available, up to four named fixtures and a note about
+score dependencies. These summaries explicitly say they do not guarantee the
+finish. They never masquerade as sufficient recipes.
 
-An alternative that needs some team to gain four or more goals on a rival in a
-tiebreaker is a long shot. Long shots are not listed when anything else is
-possible; a line says other ways need such a swing. Own results that only long
-shots reach get their own heading ("If POR loses at HOU: Only with a tiebreaker
-swing of 4 or more goals"), so every own result the grid shows for the seed is
-accounted for. When every way is a long shot, the long shots are listed under
-the same five-alternative bound, with a note.
+**Inspect complete certified alternatives** opens one original cached clause at
+a time (`alternative=1`, counted from one). Previous/next controls and a numeric
+picker make every clause accessible. Long conjunctions are paged in groups of
+four requirements (`part=1` selects the second group); the page states the total
+and that **all** requirements must hold. Navigation retains finish, team and
+fixed-result state using relative URLs, including behind a proxy prefix.
+The additional page reads only stored scenario conditions and cached history;
+it returns before grid/forecast calculations and never calls ASA or searches
+season outcomes or scores. No thousands of hidden elements are rendered.
+The existing 1,500-element/250-image browser budgets remain unchanged.
 
-The overview renders no conditions, and conditions use the clinching pages'
-compact team tokens only within the five-alternative bound. Browser journeys
-enforce limits on DOM elements and images at desktop width and 390px.
+There is no goal-swing exclusion or probability-based presentation filter.
+Four-goal and larger alternatives remain accessible, and the exact grid,
+probabilities, final-day default and mobile focus control are preserved.
+
+### Historical margin comparisons
+
+Historical context never removes a certified possibility. The first supported
+case annotates an exact single-match winning-margin requirement only when its
+minimum exceeds the maximum in verified complete prior cached NWSL regular
+seasons. Only completed seasons with complete verified inventories, valid
+completed scores and recorded kickoffs contribute. The annotation names every
+included season and the latest included match date. It explicitly describes
+a comparison with that scope, never an all-time record. There is no hardcoded
+record or probability label. If no eligible history exists, the page says so.
+
+The annotation uses the proved individual margin from the same typed
+simplification as the visible sentence. A four-goal aggregate swing, a two-goal
+head-to-head win, and a gain spread over several fixtures do not by themselves
+prove a record-breaking win. Cascades, unspecified results and other cases
+without a proved individual lower bound remain unannotated.
 
 ### Calculation, persistence and filtering
 

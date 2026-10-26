@@ -15,9 +15,10 @@ type clinchingGroupedSummary struct {
 }
 
 type clinchingSummaryGroup struct {
-	Heading    string
-	Expression scenarioExpression
-	Rival      *clinchingRivalView
+	Heading      string
+	HeadingParts []scenarioRequirementPart
+	Expression   scenarioExpression
+	Rival        *clinchingRivalView
 }
 
 func groupSeasonSummary(summary scenarioExpression, team string, teams map[string]string, games map[string]cache.Game) *clinchingGroupedSummary {
@@ -46,6 +47,12 @@ func groupSeasonSummary(summary scenarioExpression, team string, teams map[strin
 			}
 		}
 		group.Heading = joinConditions(labels)
+		for i, id := range rivals {
+			if i > 0 {
+				group.HeadingParts = append(group.HeadingParts, scenarioRequirementPart{Text: "and"})
+			}
+			group.HeadingParts = append(group.HeadingParts, teamPart(id, teams))
+		}
 		view.Groups = append(view.Groups, group)
 	}
 	return view
