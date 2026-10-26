@@ -85,12 +85,16 @@ func TestRuntimeTelemetryMatchesRegistry(t *testing.T) {
 			return now
 		},
 	}
+	// This telemetry fixture has four synthetic teams playing one match each;
+	// declare its inventory instead of inheriting the real 2024 schedule.
 	run, err := service.Run(context.Background(), syncer.RunOptions{
-		Season:     "2024",
-		Stage:      "Regular Season",
-		Trigger:    "live_check",
-		Force:      true,
-		SourceOnly: true,
+		Season:        "2024",
+		Stage:         "Regular Season",
+		ExpectedTeams: 4,
+		GamesPerTeam:  1,
+		Trigger:       "live_check",
+		Force:         true,
+		SourceOnly:    true,
 	})
 	if err != nil {
 		t.Fatal(err)
