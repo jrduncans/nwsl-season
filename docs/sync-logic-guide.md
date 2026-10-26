@@ -24,6 +24,14 @@ catalog of public stages this guide loads.
   stages are loaded by the startup scheduler; page reads still never make ASA
   requests to fill them.
 
+The optional `server-md25` Pitchfork daemon serves a manually prepared cache in
+`data/matchday25/` with `NWSL_SYNC_SCHEDULER=false` and
+`NWSL_CONFIG_FILE=/dev/null`. The prepared copy retains fixtures after Matchday
+25 as pending, with their results and xG removed. Derived batches are refreshed
+explicitly with cache-only `cmd/sync -recalculate`; starting or restarting this daemon does
+not refresh source or derived data. See the
+[sandbox setup](../README.md#matchday-25-clinching-sandbox).
+
 ## Historical regular-season cache reads
 
 `cache.DB.HistoricalRegularSeasons` reads every public, source-backed,

@@ -3,3 +3,11 @@ run = "exec env NWSL_HTTP_ADDR=127.0.0.1:$PORT scripts/dev-server"
 port = { expect = [8080], bump = 10 }
 mise = true
 watch = ["scripts/dev-*", "internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]
+
+# Manually prepared cache with results through Matchday 25. Keep the remaining
+# fixtures as PreMatch so clinching still sees the complete schedule.
+[daemons.server-md25]
+run = "test -f data/matchday25/nwsl-season.sqlite && exec env NWSL_CONFIG_FILE=/dev/null NWSL_DATA_DIR=data/matchday25 NWSL_SYNC_SCHEDULER=false NWSL_HTTP_ADDR=127.0.0.1:$PORT go run ./cmd/server"
+port = { expect = [8081], bump = 10 }
+mise = true
+watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]
