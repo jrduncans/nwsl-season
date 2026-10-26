@@ -464,9 +464,10 @@ func joinHeadToHead(conditions []ScoreCondition) []ScoreCondition {
 					joined = true
 				}
 			}
-			if joined {
-				continue
+			if !joined {
+				out = append(out, condition)
 			}
+			continue
 		}
 		for _, other := range conditions {
 			if len(other.Levels) == 1 && other.Levels[0].Measure == MeasureHeadToHeadGoals && other.TeamID == condition.TeamID && other.RivalID == condition.RivalID {

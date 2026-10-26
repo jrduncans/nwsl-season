@@ -482,6 +482,10 @@ finish with a higher goal difference than POR"). The level state reads "POR fini
 on goal difference and goals scored", followed by a head-to-head goals condition
 when their remaining matches against each other decide it.
 
+A head-to-head goals condition is appended to the matching level condition
+once. If no level condition exists for that comparison, it remains a standalone
+condition with one head-to-head goals level; it must not be appended to itself.
+
 ### Wording
 
 The page translates each typed score threshold into a comparison of final
