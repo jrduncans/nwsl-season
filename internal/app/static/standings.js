@@ -36,6 +36,21 @@ document.addEventListener("change", (event) => {
 // The Stats and Values controls are disabled until this script can apply them.
 document.querySelectorAll("[data-standings-control]").forEach((control) => { control.disabled = false; });
 
+// Both outlook views use the same rendered forecast. Keep the table's expanded
+// distributions in the DOM when switching, without changing scenario or URL state.
+document.querySelectorAll("[data-forecast-view-control]").forEach((control) => {
+  const section = control.closest(".forecast-results");
+  const panels = section?.querySelectorAll("[data-forecast-view-panel]");
+  if (!panels?.length) return;
+  const showView = () => {
+    const view = control.querySelector("input:checked")?.value ?? "table";
+    panels.forEach((panel) => { panel.hidden = panel.dataset.forecastViewPanel !== view; });
+  };
+  control.addEventListener("change", showView);
+  control.disabled = false;
+  showView();
+});
+
 document.addEventListener("change", (event) => {
   const button = event.target.closest("[data-standings-mode-value]");
   if (!button) return;

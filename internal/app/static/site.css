@@ -231,6 +231,33 @@ th:nth-child(2) { text-align: left; }
 .forecast-meta { display: flex; flex-wrap: wrap; gap: 0; margin: .9rem 0 0; color: var(--muted); font-size: .825rem; }
 .forecast-meta div { display: flex; align-items: baseline; gap: .35rem; padding: 0 .85rem; border-left: 1px solid var(--line); }.forecast-meta div:first-child { padding-left: 0; border-left: 0; }.forecast-meta dt { font-weight: 700; }.forecast-meta dd { margin: 0; color: var(--ink); font-weight: 800; }
 .forecast-results, .forecast-comparison, .forecast-builder { margin-top: 2.25rem; }
+.forecast-view-toolbar { display: flex; justify-content: flex-end; margin: -.25rem 0 .6rem; }
+.forecast-view-note { margin: .5rem 0 .7rem; font-size: .875rem; }
+[data-forecast-view-panel][hidden] { display: none; }
+/* Contain absolute screen-reader labels in Safari's horizontal overflow area. */
+.forecast-heatmap-scroll { position: relative; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.forecast-heatmap { --forecast-heat: #459f98; border-collapse: separate; border-spacing: 0; font-size: .8rem; }
+.forecast-heatmap-outside { --forecast-heat: #c69054; }
+.forecast-heatmap :is(th, td) { text-align: center; padding: .2rem; }
+.forecast-heatmap thead th { min-width: 3.35rem; padding: .45rem .2rem; }
+.forecast-heatmap .forecast-heatmap-groups th { border-bottom: 0; font-size: .75rem; }
+.forecast-heatmap .forecast-heatmap-groups th:first-child { border-bottom: 2px solid var(--line); }
+.forecast-heatmap thead .forecast-heatmap-outside { background: #f5ecdf; }
+.forecast-heatmap tbody th, .forecast-heatmap .forecast-heatmap-groups th:first-child { position: sticky; left: 0; z-index: 1; width: 12rem; min-width: 12rem; padding: .45rem .6rem; background: var(--cell-bg, var(--panel)); text-align: left; box-shadow: inset -1px 0 var(--line); }
+.forecast-heatmap .team-name { white-space: normal; }
+.forecast-heatmap-value { display: flex; align-items: center; justify-content: center; min-width: 2.95rem; min-height: 2rem; padding: .3rem .15rem; color: var(--ink); background: color-mix(in srgb, var(--forecast-heat) var(--forecast-probability), var(--panel)); font-weight: 700; }
+.forecast-heatmap .forecast-heatmap-home-boundary { border-right: 1px solid var(--line); }
+.forecast-heatmap .forecast-heatmap-playoff-boundary { border-right: 3px solid var(--line); }
+.forecast-heatmap-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; margin-top: .7rem; color: var(--muted); font-size: .75rem; }
+.forecast-heatmap-legend > span { display: inline-flex; align-items: center; gap: .5rem; }
+.forecast-heatmap-gradient { --forecast-heat: #459f98; display: inline-block; width: 5rem; height: .65rem; background: linear-gradient(to right, var(--panel), var(--forecast-heat)); }
+.forecast-heatmap-gradient.forecast-heatmap-outside { --forecast-heat: #c69054; }
+.forecast-heatmap-key { margin: .5rem 0 0; font-size: .75rem; }
+@media (max-width: 700px) {
+  .forecast-heatmap tbody th, .forecast-heatmap .forecast-heatmap-groups th:first-child { width: 7rem; min-width: 7rem; padding: .4rem; font-size: .7rem; }
+  .forecast-view-toolbar { justify-content: flex-start; }
+  .forecast-view-toolbar .segmented-options span { min-height: 44px; display: flex; align-items: center; }
+}
 .forecast-table { min-width: 0; table-layout: auto; }
 .forecast-scroll-hint { display: none; }
 .forecast-table .forecast-rank { width: 3rem; color: var(--muted); text-align: center; }

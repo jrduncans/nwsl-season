@@ -52,8 +52,11 @@
 
 <section class="forecast-results" aria-labelledby="forecast-title">
   <div class="section-heading">
-    <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by projected points. Playoff chances reflect the full range of simulated finishes. {{if .HasChampionship}}Championship chances include a simulated playoff bracket. {{end}}Expand a team’s finish distribution for its range of outcomes.</p></div>
+    <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by projected points. Playoff chances reflect the full range of simulated finishes. {{if .HasChampionship}}Championship chances include a simulated playoff bracket. {{end}}</p></div>
   </div>
+  <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label></span></fieldset></div>
+  <div id="forecast-table-panel" data-forecast-view-panel="table">
+  <p class="note forecast-view-note">Expand a team’s finish distribution for its range of outcomes.</p>
   <p class="forecast-scroll-hint" id="forecast-scroll-hint">Swipe left on the table to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll forecast-table-scroll" tabindex="0" role="region" aria-label="Scrollable {{.Season}} regular-season forecast">
     <table class="forecast-table{{if .HasChampionship}} forecast-table-with-championship{{end}}" aria-describedby="forecast-scroll-hint">
@@ -71,6 +74,23 @@
         </tr>
       {{end}}</tbody>
     </table>
+  </div>
+  </div>
+  <div id="forecast-heatmap-panel" data-forecast-view-panel="heatmap" hidden>
+    <p id="forecast-heatmap-description" class="note forecast-view-note">Chance of each final position. First place wins the Shield. Both colors use the same 0–100% scale.</p>
+    <p class="forecast-scroll-hint" id="forecast-heatmap-scroll-hint">Swipe left on the heatmap to see every position <span aria-hidden="true">→</span></p>
+    <div class="table-scroll forecast-heatmap-scroll" tabindex="0" role="region" aria-label="Scrollable finishing-position heatmap">
+      <table class="forecast-heatmap" aria-describedby="forecast-heatmap-description forecast-heatmap-key forecast-heatmap-scroll-hint">
+        <caption><span>{{.Season}} forecast · {{.ModelName}}{{if .ResultsThrough}} · through {{.ResultsThrough}}{{end}}{{if .FixedCount}} · {{.FixedCount}} fixed result{{if ne .FixedCount 1}}s{{end}}{{end}}</span></caption>
+        <thead>
+          <tr class="forecast-heatmap-groups"><th scope="col" rowspan="2">Team</th>{{range .HeatmapGroups}}<th scope="colgroup" colspan="{{.Span}}"{{if .OutsidePlayoffs}} class="forecast-heatmap-outside"{{end}}>{{.Label}}</th>{{end}}</tr>
+          <tr>{{range .HeatmapPositions}}<th scope="col" class="{{if .OutsidePlayoffs}}forecast-heatmap-outside {{end}}{{if .HomeBoundary}}forecast-heatmap-home-boundary {{end}}{{if .PlayoffBoundary}}forecast-heatmap-playoff-boundary{{end}}"><span{{if eq .Position 1}} aria-label="1, Shield"{{end}}>{{.Position}}</span></th>{{end}}</tr>
+        </thead>
+        <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th>{{range .Heatmap}}<td class="{{if .OutsidePlayoffs}}forecast-heatmap-outside {{end}}{{if .HomeBoundary}}forecast-heatmap-home-boundary {{end}}{{if .PlayoffBoundary}}forecast-heatmap-playoff-boundary{{end}}"><span class="forecast-heatmap-value" style="--forecast-probability: {{.Intensity}}">{{if .Sampled}}{{.Probability}}{{else}}<span class="visually-hidden">No simulated finishes</span>{{end}}</span></td>{{end}}</tr>{{end}}</tbody>
+      </table>
+    </div>
+    <div class="forecast-heatmap-legend" aria-hidden="true"><span>Playoffs <span class="forecast-heatmap-gradient"></span></span><span>Outside playoffs <span class="forecast-heatmap-gradient forecast-heatmap-outside"></span></span><span>Lighter → darker: 0% → 100%</span></div>
+    <p id="forecast-heatmap-key" class="note forecast-heatmap-key">A blank cell means no simulated finishes, not a mathematically impossible finish. Small positive chances appear as &lt;0.1%.</p>
   </div>
 </section>
 

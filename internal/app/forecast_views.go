@@ -56,6 +56,8 @@ type forecastPage struct {
 	Remaining           int
 	ScheduleNote        string
 	PositionScaleMax    string
+	HeatmapPositions    []forecastHeatmapPosition
+	HeatmapGroups       []forecastHeatmapGroup
 	Rows                []forecastRowView
 	Assumptions         []forecastAssumptionView
 	Teams               []forecastTeamOption
@@ -84,6 +86,7 @@ type forecastRowView struct {
 	ChampionshipChance    string
 	ChampionshipWidth     string
 	PositionBreakdown     []forecastPositionView
+	Heatmap               []forecastHeatmapCell
 	Comparison            *forecastRowMetrics
 	ExpectedPointsDelta   string
 	TopFourDelta          string
@@ -109,6 +112,50 @@ type forecastPositionView struct {
 	Position    int
 	Probability string
 	BarWidth    string
+}
+
+type forecastHeatmapPosition struct {
+	Position        int
+	OutsidePlayoffs bool
+	HomeBoundary    bool
+	PlayoffBoundary bool
+}
+
+type forecastHeatmapCell struct {
+	forecastHeatmapPosition
+	Probability string
+	Intensity   string
+	Sampled     bool
+}
+
+type forecastHeatmapGroup struct {
+	Label           string
+	Span            int
+	OutsidePlayoffs bool
+}
+
+func forecastHeatmapColumns(teams, playoffPlaces int) ([]forecastHeatmapPosition, []forecastHeatmapGroup) {
+	playoffPlaces = max(0, min(teams, playoffPlaces))
+	homePlaces := min(4, playoffPlaces)
+	positions := make([]forecastHeatmapPosition, teams)
+	for i := range positions {
+		positions[i] = forecastHeatmapPosition{
+			Position: i + 1, OutsidePlayoffs: i >= playoffPlaces,
+			HomeBoundary:    i+1 == homePlaces && homePlaces < playoffPlaces,
+			PlayoffBoundary: i+1 == playoffPlaces && playoffPlaces < teams,
+		}
+	}
+	var groups []forecastHeatmapGroup
+	if homePlaces > 0 {
+		groups = append(groups, forecastHeatmapGroup{Label: "Home playoff", Span: homePlaces})
+	}
+	if playoffPlaces > homePlaces {
+		groups = append(groups, forecastHeatmapGroup{Label: "Away playoff", Span: playoffPlaces - homePlaces})
+	}
+	if teams > playoffPlaces {
+		groups = append(groups, forecastHeatmapGroup{Label: "Outside playoffs", Span: teams - playoffPlaces, OutsidePlayoffs: true})
+	}
+	return positions, groups
 }
 
 type forecastAssumptionView struct {
@@ -151,6 +198,7 @@ func forecastRows(result simulation.Result, playoffPlaces int, certainty forecas
 		scale = 1
 	}
 	rows := make([]forecastRowView, 0, len(result.Teams))
+	heatmapPositions, _ := forecastHeatmapColumns(len(result.Teams), playoffPlaces)
 	for index, row := range result.Teams {
 		chances := forecastChances(row, playoffPlaces, certainty)
 		view := forecastRowView{
@@ -173,6 +221,18 @@ func forecastRows(result simulation.Result, playoffPlaces int, certainty forecas
 				continue
 			}
 			view.PositionBreakdown = append(view.PositionBreakdown, forecastPositionView{Position: index + 1, Probability: boundedPercent(probability), BarWidth: fmt.Sprintf("%.1f%%", math.Min(100, probability/scale*100))})
+		}
+		for index, position := range heatmapPositions {
+			probability := 0.0
+			if index < len(row.PositionProbability) {
+				probability = row.PositionProbability[index]
+			}
+			view.Heatmap = append(view.Heatmap, forecastHeatmapCell{
+				forecastHeatmapPosition: position,
+				Probability:             boundedPercent(probability),
+				Intensity:               fmt.Sprintf("%.4f%%", probability*100),
+				Sampled:                 probability > 0,
+			})
 		}
 		rows = append(rows, view)
 	}

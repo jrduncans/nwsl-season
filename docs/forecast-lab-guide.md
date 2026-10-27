@@ -350,7 +350,17 @@ remain uncertain because the model still samples plausible winning margins and
 draw scores. Switching models preserves the fixed outcomes but can change those
 conditional scoreline distributions.
 
-## Reading the projected-finish table
+## Reading the projected outlook
+
+**Table** is the default outlook. A **Table | Heatmap** segmented selector
+switches between the table and a league-wide finishing-position heatmap in the
+same section. This is a local display choice: it does not navigate, run another
+forecast, change assumptions or model choices, or alter the share URL. Returning
+to Table preserves any expanded team distributions; unapplied assumptions also
+stay in the builder. A new page load starts on Table. Without JavaScript, the
+selector is disabled and the existing table and its disclosures remain usable.
+
+### Table
 
 Each row combines 50,000 internally consistent seasons; it is not a sequence
 of independent per-match percentages.
@@ -390,6 +400,30 @@ visible without presenting an average finishing position as a literal outcome.
 On phones rank and team stay pinned while the other columns scroll; the team
 and projected-points columns are narrow enough that Playoffs fits beside them
 at 390px.
+
+### Finishing-position heatmap
+
+The heatmap uses the active model's same simulated position distributions and
+team order as the table, with a column for every finishing position. It does
+not introduce an additional selected-team chart; individual distributions stay
+in the table's expandable rows. Applied assumptions affect both views equally.
+
+Playoff positions use teal and positions outside the configured playoff field
+use amber. Both palettes use the same absolute 0–100% probability scale, rather
+than scaling each row independently. Stronger shading means a higher chance.
+Column labels and boundaries distinguish home-playoff places and the playoff
+cutoff; first place is identified as the Shield without adding another color.
+
+Every position stays visible, including rare and unsampled finishes. A positive
+share below the display precision is labelled `<0.1%`; a blank cell means no simulated
+finishes and is identified that way for screen readers. Neither is a proof that
+the finish is impossible. The probabilities follow the forecast's existing
+rounding, so displayed values may not sum to exactly 100%.
+
+The heatmap scrolls horizontally on narrow screens while team labels stay
+pinned, keeping every finishing position available on phones. Numeric labels
+and the position headings supplement the color encoding without requiring
+hover.
 
 ### Comparing models
 
