@@ -58,7 +58,7 @@ func TestContentSecurityPolicyRejectsInlineScriptAndUnlistedOrigins(t *testing.T
 // follow the existing pattern or contentSecurityPolicy needs a deliberate update.
 func TestTemplatesAndScriptsStayWithinContentSecurityPolicy(t *testing.T) {
 	scriptTag := regexp.MustCompile(`<script\b[^>]*>`)
-	executableScript := regexp.MustCompile(`^<script src="\{\{[^}]+\}\}" defer>$`)
+	executableScript := regexp.MustCompile(`^<script src="\{\{[^}]+\}\}"(?: defer)?>$`)
 	eventHandler := regexp.MustCompile(`(?i)\son[a-z]+\s*=`)
 	absoluteResource := regexp.MustCompile(`\s(src|srcset|poster|data)="(https?:)?//`)
 	err := fs.WalkDir(pageFiles, "templates", func(path string, entry fs.DirEntry, err error) error {

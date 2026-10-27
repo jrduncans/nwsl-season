@@ -1102,8 +1102,14 @@ func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 		if err := expect.Locator(summary).ToBeFocused(); err != nil {
 			t.Errorf("%q should take focus: %v", name, err)
 		}
-		if err := expect.Locator(details).Not().ToHaveAttribute("open", ""); err != nil {
-			t.Errorf("%q should start collapsed: %v", name, err)
+		initialOpen, err := details.Evaluate("element => element.open", nil)
+		if err != nil {
+			t.Fatalf("read disclosure state for %q: %v", name, err)
+		}
+		if initialOpen == true {
+			if err := summary.Press("Enter"); err != nil {
+				t.Fatalf("collapse %q: %v", name, err)
+			}
 		}
 		for _, key := range []string{"Enter", "Space"} {
 			if err := summary.Press(key); err != nil {
@@ -1113,7 +1119,7 @@ func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 				t.Errorf("%s should expand %q: %v", key, name, err)
 			}
 			// The body is shown while expanded.
-			if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeVisible(); err != nil {
+			if err := expect.Locator(details.Locator("> :not(summary):not(script)").First()).ToBeVisible(); err != nil {
 				t.Errorf("%q should show its content when expanded: %v", name, err)
 			}
 			if err := summary.Press(key); err != nil {
@@ -1122,7 +1128,7 @@ func assertKeyboardDisclosures(t *testing.T, page playwright.Page) int {
 			if err := expect.Locator(details).Not().ToHaveAttribute("open", ""); err != nil {
 				t.Errorf("%s should collapse %q: %v", key, name, err)
 			}
-			if err := expect.Locator(details.Locator("> :not(summary)").First()).ToBeHidden(); err != nil {
+			if err := expect.Locator(details.Locator("> :not(summary):not(script)").First()).ToBeHidden(); err != nil {
 				t.Errorf("%q should hide its content when collapsed: %v", name, err)
 			}
 		}

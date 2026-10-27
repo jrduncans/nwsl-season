@@ -569,6 +569,7 @@ type clinchingPage struct {
 	ViewControl      *exploreSegmentGroup
 	RestOfSeason     bool
 	HistoryNote      string
+	StatusScriptPath string
 	State            string
 	Slate            scenarios.Slate
 	SlateStartsAtUTC string

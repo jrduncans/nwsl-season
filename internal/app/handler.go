@@ -156,7 +156,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	}
 	rules, _ = a.rulesForSeason(page.Season, page.Stage)
 	page.Title = page.Season + " clinching scenarios"
-	view := clinchingPage{seasonPage: page, Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, Eliminated: []clinchingStatusGroupView{}, AlreadyClinched: []clinchingStatusGroupView{}, SlateGroups: []fixtureGroupView{}}
+	view := clinchingPage{seasonPage: page, StatusScriptPath: staticURL(r.URL.Path, "clinching-status.js"), Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, Eliminated: []clinchingStatusGroupView{}, AlreadyClinched: []clinchingStatusGroupView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
 	})
@@ -382,6 +382,17 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		if !v.CanClinch {
 			view.NoHelp = append(view.NoHelp, row)
 			continue
+		}
+		if !view.RestOfSeason && noHelpGuaranteed && row.NoHelpFixtures != "" {
+			for _, id := range noHelpPath.FixtureIDs {
+				if !slateIDs[id] {
+					// Keep the season-long path with the other no-help cards,
+					// even when this outcome also has a matchday scenario.
+					view.NoHelp = append(view.NoHelp, row)
+					row.NoHelp, row.NoHelpFixtures, row.NoHelpFixtureParts, row.NoHelpFixtureCount = "", "", nil, 0
+					break
+				}
+			}
 		}
 		if len(noHelpPath.FixtureIDs) == 1 && repeatsUnconditionalWin(row.Groups, v.TeamID, noHelpPath.FixtureIDs[0], games) {
 			// The card already lists this win as its own unconditional row.

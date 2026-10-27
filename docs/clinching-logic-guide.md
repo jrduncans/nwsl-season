@@ -416,11 +416,14 @@ Unlisted matches are unrestricted. The full included schedule remains collapsed
 below the results, with its date range above them. Incomplete-result notices
 remain visible for both clinching and elimination scenarios. Ordinary page requests
 read only cached results and do not rerun qualification or scenario discovery.
-No-help paths say “Win N matches to clinch without help” (inside a team's
-section card, “… to clinch” plus the outcome) and expand to list those matches. A one-match path is omitted from a card that already lists
-that win as an unconditional own-result row. The separate “Clinch without help” section explains that
-winning the listed matches guarantees qualification regardless of other results,
-and notes that some matches fall after the current matchday.
+No-help paths expand to list the specific matches that must be won. In the
+Next matchday view, paths extending beyond the selected slate appear in “Clinch
+without help over the remaining season,” even when the team has an actionable
+card. Paths within the slate remain in the card; a one-match path is omitted
+when the card already lists that win as an unconditional own-result row.
+Standalone no-help paths remain in the bottom section, which explains that
+winning the listed matches guarantees qualification regardless of other results.
+The rest-of-season and final-day presentations retain their existing behavior.
 
 Use `make test-clinching` for focused scenario-proof and presentation checks.
 These checks also run within `make test` and CI, including exhaustive
@@ -629,8 +632,10 @@ on a new line. Groups already show no-help paths, so the rest-of-season view
 omits the repeated no-help footer; a single group also omits the redundant
 "Every clinching scenario requires" list. Separate no-help cards remain when
 the search has not published a scenario group.
-Already-clinched and already-eliminated teams sit in one collapsed disclosure
-in this view, keeping the remaining scenarios near the top of the page.
+Already-clinched and already-eliminated teams sit in one disclosure in both
+views. It starts expanded on desktop and collapsed at 700px or less; resizing
+updates that default until the reader chooses a state. Without JavaScript it
+starts expanded.
 
 ### What is never claimed
 
