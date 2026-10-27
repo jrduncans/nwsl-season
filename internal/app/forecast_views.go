@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -40,17 +41,8 @@ type forecastPage struct {
 	ComparisonName      string
 	ComparisonID        string
 	HasChampionship     bool
-	XGAvailable         int
-	XGCompleted         int
-	XGCoverage          string
-	XGWarning           bool
-	ShowXGCoverage      bool
-	XGFreshness         string
-	XGFreshnessFallback string
-	XGRefreshWarning    bool
 	Freshness           string
 	FreshnessFallback   string
-	DataCutoff          string
 	Iterations          int
 	FixedCount          int
 	Remaining           int
@@ -69,6 +61,14 @@ type forecastPage struct {
 	CanAdd              bool
 	DefaultHomeTeam     string
 	DefaultAwayTeam     string
+}
+
+func (p forecastPage) SimulationCount() string {
+	count := strconv.Itoa(p.Iterations)
+	for i := len(count) - 3; i > 0; i -= 3 {
+		count = count[:i] + "," + count[i:]
+	}
+	return count
 }
 
 type forecastRowView struct {

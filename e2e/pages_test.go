@@ -103,7 +103,7 @@ func TestPages(t *testing.T) {
 		"standings without script":  testStandingsNoScript,
 		"fixture toggle no script":  testFixtureToggleNoScript,
 		"forecast assumption flow":  testForecastAssumptionFlow,
-		"forecast copy link":        testForecastCopyLink,
+		"forecast scenario URL":     testForecastScenarioURL,
 		"forecast compare model":    testForecastCompareModel,
 		"forecast outlook views":    testForecastOutlookViews,
 		"forecast without script":   testForecastNoScript,
@@ -731,12 +731,10 @@ func testForecastAssumptionFlow(t *testing.T, f *fixture) {
 	}
 }
 
-// testForecastCopyLink applies a scenario, copies its link, and opens the
-// copied link to find the same scenario.
-func testForecastCopyLink(t *testing.T, f *fixture) {
-	page := newPageWith(t, pageOptions{Viewport: Desktop, Clipboard: true})
+// testForecastScenarioURL reopens the page URL to find the same scenario.
+func testForecastScenarioURL(t *testing.T, f *fixture) {
+	page := newPageWith(t, pageOptions{Viewport: Desktop})
 	visit(t, page, f.URL(seasonPath("forecast")))
-	expect := playwright.NewPlaywrightAssertions()
 	selectValue(t, page.Locator("#forecast-team"), teamUnderTest)
 	if err := page.Locator("input[name=outcome][value=d]").Check(); err != nil {
 		t.Fatalf("choose draw: %v", err)
@@ -751,55 +749,14 @@ func testForecastCopyLink(t *testing.T, f *fixture) {
 	if err != nil || strings.TrimSpace(assumptionText) == "" {
 		t.Fatalf("applied scenario has no assumption text: %q, %v", assumptionText, err)
 	}
-
-	link := page.Locator("[data-copy-scenario]")
-	label := page.Locator("[data-copy-scenario-label]")
-	if err := expect.Locator(label).ToHaveText("Copy link"); err != nil {
-		t.Error(err)
-	}
-	click(t, link)
-	if err := expect.Locator(page.Locator("[data-scenario-copy-status]")).ToHaveText("Scenario link copied to the clipboard."); err != nil {
-		t.Error(err)
-	}
-	if err := expect.Locator(label).ToHaveText("Copied"); err != nil {
-		t.Error(err)
-	}
-	var copied string
-	evalInto(t, page, `() => navigator.clipboard.readText()`, nil, &copied)
-	var href string
-	evalInto(t, page, `() => document.querySelector("[data-copy-scenario]").href`, nil, &href)
-	if copied != href {
-		t.Errorf("clipboard = %q, want the link's address %q", copied, href)
-	}
-	parsed, err := url.Parse(copied)
-	if err != nil || !strings.HasPrefix(parsed.Path, mountPrefix+"/") || !assumptionURL.MatchString("?"+parsed.RawQuery) {
-		t.Errorf("copied link %q should point at the scenario under %s/", copied, mountPrefix)
-	}
-	if parsed != nil && parsed.Query().Get("p") != mustQuery(t, scenarioURL).Get("p") {
-		t.Errorf("copied link assumes p=%q, the page's URL has p=%q", parsed.Query().Get("p"), mustQuery(t, scenarioURL).Get("p"))
-	}
-	// The label returns to its original text.
-	if err := expect.Locator(label).ToHaveText("Copy link"); err != nil {
-		t.Errorf("label should reset after the copy notice: %v", err)
-	}
-
-	// A fresh page in the same context opens the copied link to the same scenario.
 	reopened, err := page.Context().NewPage()
 	if err != nil {
 		t.Fatalf("new page: %v", err)
 	}
-	visit(t, reopened, copied)
+	visit(t, reopened, scenarioURL)
 	got, err := reopened.Locator(".forecast-scenario .forecast-assumptions").TextContent()
-	if err != nil {
-		t.Fatalf("read reopened assumptions: %v", err)
-	}
-	if got != assumptionText {
-		t.Errorf("copied link shows assumptions %q, want %q", got, assumptionText)
-	}
-	var reopenedHref string
-	evalInto(t, reopened, `() => document.querySelector("[data-copy-scenario]").href`, nil, &reopenedHref)
-	if reopenedHref != href {
-		t.Errorf("reopened page's canonical link = %q, want %q", reopenedHref, href)
+	if err != nil || got != assumptionText {
+		t.Errorf("reopened scenario shows assumptions %q, want %q (%v)", got, assumptionText, err)
 	}
 }
 
@@ -833,7 +790,7 @@ func testForecastCompareModel(t *testing.T, f *fixture) {
 	if err := expect.Locator(page.Locator(`#forecast-comparison option[value="`+modelDefault+`"]`)).ToHaveJSProperty("disabled", true); err != nil {
 		t.Error(err)
 	}
-	click(t, page.Locator(".forecast-comparison-control summary")) // opens the closed disclosure
+	click(t, page.Locator("[data-forecast-controls] > summary"))
 	selectValue(t, page.Locator("#forecast-comparison"), modelComparison)
 	if err := waitForecastURL(page, regexp.MustCompile(`[?&]c=`+modelComparison)); err != nil {
 		t.Fatalf("choosing a comparison should reload with c=: %v", err)
@@ -859,6 +816,8 @@ func testForecastCompareModel(t *testing.T, f *fixture) {
 	}
 	assertNoHorizontalOverflow(t, page)
 
+	// Settings starts closed again after the comparison reload.
+	click(t, page.Locator("[data-forecast-controls] > summary"))
 	// Making the compared model the main model clears the comparison.
 	selectValue(t, page.Locator("#forecast-model"), modelComparison)
 	if err := waitForecastURL(page, regexp.MustCompile(`[?&]m=`+modelComparison)); err != nil {
@@ -914,9 +873,15 @@ func testForecastNoScript(t *testing.T, f *fixture) {
 	if got := fixedResults(t, page); got != 1 {
 		t.Errorf("fixed results = %d, want %d", got, 1)
 	}
-	// The model form's submit button replaces the auto-submit.
-	if err := expect.Locator(page.Locator("[data-forecast-model-form] button[type=submit]")).ToBeAttached(); err != nil {
-		t.Error(err)
+	// Opening settings exposes the plain model form without another disclosure.
+	click(t, page.Locator("[data-forecast-controls] > summary"))
+	selectValue(t, page.Locator("#forecast-comparison"), modelComparison)
+	click(t, page.Locator("[data-forecast-model-form] button[type=submit]"))
+	if err := waitForecastURL(page, regexp.MustCompile(`[?&]c=`+modelComparison)); err != nil {
+		t.Fatalf("plain model form should apply the comparison: %v", err)
+	}
+	if got := fixedResults(t, page); got != 1 {
+		t.Errorf("plain model form dropped the assumption: fixed results = %d", got)
 	}
 }
 

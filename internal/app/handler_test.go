@@ -1416,17 +1416,20 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	requireExact(t, body, "main h1", "Forecast lab")
 	requireElements(t, body, "#forecast-model option[value=xg-poisson-schedule-load-v1][selected]")
 	requireText(t, body, "#forecast-model option[selected]", "xG Poisson (schedule load)")
-	requireText(t, body, ".forecast-model-detail summary .badge", "Default")
+	requireText(t, body, ".forecast-model-detail h3", "About the selected approach")
 	requireText(t, body, "[data-forecast-control-status]", "Changes keep your assumptions")
-	requireText(t, body, ".forecast-comparison-control summary", "Compare another approach")
-	requireText(t, body, ".forecast-evaluation-link", "Model evaluation", "See how the forecast approaches performed historically.")
+	requireText(t, body, "label[for=forecast-comparison]", "Compare with (optional)")
+	requireText(t, body, ".forecast-evaluation-link", "Model evaluation", "See how the approaches performed historically.")
 	requireElements(t, body, `.forecast-evaluation-link a[href="model-evaluation"]`)
-	requireText(t, body, ".forecast-meta", "Possible seasons considered 20", "Data updated")
+	requireText(t, body, "details[data-forecast-controls] .forecast-meta", "Simulations 20", "Matches left 5", "Fixed results 0")
 	requireText(t, body, "table.forecast-table thead", "Projected points", "Home playoff", "Playoffs", "Shield")
 	requireText(t, body, "table.forecast-table .forecast-distribution", "Finish distribution", "Middle 80%")
 	requireText(t, body, ".forecast-builder", "Scenario", "Filter by team", "Choose a match", "Add result", "Apply scenario", "No fixed results")
 	forbidRaw(t, body, "Your scenario", "Build a scenario")
-	requireAttr(t, body, "a[data-copy-scenario]", "aria-label", "Copy scenario link")
+	requireExact(t, body, ".forecast-title-content .note", "Model estimates, not official standings.")
+	requireExact(t, body, "details[data-forecast-controls] summary", "Forecast settings")
+	requireAttr(t, body, ".forecast-results", "aria-label", "Forecast outlook")
+	forbidElements(t, body, "[data-copy-scenario]", "details[data-forecast-controls][open]", "details[data-forecast-controls] details", "#forecast-title", "#forecast-table-panel .forecast-view-note", ".forecast-xg-coverage")
 	requireAttr(t, body, "#forecast-fixture option", "data-home-label", "Home vs Bravo FC")
 	requireAttr(t, body, "#forecast-fixture option", "data-away-label", "Away at Alpha & Co <script>alert(1)</script>")
 	requireText(t, body, ".forecast-outcomes", "Alpha & Co <script>alert(1)</script> win", "Bravo FC win")
@@ -1434,7 +1437,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 	requireElements(t, body, "tr.forecast-playoff-line")
 	forbidRaw(t, body, "Playoff line:")
 	forbidText(t, body, "table.forecast-table thead", "Expected finish")
-	forbidElements(t, body, "[data-auto-submit]", "details.forecast-comparison-control[open]", "[data-fixture-filter]")
+	forbidElements(t, body, "[data-auto-submit]", "[data-fixture-filter]")
 	forbidRaw(t, body, "Show fixtures", "Find fixture", "Add assumption", "Update forecast", "Build a what-if scenario")
 	forbidText(t, body, ".forecast-outcomes", "Home win", "Away win")
 	for _, link := range find(t, body, "a") {
@@ -1462,7 +1465,6 @@ func TestForecastRendersChampionshipOddsWithEightTeamBracket(t *testing.T) {
 	requireText(t, body, "table.forecast-table th[scope=col]", "Championship")
 	requireText(t, body, "table.forecast-comparison-table th[scope=col]", "Championship chance")
 	requireText(t, body, ".forecast-method", "Championship odds continue each simulated table")
-	requireText(t, body, ".forecast-results .section-heading", "Championship chances include a simulated playoff bracket")
 }
 
 func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
@@ -1550,7 +1552,7 @@ func TestForecastComparisonUsesDedicatedDeltaTable(t *testing.T) {
 	// testForecastCompareModel in e2e.
 	requireText(t, body, ".forecast-comparison", "Model comparison", "Results Poisson vs Current pace", "Values read Current pace → Results Poisson.")
 	requireText(t, body, "table.forecast-comparison-table", "Home playoff chance", "more points", "pp higher")
-	requireElements(t, body, "details.forecast-comparison-control[open]")
+	forbidElements(t, body, "details[data-forecast-controls][open]", "details[data-forecast-controls] details")
 	var sections []string
 	for _, section := range find(t, body, "main section") {
 		if class := attr(section, "class"); class == "forecast-comparison" || class == "forecast-results" {
@@ -1614,36 +1616,7 @@ func TestForecastDefaultsToScheduleLoadNotNPXGStrength(t *testing.T) {
 	requireElements(t, response.Body.String(), "#forecast-model option[value=xg-poisson-schedule-load-v1][selected]", "#forecast-model option[value=xg-poisson-npxg-strength-v1]")
 }
 
-func TestForecastShowsXGCoverageOnlyWhenRelevant(t *testing.T) {
-	data := testSeasonData()
-	data.XGoals = []cache.GameXG{{
-		GameID: "completed", Availability: cache.XGAvailable,
-		HomeXG: sql.NullFloat64{Float64: 2.1, Valid: true}, AwayXG: sql.NullFloat64{Float64: 1.0, Valid: true},
-	}}
-	options := Options{Rules: testRules(30), ForecastIterations: 20, Location: time.UTC}
-	for _, test := range []struct {
-		path string
-		want bool
-	}{
-		{path: "/seasons/2026/regular-season/forecast", want: true},
-		{path: "/seasons/2026/regular-season/forecast?v=2&m=results-poisson-v1", want: false},
-		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-v1", want: true},
-		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-recent-form-v1", want: true},
-		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-schedule-load-v1", want: true},
-		{path: "/seasons/2026/regular-season/forecast?v=2&m=xg-poisson-npxg-strength-v1", want: true},
-	} {
-		response := httptest.NewRecorder()
-		NewHandlerWithOptions(fakeStore{season: data}, options).ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.path, nil))
-		if response.Code != http.StatusOK {
-			t.Fatalf("%s: status = %d, want 200; body=%s", test.path, response.Code, response.Body.String())
-		}
-		if got := len(find(t, response.Body.String(), ".forecast-xg-coverage")) > 0; got != test.want {
-			t.Errorf("%s: xG coverage shown = %t, want %t", test.path, got, test.want)
-		}
-	}
-}
-
-func TestForecastShowsIndependentXGFreshnessAndFailure(t *testing.T) {
+func TestForecastOmitsSeparateXGStatus(t *testing.T) {
 	data := testSeasonData()
 	data.XGoals = []cache.GameXG{{
 		GameID: "completed", Availability: cache.XGAvailable,
@@ -1659,8 +1632,7 @@ func TestForecastShowsIndependentXGFreshnessAndFailure(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	requireText(t, response.Body.String(), ".forecast-xg-coverage", "xG data refreshed", "the latest xG refresh failed")
-	requireAttr(t, response.Body.String(), ".forecast-xg-coverage time", "data-local-time", "2026-07-08T20:00:00Z")
+	forbidElements(t, response.Body.String(), ".forecast-xg-coverage", `main time[data-local-time="2026-07-08T20:00:00Z"]`)
 }
 
 func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing.T) {
