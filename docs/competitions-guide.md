@@ -99,8 +99,9 @@ block lists the same targets as plain links, keeping the current page (such as
 Playoffs becomes discoverable when a concrete matchup is cached **or** the
 same season's regular-season inventory is verified complete with safe final
 results. Placeholder rows alone do not expose other knockout stages. Completed
-regular-season standings provide a prominent, plain-link handoff to the same
-season's playoff page while retaining the standings and results.
+regular-season standings link to the same season's playoff page and its
+regular-season results. Pages that have already loaded the selected season's
+regular-season data reuse it for this check; other pages read it from the cache.
 
 ## Readiness and completeness
 
@@ -115,10 +116,11 @@ snapshot:
 
 A public stage with no cached matches renders a normal `200` load-state page
 ("not loaded" or "not published") and never contacts ASA.
-Playoff waiting copy instead says schedule details await ASA publication **or
-discovery**: a cache miss, even following an earlier empty response, cannot prove
-what ASA currently publishes. Failed refreshes explicitly warn that the cache
-may lag published details.
+A playoff page waiting on ASA says ASA hasn't published the schedule **or**
+this site hasn't picked it up, because a cache miss cannot show what ASA
+currently publishes. When the latest Playoffs refresh failed, the load-state
+page and the seeded bracket, including a fully published one, warn that
+published details may be newer than the page.
 
 ## Competition status
 
@@ -164,9 +166,10 @@ expectations before matches arrive. `bracket.BuildWithSeeds` combines the
 catalog's verified seed pairs with resolved official **total** standings.
 Unavailable adjustments or undetermined tiebreaks leave affected seeds TBD;
 an abandoned match, incomplete inventory, missing score or unknown status cannot
-certify entrants. Expected pairings are explicitly labeled separately from
-ASA-published matches. No generated matches, IDs, dates, venues or winners are
-persisted. Placeholder matches do not supply a slot's date or participants.
+certify entrants. Each card is labeled as expected or published by ASA.
+Expectations exist only on the page; placeholder matches supply no date or
+participants. Once ASA has published every match, the bracket drops these
+labels and the expected-pairings note.
 
 With this seed context, partially published matches are matched by participants,
 not by publication or kickoff order. Published sides and results take precedence

@@ -48,6 +48,7 @@ type seasonPage struct {
 	ScheduleNote           string
 	XGWarning              string
 	FormatNotice           string
+	RefreshFailed          bool
 	HasStandings           bool
 	HasFixtures            bool
 	HasXG                  bool
@@ -1064,6 +1065,10 @@ func seededBracketPageFor(page seasonPage, format competition.BracketFormat, dat
 	view := bracket.BuildWithSeeds(format, data.Games, seeds.Seeds)
 	data.Teams = append(append([]standings.Team(nil), data.Teams...), seeds.Teams...)
 	result := bracketPageFrom(page, format, data, view)
+	// A fully published bracket has no expectations left to label.
+	if view.State == bracket.StateReady {
+		return result
+	}
 	result.Seeded = true
 	result.ShowFixtureViewToggle = false
 	result.StandingsPath = standingsPath

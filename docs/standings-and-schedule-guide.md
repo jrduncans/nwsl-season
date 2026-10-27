@@ -66,13 +66,11 @@ it never certifies a rank. The clinching guide explains how proofs treat that ca
 A playoff line is drawn only when the catalog verifies the playoff place threshold (see the
 [competitions guide](competitions-guide.md)).
 
-Safely completed regular seasons link prominently to the same season's playoffs,
-even before ASA matches reach the cache. The playoff page uses resolved official
-total seeds and verified bracket pairs for labeled opening-round expectations.
-Alphabetical display order never supplies an unresolved seed. Verified inventory
-and safe final results are required before any seed-derived entrants appear;
-unknown dates, venues and later participants stay TBD. Standings and regular-season
-results remain accessible through plain links without JavaScript.
+Safely completed regular seasons link to the same season's playoffs, even
+before ASA matches reach the cache. The playoff page shows labeled opening-round
+expectations from resolved official total seeds and verified bracket pairs; a
+tied seed stays TBD rather than taking its alphabetical display position. The
+links are plain links, so they work without JavaScript.
 
 Finished-season tables show `Bye · Home` for seeds earning a first-round bye
 and home semifinal, and `Home` for other seeds earning an opening-round home

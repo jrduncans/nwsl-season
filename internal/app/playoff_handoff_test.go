@@ -16,6 +16,7 @@ import (
 type handoffStore struct {
 	seasonArchiveStore
 	regular, playoffs cache.SeasonData
+	regularReads      *int
 }
 
 func (s handoffStore) Season(_ context.Context, season, stage string) (cache.SeasonData, error) {
@@ -23,6 +24,9 @@ func (s handoffStore) Season(_ context.Context, season, stage string) (cache.Sea
 		return cache.SeasonData{}, nil
 	}
 	if stage == "Regular Season" {
+		if s.regularReads != nil {
+			*s.regularReads++
+		}
 		return s.regular, nil
 	}
 	return s.playoffs, nil
@@ -59,7 +63,8 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 	store.regular.Games[0] = final
 	body = handoffResponse(t, store, "/seasons/2026/regular-season")
 	requireElements(t, body, `.season-handoff a[href="playoffs"]`, `[data-stage-destination="playoffs"]`, ".standings")
-	requireText(t, body, "main", "Final standings", "regular-season results")
+	requireText(t, body, "main", "final standings", "regular-season results")
+	forbidText(t, body, "main", "The regular season is complete")
 	seeds, err := (&application{store: store}).finalPlayoffSeeds(context.Background(), "2026")
 	if err != nil || len(seeds.Seeds) != 16 {
 		t.Fatalf("final seeds = %+v, %v", seeds, err)
@@ -77,18 +82,22 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 			store.playoffs = cache.SeasonData{Games: tc.games}
 			body := handoffResponse(t, store, "/seasons/2026/playoffs")
 			requireElements(t, body, "[data-bracket-state]", `a[href="regular-season"]`)
-			requireText(t, body, "main", "Expected from final seeds", "not published matches", "publication or discovery", "Date and venue TBD", "Seeds 3 and 6")
+			requireText(t, body, "main", "Expected from final seeds", "until ASA publishes the matches", "Date and venue TBD", "Seeds 3 and 6")
 			if strings.Contains(body, "Published by ASA") != tc.published {
 				t.Fatal("source and expected match labels were not distinct")
 			}
 			if strings.Contains(body, "ASA has not published") {
 				t.Fatal("cache absence asserted ASA nonpublication")
 			}
+			requireText(t, body, "main", "picked it up")
+			if strings.Contains(body, "Only matchups ASA has confirmed") != (len(tc.games) > 0) {
+				t.Fatal("partial-publication notice did not match the cached rows")
+			}
 		})
 	}
 	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
 	body = handoffResponse(t, store, "/seasons/2026/playoffs")
-	requireText(t, body, "main", "latest refresh did not succeed")
+	requireText(t, body, "main", "latest playoff refresh did not succeed")
 
 	// Published results replace expectations and advance through the same URL,
 	// even when quarterfinal kickoff order differs from the bracket topology.
@@ -104,10 +113,14 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 	}
 	body = handoffResponse(t, store, "/seasons/2026/playoffs")
 	requireElements(t, body, `[data-bracket-state="ready"]`)
-	requireText(t, body, "main", "ASA-published matches and results", "2–0", "2026-11-07T20:00:00Z")
-	if strings.Count(body, "Published by ASA") != 7 || strings.Contains(body, "Expected from final seeds") {
-		t.Fatal("published matches did not replace expectations")
-	}
+	requireText(t, body, "main", "2–0", "2026-11-07T20:00:00Z")
+	forbidText(t, body, "main", "Expected", "Published by ASA", "View published matches", "did not succeed")
+	// A complete bracket still warns when a later result could be missing.
+	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
+	body = handoffResponse(t, store, "/seasons/2026/playoffs")
+	requireText(t, body, "main", "latest playoff refresh did not succeed")
+	forbidText(t, body, "main", "Expected", "View published matches")
+	store.status.LastAttempt = nil
 	store.playoffs.Games[0].AwayTeamID = seeds.Seeds[8]
 	body = handoffResponse(t, store, "/seasons/2026/playoffs")
 	requireElements(t, body, `[data-bracket-state="format_mismatch"]`, `a[href="playoffs/fixtures"]`, `[aria-label="Published matches"] .fixtures`)
@@ -136,8 +149,8 @@ func TestPlayoffSeedsRequireSafeFinalityAndResolvedOfficialRanks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantComplete := kind == "resolved" || kind == "tied"
-			if result.Complete != wantComplete || (len(result.Seeds) > 0) != (kind == "resolved") {
+			wantCertified := kind == "resolved" || kind == "tied"
+			if result.Certified != wantCertified || (len(result.Seeds) > 0) != (kind == "resolved") {
 				t.Fatalf("%s seeds = %+v", kind, result)
 			}
 		})
@@ -153,4 +166,29 @@ func TestPublishedMatchWithUnresolvedSeedsIsNotAMismatch(t *testing.T) {
 	body := handoffResponse(t, store, "/seasons/2026/playoffs")
 	requireElements(t, body, `[data-bracket-state="unresolved"]`, `[aria-label="Published matches"] .fixtures`, `a[href="regular-season"]`)
 	forbidText(t, body, "main", "Bracket format mismatch", "may disagree with the expected bracket")
+}
+
+func TestPlayoffWaitingPageWarnsAfterFailedRefresh(t *testing.T) {
+	// Before the finale the playoff page is a load-state message, which must
+	// still say when the latest refresh failed.
+	store := handoffStore{regular: resolvedHandoffSeason()}
+	store.regular.Games[0].Status = fixtures.PreMatchStatus
+	store.regular.Games[0].HomeScore, store.regular.Games[0].AwayScore = sql.NullInt64{}, sql.NullInt64{}
+	body := handoffResponse(t, store, "/seasons/2026/playoffs")
+	requireText(t, body, "main", playoffPublicationNotice)
+	forbidText(t, body, "main", "did not succeed")
+	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
+	body = handoffResponse(t, store, "/seasons/2026/playoffs")
+	requireElements(t, body, ".data-warning")
+	requireText(t, body, "main", "latest playoff refresh did not succeed", playoffPublicationNotice)
+}
+
+func TestRegularSeasonPageReusesLoadedDataForPlayoffSelector(t *testing.T) {
+	reads := 0
+	store := handoffStore{regular: resolvedHandoffSeason(), regularReads: &reads}
+	body := handoffResponse(t, store, "/seasons/2026/regular-season")
+	requireElements(t, body, `[data-stage-destination="playoffs"]`)
+	if reads != 1 {
+		t.Fatalf("regular-season reads = %d, want 1", reads)
+	}
 }

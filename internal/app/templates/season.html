@@ -2,7 +2,8 @@
 <div class="title-row">
   <div>{{template "seasonContext" .}}<h1>{{if .ShowUpcomingSeason}}Season overview{{else if .HasStandings}}Standings{{else}}{{.Stage}}{{end}}</h1></div>
 </div>
-{{if .PlayoffsPath}}<section class="season-handoff" aria-labelledby="playoff-handoff-title"><h2 id="playoff-handoff-title">Next: the playoffs</h2><p>The regular season is complete. <a href="{{.PlayoffsPath}}">View the {{.Season}} playoff bracket</a> for expected opening-round pairings and published schedule details.</p><p>Final standings remain below. <a href="{{.FixturesPath}}">View regular-season results</a>.</p></section>{{end}}
+{{if .PlayoffsPath}}<section class="season-handoff" aria-labelledby="playoff-handoff-title"><h2 id="playoff-handoff-title">Playoffs</h2><p><a href="{{.PlayoffsPath}}">View the {{.Season}} playoff bracket</a> · <a href="{{.FixturesPath}}">View regular-season results</a></p></section>{{end}}
+{{if .RefreshFailed}}<p class="data-warning">The latest playoff refresh did not succeed; published details may be newer than this page.</p>{{end}}
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 {{if .XGWarning}}<p class="data-warning"><strong>Incomplete xG data:</strong> {{.XGWarning}}</p>{{end}}
 {{if .FormatNotice}}<p class="note">{{.FormatNotice}}{{if and (not .HasStandings) .HasFixtures}} <a href="{{.FixturesPath}}">View matches.</a>{{end}}</p>{{end}}

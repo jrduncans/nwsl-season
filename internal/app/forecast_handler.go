@@ -367,7 +367,11 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
 	base := forecastURL(r.URL.Path, season, scope.Entry.Slug, forecaststate.State{ModelID: result.Model.ID, ComparisonModelID: state.ComparisonModelID, Fixed: map[string]simulation.Outcome{}}, "")
 	canonical := forecastURL(r.URL.Path, season, scope.Entry.Slug, state, "")
-	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, season, scope.Stage, season, scope.Entry.Slug, "/forecast")
+	var loadedRegular *cache.SeasonData
+	if scope.Stage == "Regular Season" {
+		loadedRegular = &data
+	}
+	seasonChoices, stageChoices, err := a.competitionSelectors(r.Context(), r.URL.Path, season, scope.Stage, season, scope.Entry.Slug, "/forecast", loadedRegular)
 	if err != nil {
 		return forecastPage{}, err
 	}
