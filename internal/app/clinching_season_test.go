@@ -225,7 +225,7 @@ func TestClinchingGroupsMergeIdenticalTwoMatchResultsIntoAPointsTotal(t *testing
 		testScenarioClause(c("a", 1), c("b", 4), c("h", 1)),
 	}
 	groups := clinchingGroups(clauses, "was", teams, games)
-	if len(groups) != 2 || groups[0].Heading != "If WAS earns at least 1 point across both matches: at KC and vs CHI" || len(groups[0].Summary.Combinations()) != 1 || len(groups[0].Summary.Combinations()[0]) != 0 {
+	if len(groups) != 2 || groups[0].Heading != "If WAS earns 1+ points (at KC, vs CHI)" || len(groups[0].Summary.Combinations()) != 1 || len(groups[0].Summary.Combinations()[0]) != 0 {
 		t.Fatalf("groups = %+v", groups)
 	}
 	assertScenarioCoverage(t, clauses, groups, games, true)

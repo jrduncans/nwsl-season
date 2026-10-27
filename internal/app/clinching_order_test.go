@@ -19,7 +19,7 @@ func TestClinchingFixturePresentationOrder(t *testing.T) {
 	if got := noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: ids}, "uta", games, teams); got != "at NJY and vs SEA" {
 		t.Fatal(got)
 	}
-	if got := partsText(rivalFixtureParts(ids, "uta", teams, games)); got != "(at NJY and vs SEA)" {
+	if got := partsText(rivalFixtureParts(ids, "uta", teams, games)); got != "(at NJY, vs SEA)" {
 		t.Fatal(got)
 	}
 	r := scenarioRequirement{GameID: ids[0], SecondGameID: ids[1], TeamID: "uta", Points: 4}

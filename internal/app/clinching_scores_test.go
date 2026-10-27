@@ -27,14 +27,14 @@ func TestScoreConditionIndividualMarginsAreExact(t *testing.T) {
 		want    string
 		margin  int
 	}{
-		{"one win versus a draw", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 2}, 12, "AAA must win by at least 12 goals", 12},
-		{"head to head counts twice", map[string]cache.Game{"ab": game("a", "b")}, map[string]uint8{"ab": 1}, 4, "AAA must win by at least 2 goals", 2},
-		{"odd head to head threshold", map[string]cache.Game{"ab": game("a", "b")}, map[string]uint8{"ab": 1}, 5, "AAA must win by at least 3 goals", 3},
-		{"both win", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 1}, 1, "AAA must win by a larger margin than BBB", 0},
-		{"both win equality sufficient", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 1}, 0, "AAA must win by at least as large a margin as BBB", 0},
-		{"unequal inventories", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y"), "b2": game("x", "b")}, map[string]uint8{"a": 1, "b": 2, "b2": 2}, 4, "AAA must win by at least 4 goals", 4},
-		{"two matches with fixed draws", map[string]cache.Game{"a": game("a", "x"), "a2": game("y", "a"), "b": game("b", "x")}, map[string]uint8{"a": 1, "a2": 2, "b": 2}, 8, "AAA must win by at least 8 goals", 8},
-		{"head to head and other draws", map[string]cache.Game{"ab": game("a", "b"), "a2": game("x", "a"), "b2": game("b", "y")}, map[string]uint8{"ab": 1, "a2": 2, "b2": 2}, 9, "AAA must win by at least 5 goals", 5},
+		{"one win versus a draw", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 2}, 12, "AAA wins by 12+", 12},
+		{"head to head counts twice", map[string]cache.Game{"ab": game("a", "b")}, map[string]uint8{"ab": 1}, 4, "AAA wins by 2+", 2},
+		{"odd head to head threshold", map[string]cache.Game{"ab": game("a", "b")}, map[string]uint8{"ab": 1}, 5, "AAA wins by 3+", 3},
+		{"both win", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 1}, 1, "", 0},
+		{"both win equality sufficient", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 1}, 0, "", 0},
+		{"unequal inventories", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y"), "b2": game("x", "b")}, map[string]uint8{"a": 1, "b": 2, "b2": 2}, 4, "AAA wins by 4+", 4},
+		{"two matches with fixed draws", map[string]cache.Game{"a": game("a", "x"), "a2": game("y", "a"), "b": game("b", "x")}, map[string]uint8{"a": 1, "a2": 2, "b": 2}, 8, "AAA wins by 8+", 8},
+		{"head to head and other draws", map[string]cache.Game{"ab": game("a", "b"), "a2": game("x", "a"), "b2": game("b", "y")}, map[string]uint8{"ab": 1, "a2": 2, "b2": 2}, 9, "AAA wins by 5+", 5},
 		{"two target matches are aggregate", map[string]cache.Game{"a": game("a", "x"), "a2": game("y", "a"), "b": game("b", "y")}, map[string]uint8{"a": 1, "a2": 4, "b": 2}, 8, "", 0},
 		{"rival loss contributes to swing", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1, "b": 4}, 4, "", 0},
 		{"unknown rival result", map[string]cache.Game{"a": game("a", "x"), "b": game("b", "y")}, map[string]uint8{"a": 1}, 12, "", 0},
@@ -113,7 +113,7 @@ func TestScoreConditionCascadesAndRemainingCounts(t *testing.T) {
 	games := map[string]cache.Game{"ab": {HomeTeamID: "a", AwayTeamID: "b", Status: "PreMatch"}, "a2": {HomeTeamID: "a", AwayTeamID: "x", Status: "PreMatch"}}
 	r := scenarioRequirement{Score: &c}
 	presentScore(&r, labels, games, map[string]uint8{"ab": 1, "a2": 1}, scenarioHistory{Maximum: 6, Scope: "test history"})
-	if r.Text != want || r.Historical != "" {
+	if r.Text != "AAA finishes ahead of BBB on tiebreakers" || !strings.Contains(partsText(r.Explanation), want) || r.Historical != "" {
 		t.Fatal("cascade was hidden or incorrectly simplified")
 	}
 	explanation := partsText(r.Explanation)
@@ -209,7 +209,7 @@ func TestRivalCascadeHistoricalMarginIncludesEqualityBranch(t *testing.T) {
 			if condition.Historical != tt.want {
 				t.Fatalf("historical note = %q, want %q", condition.Historical, tt.want)
 			}
-			if condition.Text != scoreConditionText(c, labels) {
+			if condition.Text != "POR finishes ahead of LA on tiebreakers" || !strings.Contains(partsText(condition.Explanation), scoreConditionText(c, labels)) {
 				t.Fatalf("full tiebreak cascade was replaced: %s", condition.Text)
 			}
 		})

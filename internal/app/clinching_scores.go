@@ -246,6 +246,11 @@ func presentScore(r *scenarioRequirement, labels map[string]string, games map[st
 	c := *r.Score
 	r.Parts = scoreConditionParts(c, labels)
 	r.Explanation = scoreExplanation(c, labels, games)
+	// Exact levels keep their full wording; other rows move it into the disclosure.
+	if !c.Levels[0].ExactOnly {
+		r.Explanation = append(append(r.Parts, scenarioRequirementPart{Text: ".", NoSpaceBefore: true}), r.Explanation...)
+		r.Parts = []scenarioRequirementPart{teamPart(c.TeamID, labels), {Text: "finishes ahead of"}, teamPart(c.RivalID, labels), {Text: "on tiebreakers"}}
+	}
 	parts, margin := individualMargin(c, labels, games, assumed)
 	if len(parts) > 0 {
 		r.Parts = parts
@@ -342,17 +347,7 @@ func individualMargin(c scenarios.ScoreCondition, labels map[string]string, game
 		rivalWinID = id
 	}
 	if rivalWinID != "" {
-		if headToHead {
-			return nil, 0
-		}
-		phrase := "must win by a larger margin than"
-		switch {
-		case minimum == 0:
-			phrase = "must win by at least as large a margin as"
-		case minimum != 1:
-			return nil, 0
-		}
-		return append(parts, scenarioRequirementPart{Text: phrase}, teamPart(c.RivalID, labels)), 0
+		return nil, 0
 	}
 	if headToHead {
 		minimum = (minimum + 1) / 2
@@ -360,7 +355,7 @@ func individualMargin(c scenarios.ScoreCondition, labels map[string]string, game
 	if minimum < 1 {
 		return nil, 0
 	}
-	return append(parts, scenarioRequirementPart{Text: fmt.Sprintf("must win by at least %d goals", minimum)}), minimum
+	return append(parts, scenarioRequirementPart{Text: fmt.Sprintf("wins by %d+", minimum)}), minimum
 }
 
 func fixedScenarioMasks(fixed map[string]clinching.Outcome) map[string]uint8 {

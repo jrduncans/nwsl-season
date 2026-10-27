@@ -956,7 +956,7 @@ func TestClinchingPageMovesLongerNoHelpPathsToSeasonSection(t *testing.T) {
 	body := response.Body.String()
 	requireText(t, body, ".clinching-no-help h2", "Clinch without help over the remaining season")
 	requireText(t, body, ".clinching-no-help summary", "Win 3 matches to clinch the Shield", "Win 2 matches to clinch a home playoff game", "Win 1 match to clinch a playoff spot")
-	requireText(t, body, ".clinching-no-help .clinching-fixture-list", "Win each of these remaining matches: (vs Bravo FC, vs Bravo FC, and vs Bravo FC).", "Win each of these remaining matches: (vs Bravo FC and vs Bravo FC).", "Win each of these remaining matches: at Alpha & Co <script>alert(1)</script>.")
+	requireText(t, body, ".clinching-no-help .clinching-fixture-list", "Win each of these remaining matches: (vs Bravo FC, vs Bravo FC, vs Bravo FC).", "Win each of these remaining matches: (vs Bravo FC, vs Bravo FC).", "Win each of these remaining matches: at Alpha & Co <script>alert(1)</script>.")
 	if got := len(find(t, body, ".clinching-no-help summary")); got != 3 {
 		t.Fatalf("no-help paths = %d, want 3", got)
 	}
