@@ -823,3 +823,9 @@ th:nth-child(2) { text-align: left; }
 .seeding-scenario-preview { display: block; margin-top: .3rem; color: var(--muted); font-size: .875rem; }
 .seeding-scenario[open] .seeding-scenario-preview { display: none; }
 .seeding-scenario-body { padding: 0 1rem 1rem; }
+
+@media (max-width: 700px) {
+  .clinching-view-three .segmented { align-items: stretch; }
+  .clinching-view-three .segmented-options { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .clinching-view-three .segmented-options label > span { display: flex; align-items: center; justify-content: center; min-height: 44px; white-space: normal; text-align: center; }
+}

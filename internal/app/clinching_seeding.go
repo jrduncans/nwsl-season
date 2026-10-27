@@ -613,7 +613,7 @@ func newSeedingOwnMatches(team string, fixtureIDs []string, fixed map[string]cli
 			m.ids = append(m.ids, id)
 		}
 	}
-	sort.SliceStable(m.ids, func(i, j int) bool { return games[m.ids[i]].KickoffUTC < games[m.ids[j]].KickoffUTC })
+	m.ids = fixtureIDsInKickoffOrder(m.ids, games)
 	m.ids = m.ids[:min(len(m.ids), seedingOwnMatchLimit)]
 	for _, id := range m.ids {
 		results := [3]uint8{1, 2, 4}
@@ -887,8 +887,7 @@ func seedingOverflow(paths [][]scenarioRequirement, labels map[string]string, ga
 		}
 	}
 	sort.SliceStable(order, func(a, b int) bool {
-		x, y := games[items[order[a]].requirement.GameID], games[items[order[b]].requirement.GameID]
-		return x.KickoffUTC < y.KickoffUTC
+		return fixtureBefore(items[order[a]].requirement.GameID, items[order[b]].requirement.GameID, games)
 	})
 	some := map[string]bool{}
 	seenMatches := map[string]bool{}

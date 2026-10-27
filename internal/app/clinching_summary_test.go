@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -104,6 +105,11 @@ func TestClinchingSeasonSummaryGroupsKCAndUtahLosses(t *testing.T) {
 			expanded := [][]scenarioRequirement{{}}
 			rivals := 0
 			for _, group := range summary.Groups {
+				if group.Rival == nil && len(summaryRivals(group.Expression.Combinations(), team, games)) > 1 {
+					if !strings.HasPrefix(group.Heading, "Combined conditions involving ") || partsText(group.HeadingParts) != group.Heading {
+						t.Fatalf("ambiguous combined-rival heading: %q / %q", group.Heading, partsText(group.HeadingParts))
+					}
+				}
 				expanded = summaryProduct(expanded, group.Expression.Combinations())
 				if group.Rival != nil {
 					rivals++
@@ -276,4 +282,49 @@ func TestClinchingSummaryRivalRewritePreservesScoresAndResults(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestClinchingCombinedRivalHeadingPreservesGrouping(t *testing.T) {
+	games := map[string]cache.Game{"sea-por": {HomeTeamID: "sea", AwayTeamID: "por"}, "la-bay": {HomeTeamID: "la", AwayTeamID: "bay"}}
+	teams := map[string]string{"own": "OWN", "sea": "SEA", "por": "POR", "uta": "UTA", "la": "LA", "bay": "BAY"}
+	coupled := [][]scenarioRequirement{}
+	for _, mask := range []uint8{maskHomeWin, maskAwayWin} {
+		coupled = append(coupled, []scenarioRequirement{summaryFixture("sea-por", mask), summaryScore("own", "sea", int(mask), false), summaryScore("own", "por", int(mask), false), summaryScore("own", "uta", int(mask), false)})
+	}
+	paths := summaryProduct(coupled, [][]scenarioRequirement{{summaryFixture("la-bay", maskHomeWin), summaryScore("own", "la", 1, false)}, {summaryFixture("la-bay", maskAwayWin), summaryScore("own", "la", 4, false)}})
+	expression := scenarioExpression{}
+	for _, path := range paths {
+		expression.Alternatives = append(expression.Alternatives, scenarioExpression{Conditions: path})
+	}
+	grouped := groupSeasonSummary(expression, "own", teams, games)
+	if grouped == nil {
+		t.Fatal("expected independent condition groups")
+	}
+	expanded := [][]scenarioRequirement{{}}
+	found := false
+	for _, group := range grouped.Groups {
+		expanded = summaryProduct(expanded, group.Expression.Combinations())
+		if group.Heading == "Combined conditions involving POR, SEA, and UTA" {
+			found = true
+			if got := partsText(group.HeadingParts); got != group.Heading {
+				t.Fatal(got)
+			}
+			tokens := 0
+			for _, part := range group.HeadingParts {
+				if part.Team != nil {
+					tokens++
+					if part.Team.LogoURL == "" {
+						t.Fatal("lost crest")
+					}
+				}
+			}
+			if tokens != 3 {
+				t.Fatal("lost team tokens")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("missing explicit combined-rival heading: %+v", grouped)
+	}
+	assertSameSummaryPaths(t, expanded, paths)
 }

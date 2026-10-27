@@ -49,9 +49,9 @@ func TestClinchingRivalFixtureCrests(t *testing.T) {
 	application := newApplicationWithForecastExecutor(nil, Options{Location: time.UTC}, nil)
 	teams := map[string]string{"kc": "KC", "lou": "LOU", "was": "WAS", "lou-other": "LOU"}
 	games := map[string]cache.Game{
-		"away":      {HomeTeamID: "lou", AwayTeamID: "kc"},
-		"home":      {HomeTeamID: "kc", AwayTeamID: "was"},
-		"same-code": {HomeTeamID: "lou-other", AwayTeamID: "kc"},
+		"away":      {HomeTeamID: "lou", AwayTeamID: "kc", KickoffUTC: "2026-10-26T19:00:00Z"},
+		"home":      {HomeTeamID: "kc", AwayTeamID: "was", KickoffUTC: "2026-10-25T19:00:00Z"},
+		"same-code": {HomeTeamID: "lou-other", AwayTeamID: "kc", KickoffUTC: "2026-10-27T19:00:00Z"},
 	}
 	for _, tt := range []struct {
 		name      string

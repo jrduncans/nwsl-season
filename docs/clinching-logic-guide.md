@@ -342,6 +342,13 @@ centered beside the code without shifting neighboring words.
 Inside an already named card, own-result headings omit the subject: “Win at
 [HOU token]”. Multiple fixtures retain their venues and chronological order.
 Fixture and score tokens come from stored IDs, never parsed display strings.
+Shared fixture lists, points conditions, own-result headings and complete scenario
+requirements use parsed kickoff order, breaking ties by match ID (an unavailable
+kickoff uses the zero timestamp). Whole result requirements move together, keeping
+their outcome masks and score predicates within the same logical conjunction.
+Combined-rival headings that remain in visible factored summaries say “Combined
+conditions involving SEA, POR, and UTA,” with the existing crest/code tokens.
+Single-rival compact statements and oversized-group navigation are unchanged.
 Results
 from one match with identical outside help share a heading, such as “draws or
 loses.” Two-match result orderings share a heading only when their outside help
@@ -452,6 +459,11 @@ pending match lacks a matchday, it is the most matches any team has left.
 | Three or more | Next-slate scenarios only, as before. |
 | Two (penultimate matchweek) | A segmented control, **Next matchday \| Rest of season \| Seeding**, defaulting to Next matchday. The view is the `view` query value (`next-matchday`, `rest-of-season` or `seeding`). |
 | One (decision day) | **Rest of season \| Seeding**, defaulting to Rest of season: the next slate is the rest of the season. Decision day means the two slates name the same matches. |
+
+At widths of 700px or less, the three-option view switch stacks its choices
+in equal-width rows with at least 44px touch targets. Native radio selection,
+focus indicators and GET submission (including Apply without JavaScript) remain.
+The two-option decision-day switch and desktop layout are unchanged.
 
 Playoff-elimination cards use the selected slate, including all remaining matches
 in the rest-of-season view. There is no line claiming the list is complete. When
