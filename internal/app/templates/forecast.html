@@ -86,11 +86,11 @@
           <tr class="forecast-heatmap-groups"><th scope="col" rowspan="2">Team</th>{{range .HeatmapGroups}}<th scope="colgroup" colspan="{{.Span}}"{{if .OutsidePlayoffs}} class="forecast-heatmap-outside"{{end}}>{{.Label}}</th>{{end}}</tr>
           <tr>{{range .HeatmapPositions}}<th scope="col" class="{{if .OutsidePlayoffs}}forecast-heatmap-outside {{end}}{{if .HomeBoundary}}forecast-heatmap-home-boundary {{end}}{{if .PlayoffBoundary}}forecast-heatmap-playoff-boundary{{end}}"><span{{if eq .Position 1}} aria-label="1, Shield"{{end}}>{{.Position}}</span></th>{{end}}</tr>
         </thead>
-        <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th>{{range .Heatmap}}<td class="{{if .OutsidePlayoffs}}forecast-heatmap-outside {{end}}{{if .HomeBoundary}}forecast-heatmap-home-boundary {{end}}{{if .PlayoffBoundary}}forecast-heatmap-playoff-boundary{{end}}"><span class="forecast-heatmap-value" style="--forecast-probability: {{.Intensity}}">{{if .Sampled}}{{.Probability}}{{else}}<span aria-hidden="true">·</span><span class="visually-hidden">No simulated finishes</span>{{end}}</span></td>{{end}}</tr>{{end}}</tbody>
+        <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th>{{range .Heatmap}}<td class="{{if .OutsidePlayoffs}}forecast-heatmap-outside {{end}}{{if .HomeBoundary}}forecast-heatmap-home-boundary {{end}}{{if .PlayoffBoundary}}forecast-heatmap-playoff-boundary{{end}}"><span class="forecast-heatmap-value" style="--forecast-probability: {{.Intensity}}">{{if .Sampled}}{{.Probability}}{{else}}<span class="visually-hidden">No simulated finishes</span>{{end}}</span></td>{{end}}</tr>{{end}}</tbody>
       </table>
     </div>
     <div class="forecast-heatmap-legend" aria-hidden="true"><span>Playoffs <span class="forecast-heatmap-gradient"></span></span><span>Outside playoffs <span class="forecast-heatmap-gradient forecast-heatmap-outside"></span></span><span>Lighter → darker: 0% → 100%</span></div>
-    <p id="forecast-heatmap-key" class="note forecast-heatmap-key">A dot means no simulated finishes, not a mathematically impossible finish. Small positive chances appear as &lt;0.1%.</p>
+    <p id="forecast-heatmap-key" class="note forecast-heatmap-key">A blank cell means no simulated finishes, not a mathematically impossible finish. Small positive chances appear as &lt;0.1%.</p>
   </div>
 </section>
 

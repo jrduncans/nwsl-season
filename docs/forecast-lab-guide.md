@@ -415,7 +415,7 @@ Column labels and boundaries distinguish home-playoff places and the playoff
 cutoff; first place is identified as the Shield without adding another color.
 
 Every position stays visible, including rare and unsampled finishes. A positive
-share below the display precision is labelled `<0.1%`; a dot means no simulated
+share below the display precision is labelled `<0.1%`; a blank cell means no simulated
 finishes and is identified that way for screen readers. Neither is a proof that
 the finish is impossible. The probabilities follow the forecast's existing
 rounding, so displayed values may not sum to exactly 100%.
