@@ -155,8 +155,8 @@ func rivalFixtureMask(need scenarios.RivalNeed, games map[string]cache.Game) (ui
 // its condition ("or earns 4 points if NJY gains 1+ goal difference on SD").
 func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[string]cache.Game) clinchingRivalView {
 	n := len(need.GameIDs)
-	fixtures := noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: need.GameIDs}, need.RivalID, games, teams)
 	fixtureParts := rivalFixtureParts(need.GameIDs, need.RivalID, teams, games)
+	fixtures := partsText(fixtureParts)
 	base := ""
 	switch limit := need.MaxPoints; {
 	case limit < 0:
@@ -189,12 +189,8 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 		if !stated {
 			resultParts = append(resultParts, fixtureParts...)
 		}
-		switch {
-		case stated:
-		case n == 1:
+		if !stated && n > 0 {
 			record += " " + fixtures
-		case n > 1:
-			record += " (" + fixtures + ")"
 		}
 		lead := record
 		if stated {
@@ -251,12 +247,6 @@ func rivalFixtureParts(ids []string, rival string, teams map[string]string, game
 		switch {
 		case i == 0 && len(ids) > 1:
 			parts[0].Text = "(" + parts[0].Text
-		case i > 0 && count == 2:
-			parts[i*2].Text = ", " + parts[i*2].Text
-			parts[i*2].NoSpaceBefore = true
-		case i > 0 && i == count-1:
-			parts[i*2].Text = ", " + parts[i*2].Text
-			parts[i*2].NoSpaceBefore = true
 		case i > 0:
 			parts[i*2].Text = ", " + parts[i*2].Text
 			parts[i*2].NoSpaceBefore = true

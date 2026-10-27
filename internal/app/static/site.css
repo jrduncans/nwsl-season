@@ -166,10 +166,8 @@ th:nth-child(2) { text-align: left; }
 .clinching-exact-paths > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 .clinching-combination { display: block; margin-block: .35rem; }
 .clinching-condition { display: block; padding: .35rem 0; white-space: normal; line-height: 1.7; }
-/* Score sentences wrap naturally and keep their equality branches visible. */
+/* Score sentences wrap naturally. */
 .clinching-condition-score { min-width: 0; }
-.clinching-condition-score > span + span { margin-left: .2rem; }
-.clinching-condition-score > span.clinching-attached { margin-left: 0; }
 .clinching-condition + .clinching-condition { border-top: 1px solid var(--line); }
 .clinching-condition + .clinching-condition::before { margin-right: .2rem; color: var(--muted); content: "and "; font-size: .75rem; font-weight: 800; }
 .clinching-team-token { display: inline-block; vertical-align: baseline; color: var(--green-deep); font-size: .85rem; font-weight: 800; letter-spacing: .03em; white-space: nowrap; }
@@ -795,7 +793,7 @@ th:nth-child(2) { text-align: left; }
 .clinching-score-disclosure > summary { position: relative; display: block; width: fit-content; min-height: 2.75rem; padding: .5rem .75rem .5rem 1.5rem; border-radius: .25rem; cursor: pointer; color: var(--green-deep); font-size: .8rem; font-weight: 600; line-height: 1.5; list-style: none; }
 .clinching-score-disclosure > summary:hover { background: var(--green-soft); }
 .clinching-score-disclosure > summary::-webkit-details-marker { display: none; }
-.clinching-score-disclosure > summary::before { position: absolute; left: .45rem; content: "▸"; color: var(--green); font-size: 1.1rem; }
+.clinching-score-disclosure > summary::before { position: absolute; top: .5rem; left: .45rem; content: "▸"; color: var(--green); font-size: 1.1rem; line-height: 1.2rem; }
 .clinching-score-disclosure[open] > summary::before { content: "▾"; }
 .clinching-score-disclosure > summary:focus-visible, .seeding-chance-help > summary:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; }
 .clinching-score-disclosure > div { margin-top: .35rem; padding-left: .65rem; border-left: 2px solid var(--line); }

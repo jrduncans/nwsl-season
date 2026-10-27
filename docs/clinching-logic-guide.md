@@ -531,7 +531,7 @@ explicit wording. A proved single-match winning margin is shown as “wins by
 historical margin note remains in the disclosure.
 
 Two-match exact rival totals use result pairs, such as “wins one, draws one”.
-Own minimums use “Earn 1+ points” with the fixtures; rival maximums and no-help
+Two-match minimums use “Earn 1+ points” for the card’s team and “[team] earns 1+ points” elsewhere, each with the fixtures; rival maximums and no-help
 win counts retain their existing wording. Fixture parentheticals separate
 fixtures with commas. Seeding explains that selecting a result does not fix its
 score when the user has selected results.
@@ -549,10 +549,10 @@ therefore restates each result one rival at a time, which a reader can hold in
 their head:
 
 > **One win and one loss (named fixtures)** — Clinches if all of:
-> - SD earns at most 3 points (vs BOS, at BAY), or wins one, draws one, and
->   NJY finishes ahead of SD on tiebreakers
-> - WAS doesn't win both matches (at KC, vs CHI), or wins both matches, and
->   NJY finishes ahead of WAS on tiebreakers
+> - At least one of: SD earns at most 3 points (vs BOS, at BAY); or SD wins
+>   one, draws one (vs BOS, at BAY) and NJY finishes ahead of SD on tiebreakers
+> - At least one of: WAS doesn't win both matches (at KC, vs CHI); or WAS wins
+>   both matches (at KC, vs CHI) and NJY finishes ahead of WAS on tiebreakers
 
 This is exact, not a simplification, because of two facts:
 
@@ -617,7 +617,7 @@ alternatives remain. The pass applies only within the existing 256-path summary
 bound. A complete grouped summary replaces the duplicate exact-scenario
 disclosure; the disclosure remains available when a summary is omitted for size.
 
-Rows merge under one heading as clause groups do ("one win and one loss", "earns at least 1 point from these two matches") when their rivals'
+Rows merge under one heading as clause groups do ("one win and one loss", "earns 1+ points") when their rivals'
 needs are identical. Rivals are listed in standings order. A row that needs no
 help ends after its heading.
 

@@ -130,11 +130,7 @@ func requirementText(r scenarioRequirement, perspective string, teams map[string
 		return scoreConditionText(*r.Score, teams)
 	}
 	if r.SecondGameID != "" {
-		unit := "points"
-		if r.Points == 1 {
-			unit = "point"
-		}
-		return fmt.Sprintf("%s earns at least %d %s across both matches: %s", teams[r.TeamID], r.Points, unit, noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{r.GameID, r.SecondGameID}}, r.TeamID, games, teams))
+		return partsText(requirementParts(r, perspective, teams, games))
 	}
 	outcomes := []clinching.Outcome{}
 	for i, o := range scenarioOutcomes {
@@ -181,40 +177,8 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 		return scoreConditionParts(*r.Score, teams)
 	}
 	if r.SecondGameID != "" {
-		unit := "points"
-		if r.Points == 1 {
-			unit = "point"
-		}
-		parts := []scenarioRequirementPart{
-			{Team: &scenarioTeamToken{Code: teams[r.TeamID], LogoURL: clubLogoURL(r.TeamID)}},
-			{Text: fmt.Sprintf("earns at least %d %s across both matches:", r.Points, unit)},
-		}
-		fixtures := 0
-		for _, gameID := range fixtureIDsInKickoffOrder([]string{r.GameID, r.SecondGameID}, games) {
-			game, ok := games[gameID]
-			if !ok {
-				continue
-			}
-			opponent, venue := "", ""
-			switch {
-			case game.HomeTeamID == r.TeamID:
-				opponent, venue = game.AwayTeamID, "vs"
-			case game.AwayTeamID == r.TeamID:
-				opponent, venue = game.HomeTeamID, "at"
-			}
-			if opponent == "" {
-				continue
-			}
-			if fixtures > 0 {
-				venue = "and " + venue
-			}
-			parts = append(parts,
-				scenarioRequirementPart{Text: venue},
-				scenarioRequirementPart{Team: &scenarioTeamToken{Code: teams[opponent], LogoURL: clubLogoURL(opponent)}},
-			)
-			fixtures++
-		}
-		return parts
+		parts := []scenarioRequirementPart{teamPart(r.TeamID, teams), {Text: fmt.Sprintf("earns %d+ points", r.Points)}}
+		return append(parts, rivalFixtureParts(fixtureIDsInKickoffOrder([]string{r.GameID, r.SecondGameID}, games), r.TeamID, teams, games)...)
 	}
 	outcomes := []clinching.Outcome{}
 	for i, outcome := range scenarioOutcomes {
@@ -902,10 +866,10 @@ func combineOwnPairs(groups []clinchingGroupView, team string, teams map[string]
 			continue
 		}
 		results := [2]int{ownPoints(group.Own[0], team, games), ownPoints(group.Own[1], team, games)}
-		matches := noHelpFixtureText(clinching.NoHelpPath{FixtureIDs: []string{group.Own[0].GameID, group.Own[1].GameID}}, team, games, teams)
+		matches := partsText(rivalFixtureParts(fixtureIDsInKickoffOrder([]string{group.Own[0].GameID, group.Own[1].GameID}, games), team, teams, games))
 		verbs := map[int]string{0: "loses", 1: "draws", 3: "wins"}
 		if results[0] == results[1] {
-			group.Heading = fmt.Sprintf("If %s %s both matches (%s)", teams[team], verbs[results[0]], matches)
+			group.Heading = fmt.Sprintf("If %s %s both matches %s", teams[team], verbs[results[0]], matches)
 		} else {
 			merged := false
 			for i := range out {
@@ -918,7 +882,7 @@ func combineOwnPairs(groups []clinchingGroupView, team string, teams map[string]
 				}
 				prior.AlternativeOwn = group.Own
 				nouns := map[int]string{0: "loss", 1: "draw", 3: "win"}
-				prior.Heading = fmt.Sprintf("If %s has one %s and one %s (%s)", teams[team], nouns[max(results[0], results[1])], nouns[min(results[0], results[1])], matches)
+				prior.Heading = fmt.Sprintf("If %s has one %s and one %s %s", teams[team], nouns[max(results[0], results[1])], nouns[min(results[0], results[1])], matches)
 				merged = true
 				break
 			}

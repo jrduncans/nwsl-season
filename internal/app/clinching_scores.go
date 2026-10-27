@@ -245,9 +245,10 @@ func presentScore(r *scenarioRequirement, labels map[string]string, games map[st
 	r.Historical = ""
 	c := *r.Score
 	r.Parts = scoreConditionParts(c, labels)
-	r.Explanation = append(scoreConditionParts(c, labels), scenarioRequirementPart{Text: ".", NoSpaceBefore: true})
-	r.Explanation = append(r.Explanation, scoreExplanation(c, labels, games)...)
+	r.Explanation = scoreExplanation(c, labels, games)
+	// Exact levels keep their full wording; other rows move it into the disclosure.
 	if !c.Levels[0].ExactOnly {
+		r.Explanation = append(append(r.Parts, scenarioRequirementPart{Text: ".", NoSpaceBefore: true}), r.Explanation...)
 		r.Parts = []scenarioRequirementPart{teamPart(c.TeamID, labels), {Text: "finishes ahead of"}, teamPart(c.RivalID, labels), {Text: "on tiebreakers"}}
 	}
 	parts, margin := individualMargin(c, labels, games, assumed)

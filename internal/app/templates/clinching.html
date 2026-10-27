@@ -17,7 +17,7 @@
   </details>
 {{end}}
 
-{{define "clinchingParts"}}{{range $i, $part := .}}{{if .BreakBefore}}<br>{{end}}{{if and $i (not .NoSpaceBefore)}} {{end}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span>{{else}}<span{{if .NoSpaceBefore}} class="clinching-attached"{{end}}>{{.Text}}</span>{{end}}{{end}}{{end}}
+{{define "clinchingParts"}}{{range $i, $part := .}}{{if .BreakBefore}}<br>{{end}}{{if and $i (not .NoSpaceBefore)}} {{end}}{{if .Team}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span>{{else}}<span>{{.Text}}</span>{{end}}{{end}}{{end}}
 
 {{define "clinchingRequirementText"}}{{if .Parts}}{{template "clinchingParts" .Parts}}{{else}}<span>{{.Text}}</span>{{end}}{{end}}
 

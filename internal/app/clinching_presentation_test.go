@@ -138,8 +138,8 @@ func TestSeedingOverflowCompactPresentation(t *testing.T) {
 		view seedingOverflowView
 		want []string
 	}{
-		{"no common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "NJY vs UTA"}, Some: [][]scenarioRequirement{{{Text: "KC earns at least 2 points across both matches: vs WAS and at LOU"}}}, SomeHigh: 1, Scores: true}, []string{"Some paths also need tiebreak scores."}},
-		{"common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "KC vs LOU"}, Always: []scenarioRequirement{{Text: "KC earns at least 2 points across both matches: vs WAS and vs LOU"}}}, []string{"Common requirements (all of):", "KC earns at least 2 points"}},
+		{"no common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "NJY vs UTA"}, Some: [][]scenarioRequirement{{{Text: "KC earns 2+ points (vs WAS, at LOU)"}}}, SomeHigh: 1, Scores: true}, []string{"Some paths also need tiebreak scores."}},
+		{"common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "KC vs LOU"}, Always: []scenarioRequirement{{Text: "KC earns 2+ points (vs WAS, vs LOU)"}}}, []string{"Common requirements (all of):", "KC earns 2+ points"}},
 		{"positive minimum", seedingOverflowView{SomeLow: 1, SomeHigh: 2, Some: [][]scenarioRequirement{{{Text: "UTA loses at NJY"}}}}, []string{"Each way also needs 1 to 2 of these:", "UTA loses at NJY"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
