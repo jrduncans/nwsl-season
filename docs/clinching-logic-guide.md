@@ -329,7 +329,7 @@ pagination, disclosures and complete stored clauses as Seeding; it pins the
 own results into each complete scenario and preserves all score conditions.
 Navigation and the return link retain the overview query and group context. Only groups whose summary is omitted for size offer
 an expandable scenario list. Every essential score requirement, including all
-GD, goals-scored and head-to-head equality branches, is directly visible.
+GD, goals-scored and head-to-head equality branches, is available in Tiebreak details.
 A separate native **Tiebreak details** control contains supporting current-gap
 arithmetic and remaining-match counts. When the requirement exceeds every
 historical winning margin, one sentence at the end of that same control says
@@ -356,7 +356,7 @@ is identical; for example, “one win and one loss” still names
 the two specific matches. Two-match groups with identical outside help also
 merge when together they are exactly every result worth at least some points
 total, every ordering included: five sufficient rows for everything but two
-losses become one "earns at least 1 point across both matches" heading.
+losses become one "Earn 1+ points" heading.
 For unusual slates with more than four relevant own matches, the page retains
 the original, potentially overlapping own-result groups to bound expansion.
 
@@ -522,35 +522,19 @@ condition with one head-to-head goals level; it must not be appended to itself.
 
 ### Wording
 
-The page translates each typed score threshold into a comparison of final
-standings totals. A minimum GD gain equal to the current deficit means “[team]’s
-final goal difference must equal or exceed [rival]’s”; one greater means
-“[team]’s final goal difference must exceed [rival]’s”. Other thresholds retain
-an explicit final difference. Exact-only levels remain equality requirements; consecutive level
-requirements share one sentence: “[team] must finish level with [rival] on goal
-difference and goals scored”.
-Every accepting cascade branch retains all preceding equalities: for example,
-“[team]’s final goal difference must exceed [rival]’s; if equal, [team] must
-have at least as many total goals scored as [rival]”. An exact-only prefix is
-an explicit conjunction, never an optional conditional. Multiway head-to-head
-predicates are preserved intact.
+Rows summarize a tiebreak requirement as “[team] finishes ahead of [rival] on
+tiebreakers”. The full typed comparison, including equality branches and
+multiway head-to-head predicates, appears in **Tiebreak details**, alongside
+current gaps and remaining-match counts. Exact level requirements retain their
+explicit wording. A proved single-match winning margin is shown as “wins by
+12+”; comparisons between two winning margins use the tiebreak wording. The
+historical margin note remains in the disclosure.
 
-Supporting current gaps and remaining-match counts live in **Explanation**.
-Shared explanations describe only current statistics and remaining matches.
-Seeding explains that choosing a win, draw or loss does not set the final score
-only when the user has selected results, in both its summary and complete
-alternatives. The wording works for one or two matches and unequal remaining
-inventories.
-
-A single GD threshold can become match-margin language only when the typed
-fixtures and assumed outcomes prove equivalence: one target win with all rival
-matches drawn, one head-to-head win, or two separate single-match wins requiring
-a larger (or at least equal) winning margin. A head-to-head margin contributes
-twice to the relative GD change. Additional fixed draws do not change a margin
-threshold. Multiple open margins, mixed results, exact-only
-levels and equality cascades keep the accurate final-standings wording unless
-that equivalence is proved. No score solver is added and no displayed string
-is parsed to infer a predicate.
+Two-match exact rival totals use result pairs, such as “wins one, draws one”.
+Own minimums use “Earn 1+ points” with the fixtures; rival maximums and no-help
+win counts retain their existing wording. Fixture parentheticals separate
+fixtures with commas. Seeding explains that selecting a result does not fix its
+score when the user has selected results.
 
 Rest-of-season summaries are never replaced by "Several certified scenarios":
 the scenarios are the whole answer, so every group's summary is written out (up
@@ -565,10 +549,10 @@ therefore restates each result one rival at a time, which a reader can hold in
 their head:
 
 > **One win and one loss (named fixtures)** — Clinches if all of:
-> - SD earns at most 3 points (vs BOS and at BAY), or earns 4 points, and NJY’s
->   final goal difference must exceed SD’s
-> - WAS doesn't win both matches (at KC and vs CHI), or wins both matches, and NJY’s
->   final goal difference must exceed WAS’s
+> - SD earns at most 3 points (vs BOS, at BAY), or wins one, draws one, and
+>   NJY finishes ahead of SD on tiebreakers
+> - WAS doesn't win both matches (at KC, vs CHI), or wins both matches, and
+>   NJY finishes ahead of WAS on tiebreakers
 
 This is exact, not a simplification, because of two facts:
 
@@ -583,7 +567,7 @@ This is exact, not a simplification, because of two facts:
 - **Points name the record.** A rival finishes behind on points below some total
   and ahead above it; only the total that leaves the two level needs a score
   condition. With one or two matches left, a points total also fixes the
-  rival's wins, so "earns 4 points" is a single record. With three or more, a
+  rival's wins, so four points is the single record "wins one, draws one". With three or more, a
   level total names its wins ("earns 3 points with 1 win").
 
 When every listed rival requirement must hold, outcome-only requirements for

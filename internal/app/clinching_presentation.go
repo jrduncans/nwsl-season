@@ -96,7 +96,7 @@ func ownHeadingParts(g clinchingGroupView, team string, teams map[string]string,
 			parts = append(parts, scenarioRequirementPart{Text: "and"})
 		}
 		if r.SecondGameID != "" {
-			parts = append(parts, scenarioRequirementPart{Text: fmt.Sprintf("Earn at least %s across both matches", pointsText(r.Points))})
+			parts = append(parts, scenarioRequirementPart{Text: fmt.Sprintf("Earn %d+ points", r.Points)})
 			parts = append(parts, rivalFixtureParts([]string{r.GameID, r.SecondGameID}, team, teams, games)...)
 			continue
 		}

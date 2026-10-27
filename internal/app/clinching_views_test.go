@@ -80,8 +80,8 @@ func TestClinchingPageSummarizesSlateBeforeScenarios(t *testing.T) {
 		latest time.Time
 		want   string
 	}{
-		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `<summary>Remaining matches: <time data-local-date="2026-10-16T19:00:00Z">Oct 16</time>–<time data-local-date="2026-10-18T23:00:00Z">Oct 18</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
-		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `<summary>Remaining matches: <time data-local-date="2026-10-16T19:00:00Z">Oct 16</time> · <span class="clinching-slate-toggle">2 matches</span></summary>`},
+		{"range", time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC), `<summary>Remaining matches: <time data-local-date="2026-10-16T19:00:00Z">Oct 16</time>–<time data-local-date="2026-10-18T23:00:00Z">Oct 18</time> <span class="clinching-slate-toggle">2 matches</span></summary>`},
+		{"single day", time.Date(2026, 10, 16, 23, 0, 0, 0, time.UTC), `<summary>Remaining matches: <time data-local-date="2026-10-16T19:00:00Z">Oct 16</time> <span class="clinching-slate-toggle">2 matches</span></summary>`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			slate := scenarios.Slate{State: scenarios.SlateReady, StartsAtUTC: time.Date(2026, 10, 16, 19, 0, 0, 0, time.UTC), LatestKickoffUTC: test.latest, FixtureIDs: []string{"future-1", "future-2"}}

@@ -61,10 +61,10 @@ func TestClinchingRivalFixtureCrests(t *testing.T) {
 	}{
 		{"away loss", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"away"}, MaxPoints: 0}, "KC loses at LOU", []string{"lou"}},
 		{"home result", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home"}, MaxPoints: 1}, "KC draws or loses vs WAS", []string{"was"}},
-		{"multiple fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: 3}, "KC earns at most 3 points (vs WAS and at LOU)", []string{"was", "lou"}},
-		{"three fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away", "same-code"}, MaxPoints: 3}, "KC earns at most 3 points (vs WAS, at LOU, and at LOU)", []string{"was", "lou", "lou-other"}},
+		{"multiple fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: 3}, "KC earns at most 3 points (vs WAS, at LOU)", []string{"was", "lou"}},
+		{"three fixtures", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away", "same-code"}, MaxPoints: 3}, "KC earns at most 3 points (vs WAS, at LOU, at LOU)", []string{"was", "lou", "lou-other"}},
 		{"mandatory result", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"away"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0}}}, "KC loses at LOU", []string{"lou"}},
-		{"mandatory pair", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0}}}, "KC loses both matches (vs WAS and at LOU)", []string{"was", "lou"}},
+		{"mandatory pair", scenarios.RivalNeed{RivalID: "kc", GameIDs: []string{"home", "away"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0}}}, "KC loses both matches (vs WAS, at LOU)", []string{"was", "lou"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer

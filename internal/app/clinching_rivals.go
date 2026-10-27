@@ -252,9 +252,10 @@ func rivalFixtureParts(ids []string, rival string, teams map[string]string, game
 		case i == 0 && len(ids) > 1:
 			parts[0].Text = "(" + parts[0].Text
 		case i > 0 && count == 2:
-			parts[i*2].Text = "and " + parts[i*2].Text
+			parts[i*2].Text = ", " + parts[i*2].Text
+			parts[i*2].NoSpaceBefore = true
 		case i > 0 && i == count-1:
-			parts[i*2].Text = ", and " + parts[i*2].Text
+			parts[i*2].Text = ", " + parts[i*2].Text
 			parts[i*2].NoSpaceBefore = true
 		case i > 0:
 			parts[i*2].Text = ", " + parts[i*2].Text
@@ -281,6 +282,14 @@ func tieRecordText(tie scenarios.RivalTie, matches int) string {
 			return "wins both matches"
 		case 0:
 			return "loses both matches"
+		case 4:
+			return "wins one, draws one"
+		case 3:
+			return "wins one, loses one"
+		case 2:
+			return "draws both"
+		case 1:
+			return "draws one, loses one"
 		}
 		return "earns " + pointsText(tie.Points)
 	}

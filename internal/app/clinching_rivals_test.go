@@ -110,9 +110,9 @@ func TestRivalViewWordsEachRival(t *testing.T) {
 		need scenarios.RivalNeed
 		want string
 	}{
-		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 4}, "SD doesn’t win both matches (vs BOS and at BAY)"},
+		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 4}, "SD doesn’t win both matches (vs BOS, at BAY)"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: 3, Ties: []scenarios.RivalTie{{Points: 4, Wins: 1, Condition: gd}}},
-			"SD earns at most 3 points (vs BOS and at BAY) or earns 4 points if [NJY’s final goal difference must exceed SD’s]"},
+			"SD earns at most 3 points (vs BOS, at BAY) or wins one, draws one if [NJY’s final goal difference must exceed SD’s]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos", "bay-sd"}, MaxPoints: -1, Ties: []scenarios.RivalTie{{Points: 0, Condition: gd}}},
 			"SD loses both matches (vs BOS and at BAY) and [NJY’s final goal difference must exceed SD’s]"},
 		{scenarios.RivalNeed{RivalID: "sd", GameIDs: []string{"sd-bos"}, MaxPoints: 1}, "SD draws or loses vs BOS"},
@@ -160,7 +160,7 @@ func TestRivalGroupViewsMergeOwnResultsAndFallBackWhenWithheld(t *testing.T) {
 	if views[0].RivalState != "" || len(views[0].Rivals) != 0 {
 		t.Fatalf("two wins should clinch outright: %+v", views[0])
 	}
-	if views[1].RivalState != "Clinches if" || rivalText(views[1].Rivals[0]) != "SD earns at most 3 points (vs BOS and at BAY)" {
+	if views[1].RivalState != "Clinches if" || rivalText(views[1].Rivals[0]) != "SD earns at most 3 points (vs BOS, at BAY)" {
 		t.Fatalf("one win and one loss = %q %+v", views[1].RivalState, views[1].Rivals)
 	}
 	if views[2].RivalState != "" || len(views[2].Summary.Conditions)+len(views[2].Summary.Alternatives) == 0 {
