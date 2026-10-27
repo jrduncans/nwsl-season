@@ -55,7 +55,7 @@ func TestOversizedScenarioCardsBoundedAndComplete(t *testing.T) {
 		clauses[i] = scenarios.Clause{Conditions: []scenarios.FixtureCondition{{GameID: "sd-bos", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}, ScoreConditions: []scenarios.ScoreCondition{score}}
 	}
 	query := url.Values{"alternative": {"5"}, "view": {"rest-of-season"}, "scenario_team": {"sd"}}
-	view, err := seedingAlternatives(scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: clauses}}}, 1, query, rivalTestTeams, rivalTestGames(), nil, scenarioHistory{})
+	view, err := seedingAlternatives(scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: clauses}}}, 1, "njy", query, rivalTestTeams, rivalTestGames(), nil, scenarioHistory{})
 	if err != nil {
 		t.Fatal(err)
 	}

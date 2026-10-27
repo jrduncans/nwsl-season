@@ -138,7 +138,7 @@ func TestSeedingOverflowCompactPresentation(t *testing.T) {
 		view seedingOverflowView
 		want []string
 	}{
-		{"no common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "NJY vs UTA"}, Some: [][]scenarioRequirement{{{Text: "KC earns 2+ points (vs WAS, at LOU)"}}}, SomeHigh: 1, Scores: true}, []string{"Some paths also need tiebreak scores."}},
+		{"no common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "NJY vs UTA"}, Some: [][]scenarioRequirement{{{Text: "KC earns 2+ points (vs WAS, at LOU)"}}}, SomeHigh: 1, Scores: true}, []string{"Some scenarios depend on goal difference or goals scored."}},
 		{"common requirement", seedingOverflowView{Matches: []string{"KC vs WAS", "KC vs LOU"}, Always: []scenarioRequirement{{Text: "KC earns 2+ points (vs WAS, vs LOU)"}}}, []string{"Common requirements (all of):", "KC earns 2+ points"}},
 		{"positive minimum", seedingOverflowView{SomeLow: 1, SomeHigh: 2, Some: [][]scenarioRequirement{{{Text: "UTA loses at NJY"}}}}, []string{"Each way also needs 1 to 2 of these:", "UTA loses at NJY"}},
 	} {
@@ -169,12 +169,11 @@ func TestSeedingChanceMeaningAppearsInHeaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := buf.String()
-	requireText(t, body, ".seeding-grid thead", "Overall chance", "Results: 48%", "Finish + these results")
-	forbidText(t, body, ".seeding-grid tbody", "Finish + these results", "Overall:")
-	if strings.Count(body, "Finish + these results") != 1 || strings.Contains(body, "seeding-chance-key") {
-		t.Fatal("chance explanation repeated outside headers")
-	}
-	requireText(t, body, ".seeding-chance-help", "Fix results", "among counted forecasts", "AND opponent", "venue availability")
+	requireText(t, body, ".seeding-grid thead", "Overall odds", "48% overall")
+	forbidRaw(t, body, "Finish + these results", "seeding-joint-heading")
+	requireText(t, body, ".seeding-chance-key", "Finish odds are overall.", "Cells show the chance of the finish and the column’s results.")
+	requireText(t, body, ".seeding-chance-help", "Assume match results", "among counted forecasts", "joint odds", "conditional on the selected finish", "venue availability")
+
 }
 
 func TestClinchingCompactGuaranteedRowsAcrossOutcomes(t *testing.T) {
@@ -212,28 +211,13 @@ func TestClinchingCompactGuaranteedRowsAcrossOutcomes(t *testing.T) {
 	}
 }
 
-func TestSeedingScoreGuidanceFollowsSelectedResults(t *testing.T) {
+func TestTiebreakScopeStaysInsideDetails(t *testing.T) {
 	application := newApplicationWithForecastExecutor(nil, Options{Location: time.UTC}, nil)
-	for _, fixed := range []int{0, 1} {
-		seeding := &seedingPage{Builder: forecastPage{FixedCount: fixed}, Conditions: &seedingConditionsView{}, Details: &seedingAlternativesView{}}
-		for _, name := range []string{"clinchingSeeding", "seedingAlternatives"} {
-			var buf bytes.Buffer
-			if err := application.app.pages.ExecuteTemplate(&buf, name, clinchingPage{Seeding: seeding}); err != nil {
-				t.Fatal(err)
-			}
-			want := "Score requirements apply across all remaining matches."
-			if fixed > 0 {
-				want += " Choosing a win, draw or loss does not set the final score."
-			}
-			if name == "clinchingSeeding" {
-				requireExact(t, buf.String(), ".seeding-score-guidance", want)
-			} else {
-				forbidRaw(t, buf.String(), "Score requirements apply across all remaining matches.")
-				if fixed > 0 {
-					requireText(t, buf.String(), "body", "These scenarios include your selected results. Choosing a win, draw or loss does not set the final score.")
-				}
-			}
-			forbidRaw(t, buf.String(), "Fixed results still have open scores.", "Scores remain open.")
-		}
+	var buf bytes.Buffer
+	r := scenarioRequirement{Score: &scenarios.ScoreCondition{}, Text: "POR finishes ahead of KC on tiebreakers", Explanation: []scenarioRequirementPart{{Text: "POR must overcome the goal-difference gap."}}}
+	if err := application.app.pages.ExecuteTemplate(&buf, "clinchingRequirement", r); err != nil {
+		t.Fatal(err)
 	}
+	requireText(t, buf.String(), ".clinching-score-disclosure .clinching-score-scope", "include all remaining matches", "assuming a result leaves its score open")
+	requireText(t, buf.String(), ".clinching-score-disclosure", "POR must overcome the goal-difference gap.")
 }

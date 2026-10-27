@@ -40,6 +40,10 @@ type seedingPage struct {
 	Conditions                      *seedingConditionsView
 	Details                         *seedingAlternativesView
 	HistoryNote                     string
+	Inevitable                      bool
+	// Assumptions restates each assumed result from the selected team's side
+	// when it plays in that match.
+	Assumptions [][]scenarioRequirementPart
 }
 type seedingColumnView struct {
 	Lines      []string
@@ -71,8 +75,10 @@ type seedingCellView struct {
 type seedingConditionsView struct {
 	Heading, State string
 	// MostLikely marks a finish chosen because it is the likeliest.
-	MostLikely  bool
-	Unavailable bool
+	MostLikely                                                bool
+	Unavailable                                               bool
+	Inevitable, Assumed, Eliminated                           bool
+	Likelihood, OpponentNote, GuaranteeState, InevitableState string
 	// Opponents lists the seed's possible opponents, likeliest first.
 	Opponents        []seedingOpponentView
 	Groups           []seedingGroupView
@@ -91,6 +97,7 @@ type seedingOpponentView struct {
 type seedingGroupView struct {
 	clinchingGroupView
 	Overflow *seedingOverflowView
+	NoHelp   bool
 }
 
 // seedingOverflowView summarizes a group's ways without listing them: results
@@ -115,12 +122,20 @@ type seedingOverflowView struct {
 }
 
 // seedingMaxAlternatives bounds each own-result group's listed alternatives;
-// longer lists are not readable, so the page asks for more fixed results.
+// longer lists use a necessary-condition preview and link to complete scenarios.
 const seedingMaxAlternatives = 5
 
 // seedingOwnMatchLimit bounds the grid's columns: the team's later matches
 // stay open, which keeps every cell exact.
 const seedingOwnMatchLimit = 3
+
+// Return to the builder even from a focused scenario page, retaining the
+// selected finish and every assumption in the shareable canonical URL.
+func (s seedingPage) AssumptionsURL() string {
+	u, _ := url.Parse(s.Builder.CanonicalPath)
+	u.Fragment = "forecast-builder"
+	return u.String()
+}
 
 func seedingURL(path, team string, state forecaststate.State) string {
 	q := url.Values{"view": {"seeding"}, "team": {team}}
@@ -215,6 +230,9 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		a.renderScenarioBadRequest(w, r, "Invalid seeding scenario", err)
 		return
 	}
+	if finish != nil {
+		seed.Builder.CanonicalPath = seedingFinishURL(r.URL.Path, selected, state, seedingFinishKey(*finish))
+	}
 	var cached *scenarios.SeedingResult
 	for _, row := range snapshot.Results {
 		if row.TeamID == teamID && row.Seeding != nil {
@@ -238,6 +256,17 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 			fixed[id] = clinching.AwayWin
 		}
 	}
+	fixedIDs := make([]string, 0, len(fixed))
+	for id := range fixed {
+		fixedIDs = append(fixedIDs, id)
+	}
+	for _, id := range fixtureIDsInKickoffOrder(fixedIDs, games) {
+		perspective := ""
+		if g := games[id]; g.HomeTeamID == teamID || g.AwayTeamID == teamID {
+			perspective = teamID
+		}
+		seed.Assumptions = append(seed.Assumptions, requirementParts(scenarioRequirement{GameID: id, Mask: outcomeMask([]clinching.Outcome{fixed[id]})}, perspective, labels, games))
+	}
 	filtered := scenarios.FilterSeeding(*cached, fixed)
 	seed.Disciplinary = filtered.DisciplinaryPossible
 	if filtered.Limitation != "" {
@@ -246,20 +275,24 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 	if filtered.Limitation == scenarios.LimitationBudgetPartial {
 		seed.Limitation = "Scenario search was incomplete; additional scenarios may exist."
 	}
+	inevitable := guaranteedSeedingFinish(filtered)
+	seed.Inevitable = inevitable != nil && (finish == nil || *finish == *inevitable)
 	if q.Get("alternative") != "" {
 		if finish == nil {
 			a.renderScenarioBadRequest(w, r, "Invalid seeding scenario", fmt.Errorf("choose a finish"))
 			return
 		}
-		details, err := seedingAlternatives(filtered, *finish, q, labels, games, fixedScenarioMasks(fixed), a.scenarioHistory(r.Context(), view.Season))
+		details, err := seedingAlternatives(filtered, *finish, teamID, q, labels, games, fixedScenarioMasks(fixed), a.scenarioHistory(r.Context(), view.Season))
 		if err != nil {
 			a.renderScenarioBadRequest(w, r, "Invalid seeding scenario", err)
 			return
 		}
-		details.Team = *teamPart(teamID, labels).Team
-		seed.Details = details
-		a.render(w, "seedingAlternatives", view)
-		return
+		if !seed.Inevitable {
+			details.Team = *teamPart(teamID, labels).Team
+			seed.Details = details
+			a.render(w, "seedingAlternatives", view)
+			return
+		}
 	}
 	own := newSeedingOwnMatches(teamID, snapshot.Run.Slate.FixtureIDs, fixed, games)
 	seed.Columns, seed.Rows = seedingGrid(filtered, fixed, own, labels, games)
@@ -276,6 +309,9 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		seed.LikelihoodNote = "Likelihoods are unavailable right now."
 	}
 	chosen, mostLikely := finish, false
+	if chosen == nil && inevitable != nil {
+		chosen = inevitable
+	}
 	if chosen == nil && counts != nil && len(seed.Rows) > 0 {
 		chosen, mostLikely = &seed.Rows[mostLikelyRow(seed.Rows)].seed, true
 	}
@@ -286,7 +322,11 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 	}
 	if chosen != nil {
 		seed.Conditions = seedingConditions(filtered, *chosen, own, labels, games)
-		seed.Conditions.MostLikely = mostLikely
+		seed.Conditions.Inevitable = inevitable != nil && *chosen == *inevitable
+		seed.Conditions.Eliminated = seed.Conditions.Inevitable && *chosen == 0
+		seed.Conditions.MostLikely = mostLikely && !seed.Conditions.Inevitable
+		baseline := guaranteedSeedingFinish(*cached)
+		seed.Conditions.Assumed = seed.Conditions.Inevitable && len(fixed) > 0 && (baseline == nil || *baseline != *chosen)
 		detailQuery := r.URL.Query()
 		detailQuery.Set("finish", seedingFinishKey(*chosen))
 		seed.Conditions.AlternativesURL = seedingAlternativeURL(detailQuery, 1)
@@ -295,11 +335,25 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		for i := range seed.Conditions.Groups {
 			groups := []clinchingGroupView{seed.Conditions.Groups[i].clinchingGroupView}
 			presentScenarioGroups(groups, labels, games, fixedScenarioMasks(fixed), history)
+			if len(fixed) > 0 && len(groups[0].Own) == 0 {
+				groups[0].HeadingParts = []scenarioRequirementPart{{Text: "With these assumptions"}}
+				if len(groups[0].UnrestrictedOwn) > 0 {
+					groups[0].HeadingParts = append([]scenarioRequirementPart{{Text: "Any remaining results"}}, rivalFixtureParts(groups[0].UnrestrictedOwn, teamID, labels, games)...)
+				}
+			}
 			seed.Conditions.Groups[i].clinchingGroupView = groups[0]
 		}
 		for _, row := range seed.Rows {
 			if row.seed != *chosen {
 				continue
+			}
+			seed.Conditions.Likelihood = row.Likelihood
+			if len(row.opponentIDs) > 0 {
+				if counts == nil {
+					seed.Conditions.OpponentNote = "Opponent odds are unavailable."
+				} else if row.probability == 0 {
+					seed.Conditions.OpponentNote = "This finish is possible, but opponent odds are unavailable."
+				}
 			}
 			ids := slices.Clone(row.opponentIDs)
 			sort.SliceStable(ids, func(a, b int) bool { return row.opponentLikelihoods[ids[a]] > row.opponentLikelihoods[ids[b]] })
@@ -307,9 +361,6 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 				seed.Conditions.Opponents = append(seed.Conditions.Opponents, seedingOpponentView{Code: labels[id], Team: *teamPart(id, labels).Team, Likelihood: row.opponentLikelihood(id, counts != nil)})
 			}
 		}
-	}
-	if finish != nil {
-		seed.Builder.CanonicalPath = seedingFinishURL(r.URL.Path, selected, state, seedingFinishKey(*finish))
 	}
 	a.render(w, "clinching", view)
 }
@@ -387,14 +438,14 @@ func applySeedingLikelihoods(columns []seedingColumnView, rows []seedingRowView,
 			}
 			cellOpponents[col][c.OpponentID] += c.Probability
 		}
-		row.Likelihood = likelihoodText(row.probability, len(rows) == 1)
+		row.Likelihood = likelihoodText(row.probability, len(rows) == 1 && row.probability >= 1-1e-12)
 		row.opponentLikelihoods = byOpponent
 		for col := range row.Cells {
 			cell := &row.Cells[col]
 			if !cell.Possible {
 				continue
 			}
-			cell.Likelihood = likelihoodText(cellTotals[col], only)
+			cell.Likelihood = likelihoodText(cellTotals[col], only && cellTotals[col] >= 1-1e-12)
 			order := slices.Clone(cell.opponentIDs)
 			sort.SliceStable(order, func(a, b int) bool { return cellOpponents[col][order[a]] > cellOpponents[col][order[b]] })
 			labels := map[string]string{}
@@ -411,7 +462,7 @@ func applySeedingLikelihoods(columns []seedingColumnView, rows []seedingRowView,
 		}
 	}
 	for i := range columns {
-		columns[i].Likelihood = likelihoodText(columnTotals[i], len(columns) == 1)
+		columns[i].Likelihood = likelihoodText(columnTotals[i], len(columns) == 1 && columnTotals[i] >= 1-1e-12)
 	}
 }
 
@@ -438,9 +489,12 @@ func clinchingOutcome(o simulation.Outcome) clinching.Outcome {
 }
 
 // likelihoodText rounds a simulated share for a finish the exact search says
-// is possible: never "0%", and "100%" only when it is the only finish.
+// is possible: distinguish no samples from a small share, and allow "100%"
+// only when the caller certifies a complete share for the sole possibility.
 func likelihoodText(p float64, only bool) string {
 	switch {
+	case p <= 0:
+		return "possible; odds unavailable"
 	case only:
 		return "100%"
 	case p < 0.005:
@@ -453,10 +507,10 @@ func likelihoodText(p float64, only bool) string {
 }
 
 func (row seedingRowView) opponentLikelihood(id string, available bool) string {
-	if !available {
+	if !available || row.probability <= 0 {
 		return ""
 	}
-	return likelihoodText(row.opponentLikelihoods[id], len(row.opponentIDs) == 1 && row.Likelihood == "100%")
+	return likelihoodText(row.opponentLikelihoods[id]/row.probability, len(row.opponentIDs) == 1)
 }
 
 func seedingFinishKey(seed int) string {
@@ -810,6 +864,33 @@ func seedingCover(combos [][]int, matches int) [][]uint8 {
 	return cubes
 }
 
+// A universal cached clause proves an inevitable finish, even if discovery of
+// other scenarios was incomplete. Exact mask merging may establish the same
+// proof; bounded passes retain their full input on overflow. A lone listed
+// finish, a preview count, and a 100% forecast are never proofs.
+func guaranteedSeedingFinish(result scenarios.SeedingResult) *int {
+	for _, seed := range result.Seeds {
+		paths := [][]scenarioRequirement{}
+		for _, clause := range seed.Clauses {
+			if len(clause.ScoreConditions) > 0 {
+				continue
+			}
+			path := []scenarioRequirement{}
+			for _, c := range clause.Conditions {
+				if mask := outcomeMask(c.AllowedOutcomes); mask != maskAny {
+					path = append(path, scenarioRequirement{GameID: c.GameID, Mask: mask})
+				}
+			}
+			paths = append(paths, path)
+		}
+		paths = compactFixtureMasks(uniqueConjunctions(paths))
+		if slices.ContainsFunc(paths, func(p []scenarioRequirement) bool { return len(p) == 0 }) {
+			return &seed.Seed
+		}
+	}
+	return nil
+}
+
 func seedingConditions(filtered scenarios.SeedingResult, seed int, own seedingOwnMatches, labels map[string]string, games map[string]cache.Game) *seedingConditionsView {
 	team := own.team
 	state := "Finishes " + ordinalRank(seed)
@@ -818,8 +899,10 @@ func seedingConditions(filtered scenarios.SeedingResult, seed int, own seedingOw
 		state = "Misses the playoffs"
 		heading = "How " + labels[team] + " misses the playoffs"
 	}
-	view := &seedingConditionsView{Heading: heading, State: state, Team: *teamPart(team, labels).Team, FinishText: "finishes " + ordinalRank(seed), ScenarioLinkText: "finishing " + ordinalRank(seed)}
+	view := &seedingConditionsView{GuaranteeState: "Guarantees " + ordinalRank(seed) + " place", InevitableState: "Guaranteed " + ordinalRank(seed) + " place", Heading: heading, State: state, Team: *teamPart(team, labels).Team, FinishText: "finishes " + ordinalRank(seed), ScenarioLinkText: "finishing " + ordinalRank(seed)}
 	if seed == 0 {
+		view.GuaranteeState = "Eliminated"
+		view.InevitableState = "Eliminated"
 		view.FinishText = "misses the playoffs"
 		view.ScenarioLinkText = "missing the playoffs"
 	}
@@ -829,15 +912,14 @@ func seedingConditions(filtered scenarios.SeedingResult, seed int, own seedingOw
 		return view
 	}
 	listed := filtered.Seeds[index].Clauses
-	limit := seedingMaxAlternatives
-	if len(listed) > seedingMaxAlternatives {
-		limit = 0
-	}
-	for _, group := range clinchingGroupViews(listed, team, labels, labels, games, clinchingGroupOptions{SummaryLimit: limit, RestOfSeason: true}) {
-		if len(group.paths) == 1 && len(group.paths[0]) == 0 {
-			group.SummaryOverflow = false
-		}
-		g := seedingGroupView{clinchingGroupView: group}
+	for _, group := range clinchingGroupViews(listed, team, labels, labels, games, clinchingGroupOptions{SummaryLimit: seedingMaxAlternatives, RestOfSeason: true}) {
+		// Apply the same rendered-tree bound as oversized clinching groups.
+		// A single path can still contain too many conditions to show inline.
+		group.SummaryOverflow = group.SummaryOverflow || oversizedGroup(group)
+		// paths retain the entire certified union even when presentation passes
+		// hit their bounds. An empty conjunction proves no outside help is needed.
+		noHelp := slices.ContainsFunc(group.paths, func(path []scenarioRequirement) bool { return len(path) == 0 })
+		g := seedingGroupView{clinchingGroupView: group, NoHelp: noHelp}
 		if group.SummaryOverflow {
 			g.Overflow = seedingOverflow(group.paths, labels, games)
 		}
@@ -901,11 +983,6 @@ func seedingOverflow(paths [][]scenarioRequirement, labels map[string]string, ga
 			seenMatches[id] = true
 			g := games[id]
 			view.Matches = append(view.Matches, labels[g.HomeTeamID]+" vs "+labels[g.AwayTeamID])
-			if len(view.MatchParts) < 4 {
-				view.MatchParts = append(view.MatchParts, []scenarioRequirementPart{teamPart(g.HomeTeamID, labels), {Text: "vs"}, teamPart(g.AwayTeamID, labels)})
-			} else {
-				view.MoreMatches = true
-			}
 		}
 		if r.SecondGameID == "" && r.Mask == 7 {
 			g := games[r.GameID]
@@ -930,6 +1007,27 @@ func seedingOverflow(paths [][]scenarioRequirement, labels map[string]string, ga
 			}
 		}
 		view.SomeLow, view.SomeHigh = min(view.SomeLow, n), max(view.SomeHigh, n)
+	}
+	// Only name fixtures not already described by a visible requirement.
+	shown := map[string]bool{}
+	for _, r := range view.PreviewAlways() {
+		shown[r.GameID], shown[r.SecondGameID] = true, true
+	}
+	for _, path := range view.PreviewSome() {
+		for _, r := range path {
+			shown[r.GameID], shown[r.SecondGameID] = true, true
+		}
+	}
+	for _, id := range fixtureIDsInKickoffOrder(slices.Collect(maps.Keys(seenMatches)), games) {
+		if shown[id] {
+			continue
+		}
+		g := games[id]
+		if len(view.MatchParts) < 4 {
+			view.MatchParts = append(view.MatchParts, []scenarioRequirementPart{teamPart(g.HomeTeamID, labels), {Text: "vs"}, teamPart(g.AwayTeamID, labels)})
+		} else {
+			view.MoreMatches = true
+		}
 	}
 	return view
 }

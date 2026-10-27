@@ -240,7 +240,7 @@ func TestSeedingScenariosKeepCompleteConditionsAndPageState(t *testing.T) {
 	}
 	result := scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: clauses}}}
 	query := url.Values{"view": {"seeding"}, "team": {"AAA"}, "finish": {"1"}, "alternative": {"5"}, "p": {"fixed:h"}, "part": {"1"}}
-	detail, err := seedingAlternatives(result, 1, query, labels, games, nil, scenarioHistory{})
+	detail, err := seedingAlternatives(result, 1, "a", query, labels, games, nil, scenarioHistory{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestSeedingScenariosKeepCompleteConditionsAndPageState(t *testing.T) {
 	}
 	for _, value := range []string{"-1", "0", "10", "99999999999999999999"} {
 		query.Set("alternative", value)
-		if _, err := seedingAlternatives(result, 1, query, labels, games, nil, scenarioHistory{}); err == nil {
+		if _, err := seedingAlternatives(result, 1, "a", query, labels, games, nil, scenarioHistory{}); err == nil {
 			t.Fatalf("invalid scenario %s accepted", value)
 		}
 	}

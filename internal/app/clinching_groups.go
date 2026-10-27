@@ -44,6 +44,8 @@ type scenarioTeamToken struct {
 }
 
 type scenarioExpression struct {
+	// Conjoined marks an additional required group for presentation only.
+	Conjoined    bool
 	Conditions   []scenarioRequirement
 	Alternatives []scenarioExpression
 }

@@ -43,3 +43,18 @@ func requirementsInKickoffOrder(rs []scenarioRequirement, games map[string]cache
 	})
 	return out
 }
+
+// Reorder whole requirements within a conjunction; score predicates and logical
+// groups are unchanged. Kickoff order still applies within each category.
+func ownRequirement(r scenarioRequirement, team string, games map[string]cache.Game) bool {
+	g := games[r.GameID]
+	return r.Score == nil && team != "" && (g.HomeTeamID == team || g.AwayTeamID == team)
+}
+
+func requirementsOwnFirst(rs []scenarioRequirement, team string, games map[string]cache.Game) []scenarioRequirement {
+	out := requirementsInKickoffOrder(rs, games)
+	sort.SliceStable(out, func(i, j int) bool {
+		return ownRequirement(out[i], team, games) && !ownRequirement(out[j], team, games)
+	})
+	return out
+}

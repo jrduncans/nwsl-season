@@ -339,7 +339,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 				}
 				clauses := clausesForGroup(v.Clauses, row.Groups[i], v.TeamID, games)
 				cached := scenarios.SeedingResult{Seeds: []scenarios.SeedFinish{{Seed: 1, Clauses: clauses}}}
-				cards, err := seedingAlternatives(cached, 1, r.URL.Query(), teamLabels, games, nil, history)
+				cards, err := seedingAlternatives(cached, 1, v.TeamID, r.URL.Query(), teamLabels, games, nil, history)
 				if err != nil {
 					a.renderScenarioBadRequest(w, r, "Invalid clinching scenario", err)
 					return

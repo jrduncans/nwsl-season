@@ -40,7 +40,7 @@ func seedingAlternativeURL(query url.Values, alternative int) string {
 	return "?" + q.Encode() + "#seeding-alternative"
 }
 
-func seedingAlternatives(result scenarios.SeedingResult, finish int, query url.Values, labels map[string]string, games map[string]cache.Game, fixed map[string]uint8, history scenarioHistory) (*seedingAlternativesView, error) {
+func seedingAlternatives(result scenarios.SeedingResult, finish int, team string, query url.Values, labels map[string]string, games map[string]cache.Game, fixed map[string]uint8, history scenarioHistory) (*seedingAlternativesView, error) {
 	number, err := strconv.Atoi(query.Get("alternative"))
 	if err != nil || number < 1 {
 		return nil, fmt.Errorf("invalid scenario")
@@ -77,15 +77,19 @@ func seedingAlternatives(result scenarios.SeedingResult, finish int, query url.V
 		}
 		card := seedingScenarioView{Number: i + 1, Requirements: len(requirements), Selected: i+1 == number, Scores: len(clause.ScoreConditions) > 0}
 		assumed := addAssumptions(fixed, requirements)
-		for _, r := range requirementsInKickoffOrder(requirements, games) {
-			r.Text = requirementText(r, "", labels, games)
-			r.Parts = requirementParts(r, "", labels, games)
+		for _, r := range requirementsOwnFirst(requirements, team, games) {
+			perspective := ""
+			if ownRequirement(r, team, games) {
+				perspective = team
+			}
+			r.Text = requirementText(r, perspective, labels, games)
+			r.Parts = requirementParts(r, perspective, labels, games)
 			presentScore(&r, labels, games, assumed, history)
 			card.Conditions = append(card.Conditions, r)
 		}
 		view.Scenarios = append(view.Scenarios, card)
 	}
-	// Preview the conditions that differ between the cards on this page.
+	// Lead with own results, then favor conditions that differ on this page.
 	frequency := map[string]int{}
 	for _, card := range view.Scenarios {
 		seen := map[string]bool{}
@@ -99,15 +103,18 @@ func seedingAlternatives(result scenarios.SeedingResult, finish int, query url.V
 	for i := range view.Scenarios {
 		card := &view.Scenarios[i]
 		preview := []string{}
-		for _, r := range card.Conditions {
-			if frequency[r.Text] < len(view.Scenarios) && len(preview) < 2 {
+		chosen := map[int]bool{}
+		for j, r := range card.Conditions {
+			if ownRequirement(r, team, games) && len(preview) < 2 {
 				preview = append(preview, r.Text)
+				chosen[j] = true
 			}
 		}
-		if len(preview) == 0 {
-			for _, r := range card.Conditions {
-				if len(preview) < 2 {
+		for _, differing := range []bool{true, false} {
+			for j, r := range card.Conditions {
+				if !chosen[j] && len(preview) < 2 && (!differing || frequency[r.Text] < len(view.Scenarios)) {
 					preview = append(preview, r.Text)
+					chosen[j] = true
 				}
 			}
 		}
