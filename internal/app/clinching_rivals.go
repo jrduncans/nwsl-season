@@ -230,7 +230,7 @@ func rivalView(need scenarios.RivalNeed, teams map[string]string, games map[stri
 // opponents. Punctuation follows the same list wording as noHelpFixtureText.
 func rivalFixtureParts(ids []string, rival string, teams map[string]string, games map[string]cache.Game) []scenarioRequirementPart {
 	parts := []scenarioRequirementPart{}
-	for _, id := range ids {
+	for _, id := range fixtureIDsInKickoffOrder(ids, games) {
 		game, ok := games[id]
 		if !ok {
 			continue
@@ -322,11 +322,7 @@ func rivalRowKey(row scenarios.RivalRow) string {
 func ownInKickoffOrder(own []scenarios.FixtureCondition, games map[string]cache.Game) []scenarios.FixtureCondition {
 	out := slices.Clone(own)
 	sort.SliceStable(out, func(i, j int) bool {
-		a, b := games[out[i].GameID], games[out[j].GameID]
-		if a.KickoffUTC != b.KickoffUTC {
-			return a.KickoffUTC < b.KickoffUTC
-		}
-		return out[i].GameID < out[j].GameID
+		return fixtureBefore(out[i].GameID, out[j].GameID, games)
 	})
 	return out
 }

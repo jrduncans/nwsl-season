@@ -47,9 +47,20 @@ func groupSeasonSummary(summary scenarioExpression, team string, teams map[strin
 			}
 		}
 		group.Heading = joinConditions(labels)
+		if len(rivals) > 1 && group.Rival == nil {
+			group.Heading = "Combined conditions involving " + group.Heading
+			group.HeadingParts = append(group.HeadingParts, scenarioRequirementPart{Text: "Combined conditions involving"})
+		}
 		for i, id := range rivals {
 			if i > 0 {
-				group.HeadingParts = append(group.HeadingParts, scenarioRequirementPart{Text: "and"})
+				separator := "and"
+				if len(rivals) > 2 {
+					separator = ","
+					if i == len(rivals)-1 {
+						separator = ", and"
+					}
+				}
+				group.HeadingParts = append(group.HeadingParts, scenarioRequirementPart{Text: separator, NoSpaceBefore: len(rivals) > 2})
 			}
 			group.HeadingParts = append(group.HeadingParts, teamPart(id, teams))
 		}
@@ -204,12 +215,7 @@ func summaryRivalNeed(paths [][]scenarioRequirement, team, rival string, games m
 	if len(ids) == 0 || len(ids) > 2 {
 		return nil
 	}
-	sort.Slice(ids, func(i, j int) bool {
-		if games[ids[i]].KickoffUTC != games[ids[j]].KickoffUTC {
-			return games[ids[i]].KickoffUTC < games[ids[j]].KickoffUTC
-		}
-		return ids[i] < ids[j]
-	})
+	ids = fixtureIDsInKickoffOrder(ids, games)
 	type record struct {
 		key       string // empty: not covered; "*": covered regardless of scores
 		wins      int

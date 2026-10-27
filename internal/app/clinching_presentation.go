@@ -91,7 +91,7 @@ func ownHeadingParts(g clinchingGroupView, team string, teams map[string]string,
 		return append(parts, rivalFixtureParts([]string{g.Own[0].GameID, g.Own[1].GameID}, team, teams, games)...)
 	}
 	parts := []scenarioRequirementPart{}
-	for i, r := range g.Own {
+	for i, r := range requirementsInKickoffOrder(g.Own, games) {
 		if i > 0 {
 			parts = append(parts, scenarioRequirementPart{Text: "and"})
 		}

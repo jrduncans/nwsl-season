@@ -68,7 +68,7 @@ func noHelpText(path clinching.NoHelpPath, team, achievement string) string {
 
 func noHelpFixtureText(path clinching.NoHelpPath, teamID string, games map[string]cache.Game, teams map[string]string) string {
 	fixtures := make([]string, 0, len(path.FixtureIDs))
-	for _, id := range path.FixtureIDs {
+	for _, id := range fixtureIDsInKickoffOrder(path.FixtureIDs, games) {
 		game, ok := games[id]
 		if !ok {
 			continue

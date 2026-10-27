@@ -190,7 +190,7 @@ func requirementParts(r scenarioRequirement, perspective string, teams map[strin
 			{Text: fmt.Sprintf("earns at least %d %s across both matches:", r.Points, unit)},
 		}
 		fixtures := 0
-		for _, gameID := range []string{r.GameID, r.SecondGameID} {
+		for _, gameID := range fixtureIDsInKickoffOrder([]string{r.GameID, r.SecondGameID}, games) {
 			game, ok := games[gameID]
 			if !ok {
 				continue
@@ -336,13 +336,7 @@ func clinchingGroupViews(clauses []scenarios.Clause, teamID string, teams, headi
 		}
 		raw = append(raw, c)
 	}
-	sort.Slice(ownIDs, func(i, j int) bool {
-		a, b := games[ownIDs[i]], games[ownIDs[j]]
-		if a.KickoffUTC != b.KickoffUTC {
-			return a.KickoffUTC < b.KickoffUTC
-		}
-		return ownIDs[i] < ownIDs[j]
-	})
+	ownIDs = fixtureIDsInKickoffOrder(ownIDs, games)
 	raw = uniqueConjunctions(raw)
 	type group struct {
 		own  []scenarioRequirement

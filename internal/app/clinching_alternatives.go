@@ -77,7 +77,7 @@ func seedingAlternatives(result scenarios.SeedingResult, finish int, query url.V
 		}
 		card := seedingScenarioView{Number: i + 1, Requirements: len(requirements), Selected: i+1 == number, Scores: len(clause.ScoreConditions) > 0}
 		assumed := addAssumptions(fixed, requirements)
-		for _, r := range requirements {
+		for _, r := range requirementsInKickoffOrder(requirements, games) {
 			r.Text = requirementText(r, "", labels, games)
 			r.Parts = requirementParts(r, "", labels, games)
 			presentScore(&r, labels, games, assumed, history)

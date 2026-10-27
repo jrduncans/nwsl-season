@@ -195,6 +195,7 @@ func presentScenarioGroups(groups []clinchingGroupView, labels map[string]string
 	}
 }
 func presentExpression(e *scenarioExpression, labels map[string]string, games map[string]cache.Game, assumed map[string]uint8, history scenarioHistory) {
+	e.Conditions = requirementsInKickoffOrder(e.Conditions, games)
 	assumed = addAssumptions(assumed, e.Conditions)
 	for i := range e.Conditions {
 		presentScore(&e.Conditions[i], labels, games, assumed, history)
