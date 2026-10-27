@@ -41,6 +41,9 @@ type seedingPage struct {
 	Details                         *seedingAlternativesView
 	HistoryNote                     string
 	Inevitable                      bool
+	// Assumptions restates each assumed result from the selected team's side
+	// when it plays in that match.
+	Assumptions [][]scenarioRequirementPart
 }
 type seedingColumnView struct {
 	Lines      []string
@@ -252,6 +255,17 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		case simulation.AwayWin:
 			fixed[id] = clinching.AwayWin
 		}
+	}
+	fixedIDs := make([]string, 0, len(fixed))
+	for id := range fixed {
+		fixedIDs = append(fixedIDs, id)
+	}
+	for _, id := range fixtureIDsInKickoffOrder(fixedIDs, games) {
+		perspective := ""
+		if g := games[id]; g.HomeTeamID == teamID || g.AwayTeamID == teamID {
+			perspective = teamID
+		}
+		seed.Assumptions = append(seed.Assumptions, requirementParts(scenarioRequirement{GameID: id, Mask: outcomeMask([]clinching.Outcome{fixed[id]})}, perspective, labels, games))
 	}
 	filtered := scenarios.FilterSeeding(*cached, fixed)
 	seed.Disciplinary = filtered.DisciplinaryPossible

@@ -773,6 +773,8 @@ th:nth-child(2) { text-align: left; }
 @media (max-width: 40rem) {
   .seeding-grid th, .seeding-grid td { padding: .5rem .45rem; font-size: .85rem; }
   .seeding-grid thead th { font-size: .78rem; }
+  /* Codes alone keep opponent lists to a line or two in narrow cells. */
+  .seeding-grid td .clinching-path-logo { display: none; }
 }
 .seeding-conditions { margin-block: 2rem; scroll-margin-top: 1rem; }
 .seeding-conditions > .section-heading { align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }

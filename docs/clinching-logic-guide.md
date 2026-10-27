@@ -743,6 +743,12 @@ display never changes these percentages to conditional odds. The native "About
 chances and the table" disclosure holds supporting explanations, forecast and
 venue limitations. Forecast-unavailable notices remain visible.
 
+With assumptions applied, the odds are conditional on them: the note says
+"Finish odds are given your assumptions", the finish header says "Odds", and
+"overall" is dropped from result and selected-finish odds. A result column at 100%
+omits its odds. On narrow screens, grid cells show
+opponent codes without logos so lists wrap inline.
+
 The selected-finish heading also shows its overall odds, including for rare
 finishes. "Opponent if POR finishes 6th" lists opponent odds conditional on that
 finish: each unrounded joint finish/opponent share divided by the unrounded
@@ -779,7 +785,8 @@ and rows that can no longer happen. A team change, copy link, removal, or reset
 preserves the appropriate scenario state. The selected team and the builder's
 optional match-team filter are separate controls. A fixed win or draw leaves
 its score open. Active assumptions repeat compactly beside the selected answer
-and on scenario pages, with an edit link. When an own result is assumed, groups
+and on scenario pages, with an edit link, in kickoff order and phrased from the
+selected team's side when it plays ("POR draws at HOU"). When an own result is assumed, groups
 with no additional own-result requirement say "With these assumptions" or
 "Any remaining results" instead of "With any results".
 
