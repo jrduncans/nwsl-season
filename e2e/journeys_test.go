@@ -1062,8 +1062,8 @@ func TestJ7SchedulerPath(t *testing.T) {
 }
 
 // TestJ5MissingXG is journey J5: when only half of the completed games have xG,
-// Explore labels the teams' xG as incomplete, the season and forecast pages say
-// how much xG is missing, and no page errors.
+// Explore labels the teams' xG as incomplete, the season page says how much xG
+// is missing, and Forecast Lab still produces its outlook without page errors.
 func TestJ5MissingXG(t *testing.T) {
 	t.Parallel()
 	j := newJourney(t, journeyConfig{
@@ -1104,8 +1104,10 @@ func TestJ5MissingXG(t *testing.T) {
 
 			contain("seasons/"+currentSeason,
 				fmt.Sprintf("Incomplete xG data: xG is unavailable for %d of %d completed matches", completed-withXG, completed))
-			contain("seasons/"+currentSeason+"/forecast",
-				fmt.Sprintf("xG coverage: %d of %d completed matches", withXG, completed))
+			contain("seasons/"+currentSeason+"/forecast", "Model estimates, not official standings.")
+			if err := expect.Locator(page.Locator(".forecast-table tbody tr")).ToHaveCount(fixtureTeams); err != nil {
+				t.Errorf("partial xG should still produce an outlook for every team: %v", err)
+			}
 			contain("seasons/" + currentSeason + "/fixtures")
 			contain("history")
 

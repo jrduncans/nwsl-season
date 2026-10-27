@@ -1,39 +1,30 @@
 {{define "forecast"}}{{template "head" .}}
 <div class="forecast-title">
   <div class="title-row"><div>{{template "seasonContext" .}}<h1>Forecast lab</h1></div></div>
-  <div class="forecast-title-content">
-    <p class="note">Explore possible finishes based on the selected approach, season-to-date data, and the remaining schedule. This is an estimate, not the official standings.</p>
-    <div class="title-actions">
-      <a class="button scenario-copy" href="{{.CanonicalPath}}" data-copy-scenario aria-label="Copy scenario link"><span data-copy-scenario-label>Copy link</span></a>
-      <span class="visually-hidden" data-scenario-copy-status role="status" aria-live="polite"></span>
-    </div>
-  </div>
+  <div class="forecast-title-content"><p class="note">Model estimates, not official standings.</p></div>
 </div>
 
-<section class="forecast-controls" aria-label="Forecast settings" data-forecast-controls>
-  <form method="get" action="{{.ForecastPath}}" data-forecast-model-form>
-    <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}{{if .FilteredTeam}}<input type="hidden" name="team" value="{{.FilteredTeam}}">{{end}}
-    <div class="forecast-control-fields">
-      <label for="forecast-model"><span>Forecast approach</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (default){{end}}</option>{{end}}</select></label>
-    </div>
-    <details class="forecast-comparison-control"{{if .HasComparison}} open{{end}}>
-      <summary>Compare another approach <span class="note">(optional)</span></summary>
-      <label for="forecast-comparison"><span>Compare with</span><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}<option value="{{.ID}}" {{if .Selected}}disabled{{end}} {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-    </details>
-    <p class="forecast-control-status note" data-forecast-control-status aria-live="polite">Changes keep your assumptions.</p>
-    <noscript><button class="button button-secondary forecast-model-submit" type="submit">Apply model choices</button></noscript>
-  </form>
-  {{range .Models}}{{if .Selected}}<details class="forecast-model-detail"><summary>About this approach{{if .Default}} <span class="badge">Default</span>{{end}}</summary><p>{{.Detail}}</p></details>{{end}}{{end}}
-  <p class="forecast-evaluation-link"><a href="{{.ModelEvaluationPath}}">Model evaluation</a> <span class="note">See how the forecast approaches performed historically.</span></p>
-  {{if .ShowXGCoverage}}<p class="forecast-xg-coverage{{if or .XGWarning .XGRefreshWarning}} data-warning{{end}}"><strong>xG coverage:</strong> {{if .XGCoverage}}{{.XGCoverage}}{{if .XGWarning}}. The forecast uses only matches with available xG data{{end}}{{else}}No completed matches to assess yet{{end}}. {{if .XGFreshness}}xG data refreshed <time datetime="{{.XGFreshness}}" data-local-time="{{.XGFreshness}}">{{.XGFreshnessFallback}}</time>{{else}}No successful xG refresh is available{{end}}{{if .XGRefreshWarning}}; the latest xG refresh failed{{end}}.</p>{{end}}
-</section>
-
-<dl class="forecast-meta">
-  <div><dt>Data updated</dt><dd>{{if .Freshness}}<time datetime="{{.Freshness}}" data-local-time="{{.Freshness}}">{{.FreshnessFallback}}</time>{{else}}{{.DataCutoff}}{{end}}</dd></div>
-  <div><dt>Possible seasons considered</dt><dd>{{.Iterations}}</dd></div>
-  <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>
-  <div><dt>Remaining</dt><dd>{{.Remaining}}</dd></div>
-</dl>
+<details class="forecast-controls" data-forecast-controls>
+  <summary>Forecast settings</summary>
+  <div class="forecast-control-body">
+    <form method="get" action="{{.ForecastPath}}" data-forecast-model-form>
+      <input type="hidden" name="v" value="2">{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}{{if .FilteredTeam}}<input type="hidden" name="team" value="{{.FilteredTeam}}">{{end}}
+      <div class="forecast-control-fields">
+        <label for="forecast-model"><span>Forecast approach</span><select id="forecast-model" name="m">{{range .Models}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if .Default}} (default){{end}}</option>{{end}}</select></label>
+        <label for="forecast-comparison"><span>Compare with (optional)</span><select id="forecast-comparison" name="c"><option value="">No comparison</option>{{range .Models}}<option value="{{.ID}}" {{if .Selected}}disabled{{end}} {{if .Comparison}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+      </div>
+      <p class="forecast-control-status note" data-forecast-control-status aria-live="polite">Changes keep your assumptions.</p>
+      <noscript><button class="button button-secondary forecast-model-submit" type="submit">Apply model choices</button></noscript>
+    </form>
+    {{range .Models}}{{if .Selected}}<div class="forecast-model-detail"><h3>About the selected approach</h3><p>{{.Detail}}</p></div>{{end}}{{end}}
+    <p class="forecast-evaluation-link"><a href="{{.ModelEvaluationPath}}">Model evaluation</a> <span class="note">— See how the approaches performed historically.</span></p>
+    <dl class="forecast-meta">
+      <div><dt>Simulations</dt><dd>{{.SimulationCount}}</dd></div>
+      <div><dt>Matches left</dt><dd>{{.Remaining}}</dd></div>
+      <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>
+    </dl>
+  </div>
+</details>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
 
 {{if .HasComparison}}
@@ -50,13 +41,9 @@
 </section>
 {{end}}
 
-<section class="forecast-results" aria-labelledby="forecast-title">
-  <div class="section-heading">
-    <div><h2 id="forecast-title">Projected outlook</h2><p class="note">Sorted by projected points. Playoff chances reflect the full range of simulated finishes. {{if .HasChampionship}}Championship chances include a simulated playoff bracket. {{end}}</p></div>
-  </div>
+<section class="forecast-results" aria-label="Forecast outlook">
   <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label></span></fieldset></div>
   <div id="forecast-table-panel" data-forecast-view-panel="table">
-  <p class="note forecast-view-note">Expand a team’s finish distribution for its range of outcomes.</p>
   <p class="forecast-scroll-hint" id="forecast-scroll-hint">Swipe left on the table to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll forecast-table-scroll" tabindex="0" role="region" aria-label="Scrollable {{.Season}} regular-season forecast">
     <table class="forecast-table{{if .HasChampionship}} forecast-table-with-championship{{end}}" aria-describedby="forecast-scroll-hint">

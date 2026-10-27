@@ -63,8 +63,8 @@ forecast can still run, but the page warns that it includes only the matches
 currently in the cache.
 
 The xG model reads only validated, available ASA **team-model** xG for
-completed matches. The page reports its coverage; a warning appears below 95%.
-Missing xG is deliberately not substituted with actual goals.
+completed matches. Missing xG is deliberately not substituted with actual goals.
+Coverage and a separate xG-refresh timestamp are not displayed in Forecast Lab.
 
 At server startup, the scheduler begins bootstrapping missing public historical
 regular seasons. The two previous seasons needed by the venue-based models are
@@ -351,6 +351,21 @@ draw scores. Switching models preserves the fixed outcomes but can change those
 conditional scoreline distributions.
 
 ## Reading the projected outlook
+
+The page introduces the results with “Model estimates, not official standings.”
+A **Forecast settings** disclosure starts closed on every page load, including
+when a comparison is selected. Opening it directly exposes the active approach
+and optional comparison selectors, the selected approach description, the Model
+evaluation link, and counts for simulations, matches left, and fixed results.
+There are no nested disclosures inside settings. Model choices keep applied
+assumptions; without JavaScript, the same form has an Apply model choices button.
+
+The outlook follows settings without a separate heading or introductory
+instructions. Its caption identifies the active model, and each team row labels
+its own Finish distribution disclosure. The Table | Heatmap selector is aligned
+left at every width. The footer shows the data-update timestamp; there is no
+extra timestamp, xG-coverage display, or Copy link button above the outlook.
+Scenarios can still be shared using the page URL.
 
 **Table** is the default outlook. A **Table | Heatmap** segmented selector
 switches between the table and a league-wide finishing-position heatmap in the

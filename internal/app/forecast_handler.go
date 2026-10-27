@@ -395,24 +395,13 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 		page.ComparisonName = comparison.Model.Name
 		page.ComparisonID = comparison.Model.ID
 	}
-	page.ShowXGCoverage = strings.HasPrefix(result.Model.ID, "xg-poisson-") || (comparison != nil && strings.HasPrefix(comparison.Model.ID, "xg-poisson-"))
-	page.XGAvailable, page.XGCompleted = forecastXGCoverage(data)
-	if page.XGCompleted > 0 {
-		page.XGCoverage = fmt.Sprintf("%d of %d completed matches", page.XGAvailable, page.XGCompleted)
-		page.XGWarning = float64(page.XGAvailable)/float64(page.XGCompleted) < .95
-	}
-	if page.ShowXGCoverage {
-		page.XGFreshness, page.XGFreshnessFallback, page.XGRefreshWarning = forecastXGFreshness(data, a.options.Location)
-	}
+	usesXG := strings.HasPrefix(result.Model.ID, "xg-poisson-") || (comparison != nil && strings.HasPrefix(comparison.Model.ID, "xg-poisson-"))
 	if data.LastSuccess != nil {
 		page.Freshness, page.FreshnessFallback = freshnessValues(data.LastSuccess.FinishedAt, a.options.Location)
-		page.DataCutoff = page.FreshnessFallback
-	} else {
-		page.DataCutoff = "Unavailable"
 	}
 	usesHistoricalVenue := strings.HasPrefix(result.Model.ID, "results-poisson-") || strings.HasPrefix(result.Model.ID, "xg-poisson-") ||
 		(comparison != nil && (strings.HasPrefix(comparison.Model.ID, "results-poisson-") || strings.HasPrefix(comparison.Model.ID, "xg-poisson-")))
-	page.ScheduleNote = forecastScheduleNote(data, scope.Entry.Inventory, usesHistoricalVenue, page.ShowXGCoverage)
+	page.ScheduleNote = forecastScheduleNote(data, scope.Entry.Inventory, usesHistoricalVenue, usesXG)
 	// The rendered selector is filtered for a useful no-JavaScript fallback.
 	// The complete list remains in a template for immediate client-side changes.
 	page.AllFixtures = forecastFixtures(data, state, a.options.Location, "")
@@ -506,14 +495,6 @@ func forecastXGCoverage(data cache.SeasonData) (available, completed int) {
 		}
 	}
 	return
-}
-
-func forecastXGFreshness(data cache.SeasonData, location *time.Location) (freshness, fallback string, warning bool) {
-	if success := data.XGStatus.LastSuccess; success != nil {
-		freshness, fallback = freshnessValues(success.FinishedAt, location)
-	}
-	attempt, success := data.XGStatus.LastAttempt, data.XGStatus.LastSuccess
-	return freshness, fallback, attempt != nil && (success == nil || attempt.FinishedAt.After(success.FinishedAt)) && attempt.Outcome != "success"
 }
 
 func forecastScheduleNote(data cache.SeasonData, inventory *competition.InventoryExpectation, usesHistoricalVenue, requireXG bool) string {

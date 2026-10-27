@@ -9,12 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/asatest"
+	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/config"
 	"github.com/jrduncans/nwsl-season/internal/server"
 )
@@ -93,7 +92,8 @@ func newFixture(t *testing.T) *fixture {
 	fake.Load(seedPenalties(season.PlayThrough(start.AddDate(0, 0, 105), halfSeasonScore).WithXG(1)))
 
 	now := start.AddDate(0, 0, 22)
-	srv, err := server.Build(context.Background(), testConfig(t), server.Options{
+	cfg := testConfig(t)
+	srv, err := server.Build(context.Background(), cfg, server.Options{
 		Logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
 		ASABaseURL:         fake.URL(),
 		StartScheduler:     false,
@@ -118,7 +118,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(web.Close)
 
 	f := &fixture{ASA: fake, Server: srv, BaseURL: web.URL + mountPrefix + "/", Season: season}
-	assertXGCoverage(t, f)
+	assertXGCoverage(t, cfg.DBPath)
 	return f
 }
 
@@ -162,25 +162,26 @@ func fillCache(t *testing.T, srv *server.Server, fake *asatest.Server) {
 	t.Fatalf("the cache was still loading after %d CheckNow calls", maxFillChecks)
 }
 
-var xgCoverage = regexp.MustCompile(`xG coverage:\s*(?:<[^>]*>\s*)?(\d+) of (\d+) completed matches`)
-
-// assertXGCoverage fails the fixture unless the forecast page reports xG for
-// every completed match. It reads the page over plain HTTP, so a regression
-// surfaces here instead of as a confusing browser assertion in a later test.
-func assertXGCoverage(t *testing.T, f *fixture) {
+// assertXGCoverage checks the fixture cache directly so page layout changes
+// cannot weaken the guarantee that every completed match has xG available.
+func assertXGCoverage(t *testing.T, path string) {
 	t.Helper()
-	resp, err := http.Get(f.URL("seasons/" + currentSeason + "/forecast"))
+	db, err := cache.Open(context.Background(), path)
 	if err != nil {
-		t.Fatalf("GET forecast: %v", err)
+		t.Fatal(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("forecast page: status %d, read error %v", resp.StatusCode, err)
+	defer func() { _ = db.Close() }()
+	data, err := db.Season(context.Background(), currentSeason, "Regular Season")
+	if err != nil {
+		t.Fatal(err)
 	}
-	match := xgCoverage.FindStringSubmatch(string(body))
-	want := strconv.Itoa(fixturePlayedGames)
-	if match == nil || match[1] != want || match[2] != want {
-		t.Fatalf("forecast xG coverage = %q, want %s of %s completed matches", match, want, want)
+	available := 0
+	for _, xg := range data.XGoals {
+		if xg.Availability == cache.XGAvailable {
+			available++
+		}
+	}
+	if available != fixturePlayedGames {
+		t.Fatalf("fixture xG available for %d matches, want %d", available, fixturePlayedGames)
 	}
 }

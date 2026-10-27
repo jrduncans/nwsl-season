@@ -15,6 +15,21 @@ func testForecastOutlookViews(t *testing.T, f *fixture) {
 		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("forecast")))
 		expect := playwright.NewPlaywrightAssertions()
+		settings := page.Locator("[data-forecast-controls]")
+		if err := expect.Locator(settings).ToHaveJSProperty("open", false); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator("#forecast-model")).ToBeHidden(); err != nil {
+			t.Fatal(err)
+		}
+		click(t, settings.Locator("summary"))
+		for _, selector := range []string{"#forecast-model", "#forecast-comparison", ".forecast-model-detail", ".forecast-evaluation-link", ".forecast-meta"} {
+			if err := expect.Locator(settings.Locator(selector)).ToBeVisible(); err != nil {
+				t.Errorf("one disclosure should reveal %s: %v", selector, err)
+			}
+		}
+		assertNoHorizontalOverflow(t, page)
+		click(t, settings.Locator("summary"))
 		table := page.Locator(`[data-forecast-view-panel="table"]`)
 		heatmap := page.Locator(`[data-forecast-view-panel="heatmap"]`)
 		if err := expect.Locator(table).ToBeVisible(); err != nil {
