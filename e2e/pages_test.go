@@ -105,6 +105,7 @@ func TestPages(t *testing.T) {
 		"forecast assumption flow":  testForecastAssumptionFlow,
 		"forecast copy link":        testForecastCopyLink,
 		"forecast compare model":    testForecastCompareModel,
+		"forecast outlook views":    testForecastOutlookViews,
 		"forecast without script":   testForecastNoScript,
 		"fixtures":                  testFixturesPage,
 		"schedule difficulty":       testScheduleDifficultyPage,
@@ -877,6 +878,15 @@ func testForecastNoScript(t *testing.T, f *fixture) {
 	page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
 	visitStatic(t, page, f.URL(seasonPath("forecast")))
 	expect := playwright.NewPlaywrightAssertions()
+	if err := expect.Locator(page.Locator(`[data-forecast-view-panel="table"]`)).ToBeVisible(); err != nil {
+		t.Error(err)
+	}
+	if err := expect.Locator(page.Locator(`[data-forecast-view-panel="heatmap"]`)).ToBeHidden(); err != nil {
+		t.Error(err)
+	}
+	if err := expect.Locator(page.Locator(`input[name="forecast-view"][value="heatmap"]`)).ToBeDisabled(); err != nil {
+		t.Errorf("without JavaScript the unavailable view switch should be disabled: %v", err)
+	}
 	// The script-only pending list stays hidden and the apply button disabled.
 	if err := expect.Locator(page.Locator("#forecast-pending")).ToBeHidden(); err != nil {
 		t.Error(err)
