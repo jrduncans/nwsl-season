@@ -926,6 +926,47 @@ func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 	}
 }
 
+func TestClinchingPageMovesLongerNoHelpPathsToSeasonSection(t *testing.T) {
+	data := testSeasonData()
+	data.FixtureSnapshotID = "snapshot"
+	path := func(ids ...string) clinching.NoHelpPath {
+		return clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: ids}
+	}
+	clause := []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin, clinching.Draw}}}}}
+	store := fullFakeStore{
+		fakeStore: fakeStore{season: data},
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
+			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, NoHelp: path("future-1", "future-2", "future-3")},
+			{TeamID: "alpha", Achievement: competition.AchievementHomePlayoff, TopK: 4, Status: clinching.NotClinched, NoHelp: path("future-1", "future-2")},
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.NotClinched, NoHelp: path("future-1")},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.NotClinched, NoHelp: path("future-2")},
+		}},
+		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
+			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, CanClinch: true, Clauses: clause}},
+			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementHomePlayoff, TopK: 4, CanClinch: true, Clauses: clause}},
+			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, CanClinch: true, Clauses: clause}},
+			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8}},
+		}},
+	}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching?view=next-matchday", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	requireText(t, body, ".clinching-no-help h2", "Clinch without help over the remaining season")
+	requireText(t, body, ".clinching-no-help summary", "Win 3 matches to clinch the Shield", "Win 2 matches to clinch a home playoff game", "Win 1 match to clinch a playoff spot")
+	requireText(t, body, ".clinching-no-help .clinching-fixture-list", "Win each of these remaining matches: (vs Bravo FC, vs Bravo FC, and vs Bravo FC).", "Win each of these remaining matches: (vs Bravo FC and vs Bravo FC).", "Win each of these remaining matches: at Alpha & Co <script>alert(1)</script>.")
+	if got := len(find(t, body, ".clinching-no-help summary")); got != 3 {
+		t.Fatalf("no-help paths = %d, want 3", got)
+	}
+	requireText(t, body, ".clinching-opportunity-clinching h4", "Can clinch the Shield", "Can clinch a home playoff game", "Can clinch a playoff spot")
+	requireText(t, body, ".clinching-result-group h5", "Win or draw vs Bravo FC")
+	if got := len(find(t, body, ".clinching-opportunity-clinching .clinching-statement")); got != 1 {
+		t.Fatalf("immediate no-help paths = %d, want 1", got)
+	}
+}
+
 func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
