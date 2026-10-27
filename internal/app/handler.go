@@ -19,6 +19,7 @@ import (
 
 	evaluationdata "github.com/jrduncans/nwsl-season/docs"
 	"github.com/jrduncans/nwsl-season/internal/backtest"
+	"github.com/jrduncans/nwsl-season/internal/bracket"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
@@ -755,15 +756,31 @@ func (a *application) competitionSelectors(ctx context.Context, from, season, se
 	for _, readiness := range readinesses {
 		readinessByScope[readiness.Scope.Season+"\x00"+readiness.Scope.Stage] = readiness
 	}
+	completed := map[string]bool{}
+	for _, entry := range competition.PublicEntries() {
+		if entry.Stage != "Playoffs" || !entry.Supports(competition.CapabilityBracket) || competitionStageVisible(entry, readinessByScope) {
+			continue
+		}
+		regular := readinessByScope[entry.Season+"\x00Regular Season"]
+		if entry.Season != season && regular.Completeness != cache.InventoryCompletenessComplete {
+			continue
+		}
+		seeds, seedErr := a.finalPlayoffSeeds(ctx, entry.Season)
+		if seedErr != nil {
+			return nil, nil, seedErr
+		}
+		completed[entry.Season] = seeds.Complete
+	}
+	stageVisible := func(entry competition.Entry) bool {
+		return competitionStageVisible(entry, readinessByScope) || (entry.Stage == "Playoffs" && entry.Supports(competition.CapabilityBracket) && completed[entry.Season])
+	}
 	visible := make([]competition.Entry, 0, len(entries))
 	for _, entry := range entries {
-		if competitionStageVisible(entry, readinessByScope) {
+		if stageVisible(entry) {
 			visible = append(visible, entry)
 		}
 	}
-	return seasonStageSelectorWhen(from, selectedSeason, selectedSlug, suffix, func(entry competition.Entry) bool {
-		return competitionStageVisible(entry, readinessByScope)
-	}), stageSelectorForEntries(from, season, selectedStage, visible), nil
+	return seasonStageSelectorWhen(from, selectedSeason, selectedSlug, suffix, stageVisible), stageSelectorForEntries(from, season, selectedStage, visible), nil
 }
 
 func (a *application) season(w http.ResponseWriter, r *http.Request) {
@@ -791,6 +808,28 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 		if dataErr != nil {
 			a.renderError(w, r, dataErr)
 			return
+		}
+		regular, _ := competition.Lookup(scope.Season, "Regular Season")
+		// Retain populated historical brackets, including observed reseeding
+		// and playoff evidence for tied historical ranks.
+		if scope.Stage == "Playoffs" && (regular.Rules != nil || !knockoutMatchupAvailable(data.Games)) {
+			seeds, seedErr := a.finalPlayoffSeeds(r.Context(), scope.Season)
+			if seedErr != nil {
+				a.renderError(w, r, seedErr)
+				return
+			}
+			if seeds.Complete {
+				page.FormatNotice = ""
+				page.Navigation = seasonNavigation(r.URL.Path, scope, r.URL.Path, competition.Rules{}, false)
+				result := seededBracketPageFor(page, *scope.Entry.BracketFormat, data, seeds)
+				result.PublicationNotice, err = a.playoffPublicationStatus(r.Context(), scope.Season, data, result.State == bracket.StateReady)
+				if err != nil {
+					a.renderError(w, r, err)
+					return
+				}
+				a.render(w, "bracket", result)
+				return
+			}
 		}
 		if knockoutMatchupAvailable(data.Games) {
 			a.render(w, "bracket", bracketPageFor(page, *scope.Entry.BracketFormat, data))
@@ -1096,6 +1135,11 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
 		HasFixtureOutlooks:     !retrospective && scope.forecastCapabilityAvailable() && len(outlooks) > 0,
 	}
+	if scope.Stage == "Regular Season" && presentation.Phase == seasonPhaseComplete && presentation.FinalStandingsSafe {
+		if playoffs, ok := competition.Lookup(season, "Playoffs"); ok && playoffs.Public && playoffs.Supports(competition.CapabilityBracket) {
+			page.PlayoffsPath = relativeURL(r.URL.Path, stageURL(season, playoffs.Slug))
+		}
+	}
 	if scope.xgAvailable() && completedMatches > 0 && xgAvailable < completedMatches {
 		page.XGWarning = fmt.Sprintf("xG is unavailable for %d of %d completed matches, so the xG columns are incomplete.", completedMatches-xgAvailable, completedMatches)
 	}
@@ -1163,6 +1207,9 @@ func seasonFeatureSuffix(requestPath, stageSlug string) (string, bool) {
 
 func (a *application) factualLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
 	notice := scope.Entry.ShortLabel + " matches have not been loaded yet."
+	if scope.Stage == "Playoffs" {
+		notice += " " + playoffPublicationNotice
+	}
 	if store, ok := a.store.(interface {
 		SeasonReadiness(context.Context, string, string) (cache.SeasonReadinessSnapshot, bool, error)
 	}); ok {
@@ -1170,7 +1217,7 @@ func (a *application) factualLoadPage(r *http.Request, scope requestCompetition)
 		if err != nil {
 			return seasonPage{}, fmt.Errorf("load playoff readiness: %w", err)
 		}
-		if found && readiness.Readiness == cache.SourceReadinessNotPublished {
+		if found && readiness.Readiness == cache.SourceReadinessNotPublished && scope.Stage != "Playoffs" {
 			notice = "ASA has not published " + strings.ToLower(scope.Entry.ShortLabel) + " data yet."
 		}
 	}

@@ -38,6 +38,7 @@ type seasonPage struct {
 	ScheduleDifficultyPath string
 	ForecastPath           string
 	ClinchingPath          string
+	PlayoffsPath           string
 	CurrentPath            string
 	Navigation             []navigationItem
 	SeasonSelector         []seasonSelectorItem
@@ -76,9 +77,12 @@ type seasonPage struct {
 
 type bracketPage struct {
 	seasonPage
-	State       bracket.State
-	Rounds      []bracketRoundView
-	Diagnostics []string
+	State             bracket.State
+	Rounds            []bracketRoundView
+	Diagnostics       []string
+	Seeded            bool
+	PublicationNotice string
+	StandingsPath     string
 }
 
 type bracketRoundView struct {
@@ -87,6 +91,7 @@ type bracketRoundView struct {
 }
 
 type bracketSlotView struct {
+	Expected   bool
 	SeedPair   string
 	Home       fixtureTeamView
 	Away       fixtureTeamView
@@ -1052,6 +1057,20 @@ func fixtureWinner(game cache.Game) string {
 
 func bracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData) bracketPage {
 	view := bracket.Build(format, data.Games)
+	return bracketPageFrom(page, format, data, view)
+}
+
+func seededBracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData, seeds playoffSeeds) bracketPage {
+	view := bracket.BuildWithSeeds(format, data.Games, seeds.Seeds)
+	data.Teams = append(append([]standings.Team(nil), data.Teams...), seeds.Teams...)
+	result := bracketPageFrom(page, format, data, view)
+	result.Seeded = true
+	result.ShowFixtureViewToggle = false
+	result.StandingsPath = relativeURL(stageURL(page.Season, "playoffs"), stageURL(page.Season, "regular-season"))
+	return result
+}
+
+func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cache.SeasonData, view bracket.View) bracketPage {
 	teams := make(map[string]teamNameView, len(data.Teams))
 	codes := make(map[string]string, len(data.Teams))
 	for _, team := range data.Teams {
@@ -1088,7 +1107,7 @@ func bracketPageFor(page seasonPage, format competition.BracketFormat, data cach
 	for _, round := range view.Rounds {
 		row := bracketRoundView{Label: round.Label}
 		for _, slot := range round.Slots {
-			item := bracketSlotView{Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
+			item := bracketSlotView{Expected: slot.SeedPair != nil && slot.Game == nil, Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
 			if slot.SeedPair != nil {
 				item.SeedPair = fmt.Sprintf("Seeds %d and %d", slot.SeedPair[0], slot.SeedPair[1])
 			}
