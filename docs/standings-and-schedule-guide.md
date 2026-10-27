@@ -67,8 +67,8 @@ A playoff line is drawn only when the catalog verifies the playoff place thresho
 [competitions guide](competitions-guide.md)).
 
 Safely completed regular seasons link prominently to the same season's playoffs,
-even before ASA fixtures reach the cache. The playoff page uses resolved official
-total seeds and verified bracket pairs for labelled opening-round expectations.
+even before ASA matches reach the cache. The playoff page uses resolved official
+total seeds and verified bracket pairs for labeled opening-round expectations.
 Alphabetical display order never supplies an unresolved seed. Verified inventory
 and safe final results are required before any seed-derived entrants appear;
 unknown dates, venues and later participants stay TBD. Standings and regular-season

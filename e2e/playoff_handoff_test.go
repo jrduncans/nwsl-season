@@ -46,7 +46,7 @@ func TestPlayoffHandoff(t *testing.T) {
 			if err := expect.Locator(page.Locator(".bracket-provenance").First()).ToContainText("Expected from final seeds"); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("main")).ToContainText("not published fixtures"); err != nil {
+			if err := expect.Locator(page.Locator("main")).ToContainText("not published matches"); err != nil {
 				t.Fatal(err)
 			}
 			if !noScript {

@@ -63,3 +63,34 @@ func TestSeedSourceDisagreementAndUnresolvedSeedsRemainVisible(t *testing.T) {
 		t.Fatalf("undated published fixture = %+v", view)
 	}
 }
+
+func TestPublishedGamesFillUnresolvedSeedsWithoutDisagreement(t *testing.T) {
+	format := catalogFormat(t, "2026", "Playoffs")
+	// Seeds 2 and 3 are tied; resolved seed 9 cannot be a playoff entrant.
+	seeds := map[int]string{1: "1", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9"}
+	games := []cache.Game{
+		scored(sourceGame("q3", "2", "7", "2026-11-01T20:00:00Z"), 2, 0),
+		sourceGame("q4", "6", "3", "2026-11-02T20:00:00Z"),
+		sourceGame("q1", "1", "8", "2026-11-03T20:00:00Z"),
+	}
+	view := BuildWithSeeds(format, games, seeds)
+	if view.State != StatePartial || len(view.Diagnostics) != 0 {
+		t.Fatalf("unresolved seeds produced a disagreement: %+v", view)
+	}
+	if slots(view)[2].Game == nil || slots(view)[2].Home.TeamID != "2" || slots(view)[3].Away.TeamID != "3" || slots(view)[0].Game == nil {
+		t.Fatalf("published games were not placed by their known seeds: %+v", view)
+	}
+
+	// With every opening-round seed unknown, a published game fits several
+	// slots. It stays unplaced and unresolved rather than guessed or flagged.
+	view = BuildWithSeeds(format, games[:1], map[int]string{9: "9"})
+	if view.State != StateUnresolved || len(view.Diagnostics) != 0 || slots(view)[2].Game != nil {
+		t.Fatalf("ambiguous published game = %+v", view)
+	}
+
+	// A resolved non-entrant still disagrees with the expected bracket.
+	view = BuildWithSeeds(format, []cache.Game{sourceGame("q3", "9", "7", "2026-11-01T20:00:00Z")}, seeds)
+	if view.State != StateFormatMismatch {
+		t.Fatalf("resolved non-entrant was placed: %+v", view)
+	}
+}

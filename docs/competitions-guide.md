@@ -160,20 +160,24 @@ narrow window), each team shows its short code instead of its full name, as
 Matches rows do on phones; the full name stays available to screen readers.
 
 Once the regular season is safely complete, Playoffs can show opening-round
-expectations before fixtures arrive. `bracket.BuildWithSeeds` combines the
+expectations before matches arrive. `bracket.BuildWithSeeds` combines the
 catalog's verified seed pairs with resolved official **total** standings.
 Unavailable adjustments or undetermined tiebreaks leave affected seeds TBD;
 an abandoned match, incomplete inventory, missing score or unknown status cannot
-certify entrants. Expected pairings are explicitly labelled separately from
-ASA-published fixtures. No generated fixtures, IDs, dates, venues or winners are
-persisted. Placeholder fixtures do not supply a slot's date or participants.
+certify entrants. Expected pairings are explicitly labeled separately from
+ASA-published matches. No generated matches, IDs, dates, venues or winners are
+persisted. Placeholder matches do not supply a slot's date or participants.
 
-With this seed context, partially published fixtures are matched by participants,
+With this seed context, partially published matches are matched by participants,
 not by publication or kickoff order. Published sides and results take precedence
 in matched slots; only source results supply winners and later advancement.
 Games that disagree with resolved seed pairs or cannot be placed against known
 advancement produce visible diagnostics and a chronological published-match
 fallback on the playoff page, with a link to the Matches page.
+A game naming a team without a resolved seed is not a disagreement: it fills the
+one opening-round slot whose resolved sides it includes, provided its other
+participant holds no resolved seed. If several slots could hold it, it stays
+unplaced, the bracket is unresolved, and the published-match list shows it.
 Populated historical brackets retain the existing source-backed interpretation,
 including observed reseeding and playoff evidence for tied historical ranks.
 

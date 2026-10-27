@@ -77,9 +77,9 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 			store.playoffs = cache.SeasonData{Games: tc.games}
 			body := handoffResponse(t, store, "/seasons/2026/playoffs")
 			requireElements(t, body, "[data-bracket-state]", `a[href="regular-season"]`)
-			requireText(t, body, "main", "Expected from final seeds", "not published fixtures", "publication or discovery", "Date and venue TBD", "Seeds 3 and 6")
+			requireText(t, body, "main", "Expected from final seeds", "not published matches", "publication or discovery", "Date and venue TBD", "Seeds 3 and 6")
 			if strings.Contains(body, "Published by ASA") != tc.published {
-				t.Fatal("source and expected fixture labels were not distinct")
+				t.Fatal("source and expected match labels were not distinct")
 			}
 			if strings.Contains(body, "ASA has not published") {
 				t.Fatal("cache absence asserted ASA nonpublication")
@@ -104,9 +104,9 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 	}
 	body = handoffResponse(t, store, "/seasons/2026/playoffs")
 	requireElements(t, body, `[data-bracket-state="ready"]`)
-	requireText(t, body, "main", "ASA-published fixtures and results", "2–0", "2026-11-07T20:00:00Z")
+	requireText(t, body, "main", "ASA-published matches and results", "2–0", "2026-11-07T20:00:00Z")
 	if strings.Count(body, "Published by ASA") != 7 || strings.Contains(body, "Expected from final seeds") {
-		t.Fatal("published fixtures did not replace expectations")
+		t.Fatal("published matches did not replace expectations")
 	}
 	store.playoffs.Games[0].AwayTeamID = seeds.Seeds[8]
 	body = handoffResponse(t, store, "/seasons/2026/playoffs")
@@ -142,4 +142,15 @@ func TestPlayoffSeedsRequireSafeFinalityAndResolvedOfficialRanks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPublishedMatchWithUnresolvedSeedsIsNotAMismatch(t *testing.T) {
+	// Every rank is tied, so no seed resolves; a published quarterfinal fits
+	// several seed slots and stays listed rather than placed or flagged.
+	store := handoffStore{regular: completeCatalogSeasonData()}
+	teams := store.regular.Teams
+	store.playoffs = cache.SeasonData{Games: []cache.Game{{ASAID: "quarterfinal", Season: "2026", Stage: "Playoffs", HomeTeamID: teams[0].ID, AwayTeamID: teams[1].ID, KickoffUTC: "2026-11-01T20:00:00Z", Status: fixtures.PreMatchStatus}}}
+	body := handoffResponse(t, store, "/seasons/2026/playoffs")
+	requireElements(t, body, `[data-bracket-state="unresolved"]`, `[aria-label="Published matches"] .fixtures`, `a[href="regular-season"]`)
+	forbidText(t, body, "main", "Bracket format mismatch", "may disagree with the expected bracket")
 }

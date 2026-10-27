@@ -821,7 +821,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 			if seeds.Complete {
 				page.FormatNotice = ""
 				page.Navigation = seasonNavigation(r.URL.Path, scope, r.URL.Path, competition.Rules{}, false)
-				result := seededBracketPageFor(page, *scope.Entry.BracketFormat, data, seeds)
+				result := seededBracketPageFor(page, *scope.Entry.BracketFormat, data, seeds, relativeURL(r.URL.Path, stageURL(scope.Season, regular.Slug)))
 				result.PublicationNotice, err = a.playoffPublicationStatus(r.Context(), scope.Season, data, result.State == bracket.StateReady)
 				if err != nil {
 					a.renderError(w, r, err)

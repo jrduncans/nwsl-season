@@ -53,9 +53,9 @@ const playoffPublicationNotice = "Playoff schedule details are awaiting ASA publ
 func (a *application) playoffPublicationStatus(ctx context.Context, season string, data cache.SeasonData, ready bool) (string, error) {
 	notice := playoffPublicationNotice
 	if ready {
-		notice = "ASA-published fixtures and results are shown below."
+		notice = "ASA-published matches and results are shown below."
 	} else if len(data.Games) > 0 {
-		notice += " ASA fixtures may be placeholders or partially published; only identified matchups are placed below."
+		notice += " ASA matches may be placeholders or partially published; only identified matchups are placed below."
 	}
 	status, err := a.store.Status(ctx, season, "Playoffs")
 	if err != nil {

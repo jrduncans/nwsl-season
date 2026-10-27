@@ -1060,13 +1060,13 @@ func bracketPageFor(page seasonPage, format competition.BracketFormat, data cach
 	return bracketPageFrom(page, format, data, view)
 }
 
-func seededBracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData, seeds playoffSeeds) bracketPage {
+func seededBracketPageFor(page seasonPage, format competition.BracketFormat, data cache.SeasonData, seeds playoffSeeds, standingsPath string) bracketPage {
 	view := bracket.BuildWithSeeds(format, data.Games, seeds.Seeds)
 	data.Teams = append(append([]standings.Team(nil), data.Teams...), seeds.Teams...)
 	result := bracketPageFrom(page, format, data, view)
 	result.Seeded = true
 	result.ShowFixtureViewToggle = false
-	result.StandingsPath = relativeURL(stageURL(page.Season, "playoffs"), stageURL(page.Season, "regular-season"))
+	result.StandingsPath = standingsPath
 	return result
 }
 
