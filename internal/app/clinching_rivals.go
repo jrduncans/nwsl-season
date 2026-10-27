@@ -15,10 +15,11 @@ import (
 // results that keep the team ahead of it, then each record that leaves the
 // two level on points, with the score condition that decides it.
 type clinchingRivalView struct {
-	Parts   []scenarioRequirementPart
-	GameIDs []string
-	RivalID string
-	Ties    []clinchingRivalTieView
+	Conjoined bool // an additional required group, not a separate path
+	Parts     []scenarioRequirementPart
+	GameIDs   []string
+	RivalID   string
+	Ties      []clinchingRivalTieView
 }
 
 // clinchingRivalTieView is one level-on-points record. Condition is nil when

@@ -314,7 +314,9 @@ alternative rows are indented. Each item
 repeats the rival and fixtures; its score requirement and Tiebreak details
 belong only to that item. Results with identical requirements can still merge.
 Nested groups are labeled “All of:” (only for more than one
-condition), “At least one of these conditions:” and “And at least one of these:”.
+condition), “At least one of these conditions:” and “And one of:”.
+Each additional required group of alternatives explicitly says “And one of:”,
+including independent rival groups; the alternatives within each group remain OR.
 Explanatory paragraphs use complete sentences with capitals and periods.
 Within an outcome, the page groups confirmed scenarios by the team's own results, in kickoff
 order and from wins through draws to losses. Overlapping conditions such as
@@ -718,7 +720,8 @@ impossible with that column's results. The Misses the playoffs row says
 "Possible" instead. A cell is exact: some integer scoreline with those results
 (and any fixed results) gives that seed and that opponent.
 
-At 700px or less, JavaScript enables a local "Team results" selector with
+At 700px or less, when there is more than one result column, JavaScript enables
+a local "Team results" selector with
 "All results" selected initially and one option per grouped column, using its
 existing labels. Choosing a column shows it beside the finish column using the
 same table nodes. All reachable seed rows and impossible-cell dashes remain.
@@ -726,21 +729,29 @@ The control only focuses the table: it does not fix results, change the URL,
 select a seed, rerun forecasts or filter the conditions. Desktop always shows
 the full matrix; without JavaScript the control stays hidden and the full
 matrix remains available. The table's supporting disclosure explains that
-Fix results changes the scenario while Team results only focuses the table.
+Assume match results changes the scenario. A note beside Team results says
+"Display only; assumptions and odds stay the same." Keep this selector separate
+from assumptions; it remains useful for opponent-heavy columns on mobile.
+With only one result column, omit both the selector and its display-only note.
 
 ### Likelihoods
 
-Table headings explain percentages once: the finish column says "Overall
-chance", while each own-result column labels its cells "Finish + these
-results" beneath its own-results percentage. Cells show only their numeric
-percentage. A single native "About chances and the table" disclosure holds
-supporting explanations, focus instructions, forecast and venue limitations.
-Rows show the overall finish chance; columns show the chance of those own
-results among counted forecasts; cells show the joint chance of that finish
-and those results. Forecast-unavailable notices remain visible.
-Opponent percentages below the selected finish are the chance of that finish
-AND opponent, not the opponent chance conditional on that seed. Rounded chances
-are not normalized. Venue and forecast limitations remain available.
+The finish header says "Overall odds"; result headers show their overall
+percentage. A shared note above the table explains that cells show the joint
+chance of the finish **and** the column's results. Choosing a result column for
+display never changes these percentages to conditional odds. The native "About
+chances and the table" disclosure holds supporting explanations, forecast and
+venue limitations. Forecast-unavailable notices remain visible.
+
+The selected-finish heading also shows its overall odds, including for rare
+finishes. "Opponent if POR finishes 6th" lists opponent odds conditional on that
+finish: each unrounded joint finish/opponent share divided by the unrounded
+finish share. Rounded percentages are never used as inputs or normalized.
+With zero forecast samples for the selected finish, list exact possible
+opponents without percentages and say the finish is possible but its opponent
+odds are unavailable. An unsampled opponent alongside sampled opponents says
+“possible; odds unavailable”. Simulation details belong in the table disclosure.
+An unavailable forecast likewise supplies no opponent percentages.
 
 Each row, column and cell also shows a likelihood from Forecast Lab's default
 model, with the fixed results applied. The page runs that forecast through the
@@ -748,8 +759,10 @@ shared forecast executor and its in-memory cache, with the catalog bracket's
 seed pairs; each simulated season records every team's seed, opponent and own
 results. Only exact possibilities are counted: a simulated pairing the exact
 search rules out is ignored, and a simulated finish that disciplinary points
-decide is not counted. A possible finish never shows 0%: under 0.5% shows
-"<1%", and "100%" appears only for the only possible finish. Opponents within a
+decide is not counted. Zero sampled shares say “possible; odds unavailable”,
+preserving the distinction from impossibility. Positive shares under 0.5% show "<1%"; "100%" requires the sole
+listed possibility and a complete forecast share, never a lone partial-search
+row. Opponents within a
 cell, and in the selected seed's opponent list, are ordered likeliest first.
 When the forecast is unavailable (busy, timed out, or no fixed bracket), the
 grid shows no likelihoods and says so.
@@ -757,15 +770,18 @@ grid shows no likelihoods and says so.
 Without `finish`, the page selects the likeliest finish and shows its
 conditions, marked as the most likely; the shared link stays without `finish`.
 
-### Fixing results
+### Assuming match results
 
-The shared Forecast Lab scenario builder optionally fixes results with the same
+**Assume match results** opens the shared Forecast Lab scenario builder with the same
 `p={game-id}:{h|d|a}` encoding (and twelve-result limit). Fixing the team's own
 match removes it from the columns; fixing any match removes opponents, cells
 and rows that can no longer happen. A team change, copy link, removal, or reset
 preserves the appropriate scenario state. The selected team and the builder's
 optional match-team filter are separate controls. A fixed win or draw leaves
-its score open.
+its score open. Active assumptions repeat compactly beside the selected answer
+and on scenario pages, with an edit link. When an own result is assumed, groups
+with no additional own-result requirement say "With these assumptions" or
+"Any remaining results" instead of "With any results".
 
 ### Per-seed conditions
 
@@ -777,11 +793,25 @@ rejected.
 
 Conditions are grouped by the team's own results, preserving team cards and
 result colors. Essential scores and equality continuations stay visible.
-Small outputs list up to five alternatives. Larger outputs retain a compact
+Each own-result group lists up to five complete alternatives, even when other
+groups are larger, subject to the shared 30-unit rendered-tree bound (so a
+single large conjunction can still need a preview). The presentation uses the
+full retained condition union; a displayed count of one never proves a preview complete. Presentation bounds
+retain their original certified input on overflow. Larger outputs retain a compact
 necessary-condition summary: up to three common requirements, a short positive
 minimum-count list when available, up to four named fixtures and a note about
 score dependencies. These summaries explicitly say they do not guarantee the
-finish. They never masquerade as sufficient recipes.
+finish. They never masquerade as sufficient recipes. Fixtures already described
+by visible requirements are omitted from the additional-fixture preview.
+
+An empty outside-help conjunction proves a no-help path and explicitly says, for
+example, "Guarantees 1st place". An unconditional cached clause (or its exact
+result-mask union) proves an inevitable finish independently of forecast odds,
+listed-row counts or calculation limits. These outcomes omit the grid, most-likely
+copy and scenario navigation. A guaranteed miss shows only "Eliminated" beneath the existing team heading,
+without repeating the code, 100% odds, or a redundant explanation. If only the
+assumed results prove the miss, it says "Eliminated under these assumptions".
+Without forecasts an inevitable outcome still appears automatically.
 
 **See scenarios for finishing 4th** (or the selected finish) opens complete
 scenarios under “How [team] can finish [rank]”. Each scenario is a sufficient
@@ -792,8 +822,10 @@ Up to four expandable scenario cards render per page, with the linked scenario
 open. Cards use the shared white panel surface against the off-white page,
 with green disclosure arrows; expanded headings use the pale green surface and
 green left border already used by clinching results. Collapsed cards preview
-up to two conditions, favoring those that differ
-between the scenarios on the page. Every card contains
+up to two conditions, leading with the selected team's own result when present,
+then favoring conditions that differ between the scenarios on the page. Detailed
+condition lists also put own results first, with kickoff order within each
+category; requirements stay in their original conjunction. Every card contains
 all of its match and tiebreak conditions together; only supporting score
 explanations are collapsed. Requirements are never paginated. Previous/next
 text links navigate groups of complete scenarios; there is no numeric picker.
@@ -803,8 +835,12 @@ scenario. Navigation retains finish, team and fixed-result state using relative
 URLs, including behind a proxy prefix.
 
 Tiebreak conditions appear alongside match results, followed by a reminder that
-other matches are unrestricted only while those conditions hold. Fixed-result
-context explains that selecting an outcome leaves the score open. Calculation
+other matches are unrestricted only while those conditions hold. Tiebreak
+guidance stays beside the relevant paths: an oversized preview says some
+scenarios depend on goal difference or goals scored; complete conditions carry
+their own tiebreak requirements. There is no repeated caveat above the cards.
+The expanded Tiebreak details explain that the comparisons include all remaining
+matches and that an assumed result leaves its score open. Calculation
 limits and disciplinary exclusions remain separate notices; the scenario count
 is not a promise that an incomplete search found every possible way.
 

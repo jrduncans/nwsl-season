@@ -66,6 +66,16 @@ func groupSeasonSummary(summary scenarioExpression, team string, teams map[strin
 		}
 		view.Groups = append(view.Groups, group)
 	}
+	// Each factored group is required alongside all earlier groups. Carry that
+	// conjunction into its alternatives label without changing any predicates.
+	for i := 1; i < len(view.Groups); i++ {
+		group := &view.Groups[i]
+		group.Expression.Conjoined = true
+		if group.Rival != nil {
+			group.Rival.Conjoined = true
+		}
+	}
+
 	return view
 }
 

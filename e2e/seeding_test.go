@@ -16,6 +16,16 @@ func TestPagesClinchingSeeding(t *testing.T) {
 		page := newPage(t, vp)
 		visit(t, page, j.URL(seasonPath("clinching")+"?view=seeding"))
 		expect := playwright.NewPlaywrightAssertions()
+		if err := expect.Locator(page.Locator("#seeding-conditions-title")).ToContainText("Guaranteed 1st place"); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator(".seeding-grid, .seeding-most-likely, .seeding-alternative-pages")).ToHaveCount(0); err != nil {
+			t.Fatal(err)
+		}
+		selectValue(t, page.Locator("#seeding-team"), "T00")
+		if err := page.WaitForURL("**/clinching?**team=T00**"); err != nil {
+			t.Fatal(err)
+		}
 		if err := expect.Locator(page.Locator(".seeding-grid")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
@@ -70,6 +80,16 @@ func TestPagesClinchingSeeding(t *testing.T) {
 		if err := expect.Locator(page.Locator(".forecast-scenario .forecast-assumptions li")).ToHaveCount(1); err != nil {
 			t.Fatal(err)
 		}
+		assumedURL := page.URL()
+		own := j.pendingGameOf(t, teamZero)
+		visit(t, page, j.URL(seasonPath("clinching")+"?view=seeding&team=T00&p="+own.GameID+":d"))
+		if err := expect.Locator(page.Locator(".seeding-grid thead th")).ToHaveCount(2); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator(".seeding-focus-control")).ToHaveCount(0); err != nil {
+			t.Fatal(err)
+		}
+		visit(t, page, assumedURL)
 		// Changing teams retains the fixed result, including behind a proxy prefix.
 		options, err := page.Locator("#seeding-team option").All()
 		if err != nil || len(options) < 2 {
@@ -111,6 +131,15 @@ func assertSeedingFocus(t *testing.T, page playwright.Page, vp viewport) {
 		t.Fatal(err)
 	}
 	focus := page.Locator("#seeding-focus")
+	if columns == 2 {
+		if err := expect.Locator(page.Locator(".seeding-focus-control")).ToHaveCount(0); err != nil {
+			t.Fatal(err)
+		}
+		if err := page.SetViewportSize(vp.Width, vp.Height); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
 	if err := expect.Locator(focus).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
@@ -129,11 +158,10 @@ func assertSeedingFocus(t *testing.T, page playwright.Page, vp viewport) {
 		if err := expect.Locator(page.Locator(".seeding-grid tbody tr:visible")).ToHaveCount(rows); err != nil {
 			t.Fatal(err)
 		}
-		if selected != "all" {
-			if n, err := page.Locator(".seeding-joint-heading:visible").Count(); err != nil || n != 1 {
-				t.Fatalf("focused chance labels = %d, %v", n, err)
-			}
+		if err := expect.Locator(page.Locator(".seeding-chance-key")).ToBeVisible(); err != nil {
+			t.Fatal(err)
 		}
+
 	}
 	if err := page.SetViewportSize(1280, 800); err != nil {
 		t.Fatal(err)
@@ -170,7 +198,7 @@ func TestPagesClinchingSeedingNoScript(t *testing.T) {
 	j := newJourney(t, lateSeason())
 	forEachViewport(t, func(t *testing.T, vp viewport) {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
-		visitStatic(t, page, j.URL(seasonPath("clinching")+"?view=seeding"))
+		visitStatic(t, page, j.URL(seasonPath("clinching")+"?view=seeding&team=T00"))
 		expect := playwright.NewPlaywrightAssertions()
 		if err := expect.Locator(page.Locator("#seeding-focus")).ToBeHidden(); err != nil {
 			t.Fatal(err)

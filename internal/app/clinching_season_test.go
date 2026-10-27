@@ -305,7 +305,7 @@ func TestClinchingSeedingAllAlternativesAccessible(t *testing.T) {
 
 	for _, number := range []int{1, 4, 12, 300} {
 		detail := getClinching(t, store, fmt.Sprintf("?view=seeding&team=ALP&finish=1&alternative=%d", number))
-		requireText(t, detail, "#seeding-alternative", fmt.Sprintf("Scenario %d of 300", number), "if all 2 conditions happen")
+		requireText(t, detail, "#seeding-alternative", fmt.Sprintf("Scenario %d of 300", number), "All 2 conditions must happen")
 		requireAttr(t, detail, "a", "href", "?finish=1&team=ALP&view=seeding#seeding-conditions")
 		if strings.Count(detail, "clinching-condition-score") != seedingScenariosPerPage {
 			t.Fatal("detail must render a bounded page of complete scenarios")
@@ -416,14 +416,14 @@ func TestSeedingLikelihoodsFillTheGridAndPickTheLikeliestFinish(t *testing.T) {
 	if got := rows[mostLikelyRow(rows)].seed; got != 2 {
 		t.Fatalf("most likely seed %d", got)
 	}
-	if rows[1].opponentLikelihood("charlie", true) != "50%" || rows[1].opponentLikelihood("bravo", true) != "10%" {
+	if rows[1].opponentLikelihood("charlie", true) != "83%" || rows[1].opponentLikelihood("bravo", true) != "17%" {
 		t.Fatal("opponent likelihoods")
 	}
 	for _, test := range []struct {
 		p    float64
 		only bool
 		want string
-	}{{0, false, "<1%"}, {0.004, false, "<1%"}, {0.42, false, "42%"}, {0.999, false, ">99%"}, {0.97, true, "100%"}} {
+	}{{0, false, "possible; odds unavailable"}, {0.004, false, "<1%"}, {0.42, false, "42%"}, {0.999, false, ">99%"}, {0.97, true, "100%"}} {
 		if got := likelihoodText(test.p, test.only); got != test.want {
 			t.Errorf("likelihoodText(%v, %v) = %q", test.p, test.only, got)
 		}
