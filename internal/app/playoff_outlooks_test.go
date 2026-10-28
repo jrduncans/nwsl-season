@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -58,5 +59,10 @@ func TestBracketNamesFeederTeamsAndStylesWinner(t *testing.T) {
 	slot := page.Rounds[0].Slots[0]
 	if !slot.HomeWinner || slot.AwayWinner || !slot.Completed || slot.Home.Seed != 1 || slot.Away.Seed != 8 {
 		t.Fatalf("winner and seeds: %+v", slot)
+	}
+	// The decided quarterfinal advances its winner while the other side waits.
+	semifinal := page.Rounds[1].Slots[0]
+	if semifinal.Home.ID != seeds.Seeds[1] || !strings.Contains(semifinal.Away.Name, " or ") {
+		t.Fatalf("semifinal entrants: home %+v, away %+v", semifinal.Home, semifinal.Away)
 	}
 }

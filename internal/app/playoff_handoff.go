@@ -77,7 +77,10 @@ func playoffBracketEntry(entry competition.Entry) bool {
 	return entry.Stage == "Playoffs" && entry.Supports(competition.CapabilityBracket)
 }
 
-const playoffPublicationNotice = "ASA hasn't published the playoff schedule yet, or this site hasn't picked it up."
+const (
+	playoffPublicationNotice        = "ASA hasn't published the playoff schedule yet, or this site hasn't picked it up."
+	playoffPartialPublicationNotice = "ASA hasn't published the rest of the playoff schedule yet, or this site hasn't picked it up."
+)
 
 // playoffWaitingNotice explains a bracket still waiting on ASA. A fully
 // published bracket needs no notice.
@@ -86,7 +89,7 @@ func playoffWaitingNotice(data cache.SeasonData, ready bool) string {
 	case ready:
 		return ""
 	case len(data.Games) > 0:
-		return playoffPublicationNotice
+		return playoffPartialPublicationNotice
 	default:
 		return playoffPublicationNotice
 	}

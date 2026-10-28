@@ -412,7 +412,6 @@ th:nth-child(2) { text-align: left; }
 .bracket-seeds, .bracket-kickoff, .bracket-facts, .bracket-advances { margin: 0 0 .35rem; color: var(--muted); font-size: .75rem; }
 .bracket-match { display: grid; grid-template-columns: minmax(0, 1fr) 4.6rem minmax(0, 1fr); align-items: center; gap: .4rem; margin-top: .45rem; }
 .bracket-match-team { min-width: 0; }.bracket-match-team:last-child { text-align: right; }.bracket-match-team .team-name { max-width: 100%; }.bracket-match-team .fixture-team-full { overflow: hidden; text-overflow: ellipsis; }.bracket-match-team:last-child .team-name { flex-direction: row-reverse; }.bracket-match .fixture-result { font-size: .95rem; }.bracket-match .fixture-xg { font-size: .68rem; }
-.bracket-winner { margin: .5rem 0 0; color: var(--green); font-size: .8rem; font-weight: 800; }
 .bracket-facts { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .45rem; }.bracket-meta-tag { color: var(--green-deep); background: var(--green-soft); }
 .bracket-advances { margin-top: .7rem; color: var(--green); font-weight: 700; }
 .bracket-diagnostics { color: var(--muted); }

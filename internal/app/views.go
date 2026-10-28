@@ -1159,6 +1159,11 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 		}
 		label := bracket.TBD
 		if feeder, ok := slots[source]; ok {
+			// A decided feeder advances its winner even before the other
+			// side of this slot is known.
+			if feeder.Winner.TeamID != bracket.TBD && feeder.Winner.TeamID != "" {
+				return bracketEntrant(feeder.Winner.TeamID, teams, codes)
+			}
 			if feeder.Home.TeamID != bracket.TBD && feeder.Away.TeamID != bracket.TBD {
 				label = bracketEntrantName(feeder.Home.TeamID, teams) + " or " + bracketEntrantName(feeder.Away.TeamID, teams)
 			} else {
