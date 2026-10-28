@@ -606,3 +606,19 @@ Behavior-level examples live in the tests under
 [`internal/simulation`](../internal/simulation), and
 [`internal/forecaststate`](../internal/forecaststate), with page coverage in
 [`internal/app/handler_test.go`](../internal/app/handler_test.go).
+
+### Round and match probabilities
+
+The simulator counts entry into each bracket round and each team's exclusive
+ending (a loss in a round or champion). Each qualifier's endings sum to 100%;
+each round's entries sum to its participant count. It also counts each slot's
+two topology positions separately, so each position's candidate list sums to
+100%. Recorded results stay exact.
+
+`simulation.PlayoffMatchOutlook` shares distribution selection and draw
+resolution with the simulator, using `PostseasonDistribution` when supported.
+A neutral final averages both home assignments, including each assignment's
+advance chance. Hypothetical slot winners are separate from recorded results;
+only seed-derived or recorded participants permit a scenario, and a recorded
+result invalidates it. Both participant IDs and the winner enter the scenario
+identity, cache key, and deterministic random seed.

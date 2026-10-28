@@ -59,26 +59,64 @@ func preparePlayoffs(request Request, predictor forecast.Predictor) (*playoffSim
 			if home.ID == away.ID {
 				continue
 			}
-			game := standings.Game{ID: "playoff:" + home.ID + ":" + away.ID, Status: RemainingStatus, HomeTeamID: home.ID, AwayTeamID: away.ID}
-			var distribution forecast.Distribution
-			var err error
-			if postseason, ok := predictor.(forecast.PostseasonPredictor); ok {
-				distribution, err = postseason.PostseasonDistribution(game)
-			} else {
-				distribution, err = predictor.Distribution(game)
-			}
+			match, err := preparePlayoffMatch(predictor, home.ID, away.ID)
 			if err != nil {
-				return nil, fmt.Errorf("forecast playoff pairing %q and %q: %w", home.ID, away.ID, err)
+				return nil, err
 			}
-			odds := distribution.Outcomes()
-			tieHomeChance := .5
-			if decisive := odds.HomeWin + odds.AwayWin; decisive > 0 {
-				tieHomeChance = odds.HomeWin / decisive
-			}
-			playoffs.matches[playoffPair{home.ID, away.ID}] = playoffMatch{distribution: distribution, tieHomeChance: tieHomeChance}
+
+			playoffs.matches[playoffPair{home.ID, away.ID}] = match
 		}
 	}
 	return playoffs, nil
+}
+
+// MatchOutlook contains regulation results and chances to advance, oriented to
+// the supplied home and away teams. A neutral match averages both assignments.
+type MatchOutlook struct {
+	forecast.OutcomeProbabilities
+	HomeAdvance, AwayAdvance float64
+}
+
+func tieChance(odds forecast.OutcomeProbabilities) float64 {
+	if decisive := odds.HomeWin + odds.AwayWin; decisive > 0 {
+		return odds.HomeWin / decisive
+	}
+	return .5
+}
+
+func preparePlayoffMatch(predictor forecast.Predictor, home, away string) (playoffMatch, error) {
+	game := standings.Game{ID: "playoff:" + home + ":" + away, Status: RemainingStatus, HomeTeamID: home, AwayTeamID: away}
+	var distribution forecast.Distribution
+	var err error
+	if postseason, ok := predictor.(forecast.PostseasonPredictor); ok {
+		distribution, err = postseason.PostseasonDistribution(game)
+	} else {
+		distribution, err = predictor.Distribution(game)
+	}
+	if err != nil {
+		return playoffMatch{}, fmt.Errorf("forecast playoff pairing %q and %q: %w", home, away, err)
+	}
+	return playoffMatch{distribution: distribution, tieHomeChance: tieChance(distribution.Outcomes())}, nil
+}
+
+// PlayoffMatchOutlook uses the simulator's distribution and draw resolution.
+func PlayoffMatchOutlook(predictor forecast.Predictor, home, away string, neutral bool) (MatchOutlook, error) {
+	match, err := preparePlayoffMatch(predictor, home, away)
+	if err != nil {
+		return MatchOutlook{}, err
+	}
+	odds := match.distribution.Outcomes()
+	advance := odds.HomeWin + odds.Draw*match.tieHomeChance
+	if neutral {
+		reverse, err := preparePlayoffMatch(predictor, away, home)
+		if err != nil {
+			return MatchOutlook{}, err
+		}
+		other := reverse.distribution.Outcomes()
+		odds = forecast.OutcomeProbabilities{HomeWin: (odds.HomeWin + other.AwayWin) / 2, Draw: (odds.Draw + other.Draw) / 2, AwayWin: (odds.AwayWin + other.HomeWin) / 2}
+		advance = (advance + other.AwayWin + other.Draw*(1-reverse.tieHomeChance)) / 2
+	}
+	return MatchOutlook{OutcomeProbabilities: odds, HomeAdvance: advance, AwayAdvance: 1 - advance}, nil
 }
 
 // playoffStructure validates the bracket and any postseason progress without
@@ -169,6 +207,10 @@ func validatePlayoffBracket(format competition.BracketFormat, places int) error 
 }
 
 func (p *playoffSimulation) champion(table []standings.TableRow, rng *rand.Rand) string {
+	return p.run(table, rng, nil, nil)
+}
+
+func (p *playoffSimulation) run(table []standings.TableRow, rng *rand.Rand, counts map[string]*accumulator, positions map[string][2]map[string]float64) string {
 	seeds := p.fixedSeeds
 	if seeds == nil {
 		seeds = playoffSeeds(table, rng)
@@ -181,10 +223,6 @@ func (p *playoffSimulation) champion(table []standings.TableRow, rng *rand.Rand)
 	finalRound := p.format.Rounds[len(p.format.Rounds)-1].ID
 	for _, slot := range p.format.Slots {
 		actual := p.actual[slot.ID]
-		if actual.Winner != "" {
-			winners[slot.ID] = actual.Winner
-			continue
-		}
 		var first, second string
 		if slot.SeedPair != nil {
 			first, second = seeds[slot.SeedPair[0]-1], seeds[slot.SeedPair[1]-1]
@@ -199,7 +237,33 @@ func (p *playoffSimulation) champion(table []standings.TableRow, rng *rand.Rand)
 		if actual.Home != "" {
 			first, second = actual.Home, actual.Away
 		}
-		winners[slot.ID] = p.winner(first, second, neutral, rng)
+		winner := actual.Winner
+		if winner == "" {
+			winner = p.winner(first, second, neutral, rng)
+		}
+		winners[slot.ID] = winner
+		if counts != nil {
+			counts[first].reach[slot.RoundID]++
+			counts[second].reach[slot.RoundID]++
+			loser := first
+			if loser == winner {
+				loser = second
+			}
+			counts[loser].ends[slot.RoundID]++
+			if slot.ID == p.finalID {
+				counts[winner].ends["champion"]++
+			}
+			sides := positions[slot.ID]
+			// A position follows topology, independent of the published venue.
+			if slot.SeedPair != nil {
+				sides[0][seeds[slot.SeedPair[0]-1]]++
+				sides[1][seeds[slot.SeedPair[1]-1]]++
+			} else {
+				from := p.connections[slot.ID]
+				sides[0][winners[from[0]]]++
+				sides[1][winners[from[1]]]++
+			}
+		}
 	}
 	return winners[p.finalID]
 }
@@ -234,10 +298,9 @@ func (p *playoffSimulation) applyPostseason(request Request) error {
 	seen := map[string]bool{}
 	for _, slot := range p.format.Slots {
 		actual, published := state.Slots[slot.ID]
-		if !published {
-			continue
+		if published {
+			seen[slot.ID] = true
 		}
-		seen[slot.ID] = true
 		var first, second string
 		if slot.SeedPair != nil {
 			first, second = state.Seeds[slot.SeedPair[0]], state.Seeds[slot.SeedPair[1]]
@@ -246,7 +309,7 @@ func (p *playoffSimulation) applyPostseason(request Request) error {
 			first, second = winners[from[0]], winners[from[1]]
 		}
 		samePair := (actual.Home == first && actual.Away == second) || (actual.Home == second && actual.Away == first)
-		if first == "" || second == "" || !samePair {
+		if published && (first == "" || second == "" || !samePair) {
 			return fmt.Errorf("postseason slot %q disagrees with final seeds or actual advancement", slot.ID)
 		}
 		if actual.Winner != "" {
@@ -264,12 +327,50 @@ func (p *playoffSimulation) applyPostseason(request Request) error {
 	if len(seen) != len(state.Slots) {
 		return fmt.Errorf("postseason includes unknown bracket slots")
 	}
+	// Scenarios cannot unlock another scenario: only source-backed or
+	// seed-derived participants establish an eligible upcoming slot.
+	actualSlots := make(map[string]PostseasonMatch, len(state.Slots)+len(state.Scenarios))
+	for id, match := range state.Slots {
+		actualSlots[id] = match
+	}
+	scenarioSeen := 0
+	for _, slot := range p.format.Slots {
+		scenario, ok := state.Scenarios[slot.ID]
+		if !ok {
+			continue
+		}
+		scenarioSeen++
+		actual := state.Slots[slot.ID]
+		var first, second string
+		if slot.SeedPair != nil {
+			first, second = state.Seeds[slot.SeedPair[0]], state.Seeds[slot.SeedPair[1]]
+		} else {
+			from := p.connections[slot.ID]
+			first, second = winners[from[0]], winners[from[1]]
+		}
+		samePair := (scenario.Home == first && scenario.Away == second) || (scenario.Home == second && scenario.Away == first)
+		if actual.Winner != "" || first == "" || second == "" || !samePair || (scenario.Winner != first && scenario.Winner != second) {
+			return fmt.Errorf("postseason scenario %q is stale or invalid", slot.ID)
+		}
+		if actual.Home != "" {
+			scenario.Home, scenario.Away = actual.Home, actual.Away
+		}
+		actualSlots[slot.ID] = scenario
+		loser := first
+		if loser == scenario.Winner {
+			loser = second
+		}
+		delete(p.contenders, loser)
+	}
+	if scenarioSeen != len(state.Scenarios) {
+		return fmt.Errorf("postseason scenarios include unknown bracket slots")
+	}
 	p.fixedSeeds = make([]string, request.PlayoffPlaces)
 	for seed, id := range state.Seeds {
 		p.fixedSeeds[seed-1] = id
 	}
-	p.actual = state.Slots
-	p.actualChampion = winners[p.finalID]
+	p.actual = actualSlots
+	p.actualChampion = actualSlots[p.finalID].Winner
 	return nil
 }
 

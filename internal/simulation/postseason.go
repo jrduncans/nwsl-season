@@ -9,6 +9,7 @@ import "encoding/json"
 type Postseason struct {
 	Seeds          map[int]string
 	Slots          map[string]PostseasonMatch
+	Scenarios      map[string]PostseasonMatch
 	Unavailable    string
 	Eliminated     []string
 	SourceIdentity string
