@@ -46,6 +46,7 @@ func tbdEntrant() Entrant { return Entrant{TeamID: TBD} }
 type Slot struct {
 	ID          string
 	SeedPair    *[2]int
+	ByeSeed     int
 	SourceOrder int
 	Home        Entrant
 	Away        Entrant
@@ -134,10 +135,8 @@ func place(view *View, format competition.BracketFormat, games []cache.Game) (un
 		slots := roundSlots(round)
 		var roundUnresolved, roundMismatch bool
 		switch {
-		case format.AdvancementPolicy == competition.AdvancementPolicyHistoricallyObservedReseeded && round.ID == "semifinals":
-			roundUnresolved, roundMismatch = placeObservedSemifinals(view, slots, roundGames, byID)
 		case hasDestinationConnection(slots, connections):
-			roundUnresolved, roundMismatch = placeFixedRound(view, slots, roundGames, byID, connections)
+			roundUnresolved, roundMismatch = placeFixedRound(view, slots, roundGames, byID, connections, earlierParticipants(view.Rounds[:roundIndex]))
 		default:
 			roundUnresolved, roundMismatch = placeOpeningRound(view, slots, roundGames)
 		}
@@ -192,7 +191,21 @@ func placeOpeningRound(view *View, slots []*Slot, games []cache.Game) (bool, boo
 	return unresolved, mismatch
 }
 
-func placeFixedRound(view *View, slots []*Slot, games []cache.Game, byID map[string]*Slot, connections map[string]competition.BracketConnection) (bool, bool) {
+// earlierParticipants lists every team placed in an earlier round. A bye
+// team is the one semifinal participant absent from them.
+func earlierParticipants(rounds []Round) map[string]bool {
+	values := map[string]bool{}
+	for _, round := range rounds {
+		for _, slot := range round.Slots {
+			if slot.Game != nil {
+				values[slot.Game.HomeTeamID], values[slot.Game.AwayTeamID] = true, true
+			}
+		}
+	}
+	return values
+}
+
+func placeFixedRound(view *View, slots []*Slot, games []cache.Game, byID map[string]*Slot, connections map[string]competition.BracketConnection, earlier map[string]bool) (bool, bool) {
 	unresolved, mismatch := false, false
 	participants := map[string]string{}
 	used := map[string]bool{}
@@ -201,7 +214,7 @@ func placeFixedRound(view *View, slots []*Slot, games []cache.Game, byID map[str
 			mismatch = true
 			continue
 		}
-		matches, unknown := matchingFixedSlots(slots, game, byID, connections, used)
+		matches, unknown := matchingFixedSlots(slots, game, byID, connections, used, earlier)
 		switch len(matches) {
 		case 1:
 			used[matches[0].ID] = true
@@ -222,7 +235,7 @@ func placeFixedRound(view *View, slots []*Slot, games []cache.Game, byID map[str
 	return unresolved, mismatch
 }
 
-func matchingFixedSlots(slots []*Slot, game cache.Game, byID map[string]*Slot, connections map[string]competition.BracketConnection, used map[string]bool) (matches []*Slot, unknown bool) {
+func matchingFixedSlots(slots []*Slot, game cache.Game, byID map[string]*Slot, connections map[string]competition.BracketConnection, used, earlier map[string]bool) (matches []*Slot, unknown bool) {
 	for _, slot := range slots {
 		if used[slot.ID] {
 			continue
@@ -241,55 +254,31 @@ func matchingFixedSlots(slots []*Slot, game cache.Game, byID map[string]*Slot, c
 			}
 			winners = append(winners, winner)
 		}
-		if len(winners) == len(connection.SourceSlotIDs) && sameParticipants(game.HomeTeamID, game.AwayTeamID, winners[0], winners[1]) {
+		switch {
+		case len(winners) != len(connection.SourceSlotIDs):
+		case len(winners) == 1:
+			if byeOpponent(game, winners[0], slot.Home.TeamID, earlier) {
+				matches = append(matches, slot)
+			}
+		case sameParticipants(game.HomeTeamID, game.AwayTeamID, winners[0], winners[1]):
 			matches = append(matches, slot)
 		}
 	}
 	return matches, unknown
 }
 
-func placeObservedSemifinals(view *View, slots []*Slot, games []cache.Game, byID map[string]*Slot) (bool, bool) {
-	unresolved, mismatch := false, false
-	participants := map[string]string{}
-	quarterfinals := []*Slot{byID["quarterfinal-1"], byID["quarterfinal-2"]}
-	winnersKnown := quarterfinals[0] != nil && quarterfinals[1] != nil && quarterfinals[0].Winner.TeamID != TBD && quarterfinals[1].Winner.TeamID != TBD
-	quarterfinalWinners := map[string]bool{}
-	if winnersKnown {
-		quarterfinalWinners[quarterfinals[0].Winner.TeamID] = true
-		quarterfinalWinners[quarterfinals[1].Winner.TeamID] = true
+// byeOpponent reports whether a game pairs the prior winner with a team that
+// played no earlier round, matching a known bye seed when one is supplied.
+func byeOpponent(game cache.Game, winner, bye string, earlier map[string]bool) bool {
+	other := game.HomeTeamID
+	switch winner {
+	case game.HomeTeamID:
+		other = game.AwayTeamID
+	case game.AwayTeamID:
+	default:
+		return false
 	}
-	usedWinners, usedByes := map[string]bool{}, map[string]bool{}
-	for index, game := range games {
-		if participantReuse(view, participants, game, slots[index].ID) {
-			mismatch = true
-			continue
-		}
-		if winnersKnown {
-			winner, bye, valid := observedSemifinalParticipants(game, quarterfinalWinners)
-			if !valid || usedWinners[winner] || usedByes[bye] {
-				mismatch = true
-				view.Diagnostics = append(view.Diagnostics, Diagnostic{Code: "impossible_participants", GameID: game.ASAID, SlotID: slots[index].ID, Message: "observed semifinal must contain one distinct quarterfinal winner and one distinct bye"})
-				continue
-			}
-			usedWinners[winner], usedByes[bye] = true, true
-		} else {
-			unresolved = true
-			view.Diagnostics = append(view.Diagnostics, Diagnostic{Code: "unresolved_placement", GameID: game.ASAID, SlotID: slots[index].ID, Message: "observed semifinal cannot validate its quarterfinal winner until source results resolve"})
-		}
-		unresolved = placeGame(view, slots[index], game) || unresolved
-	}
-	return unresolved, mismatch
-}
-
-func observedSemifinalParticipants(game cache.Game, winners map[string]bool) (winner, bye string, valid bool) {
-	homeWinner, awayWinner := winners[game.HomeTeamID], winners[game.AwayTeamID]
-	if homeWinner == awayWinner {
-		return "", "", false
-	}
-	if homeWinner {
-		return game.HomeTeamID, game.AwayTeamID, true
-	}
-	return game.AwayTeamID, game.HomeTeamID, true
+	return !earlier[other] && (bye == TBD || bye == other)
 }
 
 func participantReuse(view *View, participants map[string]string, game cache.Game, slotID string) bool {
@@ -338,7 +327,12 @@ func populateFixedAdvances(view *View, format competition.BracketFormat) {
 			}
 			winners = append(winners, winner)
 		}
-		if len(winners) == len(connection.SourceSlotIDs) {
+		switch {
+		case len(winners) != len(connection.SourceSlotIDs):
+		case len(winners) == 1:
+			// The bye seed hosts; any known seed stays on the home side.
+			destination.Away = Entrant{TeamID: winners[0]}
+		default:
 			destination.Home, destination.Away = Entrant{TeamID: winners[0]}, Entrant{TeamID: winners[1]}
 		}
 	}
@@ -352,7 +346,7 @@ func shape(format competition.BracketFormat) []Round {
 		byID[source.ID] = &rounds[index]
 	}
 	for _, source := range format.Slots {
-		slot := Slot{ID: source.ID, SourceOrder: source.SourceOrder, Home: tbdEntrant(), Away: tbdEntrant(), Winner: tbdEntrant()}
+		slot := Slot{ID: source.ID, ByeSeed: source.ByeSeed, SourceOrder: source.SourceOrder, Home: tbdEntrant(), Away: tbdEntrant(), Winner: tbdEntrant()}
 		if source.SeedPair != nil {
 			pair := *source.SeedPair
 			slot.SeedPair = &pair

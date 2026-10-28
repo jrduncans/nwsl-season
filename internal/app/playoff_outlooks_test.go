@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"math"
-	"strings"
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -46,12 +45,12 @@ func TestPlayoffOutlooksUseRegularDataAndPublishedVenues(t *testing.T) {
 	}
 }
 
-func TestBracketNamesFeederTeamsAndStylesWinner(t *testing.T) {
+func TestBracketLabelsFeedersAndStylesWinner(t *testing.T) {
 	regular := resolvedHandoffSeason()
 	seeds := playoffSeedsFrom("2026", regular)
 	entry, _ := competition.Lookup("2026", "Playoffs")
 	page := seededBracketPageFor(seasonPage{}, *entry.BracketFormat, cache.SeasonData{}, seeds, "")
-	if page.Rounds[1].Slots[0].Home.Name == "TBD" || page.Rounds[2].Slots[0].Home.Name != "Semifinal 1 winner" {
+	if page.Rounds[1].Slots[0].Home.Name != "Winner of Quarterfinal 1" || page.Rounds[2].Slots[0].Home.Name != "Winner of Semifinal 1" {
 		t.Fatalf("feeder labels: %+v", page.Rounds)
 	}
 	game := forecastPlayoffGame(seeds, "played", 1, 8, true)
@@ -62,7 +61,7 @@ func TestBracketNamesFeederTeamsAndStylesWinner(t *testing.T) {
 	}
 	// The decided quarterfinal advances its winner while the other side waits.
 	semifinal := page.Rounds[1].Slots[0]
-	if semifinal.Home.ID != seeds.Seeds[1] || !strings.Contains(semifinal.Away.Name, " or ") {
+	if semifinal.Home.ID != seeds.Seeds[1] || semifinal.Away.Name != "Winner of Quarterfinal 2" {
 		t.Fatalf("semifinal entrants: home %+v, away %+v", semifinal.Home, semifinal.Away)
 	}
 }

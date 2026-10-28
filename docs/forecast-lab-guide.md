@@ -348,6 +348,12 @@ Forecast Lab with model choices preserved. Historical seasons gain no forecast
 capability.
 
 The Playoffs Table lists qualifiers by title chance, breaking ties by seed.
+Seed, crest and name share a centered identity row in Table and Heatmap. The
+Champion column follows Team, then rounds read outward from it (Reach final,
+then Reach semifinal), so a reader moves from the title toward earlier rounds.
+At 390px every column fits without scrolling; with a comparison model the team
+column stays pinned as the other probabilities scroll. Round headings say Reach
+semifinal and Reach final to distinguish participation from winning the round.
 Eliminated teams follow, later elimination first, then seed. Cumulative columns
 show each unfinished round after the opening round and Champion; established
 advancement reads Through and losses read Out in the recorded round. A model
@@ -357,8 +363,19 @@ heatmap's 0–100% shading scale. Each qualifier's row sums to 100%. Bracket
 shows the candidates for each future position, with separate lists for both
 sides of each match, plus Champion odds. Every available position list sums to 100%, including established 100%
 participants; structurally possible teams with no sampled appearances retain
-<0.1% formatting. Lists use the same simulation counts as Table. Completed
+<0.1% formatting. Lists use the same simulation counts as Table. Each candidate
+group names its feeder match; the Champion card's heading already names its
+position. Later cards center between their visible feeders,
+with elbow connectors landing on the relevant candidate group; measured heights
+accommodate different list lengths. The forecast bracket scrolls horizontally
+on phones. Completed
 finals retain the settled result. At 390px the tables scroll within the page.
+
+The scenario builder has separate Match and Winner selectors. Changing Match
+updates its two available winners locally; only Apply scenario changes the
+forecast. Without JavaScript, one grouped winner selector includes the match
+labels and both teams. Applied assumptions name their match, for example
+Quarterfinal 3: Washington Spirit advances.
 
 Scenarios choose a winner only for an upcoming slot with known participants,
 from seeds or recorded advancement. URL values are

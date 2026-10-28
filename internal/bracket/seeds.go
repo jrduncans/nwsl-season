@@ -29,6 +29,9 @@ func BuildWithSeeds(format competition.BracketFormat, games []cache.Game, seeds 
 					slot.Away = Entrant{TeamID: id}
 				}
 			}
+			if id := seeds[slot.ByeSeed]; slot.ByeSeed > 0 && id != "" {
+				slot.Home = Entrant{TeamID: id}
+			}
 		}
 	}
 	// Blank participant rows are source placeholders, not identified matchups.

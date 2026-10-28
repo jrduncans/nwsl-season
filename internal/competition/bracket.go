@@ -11,15 +11,13 @@ import (
 type AdvancementPolicy string
 
 const (
-	AdvancementPolicyFixed                        AdvancementPolicy = "fixed"
-	AdvancementPolicyHistoricallyObservedReseeded AdvancementPolicy = "historically_observed_reseeded"
-	AdvancementPolicySingleFinal                  AdvancementPolicy = "single_final"
+	AdvancementPolicyFixed       AdvancementPolicy = "fixed"
+	AdvancementPolicySingleFinal AdvancementPolicy = "single_final"
 
 	// Short aliases make the policy names convenient at call sites while the
 	// AdvancementPolicy-prefixed names remain unambiguous in API docs.
-	AdvancementFixed                        = AdvancementPolicyFixed
-	AdvancementHistoricallyObservedReseeded = AdvancementPolicyHistoricallyObservedReseeded
-	AdvancementSingleFinal                  = AdvancementPolicySingleFinal
+	AdvancementFixed       = AdvancementPolicyFixed
+	AdvancementSingleFinal = AdvancementPolicySingleFinal
 )
 
 const bracketFormatVersion = 1
@@ -29,16 +27,20 @@ type BracketRound struct {
 	Label string
 }
 
+// BracketSlot is one match. An opening match names its SeedPair. A later
+// match has two prior winners, or a ByeSeed that waits for one prior winner;
+// the bye seed is the home side.
 type BracketSlot struct {
 	ID          string
 	RoundID     string
 	SeedPair    *[2]int
+	ByeSeed     int
 	SourceOrder int
 }
 
 // BracketConnection groups all source slots feeding one destination slot.
 // Grouping the sources keeps a destination unique while representing the two
-// winners that normally feed a later knockout slot.
+// winners, or the one winner facing a bye seed, that feed a later slot.
 type BracketConnection struct {
 	SourceSlotIDs     []string
 	DestinationSlotID string
@@ -57,7 +59,7 @@ func (f BracketFormat) Validate() error {
 		return fmt.Errorf("bracket format version %d is unsupported", f.Version)
 	}
 	switch f.AdvancementPolicy {
-	case AdvancementPolicyFixed, AdvancementPolicyHistoricallyObservedReseeded, AdvancementPolicySingleFinal:
+	case AdvancementPolicyFixed, AdvancementPolicySingleFinal:
 	default:
 		return fmt.Errorf("unknown advancement policy %q", f.AdvancementPolicy)
 	}
@@ -94,6 +96,9 @@ func (f BracketFormat) Validate() error {
 				return fmt.Errorf("bracket slot %q has invalid seed pair", slot.ID)
 			}
 		}
+		if slot.ByeSeed < 0 || slot.ByeSeed > 0 && (slot.SeedPair != nil || roundIndex[slot.RoundID] == 0) {
+			return fmt.Errorf("bracket slot %q has an invalid bye seed", slot.ID)
+		}
 		slotIndex[slot.ID] = slot
 	}
 	seenSeeds := map[int]string{}
@@ -114,10 +119,14 @@ func (f BracketFormat) Validate() error {
 		if roundIndex[slot.RoundID] == 0 {
 			openingSlots++
 		}
-		if slot.SeedPair == nil {
-			continue
+		seeds := []int{}
+		if slot.SeedPair != nil {
+			seeds = slot.SeedPair[:]
 		}
-		for _, seed := range slot.SeedPair {
+		if slot.ByeSeed > 0 {
+			seeds = append(seeds, slot.ByeSeed)
+		}
+		for _, seed := range seeds {
 			if prior, exists := seenSeeds[seed]; exists {
 				return fmt.Errorf("seed %d is assigned to slots %q and %q", seed, prior, slot.ID)
 			}
@@ -146,6 +155,9 @@ func (f BracketFormat) Validate() error {
 		if !exists {
 			return fmt.Errorf("bracket connection references missing destination %q", connection.DestinationSlotID)
 		}
+		if want := 2 - min(destination.ByeSeed, 1); len(connection.SourceSlotIDs) != want {
+			return fmt.Errorf("bracket connection to %q needs %d sources", connection.DestinationSlotID, want)
+		}
 		seenSources := make(map[string]bool, len(connection.SourceSlotIDs))
 		for _, sourceID := range connection.SourceSlotIDs {
 			if strings.TrimSpace(sourceID) == "" || seenSources[sourceID] {
@@ -161,6 +173,11 @@ func (f BracketFormat) Validate() error {
 			}
 		}
 		seenDestinations[connection.DestinationSlotID] = true
+	}
+	for _, slot := range f.Slots {
+		if slot.ByeSeed > 0 && !seenDestinations[slot.ID] {
+			return fmt.Errorf("bracket slot %q has a bye seed without a prior winner", slot.ID)
+		}
 	}
 	if f.AdvancementPolicy == AdvancementPolicySingleFinal && (len(f.Rounds) != 1 || len(f.Slots) != 1 || len(f.Connections) != 0) {
 		return fmt.Errorf("single-final bracket must contain one unconnected slot")

@@ -139,23 +139,26 @@ func (a *application) playoffsForecast(w http.ResponseWriter, r *http.Request, s
 	base.ModelEvaluationPath = relativeURL(r.URL.Path, stageURL(scope.Season, "regular-season")+"/model-evaluation")
 	base.FixedCount = len(state.PlayoffWinners)
 	page := playoffsForecastView(base, data, postseason, *format, results[0], comparison)
+	labels := bracketSlotLabels(*format)
 	for _, slot := range format.Slots {
 		match, ok := eligible[slot.ID]
 		if !ok {
 			continue
 		}
 		if fixed, ok := state.PlayoffWinners[slot.ID]; ok {
-			page.PlayoffAssumptions = append(page.PlayoffAssumptions, forecastAssumptionView{Fixture: playoffTeamName(data, fixed.Winner) + " advances", Remove: forecastURL(r.URL.Path, scope.Season, "playoffs", state.WithoutPlayoffWinner(slot.ID), teamID)})
+			page.PlayoffAssumptions = append(page.PlayoffAssumptions, forecastAssumptionView{Fixture: labels[slot.ID] + ": " + playoffTeamName(data, fixed.Winner) + " advances", Remove: forecastURL(r.URL.Path, scope.Season, "playoffs", state.WithoutPlayoffWinner(slot.ID), teamID)})
 			continue
 		}
 		if teamID != "" && match.Home != teamID && match.Away != teamID {
 			continue
 		}
+		choice := playoffScenarioMatch{ID: slot.ID, Label: labels[slot.ID], Fixture: playoffTeamName(data, match.Home) + " vs " + playoffTeamName(data, match.Away)}
 		for _, winner := range []string{match.Home, match.Away} {
 			match.Winner = winner
 			selected := forecaststate.State{PlayoffWinners: map[string]simulation.PostseasonMatch{slot.ID: match}}
-			page.ScenarioOptions = append(page.ScenarioOptions, playoffScenarioOption{Value: selected.Values()[0], Label: playoffTeamName(data, winner) + " advances · " + playoffTeamName(data, match.Home) + " vs " + playoffTeamName(data, match.Away)})
+			choice.Options = append(choice.Options, playoffScenarioOption{Value: selected.Values()[0], Label: playoffTeamName(data, winner)})
 		}
+		page.ScenarioMatches = append(page.ScenarioMatches, choice)
 	}
 	a.render(w, "playoffs-forecast", page)
 }
@@ -232,6 +235,10 @@ func playoffTeamName(data cache.SeasonData, id string) string {
 }
 
 type playoffScenarioOption struct{ Value, Label string }
+type playoffScenarioMatch struct {
+	ID, Label, Fixture string
+	Options            []playoffScenarioOption
+}
 type playoffForecastCell struct{ Text, Intensity string }
 type playoffForecastRow struct {
 	Team                 teamNameView
@@ -250,7 +257,7 @@ type playoffsForecastPage struct {
 	RoundColumns       []string
 	EndColumns         []string
 	Warning            string
-	ScenarioOptions    []playoffScenarioOption
+	ScenarioMatches    []playoffScenarioMatch
 	PlayoffAssumptions []forecastAssumptionView
 	BracketRounds      []playoffForecastRound
 }
@@ -281,10 +288,13 @@ func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simul
 			}
 		}
 		if ri > 0 && !complete {
-			page.RoundColumns = append(page.RoundColumns, name)
+			page.RoundColumns = append(page.RoundColumns, "Reach "+strings.ToLower(name))
 			columns = append(columns, round.ID)
 		}
 	}
+	// Champion follows Team, so later rounds read outward from it.
+	slices.Reverse(page.RoundColumns)
+	slices.Reverse(columns)
 	page.EndColumns[len(page.EndColumns)-1] = "Runner-up"
 	page.EndColumns = append(page.EndColumns, "Champion")
 	for _, qualifier := range playoffQualifiers(base.Season, data, len(format.Slots)+1) {

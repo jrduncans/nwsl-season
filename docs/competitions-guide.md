@@ -154,9 +154,14 @@ to knockout catalog entries.
 A stage with the bracket capability uses its root for a rendered bracket and
 keeps `/fixtures` chronological. Before any concrete matchup or certified
 Playoffs seeds, its root is the match list and `/fixtures` redirects there. The catalog holds each verified, versioned bracket
-topology: rounds, slots, seed pairs, connections, advancement policy (fixed,
-historically reseeded, or single final) and, for 2025 quarterfinals, the order
-in which ASA published the opening matches.
+topology: rounds, slots, seed pairs, bye seeds, connections, advancement
+policy (fixed or single final) and, for 2025 quarterfinals, the order in which
+ASA published the opening matches. NWSL playoffs have never reseeded. The
+six-team 2021–2023 brackets give seeds 1 and 2 byes: seed 1 hosts the 4–5
+winner in Semifinal 1 and seed 2 hosts the 3–6 winner in Semifinal 2, as every
+cached semifinal from those seasons shows. A bye-seed slot takes one prior
+winner rather than two. ASA published each season's 4–5 quarterfinal first, so
+chronological placement keeps it in Quarterfinal 1.
 
 [`internal/bracket`](../internal/bracket/bracket.go) builds the view from that
 format and cached matches. It places matches by format, round chronology, match
@@ -165,9 +170,19 @@ status alone or expanded minutes. A winner exists only for unequal
 regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
-matches and links to the Matches page. At 390px rounds stack in round order. When a match card is narrower than 20rem (three columns on a tablet or
-narrow window), each team shows its short code instead of its full name, as
-Matches rows do on phones; the full name stays available to screen readers.
+matches and links to the Matches page. Cards label each match and stack the two
+teams, with aligned seeds, crests, full names and scores; shootouts appear
+with xG and extra time below the teams. Unresolved entrants name their feeder
+match (for example, Winner of Quarterfinal 1); known entrants in an unplayed
+match keep that feeder as a caption, which completed matches drop.
+At desktop widths, later matches center between their feeders and elbow
+connectors join each feeder to its destination team row. Layout measures card
+heights so wrapped names and match outlooks cannot overlap. Fixed paths follow
+the catalog, whatever the kickoff order. A bye semifinal accepts its prior
+winner against a team absent from earlier rounds, and its bye side reads
+First-round bye while unplayed. At 390px rounds
+stack in round order with feeder labels. Without JavaScript, desktop rounds
+spread their cards over a shared height and omit connectors.
 
 Once the regular season is safely complete, Playoffs can show opening-round
 expectations before matches arrive. `bracket.BuildWithSeeds` combines the
@@ -189,7 +204,7 @@ one opening-round slot whose resolved sides it includes, provided its other
 participant holds no resolved seed. If several slots could hold it, it stays
 unplaced, the bracket is unresolved, and the published-match list shows it.
 Populated historical brackets retain the existing source-backed interpretation,
-including observed reseeding and playoff evidence for tied historical ranks.
+including playoff evidence for tied historical ranks.
 
 Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.

@@ -107,7 +107,10 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 	}
 	body = handoffResponse(t, store, "/seasons/2026/playoffs")
 	requireElements(t, body, `[data-bracket-state="ready"]`)
-	requireText(t, body, "main", "2–0", "2026-11-07T20:00:00Z")
+	requireExact(t, body, ".bracket-team-score", "2", "0")
+	// Connectors and results already show settled paths.
+	forbidElements(t, body, ".bracket-feeder-label")
+	requireText(t, body, "main", "2026-11-07T20:00:00Z")
 	forbidText(t, body, "main", "Expected", "Published by ASA", "View published matches", "did not succeed")
 	// A complete bracket still warns when a later result could be missing.
 	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}

@@ -225,6 +225,32 @@ Calculation budgets still apply; set `NWSL_QUALIFICATION_BUDGET` and
 Restarting reloads the server's in-memory scenario history after recalculation.
 Use `pitchfork stop server-md25` when finished.
 
+### Playoff sandbox
+
+`pitchfork start server-playoffs` runs a watched server against the separately
+prepared `data/playoffs/nwsl-season.sqlite` cache on port 8082 (with automatic
+bumping). `pitchfork status server-playoffs` prints its browser URL. It skips
+`config.env` and disables the scheduler; starting or restarting never seeds,
+resets, or syncs the copy. Stop it with `pitchfork stop server-playoffs`.
+
+The initial copy uses the current cache with all eight remaining 2026 Regular
+Season Matchday 27 games completed as **synthetic 1–0 home wins**, with 90 played
+minutes and no invented xG. Existing results and playoff source data are kept.
+These assumed results produce final standings for testing the seeded playoff
+bracket and Playoffs Forecast Lab before ASA publishes the playoff schedule.
+Open `/seasons/2026/playoffs` or `/seasons/2026/playoffs/forecast` on this server.
+Scores, seeds, and forecasts in this sandbox are hypothetical.
+
+To prepare a fresh copy, stop this daemon and use SQLite's backup API as for
+the Matchday 25 sandbox, targeting `data/playoffs/nwsl-season.sqlite`. Complete
+the remaining regular-season fixtures in the copy, clear copied qualification
+and scenario history for that stage, and publish the fixtures through
+`cache.DB.ReplaceSeason` to rebuild snapshot identity and venue summaries.
+Keep the full schedule and use terminal results with both scores present;
+direct SQL fixture edits alone leave an inconsistent snapshot. The scheduler
+stays off, and final-season playoff seeding and forecasts are computed locally
+from the copied fixtures when requested.
+
 ## Configuration
 
 | Environment variable | Default | Purpose |

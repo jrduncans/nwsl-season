@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/bracket"
@@ -94,6 +95,8 @@ type bracketRoundView struct {
 
 type bracketSlotView struct {
 	ID                                string
+	Label                             string
+	HomeSource, AwaySource            bracketSourceView
 	HomeWinner, AwayWinner, Completed bool
 	Outlook                           *fixtureOutlookView
 	HomeTeam, AwayTeam                fixtureTeamView
@@ -108,6 +111,7 @@ type bracketSlotView struct {
 
 type bracketGameView struct {
 	ID, Score, XG, Kickoff, Status, Outcome string
+	HomeScore, AwayScore                    string
 	ExtraTime, Shootout                     string
 }
 
@@ -1142,17 +1146,12 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 		}
 	}
 	slots := map[string]bracket.Slot{}
-	slotLabels := map[string]string{}
 	for _, round := range view.Rounds {
-		for i, slot := range round.Slots {
+		for _, slot := range round.Slots {
 			slots[slot.ID] = slot
-			label := round.Label
-			if len(round.Slots) > 1 {
-				label = fmt.Sprintf("%s %d", singularRoundLabel(round.Label), i+1)
-			}
-			slotLabels[slot.ID] = label
 		}
 	}
+	slotLabels := bracketSlotLabels(format)
 	entrant := func(id, source string) fixtureTeamView {
 		if id != "" && id != bracket.TBD {
 			return bracketEntrant(id, teams, codes)
@@ -1164,29 +1163,23 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 			if feeder.Winner.TeamID != bracket.TBD && feeder.Winner.TeamID != "" {
 				return bracketEntrant(feeder.Winner.TeamID, teams, codes)
 			}
-			if feeder.Home.TeamID != bracket.TBD && feeder.Away.TeamID != bracket.TBD {
-				label = bracketEntrantName(feeder.Home.TeamID, teams) + " or " + bracketEntrantName(feeder.Away.TeamID, teams)
-			} else {
-				label = slotLabels[source] + " winner"
-			}
+			label = "Winner of " + slotLabels[source]
 		}
 		return fixtureTeamView{teamNameView: teamNameView{Name: label}}
 	}
-	feeders := map[string][]string{}
-	for _, connection := range format.Connections {
-		feeders[connection.DestinationSlotID] = connection.SourceSlotIDs
-	}
+	feeders := bracketSources(format, view)
 	for _, round := range view.Rounds {
 		row := bracketRoundView{Label: round.Label}
 		for _, slot := range round.Slots {
 			item := bracketSlotView{ID: slot.ID, Expected: slot.SeedPair != nil && slot.Game == nil, Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
+			item.Label = slotLabels[slot.ID]
+			from := feeders[slot.ID]
+			item.HomeSource, item.AwaySource = from[0], from[1]
 			item.HomeWinner = slot.Winner.TeamID != bracket.TBD && slot.Winner.TeamID == slot.Home.TeamID
 			item.AwayWinner = slot.Winner.TeamID != bracket.TBD && slot.Winner.TeamID == slot.Away.TeamID
 			item.Completed = item.HomeWinner || item.AwayWinner
-			if from := feeders[slot.ID]; len(from) == 2 {
-				item.Home = entrant(slot.Home.TeamID, from[0])
-				item.Away = entrant(slot.Away.TeamID, from[1])
-			}
+			item.Home = entrant(slot.Home.TeamID, from[0].ID)
+			item.Away = entrant(slot.Away.TeamID, from[1].ID)
 			item.HomeTeam, item.AwayTeam = item.Home, item.Away
 			if slot.Game != nil {
 				game := bracketGameViewFor(*slot.Game, xgoals)
@@ -1222,6 +1215,7 @@ func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracket
 	}
 	if game.HomeScore.Valid && game.AwayScore.Valid {
 		view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
+		view.HomeScore, view.AwayScore = strconv.FormatInt(game.HomeScore.Int64, 10), strconv.FormatInt(game.AwayScore.Int64, 10)
 	}
 	if xg, ok := xgoals[game.ASAID]; ok && xg.HomeXG.Valid && xg.AwayXG.Valid {
 		view.XG = fmt.Sprintf("xG %.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
@@ -1231,6 +1225,7 @@ func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracket
 	}
 	if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
 		view.Score += fmt.Sprintf(" (%d–%d pens)", game.HomePenalties.Int64, game.AwayPenalties.Int64)
+		view.Shootout = fmt.Sprintf("Penalties %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
 	}
 	return view
 }
