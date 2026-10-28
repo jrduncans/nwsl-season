@@ -283,6 +283,137 @@ func TestPlayoffDiscoveryPersistsEmptyObservationAndFailure(t *testing.T) {
 	}
 }
 
+// playoffDiscoveryStore serves the harness's synthetic regular season beside
+// the cached 2026 Playoffs, with the cache's real sync leases.
+type playoffDiscoveryStore struct {
+	*cache.DB
+	d *playoffDiscovery
+}
+
+func (s playoffDiscoveryStore) PlanningSnapshot(context.Context) (cache.PlanningSnapshot, error) {
+	return cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{s.d.regular, s.d.playoffs()}}, nil
+}
+
+// playoffDiscoveryRunner executes only Playoffs games operations.
+type playoffDiscoveryRunner struct {
+	d        *playoffDiscovery
+	executed int
+}
+
+func (r *playoffDiscoveryRunner) Execute(ctx context.Context, operation syncer.Operation) (syncer.OperationResult, error) {
+	if operation.Stage != "Playoffs" || operation.Resource != syncer.OperationGames {
+		return syncer.OperationResult{}, nil
+	}
+	r.executed++
+	return syncer.Service{Store: r.d.db, ASA: r.d.source, Now: func() time.Time { return r.d.now }}.Execute(ctx, operation)
+}
+
+func TestPlayoffDiscoveryLeaseDeferralLeavesWorkDue(t *testing.T) {
+	completion := time.Date(2026, 11, 1, 23, 0, 0, 0, time.UTC)
+	d := newPlayoffDiscovery(t, completion)
+	runner := &playoffDiscoveryRunner{d: d}
+	config := d.config
+	config.Timeout = time.Minute
+	config.Now = func() time.Time { return d.now }
+	s, err := New(playoffDiscoveryStore{DB: d.db, d: d}, runner, config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Stop)
+	key := "2026\x00Playoffs"
+	if acquired, err := d.db.TryAcquireSyncLease(d.ctx, key, "other-process", completion.Add(time.Hour)); err != nil || !acquired {
+		t.Fatalf("hold lease = %v, %v", acquired, err)
+	}
+	if err := s.CheckNow(d.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if runner.executed != 0 || d.playoffs().GamesFull != nil {
+		t.Fatalf("deferred discovery executed %d, state %+v", runner.executed, d.playoffs().GamesFull)
+	}
+	if err := d.db.ReleaseSyncLease(d.ctx, key, "other-process"); err != nil {
+		t.Fatal(err)
+	}
+	d.now = completion.Add(5 * time.Minute)
+	if err := s.CheckNow(d.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if state := d.playoffs().GamesFull; runner.executed != 1 || state == nil || state.NextFullDueAt == nil || !state.NextFullDueAt.Equal(d.now.Add(time.Hour)) {
+		t.Fatalf("discovery after release executed %d, state %+v", runner.executed, state)
+	}
+}
+
+func TestPlayoffDiscoveryAtSaturatedBudget(t *testing.T) {
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	finale := plannedGame("finale", fixtures.CompletedStatus, now.Add(-7*24*time.Hour))
+	finale.HomeScore, finale.AwayScore = score(1), score(0)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{finale})
+	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(now.Add(-7 * 24 * time.Hour))}}
+	// Only the hourly retry makes discovery due; the persisted weekly due time
+	// is still in the future. A routine result poll for a finished
+	// quarterfinal competes with it.
+	quarterfinal := plannedGame("qf1", fixtures.PreMatchStatus, now.Add(-2*time.Hour))
+	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessAvailable, []cache.Game{quarterfinal})
+	playoffs.GamesFull.LastFullSuccessAt = timePointer(now.Add(-time.Hour))
+	playoffs.GamesFull.NextFullDueAt = timePointer(now.Add(6 * 24 * time.Hour))
+	config := Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}, config, now)
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Stage != "Playoffs" || jobs[0].Operation.NextFullDueAfter != time.Hour {
+		t.Fatalf("hourly retry at saturated budget = %+v", jobs)
+	}
+	// Catalog bootstrap still outranks it, and planning leaves it due for
+	// the next tick rather than advancing its cadence.
+	missing := historicalCatalogBootstrapScope("2025")
+	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs, missing}}
+	jobs = Plan(snapshot, config, now)
+	if len(jobs) != 1 || jobs[0].Operation.Season != "2025" {
+		t.Fatalf("bootstrap at saturated budget = %+v", jobs)
+	}
+	if !discoveryDue(playoffs, config, now.Add(5*time.Minute), now.Add(-7*24*time.Hour)) {
+		t.Fatal("crowded-out retry no longer due")
+	}
+	snapshot.Scopes = snapshot.Scopes[:2]
+	jobs = Plan(snapshot, config, now.Add(5*time.Minute))
+	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Stage != "Playoffs" {
+		t.Fatalf("next-tick retry = %+v", jobs)
+	}
+}
+
+func TestPlayoffDiscoveryLeavesUnrelatedStagesWeekly(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	finale := plannedGame("finale", fixtures.CompletedStatus, now.Add(-14*time.Hour))
+	finale.HomeScore, finale.AwayScore = score(1), score(0)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{finale})
+	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(now.Add(-12 * time.Hour)), NextDueAt: timePointer(now.Add(time.Hour))}}
+	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
+	weekly := func(season, stage string, lifecycle cache.SourceScopeLifecycle) cache.PlanningScopeSnapshot {
+		scope := planningScope(season, stage, cache.SourceReadinessAvailable, nil)
+		scope.Readiness.Scope.Lifecycle = lifecycle
+		scope.GamesFull.LastFullSuccessAt = timePointer(now.Add(-2 * time.Hour))
+		scope.GamesFull.NextFullDueAt = timePointer(now.Add(7*24*time.Hour - 2*time.Hour))
+		return scope
+	}
+	config := Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 10}
+	for _, scope := range []cache.PlanningScopeSnapshot{
+		weekly("2026", "NWSL Challenge Cup Final", cache.SourceScopeActive),
+		weekly("2025", "Playoffs", cache.SourceScopeCompleted),
+	} {
+		id := scope.Readiness.Scope
+		if jobs := fullGamesJobs(Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, scope}}, config, now)); len(jobs) != 0 {
+			t.Fatalf("%s %s accelerated: %+v", id.Season, id.Stage, jobs)
+		}
+	}
+	// Before the regular season is complete, the current Playoffs keep the
+	// weekly cadence too.
+	regular.Games[0].Status = fixtures.PreMatchStatus
+	regular.Games[0].HomeScore, regular.Games[0].AwayScore = sql.NullInt64{}, sql.NullInt64{}
+	playoffs := weekly("2026", "Playoffs", cache.SourceScopeActive)
+	if jobs := fullGamesJobs(Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}, config, now)); len(jobs) != 0 {
+		t.Fatalf("playoffs accelerated before completion: %+v", jobs)
+	}
+}
+
 func TestPlanBatchesDueTargetedJobsAndHonorsBudget(t *testing.T) {
 	now := time.Date(2033, 6, 10, 12, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("two", fixtures.PreMatchStatus, now.Add(-time.Hour)), plannedGame("one", fixtures.PreMatchStatus, now.Add(-time.Hour))})
