@@ -203,8 +203,8 @@ adjustments are omitted and model fitting stays regular-season-only.
 
 Unresolved playoff seeds, ambiguous results, missing advancement, or mismatched
 source games withhold championship odds with a visible explanation. They do not
-silently restart rounds. Final points and qualification remain factual where
-provable. Playoff source fields participate in forecast cache identity and
+silently restart rounds. Final points, qualification, and recorded playoff
+eliminations remain factual where provable. Playoff source fields participate in forecast cache identity and
 current-season playoff changes trigger baseline warming. Page requests stay
 cache-only. See [Forecast Lab](forecast-lab-guide.md#championship-forecasting-after-the-regular-season)
 for the full evidence boundary and stale-scenario recovery.

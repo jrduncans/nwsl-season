@@ -1,7 +1,7 @@
 {{define "forecast"}}{{template "head" .}}
 <div class="forecast-title">
   <div class="title-row"><div>{{template "seasonContext" .}}<h1>Forecast lab</h1></div></div>
-  <div class="forecast-title-content"><p class="note">{{if .Postseason}}Final regular-season standings and model-based championship odds.{{else}}Model estimates, not official standings.{{end}}</p></div>
+  <div class="forecast-title-content">{{if not .Postseason}}<p class="note">Model estimates, not official standings.</p>{{end}}</div>
 </div>
 
 <details class="forecast-controls" data-forecast-controls>
@@ -27,19 +27,18 @@
 </details>
 {{if .ScheduleNote}}<p class="data-warning"><strong>{{if .Postseason}}Model data:{{else}}Incomplete schedule:{{end}}</strong> {{.ScheduleNote}}</p>{{end}}
 
-{{if .PostseasonNotice}}<p class="note">{{.PostseasonNotice}} <a href="{{.PlayoffsPath}}">View playoff bracket and published details</a>.</p>{{end}}
+{{if .Postseason}}<p class="note">{{with .PostseasonNotice}}{{.}} {{end}}<a href="{{.PlayoffsPath}}">View playoff bracket and published details</a>.</p>{{end}}
 {{if .PostseasonWarning}}<p class="data-warning">{{.PostseasonWarning}}{{if not .Postseason}} <a href="{{.PlayoffsPath}}">View playoff bracket</a>.{{end}}</p>{{end}}
 
 {{if .Postseason}}
 <section class="postseason-outlook" aria-labelledby="championship-title">
   <h2 id="championship-title">Championship outlook</h2>
-  <p class="note">Points and qualification are final facts. Championship chances use cached playoff results. Unresolved seeds are labeled explicitly.</p>
   <p class="forecast-scroll-hint">Swipe left for final points, seeds, and qualification <span aria-hidden="true">→</span></p>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Final standings and championship outlook">
     <table class="postseason-table">
       <caption><span>{{.Season}} · {{.ModelName}}{{if .HasComparison}} · compared with {{.ComparisonName}}{{end}}</span></caption>
       <thead><tr><th scope="col">Team</th><th scope="col">Championship</th>{{if .HasComparison}}<th scope="col">{{.ComparisonName}}</th>{{end}}<th scope="col">Final points</th><th scope="col">Final seed</th><th scope="col">Qualification</th></tr></thead>
-      <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td><strong>{{if $.HasChampionship}}{{.ChampionshipChance}}{{else}}Withheld{{end}}</strong></td>{{if $.HasComparison}}<td>{{if $.HasChampionship}}{{.Comparison.ChampionshipChance}}{{else}}Withheld{{end}}</td>{{end}}<td>{{.FinalPoints}}</td><td>{{.FinalSeed}}</td><td>{{.Qualification}}</td></tr>{{end}}</tbody>
+      <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td><strong>{{.ChampionshipChance}}</strong></td>{{if $.HasComparison}}<td>{{.Comparison.ChampionshipChance}}</td>{{end}}<td>{{.FinalPoints}}</td><td>{{.FinalSeed}}</td><td>{{.Qualification}}</td></tr>{{end}}</tbody>
     </table>
   </div>
 </section>

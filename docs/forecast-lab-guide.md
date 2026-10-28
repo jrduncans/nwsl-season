@@ -347,14 +347,18 @@ alphabetical display order never becomes an official seed. Models and optional
 comparisons remain available. At 390px, team names stay pinned while the final
 facts and comparison columns scroll horizontally.
 
-If playoff matches are already cached while the regular-season snapshot still
-contains pending results, championship odds are withheld until final standings
-can be verified; stale regular data cannot restart observed playoff rounds.
+If playoff results or in-progress matches are already cached while the
+regular-season snapshot still contains pending results, championship odds are
+withheld until final standings can be verified; stale regular data cannot
+restart observed playoff rounds. Published playoff fixtures that have not
+started, even with identified teams, leave the regular-season forecast in place.
 The regular-season inventory and safe final results must be certified by the
 same checks as the Playoffs handoff. The verified fixed bracket and resolved
 final playoff seeds supply initial pairings even before ASA publishes fixtures.
-The page explains that unpublished schedule details remain unknown: an empty
-cache cannot establish whether ASA has published them. Partially published
+Until any playoff fixture is cached, the page explains that pairings follow
+those seeds and that unpublished schedule details remain unknown: an empty
+cache cannot establish whether ASA has published them. The page always links
+to the bracket for published dates and venues. Partially published
 fixtures are matched by participants using `bracket.BuildWithSeeds`, so source
 publication order cannot move a match into another round.
 
@@ -373,7 +377,13 @@ placements, incompatible matchups, or later-round games without known prior
 winners withhold **all** championship odds. This intentionally conservative
 boundary avoids allocating probability through uncertain bracket branches.
 Final regular-season facts remain visible with an explanation and a link to the
-source-backed bracket. Unplayed placeholders do not become matches or winners.
+source-backed bracket. Withheld odds still show `0%` for non-qualifiers and for
+qualifiers knocked out by completed, valid results; those rows are rebuilt into
+the bracket without the problem rows, and if they still disagree no playoff
+elimination is claimed. Unplayed placeholders do not become matches or winners.
+Progress the simulator could not follow is checked with
+`simulation.CheckPostseason` before the forecast runs, so it is withheld with an
+explanation rather than failing the page.
 A partial inventory of otherwise valid upcoming or completed playoff matches
 can still be used; unpublished slots are simulated only when there is no source
 conflict or unresolved result.

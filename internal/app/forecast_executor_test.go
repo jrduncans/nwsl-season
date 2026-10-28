@@ -76,7 +76,7 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 	state := forecaststate.State{Fixed: map[string]simulation.Outcome{}}
 	places := playoffPlaces(options.Rules)
 	for _, entry := range forecast.Catalog() {
-		key := forecastResultKey(data, state, entry.Model.Info().ID, options.ForecastIterations, places)
+		key := forecastResultKey(data, state, entry.Model.Info().ID, options.ForecastIterations, places, nil)
 		if _, found := application.app.forecasts.cache[key]; !found {
 			t.Errorf("cache has no baseline result for %s", entry.Model.Info().ID)
 		}

@@ -19,13 +19,27 @@ type playoffMatch struct {
 }
 
 type playoffSimulation struct {
-	format         competition.BracketFormat
-	matches        map[playoffPair]playoffMatch
-	connections    map[string][]string
-	finalID        string
-	postseason     *Postseason
+	format      competition.BracketFormat
+	matches     map[playoffPair]playoffMatch
+	connections map[string][]string
+	finalID     string
+	// fixedSeeds and actual are set only for postseason progress; the
+	// remaining slots are sampled.
+	fixedSeeds     []string
+	actual         map[string]PostseasonMatch
 	contenders     map[string]bool
 	actualChampion string
+}
+
+// CheckPostseason reports whether Run would accept the request's postseason
+// progress, so callers can withhold odds with an explanation instead of
+// failing the forecast. It does not sample or build predictions.
+func CheckPostseason(request Request) error {
+	if request.Postseason == nil || request.Postseason.Unavailable != "" || request.PlayoffBracket == nil {
+		return nil
+	}
+	_, err := playoffStructure(request)
+	return err
 }
 
 func preparePlayoffs(request Request, predictor forecast.Predictor) (*playoffSimulation, error) {
@@ -35,39 +49,11 @@ func preparePlayoffs(request Request, predictor forecast.Predictor) (*playoffSim
 	if request.PlayoffBracket == nil {
 		return nil, nil
 	}
-	format := request.PlayoffBracket.Copy()
-	if err := format.Validate(); err != nil {
-		return nil, fmt.Errorf("forecast playoff bracket: %w", err)
-	}
-	if format.AdvancementPolicy != competition.AdvancementFixed {
-		return nil, fmt.Errorf("forecast playoff bracket needs fixed advancement")
-	}
-	if err := validatePlayoffBracket(format, request.PlayoffPlaces); err != nil {
+	playoffs, err := playoffStructure(request)
+	if err != nil {
 		return nil, err
 	}
-	playoffs := &playoffSimulation{format: format, matches: make(map[playoffPair]playoffMatch, len(request.Teams)*(len(request.Teams)-1)), connections: make(map[string][]string, len(format.Connections))}
-	roundIndex := make(map[string]int, len(format.Rounds))
-	for index, round := range format.Rounds {
-		roundIndex[round.ID] = index
-	}
-	sort.Slice(playoffs.format.Slots, func(i, j int) bool {
-		left, right := playoffs.format.Slots[i], playoffs.format.Slots[j]
-		if roundIndex[left.RoundID] != roundIndex[right.RoundID] {
-			return roundIndex[left.RoundID] < roundIndex[right.RoundID]
-		}
-		return left.ID < right.ID
-	})
-	for _, connection := range format.Connections {
-		playoffs.connections[connection.DestinationSlotID] = connection.SourceSlotIDs
-	}
-	for _, slot := range format.Slots {
-		if slot.RoundID == format.Rounds[len(format.Rounds)-1].ID {
-			playoffs.finalID = slot.ID
-		}
-	}
-	if err := playoffs.applyPostseason(request); err != nil {
-		return nil, err
-	}
+	playoffs.matches = make(map[playoffPair]playoffMatch, len(request.Teams)*(len(request.Teams)-1))
 	for _, home := range request.Teams {
 		for _, away := range request.Teams {
 			if home.ID == away.ID {
@@ -91,6 +77,45 @@ func preparePlayoffs(request Request, predictor forecast.Predictor) (*playoffSim
 			}
 			playoffs.matches[playoffPair{home.ID, away.ID}] = playoffMatch{distribution: distribution, tieHomeChance: tieHomeChance}
 		}
+	}
+	return playoffs, nil
+}
+
+// playoffStructure validates the bracket and any postseason progress without
+// building match predictions.
+func playoffStructure(request Request) (*playoffSimulation, error) {
+	format := request.PlayoffBracket.Copy()
+	if err := format.Validate(); err != nil {
+		return nil, fmt.Errorf("forecast playoff bracket: %w", err)
+	}
+	if format.AdvancementPolicy != competition.AdvancementFixed {
+		return nil, fmt.Errorf("forecast playoff bracket needs fixed advancement")
+	}
+	if err := validatePlayoffBracket(format, request.PlayoffPlaces); err != nil {
+		return nil, err
+	}
+	playoffs := &playoffSimulation{format: format, connections: make(map[string][]string, len(format.Connections))}
+	roundIndex := make(map[string]int, len(format.Rounds))
+	for index, round := range format.Rounds {
+		roundIndex[round.ID] = index
+	}
+	sort.Slice(playoffs.format.Slots, func(i, j int) bool {
+		left, right := playoffs.format.Slots[i], playoffs.format.Slots[j]
+		if roundIndex[left.RoundID] != roundIndex[right.RoundID] {
+			return roundIndex[left.RoundID] < roundIndex[right.RoundID]
+		}
+		return left.ID < right.ID
+	})
+	for _, connection := range format.Connections {
+		playoffs.connections[connection.DestinationSlotID] = connection.SourceSlotIDs
+	}
+	for _, slot := range format.Slots {
+		if slot.RoundID == format.Rounds[len(format.Rounds)-1].ID {
+			playoffs.finalID = slot.ID
+		}
+	}
+	if err := playoffs.applyPostseason(request); err != nil {
+		return nil, err
 	}
 	return playoffs, nil
 }
@@ -144,13 +169,8 @@ func validatePlayoffBracket(format competition.BracketFormat, places int) error 
 }
 
 func (p *playoffSimulation) champion(table []standings.TableRow, rng *rand.Rand) string {
-	var seeds []string
-	if p.postseason != nil {
-		seeds = make([]string, len(p.postseason.Seeds))
-		for seed, id := range p.postseason.Seeds {
-			seeds[seed-1] = id
-		}
-	} else {
+	seeds := p.fixedSeeds
+	if seeds == nil {
 		seeds = playoffSeeds(table, rng)
 	}
 	seedByID := make(map[string]int, len(seeds))
@@ -160,11 +180,10 @@ func (p *playoffSimulation) champion(table []standings.TableRow, rng *rand.Rand)
 	winners := make(map[string]string, len(p.format.Slots))
 	finalRound := p.format.Rounds[len(p.format.Rounds)-1].ID
 	for _, slot := range p.format.Slots {
-		if p.postseason != nil {
-			if actual := p.postseason.Slots[slot.ID]; actual.Winner != "" {
-				winners[slot.ID] = actual.Winner
-				continue
-			}
+		actual := p.actual[slot.ID]
+		if actual.Winner != "" {
+			winners[slot.ID] = actual.Winner
+			continue
 		}
 		var first, second string
 		if slot.SeedPair != nil {
@@ -177,10 +196,8 @@ func (p *playoffSimulation) champion(table []standings.TableRow, rng *rand.Rand)
 			first, second = second, first
 		}
 		neutral := slot.RoundID == finalRound
-		if p.postseason != nil {
-			if actual := p.postseason.Slots[slot.ID]; actual.Home != "" {
-				first, second = actual.Home, actual.Away
-			}
+		if actual.Home != "" {
+			first, second = actual.Home, actual.Away
 		}
 		winners[slot.ID] = p.winner(first, second, neutral, rng)
 	}
@@ -247,7 +264,11 @@ func (p *playoffSimulation) applyPostseason(request Request) error {
 	if len(seen) != len(state.Slots) {
 		return fmt.Errorf("postseason includes unknown bracket slots")
 	}
-	p.postseason = state
+	p.fixedSeeds = make([]string, request.PlayoffPlaces)
+	for seed, id := range state.Seeds {
+		p.fixedSeeds[seed-1] = id
+	}
+	p.actual = state.Slots
 	p.actualChampion = winners[p.finalID]
 	return nil
 }

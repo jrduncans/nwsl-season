@@ -33,7 +33,7 @@ func (a *application) populateExploreForecastBenchmarks(ctx context.Context, tea
 			state := forecaststate.State{Fixed: map[string]simulation.Outcome{}}
 			places := playoffPlaces(rules)
 			task := forecastTask{
-				key:     forecastResultKey(input.Data, state, entry.Model.Info().ID, a.options.ForecastIterations, places),
+				key:     forecastResultKey(input.Data, state, entry.Model.Info().ID, a.options.ForecastIterations, places, nil),
 				request: simulation.Request{Teams: input.Data.Teams, Games: standingsGames(input.Data.Games), XGoals: forecastXGoals(input.Data), HistoricalVenue: forecastVenueSample(input.Data), Model: entry.Model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places, PlayoffBracket: forecastPlayoffBracket(season.Season, places)},
 			}
 			// This failure is absorbed into an unavailable comparison; the

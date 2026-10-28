@@ -293,16 +293,14 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 // snapshots cover teams and match state; xG values are included because they
 // are refreshed independently and affect the xG model without changing the
 // fixture snapshot.
-func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID string, iterations, playoffPlaces int, postseason ...*simulation.Postseason) string {
+func forecastResultKey(data cache.SeasonData, state forecaststate.State, modelID string, iterations, playoffPlaces int, postseason *simulation.Postseason) string {
 	parts := []string{"forecast-result-v2", data.FixtureSnapshotID, modelID, strconv.Itoa(iterations), strconv.Itoa(playoffPlaces)}
 	if len(data.Games) > 0 {
 		format, _ := json.Marshal(forecastPlayoffBracket(data.Games[0].Season, playoffPlaces))
 		parts = append(parts, string(format))
 	}
-	for _, progress := range postseason {
-		if progress != nil {
-			parts = append(parts, string(progress.Material()))
-		}
+	if postseason != nil {
+		parts = append(parts, string(postseason.Material()))
 	}
 	// A database Season result always supplies FixtureSnapshotID. Include the
 	// simulator's actual inputs as well so alternate Store implementations

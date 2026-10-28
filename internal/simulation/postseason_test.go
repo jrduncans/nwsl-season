@@ -81,3 +81,19 @@ func TestPostseasonRejectsProgressWithoutActualPriorWinners(t *testing.T) {
 		t.Fatal("invented prior-round winners for a published semifinal")
 	}
 }
+
+func TestCheckPostseasonMatchesRunValidation(t *testing.T) {
+	state := &Postseason{Seeds: map[int]string{}, Slots: map[string]PostseasonMatch{"semifinal-1": {Home: "a", Away: "d", Winner: "a"}}}
+	teams := testPlayoffTeams()
+	for i, team := range teams {
+		state.Seeds[i+1] = team.ID
+	}
+	request := Request{Teams: teams, PlayoffPlaces: 8, PlayoffBracket: testPlayoffBracket(t), Postseason: state}
+	if CheckPostseason(request) == nil {
+		t.Fatal("check accepted progress the simulator rejects")
+	}
+	state.Slots = map[string]PostseasonMatch{"quarterfinal-1": {Home: "a", Away: "h", Winner: "a"}}
+	if err := CheckPostseason(request); err != nil {
+		t.Fatalf("check rejected valid progress: %v", err)
+	}
+}

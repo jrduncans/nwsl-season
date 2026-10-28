@@ -1494,8 +1494,8 @@ func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
 		}
 	}
 	state := forecaststate.State{ModelID: "current-pace-v1", ComparisonModelID: "results-poisson-v1", Fixed: map[string]simulation.Outcome{}}
-	catalogKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, 8)
-	configuredKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, playoffPlaces(configured))
+	catalogKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, 8, nil)
+	configuredKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, playoffPlaces(configured), nil)
 	if _, found := application.app.forecasts.cache[catalogKey]; !found {
 		t.Fatal("forecast cache has no result keyed with the catalog playoff-place count")
 	}
@@ -1653,9 +1653,9 @@ func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing
 
 func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 	data := cache.SeasonData{Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}}}
-	first := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8)
+	first := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8, nil)
 	data.Teams[0].Name = "Renamed Alpha"
-	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8); second == first {
+	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8, nil); second == first {
 		t.Fatal("forecast result key did not change with team presentation")
 	}
 }
@@ -1663,9 +1663,9 @@ func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 func TestForecastResultKeyChangesWithKickoff(t *testing.T) {
 	for _, modelID := range []string{"xg-poisson-recent-form-v1", "xg-poisson-schedule-load-v1"} {
 		data := cache.SeasonData{Games: []cache.Game{{ASAID: "completed", KickoffUTC: "2026-05-01 20:00:00 UTC"}}}
-		first := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+		first := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil)
 		data.Games[0].KickoffUTC = "2026-05-02 20:00:00 UTC"
-		if second := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); second == first {
+		if second := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil); second == first {
 			t.Errorf("%s result key did not change with fixture kickoff", modelID)
 		}
 	}
@@ -1678,23 +1678,23 @@ func TestForecastResultKeyChangesWithPenaltySplits(t *testing.T) {
 		VenueHistory: []cache.VenueSummary{{Season: "2025", XGReady: true, XGMatches: 1, HomeXG: 1.7, AwayXG: .8}},
 	}
 	modelID := "xg-poisson-npxg-strength-v1"
-	unsplit := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+	unsplit := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil)
 	data.XGoals[0].Penalties = &cache.PenaltySplit{HomeXG: .79}
-	split := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+	split := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil)
 	if split == unsplit {
 		t.Fatal("result key did not change when a penalty split arrived")
 	}
 	data.VenueHistory[0].NPXGMatches, data.VenueHistory[0].HomeNPXG, data.VenueHistory[0].AwayNPXG = 1, .91, .8
-	if venue := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); venue == split {
+	if venue := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil); venue == split {
 		t.Fatal("result key did not change with prior-season npxG totals")
 	}
 }
 
 func TestForecastResultKeyChangesWhenHistoricalVenueSummaryArrives(t *testing.T) {
 	data := cache.SeasonData{Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}}}
-	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8)
+	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8, nil)
 	data.VenueHistory = []cache.VenueSummary{{Season: "2025", Stage: "Regular Season", FixtureReady: true, XGReady: true, Matches: 182, HomeGoals: 260, AwayGoals: 220, XGMatches: 182, HomeXG: 250.5, AwayXG: 215.5}}
-	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8); second == first {
+	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8, nil); second == first {
 		t.Fatal("forecast result key did not change with historical venue summary")
 	}
 }

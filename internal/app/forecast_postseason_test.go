@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -142,7 +143,7 @@ func TestPostseasonUnresolvedSeedsRetainFactualPoints(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("forecast = %d: %s", response.Code, response.Body.String())
 	}
-	requireText(t, response.Body.String(), ".data-warning", "final playoff seeds are unresolved", "Display order is not an official seed")
+	requireText(t, response.Body.String(), ".data-warning", "final playoff seeds are unresolved")
 	requireText(t, response.Body.String(), ".postseason-table", "Final points", "Withheld", "Unresolved")
 }
 
@@ -204,5 +205,77 @@ func TestPostseasonCacheAndWarmingUseTheSameInputs(t *testing.T) {
 	}
 	if string(before.Material()) == string(after.Material()) || forecastResultKey(store.regular, state, state.ModelID, 5, 8, before) == forecastResultKey(store.regular, state, state.ModelID, 5, 8, after) {
 		t.Fatal("a shootout-only correction did not invalidate the forecast")
+	}
+}
+
+func TestWithheldPostseasonOddsKeepRecordedEliminations(t *testing.T) {
+	regular := resolvedHandoffSeason()
+	seeds := playoffSeedsFrom("2026", regular)
+	played := forecastPlayoffGame(seeds, "qf-1", 1, 8, true)
+	for _, kind := range []string{"failed-refresh", "live", "missing-score"} {
+		t.Run(kind, func(t *testing.T) {
+			store := handoffStore{regular: regular}
+			other := forecastPlayoffGame(seeds, "qf-2", 4, 5, true)
+			switch kind {
+			case "failed-refresh":
+				store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
+			case "live":
+				other.Status = "InProgress"
+			case "missing-score":
+				other.HomeScore = sql.NullInt64{}
+			}
+			store.playoffs.Games = []cache.Game{played, other}
+			a := &application{store: store}
+			state, err := a.forecastPostseason(context.Background(), "2026", regular, 8)
+			if err != nil || state == nil || state.Unavailable == "" {
+				t.Fatalf("state = %+v, error = %v", state, err)
+			}
+			want := []string{seeds.Seeds[8]}
+			if kind == "failed-refresh" {
+				want = append(want, seeds.Seeds[5])
+			}
+			slices.Sort(want)
+			if !slices.Equal(state.Eliminated, want) {
+				t.Fatalf("eliminated = %v, want %v", state.Eliminated, want)
+			}
+		})
+	}
+
+	store := handoffStore{regular: regular, playoffs: cache.SeasonData{Games: []cache.Game{played}}}
+	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
+	response := httptest.NewRecorder()
+	NewHandlerWithOptions(store, Options{ForecastIterations: 5, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=current-pace-v1", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("forecast = %d: %s", response.Code, response.Body.String())
+	}
+	// Rows follow the official table, so the eighth row is the knocked-out
+	// eighth seed and rows past the playoff line did not qualify.
+	rows := find(t, response.Body.String(), ".postseason-table tbody tr")
+	if len(rows) != len(regular.Teams) {
+		t.Fatalf("rows = %d", len(rows))
+	}
+	for i, row := range rows {
+		value := strings.Fields(text(row))
+		chance := value[slices.IndexFunc(value, func(field string) bool { return field == "Withheld" || strings.HasSuffix(field, "%") })]
+		want := "Withheld"
+		if i >= 7 {
+			want = "0%"
+		}
+		if chance != want {
+			t.Fatalf("row %d championship = %q", i+1, chance)
+		}
+	}
+}
+
+func TestPublishedPlayoffFixturesKeepTheRegularSeasonForecast(t *testing.T) {
+	regular := resolvedHandoffSeason()
+	seeds := playoffSeedsFrom("2026", regular)
+	regular.Games[0].Status = fixtures.PreMatchStatus
+	regular.Games[0].HomeScore, regular.Games[0].AwayScore = sql.NullInt64{}, sql.NullInt64{}
+	store := handoffStore{regular: regular, playoffs: cache.SeasonData{Games: []cache.Game{forecastPlayoffGame(seeds, "published-quarterfinal", 1, 8, false)}}}
+	a := &application{store: store}
+	state, err := a.forecastPostseason(context.Background(), "2026", regular, 8)
+	if err != nil || state != nil {
+		t.Fatalf("an unplayed published fixture switched to postseason mode: %+v, %v", state, err)
 	}
 }

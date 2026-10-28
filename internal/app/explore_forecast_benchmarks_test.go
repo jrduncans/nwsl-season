@@ -46,7 +46,7 @@ func TestExploreForecastBenchmarksUseDefaultProjectionAndSharedCache(t *testing.
 	// Prewarm exactly the key used by Forecast Lab and startup. Explore must
 	// reuse it instead of fitting another model or reading a second snapshot.
 	model := forecast.Default().Model
-	key := forecastResultKey(*data, forecaststate.State{}, model.Info().ID, 12, 8)
+	key := forecastResultKey(*data, forecaststate.State{}, model.Info().ID, 12, 8, nil)
 	_, err := executor.results(context.Background(), []forecastTask{{key: key, request: simulation.Request{Model: model, Teams: data.Teams, Games: standingsGames(data.Games), HistoricalVenue: forecastVenueSample(*data), PlayoffPlaces: 8, PlayoffBracket: forecastPlayoffBracket("2026", 8), Iterations: 12}}})
 	if err != nil {
 		t.Fatal(err)

@@ -4,11 +4,13 @@ import "encoding/json"
 
 // Postseason is certified final seeding plus source-backed bracket progress.
 // A nonempty Unavailable withholds all championship odds, preserving the table.
-// Missing slots are unpublished matches, never completed results.
+// Eliminated then lists qualifiers whose recorded playoff losses still prove a
+// zero chance. Missing slots are unpublished matches, never completed results.
 type Postseason struct {
 	Seeds          map[int]string
 	Slots          map[string]PostseasonMatch
 	Unavailable    string
+	Eliminated     []string
 	SourceIdentity string
 }
 
