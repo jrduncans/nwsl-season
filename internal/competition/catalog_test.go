@@ -250,7 +250,7 @@ func TestPublicCompetitionCatalogMetadata(t *testing.T) {
 		policy                     AdvancementPolicy
 	}{
 		{"2016", "Playoffs", "playoffs", "Playoffs", StageKindKnockout, false, 3, 2, 3, AdvancementPolicyFixed},
-		{"2021", "Playoffs", "playoffs", "Playoffs", StageKindKnockout, false, 5, 3, 5, AdvancementPolicyHistoricallyObservedReseeded},
+		{"2021", "Playoffs", "playoffs", "Playoffs", StageKindKnockout, false, 5, 3, 5, AdvancementPolicyFixed},
 		{"2024", "Playoffs", "playoffs", "Playoffs", StageKindKnockout, false, 7, 3, 7, AdvancementPolicyFixed},
 		{"2026", "Playoffs", "playoffs", "Playoffs", StageKindKnockout, false, 0, 3, 7, AdvancementPolicyFixed},
 		{"2020", "NWSL Challenge Cup Group Stage", "challenge-cup-group-stage", "Challenge Cup Group Stage", StageKindGroup, true, 16, 0, 0, ""},
@@ -339,7 +339,12 @@ func assertPhaseEightEntry(t *testing.T, entry Entry, ok bool, season, slug, sho
 func TestVerifiedBracketTopology(t *testing.T) {
 	classicPairs := []*[2]int{seedPair(1, 4), seedPair(2, 3), nil}
 	classicConnections := []BracketConnection{{SourceSlotIDs: []string{"semifinal-1", "semifinal-2"}, DestinationSlotID: "final"}}
-	reseededPairs := []*[2]int{seedPair(3, 6), seedPair(4, 5), nil, nil, nil}
+	byePairs := []*[2]int{seedPair(4, 5), seedPair(3, 6), nil, nil, nil}
+	byeConnections := []BracketConnection{
+		{SourceSlotIDs: []string{"quarterfinal-1"}, DestinationSlotID: "semifinal-1"},
+		{SourceSlotIDs: []string{"quarterfinal-2"}, DestinationSlotID: "semifinal-2"},
+		{SourceSlotIDs: []string{"semifinal-1", "semifinal-2"}, DestinationSlotID: "final"},
+	}
 	fixedPairs := []*[2]int{seedPair(1, 8), seedPair(4, 5), seedPair(2, 7), seedPair(3, 6), nil, nil, nil}
 	fixedConnections := []BracketConnection{
 		{SourceSlotIDs: []string{"quarterfinal-1", "quarterfinal-2"}, DestinationSlotID: "semifinal-1"},
@@ -360,9 +365,9 @@ func TestVerifiedBracketTopology(t *testing.T) {
 		{"2017", "Playoffs", 2, AdvancementPolicyFixed, classicPairs, classicConnections},
 		{"2018", "Playoffs", 2, AdvancementPolicyFixed, classicPairs, classicConnections},
 		{"2019", "Playoffs", 2, AdvancementPolicyFixed, classicPairs, classicConnections},
-		{"2021", "Playoffs", 3, AdvancementPolicyHistoricallyObservedReseeded, reseededPairs, classicConnections},
-		{"2022", "Playoffs", 3, AdvancementPolicyHistoricallyObservedReseeded, reseededPairs, classicConnections},
-		{"2023", "Playoffs", 3, AdvancementPolicyHistoricallyObservedReseeded, reseededPairs, classicConnections},
+		{"2021", "Playoffs", 3, AdvancementPolicyFixed, byePairs, byeConnections},
+		{"2022", "Playoffs", 3, AdvancementPolicyFixed, byePairs, byeConnections},
+		{"2023", "Playoffs", 3, AdvancementPolicyFixed, byePairs, byeConnections},
 		{"2024", "Playoffs", 3, AdvancementPolicyFixed, fixedPairs, fixedConnections},
 		{"2025", "Playoffs", 3, AdvancementPolicyFixed, fixedPairs, fixedConnections},
 		{"2026", "Playoffs", 3, AdvancementPolicyFixed, fixedPairs, fixedConnections},
@@ -390,6 +395,43 @@ func TestVerifiedBracketTopology(t *testing.T) {
 				t.Fatalf("connections = %+v, want %+v", format.Connections, tc.connections)
 			}
 		})
+	}
+}
+
+// Seed 1 hosts the 4–5 winner and seed 2 the 3–6 winner; NWSL did not reseed.
+func TestSixTeamPlayoffsGiveTopSeedsFixedByes(t *testing.T) {
+	for _, season := range []string{"2021", "2022", "2023"} {
+		entry, _ := Lookup(season, "Playoffs")
+		var byes []int
+		for _, slot := range entry.BracketFormat.Slots {
+			byes = append(byes, slot.ByeSeed)
+		}
+		if want := []int{0, 0, 1, 2, 0}; !reflect.DeepEqual(byes, want) {
+			t.Fatalf("%s bye seeds = %v, want %v", season, byes, want)
+		}
+	}
+}
+
+func TestBracketByeSeedValidation(t *testing.T) {
+	valid := func() BracketFormat {
+		entry, _ := Lookup("2023", "Playoffs")
+		return entry.BracketFormat.Copy()
+	}
+	for name, mutate := range map[string]func(*BracketFormat){
+		"bye in opening round":     func(f *BracketFormat) { f.Slots[0].ByeSeed = 1 },
+		"bye reuses a paired seed": func(f *BracketFormat) { f.Slots[2].ByeSeed = 4 },
+		"bye with two sources":     func(f *BracketFormat) { f.Connections[0].SourceSlotIDs = []string{"quarterfinal-1", "quarterfinal-2"} },
+		"one source without bye":   func(f *BracketFormat) { f.Slots[2].ByeSeed = 0 },
+		"bye without a source":     func(f *BracketFormat) { f.Connections = f.Connections[1:] },
+	} {
+		format := valid()
+		mutate(&format)
+		if format.Validate() == nil {
+			t.Errorf("%s validated", name)
+		}
+	}
+	if err := valid().Validate(); err != nil {
+		t.Fatal(err)
 	}
 }
 

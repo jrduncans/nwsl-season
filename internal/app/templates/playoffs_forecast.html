@@ -5,11 +5,11 @@
 <section class="forecast-results" aria-label="Playoff forecast outlook">
  <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label><label><input type="radio" name="forecast-view" value="bracket" autocomplete="off" aria-controls="forecast-bracket-panel"><span>Bracket</span></label></span></fieldset></div>
  <div id="forecast-table-panel" data-forecast-view-panel="table">
-  <p class="forecast-scroll-hint">Swipe left to see every round <span aria-hidden="true">→</span></p>
+  {{if .HasComparison}}<p class="forecast-scroll-hint">Swipe left to see every round <span aria-hidden="true">→</span></p>{{end}}
   <div class="table-scroll" tabindex="0" role="region" aria-label="Playoff round probabilities">
-   <table class="playoffs-forecast-table"><caption>{{.Season}} playoffs · {{.ModelName}}</caption>
-    <thead><tr><th scope="col">Team</th>{{range .RoundColumns}}<th scope="col">{{.}}</th>{{end}}<th scope="col">Champion</th>{{if .HasComparison}}<th scope="col">{{.ComparisonName}} · Champion</th>{{end}}</tr></thead>
-    <tbody>{{range .PlayoffRows}}<tr{{if .Out}} class="playoff-team-out"{{end}}><th scope="row"><span class="bracket-seed">{{.SeedText}}</span> {{template "teamName" .Team}}</th>{{range .Rounds}}<td>{{.}}</td>{{end}}<td><strong>{{.Champion}}</strong></td>{{if $.HasComparison}}<td>{{.Comparison}}</td>{{end}}</tr>{{end}}</tbody>
+   <table class="playoffs-forecast-table"><caption><span>{{.Season}} playoffs · {{.ModelName}}</span></caption>
+    <thead><tr><th scope="col">Team <span class="playoff-seed-heading">(seed)</span></th><th scope="col">Champion</th>{{range .RoundColumns}}<th scope="col">{{.}}</th>{{end}}{{if .HasComparison}}<th scope="col">{{.ComparisonName}} · Champion</th>{{end}}</tr></thead>
+    <tbody>{{range .PlayoffRows}}<tr{{if .Out}} class="playoff-team-out"{{end}}><th scope="row">{{template "playoffForecastTeam" .}}</th><td><strong>{{.Champion}}</strong></td>{{range .Rounds}}<td>{{.}}</td>{{end}}{{if $.HasComparison}}<td>{{.Comparison}}</td>{{end}}</tr>{{end}}</tbody>
    </table>
   </div>
  </div>
@@ -17,9 +17,9 @@
   <p class="note">How each run ends. Lighter → darker: 0% → 100%.</p>
   <p class="forecast-scroll-hint">Swipe left to see every outcome <span aria-hidden="true">→</span></p>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Playoff run endings">
-   <table class="forecast-heatmap playoffs-heatmap"><caption>{{.Season}} playoffs · {{.ModelName}}</caption>
-    <thead><tr><th scope="col">Team</th>{{range .EndColumns}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
-    <tbody>{{range .PlayoffRows}}<tr><th scope="row"><span class="bracket-seed">{{.SeedText}}</span> {{template "teamName" .Team}}</th>{{range .Ends}}<td><span class="forecast-heatmap-value"{{if .Intensity}} style="--forecast-probability: {{.Intensity}}"{{end}}>{{.Text}}</span></td>{{end}}</tr>{{end}}</tbody>
+   <table class="forecast-heatmap playoffs-heatmap"><caption><span>{{.Season}} playoffs · {{.ModelName}}</span></caption>
+    <thead><tr><th scope="col">Team <span class="playoff-seed-heading">(seed)</span></th>{{range .EndColumns}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+    <tbody>{{range .PlayoffRows}}<tr><th scope="row">{{template "playoffForecastTeam" .}}</th>{{range .Ends}}<td><span class="forecast-heatmap-value"{{if .Intensity}} style="--forecast-probability: {{.Intensity}}"{{end}}>{{.Text}}</span></td>{{end}}</tr>{{end}}</tbody>
    </table>
   </div>
  </div>
@@ -27,16 +27,20 @@
   <p class="note">Chance to fill each bracket position.</p>
   <p class="forecast-scroll-hint">Swipe left to follow the bracket <span aria-hidden="true">→</span></p>
   <div class="table-scroll playoff-bracket-scroll" tabindex="0" role="region" aria-label="Playoff position probabilities">
-   <div class="playoff-forecast-bracket">{{range .BracketRounds}}<section class="playoff-forecast-round"><h2>{{.Label}}</h2>{{range .Slots}}<article class="playoff-forecast-slot" aria-label="{{.Label}}"><h3>{{.Label}}</h3>{{range $i,$side:=.Sides}}{{if $i}}<p class="playoff-position-versus">vs</p>{{end}}<ul class="playoff-position-list">{{range .Teams}}<li{{if .Out}} class="playoff-team-out"{{end}} aria-label="{{.Team.Name}}: {{.Text}}"><span class="bracket-seed">{{.Seed}}</span>{{template "teamName" .Team}}<span class="playoff-position-probability">{{.Text}}</span>{{if .Width}}<span class="forecast-probability-track" aria-hidden="true"><span style="width: {{.Width}}"></span></span>{{end}}</li>{{else}}<li>Unresolved</li>{{end}}</ul>{{end}}</article>{{end}}</section>{{end}}</div>
+   <div class="playoff-forecast-bracket" data-bracket-layout>{{range .BracketRounds}}<section class="playoff-forecast-round" data-bracket-round><h2>{{.Label}}</h2><div class="bracket-round-slots" data-bracket-slots>{{range .Slots}}<article class="playoff-forecast-slot" data-bracket-node="{{.ID}}" aria-label="{{.Label}}"><h3>{{.Label}}</h3>{{range .Sides}}<section class="playoff-position-group"{{if .Source.ID}} data-bracket-source="{{.Source.ID}}"{{end}}>{{if .Source.Label}}<h4>{{.Source.Label}}</h4>{{end}}<ul class="playoff-position-list">{{range .Teams}}<li{{if .Out}} class="playoff-team-out"{{end}} aria-label="Seed {{.Seed}}, {{.Team.Name}}: {{.Text}}"><span class="bracket-seed" aria-hidden="true">{{.Seed}}</span>{{template "teamName" .Team}}<span class="playoff-position-probability">{{.Text}}</span>{{if .Width}}<span class="forecast-probability-track" aria-hidden="true"><span style="width: {{.Width}}"></span></span>{{end}}</li>{{else}}<li>Unresolved</li>{{end}}</ul></section>{{end}}</article>{{end}}</div></section>{{end}}</div>
   </div>
  </div>
 </section>
 <section class="forecast-builder" aria-labelledby="playoff-scenario-title"><h2 id="playoff-scenario-title">Scenario</h2>
- {{if .ScenarioOptions}}<form class="playoff-scenario-form" method="get" action="{{.ForecastPath}}">
+ {{if .ScenarioMatches}}<form class="playoff-scenario-form" method="get" action="{{.ForecastPath}}" data-playoff-scenario>
   <input type="hidden" name="v" value="2"><input type="hidden" name="m" value="{{.ModelID}}">{{if .ComparisonID}}<input type="hidden" name="c" value="{{.ComparisonID}}">{{end}}{{if .FilteredTeam}}<input type="hidden" name="team" value="{{.FilteredTeam}}">{{end}}{{range .StateValues}}<input type="hidden" name="p" value="{{.}}">{{end}}<input type="hidden" name="action" value="add">
-  <label for="playoff-selection">Assume a winner</label><select id="playoff-selection" name="selection">{{range .ScenarioOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select><button class="button" type="submit">Apply scenario</button>
+  <label data-playoff-match-field hidden for="playoff-match">Match<select id="playoff-match" data-playoff-match>{{range .ScenarioMatches}}<option value="{{.ID}}">{{.Label}}</option>{{end}}</select></label>
+  <label for="playoff-selection">Winner<select id="playoff-selection" name="selection">{{range .ScenarioMatches}}<optgroup label="{{.Label}} · {{.Fixture}}" data-playoff-match-id="{{.ID}}">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</optgroup>{{end}}</select></label>
+  <button class="button" type="submit">Apply scenario</button>
  </form>{{end}}
  {{if .PlayoffAssumptions}}<ul class="forecast-assumptions">{{range .PlayoffAssumptions}}<li><span>{{.Fixture}}</span><a href="{{.Remove}}">Remove</a></li>{{end}}</ul><p><a href="{{.ResetPath}}">Reset all assumptions</a></p>{{else}}<p class="note">No fixed winners.</p>{{end}}
 </section>
 <details class="forecast-method"><summary>What this forecast considers</summary><p>Regular-season fit, confirmed playoff results, and remaining bracket matches. Expected pairings give the higher seed home advantage; published assignments take precedence. The final averages both home assignments. A 90-minute draw advances teams in proportion to their win chances. Playoff recovery and schedule load are omitted.</p></details>
 {{template "foot" .}}{{end}}
+
+{{define "playoffForecastTeam"}}<span class="playoff-team-identity"><span class="bracket-seed"><span class="visually-hidden">Seed </span>{{.SeedText}}</span> {{template "teamName" .Team}}</span>{{end}}

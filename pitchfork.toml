@@ -11,3 +11,10 @@ run = "test -f data/matchday25/nwsl-season.sqlite && exec env NWSL_CONFIG_FILE=/
 port = { expect = [8081], bump = 10 }
 mise = true
 watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]
+
+# Separate cache with synthetic final-matchday results for playoff testing.
+[daemons.server-playoffs]
+run = "test -f data/playoffs/nwsl-season.sqlite && exec env NWSL_CONFIG_FILE=/dev/null NWSL_DATA_DIR=data/playoffs NWSL_SYNC_SCHEDULER=false NWSL_HTTP_ADDR=127.0.0.1:$PORT go run ./cmd/server"
+port = { expect = [8082], bump = 10 }
+mise = true
+watch = ["internal/**/*.go", "internal/app/templates/**/*.html", "internal/app/static/**/*", "cmd/server/**/*.go", "go.mod", "go.sum"]

@@ -17,19 +17,22 @@ func playoffBracket(season string) *BracketFormat {
 	}
 	format.Connections = []BracketConnection{{SourceSlotIDs: []string{"semifinal-1", "semifinal-2"}, DestinationSlotID: "final"}}
 	if season == "2021" || season == "2022" || season == "2023" {
-		format.AdvancementPolicy = AdvancementPolicyHistoricallyObservedReseeded
+		// Six teams without reseeding: seed 1 hosts the 4–5 winner and seed 2
+		// the 3–6 winner. Each season's 4–5 match was published first, so
+		// chronological placement keeps Quarterfinal 1 as the 4–5 match.
 		format.Rounds = []BracketRound{{ID: "quarterfinals", Label: "Quarterfinals"}, {ID: "semifinals", Label: "Semifinals"}, {ID: "final", Label: "Final"}}
 		format.Slots = []BracketSlot{
-			{ID: "quarterfinal-1", RoundID: "quarterfinals", SeedPair: seedPair(3, 6)},
-			{ID: "quarterfinal-2", RoundID: "quarterfinals", SeedPair: seedPair(4, 5)},
+			{ID: "quarterfinal-1", RoundID: "quarterfinals", SeedPair: seedPair(4, 5)},
+			{ID: "quarterfinal-2", RoundID: "quarterfinals", SeedPair: seedPair(3, 6)},
+			{ID: "semifinal-1", RoundID: "semifinals", ByeSeed: 1},
+			{ID: "semifinal-2", RoundID: "semifinals", ByeSeed: 2},
 		}
-		format.Slots = append(format.Slots, laterSlots("semifinals", "semifinal-1", "semifinal-2")...)
 		format.Slots = append(format.Slots, openingSlots("final", "final")...)
 		format.Connections = []BracketConnection{
+			{SourceSlotIDs: []string{"quarterfinal-1"}, DestinationSlotID: "semifinal-1"},
+			{SourceSlotIDs: []string{"quarterfinal-2"}, DestinationSlotID: "semifinal-2"},
 			{SourceSlotIDs: []string{"semifinal-1", "semifinal-2"}, DestinationSlotID: "final"},
 		}
-		// Reseeding means the source-backed construction chooses the semifinal
-		// pairing later; the slots remain factual placeholders here.
 		return &format
 	}
 	if season == "2024" || season == "2025" || season == "2026" {

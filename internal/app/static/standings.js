@@ -51,6 +51,103 @@ document.querySelectorAll("[data-forecast-view-control]").forEach((control) => {
   showView();
 });
 
+// Keep the server-rendered grouped winner selector usable without JavaScript.
+// With it, choose the match and winner separately; the submitted selection
+// still carries both participants so stale scenarios retain their checks.
+document.querySelectorAll("[data-playoff-scenario]").forEach((form) => {
+  const match = form.querySelector("[data-playoff-match]");
+  const winner = form.querySelector("[name=selection]");
+  const groups = new Map(Array.from(winner.querySelectorAll("optgroup"), (group) => [group.dataset.playoffMatchId, group]));
+  const update = () => {
+    const group = groups.get(match.value);
+    winner.replaceChildren(...Array.from(group.children, (option) => option.cloneNode(true)));
+  };
+  match.addEventListener("change", update);
+  form.querySelector("[data-playoff-match-field]").hidden = false;
+  update();
+});
+
+// Both bracket views use their rendered feeder IDs. Measurements make room
+// for wrapped names, longer candidate lists, and results that shorten a list.
+// The public bracket keeps its round-by-round reading order on phones.
+document.querySelectorAll("[data-bracket-layout]").forEach((root) => {
+  const rounds = Array.from(root.querySelectorAll("[data-bracket-round]"));
+  const columns = rounds.map((round) => Array.from(round.querySelectorAll("[data-bracket-node]")));
+  const cards = columns.flat();
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("bracket-connectors");
+  svg.setAttribute("aria-hidden", "true");
+  root.prepend(svg);
+  let pending = false;
+  const layout = () => {
+    pending = false;
+    if (!root.getClientRects().length) return;
+    if (root.classList.contains("bracket") && matchMedia("(max-width: 700px)").matches) {
+      root.classList.remove("bracket-is-laid-out");
+      return;
+    }
+    const nodes = new Map();
+    const gap = 24;
+    let height = 0;
+    columns.forEach((column, roundIndex) => {
+      const current = column.map((card, index) => {
+        const sources = Array.from(card.querySelectorAll("[data-bracket-source]"), (anchor) => nodes.get(anchor.dataset.bracketSource)).filter(Boolean);
+        const fraction = sources.length ? sources.reduce((sum, node) => sum + node.fraction, 0) / sources.length : (index + .5) / column.length;
+        return {card, roundIndex, fraction, height: card.getBoundingClientRect().height};
+      }).sort((a, b) => a.fraction - b.fraction);
+      // In a partially known reseeded round an unknown path may share the
+      // known path's lane. Spread that round until its opponents are known.
+      if (current.some((node, i) => i > 0 && node.fraction - current[i - 1].fraction < .001)) {
+        current.forEach((node, i) => { node.fraction = (i + .5) / current.length; });
+      }
+      current.forEach((node, i) => {
+        height = Math.max(height, node.height / (2 * Math.min(node.fraction, 1 - node.fraction)));
+        if (i > 0) {
+          const prior = current[i - 1];
+          height = Math.max(height, (prior.height / 2 + node.height / 2 + gap) / (node.fraction - prior.fraction));
+        }
+        nodes.set(node.card.dataset.bracketNode, node);
+      });
+    });
+    height = Math.ceil(height);
+    root.style.setProperty("--bracket-height", `${height}px`);
+    nodes.forEach((node) => node.card.style.setProperty("--bracket-top", `${node.fraction * height - node.height / 2}px`));
+    root.classList.add("bracket-is-laid-out");
+    const bounds = root.getBoundingClientRect();
+    svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+    const paths = [];
+    nodes.forEach((target) => {
+      const to = target.card.getBoundingClientRect();
+      target.card.querySelectorAll("[data-bracket-source]").forEach((anchor) => {
+        const source = nodes.get(anchor.dataset.bracketSource);
+        if (!source || source.roundIndex >= target.roundIndex) return;
+        const from = source.card.getBoundingClientRect();
+        const entry = anchor.getBoundingClientRect();
+        const x1 = from.right - bounds.left, x2 = to.left - bounds.left;
+        const y1 = from.y + from.height / 2 - bounds.top, y2 = entry.y + entry.height / 2 - bounds.top;
+        const middle = (x1 + x2) / 2;
+        const path = document.createElementNS(svg.namespaceURI, "path");
+        path.setAttribute("d", `M${x1},${y1} H${middle} V${y2} H${x2}`);
+        path.dataset.bracketFrom = source.card.dataset.bracketNode;
+        path.dataset.bracketTo = target.card.dataset.bracketNode;
+        paths.push(path);
+      });
+    });
+    svg.replaceChildren(...paths);
+  };
+  const schedule = () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(layout);
+  };
+  const observer = new ResizeObserver(schedule);
+  cards.forEach((card) => observer.observe(card));
+  // Visibility changes when the forecast tab opens; card observations also
+  // cover font and logo loads without needing to re-run the forecast.
+  window.addEventListener("resize", schedule);
+  schedule();
+});
+
 document.addEventListener("change", (event) => {
   const button = event.target.closest("[data-standings-mode-value]");
   if (!button) return;

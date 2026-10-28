@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -51,7 +52,17 @@ func TestPlayoffsForecastAvailabilityAndRegularRedirect(t *testing.T) {
 	}
 	requireExact(t, response.Body.String(), `nav a[aria-current=page]`, "Forecast lab")
 	requireElements(t, response.Body.String(), ".playoffs-forecast-table", ".playoffs-heatmap", "#playoff-selection")
-	requireText(t, response.Body.String(), "thead", "Semifinal", "Final", "Champion")
+	var headings []string
+	for _, n := range find(t, response.Body.String(), ".playoffs-forecast-table thead th") {
+		headings = append(headings, text(n))
+	}
+	// Rounds read outward from Champion.
+	if want := []string{"Team (seed)", "Champion", "Reach final", "Reach semifinal"}; !slices.Equal(headings, want) {
+		t.Fatalf("headings = %q, want %q", headings, want)
+	}
+	// The Champion card keeps its connector without repeating its heading.
+	requireElements(t, response.Body.String(), `[data-bracket-node="champion"] [data-bracket-source="final"]`)
+	forbidText(t, response.Body.String(), ".playoff-forecast-bracket", "Winner of Final")
 	if got := len(find(t, response.Body.String(), ".playoffs-forecast-table tbody tr")); got != 8 {
 		t.Fatalf("qualifiers=%d", got)
 	}
@@ -80,7 +91,7 @@ func TestPlayoffsForecastScenariosAndStaleness(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("scenario = %d %s", response.Code, response.Body.String())
 	}
-	requireText(t, response.Body.String(), ".forecast-assumptions", "advances")
+	requireText(t, response.Body.String(), ".forecast-assumptions", "Quarterfinal 1: "+playoffTeamName(store.regular, seeds.Seeds[8])+" advances")
 	requireText(t, response.Body.String(), ".playoffs-forecast-table", "Out in quarterfinal", "Through")
 	selection := state.Values()[0]
 	response = playoffResponse(store, "/seasons/2026/playoffs/forecast?v=2&m=current-pace-v1&action=add&selection="+url.QueryEscape(selection))
@@ -165,10 +176,11 @@ func TestPlayoffsForecastRowsSortAndBoundExtremes(t *testing.T) {
 		result.Teams = append(result.Teams, team)
 	}
 	page := playoffsForecastView(forecastPage{Season: "2026"}, data, state, *entry.BracketFormat, result, nil)
-	if page.PlayoffRows[0].Champion != ">99.9%" || page.PlayoffRows[0].Rounds[0] != ">99.9%" {
+	if page.PlayoffRows[0].Champion != ">99.9%" || page.PlayoffRows[0].Rounds[1] != ">99.9%" {
 		t.Fatalf("unproven extreme: %+v", page.PlayoffRows[0])
 	}
-	if page.PlayoffRows[6].Rounds[0] != "Through" || page.PlayoffRows[6].Rounds[1] != "Out in semifinal" {
+	// Columns run Reach final, then Reach semifinal.
+	if page.PlayoffRows[6].Rounds[1] != "Through" || page.PlayoffRows[6].Rounds[0] != "Out in semifinal" {
 		t.Fatalf("settled rounds: %+v", page.PlayoffRows[6])
 	}
 	if page.PlayoffRows[6].Seed != 8 || page.PlayoffRows[7].Seed != 7 {

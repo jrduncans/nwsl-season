@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/jrduncans/nwsl-season/internal/competition"
@@ -15,8 +14,12 @@ type playoffPositionTeam struct {
 	Probability float64
 	Out         bool
 }
-type playoffPosition struct{ Teams []playoffPositionTeam }
+type playoffPosition struct {
+	Source bracketSourceView
+	Teams  []playoffPositionTeam
+}
 type playoffForecastSlot struct {
+	ID    string
 	Label string
 	Sides []playoffPosition
 }
@@ -35,6 +38,7 @@ func playoffBracketForecast(format competition.BracketFormat, state *simulation.
 		byID[team.Team.ID] = team
 	}
 	sources := map[string][]string{}
+	labels := bracketSlotLabels(format)
 	for _, connection := range format.Connections {
 		sources[connection.DestinationSlotID] = connection.SourceSlotIDs
 	}
@@ -43,12 +47,10 @@ func playoffBracketForecast(format competition.BracketFormat, state *simulation.
 	var rounds []playoffForecastRound
 	for ri, round := range format.Rounds {
 		column := playoffForecastRound{Label: round.Label}
-		index := 0
 		for _, slot := range format.Slots {
 			if slot.RoundID != round.ID {
 				continue
 			}
-			index++
 			sides := [2][]string{}
 			if slot.SeedPair != nil {
 				sides[0] = []string{state.Seeds[slot.SeedPair[0]]}
@@ -69,13 +71,12 @@ func playoffBracketForecast(format competition.BracketFormat, state *simulation.
 			if ri == 0 || state.Slots[slot.ID].Winner != "" {
 				continue
 			}
-			label := singularRoundLabel(round.Label)
-			if ri < len(format.Rounds)-1 {
-				label = fmt.Sprintf("%s %d", label, index)
-			}
-			card := playoffForecastSlot{Label: label}
+			card := playoffForecastSlot{ID: slot.ID, Label: labels[slot.ID]}
 			for side, ids := range sides {
 				position := playoffPosition{}
+				if from := sources[slot.ID]; len(from) == 2 {
+					position.Source = bracketSourceView{ID: from[side], Label: "Winner of " + labels[from[side]]}
+				}
 				for _, id := range ids {
 					if id == "" {
 						continue
@@ -109,7 +110,9 @@ func playoffBracketForecast(format competition.BracketFormat, state *simulation.
 			rounds = append(rounds, column)
 		}
 	}
-	champion := playoffPosition{}
+	// The card's Champion heading already names the position; the ID keeps the
+	// connector from the Final.
+	champion := playoffPosition{Source: bracketSourceView{ID: "final"}}
 	for seed, id := range state.Seeds {
 		if seed > len(format.Slots)+1 {
 			continue
@@ -136,7 +139,7 @@ func playoffBracketForecast(format competition.BracketFormat, state *simulation.
 		champion.Teams = append(champion.Teams, playoffPositionTeam{Team: teamName(team.Team), Seed: seed, Text: text, Width: width, Probability: team.ChampionshipProbability, Out: out})
 	}
 	sortPositionTeams(champion.Teams)
-	rounds = append(rounds, playoffForecastRound{Label: "Champion", Slots: []playoffForecastSlot{{Label: "Champion", Sides: []playoffPosition{champion}}}})
+	rounds = append(rounds, playoffForecastRound{Label: "Champion", Slots: []playoffForecastSlot{{ID: "champion", Label: "Champion", Sides: []playoffPosition{champion}}}})
 	return rounds
 }
 

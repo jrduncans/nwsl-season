@@ -202,33 +202,41 @@ func TestBuildRejectsFixedParticipantMismatchWithoutDroppingSourceGames(t *testi
 	}
 }
 
-func TestBuildObservedReseedingUsesSourceSemifinalsWithoutFabricatingPairing(t *testing.T) {
+func TestBuildByeSemifinalsFollowFixedQuarterfinalPaths(t *testing.T) {
 	format := catalogFormat(t, "2021", "Playoffs")
 	quarterOne := scored(sourceGame("quarter-one", "alpha", "bravo", "2021-11-01T20:00:00Z"), 2, 1)
 	quarterTwo := scored(sourceGame("quarter-two", "charlie", "delta", "2021-11-02T20:00:00Z"), 2, 0)
 	partial := Build(format, []cache.Game{quarterOne, quarterTwo})
-	if partial.State != StatePartial || slots(partial)[2].Home.TeamID != TBD || slots(partial)[3].Away.TeamID != TBD {
-		t.Fatalf("reseeded partial fabricated semifinal pairing: %+v", partial)
+	// Each winner advances to its fixed semifinal; the unseeded bye stays TBD.
+	if partial.State != StatePartial || slots(partial)[2].Home.TeamID != TBD || slots(partial)[2].Away.TeamID != "alpha" || slots(partial)[3].Away.TeamID != "charlie" {
+		t.Fatalf("bye semifinal paths = %+v", partial)
 	}
-	semiOne := scored(sourceGame("semi-one", "alpha", "echo", "2021-11-08T20:00:00Z"), 1, 0)
-	partial = Build(format, []cache.Game{quarterOne, quarterTwo, semiOne})
-	if partial.State != StatePartial || slots(partial)[3].Home.TeamID != TBD || slots(partial)[4].Home.TeamID != TBD {
-		t.Fatalf("one observed semifinal was not retained as a partial bracket: %+v", partial)
-	}
-	semiTwo := scored(sourceGame("semi-two", "charlie", "foxtrot", "2021-11-09T20:00:00Z"), 3, 0)
+	// The Quarterfinal 2 winner's semifinal kicks off first and still fills
+	// Semifinal 2.
+	early := scored(sourceGame("early", "echo", "charlie", "2021-11-08T20:00:00Z"), 0, 1)
+	late := scored(sourceGame("late", "foxtrot", "alpha", "2021-11-08T23:00:00Z"), 0, 1)
 	final := scored(sourceGame("final", "alpha", "charlie", "2021-11-15T20:00:00Z"), 1, 0)
-	view := Build(format, []cache.Game{quarterOne, quarterTwo, semiOne, semiTwo, final})
-	if view.State != StateReady || slots(view)[4].Winner.TeamID != "alpha" {
-		t.Fatalf("observed reseeding view = %+v", view)
+	view := Build(format, []cache.Game{quarterOne, quarterTwo, early, late, final})
+	if view.State != StateReady || slots(view)[2].Game.ASAID != "late" || slots(view)[3].Game.ASAID != "early" || slots(view)[4].Winner.TeamID != "alpha" {
+		t.Fatalf("bye bracket = %+v", view)
 	}
-	semiOne.HomeTeamID = "bravo"
-	view = Build(format, []cache.Game{quarterOne, quarterTwo, semiOne, semiTwo, final})
-	if view.State != StateFormatMismatch || len(view.SourceGames) != 5 {
-		t.Fatalf("reseeded participant mismatch = %+v", view)
+	// An unresolved quarterfinal leaves its semifinal unplaced.
+	tied := scored(sourceGame("quarter-two", "charlie", "delta", "2021-11-02T20:00:00Z"), 1, 1)
+	view = Build(format, []cache.Game{quarterOne, tied, early, late})
+	if view.State != StateUnresolved || slots(view)[2].Game.ASAID != "late" || slots(view)[3].Game != nil {
+		t.Fatalf("unresolved bye bracket = %+v", view)
 	}
 }
 
-func TestBuildObservedReseedingRejectsInvalidIncrementalSemifinals(t *testing.T) {
+func TestBuildWithSeedsFillsByeSeeds(t *testing.T) {
+	format := catalogFormat(t, "2023", "Playoffs")
+	view := BuildWithSeeds(format, nil, map[int]string{1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"})
+	if got := []string{slots(view)[0].Home.TeamID, slots(view)[2].Home.TeamID, slots(view)[3].Home.TeamID}; got[0] != "four" || got[1] != "one" || got[2] != "two" {
+		t.Fatalf("seeded byes = %q", got)
+	}
+}
+
+func TestBuildByeSemifinalsRejectImpossibleParticipants(t *testing.T) {
 	format := catalogFormat(t, "2021", "Playoffs")
 	quarters := []cache.Game{
 		scored(sourceGame("quarter-one", "alpha", "bravo", "2021-11-01T20:00:00Z"), 2, 1),
@@ -236,6 +244,7 @@ func TestBuildObservedReseedingRejectsInvalidIncrementalSemifinals(t *testing.T)
 	}
 	for name, semifinals := range map[string][]cache.Game{
 		"quarterfinal winner versus winner": {scored(sourceGame("semi-one", "alpha", "charlie", "2021-11-08T20:00:00Z"), 1, 0)},
+		"quarterfinal winner versus loser":  {scored(sourceGame("semi-one", "alpha", "bravo", "2021-11-08T20:00:00Z"), 1, 0)},
 		"bye versus bye":                    {scored(sourceGame("semi-one", "echo", "foxtrot", "2021-11-08T20:00:00Z"), 1, 0)},
 		"duplicate quarterfinal winner": {
 			scored(sourceGame("semi-one", "alpha", "echo", "2021-11-08T20:00:00Z"), 1, 0),
@@ -249,7 +258,7 @@ func TestBuildObservedReseedingRejectsInvalidIncrementalSemifinals(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			view := Build(format, append(append([]cache.Game(nil), quarters...), semifinals...))
 			if view.State != StateFormatMismatch || len(view.SourceGames) != len(quarters)+len(semifinals) {
-				t.Fatalf("invalid observed semifinal = %+v", view)
+				t.Fatalf("invalid bye semifinal = %+v", view)
 			}
 		})
 	}
@@ -300,7 +309,7 @@ func TestBuildPopulatedFormatFamilies(t *testing.T) {
 	}{
 		{"classic playoffs", "2016", "Playoffs", "semifinal-final"},
 		{"modern playoffs", "2024", "Playoffs", "quarterfinal-semifinal-final"},
-		{"observed reseeded playoffs", "2021", "Playoffs", "observed-reseeded"},
+		{"six-team playoffs with byes", "2021", "Playoffs", "quarterfinal-bye-semifinal-final"},
 		{"modern challenge cup knockout", "2020", "NWSL Challenge Cup Knockout Round", "quarterfinal-semifinal-final"},
 		{"challenge cup semifinal-final", "2022", "NWSL Challenge Cup Knockout Round", "semifinal-final"},
 		{"single challenge cup knockout", "2021", "NWSL Challenge Cup Knockout Round", "single-final"},
@@ -328,7 +337,7 @@ func populatedFamilyGames(family string) []cache.Game {
 			game("semi-2", "charlie", "delta", "2024-01-02T20:00:00Z"),
 			game("final", "alpha", "charlie", "2024-01-03T20:00:00Z"),
 		}
-	case "observed-reseeded":
+	case "quarterfinal-bye-semifinal-final":
 		return []cache.Game{
 			game("quarter-1", "alpha", "bravo", "2024-01-01T20:00:00Z"),
 			game("quarter-2", "charlie", "delta", "2024-01-02T20:00:00Z"),
