@@ -164,8 +164,7 @@ status alone or expanded minutes. A winner exists only for unequal
 regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
-matches and links to the Matches page. At 390px rounds stack with explicit `Advances to`
-text. When a match card is narrower than 20rem (three columns on a tablet or
+matches and links to the Matches page. At 390px rounds stack in round order. When a match card is narrower than 20rem (three columns on a tablet or
 narrow window), each team shows its short code instead of its full name, as
 Matches rows do on phones; the full name stays available to screen readers.
 
@@ -174,10 +173,9 @@ expectations before matches arrive. `bracket.BuildWithSeeds` combines the
 catalog's verified seed pairs with resolved official **total** standings.
 Unavailable adjustments or undetermined tiebreaks leave affected seeds TBD;
 an abandoned match, incomplete inventory, missing score or unknown status cannot
-certify entrants. Each card is labeled as expected or published by ASA.
+certify entrants. Cards show seeds, kickoff (or Date TBD), and match outlooks when both teams are known.
 Expectations exist only on the page; placeholder matches supply no date or
-participants. Once ASA has published every match, the bracket drops these
-labels and the expected-pairings note.
+participants. Once ASA has published every match, the publication note disappears.
 
 With this seed context, partially published matches are matched by participants,
 not by publication or kickoff order. Published sides and results take precedence

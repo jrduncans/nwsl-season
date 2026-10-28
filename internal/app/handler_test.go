@@ -86,7 +86,7 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 	if root.Code != http.StatusOK {
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
-	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80")
+	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "(4–3 pens)", "xG 1.25–0.80")
 	// Each entrant carries its full name and a short code for narrow cards.
 	requireElements(t, root.Body.String(), ".bracket-match .fixture-team-full", ".bracket-match .fixture-team-code")
 	fixtures := httptest.NewRecorder()
@@ -133,7 +133,7 @@ func TestBracketRootStatesKeepFactsAndRelativeFallback(t *testing.T) {
 	}{
 		{name: "empty", notice: "Playoffs matches have not been loaded yet", data: cache.SeasonData{Teams: base.Teams}, empty: true},
 		{name: "placeholder", notice: "Playoffs matches have not been loaded yet", data: cache.SeasonData{Games: []cache.Game{{ASAID: "placeholder"}}, Teams: base.Teams}, empty: true},
-		{name: "partial", state: "partial", notice: "Partial bracket data", data: partial},
+		{name: "partial", state: "partial", notice: "Quarterfinals", data: partial},
 		{name: "unresolved", state: "unresolved", notice: "unresolved source facts", data: unresolved},
 		{name: "mismatch", state: "format_mismatch", notice: "Bracket format mismatch", data: mismatch, wantSource: true},
 	} {

@@ -876,3 +876,10 @@ th:nth-child(2) { text-align: left; }
   .clinching-view-three .segmented-options { display: grid; grid-template-columns: minmax(0, 1fr); }
   .clinching-view-three .segmented-options label > span { display: flex; align-items: center; justify-content: center; min-height: 44px; white-space: normal; text-align: center; }
 }
+
+.bracket-slot .fixture-outlook { grid-column: auto; margin-top: .65rem; }
+.playoff-advance { display: flex; justify-content: space-between; gap: .5rem; font-size: .8rem; font-weight: 700; }
+.bracket-winner { font-weight: 800; }
+.bracket-loser { color: var(--muted); opacity: .65; }
+.bracket-match .fixture-result { overflow-wrap: anywhere; }
+.bracket-seed { color: var(--muted); font-size: .8em; }

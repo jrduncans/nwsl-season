@@ -834,12 +834,17 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 					a.renderError(w, r, err)
 					return
 				}
+				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 				a.render(w, "bracket", result)
 				return
 			}
 		}
 		if knockoutMatchupAvailable(data.Games) {
-			a.render(w, "bracket", bracketPageFor(page, *scope.Entry.BracketFormat, data))
+			result := bracketPageFor(page, *scope.Entry.BracketFormat, data)
+			if scope.Stage == "Playoffs" {
+				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
+			}
+			a.render(w, "bracket", result)
 			return
 		}
 	}
@@ -887,6 +892,10 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 	var outlooks func(cache.SeasonData) map[string]fixtureOutlookView
 	if scope.forecastCapabilityAvailable() {
 		outlooks = fixtureOutlooks
+	} else if scope.Stage == "Playoffs" {
+		outlooks = func(data cache.SeasonData) map[string]fixtureOutlookView {
+			return a.playoffOutlooks(r.Context(), scope.Season, data)
+		}
 	}
 	page, err := a.loadSeasonPageFor(r, outlooks)
 	if err != nil {
@@ -1185,7 +1194,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		SeasonPath:             relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
 		FixturesPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
-		HasFixtureOutlooks:     !retrospective && scope.forecastCapabilityAvailable() && len(outlooks) > 0,
+		HasFixtureOutlooks:     !retrospective && len(outlooks) > 0,
 	}
 	if scope.Stage == "Regular Season" && finalStandingsSafe(presentation) {
 		if playoffs, ok := competition.Lookup(season, "Playoffs"); ok && playoffs.Public && playoffBracketEntry(playoffs) {

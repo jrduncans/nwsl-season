@@ -86,7 +86,7 @@ func playoffWaitingNotice(data cache.SeasonData, ready bool) string {
 	case ready:
 		return ""
 	case len(data.Games) > 0:
-		return playoffPublicationNotice + " Only matchups ASA has confirmed are placed below."
+		return playoffPublicationNotice
 	default:
 		return playoffPublicationNotice
 	}

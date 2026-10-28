@@ -129,3 +129,19 @@ unavailable, not zero.
 `internal/strength` is the only place these values are calculated; view code
 formats them and compares the venue-only and raw values with their league
 averages.
+
+## Playoff match outlooks
+
+The Playoffs bracket and Matches list share the default model's outlooks, fit
+once per request on that season's Regular Season data. Forecast availability
+for that regular season gates these outlooks. Unresolved or mismatched bracket
+facts withhold them. Known expected pairings use the higher seed at home;
+published home/away assignments take precedence. The final averages both venue
+assignments. The bar shows Win / Extra time / Win for 90 minutes, followed by
+both advance chances using the simulator's relative-win draw rule. Scenarios
+in Forecast Lab never change these outlooks.
+
+Completed bracket cards emphasize the winner, mute the loser, and append paired
+shootout tallies to the score (for example, `2–2 (4–3 pens)`). Unknown later
+entrants name both possible feeder teams, or the feeder round and match number.
+One publication note replaces per-card publication and advancement labels.
