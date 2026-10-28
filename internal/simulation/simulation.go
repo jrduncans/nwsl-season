@@ -48,6 +48,7 @@ type Request struct {
 	Iterations        int
 	PlayoffPlaces     int
 	PlayoffBracket    *competition.BracketFormat
+	Postseason        *Postseason
 	// SeedPairs, when set, also counts each team's first-round pairing under
 	// these bracket seed pairs; see Result.Seedings.
 	SeedPairs [][2]int
@@ -68,6 +69,8 @@ type TeamResult struct {
 	PlayoffProbability      float64
 	ShieldProbability       float64
 	ChampionshipProbability float64
+	ChampionshipClinched    bool
+	ChampionshipEliminated  bool
 }
 
 type PointsProbability struct {
@@ -123,7 +126,8 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		return Result{}, err
 	}
 
-	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, predictor.SeedMaterial())
+	material := append(predictor.SeedMaterial(), request.Postseason.Material()...)
+	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, material)
 	// #nosec G404 G115 -- a stable seed makes equivalent cached forecasts reproducible; the signed conversion preserves its bits.
 	rng := rand.New(rand.NewSource(int64(seed)))
 	byID := make(map[string]*accumulator, len(request.Teams))
@@ -179,7 +183,12 @@ func Run(ctx context.Context, request Request) (Result, error) {
 
 	rows := make([]TeamResult, 0, len(request.Teams))
 	for _, accumulator := range byID {
-		rows = append(rows, resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces))
+		row := resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces)
+		if playoffs != nil && request.Postseason != nil {
+			row.ChampionshipClinched = playoffs.actualChampion == row.Team.ID
+			row.ChampionshipEliminated = !playoffs.contenders[row.Team.ID]
+		}
+		rows = append(rows, row)
 	}
 	sortTeamResults(rows)
 	var seedingCounts map[string][]SeedingCount

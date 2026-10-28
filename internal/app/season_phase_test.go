@@ -82,12 +82,13 @@ func TestUpcomingAndCompleteSeasonPresentation(t *testing.T) {
 
 	complete := completeCatalogSeasonData()
 	completeResponse := renderSeasonRequest(t, complete, "/seasons/2026/regular-season")
+	requireElements(t, completeResponse, `a[href="regular-season/forecast"]`)
 	for _, want := range []string{"Final standings", `>2026 Regular Season final standings</span> · <span data-standings-mode-label data-per-game="per match" data-total="totals">totals</span></span></caption>`, `data-standings-mode="total"`, `data-standings-mode-value="per-game"`, `data-standings-mode-value="total"`, ">Results</a>"} {
 		if !contains(completeResponse, want) {
 			t.Errorf("complete season missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{">Schedule difficulty</a>", ">Forecast lab</a>", ">Clinching scenarios</a>", `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline"`, `class="schedule-key-track"`} {
+	for _, forbidden := range []string{">Schedule difficulty</a>", ">Clinching scenarios</a>", `title="Venue- and load-adjusted remaining schedule difficulty relative to the league baseline"`, `class="schedule-key-track"`} {
 		if contains(completeResponse, forbidden) {
 			t.Errorf("complete season rendered %q", forbidden)
 		}
@@ -104,13 +105,13 @@ func TestUpcomingAndCompleteSeasonPresentation(t *testing.T) {
 			t.Errorf("complete results rendered %q", forbidden)
 		}
 	}
-	for _, route := range []string{"schedule-difficulty", "clinching", "forecast"} {
+	for _, route := range []string{"schedule-difficulty", "clinching"} {
 		response := httptest.NewRecorder()
 		NewHandler(fakeStore{season: complete}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/"+route, nil))
 		if response.Code != http.StatusNotFound || !contains(response.Body.String(), "unavailable for 2026 Regular Season") {
 			t.Errorf("complete season %s = status %d, body %q", route, response.Code, response.Body.String())
 		}
-		for _, forbidden := range []string{">Schedule difficulty</a>", ">Forecast lab</a>", ">Clinching scenarios</a>"} {
+		for _, forbidden := range []string{">Schedule difficulty</a>", ">Clinching scenarios</a>"} {
 			if contains(response.Body.String(), forbidden) {
 				t.Errorf("complete season %s error page rendered %q", route, forbidden)
 			}

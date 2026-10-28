@@ -1464,7 +1464,7 @@ func TestForecastRendersChampionshipOddsWithEightTeamBracket(t *testing.T) {
 	body := response.Body.String()
 	requireText(t, body, "table.forecast-table th[scope=col]", "Championship")
 	requireText(t, body, "table.forecast-comparison-table th[scope=col]", "Championship chance")
-	requireText(t, body, ".forecast-method", "Championship odds continue each simulated table")
+	requireText(t, body, ".forecast-method", "Championship odds continue through the verified eight-team bracket")
 }
 
 func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {

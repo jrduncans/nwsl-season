@@ -229,7 +229,7 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 	if scope.clinchingAvailable(rules, verified) && presentation.Phase != seasonPhaseUpcoming && presentation.Phase != seasonPhaseComplete {
 		items = append(items, struct{ label, path string }{"Clinching scenarios", base + "/clinching"})
 	}
-	if scope.forecastAvailable(rules, verified) && phaseSupportsRemainingFeatures(presentation.Phase) {
+	if scope.forecastAvailable(rules, verified) {
 		items = append(items, struct{ label, path string }{"Forecast lab", base + "/forecast"})
 	}
 	navigation := make([]navigationItem, 0, len(items))
@@ -554,6 +554,7 @@ type teamNameView struct {
 }
 
 type errorPage struct {
+	RecoveryPath      string
 	Title             string
 	Message           string
 	HomePath          string

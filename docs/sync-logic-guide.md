@@ -20,7 +20,8 @@ catalog of public stages this guide loads.
 - **Derived data** is computed from cached matches: qualification and
   clinching scenarios. Recalculation reads the cache and does not contact ASA.
 - **Forecast inputs** include matches and xG from the current regular season
-  and the two preceding regular seasons. Missing public source-backed catalog
+  and the two preceding regular seasons, plus current-season playoff fixtures
+  and results once the regular season is safely complete. Missing public source-backed catalog
   stages are loaded by the startup scheduler; page reads still never make ASA
   requests to fill them.
 
@@ -135,7 +136,10 @@ Invalid or missing kickoffs are not turned into immediate targeted polling;
 authoritative inventory reconciliation remains the safety net. Material match
 changes in the configured current stage can trigger cache-only qualification
 and scenario recalculation. Material match or xG changes in the current or
-previous two regular seasons can warm forecasts. No-op, omitted, stale, or
+previous two regular seasons, and current-season Playoffs, can warm forecasts.
+Playoff results (including shootout corrections) invalidate the postseason
+forecast inputs; warming and HTTP forecasts share the same cache-only bracket
+interpretation. No-op, omitted, stale, or
 failed source observations do not create derived work.
 
 ## Split source operations

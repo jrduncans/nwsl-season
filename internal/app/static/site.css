@@ -40,6 +40,17 @@ a { color: var(--green); }
 .season-handoff h2 { margin: 0 0 .5rem; }
 .season-handoff p { margin: .35rem 0; }
 .bracket-provenance { margin: 0 0 .5rem; color: var(--muted); font-size: .8rem; }
+.postseason-outlook { margin-top: 1.5rem; }
+.postseason-table { min-width: 42rem; border-collapse: separate; border-spacing: 0; }
+.postseason-table :is(th, td):first-child { text-align: left; }
+.postseason-table :is(th, td):nth-child(2) { text-align: right; }
+.postseason-table th:first-child { position: sticky; left: 0; z-index: 1; width: 12rem; min-width: 10rem; background: var(--cell-bg, var(--panel)); box-shadow: inset -1px 0 var(--line); }
+@media (max-width: 700px) {
+  .postseason-table { font-size: .875rem; }
+  .postseason-table :is(th, td) { padding: .6rem .4rem; }
+  .postseason-table th:first-child { width: 10rem; }
+  .postseason-table .team-name { white-space: normal; }
+}
 .forecast-title { margin-bottom: 1rem; }
 .forecast-title .title-row { margin-bottom: .5rem; }
 .forecast-title-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }

@@ -1,7 +1,7 @@
 {{define "forecast"}}{{template "head" .}}
 <div class="forecast-title">
   <div class="title-row"><div>{{template "seasonContext" .}}<h1>Forecast lab</h1></div></div>
-  <div class="forecast-title-content"><p class="note">Model estimates, not official standings.</p></div>
+  <div class="forecast-title-content"><p class="note">{{if .Postseason}}Final regular-season standings and model-based championship odds.{{else}}Model estimates, not official standings.{{end}}</p></div>
 </div>
 
 <details class="forecast-controls" data-forecast-controls>
@@ -20,13 +20,30 @@
     <p class="forecast-evaluation-link"><a href="{{.ModelEvaluationPath}}">Model evaluation</a> <span class="note">— See how the approaches performed historically.</span></p>
     <dl class="forecast-meta">
       <div><dt>Simulations</dt><dd>{{.SimulationCount}}</dd></div>
-      <div><dt>Matches left</dt><dd>{{.Remaining}}</dd></div>
-      <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>
+      {{if not .Postseason}}<div><dt>Matches left</dt><dd>{{.Remaining}}</dd></div>
+      <div><dt>Fixed results</dt><dd>{{.FixedCount}}</dd></div>{{end}}
     </dl>
   </div>
 </details>
-{{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
+{{if .ScheduleNote}}<p class="data-warning"><strong>{{if .Postseason}}Model data:{{else}}Incomplete schedule:{{end}}</strong> {{.ScheduleNote}}</p>{{end}}
 
+{{if .PostseasonNotice}}<p class="note">{{.PostseasonNotice}} <a href="{{.PlayoffsPath}}">View playoff bracket and published details</a>.</p>{{end}}
+{{if .PostseasonWarning}}<p class="data-warning">{{.PostseasonWarning}}{{if not .Postseason}} <a href="{{.PlayoffsPath}}">View playoff bracket</a>.{{end}}</p>{{end}}
+
+{{if .Postseason}}
+<section class="postseason-outlook" aria-labelledby="championship-title">
+  <h2 id="championship-title">Championship outlook</h2>
+  <p class="note">Points and qualification are final facts. Championship chances use cached playoff results. Unresolved seeds are labeled explicitly.</p>
+  <p class="forecast-scroll-hint">Swipe left for final points, seeds, and qualification <span aria-hidden="true">→</span></p>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Final standings and championship outlook">
+    <table class="postseason-table">
+      <caption><span>{{.Season}} · {{.ModelName}}{{if .HasComparison}} · compared with {{.ComparisonName}}{{end}}</span></caption>
+      <thead><tr><th scope="col">Team</th><th scope="col">Championship</th>{{if .HasComparison}}<th scope="col">{{.ComparisonName}}</th>{{end}}<th scope="col">Final points</th><th scope="col">Final seed</th><th scope="col">Qualification</th></tr></thead>
+      <tbody>{{range .Rows}}<tr><th scope="row">{{template "teamName" .Team}}</th><td><strong>{{if $.HasChampionship}}{{.ChampionshipChance}}{{else}}Withheld{{end}}</strong></td>{{if $.HasComparison}}<td>{{if $.HasChampionship}}{{.Comparison.ChampionshipChance}}{{else}}Withheld{{end}}</td>{{end}}<td>{{.FinalPoints}}</td><td>{{.FinalSeed}}</td><td>{{.Qualification}}</td></tr>{{end}}</tbody>
+    </table>
+  </div>
+</section>
+{{else}}
 {{if .HasComparison}}
 <section class="forecast-comparison" aria-labelledby="forecast-comparison-title">
   <div class="section-heading"><div><p class="eyebrow">Model comparison</p><h2 id="forecast-comparison-title">{{.ModelName}} vs {{.ComparisonName}}</h2><p id="forecast-comparison-direction" class="forecast-comparison-direction">Values read <strong>{{.ComparisonName}}</strong> → <strong>{{.ModelName}}</strong>.</p></div></div>
@@ -82,12 +99,13 @@
 </section>
 
 {{template "scenarioBuilder" .}}
+{{end}}
 
 <details class="forecast-method"><summary>What this forecast considers</summary>
   {{range .Models}}{{if .Selected}}<p><strong>Data considered:</strong> {{.Inputs}}</p><p><strong>At a high level:</strong> {{.Assumptions}}</p>{{end}}{{end}}
-  <p>It estimates each remaining match, then summarizes many possible final tables.</p>
-  {{if .HasChampionship}}<p>Championship odds continue each simulated table through the eight-team bracket. The higher seed hosts the quarterfinal and semifinal in the model; the designated-site final averages both home assignments. A match tied after 90 minutes advances a team using the model’s relative win chances as an approximation for extra time and penalties. Future playoff dates and venue changes are not known to the model.</p>{{end}}
-  <p>When you set a win, draw, or loss, the exact score remains open. That can leave tiebreaks uncertain.</p>
+  {{if not .Postseason}}<p>It estimates each remaining match, then summarizes many possible final tables.</p>{{end}}
+  {{if .HasChampionship}}<p>Championship odds continue through the verified eight-team bracket, retaining confirmed playoff advancement. Published home/away assignments are used for quarterfinals and semifinals; unpublished pairings give the higher seed home advantage. The designated-site final averages both home assignments. A match tied after 90 minutes advances a team using the model’s relative win chances as an approximation for extra time and penalties. Fitting uses regular-season data only. Published kickoffs appear on the bracket page; playoff recovery and accumulated-load adjustments are omitted, including for published dates. Venue effects use home/away assignment, without travel or stadium-specific adjustments.</p>{{end}}
+  {{if not .Postseason}}<p>When you set a win, draw, or loss, the exact score remains open. That can leave tiebreaks uncertain.</p>{{end}}
 </details>
 {{template "foot" .}}{{end}}
 

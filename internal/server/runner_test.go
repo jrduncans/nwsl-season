@@ -31,13 +31,15 @@ func TestForecastInputsChanged(t *testing.T) {
 	}
 }
 
-func TestForecastWarmingRunnerUsesOnlyCurrentAndPreviousTwoRegularSeasons(t *testing.T) {
+func TestForecastWarmingRunnerUsesCurrentPlayoffsAndThreeRegularSeasons(t *testing.T) {
 	runner := forecastWarmingRunner{currentSeason: "2026", currentStage: "Regular Season"}
 	for _, test := range []struct {
 		season, stage string
 		want          bool
 	}{
 		{"2026", "Regular Season", true},
+		{"2026", "Playoffs", true},
+		{"2026", "Challenge Cup Final", false},
 		{"2025", "Regular Season", true},
 		{"2024", "Regular Season", true},
 		{"2023", "Regular Season", false},

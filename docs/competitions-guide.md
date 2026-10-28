@@ -139,7 +139,10 @@ completion. Historical regular seasons with verified complete inventories and
 terminal results show `Final standings`, including 2021 after award reconciliation.
 Incomplete or unverified historical seasons retain `Historical standings`.
 Presentation may hide a feature that is irrelevant to a complete season, but it
-never enables one the catalog omits.
+never enables one the catalog omits. Forecast Lab keeps its cataloged navigation
+after regular-season completion, showing final regular-season facts and a
+championship outlook conditioned on cached playoff advancement. It does not
+enable forecasting on the Playoffs stage itself.
 
 ## Knockout brackets
 
@@ -186,6 +189,25 @@ including observed reseeding and playoff evidence for tied historical ranks.
 
 Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.
+
+### Forecast use of postseason state
+
+Current-season Forecast Lab reuses the seeded bracket interpretation after
+verified, safe regular-season completion. Resolved final seeds and the verified
+format permit forecasting before fixture publication. Cached completed results,
+including confirmed shootout advancement, fix winners; only unresolved rounds
+are sampled. Published home/away assignments inform quarterfinal and semifinal
+venue effects, while the designated-site final remains neutral in the model.
+Published kickoffs are linked from the bracket; playoff recovery and load
+adjustments are omitted and model fitting stays regular-season-only.
+
+Unresolved playoff seeds, ambiguous results, missing advancement, or mismatched
+source games withhold championship odds with a visible explanation. They do not
+silently restart rounds. Final points and qualification remain factual where
+provable. Playoff source fields participate in forecast cache identity and
+current-season playoff changes trigger baseline warming. Page requests stay
+cache-only. See [Forecast Lab](forecast-lab-guide.md#championship-forecasting-after-the-regular-season)
+for the full evidence boundary and stale-scenario recovery.
 
 ## Derived historical outcomes
 
