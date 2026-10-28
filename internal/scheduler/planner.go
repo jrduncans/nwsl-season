@@ -64,6 +64,7 @@ const (
 	defaultMissingXGWindow          = 5 * 24 * time.Hour
 	defaultXGCorrectionWindow       = 5 * 24 * time.Hour
 	defaultInventoryInterval        = 7 * 24 * time.Hour
+	playoffDiscoveryInterval        = time.Hour
 	defaultColdSweepInterval        = 30 * 24 * time.Hour
 )
 
@@ -73,14 +74,15 @@ const (
 func Plan(snapshot cache.PlanningSnapshot, config Config, now time.Time) []Job {
 	now = now.UTC()
 	scopes := planningScopes(snapshot, config)
+	completion := regularSeasonCompletion(snapshot, config)
 	league, playoffs := splitStageScopes(scopes)
 	// An unpublished catalog scope is more valuable than routine polling: it is
 	// how a newly active stage becomes visible to the rest of the application.
 	// Keep that bootstrap order independent of the normal league/playoff hot
 	// cadence below.
-	priorities := [][]Job{planMissingInventory(scopes, config, now), planAcceleratedBracketDiscovery(scopes, config, now)}
-	priorities = append(priorities, hotPriorities(league, config, now)[1:]...)
-	priorities = append(priorities, hotPriorities(playoffs, config, now)[1:]...)
+	priorities := [][]Job{planMissingInventory(scopes, config, now, completion), planAcceleratedBracketDiscovery(scopes, config, now, completion)}
+	priorities = append(priorities, hotPriorities(league, config, now, completion)[1:]...)
+	priorities = append(priorities, hotPriorities(playoffs, config, now, completion)[1:]...)
 	jobs := []Job{}
 	for _, priority := range priorities {
 		jobs = append(jobs, priority...)
@@ -113,9 +115,9 @@ func splitStageScopes(scopes []cache.PlanningScopeSnapshot) (league, playoffs []
 	return league, playoffs
 }
 
-func hotPriorities(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) [][]Job {
+func hotPriorities(scopes []cache.PlanningScopeSnapshot, config Config, now, completion time.Time) [][]Job {
 	initialXG := planInitialXG(scopes)
-	return [][]Job{planMissingInventory(scopes, config, now), planCheckedGames(scopes, config, now), initialXG, planCheckedXG(scopes, config, now, initialXG), planWeeklyInventory(scopes, config, now)}
+	return [][]Job{nil, planCheckedGames(scopes, config, now), initialXG, planCheckedXG(scopes, config, now, initialXG), planWeeklyInventory(scopes, config, now, completion)}
 }
 
 type coldCandidate struct {
@@ -225,10 +227,10 @@ func planningScopes(snapshot cache.PlanningSnapshot, config Config) []cache.Plan
 	return out
 }
 
-func planMissingInventory(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) []Job {
+func planMissingInventory(scopes []cache.PlanningScopeSnapshot, config Config, now, completion time.Time) []Job {
 	missing := make([]cache.PlanningScopeSnapshot, 0, len(scopes))
 	for _, scope := range scopes {
-		if scope.Readiness.Readiness == cache.SourceReadinessAvailable || !fullDue(scope.GamesFull, now) {
+		if scope.Readiness.Readiness == cache.SourceReadinessAvailable || !discoveryDue(scope, config, now, completion) {
 			continue
 		}
 		missing = append(missing, scope)
@@ -238,7 +240,11 @@ func planMissingInventory(scopes []cache.PlanningScopeSnapshot, config Config, n
 	})
 	jobs := make([]Job, 0, len(missing))
 	for _, scope := range missing {
-		jobs = append(jobs, fullGamesJob(scope, config, "missing_or_not_published_inventory"))
+		job := fullGamesJob(scope, config, "missing_or_not_published_inventory")
+		if acceleratedPlayoffs(scope, config, completion) {
+			job.Operation.NextFullDueAfter = playoffDiscoveryInterval
+		}
+		jobs = append(jobs, job)
 	}
 	return jobs
 }
@@ -247,12 +253,12 @@ func planMissingInventory(scopes []cache.PlanningScopeSnapshot, config Config, n
 // result that made a live bracket incomplete cannot be crowded out by routine
 // result or xG polls on the next scheduler tick. Missing inventories retain
 // the higher bootstrap priority above it.
-func planAcceleratedBracketDiscovery(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) []Job {
+func planAcceleratedBracketDiscovery(scopes []cache.PlanningScopeSnapshot, config Config, now, completion time.Time) []Job {
 	jobs := []Job{}
 	for _, scope := range scopes {
 		id := scope.Readiness.Scope
 		entry, found := competition.Lookup(id.Season, id.Stage)
-		if !found || !entry.Public || !entry.SourceAvailable || id.Lifecycle != cache.SourceScopeActive || entry.Kind != competition.StageKindKnockout || entry.BracketFormat == nil || len(entry.BracketFormat.Slots) == 0 || len(scope.Games) >= len(entry.BracketFormat.Slots) || !fullDue(scope.GamesFull, now) {
+		if !found || !entry.Public || !entry.SourceAvailable || id.Lifecycle != cache.SourceScopeActive || entry.Kind != competition.StageKindKnockout || entry.BracketFormat == nil || len(entry.BracketFormat.Slots) == 0 || len(scope.Games) >= len(entry.BracketFormat.Slots) || !discoveryDue(scope, config, now, completion) {
 			continue
 		}
 		// Unpublished scope work was already selected by the missing-inventory
@@ -261,9 +267,60 @@ func planAcceleratedBracketDiscovery(scopes []cache.PlanningScopeSnapshot, confi
 		if scope.Readiness.Readiness != cache.SourceReadinessAvailable {
 			continue
 		}
-		jobs = append(jobs, fullGamesJob(scope, config, "targeted_bracket_discovery"))
+		job := fullGamesJob(scope, config, "targeted_bracket_discovery")
+		if acceleratedPlayoffs(scope, config, completion) {
+			job.Operation.NextFullDueAfter = playoffDiscoveryInterval
+		}
+		jobs = append(jobs, job)
 	}
 	return jobs
+}
+
+// regularSeasonCompletion requires a verified complete inventory and scored
+// results. First-terminal observations identify the transition without making
+// subsequent no-op result checks wake discovery again.
+func regularSeasonCompletion(snapshot cache.PlanningSnapshot, config Config) time.Time {
+	for _, scope := range snapshot.Scopes {
+		if scope.Readiness.Scope.Season != config.Season || scope.Readiness.Scope.Stage != "Regular Season" || scope.Readiness.ExpectedInventory == nil || scope.Readiness.Completeness != cache.InventoryCompletenessComplete || len(scope.Games) == 0 {
+			continue
+		}
+		for _, game := range scope.Games {
+			if game.Status != fixtures.CompletedStatus || !game.HomeScore.Valid || !game.AwayScore.Valid {
+				return time.Time{}
+			}
+		}
+		var completed time.Time
+		for _, check := range scope.ResultChecks {
+			if check.FirstTerminalObservedAt != nil && check.FirstTerminalObservedAt.After(completed) {
+				completed = *check.FirstTerminalObservedAt
+			}
+		}
+		if completed.IsZero() && scope.GamesFull != nil && scope.GamesFull.LastFullSuccessAt != nil {
+			completed = *scope.GamesFull.LastFullSuccessAt
+		}
+		if completed.IsZero() {
+			completed = time.Unix(1, 0)
+		}
+		return completed
+	}
+	return time.Time{}
+}
+
+func acceleratedPlayoffs(scope cache.PlanningScopeSnapshot, config Config, completion time.Time) bool {
+	id := scope.Readiness.Scope
+	entry, ok := competition.Lookup(id.Season, id.Stage)
+	return !completion.IsZero() && id.Season == config.Season && id.Stage == "Playoffs" && id.Lifecycle == cache.SourceScopeActive && ok && entry.Public && entry.SourceAvailable && entry.BracketFormat != nil && len(entry.BracketFormat.Slots) > 0 && len(scope.Games) < len(entry.BracketFormat.Slots)
+}
+
+func discoveryDue(scope cache.PlanningScopeSnapshot, config Config, now, completion time.Time) bool {
+	if fullDue(scope.GamesFull, now) {
+		return true
+	}
+	if !acceleratedPlayoffs(scope, config, completion) {
+		return false
+	}
+	last := scope.GamesFull.LastFullSuccessAt
+	return last == nil || last.Before(completion) || !last.Add(playoffDiscoveryInterval).After(now)
 }
 
 // missingInventoryLess implements the catalog bootstrap contract.  Once a
@@ -311,10 +368,18 @@ func catalogStageOrder(season, stage string) int {
 	return len(competition.PublicEntries())
 }
 
-func planWeeklyInventory(scopes []cache.PlanningScopeSnapshot, config Config, now time.Time) []Job {
+func planWeeklyInventory(scopes []cache.PlanningScopeSnapshot, config Config, now, completion time.Time) []Job {
 	jobs := []Job{}
 	for _, scope := range scopes {
-		if scope.Readiness.Readiness != cache.SourceReadinessAvailable || scope.Readiness.Scope.Lifecycle == cache.SourceScopeCompleted || !fullDue(scope.GamesFull, now) {
+		if scope.Readiness.Readiness != cache.SourceReadinessAvailable || scope.Readiness.Scope.Lifecycle == cache.SourceScopeCompleted || acceleratedPlayoffs(scope, config, completion) || !fullDue(scope.GamesFull, now) {
+			continue
+		}
+		// A discovery that completed the bracket persisted the short interval
+		// chosen before its response arrived. Resume the normal audit interval
+		// from that successful observation.
+		id := scope.Readiness.Scope
+		entry, ok := competition.Lookup(id.Season, id.Stage)
+		if id.Season == config.Season && id.Stage == "Playoffs" && ok && entry.BracketFormat != nil && len(entry.BracketFormat.Slots) > 0 && len(scope.Games) >= len(entry.BracketFormat.Slots) && scope.GamesFull != nil && scope.GamesFull.LastFullSuccessAt != nil && now.Before(scope.GamesFull.LastFullSuccessAt.Add(inventoryInterval(config))) {
 			continue
 		}
 		jobs = append(jobs, fullGamesJob(scope, config, "weekly_inventory_audit"))

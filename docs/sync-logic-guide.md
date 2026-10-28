@@ -86,6 +86,12 @@ After inventory is available, initial xG loading proceeds independently; later
 corrections use the archived sweep. A material targeted result in an incomplete
 active bracket also makes its next full-games discovery due immediately; the
 following scheduler tick performs that one collection request.
+Once the current regular season has a verified complete inventory and all
+results have scores, the current Playoffs inventory is checked hourly until
+all verified bracket slots are present. Completion wakes discovery even when
+an older weekly due time is still in the future. Empty and partial successful
+responses schedule another hourly check; failures and lease deferrals leave
+the work due. These checks use the usual priorities and request budget.
 
 The default source-request budget is three operations per tick. Jobs beyond the
 budget stay due because planning does not mutate their cadence state. Selected
@@ -123,6 +129,7 @@ stage in one request; an omitted ID is a checked observation, not a deletion.
 | Missing xG for a completed match | Every 5 minutes for 5 days after kickoff. |
 | Available xG correction | Every 6 hours for 5 days after kickoff. |
 | Active/upcoming full inventory audit | Every 7 days. |
+| Current incomplete playoff inventory after regular-season completion | Every hour until all verified bracket slots are present. |
 
 Invalid or missing kickoffs are not turned into immediate targeted polling;
 authoritative inventory reconciliation remains the safety net. Material match
