@@ -3,6 +3,7 @@
   <div>{{template "seasonContext" .}}<h1>{{.FixturesHeading}}</h1></div>
 </div>
 {{if .ScheduleNote}}<p class="data-warning"><strong>Incomplete schedule:</strong> {{.ScheduleNote}}</p>{{end}}
+{{if .RefreshFailed}}<p class="data-warning">The latest playoff refresh did not succeed; published details may be newer than this page.</p>{{end}}
 {{if .FormatNotice}}<p class="note">{{.FormatNotice}}</p>{{end}}
 
 {{template "fixtureFilter" .}}

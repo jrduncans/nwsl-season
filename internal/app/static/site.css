@@ -36,6 +36,10 @@ a { color: var(--green); }
 .season-upcoming { max-width: 42rem; margin-top: 2rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
 .season-upcoming h2 { margin: 0 0 .35rem; }
 .season-upcoming p { margin: 0; }
+.season-handoff { margin: 1rem 0 1.5rem; padding: 1rem 1.25rem; border: 2px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.season-handoff h2 { margin: 0 0 .5rem; }
+.season-handoff p { margin: .35rem 0; }
+.bracket-provenance { margin: 0 0 .5rem; color: var(--muted); font-size: .8rem; }
 .forecast-title { margin-bottom: 1rem; }
 .forecast-title .title-row { margin-bottom: .5rem; }
 .forecast-title-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }

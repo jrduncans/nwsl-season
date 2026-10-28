@@ -96,6 +96,13 @@ controls. Without JavaScript the switchers cannot navigate, so a `<noscript>`
 block lists the same targets as plain links, keeping the current page (such as
 `/fixtures`) where the target season has it.
 
+Playoffs becomes discoverable when a concrete matchup is cached **or** the
+same season's regular-season inventory is verified complete with safe final
+results. Placeholder rows alone do not expose other knockout stages. Completed
+regular-season standings link to the same season's playoff page and its
+regular-season results. Pages that have already loaded the selected season's
+regular-season data reuse it for this check; other pages read it from the cache.
+
 ## Readiness and completeness
 
 `cache.SeasonReadiness` reports two independent facts from one read-only
@@ -109,6 +116,11 @@ snapshot:
 
 A public stage with no cached matches renders a normal `200` load-state page
 ("not loaded" or "not published") and never contacts ASA.
+A playoff page waiting on ASA says ASA hasn't published the schedule **or**
+this site hasn't picked it up, because a cache miss cannot show what ASA
+currently publishes. When the latest Playoffs refresh failed, the load-state
+page and the seeded bracket, including a fully published one, warn that
+published details may be newer than the page.
 
 ## Competition status
 
@@ -148,6 +160,29 @@ matches and links to the Matches page. At 390px rounds stack with explicit `Adva
 text. When a match card is narrower than 20rem (three columns on a tablet or
 narrow window), each team shows its short code instead of its full name, as
 Matches rows do on phones; the full name stays available to screen readers.
+
+Once the regular season is safely complete, Playoffs can show opening-round
+expectations before matches arrive. `bracket.BuildWithSeeds` combines the
+catalog's verified seed pairs with resolved official **total** standings.
+Unavailable adjustments or undetermined tiebreaks leave affected seeds TBD;
+an abandoned match, incomplete inventory, missing score or unknown status cannot
+certify entrants. Each card is labeled as expected or published by ASA.
+Expectations exist only on the page; placeholder matches supply no date or
+participants. Once ASA has published every match, the bracket drops these
+labels and the expected-pairings note.
+
+With this seed context, partially published matches are matched by participants,
+not by publication or kickoff order. Published sides and results take precedence
+in matched slots; only source results supply winners and later advancement.
+Games that disagree with resolved seed pairs or cannot be placed against known
+advancement produce visible diagnostics and a chronological published-match
+fallback on the playoff page, with a link to the Matches page.
+A game naming a team without a resolved seed is not a disagreement: it fills the
+one opening-round slot whose resolved sides it includes, provided its other
+participant holds no resolved seed. If several slots could hold it, it stays
+unplaced, the bracket is unresolved, and the published-match list shows it.
+Populated historical brackets retain the existing source-backed interpretation,
+including observed reseeding and playoff evidence for tied historical ranks.
 
 Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.
