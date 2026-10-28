@@ -82,7 +82,7 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 			store.playoffs = cache.SeasonData{Games: tc.games}
 			body := handoffResponse(t, store, "/seasons/2026/playoffs")
 			requireElements(t, body, "[data-bracket-state]", `a[href="regular-season"]`)
-			requireText(t, body, "main", "Date TBD", "Extra time", "Advances")
+			requireText(t, body, "main", "Date TBD", "Extra time", "Advance")
 			if strings.Contains(body, "ASA has not published") {
 				t.Fatal("cache absence asserted ASA nonpublication")
 			}

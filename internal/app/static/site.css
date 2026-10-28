@@ -99,14 +99,19 @@ th:nth-child(2) { text-align: left; }
 .fixture-group-status { display: inline-block; margin-left: .4rem; padding: .1rem .4rem; border-radius: 1rem; color: var(--green); background: var(--green-soft); vertical-align: middle; font-size: .7rem; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
 .fixture-group-status[hidden] { display: none; }
 .fixture-team-code { display: none; }
+.fixture-match-team { display: grid; min-width: 0; justify-items: start; }
+.fixture-team-identity { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.fixture-team-identity .team-name { min-width: 0; }
+.fixtures li > .fixture-match-team:nth-of-type(2) { justify-items: end; }
+.fixture-team-advance { margin-top: .2rem; color: var(--muted); font-size: .75rem; white-space: nowrap; }
 @media (max-width: 700px) {
   /* Phone rows show team codes so each result fits on one line; screen readers and the title keep the full name. */
   .fixtures .fixture-team-code { display: inline; }
   .fixtures .team-name:has(.fixture-team-code) .fixture-team-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 }
 /* Fade the losing side lightly so a matchday scans by result; draws stay unmarked. */
-.fixtures li[data-winner="away"] > .team-name:nth-of-type(1), .fixtures li[data-winner="home"] > .team-name:nth-of-type(2) { opacity: .75; }
-.fixtures li:first-child { border-top: 0; }.fixtures li > .team-name:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.fixture-xg { margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.fixture-npxg { color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.fixture-xg-pair { display: grid; grid-template-columns: auto auto; column-gap: .25em; margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }.fixture-xg-pair > .fixture-xg, .fixture-xg-pair > .fixture-npxg { display: contents; }.fixture-xg-pair .fixture-xg-label { justify-self: end; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }
+.fixtures li[data-winner="away"] > .fixture-match-team:nth-of-type(1), .fixtures li[data-winner="home"] > .fixture-match-team:nth-of-type(2) { opacity: .75; }
+.fixtures li:first-child { border-top: 0; }.fixtures li > .fixture-match-team:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.fixture-xg { margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.fixture-npxg { color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.fixture-xg-pair { display: grid; grid-template-columns: auto auto; column-gap: .25em; margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }.fixture-xg-pair > .fixture-xg, .fixture-xg-pair > .fixture-npxg { display: contents; }.fixture-xg-pair .fixture-xg-label { justify-self: end; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }
 .fixture-outlook-note { margin: .65rem 0 0; }
 .fixture-outlook { display: grid; grid-column: 2 / 5; gap: .25rem; min-width: 0; padding-top: .1rem; }
 .fixture-outlook-model { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
@@ -115,6 +120,8 @@ th:nth-child(2) { text-align: left; }
 .fixture-outcome-home { text-align: left; }.fixture-outcome-draw { text-align: center; }.fixture-outcome-away { text-align: right; }
 .fixture-outcome-bar { display: flex; overflow: hidden; height: .5rem; border-radius: 999px; background: var(--line); }
 .fixture-outcome-segment { flex: var(--fixture-outcome-share) 1 0; min-width: 0; }.fixture-outcome-bar .fixture-outcome-home { background: var(--green); }.fixture-outcome-bar .fixture-outcome-draw { background: #aab4ae; }.fixture-outcome-bar .fixture-outcome-away { background: var(--green-deep); }
+.fixture-outlook-playoff .fixture-outcome-labels { grid-row: 3; gap: .25rem; }
+.fixture-outlook-playoff .fixture-outcome-labels strong { display: inline-block; }
 .data-warning { padding: .8rem 1rem; border-left: 4px solid var(--gold); background: #fff6dc; }
 .clinching-category { margin-top: 2rem; }
 .clinching-status-group { margin-top: 1.25rem; padding: .7rem .9rem; border-left: 4px solid var(--green); border-radius: .4rem; background: var(--green-soft); }
@@ -414,13 +421,24 @@ th:nth-child(2) { text-align: left; }
 .bracket-slot { container-type: inline-size; }
 .bracket-slot-label { margin: 0 0 .2rem; color: var(--muted); font-size: .75rem; }
 .bracket-kickoff { margin: 0 0 .65rem; color: var(--muted); font-size: .75rem; }
-.bracket-match { display: grid; gap: .45rem; }
-.bracket-team-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 .6rem; min-height: 1.8rem; }
-.bracket-match-team { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.bracket-match { display: grid; }
+.bracket-match-outlook { --bracket-team-columns: minmax(0, 1fr) 4.25rem; }
+.bracket-match-result { --bracket-team-columns: minmax(0, 1fr) var(--bracket-goals-width, 2.6rem); }
+.bracket-match-xg { --bracket-team-columns: minmax(0, 1fr) var(--bracket-goals-width, 2.6rem) 2.6rem; }
+.bracket-match-shootout { --bracket-goals-width: 3.5rem; }
+.bracket-team-row, .bracket-match-header { display: grid; grid-template-columns: var(--bracket-team-columns, minmax(0, 1fr)); align-items: center; column-gap: .5rem; }
+.bracket-match-header { padding-bottom: .3rem; color: var(--muted); font-size: .7rem; }
+.bracket-match-header > :not(:first-child) { text-align: right; }
+.bracket-team-row { min-height: 2.5rem; padding: .35rem 0; border-top: 1px solid var(--line); }
+.bracket-match-team { display: block; min-width: 0; }
+.bracket-team-identity { display: flex; align-items: center; gap: .35rem; min-width: 0; }
 .bracket-match-team .team-name { min-width: 0; white-space: normal; }
 .bracket-match-team .fixture-team-code { display: none; }
-.bracket-team-score { font-variant-numeric: tabular-nums; }
-.bracket-feeder-label { grid-column: 1 / -1; margin-left: 1.85rem; color: var(--muted); font-size: .7rem; font-weight: 400; }
+.bracket-team-score, .bracket-team-xg, .bracket-team-advance { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bracket-team-score { font-weight: 800; }
+.bracket-team-penalties { font-size: .8rem; font-weight: 500; }
+.bracket-team-xg { font-size: .85rem; font-weight: 400; }
+.bracket-feeder-label { display: block; margin-left: 1.85rem; color: var(--muted); font-size: .7rem; font-weight: 400; }
 .bracket-facts { display: flex; flex-wrap: wrap; gap: .2rem .75rem; margin: .6rem 0 0; color: var(--muted); font-size: .75rem; }
 .bracket-diagnostics { color: var(--muted); }
 .bracket-winner { font-weight: 800; }
@@ -886,7 +904,6 @@ th:nth-child(2) { text-align: left; }
   .clinching-view-three .segmented-options label > span { display: flex; align-items: center; justify-content: center; min-height: 44px; white-space: normal; text-align: center; }
 }
 
-.playoff-advance { display: flex; justify-content: space-between; gap: .5rem; font-size: .8rem; font-weight: 700; }
 .playoffs-forecast-table { min-width: 38rem; }
 .playoffs-forecast-table :is(th, td):nth-child(n+2) { text-align: right; }
 .playoffs-forecast-table thead th { white-space: normal; }
@@ -896,6 +913,20 @@ th:nth-child(2) { text-align: left; }
 .playoffs-heatmap thead th:first-child { position: sticky; left: 0; z-index: 2; }
 .playoff-team-identity { display: flex; align-items: center; gap: .35rem; min-width: 0; }
 .playoff-team-identity .team-name { min-width: 0; white-space: normal; text-align: left; }
+.playoff-team-mobile, .playoff-team-status, .playoff-round-mobile { display: none; }
+.playoff-team-cell { display: block; min-width: 0; }
+.playoff-scenario-summary { margin-bottom: 1rem; padding: .85rem 1rem; border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: .5rem; background: var(--green-soft); }
+.playoff-scenario-summary h2 { margin: 0; font-size: 1rem; }
+.playoff-scenario-summary p { margin: .25rem 0 .5rem; font-size: .875rem; }
+.playoff-scenario-summary .forecast-assumptions { margin: .5rem 0; }
+.playoff-scenario-summary .forecast-assumptions li { padding: .5rem .65rem; }
+.playoff-overflow-hint { margin: .65rem 0 .35rem; color: var(--muted); font-size: .8rem; font-weight: 700; }
+.bracket-explorer { min-width: 0; }
+.bracket-round-nav { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: .35rem; padding: .5rem 0; background: var(--paper); }
+.bracket-round-nav[hidden], .playoff-overflow-hint[hidden] { display: none; }
+.bracket-round-nav button { padding: .55rem .7rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--panel); color: var(--green); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.bracket-round-nav button:hover { background: var(--green-soft); }
+[data-bracket-round] > h2 { scroll-margin-top: 4.5rem; }
 .playoff-seed-heading { color: var(--muted); font-size: .75rem; font-weight: 500; }
 .playoff-team-out { color: var(--muted); }
 .playoff-scenario-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: .65rem 1rem; max-width: 54rem; }
@@ -918,9 +949,17 @@ th:nth-child(2) { text-align: left; }
   .playoffs-forecast-table { min-width: 17rem; table-layout: fixed; }
   .playoffs-forecast-table, .playoffs-heatmap { font-size: .875rem; }
   .playoffs-forecast-table :is(th,td) { padding: .6rem .4rem; }
-  .playoffs-forecast-table th:first-child { width: 8.5rem; }
+  .playoffs-forecast-table th:first-child { width: 7rem; }
   .playoffs-forecast-table thead th { font-size: .75rem; }
-  .playoffs-forecast-table :is(th,td):nth-child(n+2) { padding-inline: .3rem; }
+  .playoffs-forecast-table :is(th,td):nth-child(n+2) { width: 4.5rem; padding-inline: .3rem; }
+  .playoffs-forecast-with-comparison { min-width: 27rem; }
+  .playoffs-forecast-with-comparison :is(th,td):nth-child(n+2) { width: 5rem; }
+  .playoff-team-full, .playoff-round-full { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .playoff-team-mobile, .playoff-round-mobile { display: inline; }
+  .playoff-team-mobile { min-width: 0; overflow-wrap: anywhere; }
+  .playoff-team-status { display: block; margin-top: .25rem; font-size: .7rem; font-weight: 500; white-space: normal; }
+  .playoffs-heatmap .playoff-team-full { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; white-space: normal; }
+  .playoffs-heatmap .playoff-team-mobile { display: none; }
   .playoffs-heatmap tbody th { width: 10.5rem; min-width: 10.5rem; font-size: .8rem; }
   .playoff-team-identity .team-name { gap: .3rem; }
   .playoff-scenario-form { grid-template-columns: minmax(0, 1fr); align-items: stretch; }

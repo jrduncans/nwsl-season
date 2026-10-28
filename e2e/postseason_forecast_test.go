@@ -45,6 +45,7 @@ func TestPostseasonForecast(t *testing.T) {
 	// tied while the actual winner advances and the loser gets exact zero.
 	games[0].AwayScore = games[0].HomeScore
 	games[0].Penalties = sql.NullBool{Bool: true, Valid: true}
+	games[0].ExtraTime = sql.NullBool{Bool: true, Valid: true}
 	games[0].HomePenalties, games[0].AwayPenalties = sql.NullInt64{Int64: 5, Valid: true}, sql.NullInt64{Int64: 4, Valid: true}
 	partial := games[3]
 	partial.Status = fixtures.PreMatchStatus
@@ -91,6 +92,7 @@ func TestPostseasonForecast(t *testing.T) {
 				}
 				assertNoHorizontalOverflow(t, page)
 				assertPlayoffIdentityAndTitleVisible(t, page)
+				assertPlayoffTableReadable(t, page)
 				capturePlayoffPage(t, page, vp, false, "forecast-"+tc.name)
 				click(t, page.Locator(`input[name="forecast-view"][value="heatmap"]`).Locator(".."))
 				if err := expect.Locator(page.Locator(".playoffs-heatmap")).ToBeVisible(); err != nil {
@@ -117,14 +119,70 @@ func TestPostseasonForecast(t *testing.T) {
 					}
 				}
 				if tc.name == "quarterfinal" {
-					if err := expect.Locator(page.Locator(".bracket")).ToContainText("Penalties 5–4"); err != nil {
+					card := page.Locator(`[data-bracket-node="quarterfinal-1"]`)
+					if err := expect.Locator(card.Locator(".bracket-winner .bracket-team-score")).ToHaveText("2 (5)"); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(card.Locator(".bracket-loser .bracket-team-score")).ToHaveText("2 (4)"); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(card.Locator(".bracket-match")).ToHaveAttribute("aria-label", regexp.MustCompile(`Match decided on penalties:.*5,.*4`)); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(card.Locator(".bracket-facts")).ToHaveText("After extra time"); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(card.Locator(".bracket-team-xg")).ToHaveCount(0); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(card.Locator(".bracket-match-header")).ToHaveText("TeamGoals"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if tc.name == "waiting" || tc.name == "partial" || tc.name == "quarterfinal" {
+					if err := expect.Locator(page.Locator(`[data-bracket-node="final"] .bracket-match-header`)).ToHaveCount(0); err != nil {
 						t.Fatal(err)
 					}
 				}
 				assertNoHorizontalOverflow(t, page)
 				assertTournamentGeometry(t, page, ".bracket")
+				assertPlayoffCardColumns(t, page)
 				capturePlayoffPage(t, page, vp, false, "bracket-"+tc.name)
-
+				switch tc.name {
+				case "partial":
+					visit(t, page, j.URL("seasons/2026/playoffs/fixtures"))
+					if err := expect.Locator(page.Locator(".fixture-match-team")).ToHaveCount(2); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(page.Locator(".fixture-result")).ToHaveText("vs"); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(page.Locator(".fixture-team-advance")).ToHaveCount(2); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(page.Locator(".fixture-team-identity .bracket-seed")).ToHaveText([]string{"3", "6"}); err != nil {
+						t.Fatal(err)
+					}
+					assertPlayoffCardColumns(t, page)
+					assertNoHorizontalOverflow(t, page)
+					capturePlayoffPage(t, page, vp, false, "matches-partial")
+				case "quarterfinal":
+					visit(t, page, j.URL("seasons/2026/playoffs/fixtures"))
+					if err := expect.Locator(page.Locator(".fixture-team-identity .bracket-seed")).ToHaveText([]string{"1", "8"}); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(page.GetByText("Penalties 5–4", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)})).ToBeVisible(); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(page.Locator(".scheduled .fixture-meta-tag")).ToHaveText([]string{"Knockout match", "After extra time", "Penalties 5–4"}); err != nil {
+						t.Fatal(err)
+					}
+					if err := expect.Locator(page.Locator(".fixture-result")).ToHaveText("2–2"); err != nil {
+						t.Fatal(err)
+					}
+					assertNoHorizontalOverflow(t, page)
+					capturePlayoffPage(t, page, vp, false, "matches-completed")
+				}
 			})
 		})
 	}
@@ -174,6 +232,14 @@ func TestPlayoffsForecastScenario(t *testing.T) {
 		if err := expect.Locator(page.Locator(".forecast-assumptions li")).ToHaveCount(1); err != nil {
 			t.Fatal(err)
 		}
+		if err := expect.Locator(page.Locator(`input[name="forecast-view"][value="bracket"]`)).ToBeChecked(); err != nil {
+			t.Fatal("applying a scenario lost the bracket view")
+		}
+		var summaryAboveResults bool
+		evalJSON(t, page, `() => document.querySelector('.playoff-scenario-summary').getBoundingClientRect().bottom <= document.querySelector('.forecast-view-toolbar').getBoundingClientRect().top`, nil, &summaryAboveResults)
+		if !summaryAboveResults {
+			t.Fatal("active assumptions are not above the outlook")
+		}
 		assumed := mustQuery(t, page.URL()).Get("p")
 		click(t, page.Locator("[data-forecast-controls] > summary"))
 		selectValue(t, page.Locator("#forecast-comparison"), modelComparison)
@@ -187,11 +253,29 @@ func TestPlayoffsForecastScenario(t *testing.T) {
 			t.Fatal(err)
 		}
 		staleURL := page.URL()
+		click(t, page.Locator(`input[name="forecast-view"][value="table"]`).Locator(".."))
+		assertPlayoffTableReadable(t, page)
+		assertPlayoffIdentityAndTitleVisible(t, page)
+		click(t, page.Locator(`input[name="forecast-view"][value="heatmap"]`).Locator(".."))
 		assertNoHorizontalOverflow(t, page)
 		capturePlayoffPage(t, page, vp, false, "forecast-scenario")
 		click(t, page.Locator(".forecast-assumptions a"))
 		if err := expect.Locator(page.Locator(".forecast-assumptions li")).ToHaveCount(0); err != nil {
 			t.Fatal(err)
+		}
+		if err := expect.Locator(page.Locator(`input[name="forecast-view"][value="heatmap"]`)).ToBeChecked(); err != nil {
+			t.Fatal("removing an assumption lost the heatmap view")
+		}
+		click(t, page.Locator(".playoff-scenario-form button"))
+		if err := expect.Locator(page.Locator(".playoff-scenario-summary")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		click(t, page.Locator(".playoff-scenario-summary > a"))
+		if err := expect.Locator(page.Locator(`input[name="forecast-view"][value="heatmap"]`)).ToBeChecked(); err != nil {
+			t.Fatal("resetting a scenario lost the heatmap view")
+		}
+		if got := mustQuery(t, page.URL()).Get("p"); got != "" {
+			t.Fatal("reset retained a fixed winner")
 		}
 		replacePlayoffs(t, j, []cache.Game{{ASAID: "played-scenario", Season: currentSeason, Stage: "Playoffs", Status: fixtures.CompletedStatus, HomeTeamID: ids[0], AwayTeamID: ids[7], KickoffUTC: "2026-11-01T20:00:00Z", HomeScore: sql.NullInt64{Int64: 2, Valid: true}, AwayScore: sql.NullInt64{Valid: true}}})
 		response, err := page.Goto(staleURL)
@@ -256,6 +340,130 @@ func assertPlayoffIdentityAndTitleVisible(t *testing.T, page playwright.Page) {
 			const seed = identity.querySelector('.bracket-seed').getBoundingClientRect();
 			const team = identity.querySelector('.team-name').getBoundingClientRect();
 			if (Math.abs(seed.y + seed.height / 2 - team.y - team.height / 2) > 1) issues.push('seed is not centered with its team');
+		}
+		return issues;
+	}`, nil, &issues)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+}
+
+func assertPlayoffTableReadable(t *testing.T, page playwright.Page) {
+	t.Helper()
+	var issues []string
+	evalJSON(t, page, `() => {
+		const table = document.querySelector('.playoffs-forecast-table'), issues = [];
+		for (const cell of table.querySelectorAll('th, td')) {
+			if (cell.scrollWidth > cell.clientWidth + 1) issues.push('overflowing cell: ' + cell.textContent.trim());
+		}
+		for (const name of table.querySelectorAll('.team-name')) {
+			const cell = name.closest('th').getBoundingClientRect();
+			if (name.getBoundingClientRect().right > cell.right - 2) issues.push('team identity crosses a column boundary');
+		}
+		const full = table.querySelector('.playoff-team-full'), compact = table.querySelector('.playoff-team-mobile');
+		if (innerWidth > 700 && (getComputedStyle(compact).display !== 'none' || full.getBoundingClientRect().width <= 1)) issues.push('desktop lost full team names');
+		return issues;
+	}`, nil, &issues)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+}
+
+func TestPlayoffRoundNavigation(t *testing.T) {
+	t.Parallel()
+	j := newJourney(t, journeyConfig{playedRounds: 30, score: func(game asa.Game) (int, int) {
+		if game.HomeTeamID < game.AwayTeamID {
+			return 2, 0
+		}
+		return 0, 2
+	}})
+	j.ASA.ResetRequests()
+	t.Cleanup(func() { assertNoASARequests(t, j.ASA) })
+	for _, vp := range []viewport{Desktop, Mobile, {Name: "tablet", Width: 800, Height: 1000}} {
+		t.Run(vp.Name, func(t *testing.T) {
+			page := newPage(t, vp)
+			for _, suffix := range []string{"", "/forecast#forecast-bracket-panel"} {
+				visit(t, page, j.URL("seasons/2026/playoffs"+suffix))
+				if suffix == "" {
+					assertPlayoffCardColumns(t, page)
+				}
+				expect := playwright.NewPlaywrightAssertions()
+				nav := page.Locator(".bracket-round-nav")
+				if vp.Width > 1000 {
+					if err := expect.Locator(nav).ToBeHidden(); err != nil {
+						t.Fatal("desktop gained unnecessary round controls")
+					}
+					continue
+				}
+				if err := expect.Locator(nav).ToBeVisible(); err != nil {
+					t.Fatal(err)
+				}
+				click(t, nav.Locator("button").Last())
+				var reached bool
+				evalJSON(t, page, `() => {
+					const root = document.querySelector('[data-bracket-layout]'), rounds = root.querySelectorAll('[data-bracket-round]');
+					const heading = rounds[rounds.length-1].querySelector('h2').getBoundingClientRect();
+					if (root.classList.contains('bracket') && innerWidth <= 700) return heading.top >= 0 && heading.bottom < innerHeight;
+					const port = root.classList.contains('bracket') ? root : root.closest('.table-scroll');
+					const bounds = port.getBoundingClientRect();
+					return port.scrollLeft > 0 && heading.left >= bounds.left && heading.right <= bounds.right;
+				}`, nil, &reached)
+				if !reached {
+					t.Fatal("round jump did not reveal the final round")
+				}
+				assertNoHorizontalOverflow(t, page)
+			}
+		})
+	}
+}
+
+func assertPlayoffCardColumns(t *testing.T, page playwright.Page) {
+	t.Helper()
+	var issues []string
+	evalJSON(t, page, `() => {
+		const issues = [];
+		for (const match of document.querySelectorAll('.bracket-match')) {
+			const headers = match.querySelectorAll('.bracket-match-header > span');
+			if (!match.querySelector('[role="cell"]') && headers.length) issues.push('placeholder has a header without stats');
+			for (const row of match.querySelectorAll('.bracket-team-row')) {
+				const team = row.querySelector('.bracket-team-identity').getBoundingClientRect();
+				const bounds = row.getBoundingClientRect();
+				if (team.top < bounds.top - 1 || team.bottom > bounds.bottom + 1) issues.push('team extends beyond row borders');
+				for (const [index, stat] of Array.from(row.querySelectorAll(':scope > [role="cell"]')).entries()) {
+					const value = stat.getBoundingClientRect(), header = headers[index + 1].getBoundingClientRect();
+					if (Math.abs(value.right - header.right) > 1) issues.push('stat/header column misaligned');
+					if (team.right > value.left + 1) issues.push('team overlaps its stat');
+					if (Math.abs(value.top + value.height / 2 - team.top - team.height / 2) > 1 && !row.querySelector('.bracket-feeder-label')) issues.push('stat is not centered on team');
+				}
+			}
+		}
+		for (const item of document.querySelectorAll('.fixtures li:has(.fixture-outlook-playoff)')) {
+			const teams = item.querySelectorAll(':scope > .fixture-match-team');
+			if (teams.length !== 2 || item.querySelector('.bracket-match')) { issues.push('Matches lost side-by-side teams'); continue; }
+			const home = teams[0].getBoundingClientRect(), away = teams[1].getBoundingClientRect();
+			const result = item.querySelector('.fixture-result').getBoundingClientRect();
+			if (home.right > result.left + 1 || result.right > away.left + 1) issues.push('Matches teams overlap the result');
+			if (Math.abs(home.top + home.height / 2 - away.top - away.height / 2) > 1) issues.push('Matches teams are stacked');
+			for (const team of teams) {
+				const advance = team.querySelector('.fixture-team-advance'), identity = team.querySelector('.fixture-team-identity');
+				if (!advance || advance.getBoundingClientRect().top < identity.getBoundingClientRect().bottom - 1) issues.push('advance chance is not beneath its team');
+			}
+			const outlook = item.querySelector('.fixture-outlook').getBoundingClientRect();
+			if (outlook.top < Math.max(home.bottom, away.bottom) - 1) issues.push('outlook is not below the teams');
+			const metadata = item.querySelector('.scheduled').getBoundingClientRect();
+			if (innerWidth <= 700 && metadata.top < Math.max(home.bottom, away.bottom) - 1) issues.push('match metadata interrupts team rows');
+		}
+		for (const outlook of document.querySelectorAll('.fixture-outlook-playoff')) {
+			if (outlook.querySelectorAll('.fixture-outcome-segment').length !== 3) issues.push('outlook lost three segments');
+			for (const label of outlook.querySelectorAll('.fixture-outcome-labels > span')) {
+				if (label.scrollWidth > label.clientWidth + 1) issues.push('outlook label text overflows its cell');
+			}
+			const labels = Array.from(outlook.querySelectorAll('.fixture-outcome-labels > span'), label => label.getBoundingClientRect());
+			for (let i = 1; i < labels.length; i++) {
+				if (labels[i-1].right > labels[i].left + 1) issues.push('outlook labels overlap');
+			}
+			const bounds = outlook.getBoundingClientRect();
+			if (labels.some(label => label.left < bounds.left - 1 || label.right > bounds.right + 1)) issues.push('outlook label crosses card edge');
 		}
 		return issues;
 	}`, nil, &issues)

@@ -1,10 +1,14 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/jrduncans/nwsl-season/internal/apptest"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 )
@@ -36,6 +40,40 @@ func TestBracketByeSemifinalsConnectFeedersAndLabelByes(t *testing.T) {
 	if final := page.Rounds[2].Slots[0]; final.HomeSource.ID != "semifinal-2" || final.AwaySource.ID != "semifinal-1" {
 		t.Fatalf("final follows the reversed semifinal sides: %+v", final)
 	}
+}
+
+func TestHistoricalCompletedBracketShowsActualSeeds(t *testing.T) {
+	db, err := cache.Open(context.Background(), t.TempDir()+"/cache.sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	for _, season := range apptest.Scenario(t, apptest.ScenarioThresholds) {
+		if season.Entry.Season == "2023" {
+			apptest.SeedArchive(t, db, []cache.HistoricalSeason{season})
+		}
+	}
+	response := httptest.NewRecorder()
+	NewHandler(db).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2023/playoffs", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("historical bracket = %d: %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	const first = `[data-bracket-node="quarterfinal-1"]`
+	requireExact(t, body, first+" .bracket-winner .bracket-seed", "4")
+	requireExact(t, body, first+" .bracket-loser .bracket-seed", "5")
+	// Seeds follow team identities through the neutral-site final, too.
+	requireExact(t, body, `[data-bracket-node="final"] .bracket-loser .bracket-seed`, "4")
+	requireExact(t, body, `[data-bracket-node="final"] .bracket-winner .bracket-seed`, "6")
+	response = httptest.NewRecorder()
+	NewHandler(db).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2023/playoffs/fixtures", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("historical Matches = %d: %s", response.Code, response.Body.String())
+	}
+	if got := len(find(t, response.Body.String(), ".fixtures .fixture-match-team .bracket-seed")); got != 10 {
+		t.Fatalf("historical Matches seeds = %d, want one for each of 10 team appearances", got)
+	}
+	forbidElements(t, response.Body.String(), ".fixture-team-advance", ".bracket-match")
 }
 
 func TestBracketFixedPathsFollowPublishedHomeAwayReversal(t *testing.T) {

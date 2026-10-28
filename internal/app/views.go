@@ -110,10 +110,14 @@ type bracketSlotView struct {
 }
 
 type bracketGameView struct {
-	ID, Score, XG, Kickoff, Status, Outcome string
-	HomeScore, AwayScore                    string
-	ExtraTime, Shootout                     string
+	ID, Kickoff, Status, Outcome string
+	HomeScore, AwayScore         string
+	HomeXG, AwayXG               string
+	HomePenalties, AwayPenalties string
+	ExtraTime, Shootout          string
 }
+
+func (g bracketGameView) HasXG() bool { return g.HomeXG != "" || g.AwayXG != "" }
 
 type seasonPhase string
 
@@ -527,6 +531,8 @@ type fixtureView struct {
 	AwayTeam   teamNameView
 	HomeCode   string
 	AwayCode   string
+	HomeSeed   int
+	AwaySeed   int
 	Score      string
 	XG         string
 	// NPXG is the match's non-penalty xG, set only when a penalty carried xG.
@@ -545,16 +551,25 @@ type fixtureView struct {
 // fixtureTeamView pairs a team with the short code that replaces its name
 // in narrow fixture rows.
 type fixtureTeamView struct {
-	Seed int
+	Seed        int
+	AdvanceText string
 	teamNameView
 	Code string
 }
 
 func (f fixtureView) Home() fixtureTeamView {
-	return fixtureTeamView{teamNameView: f.HomeTeam, Code: f.HomeCode}
+	team := fixtureTeamView{teamNameView: f.HomeTeam, Code: f.HomeCode, Seed: f.HomeSeed}
+	if f.Outlook != nil && f.Outlook.Playoff {
+		team.AdvanceText = f.Outlook.HomeAdvanceText
+	}
+	return team
 }
 func (f fixtureView) Away() fixtureTeamView {
-	return fixtureTeamView{teamNameView: f.AwayTeam, Code: f.AwayCode}
+	team := fixtureTeamView{teamNameView: f.AwayTeam, Code: f.AwayCode, Seed: f.AwaySeed}
+	if f.Outlook != nil && f.Outlook.Playoff {
+		team.AdvanceText = f.Outlook.AwayAdvanceText
+	}
+	return team
 }
 
 // fixtureOutlookView is the pre-match, three-way result distribution shown on
@@ -1032,15 +1047,13 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 			Remaining:    game.Status == remainingStatus,
 			Status:       game.Status,
 			KnockoutGame: game.KnockoutGame,
+			Shootout:     shootoutText(game),
 		}
 		if game.KnockoutGame && game.ExpandedMinutes.Valid {
 			view.ExpandedMinutes = fmt.Sprintf("%d minutes", game.ExpandedMinutes.Int64)
 		}
 		if game.ExtraTime.Valid && game.ExtraTime.Bool {
 			view.ExtraTime = "After extra time"
-		}
-		if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
-			view.Score += fmt.Sprintf(" (%d–%d pens)", game.HomePenalties.Int64, game.AwayPenalties.Int64)
 		}
 		if outlook, ok := outlooks[game.ASAID]; ok && view.Remaining {
 			view.Outlook = &outlook
@@ -1060,6 +1073,15 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 		groups[index].Games = append(groups[index].Games, view)
 	}
 	return groups
+}
+
+// shootoutText keeps paired penalty tallies in published home–away order on
+// both match surfaces. A flag or tally missing from the cache is not a result.
+func shootoutText(game cache.Game) string {
+	if !game.Penalties.Valid || !game.Penalties.Bool || !game.HomePenalties.Valid || !game.AwayPenalties.Valid {
+		return ""
+	}
+	return fmt.Sprintf("Penalties %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
 }
 
 // fixtureWinner names the side that won a completed match ("home" or "away"),
@@ -1087,20 +1109,7 @@ func seededBracketPageFor(page seasonPage, format competition.BracketFormat, dat
 	view := bracket.BuildWithSeeds(format, data.Games, seeds.Seeds)
 	data.Teams = append(append([]standings.Team(nil), data.Teams...), seeds.Teams...)
 	result := bracketPageFrom(page, format, data, view)
-	for ri := range result.Rounds {
-		for si := range result.Rounds[ri].Slots {
-			slot := &result.Rounds[ri].Slots[si]
-			for seed, id := range seeds.Seeds {
-				if slot.Home.ID == id {
-					slot.Home.Seed = seed
-				}
-				if slot.Away.ID == id {
-					slot.Away.Seed = seed
-				}
-			}
-			slot.HomeTeam, slot.AwayTeam = slot.Home, slot.Away
-		}
-	}
+	result.applySeeds(seeds.Seeds)
 	// A fully published bracket has no expectations left to label.
 	if view.State == bracket.StateReady {
 		return result
@@ -1209,23 +1218,26 @@ func bracketEntrant(id string, teams map[string]teamNameView, codes map[string]s
 }
 
 func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracketGameView {
-	view := bracketGameView{ID: game.ASAID, Status: game.Status}
+	view := bracketGameView{ID: game.ASAID, Status: game.Status, Shootout: shootoutText(game)}
 	if kickoff, err := fixtures.ParseKickoff(game.KickoffUTC); err == nil {
 		view.Kickoff = kickoff.UTC().Format(time.RFC3339)
 	}
 	if game.HomeScore.Valid && game.AwayScore.Valid {
-		view.Score = fmt.Sprintf("%d–%d", game.HomeScore.Int64, game.AwayScore.Int64)
 		view.HomeScore, view.AwayScore = strconv.FormatInt(game.HomeScore.Int64, 10), strconv.FormatInt(game.AwayScore.Int64, 10)
 	}
-	if xg, ok := xgoals[game.ASAID]; ok && xg.HomeXG.Valid && xg.AwayXG.Valid {
-		view.XG = fmt.Sprintf("xG %.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+	if xg, ok := xgoals[game.ASAID]; ok {
+		if xg.HomeXG.Valid {
+			view.HomeXG = fmt.Sprintf("%.2f", xg.HomeXG.Float64)
+		}
+		if xg.AwayXG.Valid {
+			view.AwayXG = fmt.Sprintf("%.2f", xg.AwayXG.Float64)
+		}
 	}
 	if game.ExtraTime.Valid && game.ExtraTime.Bool {
 		view.ExtraTime = "After extra time"
 	}
-	if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
-		view.Score += fmt.Sprintf(" (%d–%d pens)", game.HomePenalties.Int64, game.AwayPenalties.Int64)
-		view.Shootout = fmt.Sprintf("Penalties %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
+	if view.Shootout != "" {
+		view.HomePenalties, view.AwayPenalties = strconv.FormatInt(game.HomePenalties.Int64, 10), strconv.FormatInt(game.AwayPenalties.Int64, 10)
 	}
 	return view
 }
@@ -1411,6 +1423,42 @@ func (p *bracketPage) applyOutlooks(outlooks map[string]fixtureOutlookView) {
 			if outlook, ok := outlooks[slot.ID]; ok {
 				value := outlook
 				slot.Outlook = &value
+			}
+		}
+	}
+}
+
+// Seeds annotate identities without changing published sides or historical paths.
+func (p *bracketPage) applySeeds(seeds map[int]string) {
+	for ri := range p.Rounds {
+		for si := range p.Rounds[ri].Slots {
+			slot := &p.Rounds[ri].Slots[si]
+			for seed, id := range seeds {
+				if slot.Home.ID == id {
+					slot.Home.Seed = seed
+				}
+				if slot.Away.ID == id {
+					slot.Away.Seed = seed
+				}
+			}
+			slot.HomeTeam, slot.AwayTeam = slot.Home, slot.Away
+		}
+	}
+}
+
+func (p *seasonPage) applySeeds(seeds map[int]string) {
+	for _, groups := range [][]fixtureGroupView{p.ResultFixtureGroups, p.UpcomingFixtureGroups} {
+		for gi := range groups {
+			for fi := range groups[gi].Games {
+				game := &groups[gi].Games[fi]
+				for seed, id := range seeds {
+					if game.HomeTeam.ID == id {
+						game.HomeSeed = seed
+					}
+					if game.AwayTeam.ID == id {
+						game.AwaySeed = seed
+					}
+				}
 			}
 		}
 	}

@@ -351,8 +351,13 @@ The Playoffs Table lists qualifiers by title chance, breaking ties by seed.
 Seed, crest and name share a centered identity row in Table and Heatmap. The
 Champion column follows Team, then rounds read outward from it (Reach final,
 then Reach semifinal), so a reader moves from the title toward earlier rounds.
-At 390px every column fits without scrolling; with a comparison model the team
-column stays pinned as the other probabilities scroll. Round headings say Reach
+On phones, Table shows team codes beside the seed and crest, with full names
+retained for assistive technology; desktop and Heatmap retain full names.
+Probability columns have enough width for their labels and values. The baseline
+fits at 390px; comparison models scroll with the team column pinned. Long
+elimination labels appear once under the team on phones, and affected round
+cells read Out. Desktop keeps the full round labels in their cells.
+Round headings say Reach
 semifinal and Reach final to distinguish participation from winning the round.
 Eliminated teams follow, later elimination first, then seed. Cumulative columns
 show each unfinished round after the opening round and Champion; established
@@ -368,14 +373,22 @@ group names its feeder match; the Champion card's heading already names its
 position. Later cards center between their visible feeders,
 with elbow connectors landing on the relevant candidate group; measured heights
 accommodate different list lengths. The forecast bracket scrolls horizontally
-on phones. Completed
+on phones, with round-jump buttons whenever the bracket overflows. Scroll hints
+follow actual overflow at every width. Completed
 finals retain the settled result. At 390px the tables scroll within the page.
 
 The scenario builder has separate Match and Winner selectors. Changing Match
 updates its two available winners locally; only Apply scenario changes the
 forecast. Without JavaScript, one grouped winner selector includes the match
-labels and both teams. Applied assumptions name their match, for example
-Quarterfinal 3: Washington Spirit advances.
+labels and both teams. Applied assumptions appear in an Active scenario summary
+above the outlook, with individual removal links and Reset scenario. They name
+their match, for example Quarterfinal 3: Washington Spirit advances.
+With JavaScript, applying or removing assumptions, resetting a scenario, or
+changing models retains the selected Table, Heatmap or Bracket view and returns
+to the outlook, including the active assumptions. A presentation-only fragment
+such as `#forecast-bracket-panel` carries the view without changing forecast
+inputs or probabilities; view switches themselves remain local. Bare forecast
+links still start on Table, and the no-JavaScript table and forms remain usable.
 
 Scenarios choose a winner only for an upcoming slot with known participants,
 from seeds or recorded advancement. URL values are

@@ -86,7 +86,12 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 	if root.Code != http.StatusOK {
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
-	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "Penalties 4–3", "xG 1.25–0.80")
+	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD")
+	requireExact(t, root.Body.String(), ".bracket-team-score", "2 (4)", "1 (3)")
+	requireAttrContains(t, root.Body.String(), ".bracket-match-result", "aria-label", "Match decided on penalties:")
+	requireExact(t, root.Body.String(), ".bracket-match-header [role=columnheader]", "Goals", "xG")
+	requireExact(t, root.Body.String(), ".bracket-winner .bracket-team-xg", "1.25")
+	requireExact(t, root.Body.String(), ".bracket-loser .bracket-team-xg", "0.80")
 	// Each entrant carries its full name and a short code for narrow cards.
 	requireElements(t, root.Body.String(), ".bracket-match .fixture-team-full", ".bracket-match .fixture-team-code")
 	fixtures := httptest.NewRecorder()

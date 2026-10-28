@@ -242,6 +242,8 @@ type playoffScenarioMatch struct {
 type playoffForecastCell struct{ Text, Intensity string }
 type playoffForecastRow struct {
 	Team                 teamNameView
+	MobileName           string
+	EliminationText      string
 	Seed                 int
 	SeedText             string
 	Rounds               []string
@@ -299,7 +301,7 @@ func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simul
 	page.EndColumns = append(page.EndColumns, "Champion")
 	for _, qualifier := range playoffQualifiers(base.Season, data, len(format.Slots)+1) {
 		row := rows[qualifier.ID]
-		item := playoffForecastRow{Team: teamName(row.Team), Seed: qualifier.Seed, Chance: row.ChampionshipProbability, Out: row.ChampionshipEliminated || slices.Contains(state.Eliminated, qualifier.ID), Elimination: -1}
+		item := playoffForecastRow{Team: teamName(row.Team), MobileName: scenarioTeamCode(row.Team), Seed: qualifier.Seed, Chance: row.ChampionshipProbability, Out: row.ChampionshipEliminated || slices.Contains(state.Eliminated, qualifier.ID), Elimination: -1}
 		item.SeedText = "—"
 		for seed, id := range state.Seeds {
 			if id == qualifier.ID {
@@ -313,6 +315,9 @@ func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simul
 		eliminated := "Out"
 		if eliminatedRound != "" {
 			eliminated = "Out in " + roundNames[eliminatedRound]
+		}
+		if item.Out {
+			item.EliminationText = eliminated
 		}
 		for ri, round := range format.Rounds {
 			if eliminatedRound == round.ID {
