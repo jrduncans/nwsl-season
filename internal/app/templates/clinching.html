@@ -111,13 +111,35 @@
   <summary>Assume match results <span class="note">{{if .Builder.FixedCount}}· {{.Builder.FixedCount}} assumed{{else}}(optional){{end}}</span></summary>
   {{template "scenarioBuilder" .Builder}}
 </details>
+{{if and (not $.State) .OpponentOutlook}}
+<section id="seeding-opponents" class="seeding-opponent-outlook" aria-labelledby="seeding-opponents-title">
+  <h2 class="clinching-opportunity-heading"><span class="clinching-team-identity">{{template "teamName" .Team}}</span></h2>
+  <div class="seeding-opponent-body">
+  <h3 id="seeding-opponents-title">Likely first-round opponents</h3>
+  <p class="note">{{if .Builder.FixedCount}}Chances given your assumptions{{else}}Overall chances{{end}}, across all possible seeds.{{if .LikelihoodModel}} Forecast: {{.LikelihoodModel}}.{{else}} Opponent odds are unavailable right now.{{end}}</p>
+  {{with .Limitation}}<p class="data-warning">{{.}}</p>{{end}}
+  <ul class="seeding-opponent-chart" aria-label="First-round opponent chances">
+    {{range .OpponentOutlook}}<li{{if .Other}} class="seeding-opponent-other"{{end}}>
+      <span class="seeding-opponent-name">{{with .Team}}{{template "teamName" .}}{{else}}{{.Label}}{{end}}</span>
+      <span class="seeding-opponent-track" aria-hidden="true">{{if .BarWidth}}<span style="width: {{.BarWidth}}"></span>{{end}}</span>
+      <span class="seeding-opponent-chance">{{.Likelihood}}</span>
+    </li>{{end}}
+  </ul>
+  {{if .LikelihoodModel}}<div class="seeding-opponent-scale" aria-hidden="true"><span><span>0%</span><span>100%</span></span></div>{{end}}
+  </div>
+</section>
+{{end}}
 {{end}}
 {{if .State}}<p class="data-warning">{{.State}}</p>{{else}}{{with .Seeding}}
+{{if .Inevitable}}
+{{if and .Limitation (not .OpponentOutlook)}}<p class="data-warning">{{.Limitation}}</p>{{end}}
+{{if .Disciplinary}}<p class="note">Scenarios requiring the disciplinary-points tiebreaker are omitted.</p>{{end}}
+{{else}}
 <section class="seeding-results" aria-labelledby="seeding-title">
-  <h2 id="seeding-title">{{template "teamName" .Team}}</h2>
-  {{if .Limitation}}<p class="data-warning">{{.Limitation}}</p>{{end}}
+  <h2 id="seeding-title">Seed-by-seed scenarios</h2>
+  {{if and .Limitation (not .OpponentOutlook)}}<p class="data-warning">{{.Limitation}}</p>{{end}}
   {{if .Disciplinary}}<p class="note">Scenarios requiring the disciplinary-points tiebreaker are omitted.</p>{{end}}
-  {{if and .Rows (not .Inevitable)}}
+  {{if .Rows}}
   {{if .LegendParts}}<p class="note">{{template "clinchingParts" .LegendParts}}</p>{{else}}{{with .Legend}}<p class="note">{{.}}</p>{{end}}{{end}}
   {{if .LikelihoodModel}}<p class="note seeding-chance-key">Finish odds are {{if .Builder.FixedCount}}given your assumptions{{else}}overall{{end}}. Cells show the chance of the finish <strong>and</strong> the column’s results.</p>{{end}}
   <details class="seeding-chance-help"><summary>About chances and the table</summary><p>Column headings show result odds among counted forecasts. Cell percentages are joint odds of both the finish and those results, not odds conditional on the column. Opponent odds below are conditional on the selected finish. Conditional odds use unrounded forecasts. Rounded percentages may not add to 100%. “Possible; odds unavailable” means an exact possibility had no occurrences in the simulated seasons, so the forecast cannot estimate its odds.{{if .LikelihoodModel}} Forecast: {{.LikelihoodModel}}{{if .Builder.FixedCount}}, given your assumptions{{end}}.{{end}}</p><p>Choose a finish to see its scenarios. Use Assume match results to change the scenario.</p><p>Cells list possible first-round opponents, likeliest first when odds are available. Every listed finish is exactly possible, however unlikely. The higher seed normally hosts; venue availability can change hosting.</p></details>
@@ -137,6 +159,7 @@
 
   {{else if not .Rows}}<p>No confirmed finishes{{if .Builder.FixedCount}} match your assumptions{{else}} are available{{end}}.</p>{{end}}
 </section>
+{{end}}
 {{with .Conditions}}
 <section id="seeding-conditions" class="seeding-conditions" aria-labelledby="seeding-conditions-title">
   <div class="section-heading"><h2 id="seeding-conditions-title">{{if .Eliminated}}Eliminated{{if .Assumed}} under these assumptions{{end}}{{else}}{{if not .Inevitable}}How {{end}}<span class="clinching-team-token"><img class="clinching-path-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true"><span>{{.Team.Code}}</span></span> {{if .Inevitable}}· {{.InevitableState}}{{else}}{{.FinishText}}{{end}}{{with .Likelihood}} <span class="seeding-finish-odds">{{.}}{{if not $.Seeding.Builder.FixedCount}} overall{{end}}</span>{{end}}{{end}}</h2>{{if not .Inevitable}}<a href="#seeding-title">All finishes ↑</a>{{end}}</div>

@@ -837,6 +837,26 @@ th:nth-child(2) { text-align: left; }
 .seeding-team-picker { margin: 0; }
 .seeding-team-picker label { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .seeding-team-picker select { max-width: 100%; }
+.seeding-opponent-outlook { margin-block: 1rem 2rem; overflow: hidden; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); scroll-margin-top: 1rem; }
+.seeding-opponent-body { padding: .9rem 1rem; border-top: 1px solid var(--line); }
+.seeding-opponent-outlook h3 { margin-block: 0 .25rem; }
+.seeding-opponent-body > .note { margin-block: .25rem 1.25rem; }
+.seeding-opponent-chart { display: grid; gap: .85rem; margin: 0; padding: 0; list-style: none; }
+.seeding-opponent-chart li { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 1.2fr) 7rem; align-items: center; gap: .75rem; }
+.seeding-opponent-name, .seeding-opponent-name .team-name { min-width: 0; }
+.seeding-opponent-name .team-name > span { overflow-wrap: anywhere; }
+.seeding-opponent-track { display: block; height: .75rem; border-radius: .2rem; background: var(--chart-chance); overflow: hidden; }
+.seeding-opponent-track > span { display: block; height: 100%; min-width: 2px; background: var(--green); border-radius: inherit; }
+.seeding-opponent-chance { text-align: right; font-size: .875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.seeding-opponent-other .seeding-opponent-track > span { background: var(--muted); }
+.seeding-opponent-other { color: var(--muted); }
+.seeding-opponent-scale { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 1.2fr) 7rem; gap: .75rem; margin-top: .5rem; color: var(--muted); font-size: .75rem; }
+.seeding-opponent-scale > span { grid-column: 2; display: flex; justify-content: space-between; }
+@media (max-width: 700px) {
+  .seeding-opponent-chart li { grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; }
+  .seeding-opponent-track { grid-column: 1 / -1; grid-row: 2; }
+  .seeding-opponent-scale { display: block; }
+}
 .seeding-fixed-results { margin-block: 1rem 2rem; }
 .seeding-fixed-results > summary { color: var(--green); cursor: pointer; font-weight: 700; }
 .seeding-results { margin-block-start: 2rem; }

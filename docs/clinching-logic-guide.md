@@ -696,9 +696,48 @@ still finish in the playoff seeding and who it would play in the first round.
 code. The picker includes only this season's participants. An omitted team
 selects the first team in the standings.
 
+### Overall opponent outlook
+
+Below the team picker, **Assume match results** controls both the opponent
+outlook and seed scenarios. It is collapsed when no results are assumed and
+opens automatically with active assumptions, keeping the inputs ahead of both
+outputs.
+
+The first result is **Likely first-round opponents**, a descending horizontal
+bar chart in the same white, bordered panel style as Explore charts, with full
+team names, crests and overall probabilities on a shared
+0–100% scale. It sums unrounded joint opponent shares across all reachable
+seeds and result columns after the exact-possibility checks below. Choosing a
+finish does not change this summary. Assumed results do change it, and the
+caption explicitly says the chances are given those assumptions.
+The selected-team header reuses the clinching scenario card's pale green
+gradient, compact team name and larger crest on a white tile; the chart stays
+in a separate white body below it.
+
+**Miss playoffs** is a separate outcome when possible. Any forecast share
+omitted by unresolved disciplinary ties or the exact scenario search appears
+as **Unresolved outcome**; it is never redistributed among opponents.
+Unsampled exact possibilities remain listed as “possible; odds unavailable”,
+with no bar. If the forecast is unavailable, the list keeps possible opponents
+without percentages. A sole opponent receives 100% only with a complete
+forecast share. Rounded percentages may not total 100%. With no possible
+opponent, as for an eliminated team, the outlook is omitted. A scenario-search
+limitation appears once: in the outlook when it is shown, otherwise ahead of
+the grid or guaranteed finish.
+
+On phones each opponent's percentage sits on its name line and the bar spans
+the panel width below it.
+
+The **Seed-by-seed scenarios** grid stays visible below the opponent summary:
+seeding is a primary function of this view. Selected-finish conditions follow
+the grid, including without JavaScript. Supporting explanations and full
+scenario lists retain their existing disclosures and links. Guaranteed finishes
+and elimination keep their concise answer in place of the grid, still noting
+omitted disciplinary-tiebreaker scenarios.
+
 ### Possibilities grid
 
-The page leads with a grid. Each row is a seed the team can still reach, in
+Each grid row is a seed the team can still reach, in
 order, with **Misses the playoffs** last when it is possible. The row heading
 states the seed and its catalog bracket pairing ("4th, hosts 5th";
 "5th, at 4th"). Hosting has the same venue-availability caveat as

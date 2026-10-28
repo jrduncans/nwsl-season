@@ -41,6 +41,7 @@ type seedingPage struct {
 	Details                         *seedingAlternativesView
 	HistoryNote                     string
 	Inevitable                      bool
+	OpponentOutlook                 []seedingOpponentChanceView
 	// Assumptions restates each assumed result from the selected team's side
 	// when it plays in that match.
 	Assumptions [][]scenarioRequirementPart
@@ -308,6 +309,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 	} else if len(seed.Rows) > 0 {
 		seed.LikelihoodNote = "Likelihoods are unavailable right now."
 	}
+	seed.OpponentOutlook = seedingOpponentChances(seed.Rows, data.Teams, counts != nil)
 	chosen, mostLikely := finish, false
 	if chosen == nil && inevitable != nil {
 		chosen = inevitable

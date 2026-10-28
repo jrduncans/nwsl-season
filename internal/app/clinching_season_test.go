@@ -406,6 +406,10 @@ func TestSeedingLikelihoodsFillTheGridAndPickTheLikeliestFinish(t *testing.T) {
 		{Seed: 2, OpponentID: "bravo", Own: map[string]simulation.Outcome{"first": simulation.HomeWin, "second": simulation.AwayWin}, Probability: 0.1},
 	}
 	applySeedingLikelihoods(columns, rows, counts, m)
+	outlook := seedingOpponentChances(rows, []standings.Team{{ID: "bravo", Name: "Bravo"}, {ID: "charlie", Name: "Charlie"}}, true)
+	if len(outlook) != 3 || outlook[0].Label != "Charlie" || outlook[0].Likelihood != "50%" || outlook[1].Label != "Bravo" || outlook[1].Likelihood != "40%" || outlook[2].Likelihood != "10%" {
+		t.Fatalf("overall outlook must combine seeds and keep excluded samples unresolved: %+v", outlook)
+	}
 	if rows[0].Likelihood != "30%" || rows[1].Likelihood != "60%" {
 		t.Fatalf("row likelihoods %q %q", rows[0].Likelihood, rows[1].Likelihood)
 	}

@@ -26,6 +26,13 @@ func TestPagesClinchingSeeding(t *testing.T) {
 		if err := page.WaitForURL("**/clinching?**team=T00**"); err != nil {
 			t.Fatal(err)
 		}
+		if err := expect.Locator(page.Locator("#seeding-opponents")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
+		outlook, err := page.Locator("#seeding-opponents").InnerHTML()
+		if err != nil {
+			t.Fatal(err)
+		}
 		if err := expect.Locator(page.Locator(".seeding-grid")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}
@@ -46,6 +53,9 @@ func TestPagesClinchingSeeding(t *testing.T) {
 		}
 		if err := expect.Locator(page.Locator("#seeding-conditions")).ToBeVisible(); err != nil {
 			t.Fatal(err)
+		}
+		if after, err := page.Locator("#seeding-opponents").InnerHTML(); err != nil || after != outlook {
+			t.Fatalf("selecting a seed changed the overall opponent outlook: %v", err)
 		}
 		if !strings.Contains(page.URL(), "finish=") {
 			t.Fatalf("finish selection missing from URL: %s", page.URL())
@@ -200,6 +210,9 @@ func TestPagesClinchingSeedingNoScript(t *testing.T) {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
 		visitStatic(t, page, j.URL(seasonPath("clinching")+"?view=seeding&team=T00"))
 		expect := playwright.NewPlaywrightAssertions()
+		if err := expect.Locator(page.Locator("#seeding-opponents")).ToBeVisible(); err != nil {
+			t.Fatal(err)
+		}
 		if err := expect.Locator(page.Locator("#seeding-focus")).ToBeHidden(); err != nil {
 			t.Fatal(err)
 		}
