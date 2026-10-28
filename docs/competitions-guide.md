@@ -87,7 +87,12 @@ Season pages live at `/seasons/{season}/{stage-slug}` with optional
 primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar), and so does
 the retired `/seasons` archive URL. Season-only
 URLs redirect to the primary stage, keeping the suffix and query. An unknown
-stage slug for a cataloged season is a `404`, never a fallback. Every link and
+stage slug for a cataloged season is a `404`, never a fallback. The main-page menu label is Standings for Regular Season and the catalog’s
+short menu label for other competitions: Playoffs, Group stage, Knockout round,
+or Final. When the main page renders chronological matches, the separate
+Matches/Results item is omitted and `/fixtures` redirects there with its query
+intact. A concrete matchup or a certified seeded Playoffs bracket restores the
+separate Matches page. Every link and
 redirect is relative so the `/nwsl-season/` proxy prefix survives.
 
 Each stage page has in-page Season and Competition switchers whose targets are
@@ -139,12 +144,16 @@ completion. Historical regular seasons with verified complete inventories and
 terminal results show `Final standings`, including 2021 after award reconciliation.
 Incomplete or unverified historical seasons retain `Historical standings`.
 Presentation may hide a feature that is irrelevant to a complete season, but it
-never enables one the catalog omits.
+never enables one the catalog omits. Once safe final standings and a compatible bracket are available, Forecast Lab
+moves from Regular Season to Playoffs. This separate availability rule reuses
+the Regular Season forecast capability and never adds league-only capabilities
+to knockout catalog entries.
 
 ## Knockout brackets
 
-A stage with the bracket capability uses its root for the bracket and keeps
-`/fixtures` chronological. The catalog holds each verified, versioned bracket
+A stage with the bracket capability uses its root for a rendered bracket and
+keeps `/fixtures` chronological. Before any concrete matchup or certified
+Playoffs seeds, its root is the match list and `/fixtures` redirects there. The catalog holds each verified, versioned bracket
 topology: rounds, slots, seed pairs, connections, advancement policy (fixed,
 historically reseeded, or single final) and, for 2025 quarterfinals, the order
 in which ASA published the opening matches.
@@ -156,8 +165,7 @@ status alone or expanded minutes. A winner exists only for unequal
 regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
-matches and links to the Matches page. At 390px rounds stack with explicit `Advances to`
-text. When a match card is narrower than 20rem (three columns on a tablet or
+matches and links to the Matches page. At 390px rounds stack in round order. When a match card is narrower than 20rem (three columns on a tablet or
 narrow window), each team shows its short code instead of its full name, as
 Matches rows do on phones; the full name stays available to screen readers.
 
@@ -166,10 +174,9 @@ expectations before matches arrive. `bracket.BuildWithSeeds` combines the
 catalog's verified seed pairs with resolved official **total** standings.
 Unavailable adjustments or undetermined tiebreaks leave affected seeds TBD;
 an abandoned match, incomplete inventory, missing score or unknown status cannot
-certify entrants. Each card is labeled as expected or published by ASA.
+certify entrants. Cards show seeds, kickoff (or Date TBD), and match outlooks when both teams are known.
 Expectations exist only on the page; placeholder matches supply no date or
-participants. Once ASA has published every match, the bracket drops these
-labels and the expected-pairings note.
+participants. Once ASA has published every match, the publication note disappears.
 
 With this seed context, partially published matches are matched by participants,
 not by publication or kickoff order. Published sides and results take precedence
@@ -186,6 +193,25 @@ including observed reseeding and playoff evidence for tied historical ranks.
 
 Group stages render chronological matches with date headings, never
 `Matchday` headings or a combined table.
+
+### Forecast use of postseason state
+
+Current-season Forecast Lab reuses the seeded bracket interpretation after
+verified, safe regular-season completion. Resolved final seeds and the verified
+format permit forecasting before fixture publication. Cached completed results,
+including confirmed shootout advancement, fix winners; only unresolved rounds
+are sampled. Published home/away assignments inform quarterfinal and semifinal
+venue effects, while the designated-site final remains neutral in the model.
+Published kickoffs are linked from the bracket; playoff recovery and load
+adjustments are omitted and model fitting stays regular-season-only.
+
+Unresolved playoff seeds, ambiguous results, missing advancement, or mismatched
+source games withhold championship odds with a visible explanation. They do not
+silently restart rounds. Final points, qualification, and recorded playoff
+eliminations remain factual where provable. Playoff source fields participate in forecast cache identity and
+current-season playoff changes trigger baseline warming. Page requests stay
+cache-only. See [Forecast Lab](forecast-lab-guide.md#championship-forecasting-after-the-regular-season)
+for the full evidence boundary and stale-scenario recovery.
 
 ## Derived historical outcomes
 

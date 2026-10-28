@@ -386,7 +386,7 @@ func (a *application) seedingLikelihoods(ctx context.Context, data cache.SeasonD
 	}
 	model := forecast.Default().Model
 	request := simulation.Request{Teams: data.Teams, Games: standingsGames(data.Games), XGoals: forecastXGoals(data), HistoricalVenue: forecastVenueSample(data), Model: model, Fixed: state.Fixed, Iterations: a.options.ForecastIterations, PlayoffPlaces: places, SeedPairs: pairs}
-	key := forecastResultKey(data, state, model.Info().ID, a.options.ForecastIterations, places) + "\x00seeding"
+	key := forecastResultKey(data, state, model.Info().ID, a.options.ForecastIterations, places, nil) + "\x00seeding"
 	results, err := a.forecasts.results(withForecastTrigger(ctx, "http"), []forecastTask{{key: key, request: request}})
 	if err != nil {
 		return nil, ""

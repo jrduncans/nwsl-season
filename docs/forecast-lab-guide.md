@@ -285,8 +285,10 @@ spurious probability advantage.
 
 The production default is 50,000 simulated seasons. The simulator checks the
 HTTP request context at least every 100 iterations, so cancelled requests stop
-instead of continuing to consume CPU. If there are no remaining matches, it
-reuses the known final table but still samples the playoffs in every iteration.
+instead of continuing to consume CPU. After verified regular-season completion, it
+reuses the known final table and retains cached playoff advancement, sampling
+only unresolved rounds. If final seeds or source advancement cannot be verified,
+it retains the table and withholds championship odds.
 A forecast without an eligible fixed bracket retains the single-table shortcut.
 
 ### Playoff assumptions
@@ -294,26 +296,30 @@ A forecast without an eligible fixed bracket retains the single-table shortcut.
 The [2026 competition rules](https://images.nwslsoccer.com/image/private/t_q-good/prd/tstudhfledlk7z8ygtzd.pdf)
 define an eight-team bracket. Quarterfinals pair 1–8, 4–5,
 2–7, and 3–6; the first two winners meet and the last two winners meet in the
-semifinals. The higher seed gets the model's home advantage in those two
-rounds. The Championship has a designated venue, so the model samples either
+semifinals. Published home/away assignments get the model's venue effect in those two
+rounds; unpublished pairings give the higher seed home advantage. The Championship has a designated venue, so the model samples either
 team as the nominal home side with equal probability. This removes a systematic
 home assignment advantage; it does not attempt to model a team's actual travel
-or local support at that venue. Venue changes in earlier rounds are likewise
-not known in advance.
+or local support at that venue. Unpublished venue changes in earlier rounds are not known in advance.
+The model uses home/away assignment rather than stadium identity; it does not
+adjust for a published stadium move, travel, or local support.
 
 The model samples a 90-minute score for each playoff match. When that score is
 tied, it chooses the advancing team according to the model's relative
 90-minute win chances, normalized to exclude draws. This is an approximation
 for extra time and penalties, rather than a separate extra-time or shootout
 model. The selected forecast model is fitted to completed regular-season data
-once. Playoff results do not refit it. The schedule-load model cannot know
-future playoff kickoffs, so its playoff pairings use its underlying xG venue
-rates without a recovery or accumulated-load adjustment.
+once. Playoff results do not refit it. Published playoff kickoffs remain available on the linked bracket page.
+All playoff pairings use the underlying venue rates without recovery or
+accumulated-load adjustments, including when dates are published. Applying
+those adjustments would require modeling the full conditional playoff schedule
+and load; this change does not introduce that model.
 
-When the accessible standings rules cannot separate a tied seed group, each
-simulation randomly assigns that group's seeds. Every tied team therefore
-gets an equal opportunity at each seed without using the standings display
-fallback as a predictive tiebreak.
+During the regular season, when accessible standings rules cannot separate a
+tied seed group, each simulation randomly assigns that group's seeds. Every
+tied team gets an equal opportunity without using display order as a tiebreak.
+Once the regular season is complete, an unresolved playoff seed instead
+withholds championship odds until the source can certify the bracket.
 
 ```mermaid
 flowchart TD
@@ -329,6 +335,90 @@ flowchart TD
     I --> K["Expected values, 80% intervals, and probabilities"]
     J --> K
 ```
+
+## Championship forecasting after the regular season
+
+Once Regular Season forecasting is supported, its final standings are safe,
+and a compatible fixed bracket is verified, Forecast Lab moves to
+`/seasons/{season}/playoffs/forecast`. The Playoffs menu includes Forecast lab;
+the Regular Season menu drops it. A Regular Season forecast request without
+fixed results redirects relatively with `v`, `m`, `c`, and a qualified `team`
+filter. Fixed-result links show the out-of-date page, recovering to the Playoffs
+Forecast Lab with model choices preserved. Historical seasons gain no forecast
+capability.
+
+The Playoffs Table lists qualifiers by title chance, breaking ties by seed.
+Eliminated teams follow, later elimination first, then seed. Cumulative columns
+show each unfinished round after the opening round and Champion; established
+advancement reads Through and losses read Out in the recorded round. A model
+comparison adds its Champion column. Heatmap shows exclusive run endings: Out
+in quarterfinal, Out in semifinal, Runner-up, Champion, on the regular-season
+heatmap's 0–100% shading scale. Each qualifier's row sums to 100%. Bracket
+shows the candidates for each future position, with separate lists for both
+sides of each match, plus Champion odds. Every available position list sums to 100%, including established 100%
+participants; structurally possible teams with no sampled appearances retain
+<0.1% formatting. Lists use the same simulation counts as Table. Completed
+finals retain the settled result. At 390px the tables scroll within the page.
+
+Scenarios choose a winner only for an upcoming slot with known participants,
+from seeds or recorded advancement. URL values are
+`p={slot-id}:{winner-id}:{participant-id}:{participant-id}`, using v2 model
+handling and sorted participant IDs. Including both participants detects a
+changed opponent even if the selected winner remains. A recorded result also
+makes the assumption stale. Assumptions cannot establish eligibility for a
+later assumption. They affect Forecast Lab only, never public match outlooks.
+
+If playoff results or in-progress matches are already cached while the
+regular-season snapshot still contains pending results, championship odds are
+withheld until final standings can be verified; stale regular data cannot
+restart observed playoff rounds. Published playoff fixtures that have not
+started, even with identified teams, leave the regular-season forecast in place.
+The regular-season inventory and safe final results must be certified by the
+same checks as the Playoffs handoff. The verified fixed bracket and resolved
+final playoff seeds supply initial pairings even before ASA publishes fixtures.
+Until any playoff fixture is cached, the page explains that pairings follow
+those seeds and that unpublished schedule details remain unknown: an empty
+cache cannot establish whether ASA has published them. The page always links
+to the bracket for published dates and venues. Partially published
+fixtures are matched by participants using `bracket.BuildWithSeeds`, so source
+publication order cannot move a match into another round.
+
+Only completed (`FullTime`) playoff results with valid scores establish winners.
+Unequal final scores include extra time; a tied score needs an explicit shootout
+flag and paired, non-negative, unequal penalty tallies. Recorded winners advance
+without resampling that match. Eliminated teams show exactly `0%`, and a
+confirmed champion shows `100%`. A zero count from finite simulation alone is
+still displayed as `<0.1%`.
+
+A failed latest playoff refresh also withholds odds because published
+advancement may be newer than the cache. Unknown or in-progress statuses,
+missing scores, tied results without confirmed
+advancement, invalid shootouts, unidentified played participants, duplicate
+placements, incompatible matchups, or later-round games without known prior
+winners withhold **all** championship odds. This intentionally conservative
+boundary avoids allocating probability through uncertain bracket branches.
+The explanation remains visible; qualified teams with proven losses are marked
+Out, with all other percentages withheld. Their recorded elimination rounds
+retain the normal later-elimination-first ordering. Qualifiers require source-backed
+final ranking; an unresolved tie crossing the cutoff cannot invent entrants.
+Completed, valid, decisive rows are rebuilt into
+the bracket without the problem rows, and if they still disagree no playoff
+elimination is claimed. Unplayed placeholders do not become matches or winners.
+Progress the simulator could not follow is checked with
+`simulation.CheckPostseason` before the forecast runs, so it is withheld with an
+explanation rather than failing the page.
+A partial inventory of otherwise valid upcoming or completed playoff matches
+can still be used; unpublished slots are simulated only when there is no source
+conflict or unresolved result.
+
+The same postseason construction feeds HTTP forecasts and baseline warming.
+Its canonical identity includes certified seeds, slot participants and winners,
+and a digest of playoff source fields including statuses, scores, shootouts,
+extra-time flags and kickoffs. It participates in both the random seed and
+result-cache key; verified bracket format also participates in cache identity.
+Current-season playoff source changes trigger warming alongside the existing
+regular-season and historical inputs. All these reads use local SQLite only.
+Postseason results do not enter model fitting or regular-season standings.
 
 ## Fixed outcomes are conditional scorelines
 
@@ -471,6 +561,8 @@ Forecast Lab has two URL formats. The current canonical form is:
   match ID.
 - At most 12 fixed outcomes are accepted. Malformed, duplicate, unknown,
   completed, or otherwise stale match assumptions return `400 Bad Request`.
+  Stale assumptions receive an explanation and a relative recovery link to the
+  latest forecast, preserving model choices and clearing fixed results.
 
 The app continues to accept legacy version-1 Results Poisson links, but it
 generates version-2 links. A bare `/forecast` chooses the catalog default;
@@ -489,7 +581,8 @@ seed.
 A URL preserves model choices and assumptions, **not** a historical source
 snapshot. It always uses the latest successful cache. When a match later
 completes or disappears, an assumption that names it becomes stale and the
-link is rejected rather than silently reinterpreted.
+link shows an explanation with a recovery path rather than silently
+reinterpreting those assumptions.
 
 ## Forecasts are not clinching proofs
 
@@ -536,3 +629,19 @@ Behavior-level examples live in the tests under
 [`internal/simulation`](../internal/simulation), and
 [`internal/forecaststate`](../internal/forecaststate), with page coverage in
 [`internal/app/handler_test.go`](../internal/app/handler_test.go).
+
+### Round and match probabilities
+
+The simulator counts entry into each bracket round and each team's exclusive
+ending (a loss in a round, champion, or did not qualify). Each qualifier's endings sum to 100%;
+each round's entries sum to its participant count. It also counts each slot's
+two topology positions separately, so each position's candidate list sums to
+100%. Recorded results stay exact.
+
+`simulation.PlayoffMatchOutlook` shares distribution selection and draw
+resolution with the simulator, using `PostseasonDistribution` when supported.
+A neutral final averages both home assignments, including each assignment's
+advance chance. Hypothetical slot winners are separate from recorded results;
+only seed-derived or recorded participants permit a scenario, and a recorded
+result invalidates it. Both participant IDs and the winner enter the scenario
+identity, cache key, and deterministic random seed.

@@ -77,6 +77,9 @@ func (r forecastWarmingRunner) refreshScenarioHistory(ctx context.Context) {
 }
 
 func (r forecastWarmingRunner) forecastInputsForScope(season, stage string) bool {
+	if season == r.currentSeason && stage == "Playoffs" && r.currentStage == "Regular Season" {
+		return true
+	}
 	if stage != r.currentStage {
 		return false
 	}

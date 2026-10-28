@@ -810,7 +810,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	if scope.Entry.Supports(competition.CapabilityBracket) && scope.Entry.BracketFormat != nil {
+	if !page.MainPageMatches && scope.Entry.Supports(competition.CapabilityBracket) && scope.Entry.BracketFormat != nil {
 		data, dataErr := a.loadSeasonData(r.Context(), scope.Season, scope.Stage)
 		if dataErr != nil {
 			a.renderError(w, r, dataErr)
@@ -827,7 +827,6 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 			}
 			if seeds.Certified {
 				page.FormatNotice = ""
-				page.Navigation = seasonNavigation(r.URL.Path, scope, r.URL.Path, competition.Rules{}, false)
 				result := seededBracketPageFor(page, *scope.Entry.BracketFormat, data, seeds, relativeURL(r.URL.Path, stageURL(scope.Season, regular.Slug)))
 				result.PublicationNotice = playoffWaitingNotice(data, result.State == bracket.StateReady)
 				result.RefreshFailed, err = a.playoffRefreshWarning(r.Context(), scope.Season)
@@ -835,12 +834,17 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 					a.renderError(w, r, err)
 					return
 				}
+				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 				a.render(w, "bracket", result)
 				return
 			}
 		}
 		if knockoutMatchupAvailable(data.Games) {
-			a.render(w, "bracket", bracketPageFor(page, *scope.Entry.BracketFormat, data))
+			result := bracketPageFor(page, *scope.Entry.BracketFormat, data)
+			if scope.Stage == "Playoffs" {
+				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
+			}
+			a.render(w, "bracket", result)
 			return
 		}
 	}
@@ -888,10 +892,22 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 	var outlooks func(cache.SeasonData) map[string]fixtureOutlookView
 	if scope.forecastCapabilityAvailable() {
 		outlooks = fixtureOutlooks
+	} else if scope.Stage == "Playoffs" {
+		outlooks = func(data cache.SeasonData) map[string]fixtureOutlookView {
+			return a.playoffOutlooks(r.Context(), scope.Season, data)
+		}
 	}
 	page, err := a.loadSeasonPageFor(r, outlooks)
 	if err != nil {
 		a.renderError(w, r, err)
+		return
+	}
+	if page.MainPageMatches {
+		target := relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug))
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		redirectRelative(w, target, http.StatusSeeOther)
 		return
 	}
 	a.render(w, "fixtures", page)
@@ -975,7 +991,21 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	return a.loadSeasonPageFor(r, nil)
 }
 
-func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.SeasonData) map[string]fixtureOutlookView) (seasonPage, error) {
+// mainPageRendersMatches mirrors the main-page dispatch, including brackets
+// available from certified seeds before ASA publishes any concrete matchup.
+func mainPageRendersMatches(scope requestCompetition, games []cache.Game, certifiedSeeds bool) bool {
+	if scope.Entry.Kind == competition.StageKindLeagueTable {
+		return false
+	}
+	if scope.supports(competition.CapabilityBracket) && scope.Entry.BracketFormat != nil {
+		if knockoutMatchupAvailable(games) || (scope.Stage == "Playoffs" && certifiedSeeds) {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.SeasonData) map[string]fixtureOutlookView) (page seasonPage, err error) {
 	if a.store == nil {
 		return seasonPage{}, fmt.Errorf("season cache unavailable")
 	}
@@ -989,6 +1019,39 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if err != nil {
 		return seasonPage{}, fmt.Errorf("load %s season: %w", season, err)
 	}
+	defer func() {
+		if err != nil {
+			return
+		}
+		certified := false
+		if scope.Stage == "Playoffs" && !knockoutMatchupAvailable(data.Games) {
+			var seeds playoffSeeds
+			seeds, err = a.finalPlayoffSeeds(r.Context(), scope.Season)
+			if err != nil {
+				return
+			}
+			certified = seeds.Certified
+		}
+		presentation := competitionPresentation(scope, data)
+		presentation.Historical = historicalCatalogScope(scope)
+		presentation.MainPageMatches = mainPageRendersMatches(scope, data.Games, certified)
+		regularData := data
+		if scope.Stage == "Playoffs" {
+			regularData, err = a.loadSeasonData(r.Context(), scope.Season, "Regular Season")
+			if err != nil {
+				return
+			}
+		}
+		if scope.Stage == "Regular Season" || scope.Stage == "Playoffs" {
+			regularRules, verified := a.rulesForSeason(scope.Season, "Regular Season")
+			presentation.PlayoffsForecast = playoffsForecastAvailable(scope.Season, regularData, regularRules, verified)
+		}
+		if scope.Stage == "Regular Season" && presentation.PlayoffsForecast {
+			page.HasForecast = false
+		}
+		page.MainPageMatches = presentation.MainPageMatches
+		page.Navigation = seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, rulesVerified, presentation)
+	}()
 	if len(data.Games) == 0 || (scope.Entry.Kind == competition.StageKindKnockout && !knockoutMatchupAvailable(data.Games)) {
 		if historicalCatalogScope(scope) {
 			return a.historicalLoadPage(r, scope)
@@ -998,7 +1061,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
 	}
-	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
+	presentation := competitionPresentation(scope, data)
 	presentation.Historical = historicalCatalogScope(scope)
 
 	var standingsView []tableRowView
@@ -1108,7 +1171,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 	if err != nil {
 		return seasonPage{}, err
 	}
-	page := seasonPage{
+	page = seasonPage{
 		Title:                  season + " NWSL season",
 		Season:                 season,
 		Stage:                  scope.Stage,
@@ -1145,7 +1208,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		SeasonPath:             relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)),
 		FixturesPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
-		HasFixtureOutlooks:     !retrospective && scope.forecastCapabilityAvailable() && len(outlooks) > 0,
+		HasFixtureOutlooks:     !retrospective && len(outlooks) > 0,
 	}
 	if scope.Stage == "Regular Season" && finalStandingsSafe(presentation) {
 		if playoffs, ok := competition.Lookup(season, "Playoffs"); ok && playoffs.Public && playoffBracketEntry(playoffs) {

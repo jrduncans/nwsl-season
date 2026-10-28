@@ -161,7 +161,7 @@ func TestSourceEntriesFilteringOrderingAndCopies(t *testing.T) {
 }
 
 func validEntry() Entry {
-	return Entry{Season: "2026", Stage: "Test", Label: "Test", ShortLabel: "Test", Slug: "test", Kind: StageKindLeagueTable, SourceAvailable: true}
+	return Entry{Season: "2026", Stage: "Test", Label: "Test", ShortLabel: "Test", MenuLabel: "Test", Slug: "test", Kind: StageKindLeagueTable, SourceAvailable: true}
 }
 
 func TestEntryValidationRejections(t *testing.T) {
@@ -233,7 +233,7 @@ func TestValidNilAndStageSpecificEntries(t *testing.T) {
 	for _, entry := range []Entry{
 		validEntry(),
 		{Season: "2026", Stage: "Exhibition", Label: "Exhibition", ShortLabel: "Exhibition", Slug: "exhibition", Kind: StageKindLeagueTable, Capabilities: []Capability{CapabilityFixtures, CapabilityXG}},
-		{Season: "2026", Stage: "Final", Label: "Final", ShortLabel: "Final", Slug: "final", Kind: StageKindKnockout, Capabilities: []Capability{CapabilityBracket}, BracketFormat: singleFinalBracket()},
+		{Season: "2026", Stage: "Final", Label: "Final", ShortLabel: "Final", MenuLabel: "Final", Slug: "final", Kind: StageKindKnockout, Capabilities: []Capability{CapabilityBracket}, BracketFormat: singleFinalBracket()},
 	} {
 		if err := entry.Validate(); err != nil {
 			t.Fatalf("valid entry rejected: %v", err)

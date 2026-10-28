@@ -74,6 +74,7 @@ type seasonPage struct {
 	FixtureTeams           []teamNameView
 	Remaining              int
 	HasFixtureOutlooks     bool
+	MainPageMatches        bool
 }
 
 type bracketPage struct {
@@ -92,13 +93,17 @@ type bracketRoundView struct {
 }
 
 type bracketSlotView struct {
-	Expected   bool
-	SeedPair   string
-	Home       fixtureTeamView
-	Away       fixtureTeamView
-	Winner     string
-	AdvancesTo string
-	Game       *bracketGameView
+	ID                                string
+	HomeWinner, AwayWinner, Completed bool
+	Outlook                           *fixtureOutlookView
+	HomeTeam, AwayTeam                fixtureTeamView
+	Expected                          bool
+	SeedPair                          string
+	Home                              fixtureTeamView
+	Away                              fixtureTeamView
+	Winner                            string
+	AdvancesTo                        string
+	Game                              *bracketGameView
 }
 
 type bracketGameView struct {
@@ -120,6 +125,8 @@ type seasonPresentation struct {
 	Historical         bool
 	FinalStandingsSafe bool
 	HasUpcoming        bool
+	MainPageMatches    bool
+	PlayoffsForecast   bool
 }
 
 type navigationItem struct {
@@ -214,7 +221,10 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 		}
 		items = append(items, struct{ label, path string }{label, base})
 	}
-	if scope.fixturesAvailable() {
+	if scope.Stage != "Regular Season" && scope.Entry.MenuLabel != "" {
+		items = append(items, struct{ label, path string }{scope.Entry.MenuLabel, base})
+	}
+	if scope.fixturesAvailable() && !presentation.MainPageMatches {
 		label := "Matches"
 		if presentation.Phase == seasonPhaseUpcoming {
 			label = "Schedule"
@@ -229,7 +239,7 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 	if scope.clinchingAvailable(rules, verified) && presentation.Phase != seasonPhaseUpcoming && presentation.Phase != seasonPhaseComplete {
 		items = append(items, struct{ label, path string }{"Clinching scenarios", base + "/clinching"})
 	}
-	if scope.forecastAvailable(rules, verified) && phaseSupportsRemainingFeatures(presentation.Phase) {
+	if (scope.forecastAvailable(rules, verified) && !presentation.PlayoffsForecast) || (scope.Stage == "Playoffs" && presentation.PlayoffsForecast) {
 		items = append(items, struct{ label, path string }{"Forecast lab", base + "/forecast"})
 	}
 	navigation := make([]navigationItem, 0, len(items))
@@ -531,17 +541,24 @@ type fixtureView struct {
 // fixtureTeamView pairs a team with the short code that replaces its name
 // in narrow fixture rows.
 type fixtureTeamView struct {
+	Seed int
 	teamNameView
 	Code string
 }
 
-func (f fixtureView) Home() fixtureTeamView { return fixtureTeamView{f.HomeTeam, f.HomeCode} }
-func (f fixtureView) Away() fixtureTeamView { return fixtureTeamView{f.AwayTeam, f.AwayCode} }
+func (f fixtureView) Home() fixtureTeamView {
+	return fixtureTeamView{teamNameView: f.HomeTeam, Code: f.HomeCode}
+}
+func (f fixtureView) Away() fixtureTeamView {
+	return fixtureTeamView{teamNameView: f.AwayTeam, Code: f.AwayCode}
+}
 
 // fixtureOutlookView is the pre-match, three-way result distribution shown on
 // the fixtures page. Its shares remain numeric so the same values drive the
 // displayed percentages and the proportional bar.
 type fixtureOutlookView struct {
+	Playoff                            bool
+	HomeAdvanceText, AwayAdvanceText   string
 	ModelName                          string
 	HomeWin, Draw, AwayWin             float64
 	HomeWinText, DrawText, AwayWinText string
@@ -554,6 +571,7 @@ type teamNameView struct {
 }
 
 type errorPage struct {
+	RecoveryPath      string
 	Title             string
 	Message           string
 	HomePath          string
@@ -1018,7 +1036,7 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 			view.ExtraTime = "After extra time"
 		}
 		if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
-			view.Shootout = fmt.Sprintf("Shootout %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
+			view.Score += fmt.Sprintf(" (%d–%d pens)", game.HomePenalties.Int64, game.AwayPenalties.Int64)
 		}
 		if outlook, ok := outlooks[game.ASAID]; ok && view.Remaining {
 			view.Outlook = &outlook
@@ -1065,6 +1083,20 @@ func seededBracketPageFor(page seasonPage, format competition.BracketFormat, dat
 	view := bracket.BuildWithSeeds(format, data.Games, seeds.Seeds)
 	data.Teams = append(append([]standings.Team(nil), data.Teams...), seeds.Teams...)
 	result := bracketPageFrom(page, format, data, view)
+	for ri := range result.Rounds {
+		for si := range result.Rounds[ri].Slots {
+			slot := &result.Rounds[ri].Slots[si]
+			for seed, id := range seeds.Seeds {
+				if slot.Home.ID == id {
+					slot.Home.Seed = seed
+				}
+				if slot.Away.ID == id {
+					slot.Away.Seed = seed
+				}
+			}
+			slot.HomeTeam, slot.AwayTeam = slot.Home, slot.Away
+		}
+	}
 	// A fully published bracket has no expectations left to label.
 	if view.State == bracket.StateReady {
 		return result
@@ -1109,13 +1141,53 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 			connections[source] = destination
 		}
 	}
+	slots := map[string]bracket.Slot{}
+	slotLabels := map[string]string{}
+	for _, round := range view.Rounds {
+		for i, slot := range round.Slots {
+			slots[slot.ID] = slot
+			label := round.Label
+			if len(round.Slots) > 1 {
+				label = fmt.Sprintf("%s %d", singularRoundLabel(round.Label), i+1)
+			}
+			slotLabels[slot.ID] = label
+		}
+	}
+	entrant := func(id, source string) fixtureTeamView {
+		if id != "" && id != bracket.TBD {
+			return bracketEntrant(id, teams, codes)
+		}
+		label := bracket.TBD
+		if feeder, ok := slots[source]; ok {
+			// A decided feeder advances its winner even before the other
+			// side of this slot is known.
+			if feeder.Winner.TeamID != bracket.TBD && feeder.Winner.TeamID != "" {
+				return bracketEntrant(feeder.Winner.TeamID, teams, codes)
+			}
+			if feeder.Home.TeamID != bracket.TBD && feeder.Away.TeamID != bracket.TBD {
+				label = bracketEntrantName(feeder.Home.TeamID, teams) + " or " + bracketEntrantName(feeder.Away.TeamID, teams)
+			} else {
+				label = slotLabels[source] + " winner"
+			}
+		}
+		return fixtureTeamView{teamNameView: teamNameView{Name: label}}
+	}
+	feeders := map[string][]string{}
+	for _, connection := range format.Connections {
+		feeders[connection.DestinationSlotID] = connection.SourceSlotIDs
+	}
 	for _, round := range view.Rounds {
 		row := bracketRoundView{Label: round.Label}
 		for _, slot := range round.Slots {
-			item := bracketSlotView{Expected: slot.SeedPair != nil && slot.Game == nil, Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
-			if slot.SeedPair != nil {
-				item.SeedPair = fmt.Sprintf("Seeds %d and %d", slot.SeedPair[0], slot.SeedPair[1])
+			item := bracketSlotView{ID: slot.ID, Expected: slot.SeedPair != nil && slot.Game == nil, Home: bracketEntrant(slot.Home.TeamID, teams, codes), Away: bracketEntrant(slot.Away.TeamID, teams, codes), Winner: bracketEntrantName(slot.Winner.TeamID, teams), AdvancesTo: connections[slot.ID]}
+			item.HomeWinner = slot.Winner.TeamID != bracket.TBD && slot.Winner.TeamID == slot.Home.TeamID
+			item.AwayWinner = slot.Winner.TeamID != bracket.TBD && slot.Winner.TeamID == slot.Away.TeamID
+			item.Completed = item.HomeWinner || item.AwayWinner
+			if from := feeders[slot.ID]; len(from) == 2 {
+				item.Home = entrant(slot.Home.TeamID, from[0])
+				item.Away = entrant(slot.Away.TeamID, from[1])
 			}
+			item.HomeTeam, item.AwayTeam = item.Home, item.Away
 			if slot.Game != nil {
 				game := bracketGameViewFor(*slot.Game, xgoals)
 				item.Game = &game
@@ -1158,7 +1230,7 @@ func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracket
 		view.ExtraTime = "After extra time"
 	}
 	if game.Penalties.Valid && game.Penalties.Bool && game.HomePenalties.Valid && game.AwayPenalties.Valid {
-		view.Shootout = fmt.Sprintf("Shootout %d–%d", game.HomePenalties.Int64, game.AwayPenalties.Int64)
+		view.Score += fmt.Sprintf(" (%d–%d pens)", game.HomePenalties.Int64, game.AwayPenalties.Int64)
 	}
 	return view
 }
@@ -1325,4 +1397,42 @@ func officialStandingsNote(season string, adjustmentsUnavailable bool) string {
 		note += fmt.Sprintf(" Official points include a %d-point disciplinary deduction.", deduction.Points)
 	}
 	return note
+}
+
+func singularRoundLabel(label string) string {
+	switch label {
+	case "Quarterfinals":
+		return "Quarterfinal"
+	case "Semifinals":
+		return "Semifinal"
+	}
+	return label
+}
+
+func (p *bracketPage) applyOutlooks(outlooks map[string]fixtureOutlookView) {
+	for ri := range p.Rounds {
+		for si := range p.Rounds[ri].Slots {
+			slot := &p.Rounds[ri].Slots[si]
+			if outlook, ok := outlooks[slot.ID]; ok {
+				value := outlook
+				slot.Outlook = &value
+			}
+		}
+	}
+}
+
+func competitionPresentation(scope requestCompetition, data cache.SeasonData) seasonPresentation {
+	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
+	if scope.Entry.Kind == competition.StageKindKnockout && scope.Entry.BracketFormat != nil && len(data.Games) == len(scope.Entry.BracketFormat.Slots) {
+		complete := true
+		for _, game := range data.Games {
+			if game.Status != fixtures.CompletedStatus || !validPlayoffRow(game) || fixtureWinner(game) == "" {
+				complete = false
+			}
+		}
+		if complete {
+			presentation.Phase = seasonPhaseComplete
+		}
+	}
+	return presentation
 }

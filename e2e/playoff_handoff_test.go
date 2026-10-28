@@ -49,10 +49,10 @@ func TestPlayoffHandoff(t *testing.T) {
 			if err := expect.Locator(page.Locator(".bracket-slot")).ToHaveCount(7); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator(".bracket-provenance").First()).ToContainText("Expected from final seeds"); err != nil {
+			if err := expect.Locator(page.Locator(".bracket-slot .fixture-outlook")).ToHaveCount(4); err != nil {
 				t.Fatal(err)
 			}
-			if err := expect.Locator(page.Locator("main")).ToContainText("until ASA publishes the matches"); err != nil {
+			if err := expect.Locator(page.Locator("main")).ToContainText("Extra time"); err != nil {
 				t.Fatal(err)
 			}
 			if !noScript {
@@ -108,7 +108,7 @@ func TestPlayoffHandoff(t *testing.T) {
 				if err := expect.Locator(page.Locator(fmt.Sprintf(`[data-bracket-state="%s"]`, tc.state))).ToBeVisible(); err != nil {
 					t.Fatal(err)
 				}
-				if err := expect.Locator(page.Locator(".bracket-provenance", playwright.PageLocatorOptions{HasText: "Published by ASA"})).ToHaveCount(tc.published); err != nil {
+				if err := expect.Locator(page.Locator(".bracket-provenance")).ToHaveCount(0); err != nil {
 					t.Fatal(err)
 				}
 				assertNoHorizontalOverflow(t, page)

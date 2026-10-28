@@ -86,7 +86,7 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 	if root.Code != http.StatusOK {
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
-	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "Advances to", "After extra time", "Shootout 4–3", "xG 1.25–0.80")
+	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD", "(4–3 pens)", "xG 1.25–0.80")
 	// Each entrant carries its full name and a short code for narrow cards.
 	requireElements(t, root.Body.String(), ".bracket-match .fixture-team-full", ".bracket-match .fixture-team-code")
 	fixtures := httptest.NewRecorder()
@@ -133,7 +133,7 @@ func TestBracketRootStatesKeepFactsAndRelativeFallback(t *testing.T) {
 	}{
 		{name: "empty", notice: "Playoffs matches have not been loaded yet", data: cache.SeasonData{Teams: base.Teams}, empty: true},
 		{name: "placeholder", notice: "Playoffs matches have not been loaded yet", data: cache.SeasonData{Games: []cache.Game{{ASAID: "placeholder"}}, Teams: base.Teams}, empty: true},
-		{name: "partial", state: "partial", notice: "Partial bracket data", data: partial},
+		{name: "partial", state: "partial", notice: "Quarterfinals", data: partial},
 		{name: "unresolved", state: "unresolved", notice: "unresolved source facts", data: unresolved},
 		{name: "mismatch", state: "format_mismatch", notice: "Bracket format mismatch", data: mismatch, wantSource: true},
 	} {
@@ -217,7 +217,7 @@ func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
 		data.Games[i].Matchday = sql.NullInt64{Int64: int64(i + 1), Valid: true}
 	}
 	data.XGoals = []cache.GameXG{{GameID: "completed", Availability: cache.XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeXG: sql.NullFloat64{Float64: 1.4, Valid: true}, AwayXG: sql.NullFloat64{Float64: .7, Valid: true}}}
-	for _, path := range []string{"/seasons/2020/challenge-cup-group-stage", "/seasons/2020/challenge-cup-group-stage/fixtures"} {
+	for _, path := range []string{"/seasons/2020/challenge-cup-group-stage"} {
 		response := httptest.NewRecorder()
 		NewHandler(fakeStore{season: data}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {
@@ -374,20 +374,17 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 	}
 	seasonBody := seasonResponse.Body.String()
 	requireText(t, seasonBody, "main", unknownFormatNotice)
-	requireElements(t, seasonBody, `[href="regular-season/fixtures"]`)
+	forbidElements(t, seasonBody, `[href="regular-season/fixtures"]`)
 	forbidElements(t, seasonBody, "table.standings", ".qualification-badge", ".playoff-line")
 	forbidRaw(t, seasonBody, "expected regular-season", "16 expected", "30 fixtures", "top 8")
 
 	fixturesResponse := httptest.NewRecorder()
 	handler.ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2099/regular-season/fixtures", nil))
-	if fixturesResponse.Code != http.StatusOK {
-		t.Fatalf("fixtures status = %d, want 200", fixturesResponse.Code)
+	if fixturesResponse.Code != http.StatusSeeOther || fixturesResponse.Header().Get("Location") != "../regular-season" {
+		t.Fatalf("factual match-list redirect=%d %q", fixturesResponse.Code, fixturesResponse.Header().Get("Location"))
 	}
-	fixturesBody := fixturesResponse.Body.String()
-	requireText(t, fixturesBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
-	requireText(t, fixturesBody, ".site-nav", "Matches")
-	forbidRaw(t, fixturesBody, "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios")
-	forbidRaw(t, fixturesBody, "fixture-outlook")
+	requireText(t, seasonBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
+	forbidRaw(t, seasonBody, "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios", "fixture-outlook")
 }
 
 func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {
@@ -1464,7 +1461,7 @@ func TestForecastRendersChampionshipOddsWithEightTeamBracket(t *testing.T) {
 	body := response.Body.String()
 	requireText(t, body, "table.forecast-table th[scope=col]", "Championship")
 	requireText(t, body, "table.forecast-comparison-table th[scope=col]", "Championship chance")
-	requireText(t, body, ".forecast-method", "Championship odds continue each simulated table")
+	requireText(t, body, ".forecast-method", "Championship odds continue through the verified eight-team bracket")
 }
 
 func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
@@ -1494,8 +1491,8 @@ func TestForecastNonCurrentCatalogSeasonUsesCatalogRules(t *testing.T) {
 		}
 	}
 	state := forecaststate.State{ModelID: "current-pace-v1", ComparisonModelID: "results-poisson-v1", Fixed: map[string]simulation.Outcome{}}
-	catalogKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, 8)
-	configuredKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, playoffPlaces(configured))
+	catalogKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, 8, nil)
+	configuredKey := forecastResultKey(data, state, "current-pace-v1", options.ForecastIterations, playoffPlaces(configured), nil)
 	if _, found := application.app.forecasts.cache[catalogKey]; !found {
 		t.Fatal("forecast cache has no result keyed with the catalog playoff-place count")
 	}
@@ -1653,9 +1650,9 @@ func TestForecastScheduleNoteReportsExcludedStatusesAndUnevenSchedule(t *testing
 
 func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 	data := cache.SeasonData{Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}}}
-	first := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8)
+	first := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8, nil)
 	data.Teams[0].Name = "Renamed Alpha"
-	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8); second == first {
+	if second := forecastResultKey(data, forecaststate.State{}, "results-poisson-v1", 50000, 8, nil); second == first {
 		t.Fatal("forecast result key did not change with team presentation")
 	}
 }
@@ -1663,9 +1660,9 @@ func TestForecastResultKeyChangesWithTeamPresentation(t *testing.T) {
 func TestForecastResultKeyChangesWithKickoff(t *testing.T) {
 	for _, modelID := range []string{"xg-poisson-recent-form-v1", "xg-poisson-schedule-load-v1"} {
 		data := cache.SeasonData{Games: []cache.Game{{ASAID: "completed", KickoffUTC: "2026-05-01 20:00:00 UTC"}}}
-		first := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+		first := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil)
 		data.Games[0].KickoffUTC = "2026-05-02 20:00:00 UTC"
-		if second := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); second == first {
+		if second := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil); second == first {
 			t.Errorf("%s result key did not change with fixture kickoff", modelID)
 		}
 	}
@@ -1678,23 +1675,23 @@ func TestForecastResultKeyChangesWithPenaltySplits(t *testing.T) {
 		VenueHistory: []cache.VenueSummary{{Season: "2025", XGReady: true, XGMatches: 1, HomeXG: 1.7, AwayXG: .8}},
 	}
 	modelID := "xg-poisson-npxg-strength-v1"
-	unsplit := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+	unsplit := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil)
 	data.XGoals[0].Penalties = &cache.PenaltySplit{HomeXG: .79}
-	split := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8)
+	split := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil)
 	if split == unsplit {
 		t.Fatal("result key did not change when a penalty split arrived")
 	}
 	data.VenueHistory[0].NPXGMatches, data.VenueHistory[0].HomeNPXG, data.VenueHistory[0].AwayNPXG = 1, .91, .8
-	if venue := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8); venue == split {
+	if venue := forecastResultKey(data, forecaststate.State{}, modelID, 50000, 8, nil); venue == split {
 		t.Fatal("result key did not change with prior-season npxG totals")
 	}
 }
 
 func TestForecastResultKeyChangesWhenHistoricalVenueSummaryArrives(t *testing.T) {
 	data := cache.SeasonData{Teams: []standings.Team{{ID: "alpha", Name: "Alpha"}}}
-	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8)
+	first := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8, nil)
 	data.VenueHistory = []cache.VenueSummary{{Season: "2025", Stage: "Regular Season", FixtureReady: true, XGReady: true, Matches: 182, HomeGoals: 260, AwayGoals: 220, XGMatches: 182, HomeXG: 250.5, AwayXG: 215.5}}
-	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8); second == first {
+	if second := forecastResultKey(data, forecaststate.State{}, "xg-poisson-home-two-seasons-v1", 50000, 8, nil); second == first {
 		t.Fatal("forecast result key did not change with historical venue summary")
 	}
 }

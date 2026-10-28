@@ -48,6 +48,7 @@ type Request struct {
 	Iterations        int
 	PlayoffPlaces     int
 	PlayoffBracket    *competition.BracketFormat
+	Postseason        *Postseason
 	// SeedPairs, when set, also counts each team's first-round pairing under
 	// these bracket seed pairs; see Result.Seedings.
 	SeedPairs [][2]int
@@ -68,6 +69,12 @@ type TeamResult struct {
 	PlayoffProbability      float64
 	ShieldProbability       float64
 	ChampionshipProbability float64
+	ChampionshipClinched    bool
+	ChampionshipEliminated  bool
+	RoundReach              map[string]float64
+	RunEnds                 map[string]float64
+	ReachedRounds           map[string]bool
+	EliminatedRound         string
 }
 
 type PointsProbability struct {
@@ -86,6 +93,8 @@ type Result struct {
 	ChampionshipSimulated bool
 	// Seedings is set when the request names SeedPairs, keyed by team ID.
 	Seedings map[string][]SeedingCount
+	// BracketPositions counts the two topology sides of each slot separately.
+	BracketPositions map[string][2]map[string]float64
 }
 
 type preparedFixture struct {
@@ -99,6 +108,7 @@ type accumulator struct {
 	points        map[int]float64
 	positions     []float64
 	championships float64
+	reach, ends   map[string]float64
 }
 
 // Run fits the model once and simulates the requested number of seasons.
@@ -123,14 +133,21 @@ func Run(ctx context.Context, request Request) (Result, error) {
 		return Result{}, err
 	}
 
-	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, predictor.SeedMaterial())
+	material := append(predictor.SeedMaterial(), request.Postseason.Material()...)
+	seed := SeedWithMaterial(request.Model.Info().ID, request.Teams, request.Games, request.Fixed, material)
 	// #nosec G404 G115 -- a stable seed makes equivalent cached forecasts reproducible; the signed conversion preserves its bits.
 	rng := rand.New(rand.NewSource(int64(seed)))
 	byID := make(map[string]*accumulator, len(request.Teams))
 	for _, team := range request.Teams {
-		byID[team.ID] = &accumulator{team: team, points: map[int]float64{}, positions: make([]float64, len(request.Teams))}
+		byID[team.ID] = &accumulator{team: team, points: map[int]float64{}, positions: make([]float64, len(request.Teams)), reach: map[string]float64{}, ends: map[string]float64{}}
 	}
 
+	positions := map[string][2]map[string]float64{}
+	if playoffs != nil {
+		for _, slot := range playoffs.format.Slots {
+			positions[slot.ID] = [2]map[string]float64{{}, {}}
+		}
+	}
 	var seedings *seedingCounter
 	if len(request.SeedPairs) > 0 {
 		if seedings, err = newSeedingCounter(request.SeedPairs, request.Teams, prepared.remaining); err != nil {
@@ -171,7 +188,7 @@ func Run(ctx context.Context, request Request) (Result, error) {
 				seedings.add(table, outcomes, 1)
 			}
 			if playoffs != nil {
-				champion := playoffs.champion(table, rng)
+				champion := playoffs.run(table, rng, byID, positions)
 				byID[champion].championships++
 			}
 		}
@@ -179,14 +196,53 @@ func Run(ctx context.Context, request Request) (Result, error) {
 
 	rows := make([]TeamResult, 0, len(request.Teams))
 	for _, accumulator := range byID {
-		rows = append(rows, resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces))
+		row := resultFromAccumulator(accumulator, request.Iterations, request.PlayoffPlaces)
+		row.RoundReach, row.RunEnds = accumulator.reach, accumulator.ends
+		for round, count := range row.RoundReach {
+			row.RoundReach[round] = count / float64(request.Iterations)
+		}
+		for round, count := range row.RunEnds {
+			row.RunEnds[round] = count / float64(request.Iterations)
+		}
+		if playoffs != nil && request.Postseason != nil {
+			row.ReachedRounds = map[string]bool{}
+			for _, slot := range playoffs.format.Slots {
+				actual := playoffs.actual[slot.ID]
+				if actual.Home == row.Team.ID || actual.Away == row.Team.ID {
+					row.ReachedRounds[slot.RoundID] = true
+				}
+				if actual.Winner != "" && actual.Winner != row.Team.ID && (actual.Home == row.Team.ID || actual.Away == row.Team.ID) {
+					row.EliminatedRound = slot.RoundID
+				}
+				if slot.SeedPair != nil && (playoffs.fixedSeeds[slot.SeedPair[0]-1] == row.Team.ID || playoffs.fixedSeeds[slot.SeedPair[1]-1] == row.Team.ID) {
+					row.ReachedRounds[slot.RoundID] = true
+				}
+				if slot.SeedPair == nil {
+					from := playoffs.connections[slot.ID]
+					if playoffs.actual[from[0]].Winner == row.Team.ID || playoffs.actual[from[1]].Winner == row.Team.ID {
+						row.ReachedRounds[slot.RoundID] = true
+					}
+				}
+			}
+			row.ChampionshipClinched = playoffs.actualChampion == row.Team.ID
+			row.ChampionshipEliminated = !playoffs.contenders[row.Team.ID]
+		}
+		rows = append(rows, row)
 	}
 	sortTeamResults(rows)
 	var seedingCounts map[string][]SeedingCount
 	if seedings != nil {
 		seedingCounts = seedings.result(prepared.remaining, request.Iterations)
 	}
+	for _, sides := range positions {
+		for _, side := range sides {
+			for id, count := range side {
+				side[id] = count / float64(request.Iterations)
+			}
+		}
+	}
 	return Result{
+		BracketPositions:      positions,
 		Seedings:              seedingCounts,
 		Model:                 request.Model.Info(),
 		Iterations:            request.Iterations,

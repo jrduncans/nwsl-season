@@ -82,17 +82,11 @@ func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
 			store.playoffs = cache.SeasonData{Games: tc.games}
 			body := handoffResponse(t, store, "/seasons/2026/playoffs")
 			requireElements(t, body, "[data-bracket-state]", `a[href="regular-season"]`)
-			requireText(t, body, "main", "Expected from final seeds", "until ASA publishes the matches", "Date and venue TBD", "Seeds 3 and 6")
-			if strings.Contains(body, "Published by ASA") != tc.published {
-				t.Fatal("source and expected match labels were not distinct")
-			}
+			requireText(t, body, "main", "Date TBD", "Extra time", "Advances")
 			if strings.Contains(body, "ASA has not published") {
 				t.Fatal("cache absence asserted ASA nonpublication")
 			}
 			requireText(t, body, "main", "picked it up")
-			if strings.Contains(body, "Only matchups ASA has confirmed") != (len(tc.games) > 0) {
-				t.Fatal("partial-publication notice did not match the cached rows")
-			}
 		})
 	}
 	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}

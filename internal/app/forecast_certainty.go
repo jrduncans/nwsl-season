@@ -130,7 +130,7 @@ func forecastChances(row simulation.TeamResult, playoffPlaces int, certainty for
 		Shield:       forecastChance(row.ShieldProbability, certainty.isClinched(row.Team.ID, 1), out || certainty.isEliminated(row.Team.ID, 1)),
 		TopFour:      forecastChance(row.TopFourProbability, certainty.isClinched(row.Team.ID, 4), out || certainty.isEliminated(row.Team.ID, 4)),
 		Playoff:      forecastChance(row.PlayoffProbability, certainty.isClinched(row.Team.ID, playoffPlaces), out),
-		Championship: forecastChance(row.ChampionshipProbability, false, out),
+		Championship: forecastChance(row.ChampionshipProbability, row.ChampionshipClinched, out || row.ChampionshipEliminated),
 	}
 }
 
