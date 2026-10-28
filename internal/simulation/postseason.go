@@ -7,12 +7,13 @@ import "encoding/json"
 // Eliminated then lists qualifiers whose recorded playoff losses still prove a
 // zero chance. Missing slots are unpublished matches, never completed results.
 type Postseason struct {
-	Seeds          map[int]string
-	Slots          map[string]PostseasonMatch
-	Scenarios      map[string]PostseasonMatch
-	Unavailable    string
-	Eliminated     []string
-	SourceIdentity string
+	Seeds            map[int]string
+	Slots            map[string]PostseasonMatch
+	Scenarios        map[string]PostseasonMatch
+	Unavailable      string
+	Eliminated       []string
+	EliminatedRounds map[string]string
+	SourceIdentity   string
 }
 
 // PostseasonMatch records an identified source match. Winner is empty only

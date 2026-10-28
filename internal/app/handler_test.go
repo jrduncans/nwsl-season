@@ -374,20 +374,17 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 	}
 	seasonBody := seasonResponse.Body.String()
 	requireText(t, seasonBody, "main", unknownFormatNotice)
-	requireElements(t, seasonBody, `[href="regular-season/fixtures"]`)
+	forbidElements(t, seasonBody, `[href="regular-season/fixtures"]`)
 	forbidElements(t, seasonBody, "table.standings", ".qualification-badge", ".playoff-line")
 	forbidRaw(t, seasonBody, "expected regular-season", "16 expected", "30 fixtures", "top 8")
 
 	fixturesResponse := httptest.NewRecorder()
 	handler.ServeHTTP(fixturesResponse, httptest.NewRequest(http.MethodGet, "/seasons/2099/regular-season/fixtures", nil))
-	if fixturesResponse.Code != http.StatusOK {
-		t.Fatalf("fixtures status = %d, want 200", fixturesResponse.Code)
+	if fixturesResponse.Code != http.StatusSeeOther || fixturesResponse.Header().Get("Location") != "../regular-season" {
+		t.Fatalf("factual match-list redirect=%d %q", fixturesResponse.Code, fixturesResponse.Header().Get("Location"))
 	}
-	fixturesBody := fixturesResponse.Body.String()
-	requireText(t, fixturesBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
-	requireText(t, fixturesBody, ".site-nav", "Matches")
-	forbidRaw(t, fixturesBody, "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios")
-	forbidRaw(t, fixturesBody, "fixture-outlook")
+	requireText(t, seasonBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
+	forbidRaw(t, seasonBody, "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios", "fixture-outlook")
 }
 
 func TestHistoricalCatalogPagesUseRetrospectivePresentation(t *testing.T) {

@@ -3,7 +3,7 @@
 {{template "forecastSettings" .}}
 {{if .Warning}}<p class="data-warning">{{.Warning}}</p>{{end}}
 <section class="forecast-results" aria-label="Playoff forecast outlook">
- <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label></span></fieldset></div>
+ <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label><label><input type="radio" name="forecast-view" value="bracket" autocomplete="off" aria-controls="forecast-bracket-panel"><span>Bracket</span></label></span></fieldset></div>
  <div id="forecast-table-panel" data-forecast-view-panel="table">
   <p class="forecast-scroll-hint">Swipe left to see every round <span aria-hidden="true">→</span></p>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Playoff round probabilities">
@@ -21,6 +21,13 @@
     <thead><tr><th scope="col">Team</th>{{range .EndColumns}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
     <tbody>{{range .PlayoffRows}}<tr><th scope="row"><span class="bracket-seed">{{.SeedText}}</span> {{template "teamName" .Team}}</th>{{range .Ends}}<td><span class="forecast-heatmap-value"{{if .Intensity}} style="--forecast-probability: {{.Intensity}}"{{end}}>{{.Text}}</span></td>{{end}}</tr>{{end}}</tbody>
    </table>
+  </div>
+ </div>
+ <div id="forecast-bracket-panel" data-forecast-view-panel="bracket" hidden>
+  <p class="note">Chance to fill each bracket position.</p>
+  <p class="forecast-scroll-hint">Swipe left to follow the bracket <span aria-hidden="true">→</span></p>
+  <div class="table-scroll playoff-bracket-scroll" tabindex="0" role="region" aria-label="Playoff position probabilities">
+   <div class="playoff-forecast-bracket">{{range .BracketRounds}}<section class="playoff-forecast-round"><h2>{{.Label}}</h2>{{range .Slots}}<article class="playoff-forecast-slot" aria-label="{{.Label}}"><h3>{{.Label}}</h3>{{range $i,$side:=.Sides}}{{if $i}}<p class="playoff-position-versus">vs</p>{{end}}<ul class="playoff-position-list">{{range .Teams}}<li{{if .Out}} class="playoff-team-out"{{end}} aria-label="{{.Team.Name}}: {{.Text}}"><span class="bracket-seed">{{.Seed}}</span>{{template "teamName" .Team}}<span class="playoff-position-probability">{{.Text}}</span>{{if .Width}}<span class="forecast-probability-track" aria-hidden="true"><span style="width: {{.Width}}"></span></span>{{end}}</li>{{else}}<li>Unresolved</li>{{end}}</ul>{{end}}</article>{{end}}</section>{{end}}</div>
   </div>
  </div>
 </section>

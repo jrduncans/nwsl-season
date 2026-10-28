@@ -353,7 +353,11 @@ show each unfinished round after the opening round and Champion; established
 advancement reads Through and losses read Out in the recorded round. A model
 comparison adds its Champion column. Heatmap shows exclusive run endings: Out
 in quarterfinal, Out in semifinal, Runner-up, Champion, on the regular-season
-heatmap's 0–100% shading scale. Each qualifier's row sums to 100%. Completed
+heatmap's 0–100% shading scale. Each qualifier's row sums to 100%. Bracket
+shows the candidates for each future position, with separate lists for both
+sides of each match, plus Champion odds. Every available position list sums to 100%, including established 100%
+participants; structurally possible teams with no sampled appearances retain
+<0.1% formatting. Lists use the same simulation counts as Table. Completed
 finals retain the settled result. At 390px the tables scroll within the page.
 
 Scenarios choose a winner only for an upcoming slot with known participants,
@@ -394,7 +398,8 @@ placements, incompatible matchups, or later-round games without known prior
 winners withhold **all** championship odds. This intentionally conservative
 boundary avoids allocating probability through uncertain bracket branches.
 The explanation remains visible; qualified teams with proven losses are marked
-Out, with all other percentages withheld. Qualifiers require source-backed
+Out, with all other percentages withheld. Their recorded elimination rounds
+retain the normal later-elimination-first ordering. Qualifiers require source-backed
 final ranking; an unresolved tie crossing the cutoff cannot invent entrants.
 Completed, valid, decisive rows are rebuilt into
 the bracket without the problem rows, and if they still disagree no playoff

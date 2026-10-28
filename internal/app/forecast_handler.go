@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -216,11 +217,8 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		team := query.Get("team")
-		seeds := playoffSeedsFrom(scope.Season, data)
-		for seed, id := range seeds.Seeds {
-			if seed <= playoffPlaces(rules) && team == id {
-				values.Set("team", team)
-			}
+		if team != "" && slices.ContainsFunc(playoffQualifiers(scope.Season, data, playoffPlaces(rules)), func(qualifier playoffQualifier) bool { return qualifier.ID == team }) {
+			values.Set("team", team)
 		}
 		if encoded := values.Encode(); encoded != "" {
 			target += "?" + encoded

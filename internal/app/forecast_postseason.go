@@ -80,7 +80,7 @@ func (a *application) forecastPostseason(ctx context.Context, season string, dat
 	// stay provable even when another gap withholds the remaining odds.
 	withhold := func(message string) (*simulation.Postseason, error) {
 		state.Unavailable = message
-		state.Eliminated = recordedPlayoffEliminations(*entry.BracketFormat, games, state.Seeds)
+		state.Eliminated, state.EliminatedRounds = recordedPlayoffEliminations(*entry.BracketFormat, games, state.Seeds)
 		return state, nil
 	}
 	failedRefresh, err := a.playoffRefreshWarning(ctx, season)
@@ -161,7 +161,7 @@ func validPlayoffRow(game cache.Game) bool {
 // recordedPlayoffEliminations lists qualifiers knocked out by completed,
 // valid results. Other rows are left out rather than guessed, and a bracket
 // that still disagrees proves nothing.
-func recordedPlayoffEliminations(format competition.BracketFormat, games []cache.Game, seeds map[int]string) []string {
+func recordedPlayoffEliminations(format competition.BracketFormat, games []cache.Game, seeds map[int]string) ([]string, map[string]string) {
 	completed := make([]cache.Game, 0, len(games))
 	for _, game := range games {
 		if game.HomeTeamID != "" && game.AwayTeamID != "" && game.Status == fixtures.CompletedStatus && validPlayoffRow(game) && fixtureWinner(game) != "" {
@@ -170,9 +170,10 @@ func recordedPlayoffEliminations(format competition.BracketFormat, games []cache
 	}
 	view := bracket.BuildWithSeeds(format, completed, seeds)
 	if view.State == bracket.StateFormatMismatch || view.State == bracket.StateUnresolved {
-		return nil
+		return nil, nil
 	}
 	var eliminated []string
+	rounds := map[string]string{}
 	for _, round := range view.Rounds {
 		for _, slot := range round.Slots {
 			if slot.Game == nil || slot.Winner.TeamID == bracket.TBD {
@@ -183,10 +184,11 @@ func recordedPlayoffEliminations(format competition.BracketFormat, games []cache
 				loser = slot.Away.TeamID
 			}
 			eliminated = append(eliminated, loser)
+			rounds[loser] = round.ID
 		}
 	}
 	sort.Strings(eliminated)
-	return eliminated
+	return eliminated, rounds
 }
 
 func (a *application) renderStaleForecast(w http.ResponseWriter, r *http.Request, scope requestCompetition, state forecaststate.State) {

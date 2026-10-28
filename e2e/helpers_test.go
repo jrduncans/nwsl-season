@@ -106,6 +106,9 @@ type pageOptions struct {
 	Touch bool
 	// Clipboard grants clipboard-read and clipboard-write permissions.
 	Clipboard bool
+	// ExpectedBadRequestURL permits an intentional 400 document response and
+	// its browser resource-error message for one narrowly matched URL.
+	ExpectedBadRequestURL func(string) bool
 }
 
 // newPageWith applies the same network guards, tracing, and cleanup to every
@@ -179,6 +182,11 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	}
 	page.On("console", func(message playwright.ConsoleMessage) {
 		if message.Type() == "error" {
+			if opts.ExpectedBadRequestURL != nil && message.Text() == "Failed to load resource: the server responded with a status of 400 (Bad Request)" {
+				if location := message.Location(); location != nil && opts.ExpectedBadRequestURL(location.URL) {
+					return
+				}
+			}
 			record("console error: %s", message.Text())
 		}
 	})
@@ -190,6 +198,9 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	})
 	page.On("response", func(response playwright.Response) {
 		if sameOrigin(page, response.URL()) && response.Status() >= 400 {
+			if response.Status() == 400 && response.Request().ResourceType() == "document" && opts.ExpectedBadRequestURL != nil && opts.ExpectedBadRequestURL(response.URL()) {
+				return
+			}
 			record("bad response: %s %s: %d", response.Request().Method(), response.URL(), response.Status())
 		}
 	})

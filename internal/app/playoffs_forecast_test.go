@@ -159,6 +159,7 @@ func TestPlayoffsForecastRowsSortAndBoundExtremes(t *testing.T) {
 			team.EliminatedRound = "quarterfinals"
 			if seed == 8 {
 				team.EliminatedRound = "semifinals"
+				team.ReachedRounds = map[string]bool{"semifinals": true}
 			}
 		}
 		result.Teams = append(result.Teams, team)
@@ -166,6 +167,9 @@ func TestPlayoffsForecastRowsSortAndBoundExtremes(t *testing.T) {
 	page := playoffsForecastView(forecastPage{Season: "2026"}, data, state, *entry.BracketFormat, result, nil)
 	if page.PlayoffRows[0].Champion != ">99.9%" || page.PlayoffRows[0].Rounds[0] != ">99.9%" {
 		t.Fatalf("unproven extreme: %+v", page.PlayoffRows[0])
+	}
+	if page.PlayoffRows[6].Rounds[0] != "Through" || page.PlayoffRows[6].Rounds[1] != "Out in semifinal" {
+		t.Fatalf("settled rounds: %+v", page.PlayoffRows[6])
 	}
 	if page.PlayoffRows[6].Seed != 8 || page.PlayoffRows[7].Seed != 7 {
 		t.Fatalf("elimination order=%+v", page.PlayoffRows)
@@ -204,4 +208,59 @@ func TestPlayoffForecastMissingResultWithholds(t *testing.T) {
 	store.playoffs.Games = []cache.Game{game}
 	response := playoffResponse(store, "/seasons/2026/playoffs/forecast")
 	requireText(t, response.Body.String(), ".data-warning", "withheld")
+}
+
+func TestRegularForecastRedirectKeepsQualifiedTeamWithTiedSeed(t *testing.T) {
+	regular := catalogSeasonData()
+	regular.Games = nil
+	for first := range len(regular.Teams) {
+		for second := first + 1; second < len(regular.Teams); second++ {
+			for venue := range 2 {
+				home, away := regular.Teams[first].ID, regular.Teams[second].ID
+				hs, as := int64(2), int64(0)
+				if second == 1 {
+					hs = 0
+				}
+				if venue == 1 {
+					home, away = away, home
+					hs, as = as, hs
+				}
+				index := len(regular.Games)
+				regular.Games = append(regular.Games, cache.Game{ASAID: fmt.Sprintf("tied-%d", index), Season: "2026", Stage: "Regular Season", HomeTeamID: home, AwayTeamID: away, Status: fixtures.CompletedStatus, KickoffUTC: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(index) * time.Hour).Format(time.RFC3339), HomeScore: sql.NullInt64{Int64: hs, Valid: true}, AwayScore: sql.NullInt64{Int64: as, Valid: true}})
+			}
+		}
+	}
+	seeds := playoffSeedsFrom("2026", regular)
+	if !seeds.Certified || seeds.Seeds[1] != "" || seeds.Seeds[2] != "" {
+		t.Fatalf("test needs tied qualifying seeds: %+v", seeds)
+	}
+	team := regular.Teams[0].ID
+	response := playoffResponse(handoffStore{regular: regular}, "/seasons/2026/regular-season/forecast?v=2&m=current-pace-v1&team="+team)
+	if response.Code != http.StatusSeeOther || !strings.Contains(response.Header().Get("Location"), "team="+team) {
+		t.Fatalf("qualified filter dropped: %d %q", response.Code, response.Header().Get("Location"))
+	}
+}
+
+func TestWithheldPlayoffForecastOrdersRecordedEliminations(t *testing.T) {
+	store := handoffStore{regular: resolvedHandoffSeason()}
+	seeds := playoffSeedsFrom("2026", store.regular)
+	for i, pair := range [][2]int{{1, 8}, {4, 5}, {2, 7}, {3, 6}, {1, 4}, {2, 3}} {
+		game := forecastPlayoffGame(seeds, fmt.Sprintf("known-%d", i), pair[0], pair[1], true)
+		game.KickoffUTC = fmt.Sprintf("2026-11-%02dT20:00:00Z", i+1)
+		store.playoffs.Games = append(store.playoffs.Games, game)
+	}
+	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
+	state, err := (&application{store: store}).forecastPostseason(context.Background(), "2026", store.regular, 8)
+	if err != nil || state.EliminatedRounds[seeds.Seeds[3]] != "semifinals" {
+		t.Fatalf("recorded round lost: %+v, %v", state, err)
+	}
+	result := simulation.Result{}
+	for _, team := range store.regular.Teams {
+		result.Teams = append(result.Teams, simulation.TeamResult{Team: team})
+	}
+	entry, _ := competition.Lookup("2026", "Playoffs")
+	page := playoffsForecastView(forecastPage{Season: "2026"}, store.regular, state, *entry.BracketFormat, result, nil)
+	if page.PlayoffRows[2].Seed != 3 || page.PlayoffRows[3].Seed != 4 || page.PlayoffRows[4].Seed != 5 {
+		t.Fatalf("withheld order: %+v", page.PlayoffRows)
+	}
 }

@@ -252,6 +252,7 @@ type playoffsForecastPage struct {
 	Warning            string
 	ScenarioOptions    []playoffScenarioOption
 	PlayoffAssumptions []forecastAssumptionView
+	BracketRounds      []playoffForecastRound
 }
 
 func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simulation.Postseason, format competition.BracketFormat, result simulation.Result, comparison *simulation.Result) playoffsForecastPage {
@@ -295,23 +296,30 @@ func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simul
 				item.SeedText = strconv.Itoa(seed)
 			}
 		}
+		eliminatedRound := row.EliminatedRound
+		if eliminatedRound == "" {
+			eliminatedRound = state.EliminatedRounds[qualifier.ID]
+		}
 		eliminated := "Out"
-		if row.EliminatedRound != "" {
-			eliminated = "Out in " + roundNames[row.EliminatedRound]
+		if eliminatedRound != "" {
+			eliminated = "Out in " + roundNames[eliminatedRound]
 		}
 		for ri, round := range format.Rounds {
-			if row.EliminatedRound == round.ID {
+			if eliminatedRound == round.ID {
 				item.Elimination = ri
 			}
 		}
 		for _, round := range columns {
 			value := "—"
 			switch {
-			case item.Out:
-				value = eliminated
 			case state.Unavailable != "":
+				if item.Out {
+					value = "Out"
+				}
 			case row.ReachedRounds[round]:
 				value = "Through"
+			case item.Out:
+				value = eliminated
 			default:
 				value = forecastChance(row.RoundReach[round], false, false)
 			}
@@ -348,6 +356,7 @@ func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simul
 		}
 		return a.Seed < b.Seed
 	})
+	page.BracketRounds = playoffBracketForecast(format, state, result)
 	return page
 }
 

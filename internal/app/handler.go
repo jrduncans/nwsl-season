@@ -994,7 +994,7 @@ func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 // mainPageRendersMatches mirrors the main-page dispatch, including brackets
 // available from certified seeds before ASA publishes any concrete matchup.
 func mainPageRendersMatches(scope requestCompetition, games []cache.Game, certifiedSeeds bool) bool {
-	if !scope.Cataloged || scope.Entry.Kind == competition.StageKindLeagueTable {
+	if scope.Entry.Kind == competition.StageKindLeagueTable {
 		return false
 	}
 	if scope.supports(competition.CapabilityBracket) && scope.Entry.BracketFormat != nil {
