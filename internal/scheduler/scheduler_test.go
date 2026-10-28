@@ -5,17 +5,98 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jrduncans/nwsl-season/internal/asa"
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 )
+
+type discoverySource struct{ err error }
+
+func (s *discoverySource) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error) {
+	return nil, nil
+}
+func (s *discoverySource) Games(context.Context, asa.GamesFilters) ([]asa.Game, error) {
+	return nil, s.err
+}
+
+func TestPlayoffDiscoveryPersistsEmptyObservation(t *testing.T) {
+	ctx := context.Background()
+	db, err := cache.Open(ctx, filepath.Join(t.TempDir(), "cache.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Date(2026, 11, 1, 23, 0, 0, 0, time.UTC)
+	if _, err := db.EnsureSourceScopes(ctx, "2026", "Regular Season", now); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := db.PlanningSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := plannedGame("finale", fixtures.CompletedStatus, now.Add(-time.Hour))
+	game.HomeScore, game.AwayScore = score(1), score(0)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{game})
+	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
+	regular.ResultChecks = []cache.GameResultCheckState{{FirstTerminalObservedAt: timePointer(now)}}
+	var playoffs cache.PlanningScopeSnapshot
+	for _, scope := range snapshot.Scopes {
+		if scope.Readiness.Scope.Season == "2026" && scope.Readiness.Scope.Stage == "Playoffs" {
+			playoffs = scope
+		}
+	}
+	config := Config{Season: "2026", Stage: "Regular Season", SourceRequestBudget: 1}
+	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}, config, now)
+	if len(jobs) != 1 || jobs[0].Operation.Stage != "Playoffs" {
+		t.Fatalf("jobs = %+v", jobs)
+	}
+	source := &discoverySource{}
+	service := syncer.Service{Store: db, ASA: source, Now: func() time.Time { return now }}
+	if _, err := service.Execute(ctx, jobs[0].Operation); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = db.PlanningSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range snapshot.Scopes {
+		if scope.Readiness.Scope.Season == "2026" && scope.Readiness.Scope.Stage == "Playoffs" {
+			playoffs = scope
+		}
+	}
+	if playoffs.GamesFull == nil || playoffs.GamesFull.NextFullDueAt == nil || !playoffs.GamesFull.NextFullDueAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("persisted cadence = %+v", playoffs.GamesFull)
+	}
+	if discoveryDue(playoffs, config, now.Add(59*time.Minute), now) || !discoveryDue(playoffs, config, now.Add(time.Hour), now) {
+		t.Fatal("persisted retry boundary incorrect")
+	}
+	source.err = errors.New("source unavailable")
+	now = now.Add(time.Hour)
+	if _, err := service.Execute(ctx, jobs[0].Operation); err == nil {
+		t.Fatal("expected source failure")
+	}
+	snapshot, err = db.PlanningSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range snapshot.Scopes {
+		if scope.Readiness.Scope.Season == "2026" && scope.Readiness.Scope.Stage == "Playoffs" {
+			playoffs = scope
+		}
+	}
+	if !discoveryDue(playoffs, config, now, now.Add(-time.Hour)) {
+		t.Fatal("failure advanced successful observation")
+	}
+}
 
 func TestPlanBatchesDueTargetedJobsAndHonorsBudget(t *testing.T) {
 	now := time.Date(2033, 6, 10, 12, 0, 0, 0, time.UTC)
@@ -29,6 +110,49 @@ func TestPlanBatchesDueTargetedJobsAndHonorsBudget(t *testing.T) {
 	jobs = Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, Config{Season: "2033", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, Timeout: time.Second, SourceRequestBudget: 0}, now)
 	if len(jobs) != 1 {
 		t.Fatalf("default budget jobs = %+v", jobs)
+	}
+}
+
+func TestPlayoffDiscoveryAfterRegularSeasonCompletion(t *testing.T) {
+	now := time.Date(2026, 11, 1, 23, 0, 0, 0, time.UTC)
+	game := plannedGame("finale", fixtures.CompletedStatus, now.Add(-4*time.Hour))
+	game.HomeScore, game.AwayScore = score(1), score(0)
+	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{game})
+	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(now)}}
+	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil)
+	playoffs.GamesFull = &cache.SourceResourceScopeState{LastFullSuccessAt: timePointer(now.Add(-time.Minute)), NextFullDueAt: timePointer(now.Add(7 * 24 * time.Hour))}
+	config := Config{Season: "2026", Stage: "Regular Season", SourceRequestBudget: 1}
+	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}
+	jobs := Plan(snapshot, config, now)
+	if len(jobs) != 1 || jobs[0].Operation.Stage != "Playoffs" || jobs[0].Operation.NextFullDueAfter != time.Hour {
+		t.Fatalf("completion jobs = %+v", jobs)
+	}
+	// A successful empty observation suppresses a busy loop, then retries.
+	playoffs.GamesFull.LastFullSuccessAt = timePointer(now)
+	playoffs.GamesFull.NextFullDueAt = timePointer(now.Add(time.Hour))
+	snapshot.Scopes[1] = playoffs
+	if discoveryDue(playoffs, config, now.Add(59*time.Minute), now) {
+		t.Fatal("early retry")
+	}
+	if !discoveryDue(playoffs, config, now.Add(time.Hour), now) {
+		t.Fatal("hourly retry missing")
+	}
+	playoffs.Readiness.Readiness = cache.SourceReadinessAvailable
+	playoffs.Games = []cache.Game{plannedGame("quarterfinal", fixtures.PreMatchStatus, now.Add(24*time.Hour))}
+	snapshot.Scopes[1] = playoffs
+	jobs = Plan(snapshot, config, now.Add(time.Hour))
+	if len(jobs) != 1 || jobs[0].Operation.Stage != "Playoffs" || jobs[0].Operation.NextFullDueAfter != time.Hour {
+		t.Fatalf("partial jobs = %+v", jobs)
+	}
+	entry, _ := competition.Lookup("2026", "Playoffs")
+	playoffs.Games = make([]cache.Game, len(entry.BracketFormat.Slots))
+	if acceleratedPlayoffs(playoffs, config, now) {
+		t.Fatal("complete bracket accelerated")
+	}
+	playoffs.Readiness.Scope.Stage = "Challenge Cup"
+	if acceleratedPlayoffs(playoffs, config, now) {
+		t.Fatal("unrelated stage accelerated")
 	}
 }
 
