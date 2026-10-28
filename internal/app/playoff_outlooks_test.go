@@ -143,6 +143,40 @@ func TestCompletedPlayoffCardKeepsSeedsGoalsAndXGWithEachTeam(t *testing.T) {
 	}
 }
 
+func TestFlippedBracketCardReversesItsOutlookOnly(t *testing.T) {
+	regular := resolvedHandoffSeason()
+	codes := map[string]string{}
+	for i := range regular.Teams {
+		regular.Teams[i].Abbreviation = fmt.Sprintf("T%02d", i)
+		codes[regular.Teams[i].ID] = scenarioTeamCode(regular.Teams[i])
+	}
+	seeds := playoffSeedsFrom("2026", regular)
+	var games []cache.Game
+	for i, pair := range [][2]int{{1, 8}, {4, 5}, {2, 7}, {3, 6}} {
+		game := forecastPlayoffGame(seeds, fmt.Sprintf("qf-%d", i), pair[0], pair[1], true)
+		game.KickoffUTC = fmt.Sprintf("2026-11-%02dT20:00:00Z", i+1)
+		games = append(games, game)
+	}
+	// The Quarterfinal 2 winner hosts, but the Quarterfinal 1 winner belongs on top.
+	semi := forecastPlayoffGame(seeds, "semi", 4, 1, false)
+	semi.KickoffUTC = "2026-11-10T20:00:00Z"
+	store := handoffStore{regular: regular, playoffs: cache.SeasonData{Teams: regular.Teams, Games: append(games, semi)}}
+	odds := (&application{store: store}).playoffOutlooks(context.Background(), "2026", store.playoffs)["semi"]
+	top, bottom := seeds.Seeds[1], seeds.Seeds[4]
+	body := handoffResponse(t, store, "/seasons/2026/playoffs")
+	const card = `[data-bracket-node="semifinal-1"]`
+	rows := find(t, body, card+" .bracket-team-row")
+	if len(rows) != 2 || text(findIn(t, rows[0], ".bracket-seed")[0]) != "1" || !strings.Contains(text(rows[0]), odds.AwayAdvanceText) || !strings.Contains(text(rows[1]), odds.HomeAdvanceText) {
+		t.Fatal("flipped card lost its advance chances")
+	}
+	requireExact(t, body, card+" .fixture-outcome-labels .fixture-outcome-home", codes[top]+" "+odds.AwayWinText)
+	requireExact(t, body, card+" .fixture-outcome-labels .fixture-outcome-away", codes[bottom]+" "+odds.HomeWinText)
+	requireAttrContains(t, body, card+" .fixture-outcome-bar .fixture-outcome-home", "style", fmt.Sprint(odds.AwayWin))
+	body = handoffResponse(t, store, "/seasons/2026/playoffs/fixtures")
+	requireExact(t, body, ".fixture-team-advance", "Advance "+odds.HomeAdvanceText, "Advance "+odds.AwayAdvanceText)
+	requireExact(t, body, ".fixture-outcome-labels .fixture-outcome-home", codes[bottom]+" "+odds.HomeWinText)
+}
+
 func TestBracketShootoutTalliesAndPlaceholderHeaders(t *testing.T) {
 	regular := resolvedHandoffSeason()
 	seeds := playoffSeedsFrom("2026", regular)

@@ -5,9 +5,8 @@
 {{if eq .State "format_mismatch"}}<p class="data-warning"><strong>Bracket format mismatch:</strong> Cached source matches do not fit the verified bracket. <a href="{{.FixturesPath}}">View matches</a>.</p>{{else if eq .State "unresolved"}}<p class="data-warning">The bracket has unresolved source facts; later advancement remains TBD.</p>{{end}}
 <section class="bracket" tabindex="0" data-bracket-layout data-bracket-state="{{.State}}" aria-label="{{.Stage}} bracket">
   {{range .Rounds}}<section class="bracket-round" data-bracket-round><h2>{{.Label}}</h2><div class="bracket-round-slots" data-bracket-slots>{{range .Slots}}<article class="bracket-slot" data-bracket-node="{{.ID}}" aria-label="{{.Label}}">
-    <h3 class="bracket-slot-label">{{.Label}}</h3>
-    {{if not .Game}}<p class="bracket-kickoff">Date TBD</p>{{end}}
-    {{if .Game}}<p class="bracket-kickoff"><time{{if .Game.Kickoff}} datetime="{{.Game.Kickoff}}" data-local-time="{{.Game.Kickoff}}"{{end}}>{{if .Game.Kickoff}}{{.Game.Kickoff}}{{else}}Date TBD{{end}}</time></p>{{end}}
+    <div class="bracket-slot-heading"><h3 class="bracket-slot-label">{{.Label}}</h3>
+    <p class="bracket-kickoff{{if or .Outlook (and .Game .Game.HomeScore)}} visually-hidden{{end}}">{{template "bracketKickoff" .}}</p></div>
     {{template "bracketMatchTeams" .}}
     {{if .Game}}{{if .Game.ExtraTime}}<p class="bracket-facts"><span>{{.Game.ExtraTime}}</span></p>{{end}}{{end}}
     {{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}
@@ -18,7 +17,7 @@
 {{template "foot" .}}{{end}}
 
 {{define "bracketMatchTeams"}}<div class="bracket-match{{if and .Game .Game.HomeScore}} bracket-match-result{{if .Game.HasXG}} bracket-match-xg{{end}}{{if .Game.Shootout}} bracket-match-shootout{{end}}{{else if .Outlook}} bracket-match-outlook{{end}}" role="table" aria-label="Match teams{{if and .Game .Game.Shootout}}. Match decided on penalties: {{.Home.Name}} {{.Game.HomePenalties}}, {{.Away.Name}} {{.Game.AwayPenalties}}.{{end}}">
-  {{if or .Outlook (and .Game .Game.HomeScore)}}<div class="bracket-match-header" role="row"><span role="columnheader">Team</span>{{if and .Game .Game.HomeScore}}<span role="columnheader">Goals</span>{{if .Game.HasXG}}<span role="columnheader">xG</span>{{end}}{{else if .Outlook}}<span role="columnheader">Advance</span>{{end}}</div>{{end}}
+  {{if or .Outlook (and .Game .Game.HomeScore)}}<div class="bracket-match-header" role="row"><span class="visually-hidden" role="columnheader">Team</span>{{if and .Game .Game.HomeScore}}<span role="columnheader">Goals</span>{{if .Game.HasXG}}<span role="columnheader">xG</span>{{end}}{{else if .Outlook}}<span role="columnheader">Advance</span>{{end}}<span class="bracket-header-kickoff" aria-hidden="true">{{template "bracketKickoff" .}}</span></div>{{end}}
   <div class="bracket-team-row{{if .HomeWinner}} bracket-winner{{else if .Completed}} bracket-loser{{end}}" role="row"{{if .HomeSource.ID}} data-bracket-source="{{.HomeSource.ID}}"{{end}}>
     <span class="bracket-match-team" role="rowheader"><span class="bracket-team-identity">{{template "fixtureTeamName" .Home}}</span>{{if and .HomeSource.Label .Home.ID (not .Completed)}}<span class="bracket-feeder-label">{{.HomeSource.Label}}</span>{{end}}</span>
     {{if and .Game .Game.HomeScore}}<span class="bracket-team-score" role="cell">{{.Game.HomeScore}}{{if .Game.Shootout}} <span class="bracket-team-penalties" aria-label="{{.Game.HomePenalties}} penalties scored">({{.Game.HomePenalties}})</span>{{end}}</span>{{if .Game.HasXG}}<span class="bracket-team-xg" role="cell">{{if .Game.HomeXG}}{{.Game.HomeXG}}{{else}}<span aria-label="Unavailable">—</span>{{end}}</span>{{end}}{{else if .Outlook}}<strong class="bracket-team-advance" role="cell">{{.Outlook.HomeAdvanceText}}</strong>{{end}}
@@ -28,3 +27,5 @@
     {{if and .Game .Game.HomeScore}}<span class="bracket-team-score" role="cell">{{.Game.AwayScore}}{{if .Game.Shootout}} <span class="bracket-team-penalties" aria-label="{{.Game.AwayPenalties}} penalties scored">({{.Game.AwayPenalties}})</span>{{end}}</span>{{if .Game.HasXG}}<span class="bracket-team-xg" role="cell">{{if .Game.AwayXG}}{{.Game.AwayXG}}{{else}}<span aria-label="Unavailable">—</span>{{end}}</span>{{end}}{{else if .Outlook}}<strong class="bracket-team-advance" role="cell">{{.Outlook.AwayAdvanceText}}</strong>{{end}}
   </div>
 </div>{{end}}
+
+{{define "bracketKickoff"}}{{if and .Game .Game.Kickoff}}<time datetime="{{.Game.Kickoff}}" data-local-time="{{.Game.Kickoff}}">{{.Game.Kickoff}}</time>{{else}}Date TBD{{end}}{{end}}

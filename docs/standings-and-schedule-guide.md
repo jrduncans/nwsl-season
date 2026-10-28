@@ -140,8 +140,9 @@ published home/away assignments take precedence. The final averages both venue
 assignments. The always-visible three-part bar shows each team's 90-minute win
 chance around the extra-time chance. Its ends use team codes (for example,
 `NJY 48.5% · Extra time 25.0% · SEA 26.5%`) in both the bracket and Matches list.
-The bracket's first, top team always owns the left segment, including when
-published home/away assignments put the higher seed second. Each stacked bracket
+The bracket's first, top team always owns the left segment. After the first
+round the top team is the upper feeder match's winner, even when the published
+home/away assignment hosts the other team. Each stacked bracket
 row shows its advance chance under one right-aligned Advance header, using the
 simulator's relative-win draw rule. The Matches list keeps the usual side-by-side
 Home vs Away row, with home on the left and each team's `Advance 59.2%` beneath
@@ -158,8 +159,9 @@ Completed bracket cards use the same stacked identities, with separate
 right-aligned Goals and xG columns. The xG column appears only when at least one
 team has a value; a missing side reads `—`, rather than zero. The header row
 appears only when there are stat columns (Goals or Advance), so placeholders
-have no lone Team header. The winner is bold and the loser muted, including
-shootout decisions. Shootout tallies appear beside each team's goals, for
+have no lone Team header. That header row shares a light green band with the
+match label and kickoff. The winner is bold, with a green left edge, and the
+loser muted, including shootout decisions. Shootout tallies appear beside each team's goals, for
 example `2 (5)` and `2 (4)`, with accessible text identifying the penalty decision
 and both tallies. After extra time remains a footnote. Known final regular-season
 seeds stay beside the teams in every bracket round and in upcoming and completed
