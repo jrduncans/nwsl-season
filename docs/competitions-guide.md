@@ -87,7 +87,12 @@ Season pages live at `/seasons/{season}/{stage-slug}` with optional
 primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar), and so does
 the retired `/seasons` archive URL. Season-only
 URLs redirect to the primary stage, keeping the suffix and query. An unknown
-stage slug for a cataloged season is a `404`, never a fallback. Every link and
+stage slug for a cataloged season is a `404`, never a fallback. The main-page menu label is Standings for Regular Season and the catalog’s
+short menu label for other competitions: Playoffs, Group stage, Knockout round,
+or Final. When the main page renders chronological matches, the separate
+Matches/Results item is omitted and `/fixtures` redirects there with its query
+intact. A concrete matchup or a certified seeded Playoffs bracket restores the
+separate Matches page. Every link and
 redirect is relative so the `/nwsl-season/` proxy prefix survives.
 
 Each stage page has in-page Season and Competition switchers whose targets are

@@ -74,6 +74,7 @@ type seasonPage struct {
 	FixtureTeams           []teamNameView
 	Remaining              int
 	HasFixtureOutlooks     bool
+	MainPageMatches        bool
 }
 
 type bracketPage struct {
@@ -120,6 +121,7 @@ type seasonPresentation struct {
 	Historical         bool
 	FinalStandingsSafe bool
 	HasUpcoming        bool
+	MainPageMatches    bool
 }
 
 type navigationItem struct {
@@ -214,7 +216,10 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 		}
 		items = append(items, struct{ label, path string }{label, base})
 	}
-	if scope.fixturesAvailable() {
+	if scope.Stage != "Regular Season" && scope.Entry.MenuLabel != "" {
+		items = append(items, struct{ label, path string }{scope.Entry.MenuLabel, base})
+	}
+	if scope.fixturesAvailable() && !presentation.MainPageMatches {
 		label := "Matches"
 		if presentation.Phase == seasonPhaseUpcoming {
 			label = "Schedule"

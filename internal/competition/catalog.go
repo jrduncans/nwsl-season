@@ -39,6 +39,7 @@ type Entry struct {
 	Stage           string
 	Label           string
 	ShortLabel      string
+	MenuLabel       string
 	Slug            string
 	Kind            StageKind
 	Public          bool
@@ -81,7 +82,7 @@ func publicKnockoutEntries() []Entry {
 	entries := make([]Entry, 0, 25)
 	for _, season := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {
 		entry := Entry{
-			Season: season, Stage: "Playoffs", Label: season + " Playoffs", ShortLabel: "Playoffs", Slug: "playoffs",
+			Season: season, Stage: "Playoffs", Label: season + " Playoffs", ShortLabel: "Playoffs", MenuLabel: "Playoffs", Slug: "playoffs",
 			Kind: StageKindKnockout, Public: true, SourceAvailable: true,
 			Capabilities: []Capability{CapabilityFixtures, CapabilityXG, CapabilityBracket}, BracketFormat: playoffBracket(season),
 		}
@@ -98,7 +99,7 @@ func publicKnockoutEntries() []Entry {
 	for _, season := range []string{"2020", "2021", "2022", "2023"} {
 		games := map[string]int{"2020": 16, "2021": 20, "2022": 36, "2023": 36}[season]
 		entries = append(entries, Entry{
-			Season: season, Stage: "NWSL Challenge Cup Group Stage", Label: season + " NWSL Challenge Cup Group Stage", ShortLabel: "Challenge Cup Group Stage", Slug: "challenge-cup-group-stage",
+			Season: season, Stage: "NWSL Challenge Cup Group Stage", Label: season + " NWSL Challenge Cup Group Stage", ShortLabel: "Challenge Cup Group Stage", MenuLabel: "Group stage", Slug: "challenge-cup-group-stage",
 			Kind: StageKindGroup, Public: true, Primary: season == "2020", SourceAvailable: true,
 			Inventory: &InventoryExpectation{Games: games}, Capabilities: []Capability{CapabilityFixtures, CapabilityXG},
 		})
@@ -106,14 +107,14 @@ func publicKnockoutEntries() []Entry {
 	for _, season := range []string{"2020", "2021", "2022", "2023"} {
 		games := map[string]int{"2020": 7, "2021": 1, "2022": 3, "2023": 3}[season]
 		entries = append(entries, Entry{
-			Season: season, Stage: "NWSL Challenge Cup Knockout Round", Label: season + " NWSL Challenge Cup Knockout Round", ShortLabel: "Challenge Cup Knockout", Slug: "challenge-cup-knockout-round",
+			Season: season, Stage: "NWSL Challenge Cup Knockout Round", Label: season + " NWSL Challenge Cup Knockout Round", ShortLabel: "Challenge Cup Knockout", MenuLabel: "Knockout round", Slug: "challenge-cup-knockout-round",
 			Kind: StageKindKnockout, Public: true, SourceAvailable: true,
 			Inventory: &InventoryExpectation{Games: games}, Capabilities: []Capability{CapabilityFixtures, CapabilityXG, CapabilityBracket}, BracketFormat: challengeCupKnockoutBracket(season),
 		})
 	}
 	for _, season := range []string{"2024", "2025", "2026"} {
 		entries = append(entries, Entry{
-			Season: season, Stage: "NWSL Challenge Cup Final", Label: season + " NWSL Challenge Cup Final", ShortLabel: "Challenge Cup Final", Slug: "challenge-cup-final",
+			Season: season, Stage: "NWSL Challenge Cup Final", Label: season + " NWSL Challenge Cup Final", ShortLabel: "Challenge Cup Final", MenuLabel: "Final", Slug: "challenge-cup-final",
 			Kind: StageKindKnockout, Public: true, SourceAvailable: true,
 			Inventory: &InventoryExpectation{Games: 1}, Capabilities: []Capability{CapabilityFixtures, CapabilityXG, CapabilityBracket}, BracketFormat: singleFinalBracket(),
 		})
@@ -216,6 +217,9 @@ func (e Entry) Validate() error {
 	}
 	if !slugPattern.MatchString(e.Slug) {
 		return fmt.Errorf("entry slug %q is not lowercase kebab case", e.Slug)
+	}
+	if e.Kind != StageKindLeagueTable && strings.TrimSpace(e.MenuLabel) == "" {
+		return fmt.Errorf("entry menu label is blank")
 	}
 	switch e.Kind {
 	case StageKindLeagueTable, StageKindKnockout, StageKindGroup:

@@ -217,7 +217,7 @@ func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
 		data.Games[i].Matchday = sql.NullInt64{Int64: int64(i + 1), Valid: true}
 	}
 	data.XGoals = []cache.GameXG{{GameID: "completed", Availability: cache.XGAvailable, HomeTeamID: "alpha", AwayTeamID: "bravo", HomeXG: sql.NullFloat64{Float64: 1.4, Valid: true}, AwayXG: sql.NullFloat64{Float64: .7, Valid: true}}}
-	for _, path := range []string{"/seasons/2020/challenge-cup-group-stage", "/seasons/2020/challenge-cup-group-stage/fixtures"} {
+	for _, path := range []string{"/seasons/2020/challenge-cup-group-stage"} {
 		response := httptest.NewRecorder()
 		NewHandler(fakeStore{season: data}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusOK {
