@@ -15,10 +15,6 @@ import (
 )
 
 type forecastPage struct {
-	Postseason          bool
-	PostseasonNotice    string
-	PostseasonWarning   string
-	PlayoffsPath        string
 	SeedingTeam         string
 	AtFixedLimit        bool
 	Title               string
@@ -76,9 +72,6 @@ func (p forecastPage) SimulationCount() string {
 }
 
 type forecastRowView struct {
-	FinalSeed             string
-	FinalPoints           string
-	Qualification         string
 	Rank                  int
 	PlayoffLine           bool
 	Team                  teamNameView

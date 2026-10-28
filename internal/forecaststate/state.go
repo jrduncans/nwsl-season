@@ -23,6 +23,7 @@ type State struct {
 	ModelID           string
 	ComparisonModelID string
 	Fixed             map[string]simulation.Outcome
+	PlayoffWinners    map[string]simulation.PostseasonMatch
 }
 
 // ParseV2 decodes the model-comparison format using a caller-owned catalog.
@@ -69,6 +70,19 @@ func parseFixed(modelID, comparisonID string, values []string) (State, error) {
 
 // Values returns sorted p query values.
 func (s State) Values() []string {
+	if len(s.PlayoffWinners) > 0 {
+		ids := make([]string, 0, len(s.PlayoffWinners))
+		for id := range s.PlayoffWinners {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		values := make([]string, 0, len(ids))
+		for _, id := range ids {
+			match := s.PlayoffWinners[id]
+			values = append(values, strings.Join([]string{id, match.Winner, match.Home, match.Away}, ":"))
+		}
+		return values
+	}
 	ids := make([]string, 0, len(s.Fixed))
 	for id := range s.Fixed {
 		ids = append(ids, id)
@@ -106,7 +120,11 @@ func (s State) copy() State {
 	for id, outcome := range s.Fixed {
 		fixed[id] = outcome
 	}
-	return State{ModelID: s.ModelID, ComparisonModelID: s.ComparisonModelID, Fixed: fixed}
+	winners := make(map[string]simulation.PostseasonMatch, len(s.PlayoffWinners))
+	for id, match := range s.PlayoffWinners {
+		winners[id] = match
+	}
+	return State{ModelID: s.ModelID, ComparisonModelID: s.ComparisonModelID, Fixed: fixed, PlayoffWinners: winners}
 }
 
 func (s State) WithModel(id string) State {
@@ -119,3 +137,49 @@ func (s State) WithModel(id string) State {
 }
 func (s State) WithComparison(id string) State { c := s.copy(); c.ComparisonModelID = id; return c }
 func (s State) WithoutComparison() State       { c := s.copy(); c.ComparisonModelID = ""; return c }
+
+// ParsePlayoffs preserves v2 model handling and decodes slot, winner and both
+// participants. Keeping the pair makes changed opponents invalidate old links.
+func ParsePlayoffs(version, modelID, comparisonID string, values []string, supported func(string) bool, recommended string) (State, error) {
+	if len(values) > 0 && version != EncodingVersion {
+		return State{}, fmt.Errorf("unsupported playoff forecast version %q", version)
+	}
+	state, err := ParseV2(version, modelID, comparisonID, nil, supported, recommended)
+	if err != nil {
+		return State{}, err
+	}
+	if len(values) > MaxFixed {
+		return State{}, fmt.Errorf("at most %d fixed results are allowed", MaxFixed)
+	}
+	state.PlayoffWinners = map[string]simulation.PostseasonMatch{}
+	for _, value := range values {
+		parts := strings.Split(value, ":")
+		if len(parts) != 4 || parts[0] == "" || parts[2] == "" || parts[3] == "" || parts[2] == parts[3] || (parts[1] != parts[2] && parts[1] != parts[3]) {
+			return State{}, fmt.Errorf("invalid playoff selection %q", value)
+		}
+		if _, exists := state.PlayoffWinners[parts[0]]; exists {
+			return State{}, fmt.Errorf("duplicate playoff selection %q", parts[0])
+		}
+		home, away := parts[2], parts[3]
+		if home > away {
+			home, away = away, home
+		}
+		state.PlayoffWinners[parts[0]] = simulation.PostseasonMatch{Home: home, Away: away, Winner: parts[1]}
+	}
+	return state, nil
+}
+
+func (s State) WithPlayoffWinner(slot string, match simulation.PostseasonMatch) State {
+	clone := s.copy()
+	if match.Home > match.Away {
+		match.Home, match.Away = match.Away, match.Home
+	}
+	clone.PlayoffWinners[slot] = match
+	return clone
+}
+
+func (s State) WithoutPlayoffWinner(slot string) State {
+	clone := s.copy()
+	delete(clone.PlayoffWinners, slot)
+	return clone
+}

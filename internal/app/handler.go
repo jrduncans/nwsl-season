@@ -1032,9 +1032,23 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 			}
 			certified = seeds.Certified
 		}
-		presentation := classifySeasonPhase(data, scope.Entry.Inventory)
+		presentation := competitionPresentation(scope, data)
 		presentation.Historical = historicalCatalogScope(scope)
 		presentation.MainPageMatches = mainPageRendersMatches(scope, data.Games, certified)
+		regularData := data
+		if scope.Stage == "Playoffs" {
+			regularData, err = a.loadSeasonData(r.Context(), scope.Season, "Regular Season")
+			if err != nil {
+				return
+			}
+		}
+		if scope.Stage == "Regular Season" || scope.Stage == "Playoffs" {
+			regularRules, verified := a.rulesForSeason(scope.Season, "Regular Season")
+			presentation.PlayoffsForecast = playoffsForecastAvailable(scope.Season, regularData, regularRules, verified)
+		}
+		if scope.Stage == "Regular Season" && presentation.PlayoffsForecast {
+			page.HasForecast = false
+		}
 		page.MainPageMatches = presentation.MainPageMatches
 		page.Navigation = seasonNavigationForPresentation(r.URL.Path, scope, r.URL.Path, rules, rulesVerified, presentation)
 	}()
@@ -1047,7 +1061,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
 	}
-	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
+	presentation := competitionPresentation(scope, data)
 	presentation.Historical = historicalCatalogScope(scope)
 
 	var standingsView []tableRowView

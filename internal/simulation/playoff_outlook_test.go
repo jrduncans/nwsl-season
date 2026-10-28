@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/forecast"
+	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 func TestPlayoffMatchOutlookSharesAdvancementAndNeutralAveraging(t *testing.T) {
@@ -123,5 +124,29 @@ func TestPostseasonScenariosValidateParticipantsAndResults(t *testing.T) {
 	state.Slots["quarterfinal-1"] = PostseasonMatch{Home: "a", Away: "h", Winner: "h"}
 	if CheckPostseason(request) == nil {
 		t.Fatal("accepted scenario on recorded result")
+	}
+}
+
+func TestExclusiveRunsIncludeNonqualifiers(t *testing.T) {
+	teams := append(testPlayoffTeams(), standings.Team{ID: "nonqualifier"})
+	state := &Postseason{Seeds: map[int]string{}}
+	for i, team := range teams[:8] {
+		state.Seeds[i+1] = team.ID
+	}
+	result, err := Run(context.Background(), Request{Teams: teams, Model: forecast.NewResultsPoissonV1(), Iterations: 10, PlayoffPlaces: 8, PlayoffBracket: testPlayoffBracket(t), Postseason: state})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, team := range result.Teams {
+		total := 0.0
+		for _, p := range team.RunEnds {
+			total += p
+		}
+		if math.Abs(total-1) > 1e-10 {
+			t.Fatalf("%s run sum=%g", team.Team.ID, total)
+		}
+		if team.Team.ID == "nonqualifier" && team.RunEnds["did-not-qualify"] != 1 {
+			t.Fatal("nonqualifier missing")
+		}
 	}
 }

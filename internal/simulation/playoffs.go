@@ -219,6 +219,11 @@ func (p *playoffSimulation) run(table []standings.TableRow, rng *rand.Rand, coun
 	for index, id := range seeds {
 		seedByID[id] = index + 1
 	}
+	for id, count := range counts {
+		if seedByID[id] == 0 || seedByID[id] > len(p.format.Slots)+1 {
+			count.ends["did-not-qualify"]++
+		}
+	}
 	winners := make(map[string]string, len(p.format.Slots))
 	finalRound := p.format.Rounds[len(p.format.Rounds)-1].ID
 	for _, slot := range p.format.Slots {
@@ -354,6 +359,15 @@ func (p *playoffSimulation) applyPostseason(request Request) error {
 		}
 		if actual.Home != "" {
 			scenario.Home, scenario.Away = actual.Home, actual.Away
+		} else {
+			scenario.Home, scenario.Away = first, second
+			seedByID := map[string]int{}
+			for seed, id := range state.Seeds {
+				seedByID[id] = seed
+			}
+			if seedByID[first] > seedByID[second] {
+				scenario.Home, scenario.Away = second, first
+			}
 		}
 		actualSlots[slot.ID] = scenario
 		loser := first

@@ -144,15 +144,16 @@ completion. Historical regular seasons with verified complete inventories and
 terminal results show `Final standings`, including 2021 after award reconciliation.
 Incomplete or unverified historical seasons retain `Historical standings`.
 Presentation may hide a feature that is irrelevant to a complete season, but it
-never enables one the catalog omits. Forecast Lab keeps its cataloged navigation
-after regular-season completion, showing final regular-season facts and a
-championship outlook conditioned on cached playoff advancement. It does not
-enable forecasting on the Playoffs stage itself.
+never enables one the catalog omits. Once safe final standings and a compatible bracket are available, Forecast Lab
+moves from Regular Season to Playoffs. This separate availability rule reuses
+the Regular Season forecast capability and never adds league-only capabilities
+to knockout catalog entries.
 
 ## Knockout brackets
 
-A stage with the bracket capability uses its root for the bracket and keeps
-`/fixtures` chronological. The catalog holds each verified, versioned bracket
+A stage with the bracket capability uses its root for a rendered bracket and
+keeps `/fixtures` chronological. Before any concrete matchup or certified
+Playoffs seeds, its root is the match list and `/fixtures` redirects there. The catalog holds each verified, versioned bracket
 topology: rounds, slots, seed pairs, connections, advancement policy (fixed,
 historically reseeded, or single final) and, for 2025 quarterfinals, the order
 in which ASA published the opening matches.

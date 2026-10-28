@@ -126,6 +126,7 @@ type seasonPresentation struct {
 	FinalStandingsSafe bool
 	HasUpcoming        bool
 	MainPageMatches    bool
+	PlayoffsForecast   bool
 }
 
 type navigationItem struct {
@@ -238,7 +239,7 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 	if scope.clinchingAvailable(rules, verified) && presentation.Phase != seasonPhaseUpcoming && presentation.Phase != seasonPhaseComplete {
 		items = append(items, struct{ label, path string }{"Clinching scenarios", base + "/clinching"})
 	}
-	if scope.forecastAvailable(rules, verified) {
+	if (scope.forecastAvailable(rules, verified) && !presentation.PlayoffsForecast) || (scope.Stage == "Playoffs" && presentation.PlayoffsForecast) {
 		items = append(items, struct{ label, path string }{"Forecast lab", base + "/forecast"})
 	}
 	navigation := make([]navigationItem, 0, len(items))
@@ -1413,4 +1414,20 @@ func (p *bracketPage) applyOutlooks(outlooks map[string]fixtureOutlookView) {
 			}
 		}
 	}
+}
+
+func competitionPresentation(scope requestCompetition, data cache.SeasonData) seasonPresentation {
+	presentation := classifySeasonPhase(data, scope.Entry.Inventory)
+	if scope.Entry.Kind == competition.StageKindKnockout && scope.Entry.BracketFormat != nil && len(data.Games) == len(scope.Entry.BracketFormat.Slots) {
+		complete := true
+		for _, game := range data.Games {
+			if game.Status != fixtures.CompletedStatus || !validPlayoffRow(game) || fixtureWinner(game) == "" {
+				complete = false
+			}
+		}
+		if complete {
+			presentation.Phase = seasonPhaseComplete
+		}
+	}
+	return presentation
 }

@@ -6,9 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"slices"
 	"sort"
-	"strconv"
 
 	"github.com/jrduncans/nwsl-season/internal/bracket"
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -16,7 +14,6 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/forecaststate"
 	"github.com/jrduncans/nwsl-season/internal/simulation"
-	"github.com/jrduncans/nwsl-season/internal/standings"
 )
 
 // forecastPostseason reads local cache only. The same input construction is
@@ -167,7 +164,7 @@ func validPlayoffRow(game cache.Game) bool {
 func recordedPlayoffEliminations(format competition.BracketFormat, games []cache.Game, seeds map[int]string) []string {
 	completed := make([]cache.Game, 0, len(games))
 	for _, game := range games {
-		if game.HomeTeamID != "" && game.AwayTeamID != "" && game.Status == fixtures.CompletedStatus && validPlayoffRow(game) {
+		if game.HomeTeamID != "" && game.AwayTeamID != "" && game.Status == fixtures.CompletedStatus && validPlayoffRow(game) && fixtureWinner(game) != "" {
 			completed = append(completed, game)
 		}
 	}
@@ -192,78 +189,14 @@ func recordedPlayoffEliminations(format competition.BracketFormat, games []cache
 	return eliminated
 }
 
-// Final-standings labels for the postseason table; Unresolved also marks a
-// seed that official tiebreak data cannot settle.
-const (
-	qualificationQualified  = "Qualified"
-	qualificationMissed     = "Did not qualify"
-	qualificationUnresolved = "Unresolved"
-)
-
-func (p *forecastPage) applyPostseason(data cache.SeasonData, state *simulation.Postseason, places int, fromPath, season string) {
-	if state == nil {
-		return
-	}
-	p.PostseasonWarning = state.Unavailable
-	p.PlayoffsPath = relativeURL(fromPath, stageURL(season, "playoffs"))
-	regular, _ := competition.Lookup(season, "Regular Season")
-	p.Postseason = finalStandingsSafe(classifySeasonPhase(data, regular.Inventory))
-	if !p.Postseason {
-		return
-	}
-	if len(state.Slots) == 0 && state.Unavailable == "" {
-		p.PostseasonNotice = playoffPublicationNotice + " Initial pairings follow resolved final seeds and the verified bracket; unpublished dates and venues remain unknown."
-	}
-	table, err := competition.OfficialStandings(season, data.Teams, standingsGames(data.Games), standings.OrderOfficialTotal)
-	if err != nil {
-		return
-	}
-	rows := make(map[string]forecastRowView, len(p.Rows))
-	for _, row := range p.Rows {
-		rows[row.Team.ID] = row
-	}
-	p.Rows = nil
-	for i, official := range table {
-		row := rows[official.Team.ID]
-		row.FinalPoints = strconv.Itoa(official.Record.Points)
-		row.FinalSeed = strconv.Itoa(i + 1)
-		row.Qualification = qualificationMissed
-		if i < places {
-			row.Qualification = qualificationQualified
-		}
-		if official.TieBreak.Undetermined {
-			row.FinalSeed = qualificationUnresolved
-			// All occupied positions must agree before claiming qualification.
-			for j, other := range table {
-				if slices.Contains(official.TieBreak.TiedTeamIDs, other.Team.ID) && (j < places) != (i < places) {
-					row.Qualification = qualificationUnresolved
-				}
-			}
-		}
-		if !p.HasChampionship {
-			// Withheld odds still show settled facts: non-qualifiers and
-			// recorded playoff losers cannot win the championship.
-			row.ChampionshipChance = "Withheld"
-			if row.Qualification == qualificationMissed || slices.Contains(state.Eliminated, official.Team.ID) {
-				row.ChampionshipChance = "0%"
-			}
-			if row.Comparison != nil {
-				comparison := *row.Comparison
-				comparison.ChampionshipChance = row.ChampionshipChance
-				row.Comparison = &comparison
-			}
-		}
-		p.Rows = append(p.Rows, row)
-	}
-}
-
 func (a *application) renderStaleForecast(w http.ResponseWriter, r *http.Request, scope requestCompetition, state forecaststate.State) {
 	state.Fixed = map[string]simulation.Outcome{}
+	state.PlayoffWinners = nil
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
 	a.render(w, "error", errorPage{
 		Title:        "This forecast scenario is out of date",
-		Message:      "A fixed regular-season result is no longer a remaining cached match. Shared links use the latest cache; completed or removed matches cannot stay fixed. Open the latest forecast to keep your model choices and clear those assumptions.",
+		Message:      "A fixed result no longer matches the available fixtures. Shared links use the latest cache; completed, removed, or changed matchups cannot stay fixed. Open the latest forecast to keep your model choices and clear those assumptions.",
 		RecoveryPath: forecastURL(r.URL.Path, scope.Season, scope.Entry.Slug, state, ""),
 		HomePath:     relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 	})

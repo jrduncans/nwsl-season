@@ -3,11 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -105,48 +101,6 @@ func TestForecastPostseasonPublicationAndResultSafety(t *testing.T) {
 	}
 }
 
-func TestPostseasonForecastFinalFactsAndStaleScenarioRecovery(t *testing.T) {
-	store := handoffStore{regular: resolvedHandoffSeason()}
-	seeds := playoffSeedsFrom("2026", store.regular)
-	for _, pair := range [][2]int{{1, 8}, {4, 5}, {2, 7}, {3, 6}, {1, 4}, {2, 3}, {1, 2}} {
-		store.playoffs.Games = append(store.playoffs.Games, forecastPlayoffGame(seeds, fmt.Sprintf("p-%d", len(store.playoffs.Games)), pair[0], pair[1], true))
-	}
-	response := httptest.NewRecorder()
-	handler := NewHandlerWithOptions(store, Options{ForecastIterations: 20, Location: time.UTC})
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/seasons/2026/regular-season/forecast?m=current-pace-v1&v=2", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("forecast = %d: %s", response.Code, response.Body.String())
-	}
-	body := response.Body.String()
-	requireText(t, body, ".postseason-outlook", "Championship outlook", "Final points", "Qualification", "100%", "0%", "Qualified", "Did not qualify")
-	forbidElements(t, body, ".forecast-builder", ".forecast-distribution", ".forecast-heatmap", ".forecast-table")
-	requireElements(t, body, `a[href="../playoffs"]`)
-	// The official table, rather than expected-points sorting, supplies rank
-	// and settled qualification; only the recorded champion gets exact 100%.
-	rows := find(t, body, ".postseason-table tbody tr")
-	if len(rows) != len(store.regular.Teams) || !strings.Contains(text(rows[0]), "100%") || strings.Contains(text(rows[1]), "100%") {
-		t.Fatal("confirmed champion and final ordering were not preserved")
-	}
-	stale := httptest.NewRecorder()
-	handler.ServeHTTP(stale, httptest.NewRequest(http.MethodGet, "/nwsl-season/seasons/2026/regular-season/forecast?v=2&m=current-pace-v1&p=removed:h", nil))
-	if stale.Code != http.StatusBadRequest {
-		t.Fatalf("stale scenario status = %d", stale.Code)
-	}
-	requireText(t, stale.Body.String(), "main", "out of date", "latest cache", "View the latest forecast without fixed results")
-	requireElements(t, stale.Body.String(), `a[href="forecast?m=current-pace-v1&v=2"]`)
-}
-
-func TestPostseasonUnresolvedSeedsRetainFactualPoints(t *testing.T) {
-	regular := completeCatalogSeasonData()
-	response := httptest.NewRecorder()
-	NewHandlerWithOptions(handoffStore{regular: regular}, Options{ForecastIterations: 5}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=current-pace-v1", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("forecast = %d: %s", response.Code, response.Body.String())
-	}
-	requireText(t, response.Body.String(), ".data-warning", "final playoff seeds are unresolved")
-	requireText(t, response.Body.String(), ".postseason-table", "Final points", "Withheld", "Unresolved")
-}
-
 func TestPostseasonCannotReplayResultsWithAStaleRegularSeason(t *testing.T) {
 	regular := resolvedHandoffSeason()
 	seeds := playoffSeedsFrom("2026", regular)
@@ -241,30 +195,6 @@ func TestWithheldPostseasonOddsKeepRecordedEliminations(t *testing.T) {
 		})
 	}
 
-	store := handoffStore{regular: regular, playoffs: cache.SeasonData{Games: []cache.Game{played}}}
-	store.status.LastAttempt = &cache.SyncRun{Outcome: "failure"}
-	response := httptest.NewRecorder()
-	NewHandlerWithOptions(store, Options{ForecastIterations: 5, Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=2&m=current-pace-v1", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("forecast = %d: %s", response.Code, response.Body.String())
-	}
-	// Rows follow the official table, so the eighth row is the knocked-out
-	// eighth seed and rows past the playoff line did not qualify.
-	rows := find(t, response.Body.String(), ".postseason-table tbody tr")
-	if len(rows) != len(regular.Teams) {
-		t.Fatalf("rows = %d", len(rows))
-	}
-	for i, row := range rows {
-		value := strings.Fields(text(row))
-		chance := value[slices.IndexFunc(value, func(field string) bool { return field == "Withheld" || strings.HasSuffix(field, "%") })]
-		want := "Withheld"
-		if i >= 7 {
-			want = "0%"
-		}
-		if chance != want {
-			t.Fatalf("row %d championship = %q", i+1, chance)
-		}
-	}
 }
 
 func TestPublishedPlayoffFixturesKeepTheRegularSeasonForecast(t *testing.T) {

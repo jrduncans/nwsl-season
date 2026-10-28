@@ -67,32 +67,53 @@ func TestPostseasonForecast(t *testing.T) {
 			}
 			forEachViewport(t, func(t *testing.T, vp viewport) {
 				page := newPage(t, vp)
-				visit(t, page, j.URL("seasons/2026/regular-season"))
-				click(t, page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Forecast lab", Exact: playwright.Bool(true)}))
+				visit(t, page, j.URL("seasons/2026/playoffs/forecast"))
 				expect := playwright.NewPlaywrightAssertions()
-				if err := expect.Locator(page.Locator(".postseason-table")).ToBeVisible(); err != nil {
-					t.Fatal(err)
-				}
-				if err := expect.Locator(page.Locator(".forecast-builder, .forecast-distribution, .forecast-view-toolbar")).ToHaveCount(0); err != nil {
+				if err := expect.Locator(page.Locator(".playoffs-forecast-table")).ToBeVisible(); err != nil {
 					t.Fatal(err)
 				}
 				if tc.name == "champion" {
-					if err := expect.Locator(page.Locator(".postseason-table tbody tr").First()).ToContainText("100%"); err != nil {
+					if err := expect.Locator(page.Locator(".playoffs-forecast-table tbody tr").First()).ToContainText("100%"); err != nil {
 						t.Fatal(err)
 					}
 				}
 				if tc.name == "quarterfinal" || tc.name == "semifinal" || tc.name == "champion" {
-					if err := expect.Locator(page.Locator(".postseason-table tbody tr").Nth(7)).ToContainText("0%"); err != nil {
+					if err := expect.Locator(page.Locator(".playoffs-forecast-table tbody tr").Nth(7)).ToContainText("0%"); err != nil {
 						t.Fatal(err)
 					}
 				}
 				if tc.name == "unresolved" {
-					if err := expect.Locator(page.Locator(".postseason-table")).ToContainText("Withheld"); err != nil {
+					if err := expect.Locator(page.Locator(".playoffs-forecast-table")).ToContainText("—"); err != nil {
 						t.Fatal(err)
 					}
 				}
 				assertNoHorizontalOverflow(t, page)
 				capturePlayoffPage(t, page, vp, false, "forecast-"+tc.name)
+				click(t, page.Locator(`input[name="forecast-view"][value="heatmap"]`).Locator(".."))
+				if err := expect.Locator(page.Locator(".playoffs-heatmap")).ToBeVisible(); err != nil {
+					t.Fatal(err)
+				}
+				assertNoHorizontalOverflow(t, page)
+				capturePlayoffPage(t, page, vp, false, "forecast-heatmap-"+tc.name)
+				visit(t, page, j.URL("seasons/2026/playoffs"))
+				if tc.name == "waiting" || tc.name == "partial" {
+					if err := expect.Locator(page.Locator(".bracket-slot .fixture-outlook")).ToHaveCount(4); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if tc.name == "unresolved" {
+					if err := expect.Locator(page.Locator(".bracket-slot .fixture-outlook")).ToHaveCount(0); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if tc.name == "quarterfinal" {
+					if err := expect.Locator(page.Locator(".bracket")).ToContainText("2–2 (5–4 pens)"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				assertNoHorizontalOverflow(t, page)
+				capturePlayoffPage(t, page, vp, false, "bracket-"+tc.name)
+
 			})
 		})
 	}

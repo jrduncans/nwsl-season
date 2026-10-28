@@ -338,14 +338,31 @@ flowchart TD
 
 ## Championship forecasting after the regular season
 
-Forecast Lab remains in navigation after verified regular-season completion.
-The postseason view leads with championship odds alongside the official final
-regular-season points, resolved seeds, and settled qualification. It hides
-regular-season projection intervals, the position heatmap, and empty scenario
-controls. Unresolved ranks or qualification boundaries are labeled explicitly;
-alphabetical display order never becomes an official seed. Models and optional
-comparisons remain available. At 390px, team names stay pinned while the final
-facts and comparison columns scroll horizontally.
+Once Regular Season forecasting is supported, its final standings are safe,
+and a compatible fixed bracket is verified, Forecast Lab moves to
+`/seasons/{season}/playoffs/forecast`. The Playoffs menu includes Forecast lab;
+the Regular Season menu drops it. A Regular Season forecast request without
+fixed results redirects relatively with `v`, `m`, `c`, and a qualified `team`
+filter. Fixed-result links show the out-of-date page, recovering to the Playoffs
+Forecast Lab with model choices preserved. Historical seasons gain no forecast
+capability.
+
+The Playoffs Table lists qualifiers by title chance, breaking ties by seed.
+Eliminated teams follow, later elimination first, then seed. Cumulative columns
+show each unfinished round after the opening round and Champion; established
+advancement reads Through and losses read Out in the recorded round. A model
+comparison adds its Champion column. Heatmap shows exclusive run endings: Out
+in quarterfinal, Out in semifinal, Runner-up, Champion, on the regular-season
+heatmap's 0–100% shading scale. Each qualifier's row sums to 100%. Completed
+finals retain the settled result. At 390px the tables scroll within the page.
+
+Scenarios choose a winner only for an upcoming slot with known participants,
+from seeds or recorded advancement. URL values are
+`p={slot-id}:{winner-id}:{participant-id}:{participant-id}`, using v2 model
+handling and sorted participant IDs. Including both participants detects a
+changed opponent even if the selected winner remains. A recorded result also
+makes the assumption stale. Assumptions cannot establish eligibility for a
+later assumption. They affect Forecast Lab only, never public match outlooks.
 
 If playoff results or in-progress matches are already cached while the
 regular-season snapshot still contains pending results, championship odds are
@@ -376,9 +393,10 @@ advancement, invalid shootouts, unidentified played participants, duplicate
 placements, incompatible matchups, or later-round games without known prior
 winners withhold **all** championship odds. This intentionally conservative
 boundary avoids allocating probability through uncertain bracket branches.
-Final regular-season facts remain visible with an explanation and a link to the
-source-backed bracket. Withheld odds still show `0%` for non-qualifiers and for
-qualifiers knocked out by completed, valid results; those rows are rebuilt into
+The explanation remains visible; qualified teams with proven losses are marked
+Out, with all other percentages withheld. Qualifiers require source-backed
+final ranking; an unresolved tie crossing the cutoff cannot invent entrants.
+Completed, valid, decisive rows are rebuilt into
 the bracket without the problem rows, and if they still disagree no playoff
 elimination is claimed. Unplayed placeholders do not become matches or winners.
 Progress the simulator could not follow is checked with
@@ -610,7 +628,7 @@ Behavior-level examples live in the tests under
 ### Round and match probabilities
 
 The simulator counts entry into each bracket round and each team's exclusive
-ending (a loss in a round or champion). Each qualifier's endings sum to 100%;
+ending (a loss in a round, champion, or did not qualify). Each qualifier's endings sum to 100%;
 each round's entries sum to its participant count. It also counts each slot's
 two topology positions separately, so each position's candidate list sums to
 100%. Recorded results stay exact.
