@@ -171,8 +171,25 @@ regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
 matches and links to the Matches page. Cards label each match and stack the two
-teams, with aligned seeds, crests, full names and scores; shootouts appear
-with xG and extra time below the teams. Unresolved entrants name their feeder
+teams, with aligned seeds, crests and full names. Upcoming outlooks put each
+team's advance chance in its row under one Advance header, above an always-visible
+three-part 90-minute win / extra time / win bar. The ends name the teams by code;
+the top row always corresponds to the left segment, regardless of seed or
+published venue order. The Matches list keeps side-by-side Home vs Away teams,
+with each advance chance beneath its team name and the same code-labeled bar
+below. Home owns the left segment, and the Knockout match tag stays with the
+usual match metadata. Completed bracket cards put Goals and xG in separate
+right-aligned columns in each team row, emphasize the winner, and mute the loser.
+The xG column is omitted when neither side has a value; a single missing side
+reads `—`. Cards show a header only when there are Goals or Advance columns,
+so unresolved placeholders have no lone Team heading. Penalty shootout tallies
+sit beside each team's goals (`2 (5)` versus `2 (4)`), with accessible text naming
+the penalty decision and both tallies. After extra time remains below the rows.
+Final seeds annotate team identities in every bracket round and in upcoming and
+completed Matches-list rows, including historical results, only when safe
+regular-season completion and the official total rank resolve that team's seed.
+Unavailable seeds are omitted. These annotations never reorder published sides
+or change historical match placement. Unresolved entrants name their feeder
 match (for example, Winner of Quarterfinal 1); known entrants in an unplayed
 match keep that feeder as a caption, which completed matches drop.
 At desktop widths, later matches center between their feeders and elbow
@@ -183,6 +200,12 @@ winner against a team absent from earlier rounds, and its bye side reads
 First-round bye while unplayed. At 390px rounds
 stack in round order with feeder labels. Without JavaScript, desktop rounds
 spread their cards over a shared height and omit connectors.
+
+Round-jump buttons accompany the stacked phone bracket and any bracket that
+overflows horizontally. On phones they jump to a round heading; on wider
+screens they scroll the bracket to that round. A horizontal-scroll hint appears
+only when content actually overflows. Full-width desktop brackets keep their
+existing layout without extra controls. These navigation aids require JavaScript.
 
 Once the regular season is safely complete, Playoffs can show opening-round
 expectations before matches arrive. `bracket.BuildWithSeeds` combines the

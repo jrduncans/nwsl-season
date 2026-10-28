@@ -842,6 +842,12 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 		if knockoutMatchupAvailable(data.Games) {
 			result := bracketPageFor(page, *scope.Entry.BracketFormat, data)
 			if scope.Stage == "Playoffs" {
+				seeds, seedErr := a.finalPlayoffSeeds(r.Context(), scope.Season)
+				if seedErr != nil {
+					a.renderError(w, r, seedErr)
+					return
+				}
+				result.applySeeds(seeds.Seeds)
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 			}
 			a.render(w, "bracket", result)
@@ -1041,6 +1047,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 			if err != nil {
 				return
 			}
+			page.applySeeds(playoffSeedsFrom(scope.Season, regularData).Seeds)
 		}
 		if scope.Stage == "Regular Season" || scope.Stage == "Playoffs" {
 			regularRules, verified := a.rulesForSeason(scope.Season, "Regular Season")

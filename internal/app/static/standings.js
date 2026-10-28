@@ -42,13 +42,36 @@ document.querySelectorAll("[data-forecast-view-control]").forEach((control) => {
   const section = control.closest(".forecast-results");
   const panels = section?.querySelectorAll("[data-forecast-view-panel]");
   if (!panels?.length) return;
+  const playoffs = section.hasAttribute("data-playoff-forecast");
+  const restored = playoffs && Array.from(panels).find((panel) => `#${panel.id}` === location.hash);
+  if (restored) control.querySelector(`input[value="${restored.dataset.forecastViewPanel}"]`).checked = true;
   const showView = () => {
     const view = control.querySelector("input:checked")?.value ?? "table";
     panels.forEach((panel) => { panel.hidden = panel.dataset.forecastViewPanel !== view; });
+    if (playoffs) {
+      // Fragments keep presentation out of forecast inputs. Browsers retain
+      // the form's fragment through the scenario's relative 303 redirect.
+      const fragment = `#forecast-${view}-panel`;
+      document.querySelectorAll("[data-playoff-preserve-view], [data-playoff-scenario], [data-forecast-controls] form").forEach((element) => {
+        const attribute = element.tagName === "FORM" ? "action" : "href";
+        element.setAttribute(attribute, element.getAttribute(attribute).split("#")[0] + fragment);
+      });
+    }
   };
   control.addEventListener("change", showView);
   control.disabled = false;
   showView();
+  if (restored) requestAnimationFrame(() => section.scrollIntoView({block: "start"}));
+});
+
+// Only show a scroll hint when its table actually needs one, at any width.
+document.querySelectorAll("[data-playoff-table-scroll]").forEach((scrollport) => {
+  const hint = scrollport.previousElementSibling;
+  const update = () => { hint.hidden = !scrollport.clientWidth || scrollport.scrollWidth <= scrollport.clientWidth + 1; };
+  const observer = new ResizeObserver(update);
+  observer.observe(scrollport);
+  observer.observe(scrollport.querySelector("table"));
+  update();
 });
 
 // Keep the server-rendered grouped winner selector usable without JavaScript.
@@ -70,10 +93,46 @@ document.querySelectorAll("[data-playoff-scenario]").forEach((form) => {
 // Both bracket views use their rendered feeder IDs. Measurements make room
 // for wrapped names, longer candidate lists, and results that shorten a list.
 // The public bracket keeps its round-by-round reading order on phones.
-document.querySelectorAll("[data-bracket-layout]").forEach((root) => {
+document.querySelectorAll("[data-bracket-layout]").forEach((root, rootIndex) => {
   const rounds = Array.from(root.querySelectorAll("[data-bracket-round]"));
   const columns = rounds.map((round) => Array.from(round.querySelectorAll("[data-bracket-node]")));
   const cards = columns.flat();
+  const publicBracket = root.classList.contains("bracket");
+  const scrollport = publicBracket ? root : root.closest(".playoff-bracket-scroll");
+  const explorer = document.createElement("div");
+  explorer.className = "bracket-explorer";
+  scrollport.before(explorer);
+  const navigation = document.createElement("nav");
+  navigation.className = "bracket-round-nav";
+  navigation.setAttribute("aria-label", "Jump to bracket round");
+  navigation.hidden = true;
+  rounds.forEach((round, index) => {
+    const heading = round.querySelector("h2");
+    heading.id = `bracket-round-${rootIndex}-${index}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = heading.textContent;
+    button.setAttribute("aria-controls", heading.id);
+    button.addEventListener("click", () => {
+      if (publicBracket && matchMedia("(max-width: 700px)").matches) {
+        heading.scrollIntoView({block: "start"});
+      } else {
+        scrollport.scrollTo({left: scrollport.scrollLeft + round.getBoundingClientRect().left - scrollport.getBoundingClientRect().left - scrollport.clientLeft});
+      }
+    });
+    navigation.append(button);
+  });
+  const hint = document.createElement("p");
+  hint.className = "playoff-overflow-hint";
+  hint.textContent = "Scroll horizontally to follow the bracket →";
+  hint.hidden = true;
+  explorer.append(navigation, hint, scrollport);
+  const updateNavigation = () => {
+    const vertical = publicBracket && matchMedia("(max-width: 700px)").matches;
+    const overflow = scrollport.scrollWidth > scrollport.clientWidth + 1;
+    navigation.hidden = rounds.length < 2 || !(vertical || overflow);
+    hint.hidden = !overflow;
+  };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add("bracket-connectors");
   svg.setAttribute("aria-hidden", "true");
@@ -82,8 +141,9 @@ document.querySelectorAll("[data-bracket-layout]").forEach((root) => {
   const layout = () => {
     pending = false;
     if (!root.getClientRects().length) return;
-    if (root.classList.contains("bracket") && matchMedia("(max-width: 700px)").matches) {
+    if (publicBracket && matchMedia("(max-width: 700px)").matches) {
       root.classList.remove("bracket-is-laid-out");
+      updateNavigation();
       return;
     }
     const nodes = new Map();
@@ -134,6 +194,7 @@ document.querySelectorAll("[data-bracket-layout]").forEach((root) => {
       });
     });
     svg.replaceChildren(...paths);
+    updateNavigation();
   };
   const schedule = () => {
     if (pending) return;
@@ -142,6 +203,7 @@ document.querySelectorAll("[data-bracket-layout]").forEach((root) => {
   };
   const observer = new ResizeObserver(schedule);
   cards.forEach((card) => observer.observe(card));
+  observer.observe(scrollport);
   // Visibility changes when the forecast tab opens; card observations also
   // cover font and logo loads without needing to re-run the forecast.
   window.addEventListener("resize", schedule);
