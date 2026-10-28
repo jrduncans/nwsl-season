@@ -107,6 +107,29 @@ type bracketSlotView struct {
 	Winner                            string
 	AdvancesTo                        string
 	Game                              *bracketGameView
+	// Flipped marks a card whose rows follow the bracket path, so its
+	// published away side is shown first.
+	Flipped bool
+}
+
+// flip puts the upper feeder's team on top so connectors never cross; the
+// Matches list keeps the published home/away order.
+func (s *bracketSlotView) flip() {
+	s.Home, s.Away = s.Away, s.Home
+	s.HomeTeam, s.AwayTeam = s.AwayTeam, s.HomeTeam
+	s.HomeSource, s.AwaySource = s.AwaySource, s.HomeSource
+	s.HomeWinner, s.AwayWinner = s.AwayWinner, s.HomeWinner
+	if s.Game != nil {
+		game := *s.Game
+		game.HomeScore, game.AwayScore = game.AwayScore, game.HomeScore
+		game.HomeXG, game.AwayXG = game.AwayXG, game.HomeXG
+		game.HomePenalties, game.AwayPenalties = game.AwayPenalties, game.HomePenalties
+		if game.Shootout != "" {
+			game.Shootout = fmt.Sprintf("Penalties %s–%s", game.HomePenalties, game.AwayPenalties)
+		}
+		s.Game = &game
+	}
+	s.Flipped = !s.Flipped
 }
 
 type bracketGameView struct {
@@ -581,6 +604,14 @@ type fixtureOutlookView struct {
 	ModelName                          string
 	HomeWin, Draw, AwayWin             float64
 	HomeWinText, DrawText, AwayWinText string
+}
+
+// reversed swaps the sides so the outlook matches a flipped bracket card.
+func (o fixtureOutlookView) reversed() fixtureOutlookView {
+	o.HomeAdvanceText, o.AwayAdvanceText = o.AwayAdvanceText, o.HomeAdvanceText
+	o.HomeWin, o.AwayWin = o.AwayWin, o.HomeWin
+	o.HomeWinText, o.AwayWinText = o.AwayWinText, o.HomeWinText
+	return o
 }
 
 type teamNameView struct {
@@ -1177,6 +1208,10 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 		return fixtureTeamView{teamNameView: teamNameView{Name: label}}
 	}
 	feeders := bracketSources(format, view)
+	feederOrder := map[string][]string{}
+	for _, connection := range format.Connections {
+		feederOrder[connection.DestinationSlotID] = connection.SourceSlotIDs
+	}
 	for _, round := range view.Rounds {
 		row := bracketRoundView{Label: round.Label}
 		for _, slot := range round.Slots {
@@ -1193,6 +1228,9 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 			if slot.Game != nil {
 				game := bracketGameViewFor(*slot.Game, xgoals)
 				item.Game = &game
+			}
+			if order := feederOrder[slot.ID]; len(order) == 2 && from[0].ID == order[1] {
+				item.flip()
 			}
 			row.Slots = append(row.Slots, item)
 		}
@@ -1422,6 +1460,9 @@ func (p *bracketPage) applyOutlooks(outlooks map[string]fixtureOutlookView) {
 			slot := &p.Rounds[ri].Slots[si]
 			if outlook, ok := outlooks[slot.ID]; ok {
 				value := outlook
+				if slot.Flipped {
+					value = value.reversed()
+				}
 				slot.Outlook = &value
 			}
 		}

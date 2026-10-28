@@ -196,6 +196,10 @@ Unavailable seeds are omitted. These annotations never reorder published sides
 or change historical match placement. Unresolved entrants name their feeder
 match (for example, Winner of Quarterfinal 1); known entrants in an unplayed
 match keep that feeder as a caption, which completed matches drop.
+Bracket cards after the first round list teams in bracket-path order: the
+winner of the upper feeder match sits on top, whatever the published home/away
+order, so connectors never cross. Scores, xG, shootout tallies and outlooks move
+with their teams; the Matches list keeps Home vs Away.
 At desktop widths, later matches center between their feeders and elbow
 connectors join each feeder to its destination team row. Layout measures card
 heights so wrapped names and match outlooks cannot overlap. Fixed paths follow

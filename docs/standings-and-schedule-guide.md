@@ -140,8 +140,9 @@ published home/away assignments take precedence. The final averages both venue
 assignments. The always-visible three-part bar shows each team's 90-minute win
 chance around the extra-time chance. Its ends use team codes (for example,
 `NJY 48.5% · Extra time 25.0% · SEA 26.5%`) in both the bracket and Matches list.
-The bracket's first, top team always owns the left segment, including when
-published home/away assignments put the higher seed second. Each stacked bracket
+The bracket's first, top team always owns the left segment. After the first
+round the top team is the upper feeder match's winner, even when the published
+home/away assignment hosts the other team. Each stacked bracket
 row shows its advance chance under one right-aligned Advance header, using the
 simulator's relative-win draw rule. The Matches list keeps the usual side-by-side
 Home vs Away row, with home on the left and each team's `Advance 59.2%` beneath

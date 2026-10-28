@@ -37,8 +37,9 @@ func TestBracketByeSemifinalsConnectFeedersAndLabelByes(t *testing.T) {
 	if first.Home.ID != "bye-one" || first.AwaySource.ID != "quarterfinal-1" || second.Home.ID != "bye-two" || second.AwaySource.ID != "quarterfinal-2" || second.HomeSource.Label != "First-round bye" {
 		t.Fatalf("bye paths: first=%+v second=%+v", first, second)
 	}
-	if final := page.Rounds[2].Slots[0]; final.HomeSource.ID != "semifinal-2" || final.AwaySource.ID != "semifinal-1" {
-		t.Fatalf("final follows the reversed semifinal sides: %+v", final)
+	// The Semifinal 2 winner hosts the final, but rows follow the bracket path.
+	if final := page.Rounds[2].Slots[0]; !final.Flipped || final.HomeSource.ID != "semifinal-1" || final.AwaySource.ID != "semifinal-2" || final.Home.ID != "bye-one" {
+		t.Fatalf("final rows do not follow the semifinal path: %+v", final)
 	}
 }
 
@@ -76,7 +77,7 @@ func TestHistoricalCompletedBracketShowsActualSeeds(t *testing.T) {
 	forbidElements(t, response.Body.String(), ".fixture-team-advance", ".bracket-match")
 }
 
-func TestBracketFixedPathsFollowPublishedHomeAwayReversal(t *testing.T) {
+func TestBracketRowsFollowFeederPathOverPublishedHomeAway(t *testing.T) {
 	regular := resolvedHandoffSeason()
 	seeds := playoffSeedsFrom("2026", regular)
 	entry, _ := competition.Lookup("2026", "Playoffs")
@@ -86,9 +87,26 @@ func TestBracketFixedPathsFollowPublishedHomeAwayReversal(t *testing.T) {
 		game.KickoffUTC = fmt.Sprintf("2026-11-%02dT20:00:00Z", i+1)
 		data.Games = append(data.Games, game)
 	}
+	// The Quarterfinal 2 winner hosts Semifinal 1 and loses it on penalties.
+	semi := &data.Games[4]
+	semi.HomeScore, semi.AwayScore = sql.NullInt64{Int64: 1, Valid: true}, sql.NullInt64{Int64: 1, Valid: true}
+	semi.ExtraTime = sql.NullBool{Bool: true, Valid: true}
+	semi.Penalties = sql.NullBool{Bool: true, Valid: true}
+	semi.HomePenalties, semi.AwayPenalties = sql.NullInt64{Int64: 3, Valid: true}, sql.NullInt64{Int64: 4, Valid: true}
 	page := seededBracketPageFor(seasonPage{}, *entry.BracketFormat, data, seeds, "")
-	semi := page.Rounds[1].Slots[0]
-	if semi.HomeSource.ID != "quarterfinal-2" || semi.AwaySource.ID != "quarterfinal-1" || semi.Home.ID != seeds.Seeds[4] || semi.Away.ID != seeds.Seeds[1] {
-		t.Fatalf("published sides lost their feeder: %+v", semi)
+	got := page.Rounds[1].Slots[0]
+	if !got.Flipped || got.HomeSource.ID != "quarterfinal-1" || got.AwaySource.ID != "quarterfinal-2" || got.Home.ID != seeds.Seeds[1] || got.Away.ID != seeds.Seeds[4] {
+		t.Fatalf("rows do not follow the feeder path: %+v", got)
+	}
+	if !got.HomeWinner || got.AwayWinner || got.HomeTeam.ID != seeds.Seeds[1] || got.AwayTeam.ID != seeds.Seeds[4] {
+		t.Fatalf("winner or outlook teams stayed with the published sides: %+v", got)
+	}
+	if g := got.Game; g.HomeScore != "1" || g.AwayScore != "1" || g.HomePenalties != "4" || g.AwayPenalties != "3" || g.Shootout != "Penalties 4–3" {
+		t.Fatalf("game values stayed with the published sides: %+v", *g)
+	}
+	for _, quarterfinal := range page.Rounds[0].Slots {
+		if quarterfinal.Flipped {
+			t.Fatalf("a first-round card has no feeders to follow: %+v", quarterfinal)
+		}
 	}
 }
