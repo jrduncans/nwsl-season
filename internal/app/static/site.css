@@ -418,18 +418,28 @@ th:nth-child(2) { text-align: left; }
 [data-bracket-round] > h2 { margin: 1rem 0 .75rem; font-size: 1.1rem; }
 .bracket-round-slots { position: relative; display: flex; flex-direction: column; justify-content: space-around; gap: 1.25rem; flex: 1; }
 .bracket-slot, .playoff-forecast-slot { position: relative; padding: .85rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
-.bracket-slot { container-type: inline-size; }
-.bracket-slot-label { margin: 0 0 .2rem; color: var(--muted); font-size: .75rem; }
-.bracket-kickoff { margin: 0 0 .65rem; color: var(--muted); font-size: .75rem; }
+/* Match cards run edge to edge: the label, kickoff and column headers share the
+   table-header green as one band, and team rows divide the full card width. */
+.bracket-slot { container-type: inline-size; padding: 0; overflow: hidden; }
+.bracket-slot-heading, .bracket-match-header, .bracket-team-row { padding-inline: .85rem; }
+.bracket-slot-heading, .bracket-match-header { background: var(--green-soft); }
+.bracket-slot-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 .75rem; padding-block: .4rem .15rem; color: var(--muted); font-size: .75rem; }
+.bracket-slot:not(:has(.bracket-match-header)) .bracket-slot-heading { padding-bottom: .4rem; border-bottom: 2px solid var(--line); }
+.bracket-slot-label, .bracket-kickoff { margin: 0; font-size: inherit; }
 .bracket-match { display: grid; }
 .bracket-match-outlook { --bracket-team-columns: minmax(0, 1fr) 4.25rem; }
 .bracket-match-result { --bracket-team-columns: minmax(0, 1fr) var(--bracket-goals-width, 2.6rem); }
 .bracket-match-xg { --bracket-team-columns: minmax(0, 1fr) var(--bracket-goals-width, 2.6rem) 2.6rem; }
 .bracket-match-shootout { --bracket-goals-width: 3.5rem; }
 .bracket-team-row, .bracket-match-header { display: grid; grid-template-columns: var(--bracket-team-columns, minmax(0, 1fr)); align-items: center; column-gap: .5rem; }
-.bracket-match-header { padding-bottom: .3rem; color: var(--muted); font-size: .7rem; }
+.bracket-match-header { padding-block: .1rem .25rem; border-bottom: 2px solid var(--line); color: var(--muted); font-size: .7rem; }
 .bracket-match-header > :not(:first-child) { text-align: right; }
-.bracket-team-row { min-height: 2.5rem; padding: .35rem 0; border-top: 1px solid var(--line); }
+/* The hidden Team header takes no grid cell, so start the stat headers after the team column;
+   the kickoff fills the team column instead. */
+.bracket-match-header > :nth-child(2) { grid-column: 2; }
+.bracket-match-header > .bracket-header-kickoff { grid-area: 1 / 1; text-align: left; }
+.bracket-team-row { min-height: 2.5rem; padding-block: .35rem; border-top: 1px solid var(--line); }
+.bracket-match > .bracket-team-row:first-child, .bracket-match-header + .bracket-team-row { border-top: 0; }
 .bracket-match-team { display: block; min-width: 0; }
 .bracket-team-identity { display: flex; align-items: center; gap: .35rem; min-width: 0; }
 .bracket-match-team .team-name { min-width: 0; white-space: normal; }
@@ -439,12 +449,13 @@ th:nth-child(2) { text-align: left; }
 .bracket-team-penalties { font-size: .8rem; font-weight: 500; }
 .bracket-team-xg { font-size: .85rem; font-weight: 400; }
 .bracket-feeder-label { display: block; margin-left: 1.85rem; color: var(--muted); font-size: .7rem; font-weight: 400; }
-.bracket-facts { display: flex; flex-wrap: wrap; gap: .2rem .75rem; margin: .6rem 0 0; color: var(--muted); font-size: .75rem; }
+.bracket-facts { display: flex; flex-wrap: wrap; gap: .2rem .75rem; margin: 0 .85rem; padding: .35rem 0 .6rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .75rem; }
 .bracket-diagnostics { color: var(--muted); }
 .bracket-winner { font-weight: 800; }
+.bracket-slot .bracket-winner { box-shadow: inset 3px 0 var(--green); }
 .bracket-loser { color: var(--muted); }
 .bracket-seed { flex: 0 0 1.1rem; width: 1.1rem; color: var(--muted); font-size: .8rem; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
-.bracket-slot .fixture-outlook { grid-column: auto; margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+.bracket-slot .fixture-outlook { grid-column: auto; margin: .35rem .85rem .75rem; padding-top: .6rem; border-top: 1px solid var(--line); }
 .bracket-slot .fixture-outlook-model { font-size: .65rem; }
 .bracket-is-laid-out [data-bracket-slots] { flex: none; height: var(--bracket-height); display: block; }
 .bracket-is-laid-out [data-bracket-node] { position: absolute; top: var(--bracket-top); left: 0; width: 100%; }

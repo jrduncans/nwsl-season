@@ -135,7 +135,7 @@ func TestPostseasonForecast(t *testing.T) {
 					if err := expect.Locator(card.Locator(".bracket-team-xg")).ToHaveCount(0); err != nil {
 						t.Fatal(err)
 					}
-					if err := expect.Locator(card.Locator(".bracket-match-header")).ToHaveText("TeamGoals"); err != nil {
+					if err := expect.Locator(card.Locator(".bracket-match-header [role=columnheader]")).ToHaveText([]string{"Team", "Goals"}); err != nil {
 						t.Fatal(err)
 					}
 				}

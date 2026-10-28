@@ -158,8 +158,9 @@ Completed bracket cards use the same stacked identities, with separate
 right-aligned Goals and xG columns. The xG column appears only when at least one
 team has a value; a missing side reads `—`, rather than zero. The header row
 appears only when there are stat columns (Goals or Advance), so placeholders
-have no lone Team header. The winner is bold and the loser muted, including
-shootout decisions. Shootout tallies appear beside each team's goals, for
+have no lone Team header. That header row shares a light green band with the
+match label and kickoff. The winner is bold, with a green left edge, and the
+loser muted, including shootout decisions. Shootout tallies appear beside each team's goals, for
 example `2 (5)` and `2 (4)`, with accessible text identifying the penalty decision
 and both tallies. After extra time remains a footnote. Known final regular-season
 seeds stay beside the teams in every bracket round and in upcoming and completed

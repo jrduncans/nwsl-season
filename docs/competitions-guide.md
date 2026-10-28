@@ -171,7 +171,11 @@ regulation/extra-time scores or a valid paired shootout tally. Unknown slots are
 `TBD`. The result state is `empty`, `partial`, `ready`, `unresolved` or
 `format_mismatch`; a mismatch is a nonfatal warning that still shows the source
 matches and links to the Matches page. Cards label each match and stack the two
-teams, with aligned seeds, crests and full names. Upcoming outlooks put each
+teams, with aligned seeds, crests and full names. A light green band, styled
+like a table header, holds the match label above the kickoff (or Date TBD) and
+the stat column headers; the Team header is announced but not shown. Cards
+without stat columns keep the label and kickoff on one line. Team rows span the
+card width, and the winner's row carries a green left edge. Upcoming outlooks put each
 team's advance chance in its row under one Advance header, above an always-visible
 three-part 90-minute win / extra time / win bar. The ends name the teams by code;
 the top row always corresponds to the left segment, regardless of seed or
@@ -181,8 +185,8 @@ below. Home owns the left segment, and the Knockout match tag stays with the
 usual match metadata. Completed bracket cards put Goals and xG in separate
 right-aligned columns in each team row, emphasize the winner, and mute the loser.
 The xG column is omitted when neither side has a value; a single missing side
-reads `—`. Cards show a header only when there are Goals or Advance columns,
-so unresolved placeholders have no lone Team heading. Penalty shootout tallies
+reads `—`. Cards show a column header row only when there are Goals or Advance
+columns, so unresolved placeholders have no lone Team heading. Penalty shootout tallies
 sit beside each team's goals (`2 (5)` versus `2 (4)`), with accessible text naming
 the penalty decision and both tallies. After extra time remains below the rows.
 Final seeds annotate team identities in every bracket round and in upcoming and
