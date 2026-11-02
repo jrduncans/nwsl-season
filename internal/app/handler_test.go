@@ -247,30 +247,45 @@ func TestForecastURLsUseCanonicalStageBase(t *testing.T) {
 	}
 }
 
-func TestHome(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/", nil)
-	response := httptest.NewRecorder()
-
-	NewHandler(nil).ServeHTTP(response, request)
-
-	if response.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
-	}
-	if location := response.Header().Get("Location"); location != "seasons/2026/regular-season" {
-		t.Fatalf("location = %q, want current season", location)
-	}
-}
-
-func TestSeasonsRedirectsToCurrentSeason(t *testing.T) {
-	for _, path := range []string{"/seasons", "/nwsl-season/seasons"} {
-		response := httptest.NewRecorder()
-		NewHandler(nil).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
-		if response.Code != http.StatusSeeOther {
-			t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusSeeOther)
-		}
-		if location := response.Header().Get("Location"); location != "seasons/2026/regular-season" {
-			t.Fatalf("%s location = %q, want current season", path, location)
-		}
+func TestCurrentSeasonRedirectFollowsPlayoffHandoff(t *testing.T) {
+	complete := resolvedHandoffSeason()
+	pending := resolvedHandoffSeason()
+	pending.Games[0].Status = fixtures.PreMatchStatus
+	abandoned := resolvedHandoffSeason()
+	abandoned.Games[0].Status = fixtures.AbandonedStatus
+	missingScore := resolvedHandoffSeason()
+	missingScore.Games[0].HomeScore = sql.NullInt64{}
+	incomplete := resolvedHandoffSeason()
+	incomplete.Games = incomplete.Games[1:]
+	for _, tc := range []struct {
+		name, season, target string
+		store                fakeStore
+	}{
+		{name: "empty cache", season: "2026", target: "regular-season"},
+		{name: "active season", season: "2026", store: fakeStore{season: pending}, target: "regular-season"},
+		{name: "complete before playoff publication", season: "2026", store: fakeStore{season: complete}, target: "playoffs"},
+		{name: "unresolved seeds", season: "2026", store: fakeStore{season: completeCatalogSeasonData()}, target: "playoffs"},
+		{name: "abandoned match", season: "2026", store: fakeStore{season: abandoned}, target: "regular-season"},
+		{name: "missing score", season: "2026", store: fakeStore{season: missingScore}, target: "regular-season"},
+		{name: "incomplete inventory", season: "2026", store: fakeStore{season: incomplete}, target: "regular-season"},
+		{name: "cache error", season: "2026", store: fakeStore{err: errors.New("cache unavailable")}, target: "regular-season"},
+		{name: "configured future season", season: "2027", store: fakeStore{season: complete}, target: "regular-season"},
+		{name: "different primary stage", season: "2020", target: "challenge-cup-group-stage"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := NewHandlerWithOptions(tc.store, Options{CurrentSeason: tc.season})
+			for _, path := range []string{"/", "/seasons", "/nwsl-season/", "/nwsl-season/seasons"} {
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+				if response.Code != http.StatusSeeOther {
+					t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusSeeOther)
+				}
+				want := "seasons/" + tc.season + "/" + tc.target
+				if location := response.Header().Get("Location"); location != want {
+					t.Fatalf("%s location = %q, want %q", path, location, want)
+				}
+			}
+		})
 	}
 }
 

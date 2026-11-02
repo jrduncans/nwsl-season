@@ -706,23 +706,30 @@ func (a *application) root(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	a.redirectToCurrentSeason(w)
+	a.redirectToCurrentSeason(w, r)
 }
 
 // seasons keeps the retired season archive's URL working: like the root, it
 // sends visitors to the current season.
-func (a *application) seasons(w http.ResponseWriter, _ *http.Request) {
-	a.redirectToCurrentSeason(w)
+func (a *application) seasons(w http.ResponseWriter, r *http.Request) {
+	a.redirectToCurrentSeason(w, r)
 }
 
 // redirectToCurrentSeason sends a request for "/" or "/seasons" to the current
-// season's primary stage. Both paths resolve the relative target from the site
-// root.
-func (a *application) redirectToCurrentSeason(w http.ResponseWriter) {
+// season's primary stage, switching to Playoffs after safe regular-season
+// completion. Both paths resolve the relative target from the site root.
+func (a *application) redirectToCurrentSeason(w http.ResponseWriter, r *http.Request) {
 	entry, ok := competition.PrimaryEntry(a.options.CurrentSeason)
 	if !ok {
 		redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/regular-season", http.StatusSeeOther)
 		return
+	}
+	if entry.Stage == "Regular Season" {
+		if playoffs, exists := competition.Lookup(entry.Season, "Playoffs"); exists && playoffBracketEntry(playoffs) {
+			if seeds, err := a.finalPlayoffSeeds(r.Context(), entry.Season); err == nil && seeds.Certified {
+				entry = playoffs
+			}
+		}
 	}
 	redirectRelative(w, "seasons/"+url.PathEscape(a.options.CurrentSeason)+"/"+entry.Slug, http.StatusSeeOther)
 }

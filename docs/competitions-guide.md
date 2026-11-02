@@ -83,9 +83,13 @@ unsupported request has no side effects.
 
 Season pages live at `/seasons/{season}/{stage-slug}` with optional
 `/fixtures`, `/schedule-difficulty`, `/forecast`, `/model-evaluation` and
-`/clinching` suffixes. The root redirects to the configured current season's
-primary stage (`NWSL_SYNC_SEASON`; it never rolls over by calendar), and so does
-the retired `/seasons` archive URL. Season-only
+`/clinching` suffixes. The root and retired `/seasons` archive URL redirect to
+the configured current season (`NWSL_SYNC_SEASON`; it never rolls over by
+calendar). They use its primary stage until the local cache certifies safe
+regular-season completion, then switch to its cataloged Playoffs bracket.
+This handoff does not require published playoff fixtures or every tied seed
+to be resolved. Empty, incomplete, unsafe or unreadable regular-season data
+keeps the primary-stage destination. Season-only
 URLs redirect to the primary stage, keeping the suffix and query. An unknown
 stage slug for a cataloged season is a `404`, never a fallback. The main-page menu label is Standings for Regular Season and the catalog’s
 short menu label for other competitions: Playoffs, Group stage, Knockout round,
