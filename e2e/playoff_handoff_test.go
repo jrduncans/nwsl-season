@@ -36,8 +36,15 @@ func TestPlayoffHandoff(t *testing.T) {
 			if noScript {
 				load = visitStatic
 			}
-			load(t, page, j.URL("seasons/2026/regular-season"))
 			expect := playwright.NewPlaywrightAssertions()
+			load(t, page, j.URL(""))
+			if err := page.WaitForURL("**/nwsl-season/seasons/2026/playoffs"); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.Locator(page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Forecast lab", Exact: playwright.Bool(true)})).ToBeVisible(); err != nil {
+				t.Fatal(err)
+			}
+			load(t, page, j.URL("seasons/2026/regular-season"))
 			if err := expect.Locator(page.Locator(".season-handoff")).ToBeVisible(); err != nil {
 				t.Fatal(err)
 			}
