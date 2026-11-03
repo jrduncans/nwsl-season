@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"runtime"
 	"sort"
 	"strings"
@@ -230,8 +229,7 @@ func newJourney(t *testing.T, cfg journeyConfig) *journey {
 
 	mux := http.NewServeMux()
 	mux.Handle(mountPrefix+"/", http.StripPrefix(mountPrefix, srv.Handler()))
-	web := httptest.NewServer(mux)
-	t.Cleanup(web.Close)
+	web := newBrowserServer(t, mux)
 
 	return &journey{
 		fixture: &fixture{ASA: fake, Server: srv, BaseURL: web.URL + mountPrefix + "/"},

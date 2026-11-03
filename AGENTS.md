@@ -12,6 +12,12 @@ Also run, when they apply:
 
 Keep each `gosec` suppression narrow and justified.
 
+On macOS, use approved execution outside Codex's command sandbox for commands
+that launch the E2E browser (`make verify`, `make test-e2e`, or
+`go test -tags e2e ...`). Chrome can abort during macOS application registration
+inside that outer sandbox and show a crash popup. Keep Chromium's own sandbox
+enabled (`ChromiumSandbox: true`).
+
 Page requests read only the local SQLite cache; only the scheduler and
 `cmd/sync` call ASA.
 

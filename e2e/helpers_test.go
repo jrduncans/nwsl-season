@@ -119,7 +119,9 @@ func newPageWith(t *testing.T, opts pageOptions) playwright.Page {
 	contextOptions := playwright.BrowserNewContextOptions{
 		Viewport: &playwright.Size{Width: vp.Width, Height: vp.Height},
 		// Fix the locale so Intl output does not depend on the machine.
-		Locale: playwright.String("en-US"),
+		Locale:          playwright.String("en-US"),
+		ServiceWorkers:  playwright.ServiceWorkerPolicyBlock,
+		AcceptDownloads: playwright.Bool(false),
 	}
 	if opts.Timezone != "" {
 		contextOptions.TimezoneId = playwright.String(opts.Timezone)

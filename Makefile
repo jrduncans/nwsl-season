@@ -46,18 +46,20 @@ test-clinching:
 	go test ./internal/scenarios ./internal/clinching ./internal/qualification ./internal/scenariorefresh
 	go test ./internal/app -run 'Test(Clinching|ConditionText|NoHelp|Requirement|PointRequirement|ScenarioTeamCode|ScoreCondition)'
 
-# Browser journeys (build tag e2e) in headless Chromium; a plain `go test ./...` never needs a browser.
-# Run `make e2e-install` once first (and again after upgrading playwright-go); tests never download anything.
+# Browser journeys (build tag e2e) in sandboxed stable Chrome; a plain `go test ./...` never needs a browser.
+# Install stable Chrome and run `make e2e-install` once first; tests never download anything.
 # NWSL_E2E_CHROMIUM=/path/to/chromium uses a preinstalled browser instead.
 .PHONY: test-e2e
 test-e2e:
 	go test -tags e2e -count=1 ./e2e/...
 
-# Installs the Playwright driver and Chromium that match the playwright-go version in go.mod.
-# Honors PLAYWRIGHT_BROWSERS_PATH and PLAYWRIGHT_DRIVER_PATH. CI installs only the headless shell.
+# Installs the matching Playwright driver using maintained Node.js, without bundled browsers.
+# The Go CLI assembles the driver before --version; no browser install command runs.
+# Chrome is installed and updated separately. Honors PLAYWRIGHT_DRIVER_PATH.
 .PHONY: e2e-install
 e2e-install:
-	go run github.com/mxschmitt/playwright-go/cmd/playwright install chromium
+	@test -n "$${PLAYWRIGHT_NODEJS_PATH:-$$(command -v node)}" || { echo "Node.js is required; run mise install" >&2; exit 1; }
+	PLAYWRIGHT_NODEJS_PATH="$${PLAYWRIGHT_NODEJS_PATH:-$$(command -v node)}" go run github.com/mxschmitt/playwright-go/cmd/playwright --version
 
 # Benchmark budget guards. Budgets count work, not time, so they are stable on CI.
 .PHONY: test-guards

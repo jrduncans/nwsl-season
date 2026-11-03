@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -114,8 +113,7 @@ func newFixture(t *testing.T) *fixture {
 
 	mux := http.NewServeMux()
 	mux.Handle(mountPrefix+"/", http.StripPrefix(mountPrefix, srv.Handler()))
-	web := httptest.NewServer(mux)
-	t.Cleanup(web.Close)
+	web := newBrowserServer(t, mux)
 
 	f := &fixture{ASA: fake, Server: srv, BaseURL: web.URL + mountPrefix + "/", Season: season}
 	assertXGCoverage(t, cfg.DBPath)
