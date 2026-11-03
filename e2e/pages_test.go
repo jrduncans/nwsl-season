@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"sort"
@@ -1303,8 +1302,7 @@ func newBracketFixture(t *testing.T) *fixture {
 	})
 	mux := http.NewServeMux()
 	mux.Handle(mountPrefix+"/", http.StripPrefix(mountPrefix, srv.Handler()))
-	web := httptest.NewServer(mux)
-	t.Cleanup(web.Close)
+	web := newBrowserServer(t, mux)
 	return &fixture{Server: srv, BaseURL: web.URL + mountPrefix + "/"}
 }
 
@@ -1436,20 +1434,33 @@ func assertUnderPrefix(t *testing.T, vp viewport, f *fixture, path string, resol
 	if !resolveLinks {
 		return
 	}
-	// Fetch outside the page: the CSP's connect-src would block the page's own
-	// fetch. The request context uses the browser context's network settings.
+	// These targets were checked against the fixture origin above. Fetch with
+	// Go and never follow redirects: Playwright's API client uses CONNECT even
+	// for HTTP, and the browser proxy deliberately rejects tunnels.
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	for _, target := range targets {
-		response, err := page.Context().Request().Get(target)
+		response, err := client.Get(target)
 		if err != nil {
 			t.Errorf("%s: link %s: %v", path, target, err)
 			continue
 		}
-		status := response.Status()
+		status := response.StatusCode
+		body, readErr := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if readErr != nil {
+			t.Errorf("%s: read link %s: %v", path, target, readErr)
+			continue
+		}
 		if status >= 200 && status < 400 {
 			continue
 		}
 		if hiddenTargets[target] && status == http.StatusNotFound {
-			if body, err := response.Text(); err == nil && strings.Contains(body, " is unavailable for ") {
+			if strings.Contains(string(body), " is unavailable for ") {
 				continue
 			}
 		}

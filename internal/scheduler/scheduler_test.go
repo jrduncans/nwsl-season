@@ -321,7 +321,8 @@ func TestPlayoffDiscoveryLeaseDeferralLeavesWorkDue(t *testing.T) {
 	}
 	t.Cleanup(s.Stop)
 	key := "2026\x00Playoffs"
-	if acquired, err := d.db.TryAcquireSyncLease(d.ctx, key, "other-process", completion.Add(time.Hour)); err != nil || !acquired {
+	// Lease expiry uses the database wall clock, not the synthetic planning date.
+	if acquired, err := d.db.TryAcquireSyncLease(d.ctx, key, "other-process", time.Now().Add(time.Hour)); err != nil || !acquired {
 		t.Fatalf("hold lease = %v, %v", acquired, err)
 	}
 	if err := s.CheckNow(d.ctx); err != nil {

@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"slices"
@@ -65,8 +64,7 @@ func exploreBaseArchive(t *testing.T, archive []cache.HistoricalSeason) string {
 	})
 	mux := http.NewServeMux()
 	mux.Handle(mountPrefix+"/", http.StripPrefix(mountPrefix, srv.Handler()))
-	web := httptest.NewServer(mux)
-	t.Cleanup(web.Close)
+	web := newBrowserServer(t, mux)
 	return web.URL + mountPrefix + "/"
 }
 

@@ -550,13 +550,49 @@ Choose the layer by the assertion: what the server sends is a Go test; what a
 user sees after JavaScript runs is a browser test. Domain logic never moves
 into browser tests. Tests never call the real ASA API.
 
-Browser tests need Chromium. Run `make e2e-install` once (and again after
-upgrading `playwright-go`), then `make test-e2e`. Set `NWSL_E2E_CHROMIUM` to use
-an existing browser. Seed data comes from `internal/apptest`; to look at a
-scenario by hand, run `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams`.
-The suite takes about 20s locally. Every top-level browser test runs in
-parallel, and test servers simulate 1,000 forecast seasons instead of 50,000;
-the `e2e` package comment explains both.
+Browser tests use installed **stable Google Chrome**, headless with Chromium's
+sandbox explicitly enabled. Install Chrome separately, keep it updated, run
+`mise install` for the pinned Node.js runtime, then `make e2e-install` for the
+matching Playwright driver. That target does not download bundled browsers or
+use Playwright's bundled Node.js. Re-run it after upgrading `playwright-go`.
+Tests never download anything and print the actual browser, driver and Node.js
+versions when they start. `PLAYWRIGHT_NODEJS_PATH` can select another maintained
+Node.js executable; otherwise the tests require `node` on `PATH`.
+`NWSL_E2E_CHROMIUM` selects an explicitly managed Chrome/Chromium executable
+instead of the stable Chrome channel. It still requires Chromium's sandbox;
+there is no fallback to an unsandboxed launch. Neither path uses your personal
+Chrome profile: each test has fresh cookies and storage. Browser downloads
+and service workers are disabled.
+
+All test browser HTTP traffic passes through a local proxy that permits only
+application fixture servers registered by `newBrowserServer`. Unrelated
+loopback ports, external origins, HTTPS tunnels and WebSocket upgrades are
+rejected, including after redirects. Club logos are fulfilled from the local
+stub. New application fixture servers must use that helper. This proxy is a
+browser traffic guard, not an OS network boundary: arbitrary test code,
+Playwright's driver and a compromised browser process still need an outer
+sandbox or disposable VM to constrain their access. Do not use this test
+browser setup to browse untrusted websites.
+
+Seed data comes from `internal/apptest`; to look at a scenario by hand, run
+`NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams`.
+Every top-level browser test runs in parallel, and test servers simulate
+1,000 forecast seasons instead of 50,000; the `e2e` package comment explains
+both. CI installs current stable Chrome on each fresh runner using the
+Playwright Chrome installer and uses the Node.js version in `mise.toml`.
+Chrome updates may reveal compatibility changes; validate them with
+`make verify` rather than keeping a vulnerable browser for reproducibility.
+
+The daily vulnerability workflow and Dependabot's weekly updates cover Go
+dependencies; `govulncheck` does not scan the external Chrome/Node.js binaries
+or vendored JavaScript. Maintain Chrome through its updater and review Node.js
+security releases when updating the pin in `mise.toml`. Vendored JavaScript
+versions and upstream sources are listed in
+[`internal/app/static/vendor/README.md`](internal/app/static/vendor/README.md).
+Keep production credentials out of test environments. For untrusted code,
+use a disposable VM or container without home-directory mounts, SSH-agent or
+Docker sockets, and enforce network access outside the agent too. A Git
+worktree alone does not provide that isolation.
 
 CI runs E2E with `-parallel=12` and Playwright tracing enabled. A
 [four-run CI comparison](https://github.com/jrduncans/nwsl-season/actions/runs/39189725215)
