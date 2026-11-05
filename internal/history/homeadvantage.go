@@ -16,7 +16,7 @@ import (
 // season's actual rates in place.
 type SeasonHomeAdvantage struct {
 	Season       string
-	Lifecycle    cache.SourceScopeLifecycle
+	Active       bool
 	Basis        ScoringBasis
 	Played       int
 	PlotEligible bool
@@ -56,7 +56,7 @@ type homeAdvantageMatch struct {
 
 func homeAdvantageSeason(summary SeasonScoring) SeasonHomeAdvantage {
 	season := SeasonHomeAdvantage{
-		Season: summary.Season, Lifecycle: summary.Lifecycle, Basis: summary.Basis,
+		Season: summary.Season, Active: summary.InProgress(), Basis: summary.Basis,
 		Played: summary.Played, PlotEligible: summary.PlotEligible, Exclusions: summary.Exclusions,
 	}
 	if !summary.PlotEligible {

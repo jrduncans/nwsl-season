@@ -57,6 +57,16 @@ type SeasonScoring struct {
 	Teams                                           []TeamScoring
 }
 
+// InProgress reports whether an active source scope still lacks verified final
+// regular-season results. Its source lifecycle can stay active through playoffs.
+func (s SeasonScoring) InProgress() bool {
+	return s.Lifecycle == cache.SourceScopeActive && !s.hasFinalResults()
+}
+
+func (s SeasonScoring) hasFinalResults() bool {
+	return s.Readiness == cache.SourceReadinessAvailable && s.Inventory == cache.InventoryCompletenessComplete && s.Pending == 0 && s.InvalidCompleted == 0
+}
+
 // SummarizeScoring calculates deterministic league-level scoring summaries
 // from one historical cache snapshot, counting every shot. It never changes
 // the supplied snapshot.

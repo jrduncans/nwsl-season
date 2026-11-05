@@ -164,7 +164,7 @@ func TestParityKeepsActiveSeasonsAndSkipsIneligibleOnes(t *testing.T) {
 	if got[0].PlotEligible || got[0].Teams != nil || got[0].Spread != 0 || !slices.Contains(got[0].Exclusions, "below_minimum_matches") {
 		t.Errorf("short season = %+v, want no values", got[0])
 	}
-	if !got[2].PlotEligible || got[2].Lifecycle != cache.SourceScopeActive || got[2].Played != 20 {
+	if !got[2].PlotEligible || !got[2].Active || got[2].Played != 20 {
 		t.Fatalf("active season = %+v", got[2])
 	}
 	// Fewer matches per team so far widen the chance spread.

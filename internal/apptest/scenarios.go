@@ -49,7 +49,7 @@ func Scenario(t testing.TB, name string) (archive []cache.HistoricalSeason) {
 		for _, year := range []string{"2016", "2017", "2018", "2019", "2021", "2022", "2023", "2024", "2025", "2026"} {
 			states[year] = ArchiveState{Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 20}
 		}
-		states["2026"] = ArchiveState{Lifecycle: cache.SourceScopeActive, Inventory: cache.InventoryCompletenessComplete, Goals: 3, XGCovered: 20}
+		states["2026"] = ArchiveState{Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 20}
 		archive = Archive(t, states)
 		for i := range archive {
 			archive[i].Data.Teams = previewTeams()[:6]

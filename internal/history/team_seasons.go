@@ -103,7 +103,7 @@ func TeamSeasons(all, goals []SeasonScoring, inputs []cache.HistoricalSeason) []
 		if !eligible {
 			reason = "Season is not eligible: " + strings.Join(summary.Exclusions, ", ")
 		}
-		active := summary.Lifecycle == cache.SourceScopeActive
+		active := summary.InProgress()
 		if active && eligible {
 			played := map[string]int{}
 			for _, team := range summary.Teams {

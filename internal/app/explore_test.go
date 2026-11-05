@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,8 +13,81 @@ import (
 	"testing"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
+	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/history"
 )
+
+func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		inventory cache.InventoryCompleteness
+		pending   bool
+		active    bool
+	}{
+		{name: "final before playoffs", inventory: cache.InventoryCompletenessComplete},
+		{name: "pending fixture", inventory: cache.InventoryCompletenessComplete, pending: true, active: true},
+		{name: "unverified inventory", inventory: cache.InventoryCompletenessUnknown, active: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			archive := testArchive(t, map[string]archiveState{
+				"2026": {Lifecycle: cache.SourceScopeActive, Inventory: tc.inventory},
+			})
+			archive[0].Data = completeCatalogSeasonData()
+			// Equal points, with distinct goal differences from best at
+			// team-14 down to last at alpha.
+			for i := range archive[0].Data.Games {
+				home := i % len(archive[0].Data.Teams)
+				archive[0].Data.Games[i].HomeScore.Int64 = int64(1 + home*(home+1)/2)
+			}
+			teamPlayed := 30
+			if tc.pending {
+				archive[0].Data.Games[0].Status = fixtures.PreMatchStatus
+				teamPlayed--
+			}
+			code, body := getPage(t, archive, "/explore?view=season-trend&season=2026&team=alpha")
+			if code != http.StatusOK {
+				t.Fatalf("status = %d", code)
+			}
+			status := "2026 regular season"
+			if tc.active {
+				status += " · In progress"
+			}
+			requireExact(t, body, "[data-trend-season-summary]", fmt.Sprintf("%s · %d played", status, teamPlayed))
+
+			for _, id := range []string{"explore-data", "explore-team-data", "explore-home-data", "explore-parity-data"} {
+				var records []struct {
+					Season string
+					Active bool
+				}
+				payload := text(find(t, body, "#"+id)[0])
+				if err := json.Unmarshal([]byte(payload), &records); err != nil {
+					t.Fatalf("%s: %v", id, err)
+				}
+				if len(records) != 1 || records[0].Season != "2026" || records[0].Active != tc.active {
+					t.Errorf("%s = %+v, want 2026 with active=%v", id, records, tc.active)
+				}
+			}
+			if tc.active {
+				if payload := text(find(t, body, "#explore-threshold-data")[0]); strings.Contains(payload, `"2026"`) {
+					t.Error("2026 thresholds are available before the regular season is verified complete")
+				}
+				return
+			}
+
+			code, body = getPage(t, archive, "/explore?view=thresholds&threshold-season=2026")
+			if code != http.StatusOK {
+				t.Fatalf("2026 thresholds status = %d", code)
+			}
+			requireElements(t, body, `[data-threshold-season] option[value="2026"][selected]`)
+			requireText(t, body, `[data-threshold-detail="2026"] h3`, "8 playoff teams", "no byes")
+			for outcome, team := range map[string]string{"shield": "Team 14", "home": "Team 11", "playoffs": "Team 07"} {
+				selector := fmt.Sprintf(`[data-threshold-table-rows] tr[data-season="2026"][data-outcome="%s"]`, outcome)
+				requireAttr(t, body, selector, "data-team", team)
+				requireAttr(t, body, selector, "data-ppg", "1.5")
+			}
+		})
+	}
+}
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=team-rankings&team=alpha", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=teams&display=scatter", "/nwsl-season/explore?view=team-history&team=alpha"} {
@@ -762,5 +836,21 @@ func TestTableLabel(t *testing.T) {
 		if got := tableLabel(test.rows, test.noun); got != test.want {
 			t.Errorf("tableLabel(%d, %q) = %q, want %q", test.rows, test.noun, got, test.want)
 		}
+	}
+}
+
+func TestExploreThresholdsLeaveGapsForTiesWhileSourceScopeIsActive(t *testing.T) {
+	archive := testArchive(t, map[string]archiveState{
+		"2026": {Lifecycle: cache.SourceScopeActive, Inventory: cache.InventoryCompletenessComplete},
+	})
+	// Every team has the same record, so no rank is determined by results.
+	archive[0].Data = completeCatalogSeasonData()
+	code, body := getPage(t, archive, "/explore?view=thresholds&threshold-season=2026")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	requireText(t, body, `[data-threshold-detail="2026"]`, "Tied finishing order remains ambiguous")
+	if rows := find(t, body, `[data-threshold-table-rows] tr[data-season="2026"]`); len(rows) != 0 {
+		t.Errorf("tied season published %d cutoff rows, want gaps", len(rows))
 	}
 }

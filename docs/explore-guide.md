@@ -159,6 +159,10 @@ present and nonnegative. `Abandoned` has its own terminal count; a malformed
 statuses are pending. Team views orient home and away appearances to each team
 (points are 3/1/0) and require distinct, nonempty team IDs per match.
 
+Regular-season views treat an active source scope as complete once the verified
+fixture inventory is satisfied and every fixture has a valid final score or
+is abandoned. This works during playoffs and is independent of xG coverage.
+
 ### Expected values
 
 xG and xPoints join a played match by match ID and matching home/away teams,
@@ -378,17 +382,15 @@ evidence, so a conflict withholds just the outcomes it touches. An unresolved
 threshold or adjacent finisher leaves that boundary as a gap. A tie override is accepted only for a still-unresolved rank,
 never to replace a result the season's computable rules already determine.
 
-A season needs loaded, terminal regular-season results, a complete resolved
-catalog playoff bracket and consistent official match counts across teams after
-awards. Known incomplete inventory withholds all thresholds. Without verified
-regular-season inventory, equal match counts and a completed postseason are
-closure checks, not an independent audit of every match; a uniformly truncated
-archive cannot be ruled out by counts alone. An in-progress season can enter as soon
-as verified regular-season inventory is complete and its postseason is complete,
-without waiting for the calendar to change. Ordinary later seasons need only
-normal ASA synchronization and their normal competition catalog entry, not an
-outcome-specific manual record. An exceptional or ambiguous season may need a
-source-backed exception.
+A season needs loaded, terminal regular-season results and consistent official
+match counts across teams after awards. With verified competition rules and
+complete fixture inventory, the final standings can establish cutoffs before
+the postseason ends. Unresolved ranks leave gaps until the evidence settles
+them. Historical formats without verified competition rules require a complete,
+resolved catalog playoff bracket. Known incomplete inventory withholds all
+thresholds. Without verified inventory, equal match counts and a completed
+postseason are closure checks; a uniformly truncated archive can pass both.
+An exceptional or ambiguous season may need a source-backed exception.
 
 [`outcome_overrides.json`](../internal/competition/outcome_overrides.json) contains
 only facts absent from ASA: awarded matches, deductions and otherwise unresolved
