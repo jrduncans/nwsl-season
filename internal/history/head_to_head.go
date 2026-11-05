@@ -95,7 +95,7 @@ func HeadToHead(summaries, goals []SeasonScoring, inputs []cache.HistoricalSeaso
 				}
 				basisMatch := basisMatches[season.Season][match.ID]
 				covered := !nonPenalty || basisMatch.GoalsCovered
-				result.Meetings = append(result.Meetings, HeadToHeadMeeting{TeamMatch: basisMatch, Season: season.Season, OpponentName: name, Active: season.Lifecycle == cache.SourceScopeActive, GoalsCovered: covered})
+				result.Meetings = append(result.Meetings, HeadToHeadMeeting{TeamMatch: basisMatch, Season: season.Season, OpponentName: name, Active: season.InProgress(), GoalsCovered: covered})
 				result.AllExpected.add(basisMatch, covered)
 				if match.Home {
 					result.HomeExpected.add(basisMatch, covered)

@@ -391,7 +391,7 @@ func exploreChartRecords(summaries []history.SeasonScoring) []exploreChartRecord
 	for _, summary := range summaries {
 		if summary.PlotEligible {
 			records = append(records, exploreChartRecord{
-				Season: summary.Season, Played: summary.Played, Active: summary.Lifecycle == cache.SourceScopeActive,
+				Season: summary.Season, Played: summary.Played, Active: summary.InProgress(),
 				Goals: summary.GoalsPerMatch, XG: summary.XGPerMatch, Gap: summary.GoalsMinusXGPerMatch, Bins: summary.GoalBins,
 			})
 		}

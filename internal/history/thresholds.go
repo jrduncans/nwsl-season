@@ -71,10 +71,10 @@ func Thresholds(summaries []SeasonScoring, archive []cache.HistoricalSeason) []S
 		if !found || playoffs.BracketFormat == nil {
 			continue
 		}
-		// An active season enters when verified regular-season inventory and a
-		// complete postseason prove closure, even before the calendar rolls over.
+		// Verified rules can establish the cutoffs as soon as the regular
+		// season ends. Historical formats still use the postseason as evidence.
 		if entry.Inventory != nil && summary.Lifecycle != cache.SourceScopeCompleted {
-			if !regularThresholdsComplete(summary) || bracket.Build(*playoffs.BracketFormat, snapshots[year].PlayoffGames).State != bracket.StateReady {
+			if !summary.hasFinalResults() || (needsPostseasonEvidence(entry, summary) && bracket.Build(*playoffs.BracketFormat, snapshots[year].PlayoffGames).State != bracket.StateReady) {
 				continue
 			}
 		}
@@ -83,10 +83,6 @@ func Thresholds(summaries []SeasonScoring, archive []cache.HistoricalSeason) []S
 	}
 	slices.SortFunc(rows, func(a, b SeasonThresholds) int { return strings.Compare(a.Season, b.Season) })
 	return rows
-}
-
-func regularThresholdsComplete(summary SeasonScoring) bool {
-	return summary.Readiness == cache.SourceReadinessAvailable && summary.Inventory == cache.InventoryCompletenessComplete && summary.Pending == 0 && summary.InvalidCompleted == 0
 }
 
 func deriveThresholdSeason(entry competition.Entry, summary SeasonScoring, snapshot cache.HistoricalSeason, format competition.BracketFormat, override competition.OutcomeOverrides) SeasonThresholds {
@@ -187,7 +183,7 @@ func thresholdFinishes(summary SeasonScoring, snapshot cache.HistoricalSeason, f
 	if summary.Readiness != cache.SourceReadinessAvailable || len(summary.Teams) <= season.Playoffs {
 		return finishes, none, "Regular-season records not loaded"
 	}
-	if summary.Lifecycle != cache.SourceScopeCompleted && !regularThresholdsComplete(summary) {
+	if summary.Lifecycle != cache.SourceScopeCompleted && !summary.hasFinalResults() {
 		return finishes, none, "Regular season is not completed"
 	}
 	if summary.Basis != AllShots || summary.Pending > 0 || summary.InvalidCompleted > 0 || summary.Inventory == cache.InventoryCompletenessIncomplete {
@@ -206,19 +202,20 @@ func thresholdFinishes(summary SeasonScoring, snapshot cache.HistoricalSeason, f
 		return finishes, none, reason
 	}
 	view := bracket.Build(format, snapshot.PlayoffGames)
-	if view.State != bracket.StateReady {
-		return finishes, none, "Complete, resolved playoff fixtures are required"
-	}
-	for _, game := range snapshot.PlayoffGames {
-		if game.Status != fixtures.CompletedStatus {
-			return finishes, none, "Playoffs are not completed"
+	if reason := thresholdPlayoffReadiness(view, snapshot.PlayoffGames, finishes); reason != "" {
+		// Only an unfinished postseason can be set aside, and only when verified
+		// rules already settle the regular season. Contradictory data withholds.
+		if needsPostseasonEvidence(snapshot.Entry, summary) || reason == playoffParticipantMismatch {
+			return finishes, none, reason
 		}
-		if _, found := finishes[game.HomeTeamID]; !found {
-			return finishes, none, "Playoff participants do not match regular-season records"
+		ranked := thresholdRanking(snapshot, finishes, override)
+		// Without postseason evidence, unresolved rank intervals remain gaps.
+		candidates := thresholdSeedCandidates(ranked, bracket.View{}, season, thresholdEvidence{})
+		if reason := resolveThresholdSeeds(candidates, finishes, bracket.View{}, format, override.Ties, false); reason == tieOverrideConflict {
+			return finishes, none, reason
 		}
-		if _, found := finishes[game.AwayTeamID]; !found {
-			return finishes, none, "Playoff participants do not match regular-season records"
-		}
+		seeds := thresholdSeeds{candidates: candidates}
+		return finishes, [4]thresholdSeeds{seeds, seeds, seeds, seeds}, ""
 	}
 	ranked := thresholdRanking(snapshot, finishes, override)
 	combined := thresholdSeedCandidates(ranked, view, season, thresholdEvidence{true, true, true})
@@ -236,6 +233,32 @@ func thresholdFinishes(summary SeasonScoring, snapshot cache.HistoricalSeason, f
 		seeds[index] = thresholdSeeds{own, resolveThresholdSeeds(own, finishes, view, format, override.Ties, false)}
 	}
 	return finishes, seeds, ""
+}
+
+const playoffParticipantMismatch = "Playoff participants do not match regular-season records"
+
+// needsPostseasonEvidence reports whether a season's cutoffs depend on its
+// completed postseason. Verified competition rules and final regular-season
+// results establish them without it.
+func needsPostseasonEvidence(entry competition.Entry, summary SeasonScoring) bool {
+	return entry.Rules == nil || !summary.hasFinalResults()
+}
+
+func thresholdPlayoffReadiness(view bracket.View, games []cache.Game, finishes map[string]ThresholdFinish) string {
+	if view.State != bracket.StateReady {
+		return "Complete, resolved playoff fixtures are required"
+	}
+	for _, game := range games {
+		if game.Status != fixtures.CompletedStatus {
+			return "Playoffs are not completed"
+		}
+		_, homeFound := finishes[game.HomeTeamID]
+		_, awayFound := finishes[game.AwayTeamID]
+		if !homeFound || !awayFound {
+			return playoffParticipantMismatch
+		}
+	}
+	return ""
 }
 
 // Awards fill observed game-count deficits only. If ASA later supplies the
@@ -404,9 +427,9 @@ func resolveThresholdSeeds(candidates map[string][]int, finishes map[string]Thre
 				}
 			}
 		}
-		openingSlots := view.Rounds[0].Slots
-		if !pairing {
-			openingSlots = nil
+		var openingSlots []bracket.Slot
+		if pairing {
+			openingSlots = view.Rounds[0].Slots
 		}
 		for _, slot := range openingSlots {
 			pairs := [][2]int{}

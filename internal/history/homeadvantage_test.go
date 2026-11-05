@@ -174,7 +174,7 @@ func TestHomeAdvantageKeepsActiveSeasonsAndSortsSeasons(t *testing.T) {
 	if len(got) != 2 || got[0].Season != "2018" || got[1].Season != "2019" {
 		t.Fatalf("seasons = %+v", got)
 	}
-	if got[0].Lifecycle != cache.SourceScopeCompleted || got[1].Lifecycle != cache.SourceScopeActive || !got[1].PlotEligible || got[1].Played != 20 {
+	if got[0].Active || !got[1].Active || !got[1].PlotEligible || got[1].Played != 20 {
 		t.Fatalf("lifecycles = %+v", got)
 	}
 	assertFloat(t, got[1].Goals, 15.0/20)

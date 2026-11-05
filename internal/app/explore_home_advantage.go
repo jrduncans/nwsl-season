@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
 )
 
@@ -78,7 +77,7 @@ func exploreHomeAdvantage(query url.Values, seasons []history.SeasonHomeAdvantag
 			continue
 		}
 		page.HomeAdvantageRows = append(page.HomeAdvantageRows, exploreHomeAdvantageRowFor(season))
-		if season.Lifecycle == cache.SourceScopeActive {
+		if season.Active {
 			active = append(active, fmt.Sprintf("%s: in progress through %d matches", season.Season, season.Played))
 		}
 		if season.XG == nil {
@@ -199,7 +198,7 @@ func exploreHomeAdvantageRecords(seasons []history.SeasonHomeAdvantage) []explor
 			continue
 		}
 		records = append(records, exploreHomeAdvantageRecord{
-			Season: season.Season, Played: season.Played, Active: season.Lifecycle == cache.SourceScopeActive,
+			Season: season.Season, Played: season.Played, Active: season.Active,
 			Goals: season.Goals, XG: season.XG, Points: season.Points, XPoints: season.XPoints,
 			HomeWins: season.HomeWins, Draws: season.Draws, AwayWins: season.AwayWins,
 		})

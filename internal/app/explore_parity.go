@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
 )
 
@@ -112,7 +111,7 @@ func exploreParity(query url.Values, seasons []history.SeasonParity, teamSeasons
 			continue
 		}
 		record := exploreParityRecord{
-			Season: season.Season, Active: season.Lifecycle == cache.SourceScopeActive, Played: season.Played,
+			Season: season.Season, Active: season.Active, Played: season.Played,
 			Matches: season.MatchesPerTeam, Spread: season.Spread, Chance: season.Chance, XSpread: season.XSpread,
 			Gap: season.Gap, Q1: season.Q1, Q3: season.Q3, IQR: season.IQR(),
 		}

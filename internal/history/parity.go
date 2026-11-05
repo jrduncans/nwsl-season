@@ -33,7 +33,7 @@ type TeamParity struct {
 // actual values in place.
 type SeasonParity struct {
 	Season       string
-	Lifecycle    cache.SourceScopeLifecycle
+	Active       bool
 	Played       int
 	PlotEligible bool
 	Exclusions   []string
@@ -79,7 +79,7 @@ func Parity(summaries []SeasonScoring) []SeasonParity {
 
 func paritySeason(summary SeasonScoring) SeasonParity {
 	season := SeasonParity{
-		Season: summary.Season, Lifecycle: summary.Lifecycle, Played: summary.Played,
+		Season: summary.Season, Active: summary.InProgress(), Played: summary.Played,
 		PlotEligible: summary.PlotEligible, Exclusions: summary.Exclusions,
 	}
 	if !summary.PlotEligible || len(summary.Teams) == 0 {

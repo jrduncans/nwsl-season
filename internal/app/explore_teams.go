@@ -132,7 +132,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	// silently substitutes another year's data.
 	for i := len(summaries) - 1; i >= 0; i-- {
 		summary := summaries[i]
-		season := exploreTeamSeason{Season: summary.Season, Active: summary.Lifecycle == cache.SourceScopeActive}
+		season := exploreTeamSeason{Season: summary.Season, Active: summary.InProgress()}
 		if summary.TeamComparisonEligible() {
 			for _, team := range summary.Teams {
 				row := exploreTeamRecord{ID: team.TeamID, Name: names[summary.Season][team.TeamID], LogoURL: clubLogoURL(team.TeamID), Played: team.Played, XGCovered: team.XGCovered, XPointsCovered: team.XPointsCovered}

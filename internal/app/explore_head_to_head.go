@@ -303,7 +303,7 @@ func headToHeadPayload(summaries, npSummaries []history.SeasonScoring, archive [
 		if !season.TeamComparisonEligible() {
 			continue
 		}
-		info := exploreHeadToHeadSeason{Year: season.Season, Active: season.Lifecycle == cache.SourceScopeActive, Names: map[string]string{}}
+		info := exploreHeadToHeadSeason{Year: season.Season, Active: season.InProgress(), Names: map[string]string{}}
 		for _, input := range archive {
 			if input.Entry.Season == season.Season {
 				for _, team := range input.Data.Teams {

@@ -208,7 +208,7 @@ func exploreScoringPageFor(fromPath string, summaries []history.SeasonScoring, b
 	for _, summary := range summaries {
 		if summary.PlotEligible && summary.GoalsPerMatch != nil && !math.IsNaN(*summary.GoalsPerMatch) && !math.IsInf(*summary.GoalsPerMatch, 0) && *summary.GoalsPerMatch >= 0 {
 			page.HasTrendData = true
-			if summary.Lifecycle == cache.SourceScopeActive {
+			if summary.InProgress() {
 				active = append(active, fmt.Sprintf("%s: in progress through %d matches", summary.Season, summary.Played))
 			}
 		}
