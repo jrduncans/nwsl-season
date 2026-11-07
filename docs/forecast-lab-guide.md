@@ -336,6 +336,8 @@ flowchart TD
     J --> K
 ```
 
+The bracket view omits eliminated teams from the Champion list as playoff results are recorded.
+
 ## Championship forecasting after the regular season
 
 Once Regular Season forecasting is supported, its final standings are safe,
