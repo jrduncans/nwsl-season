@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/jrduncans/nwsl-season/internal/competition"
@@ -118,25 +119,18 @@ func playoffBracketForecast(format competition.BracketFormat, state *simulation.
 			continue
 		}
 		team := byID[id]
-		out := team.ChampionshipEliminated
-		text := forecastChance(team.ChampionshipProbability, team.ChampionshipClinched, out)
-		if out {
-			text = "Out"
+		if team.ChampionshipEliminated || slices.Contains(state.Eliminated, id) {
+			continue
 		}
+		text := forecastChance(team.ChampionshipProbability, team.ChampionshipClinched, false)
 		if state.Unavailable != "" {
 			text = "—"
-			for _, eliminated := range state.Eliminated {
-				if eliminated == id {
-					text = "Out"
-					out = true
-				}
-			}
 		}
 		width := percent(team.ChampionshipProbability)
 		if state.Unavailable != "" {
 			width = ""
 		}
-		champion.Teams = append(champion.Teams, playoffPositionTeam{Team: teamName(team.Team), Seed: seed, Text: text, Width: width, Probability: team.ChampionshipProbability, Out: out})
+		champion.Teams = append(champion.Teams, playoffPositionTeam{Team: teamName(team.Team), Seed: seed, Text: text, Width: width, Probability: team.ChampionshipProbability})
 	}
 	sortPositionTeams(champion.Teams)
 	rounds = append(rounds, playoffForecastRound{Label: "Champion", Slots: []playoffForecastSlot{{ID: "champion", Label: "Champion", Sides: []playoffPosition{champion}}}})

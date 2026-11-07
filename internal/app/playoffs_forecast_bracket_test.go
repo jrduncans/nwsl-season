@@ -48,18 +48,16 @@ func TestPlayoffForecastPositionListsConserveProbability(t *testing.T) {
 		if step == 0 && (len(rounds) != 3 || len(rounds[1].Slots[0].Sides) != 2 || len(rounds[1].Slots[0].Sides[0].Teams) != 4) {
 			t.Fatalf("initial positions=%+v", rounds)
 		}
+		champion := rounds[len(rounds)-1].Slots[0].Sides[0].Teams
+		if len(champion) != 8-step {
+			t.Fatalf("step %d: got %d championship contenders", step, len(champion))
+		}
 		if step == 7 {
 			if len(rounds) != 1 {
 				t.Fatal("completed matches retained future slots")
 			}
-			champion := rounds[0].Slots[0].Sides[0].Teams
 			if champion[0].Text != "100%" {
 				t.Fatal("settled champion not exact")
-			}
-			for _, team := range champion[1:] {
-				if team.Text != "Out" {
-					t.Fatal("settled loser not out")
-				}
 			}
 		}
 	}
