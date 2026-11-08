@@ -139,6 +139,10 @@ func (a *application) playoffsForecast(w http.ResponseWriter, r *http.Request, s
 	base.ModelEvaluationPath = relativeURL(r.URL.Path, stageURL(scope.Season, "regular-season")+"/model-evaluation")
 	base.FixedCount = len(state.PlayoffWinners)
 	page := playoffsForecastView(base, data, postseason, *format, results[0], comparison)
+	page.PlayoffImpact = a.playoffImpact(r.Context(), data, state, places, postseason, *format, eligible, results[0], page.PlayoffRows)
+	if r.Context().Err() != nil {
+		return
+	}
 	labels := bracketSlotLabels(*format)
 	for _, slot := range format.Slots {
 		match, ok := eligible[slot.ID]
@@ -262,6 +266,7 @@ type playoffsForecastPage struct {
 	ScenarioMatches    []playoffScenarioMatch
 	PlayoffAssumptions []forecastAssumptionView
 	BracketRounds      []playoffForecastRound
+	PlayoffImpact      []playoffImpactMatch
 }
 
 func playoffsForecastView(base forecastPage, data cache.SeasonData, state *simulation.Postseason, format competition.BracketFormat, result simulation.Result, comparison *simulation.Result) playoffsForecastPage {
