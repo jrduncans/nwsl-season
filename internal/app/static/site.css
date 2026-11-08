@@ -958,7 +958,6 @@ th:nth-child(2) { text-align: left; }
 .bracket-round-nav button { padding: .55rem .7rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--panel); color: var(--green); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
 .bracket-round-nav button:hover { background: var(--green-soft); }
 [data-bracket-round] > h2 { scroll-margin-top: 4.5rem; }
-.playoff-seed-heading { color: var(--muted); font-size: .75rem; font-weight: 500; }
 .playoff-team-out { color: var(--muted); }
 .playoff-scenario-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: .65rem 1rem; max-width: 54rem; }
 .playoff-scenario-form label { position: relative; display: grid; gap: .35rem; min-width: 0; font-size: .875rem; font-weight: 700; }
@@ -995,4 +994,24 @@ th:nth-child(2) { text-align: left; }
   .playoff-team-identity .team-name { gap: .3rem; }
   .playoff-scenario-form { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .playoff-forecast-bracket { grid-auto-columns: 18rem; gap: 2rem; }
+}
+
+/* Playoff forecast: By match and By team views. */
+
+.playoff-impact { margin-top: 1.5rem; }
+.playoff-impact h3 { margin: 0 0 .5rem; font-size: 1rem; }
+.playoff-impact h3 span { margin-left: .4rem; color: var(--muted); font-size: .85rem; font-weight: 600; }
+.playoff-impact-table { min-width: 36rem; }
+.playoff-impact-table :is(th, td) { text-align: right; font-variant-numeric: tabular-nums; }
+.playoff-impact-table thead th { white-space: normal; }
+.playoff-impact-table thead th[colspan] { text-align: center; }
+.playoff-impact-table :is(th, td).playoff-impact-start { border-left: 1px solid var(--line); }
+.playoff-impact-table :is(thead th[rowspan], tbody th) { position: sticky; left: 0; z-index: 1; width: 30%; background: var(--cell-bg, var(--panel)); box-shadow: inset -1px 0 var(--line); text-align: left; vertical-align: middle; }
+.playoff-impact-advance { display: block; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.playoff-impact-participant :is(th, td) { background: var(--green-soft); }
+@media (max-width: 700px) {
+  .playoff-impact-table { min-width: 28rem; font-size: .8rem; }
+  .playoff-impact-table :is(th, td) { padding: .5rem .3rem; }
+  .playoff-impact-table :is(thead th[rowspan], tbody th) { width: 5rem; min-width: 5rem; }
+  .playoff-impact-table .team-logo { display: none; }
 }

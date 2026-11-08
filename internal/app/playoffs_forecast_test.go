@@ -57,7 +57,7 @@ func TestPlayoffsForecastAvailabilityAndRegularRedirect(t *testing.T) {
 		headings = append(headings, text(n))
 	}
 	// Rounds read outward from Champion.
-	if want := []string{"Team (seed)", "Champion", "Reach final", "Reach semifinal"}; !slices.Equal(headings, want) {
+	if want := []string{"Team", "Champion", "Reach final", "Reach semifinal"}; !slices.Equal(headings, want) {
 		t.Fatalf("headings = %q, want %q", headings, want)
 	}
 	// The Champion card keeps its connector without repeating its heading.
@@ -197,8 +197,16 @@ func TestPlayoffForecastBaselineReusesWarmCache(t *testing.T) {
 	before := len(app.app.forecasts.cache)
 	response := httptest.NewRecorder()
 	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/forecast", nil))
-	if response.Code != http.StatusOK || len(app.app.forecasts.cache) != before {
+	// The baseline is warm. Only By match's conditional runs are new: one per
+	// possible winner of each unplayed quarterfinal.
+	if added := len(app.app.forecasts.cache) - before; response.Code != http.StatusOK || added != 8 {
 		t.Fatalf("baseline cache miss: %d, %d -> %d", response.Code, before, len(app.app.forecasts.cache))
+	}
+	before = len(app.app.forecasts.cache)
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs/forecast", nil))
+	if response.Code != http.StatusOK || len(app.app.forecasts.cache) != before {
+		t.Fatalf("conditional runs not cached: %d, %d -> %d", response.Code, before, len(app.app.forecasts.cache))
 	}
 }
 

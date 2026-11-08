@@ -4,12 +4,12 @@
 {{if .Warning}}<p class="data-warning">{{.Warning}}</p>{{end}}
 <section class="forecast-results" data-playoff-forecast aria-label="Playoff forecast outlook">
  {{if .PlayoffAssumptions}}<section class="playoff-scenario-summary" aria-labelledby="playoff-active-scenario"><h2 id="playoff-active-scenario">Active scenario</h2><p>Forecast assumes these winners:</p><ul class="forecast-assumptions">{{range .PlayoffAssumptions}}<li><span>{{.Fixture}}</span><a href="{{.Remove}}" data-playoff-preserve-view>Remove<span class="visually-hidden"> assumption: {{.Fixture}}</span></a></li>{{end}}</ul><a href="{{.ResetPath}}" data-playoff-preserve-view>Reset scenario</a></section>{{end}}
- <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label><label><input type="radio" name="forecast-view" value="bracket" autocomplete="off" aria-controls="forecast-bracket-panel"><span>Bracket</span></label></span></fieldset></div>
+ <div class="forecast-view-toolbar"><fieldset class="segmented segmented-inline" data-forecast-view-control disabled><legend class="visually-hidden">Outlook view</legend><span class="segmented-options"><label><input type="radio" name="forecast-view" value="table" autocomplete="off" aria-controls="forecast-table-panel" checked><span>Table</span></label><label><input type="radio" name="forecast-view" value="heatmap" autocomplete="off" aria-controls="forecast-heatmap-panel"><span>Heatmap</span></label><label><input type="radio" name="forecast-view" value="bracket" autocomplete="off" aria-controls="forecast-bracket-panel"><span>Bracket</span></label>{{if .PlayoffImpact}}<label><input type="radio" name="forecast-view" value="match" autocomplete="off" aria-controls="forecast-match-panel"><span>By match</span></label>{{end}}</span></fieldset></div>
  <div id="forecast-table-panel" data-forecast-view-panel="table">
   <p class="playoff-overflow-hint" data-playoff-scroll-hint hidden>Scroll horizontally to see every column <span aria-hidden="true">→</span></p>
   <div class="table-scroll" data-playoff-table-scroll tabindex="0" role="region" aria-label="Playoff round probabilities">
    <table class="playoffs-forecast-table{{if .HasComparison}} playoffs-forecast-with-comparison{{end}}"><caption><span>{{.Season}} playoffs · {{.ModelName}}</span></caption>
-    <thead><tr><th scope="col">Team <span class="playoff-seed-heading">(seed)</span></th><th scope="col">Champion</th>{{range .RoundColumns}}<th scope="col">{{.}}</th>{{end}}{{if .HasComparison}}<th scope="col">{{.ComparisonName}} · Champion</th>{{end}}</tr></thead>
+    <thead><tr><th scope="col">Team</th><th scope="col">Champion</th>{{range .RoundColumns}}<th scope="col">{{.}}</th>{{end}}{{if .HasComparison}}<th scope="col">{{.ComparisonName}} · Champion</th>{{end}}</tr></thead>
     <tbody>{{range .PlayoffRows}}{{$row := .}}<tr{{if .Out}} class="playoff-team-out"{{end}}><th scope="row">{{template "playoffForecastTeam" .}}</th><td><strong>{{.Champion}}</strong></td>{{range .Rounds}}<td><span class="playoff-round-full">{{.}}</span><span class="playoff-round-mobile" aria-hidden="true">{{if and $row.Out (ne . "Through")}}Out{{else}}{{.}}{{end}}</span></td>{{end}}{{if $.HasComparison}}<td>{{.Comparison}}</td>{{end}}</tr>{{end}}</tbody>
    </table>
   </div>
@@ -19,7 +19,7 @@
   <p class="playoff-overflow-hint" data-playoff-scroll-hint hidden>Scroll horizontally to see every outcome <span aria-hidden="true">→</span></p>
   <div class="table-scroll" data-playoff-table-scroll tabindex="0" role="region" aria-label="Playoff run endings">
    <table class="forecast-heatmap playoffs-heatmap"><caption><span>{{.Season}} playoffs · {{.ModelName}}</span></caption>
-    <thead><tr><th scope="col">Team <span class="playoff-seed-heading">(seed)</span></th>{{range .EndColumns}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+    <thead><tr><th scope="col">Team</th>{{range .EndColumns}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
     <tbody>{{range .PlayoffRows}}<tr><th scope="row">{{template "playoffForecastTeam" .}}</th>{{range .Ends}}<td><span class="forecast-heatmap-value"{{if .Intensity}} style="--forecast-probability: {{.Intensity}}"{{end}}>{{.Text}}</span></td>{{end}}</tr>{{end}}</tbody>
    </table>
   </div>
@@ -30,6 +30,19 @@
    <div class="playoff-forecast-bracket" data-bracket-layout>{{range .BracketRounds}}<section class="playoff-forecast-round" data-bracket-round><h2>{{.Label}}</h2><div class="bracket-round-slots" data-bracket-slots>{{range .Slots}}<article class="playoff-forecast-slot" data-bracket-node="{{.ID}}" aria-label="{{.Label}}"><h3>{{.Label}}</h3>{{range .Sides}}<section class="playoff-position-group"{{if .Source.ID}} data-bracket-source="{{.Source.ID}}"{{end}}>{{if .Source.Label}}<h4>{{.Source.Label}}</h4>{{end}}<ul class="playoff-position-list">{{range .Teams}}<li{{if .Out}} class="playoff-team-out"{{end}} aria-label="Seed {{.Seed}}, {{.Team.Name}}: {{.Text}}"><span class="bracket-seed" aria-hidden="true">{{.Seed}}</span>{{template "teamName" .Team}}<span class="playoff-position-probability">{{.Text}}</span>{{if .Width}}<span class="forecast-probability-track" aria-hidden="true"><span style="width: {{.Width}}"></span></span>{{end}}</li>{{else}}<li>Unresolved</li>{{end}}</ul></section>{{end}}</article>{{end}}</div></section>{{end}}</div>
   </div>
  </div>
+ {{if .PlayoffImpact}}<div id="forecast-match-panel" data-forecast-view-panel="match" hidden>
+  <p class="note">What each result of a match still to be played would do to every team's chances.</p>
+  {{range .PlayoffImpact}}{{$match := .}}{{$metrics := len .Metrics}}<section class="playoff-impact" aria-label="{{.Label}}: {{.Fixture}}">
+   <h3>{{.Label}} <span>{{.Fixture}}</span></h3>
+   <div class="table-scroll" tabindex="0" role="region" aria-label="{{.Label}} chances by result">
+    <table class="playoff-impact-table"><caption class="visually-hidden">{{.Label}}: chances by result</caption>
+     <thead><tr><th scope="col" rowspan="2">Team</th><th scope="colgroup" colspan="{{$metrics}}" class="playoff-impact-start">Now</th>{{range .Outcomes}}<th scope="colgroup" colspan="{{$metrics}}" class="playoff-impact-start">If <span class="playoff-team-full">{{.Team.Name}}</span><span class="playoff-team-mobile" aria-hidden="true">{{.MobileName}}</span> advances <span class="playoff-impact-advance">{{.Advance}}</span></th>{{end}}</tr>
+      <tr>{{range $i, $m := $match.Metrics}}<th scope="col"{{if not $i}} class="playoff-impact-start"{{end}}>{{$m}}</th>{{end}}{{range $match.Outcomes}}{{range $i, $m := $match.Metrics}}<th scope="col"{{if not $i}} class="playoff-impact-start"{{end}}>{{$m}}</th>{{end}}{{end}}</tr></thead>
+     <tbody>{{range .Rows}}<tr{{if .Participant}} class="playoff-impact-participant"{{end}}><th scope="row">{{template "playoffForecastTeam" .}}</th>{{range $i, $v := .Now}}<td{{if not $i}} class="playoff-impact-start"{{end}}>{{$v}}</td>{{end}}{{range .Cells}}{{range $i, $v := .}}<td{{if not $i}} class="playoff-impact-start"{{end}}>{{$v}}</td>{{end}}{{end}}</tr>{{end}}</tbody>
+    </table>
+   </div>
+  </section>{{end}}
+ </div>{{end}}
 </section>
 <section class="forecast-builder" aria-labelledby="playoff-scenario-title"><h2 id="playoff-scenario-title">Scenario</h2>
  {{if .ScenarioMatches}}<form class="playoff-scenario-form" method="get" action="{{.ForecastPath}}" data-playoff-scenario>

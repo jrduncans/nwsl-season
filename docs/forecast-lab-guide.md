@@ -662,6 +662,28 @@ Behavior-level examples live in the tests under
 [`internal/forecaststate`](../internal/forecaststate), with page coverage in
 [`internal/app/handler_test.go`](../internal/app/handler_test.go).
 
+### By match
+
+Beside Table, Heatmap and Bracket, the playoff forecast offers a conditional
+view. It is omitted while championship odds are withheld.
+
+**By match** answers "who do I want to win?". Each unplayed match whose
+participants are already known (seed-derived or recorded) gets a table of every
+surviving team's chances now and if each side advances. A column is exactly the
+forecast the Scenario form would produce for that winner, so it includes any
+assumptions already applied; matches with an assumption are omitted. Each
+outcome's heading shows the chance that side advances. A team that would be
+eliminated reads `Out`. The view re-runs the forecast twice per eligible match
+through the shared executor, so the first view of a new state costs those runs
+and later views reuse the result cache.
+
+Every scenario column group repeats the same sub-columns. A winner reaches the
+next round for certain, so the sub-columns are the later rounds' reach chances
+and then `Champion`: `Final` and `Champion` for a quarterfinal, `Champion` alone
+for a semifinal. The Final itself gets no table, because its result only
+restates the title. When no match remains that qualifies, the segment is not
+offered.
+
 ### Round and match probabilities
 
 The simulator counts entry into each bracket round and each team's exclusive
