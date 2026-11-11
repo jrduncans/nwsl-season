@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#17211d"/>
+  <rect x="96" y="150" width="12" height="250" fill="#136f4a"/>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+    <text x="140" y="315" fill="#ffffff" font-size="190" font-weight="800" letter-spacing="7">NWSL</text>
+    <text x="146" y="390" fill="#cbd4ce" font-size="46" font-weight="700" letter-spacing="7.4">BY THE NUMBERS</text>
+    <text x="96" y="530" fill="#cbd4ce" font-size="32" font-weight="400">Standings, xG, clinching scenarios, and playoff forecasts</text>
+  </g>
+</svg>

@@ -90,7 +90,7 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 		t.Fatalf("unexpected reads: %+v", store)
 	}
 	body := response.Body.String()
-	requireExact(t, body, "title", "Team-seasons · Explore · NWSL Season Explorer")
+	requireExact(t, body, "title", "Team-seasons · Explore · NWSL by the Numbers")
 	forbidRaw(t, body, "data-team-seasons-detail", "data-team-seasons-hint", `name="team-season"`, "data-team-seasons-link")
 	if len(find(t, body, "[data-team-seasons-values][open]")) != 0 {
 		t.Fatal("default table expanded")

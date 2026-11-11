@@ -28,7 +28,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 	if store.archiveCalls != 1 || store.seasonCalls != 0 || store.statusCalls != 0 {
 		t.Errorf("reads: archive=%d season=%d status=%d, want one archive read only", store.archiveCalls, store.seasonCalls, store.statusCalls)
 	}
-	requireExact(t, body, "title", "Home advantage · Explore · NWSL Season Explorer")
+	requireExact(t, body, "title", "Home advantage · Explore · NWSL by the Numbers")
 	requireAttr(t, body, `a[data-view-choice="home-advantage"]`, "aria-current", "page")
 	requireExact(t, body, "#explore-home-title", "Home advantage per match")
 	requireAttr(t, body, `canvas[data-chart="home-goals"]`, "role", "img")

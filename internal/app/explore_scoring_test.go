@@ -135,4 +135,5 @@ func TestExploreLinksStylesheetAndHome(t *testing.T) {
 	_, body := getPage(t, penaltyArchive(t, 20), "/explore")
 	requireAttr(t, body, `link[rel=stylesheet]`, "href", staticURL("/explore", "site.css"))
 	requireAttr(t, body, `a.brand`, "href", relativeURL("/explore", "/"))
+	requireAttr(t, body, `a.brand`, "aria-label", "NWSL by the Numbers")
 }

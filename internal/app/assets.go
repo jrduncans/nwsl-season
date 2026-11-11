@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strings"
 )
 
 //go:embed templates/*.html static/*
@@ -42,6 +43,18 @@ func staticURL(fromPath, name string) string {
 	return target
 }
 
+// shareImageName is the link-preview image that social sharing tags use.
+const shareImageName = "share.png"
+
+// shareImageURL returns the absolute, versioned share image URL under
+// publicURL, or "" when no public URL is configured.
+func shareImageURL(publicURL string) string {
+	if publicURL == "" {
+		return ""
+	}
+	return strings.TrimRight(publicURL, "/") + "/static/" + shareImageName + "?v=" + staticVersions[shareImageName]
+}
+
 // staticHandler serves the embedded static files. A request whose version
 // matches the file's current content is cached for a year without
 // revalidation; any other request, including an unversioned or stale link,
@@ -56,6 +69,10 @@ func staticHandler(files fs.FS) http.Handler {
 				w.Header().Set("Cache-Control", "no-cache")
 			}
 			w.Header().Set("ETag", `"`+version+`"`)
+		}
+		if r.URL.Path == shareImageName {
+			// Link-preview services and clients load this image from other origins.
+			w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 		}
 		fileServer.ServeHTTP(w, r)
 	})

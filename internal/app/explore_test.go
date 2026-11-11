@@ -349,7 +349,7 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		}
 		_, label, _ := strings.Cut(tc.current, `aria-current="page">`)
 		label = strings.TrimSuffix(label, "</a>")
-		if title := "<title>" + label + " · Explore · NWSL Season Explorer</title>"; !strings.Contains(body, title) {
+		if title := "<title>" + label + " · Explore · NWSL by the Numbers</title>"; !strings.Contains(body, title) {
 			t.Errorf("%s: missing view title %q", tc.query, title)
 		}
 		for group, label := range groups {

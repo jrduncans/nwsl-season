@@ -402,7 +402,7 @@ func (a *application) forecastPage(r *http.Request, data cache.SeasonData, seaso
 	rows, positionScaleMax := forecastComparisonRows(result, comparison, playoffPlaces(rules), certainty)
 	heatmapPositions, heatmapGroups := forecastHeatmapColumns(len(result.Teams), playoffPlaces(rules))
 	page := forecastPage{
-		Title: "Forecast lab · " + season + " NWSL season", Season: season, Stage: scope.Stage, ResultsThrough: resultsThrough,
+		Title: "Forecast lab · " + season + " season", Season: season, Stage: scope.Stage, ResultsThrough: resultsThrough,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		SeasonPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)), ForecastPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/forecast"),
 		SeasonSelector: seasonChoices, StageSelector: stageChoices,

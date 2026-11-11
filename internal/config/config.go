@@ -18,6 +18,8 @@ const (
 	defaultHTTPPort = "8080"
 	defaultHTTPAddr = defaultHTTPHost + ":" + defaultHTTPPort
 	defaultDataDir  = "data"
+	// defaultPublicURL is the production site root used in social sharing tags.
+	defaultPublicURL = "https://nwsl.jrduncans.com"
 
 	defaultSyncSeason          = "2026"
 	defaultSyncStage           = "Regular Season"
@@ -47,6 +49,10 @@ type Config struct {
 	// refreshes. Tests point it at a local fake; production keeps the default.
 	ASABaseURL string
 
+	// PublicURL is the absolute site root that social sharing tags point at,
+	// since link previews need absolute image URLs.
+	PublicURL string
+
 	// SyncScheduler starts the background scheduler, the server's only ASA
 	// caller. Development servers that read a copied cache turn it off.
 	SyncScheduler bool
@@ -67,6 +73,10 @@ type Config struct {
 func FromEnvironment() (Config, error) {
 	dataDir := valueOrDefault("NWSL_DATA_DIR", defaultDataDir)
 	asaBaseURL, err := absoluteHTTPURLFromEnvironment("NWSL_ASA_BASE_URL", asa.DefaultBaseURL)
+	if err != nil {
+		return Config{}, err
+	}
+	publicURL, err := absoluteHTTPURLFromEnvironment("NWSL_PUBLIC_URL", defaultPublicURL)
 	if err != nil {
 		return Config{}, err
 	}
@@ -113,6 +123,7 @@ func FromEnvironment() (Config, error) {
 		DBPath:   filepath.Join(dataDir, "nwsl-season.sqlite"),
 
 		ASABaseURL: asaBaseURL,
+		PublicURL:  publicURL,
 
 		SyncScheduler: syncScheduler,
 
@@ -131,7 +142,7 @@ func FromEnvironment() (Config, error) {
 
 // absoluteHTTPURLFromEnvironment accepts only absolute http or https URLs
 // with a host name and no user information, query string, or fragment, so a
-// typo cannot silently send source requests elsewhere.
+// typo cannot silently send source requests or share links elsewhere.
 func absoluteHTTPURLFromEnvironment(name, fallback string) (string, error) {
 	value := os.Getenv(name)
 	if value == "" {

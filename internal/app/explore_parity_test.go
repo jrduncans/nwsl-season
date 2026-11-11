@@ -26,7 +26,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 	if store.archiveCalls != 1 || store.seasonCalls != 0 || store.statusCalls != 0 {
 		t.Errorf("reads: archive=%d season=%d status=%d, want one archive read only", store.archiveCalls, store.seasonCalls, store.statusCalls)
 	}
-	requireExact(t, body, "title", "Parity · Explore · NWSL Season Explorer")
+	requireExact(t, body, "title", "Parity · Explore · NWSL by the Numbers")
 	requireAttr(t, body, `a[data-view-choice="parity"]`, "aria-current", "page")
 	requireAttr(t, body, `canvas[data-chart="parity"]`, "role", "img")
 	requireText(t, body, "[data-panel=parity]",
