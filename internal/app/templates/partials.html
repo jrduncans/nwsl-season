@@ -3,12 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} · NWSL Season Explorer</title>
+  <title>{{.Title}} · NWSL by the Numbers</title>
+  <meta name="description" content="Standings, results, xG, clinching scenarios, and playoff forecasts for the NWSL.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="NWSL by the Numbers">
+  <meta property="og:title" content="{{.Title}} · NWSL by the Numbers">
+  <meta property="og:description" content="Standings, results, xG, clinching scenarios, and playoff forecasts for the NWSL.">
+  {{- with shareImageURL}}
+  <meta property="og:image" content="{{.}}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="NWSL by the Numbers">
+  <meta name="twitter:card" content="summary_large_image">
+  {{- else}}
+  <meta name="twitter:card" content="summary">
+  {{- end}}
   <link rel="stylesheet" href="{{.StylesheetPath}}">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="{{.HomePath}}">NWSL Season Explorer</a>
+    <a class="brand" href="{{.HomePath}}" aria-label="NWSL by the Numbers"><span class="brand-mark">NWSL</span><span class="brand-tagline">by the numbers</span></a>
     {{if .Navigation}}<nav class="site-nav" aria-label="Season sections"><ul>{{range .Navigation}}<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a></li>{{end}}</ul></nav>{{end}}
   </header>
   <main class="page">{{end}}

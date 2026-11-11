@@ -59,6 +59,9 @@ type Options struct {
 	ForecastConcurrency int
 	ForecastTimeout     time.Duration
 	Location            *time.Location
+	// PublicURL is the absolute site root for social sharing tags. Empty
+	// leaves out the tags that need an absolute URL, such as the share image.
+	PublicURL string
 }
 
 // NewHandler wires the application routes using the current-season defaults.
@@ -95,7 +98,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload}).ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -1186,7 +1189,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		return seasonPage{}, err
 	}
 	page = seasonPage{
-		Title:                  season + " NWSL season",
+		Title:                  stagePageTitle(scope),
 		Season:                 season,
 		Stage:                  scope.Stage,
 		HomePath:               relativeURL(r.URL.Path, "/"),
@@ -1319,7 +1322,16 @@ func (a *application) factualLoadPage(r *http.Request, scope requestCompetition)
 	if err != nil {
 		return seasonPage{}, err
 	}
-	return seasonPage{Title: scope.Season + " " + scope.Entry.ShortLabel, Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Matches", StandingsMode: "per-game", FormatNotice: notice, RefreshFailed: refreshFailed}, nil
+	return seasonPage{Title: stagePageTitle(scope), Season: scope.Season, Stage: scope.Stage, HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), FixturesPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)+"/fixtures"), CurrentPath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), SeasonSelector: seasonChoices, StageSelector: stageChoices, FixturesHeading: "Matches", StandingsMode: "per-game", FormatNotice: notice, RefreshFailed: refreshFailed}, nil
+}
+
+// stagePageTitle names a season or stage page for its <title>. The site name
+// that follows already says NWSL, so the page part leaves it out.
+func stagePageTitle(scope requestCompetition) string {
+	if scope.Stage == "Regular Season" {
+		return scope.Season + " season"
+	}
+	return scope.Season + " " + scope.Entry.ShortLabel
 }
 
 func (a *application) historicalLoadPage(r *http.Request, scope requestCompetition) (seasonPage, error) {
@@ -1341,7 +1353,7 @@ func (a *application) historicalLoadPage(r *http.Request, scope requestCompetiti
 		return seasonPage{}, err
 	}
 	return seasonPage{
-		Title:           scope.Season + " NWSL season",
+		Title:           stagePageTitle(scope),
 		Season:          scope.Season,
 		Stage:           scope.Stage,
 		HomePath:        relativeURL(r.URL.Path, "/"),

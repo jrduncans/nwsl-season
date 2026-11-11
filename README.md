@@ -1,6 +1,6 @@
-# NWSL Season Explorer
+# NWSL by the Numbers
 
-NWSL Season Explorer is a website built in Go for browsing NWSL seasons,
+NWSL by the Numbers is a website built in Go for browsing NWSL seasons,
 standings, matches, schedule difficulty, playoff qualification, and
 probabilistic season forecasts.
 
@@ -260,6 +260,7 @@ from the copied fixtures when requested.
 | `PORT` | `8080` | Port used when `NWSL_HTTP_ADDR` is unset. |
 | `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache. |
 | `NWSL_ASA_BASE_URL` | `https://app.americansocceranalysis.com/api/v1` | ASA API root used by the server's scheduler and as the `sync -base-url` default. Must be an absolute `http` or `https` URL with a host name and no user information, query string, or fragment; override it only to point at a local fake ASA in tests. |
+| `NWSL_PUBLIC_URL` | `https://nwsl.jrduncans.com` | Absolute site root, including any proxy mount path, used for the share image URL in social sharing tags. Same validation as `NWSL_ASA_BASE_URL`. |
 | `NWSL_SYNC_SCHEDULER` | `true` | Set to `false` to serve the existing cache without starting the scheduler, which is the server's only ASA caller. Development worktrees do this automatically. |
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
@@ -633,6 +634,13 @@ gzip (checked October 2026; it adds no caching headers). Judge page weight by
 the compressed transfer size, not the raw HTML: Explore is about 1.3 MB raw
 but about 190 KB over the wire. Repeated text such as embedded JSON compresses
 well, so raw size overstates its cost.
+Every page carries a description plus Open Graph and Twitter card tags for
+link previews. The preview image, `internal/app/static/share.png`, is rendered
+from `assets/share-image.svg`; after editing the SVG, regenerate it with
+`rsvg-convert -w 1200 -h 630 assets/share-image.svg -o internal/app/static/share.png`.
+Its absolute URL comes from `NWSL_PUBLIC_URL`, and it is the one static file
+served with `Cross-Origin-Resource-Policy: cross-origin` so other sites can
+show it.
 Page links to static files carry a content hash (`?v=`). A request with the
 current hash is cached for a year as `immutable`; any other static request
 revalidates against that hash as its ETag. Pages themselves send no caching

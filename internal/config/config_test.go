@@ -23,6 +23,7 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "")
 	t.Setenv("NWSL_ASA_BASE_URL", "")
+	t.Setenv("NWSL_PUBLIC_URL", "")
 	t.Setenv("NWSL_SYNC_SCHEDULER", "")
 
 	got, err := FromEnvironment()
@@ -32,6 +33,9 @@ func TestFromEnvironmentUsesDefaults(t *testing.T) {
 
 	if got.ASABaseURL != asa.DefaultBaseURL {
 		t.Errorf("ASABaseURL = %q, want %q", got.ASABaseURL, asa.DefaultBaseURL)
+	}
+	if got.PublicURL != defaultPublicURL {
+		t.Errorf("PublicURL = %q, want %q", got.PublicURL, defaultPublicURL)
 	}
 	if got.HTTPAddr != defaultHTTPAddr {
 		t.Errorf("HTTPAddr = %q, want %q", got.HTTPAddr, defaultHTTPAddr)
@@ -79,6 +83,7 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 	t.Setenv("NWSL_FORECAST_CONCURRENCY", "3")
 	t.Setenv("NWSL_FORECAST_TIMEOUT", "40s")
 	t.Setenv("NWSL_ASA_BASE_URL", "http://127.0.0.1:9999/api/v1")
+	t.Setenv("NWSL_PUBLIC_URL", "https://example.test/nwsl")
 	t.Setenv("NWSL_SYNC_SCHEDULER", "false")
 
 	got, err := FromEnvironment()
@@ -88,6 +93,9 @@ func TestFromEnvironmentUsesOverrides(t *testing.T) {
 
 	if got.ASABaseURL != "http://127.0.0.1:9999/api/v1" {
 		t.Errorf("ASABaseURL = %q, want configured fake URL", got.ASABaseURL)
+	}
+	if got.PublicURL != "https://example.test/nwsl" {
+		t.Errorf("PublicURL = %q, want configured URL", got.PublicURL)
 	}
 
 	if got.HTTPAddr != ":9090" {
@@ -195,6 +203,17 @@ func TestFromEnvironmentRejectsInvalidForecastLimits(t *testing.T) {
 			t.Setenv(test.key, test.value)
 			if _, err := FromEnvironment(); err == nil {
 				t.Fatalf("FromEnvironment() with %s=%q succeeded", test.key, test.value)
+			}
+		})
+	}
+}
+
+func TestFromEnvironmentRejectsInvalidPublicURL(t *testing.T) {
+	for _, value := range []string{"nwsl.example.test", "/nwsl", "ftp://example.test", "https://example.test/?a=b"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("NWSL_PUBLIC_URL", value)
+			if got, err := FromEnvironment(); err == nil {
+				t.Fatalf("FromEnvironment() with NWSL_PUBLIC_URL=%q = %q, want validation error", value, got.PublicURL)
 			}
 		})
 	}

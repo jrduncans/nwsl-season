@@ -86,6 +86,7 @@ func TestBracketRootRendersVerifiedShapeAndKeepsFixturesChronological(t *testing
 	if root.Code != http.StatusOK {
 		t.Fatalf("bracket root status = %d; body=%s", root.Code, root.Body.String())
 	}
+	requireExact(t, root.Body.String(), "title", "2024 Playoffs · NWSL by the Numbers")
 	requireText(t, root.Body.String(), "main [data-bracket-state]", "Quarterfinals", "Semifinals", "Final", "TBD")
 	requireExact(t, root.Body.String(), ".bracket-team-score", "2 (4)", "1 (3)")
 	requireAttrContains(t, root.Body.String(), ".bracket-match-result", "aria-label", "Match decided on penalties:")
@@ -178,6 +179,7 @@ func TestUnpopulatedKnockoutsAreNotLinkedOrRenderedAsEmptyBrackets(t *testing.T)
 		t.Fatalf("regular page = %d %s", regular.Code, regular.Body.String())
 	}
 	forbidElements(t, regular.Body.String(), `[data-stage-destination="playoffs"]`)
+	requireExact(t, regular.Body.String(), "title", "2026 season · NWSL by the Numbers")
 
 	populated := httptest.NewRecorder()
 	handler.ServeHTTP(populated, httptest.NewRequest(http.MethodGet, "/seasons/2025/playoffs", nil))
@@ -1427,6 +1429,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
+	requireExact(t, body, "title", "Forecast lab · 2026 season · NWSL by the Numbers")
 	// The model form, the assumption builder form, the pending/update hooks and the
 	// fixture option kickoff times are exercised by TestPages in e2e
 	// (testForecastNoScript, testForecastAssumptionFlow, testLocalTimes).
