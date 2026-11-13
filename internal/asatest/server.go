@@ -9,6 +9,7 @@ package asatest
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -141,9 +142,7 @@ func (s *Server) Load(scenario *Scenario) {
 	s.xgoals = slices.Clone(scenario.XGoals)
 	s.penalty = slices.Clone(scenario.PenaltyXGoals)
 	s.stages = map[string]string{}
-	for id, stage := range scenario.Stages {
-		s.stages[id] = stage
-	}
+	maps.Copy(s.stages, scenario.Stages)
 }
 
 // FailNext makes the next n requests to path (for example PathGames) answer

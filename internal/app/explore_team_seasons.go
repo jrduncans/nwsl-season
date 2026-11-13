@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"slices"
@@ -252,9 +253,7 @@ func teamSeasonsEnds(measure history.TeamSeasonMeasure, by history.TeamSeasonRan
 
 func teamSeasonsURL(query url.Values, changes map[string]string) string {
 	values := url.Values{}
-	for key, value := range query {
-		values[key] = value
-	}
+	maps.Copy(values, query)
 	for key, value := range changes {
 		values.Set(key, value)
 	}

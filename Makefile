@@ -7,7 +7,7 @@ BACKTEST_PACKAGE := ./cmd/backtest
 BACKTEST_BINARY := nwsl-season-backtest
 TARGET_OS ?= linux
 TARGET_ARCH ?= arm64
-GOLANGCI_LINT ?= mise exec -- golangci-lint
+HK ?= mise exec -- hk
 GOVULNCHECK ?= mise exec -- govulncheck
 WEAVER ?= mise exec -- weaver
 TELEMETRY_REGISTRY := ./telemetry/registry
@@ -17,11 +17,17 @@ TELEMETRY_DOCS := ./docs/telemetry/catalog
 TELEMETRY_GO := ./internal/telemetry/nwslconv
 TELEMETRY_DIFF_OUTPUT ?= ./work/telemetry-schema-diff
 
-.PHONY: verify test fmt vet lint race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated telemetry-diff telemetry-mcp telemetry-emit-local telemetry-live-check backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
+.PHONY: verify check test race vuln telemetry-check-code telemetry-check telemetry-generate telemetry-check-generated telemetry-diff telemetry-mcp telemetry-emit-local telemetry-live-check backtest backfill-evaluation-data model-evaluation build build-server build-linux build-linux-server build-sync build-linux-sync build-backtest build-linux-backtest clean
 
-# The full pre-handoff check from AGENTS.md, in order (run `make e2e-install` once first).
-# Add `make race` when a change touches concurrency.
-verify: fmt lint vet test test-e2e
+# Every hk check, the tests and E2E in one command (run `make e2e-install` once first).
+# The hk hooks in hk.pkl cover all but E2E on commit and push.
+verify: check test test-e2e
+
+# Formatting, linting (golangci-lint includes vet) and the other hk.pkl steps
+# across the repository, reporting every failing step rather than the first;
+# `hk fix --all` applies their fixes.
+check:
+	$(HK) check --all --no-fail-fast
 
 test:
 	go test ./...
@@ -65,15 +71,6 @@ e2e-install:
 .PHONY: test-guards
 test-guards:
 	go test -run '^$$' -bench . -benchtime=1x ./internal/clinching ./internal/scenarios ./internal/simulation
-
-fmt:
-	$(GOLANGCI_LINT) fmt ./...
-
-vet:
-	go vet ./...
-
-lint:
-	$(GOLANGCI_LINT) run ./...
 
 # CI splits RACE_PACKAGES across runners; locally it defaults to every package.
 RACE_PACKAGES ?= ./...

@@ -3,6 +3,7 @@ package clinching
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -447,9 +448,7 @@ func (e *Evaluator) validateProbe(r Request) error {
 
 func (e *Evaluator) prepare(r Request) (preparedSeason, error) {
 	p := preparedSeason{target: r.TargetTeamID, points: make(map[string]int, len(e.basePoints)), witness: map[string]WitnessGame{}}
-	for id, value := range e.basePoints {
-		p.points[id] = value
-	}
+	maps.Copy(p.points, e.basePoints)
 	fixed := make(map[string]Outcome, len(r.Fixed))
 	for _, value := range r.Fixed {
 		fixed[value.GameID] = value.Outcome

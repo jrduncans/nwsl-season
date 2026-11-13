@@ -156,9 +156,9 @@ func TestExploreParitySortUsesUnroundedValuesAndKeepsMissingLast(t *testing.T) {
 	build := func() []exploreParityRow {
 		return []exploreParityRow{
 			// .5001 and .5004 both display as 0.50.
-			{exploreParityRecord: exploreParityRecord{Season: "2021", Spread: .5001, XSpread: value(.3), Matches: 24}},
-			{exploreParityRecord: exploreParityRecord{Season: "2022", Spread: .5004, Matches: 22}},
-			{exploreParityRecord: exploreParityRecord{Season: "2023", Spread: .2, XSpread: value(.4), Matches: 22}},
+			{Season: "2021", Spread: .5001, XSpread: value(.3), Matches: 24},
+			{Season: "2022", Spread: .5004, Matches: 22},
+			{Season: "2023", Spread: .2, XSpread: value(.4), Matches: 22},
 		}
 	}
 	for _, test := range []struct{ column, order, want string }{

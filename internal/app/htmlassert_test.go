@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -210,9 +211,9 @@ func splitAlternatives(selector string) []string {
 }
 
 func ancestorsMatch(n *html.Node, parts []selectorPart) bool {
-	for i := len(parts) - 1; i >= 0; i-- {
+	for _, part := range slices.Backward(parts) {
 		n = n.Parent
-		for n != nil && !parts[i].matches(n) {
+		for n != nil && !part.matches(n) {
 			n = n.Parent
 		}
 		if n == nil {

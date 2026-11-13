@@ -1,19 +1,24 @@
 # Agent guide
 
-After the final edit to Go, templates, JavaScript or CSS, run `make verify`.
-Also run, when they apply:
+Git hooks from `hk.pkl` fix and lint staged files on commit (including the
+telemetry code and generated-artifact checks) and run `go test` and
+`govulncheck` on push. Never bypass them with `HK=0` or `--no-verify`. An
+agent Stop hook may also run `hk run check --safe` on modified files when you
+finish; fix what it reports. Where the hooks aren't installed, run `hk check`
+and `make test vuln` instead. If `govulncheck` can't reach its database,
+report the scan as skipped, not clean.
+
+The hooks leave these to you. After the final edit to Go, templates,
+JavaScript or CSS, run `make test-e2e`. Also run, when they apply:
 
 - Goroutines, channels, locks, shared mutable state, the scheduler, or
   cache/HTTP concurrency: `make race`.
-- `go.mod`/`go.sum` or release work: `make vuln`; if its database is
-  unreachable, report the scan as skipped, not clean.
-- `telemetry/registry`: `make telemetry-check-generated` and
-  `make telemetry-live-check`.
+- `telemetry/registry`: `make telemetry-live-check`.
 
 Keep each `gosec` suppression narrow and justified.
 
 On macOS, use approved execution outside Codex's command sandbox for commands
-that launch the E2E browser (`make verify`, `make test-e2e`, or
+that launch the E2E browser (`make test-e2e`, `make verify`, or
 `go test -tags e2e ...`). Chrome can abort during macOS application registration
 inside that outer sandbox and show a crash popup. Keep Chromium's own sandbox
 enabled (`ChromiumSandbox: true`).

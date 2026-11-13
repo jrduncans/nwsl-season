@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -300,12 +301,7 @@ func selectModel(report Report, coverageGate bool) Selection {
 }
 
 func isReferenceModel(report Report, id string) bool {
-	for _, reference := range report.ReferenceModels {
-		if id == reference {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(report.ReferenceModels, id)
 }
 
 func modelMetrics(report Report, id string) MetricSet {

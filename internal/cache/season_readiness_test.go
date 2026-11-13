@@ -138,7 +138,7 @@ func TestEvaluateSeasonReadinessChecksEveryInventoryDimension(t *testing.T) {
 func TestEvaluateSeasonReadinessUsesExplicitInventedPastInventory(t *testing.T) {
 	t.Parallel()
 	appearances := make(map[string]int, 14)
-	for i := 0; i < 14; i++ {
+	for i := range 14 {
 		appearances[string(rune('a'+i))] = 26
 	}
 	observed := observedInventory{teams: 14, games: 182, appearances: appearances}

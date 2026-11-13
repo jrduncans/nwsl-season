@@ -325,8 +325,8 @@ func rationalScores(ctx context.Context, rows []scoreInequality, n int) ([]*big.
 	for i := range values {
 		values[i] = new(big.Rat)
 	}
-	for k := len(steps) - 1; k >= 0; k-- {
-		st := steps[k]
+	for _, st := range slices.Backward(steps) {
+
 		var low, high *big.Rat
 		for _, r := range st.rows {
 			bound := new(big.Rat).SetInt64(r.b)

@@ -102,7 +102,7 @@ func (s *seasonSearch) rivalRows() ([]rivalRow, bool) {
 			ok = rowOK
 			return
 		}
-		for outcome := int8(0); outcome < 3; outcome++ {
+		for outcome := range int8(3) {
 			s.set(own[i], outcome)
 			visit(i + 1)
 			s.clear(own[i])
@@ -196,7 +196,7 @@ func (s *seasonSearch) rivalNeed(rival int, free []int, tie int) (RivalNeed, boo
 			return
 		}
 		game := s.games[free[i]]
-		for outcome := int8(0); outcome < 3; outcome++ {
+		for outcome := range int8(3) {
 			next := r
 			switch teamResult(game, outcome, rival) {
 			case 1:

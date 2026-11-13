@@ -82,7 +82,7 @@ func newPlayoffDiscovery(t *testing.T, completion time.Time) *playoffDiscovery {
 	finale.HomeScore, finale.AwayScore = score(1), score(0)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{finale})
 	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
-	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(completion)}}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: new(completion)}}
 	// The large budget keeps regular-season xG and correction work from
 	// crowding out the playoff jobs under test.
 	config := Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 10}
@@ -349,14 +349,14 @@ func TestPlayoffDiscoveryAtSaturatedBudget(t *testing.T) {
 	finale.HomeScore, finale.AwayScore = score(1), score(0)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{finale})
 	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
-	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(now.Add(-7 * 24 * time.Hour))}}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: new(now.Add(-7 * 24 * time.Hour))}}
 	// Only the hourly retry makes discovery due; the persisted weekly due time
 	// is still in the future. A routine result poll for a finished
 	// quarterfinal competes with it.
 	quarterfinal := plannedGame("qf1", fixtures.PreMatchStatus, now.Add(-2*time.Hour))
 	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessAvailable, []cache.Game{quarterfinal})
-	playoffs.GamesFull.LastFullSuccessAt = timePointer(now.Add(-time.Hour))
-	playoffs.GamesFull.NextFullDueAt = timePointer(now.Add(6 * 24 * time.Hour))
+	playoffs.GamesFull.LastFullSuccessAt = new(now.Add(-time.Hour))
+	playoffs.GamesFull.NextFullDueAt = new(now.Add(6 * 24 * time.Hour))
 	config := Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}, config, now)
 	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Operation.Stage != "Playoffs" || jobs[0].Operation.NextFullDueAfter != time.Hour {
@@ -386,13 +386,13 @@ func TestPlayoffDiscoveryLeavesUnrelatedStagesWeekly(t *testing.T) {
 	finale.HomeScore, finale.AwayScore = score(1), score(0)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{finale})
 	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
-	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(now.Add(-12 * time.Hour)), NextDueAt: timePointer(now.Add(time.Hour))}}
-	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: new(now.Add(-12 * time.Hour)), NextDueAt: new(now.Add(time.Hour))}}
+	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season", NextFullDueAt: new(now.Add(24 * time.Hour))}
 	weekly := func(season, stage string, lifecycle cache.SourceScopeLifecycle) cache.PlanningScopeSnapshot {
 		scope := planningScope(season, stage, cache.SourceReadinessAvailable, nil)
 		scope.Readiness.Scope.Lifecycle = lifecycle
-		scope.GamesFull.LastFullSuccessAt = timePointer(now.Add(-2 * time.Hour))
-		scope.GamesFull.NextFullDueAt = timePointer(now.Add(7*24*time.Hour - 2*time.Hour))
+		scope.GamesFull.LastFullSuccessAt = new(now.Add(-2 * time.Hour))
+		scope.GamesFull.NextFullDueAt = new(now.Add(7*24*time.Hour - 2*time.Hour))
 		return scope
 	}
 	config := Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 10}
@@ -419,7 +419,7 @@ func TestPlanBatchesDueTargetedJobsAndHonorsBudget(t *testing.T) {
 	now := time.Date(2033, 6, 10, 12, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("two", fixtures.PreMatchStatus, now.Add(-time.Hour)), plannedGame("one", fixtures.PreMatchStatus, now.Add(-time.Hour))})
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: timePointer(now)}, {GameID: "two", NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: new(now)}, {GameID: "two", NextDueAt: new(now)}}
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
 	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || !reflect.DeepEqual(jobIDs(jobs[0]), []string{"one", "two"}) {
 		t.Fatalf("jobs = %+v", jobs)
@@ -436,9 +436,9 @@ func TestPlayoffDiscoveryAfterRegularSeasonCompletion(t *testing.T) {
 	game.HomeScore, game.AwayScore = score(1), score(0)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{game})
 	regular.Readiness.ExpectedInventory = &competition.InventoryExpectation{Games: 1}
-	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: timePointer(now)}}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "finale", FirstTerminalObservedAt: new(now)}}
 	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil)
-	playoffs.GamesFull = &cache.SourceResourceScopeState{LastFullSuccessAt: timePointer(now.Add(-time.Minute)), NextFullDueAt: timePointer(now.Add(7 * 24 * time.Hour))}
+	playoffs.GamesFull = &cache.SourceResourceScopeState{LastFullSuccessAt: new(now.Add(-time.Minute)), NextFullDueAt: new(now.Add(7 * 24 * time.Hour))}
 	config := Config{Season: "2026", Stage: "Regular Season", SourceRequestBudget: 1}
 	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}
 	jobs := Plan(snapshot, config, now)
@@ -446,8 +446,8 @@ func TestPlayoffDiscoveryAfterRegularSeasonCompletion(t *testing.T) {
 		t.Fatalf("completion jobs = %+v", jobs)
 	}
 	// A successful empty observation suppresses a busy loop, then retries.
-	playoffs.GamesFull.LastFullSuccessAt = timePointer(now)
-	playoffs.GamesFull.NextFullDueAt = timePointer(now.Add(time.Hour))
+	playoffs.GamesFull.LastFullSuccessAt = new(now)
+	playoffs.GamesFull.NextFullDueAt = new(now.Add(time.Hour))
 	snapshot.Scopes[1] = playoffs
 	if discoveryDue(playoffs, config, now.Add(59*time.Minute), now) {
 		t.Fatal("early retry")
@@ -553,7 +553,7 @@ func TestPlanKeepsNonterminalMaterialChangesOnCheckCadence(t *testing.T) {
 	now := time.Date(2033, 8, 1, 0, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("unsettled", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "unsettled", NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "unsettled", NextDueAt: new(now)}}
 
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
 	if len(jobs) != 1 || jobs[0].Kind != JobCheckedGames || len(jobs[0].Operation.Requested) != 1 {
@@ -594,9 +594,9 @@ func TestPlanDoesNotReloadAvailableCompletedCatalogSeasonAsBootstrap(t *testing.
 	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
 	historical := planningScope("2025", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.CompletedStatus, now.Add(-time.Hour))})
 	historical.Readiness.Scope.Lifecycle = cache.SourceScopeCompleted
-	historical.GamesFull.LastFullSuccessAt = timePointer(now.Add(-31 * 24 * time.Hour))
-	historical.GamesFull.NextFullDueAt = timePointer(now.Add(24 * time.Hour))
-	historical.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: timePointer(now.Add(-31 * 24 * time.Hour)), NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
+	historical.GamesFull.LastFullSuccessAt = new(now.Add(-31 * 24 * time.Hour))
+	historical.GamesFull.NextFullDueAt = new(now.Add(24 * time.Hour))
+	historical.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2025", Stage: "Regular Season", LastFullSuccessAt: new(now.Add(-31 * 24 * time.Hour)), NextFullDueAt: new(now.Add(24 * time.Hour))}
 
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{historical}}, testPlannerConfig(), now)
 	if len(jobs) != 0 {
@@ -627,7 +627,7 @@ func TestPlanIncludesActiveCurrentPlayoffsAfterRegularScope(t *testing.T) {
 func TestPlanPrioritizesMissingCatalogDiscoveryBeforeRoutineChecks(t *testing.T) {
 	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("regular", fixtures.PreMatchStatus, now.Add(-time.Hour))})
-	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: timePointer(now)}}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: new(now)}}
 	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season"}
 	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessNotPublished, nil)
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{playoffs, regular}}, Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}, now)
@@ -639,11 +639,11 @@ func TestPlanPrioritizesMissingCatalogDiscoveryBeforeRoutineChecks(t *testing.T)
 func TestPlanSelectsAcceleratedBracketDiscoveryBeforeRoutinePollAtSaturatedBudget(t *testing.T) {
 	now := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
 	regular := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("regular", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
-	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: timePointer(now)}}
+	regular.ResultChecks = []cache.GameResultCheckState{{GameID: "regular", NextDueAt: new(now)}}
 	regular.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season"}
 	playoffGame := plannedGame("playoff", fixtures.PreMatchStatus, now.Add(time.Hour))
 	playoffs := planningScope("2026", "Playoffs", cache.SourceReadinessAvailable, []cache.Game{playoffGame})
-	playoffs.GamesFull.NextFullDueAt = timePointer(now)
+	playoffs.GamesFull.NextFullDueAt = new(now)
 	playoffs.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Playoffs"}
 
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{regular, playoffs}}, Config{Season: "2026", Stage: "Regular Season", CheckInterval: 5 * time.Minute, CompletionGrace: time.Hour, SourceRequestBudget: 1}, now)
@@ -690,7 +690,7 @@ func TestPlanAuditsActiveCompleteInventoryWeekly(t *testing.T) {
 	now := time.Date(2033, 8, 2, 0, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("future", fixtures.PreMatchStatus, now.Add(time.Hour))})
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
-	scope.GamesFull.NextFullDueAt = timePointer(now)
+	scope.GamesFull.NextFullDueAt = new(now)
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)
 	if len(jobs) != 1 || jobs[0].Kind != JobFullGames || jobs[0].Reason != "weekly_inventory_audit" {
 		t.Fatalf("weekly active inventory jobs = %+v", jobs)
@@ -804,7 +804,7 @@ func TestColdExecutionDefersBeforeScopeWhenGlobalLeaseIsUnavailable(t *testing.T
 
 func TestSweepDueArchivedUsesMaintenanceTriggerAndFreshHotPreemption(t *testing.T) {
 	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
-	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	archive := coldPlanningScope("2025", new(now.Add(-time.Hour)))
 	hot := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
 	store := &sequencePlanningStore{snapshots: []cache.PlanningSnapshot{{Scopes: []cache.PlanningScopeSnapshot{archive}}, {Scopes: []cache.PlanningScopeSnapshot{hot}}}}
 	runner := &operationRunner{}
@@ -824,7 +824,7 @@ func TestSweepDueArchivedUsesMaintenanceTriggerAndFreshHotPreemption(t *testing.
 
 func TestSchedulerColdCorrectionDoesNotRecalculateHistoricalQualification(t *testing.T) {
 	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
-	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	archive := coldPlanningScope("2025", new(now.Add(-time.Hour)))
 	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{archive}}}
 	runner := &historicalCorrectionRunner{}
 	config := testPlannerConfig()
@@ -843,8 +843,8 @@ func TestSchedulerColdCorrectionDoesNotRecalculateHistoricalQualification(t *tes
 func TestSchedulerRefreshesCurrentCalculationsBeforeColdMaintenance(t *testing.T) {
 	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
 	current := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("current", fixtures.PreMatchStatus, now.Add(time.Hour))})
-	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
-	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season", NextFullDueAt: new(now.Add(24 * time.Hour))}
+	archive := coldPlanningScope("2025", new(now.Add(-time.Hour)))
 	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{current, archive}}}
 	runner := &historicalCorrectionRunner{}
 	s, err := New(store, runner, testPlannerConfig(), nil)
@@ -874,7 +874,7 @@ func TestPlanUsesConfiguredCorrectionDefaults(t *testing.T) {
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("final", fixtures.CompletedStatus, now.Add(-time.Hour))})
 	scope.Games[0].HomeScore, scope.Games[0].AwayScore = score(1), score(0)
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "final", FirstTerminalObservedAt: &first, NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "final", FirstTerminalObservedAt: &first, NextDueAt: new(now)}}
 	config := testPlannerConfig()
 	config.ResultCorrectionInterval = 2 * time.Hour
 	jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, config, now)
@@ -887,7 +887,7 @@ func TestSchedulerExecutesPlannedJobsSequentially(t *testing.T) {
 	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: new(now)}}
 	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}}
 	runner := &operationRunner{}
 	s, err := New(store, runner, testPlannerConfig(), nil)
@@ -923,7 +923,7 @@ func TestSchedulerStartupUsesStartupSourceTrigger(t *testing.T) {
 func TestSchedulerStartupDrainsCatalogBootstrapInBudgetedBatches(t *testing.T) {
 	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	current := planningScope("2026", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("current", fixtures.PreMatchStatus, now.Add(time.Hour))})
-	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(time.Hour))}
+	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2026", Stage: "Regular Season", NextFullDueAt: new(now.Add(time.Hour))}
 	first := []cache.PlanningScopeSnapshot{current, historicalCatalogBootstrapScope("2025"), historicalCatalogBootstrapScope("2024"), historicalCatalogBootstrapScope("2023")}
 	second := []cache.PlanningScopeSnapshot{current, historicalCatalogXGBootstrapScope("2022"), historicalCatalogXGBootstrapScope("2021")}
 	store := &sequencePlanningStore{snapshots: []cache.PlanningSnapshot{
@@ -1097,7 +1097,7 @@ func TestConfigNowControlsPlanningClock(t *testing.T) {
 	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("one", fixtures.PreMatchStatus, now.Add(-2*time.Hour))})
 	scope.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season"}
-	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: timePointer(now)}}
+	scope.ResultChecks = []cache.GameResultCheckState{{GameID: "one", NextDueAt: new(now)}}
 	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}
 
 	for _, test := range []struct {
@@ -1133,8 +1133,8 @@ func TestConfigNowControlsPlanningClock(t *testing.T) {
 func TestCheckNowUsesMaintenanceTriggerAndReturnsAfterJobsAndCalculations(t *testing.T) {
 	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
 	current := planningScope("2033", "Regular Season", cache.SourceReadinessAvailable, []cache.Game{plannedGame("current", fixtures.PreMatchStatus, now.Add(time.Hour))})
-	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season", NextFullDueAt: timePointer(now.Add(24 * time.Hour))}
-	archive := coldPlanningScope("2025", timePointer(now.Add(-time.Hour)))
+	current.XGFull = &cache.SourceResourceScopeState{Resource: cache.SourceResourceGameXG, Season: "2033", Stage: "Regular Season", NextFullDueAt: new(now.Add(24 * time.Hour))}
+	archive := coldPlanningScope("2025", new(now.Add(-time.Hour)))
 	store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{current, archive}}}
 	runner := &historicalCorrectionRunner{}
 	config := testPlannerConfig()
@@ -1364,8 +1364,8 @@ func historicalCatalogXGBootstrapScope(season string) cache.PlanningScopeSnapsho
 func plannedGame(id, status string, kickoff time.Time) cache.Game {
 	return cache.Game{ASAID: id, Season: "2033", Stage: "Regular Season", KickoffUTC: kickoff.Format(time.RFC3339), Status: status, HomeTeamID: "home", AwayTeamID: "away"}
 }
-func score(value int) sql.NullInt64          { return sql.NullInt64{Int64: int64(value), Valid: true} }
-func timePointer(value time.Time) *time.Time { return &value }
+func score(value int) sql.NullInt64 { return sql.NullInt64{Int64: int64(value), Valid: true} }
+
 func jobIDs(job Job) []string {
 	out := make([]string, len(job.Operation.Requested))
 	for i, v := range job.Operation.Requested {
@@ -1519,11 +1519,11 @@ func TestColdGamesRefreshKeepsVerifiedCatalogInventory(t *testing.T) {
 	now := time.Date(2033, 10, 3, 0, 0, 0, 0, time.UTC)
 	entry, _ := competition.Lookup("2021", "Regular Season")
 	for _, dueResource := range []string{"games", "xg"} {
-		scope := coldPlanningScope("2021", timePointer(now.Add(-time.Hour)))
+		scope := coldPlanningScope("2021", new(now.Add(-time.Hour)))
 		scope.Readiness.ExpectedInventory = entry.Inventory
 		if dueResource == "xg" {
-			scope.GamesFull.NextFullDueAt = timePointer(now.Add(time.Hour))
-			scope.XGFull.NextFullDueAt = timePointer(now.Add(-time.Hour))
+			scope.GamesFull.NextFullDueAt = new(now.Add(time.Hour))
+			scope.XGFull.NextFullDueAt = new(now.Add(-time.Hour))
 			scope.XGFull.LastFullSuccessAt = scope.GamesFull.LastFullSuccessAt
 		}
 		jobs := Plan(cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}, testPlannerConfig(), now)

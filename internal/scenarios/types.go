@@ -5,7 +5,6 @@ package scenarios
 import (
 	"fmt"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/clinching"
@@ -387,6 +386,6 @@ func sortedMethods(values []clinching.ProofMethod) []clinching.ProofMethod {
 	for v := range seen {
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }

@@ -367,7 +367,7 @@ func simulatedGames(completed []standings.Game, remaining []preparedFixture, rng
 }
 
 func sample(distribution forecast.Distribution, fixed Outcome, rng *rand.Rand) (forecast.Scoreline, error) {
-	for attempt := 0; attempt < conditionalAttempts; attempt++ {
+	for range conditionalAttempts {
 		score := distribution.Sample(rng)
 		if fixed == "" || matches(score, fixed) {
 			return score, nil

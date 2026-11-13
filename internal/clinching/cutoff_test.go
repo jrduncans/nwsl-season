@@ -22,7 +22,7 @@ func TestCutoffDecisionMatchesMaximumOracle(t *testing.T) {
 		{ID: "a-c", HomeTeamID: "a", AwayTeamID: "c"},
 		{ID: "b-d", HomeTeamID: "b", AwayTeamID: "d"},
 	}
-	for trial := 0; trial < 200; trial++ {
+	for trial := range 200 {
 		points := map[string]int{}
 		for _, id := range teamIDs {
 			points[id] = random.Intn(10)
@@ -170,7 +170,7 @@ func TestUniversalSlateBlockerLeavesPossibleSlateForScenarioSearch(t *testing.T)
 func TestBinaryNoHelpMatchesLinearPrefixEnumeration(t *testing.T) {
 	// #nosec G404 -- a fixed pseudo-random stream makes this enumeration test reproducible.
 	random := rand.New(rand.NewSource(20260722))
-	for trial := 0; trial < 100; trial++ {
+	for trial := range 100 {
 		teams := []standings.Team{{ID: "target"}, {ID: "a"}, {ID: "b"}, {ID: "c"}}
 		pairs := [][2]string{{"target", "a"}, {"b", "target"}, {"target", "c"}, {"a", "b"}, {"b", "c"}, {"c", "a"}}
 		games := make([]standings.Game, len(pairs))

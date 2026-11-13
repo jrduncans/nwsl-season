@@ -237,7 +237,7 @@ func TestExploreTeamSeasonsRejectsInvalidState(t *testing.T) {
 func TestExploreTeamSeasonsSortAndPointsBasis(t *testing.T) {
 	value := func(v float64) *float64 { return &v }
 	for _, order := range []string{"asc", "desc"} {
-		rows := []exploreTeamSeasonRow{{exploreTeamSeasonRecord: exploreTeamSeasonRecord{TeamSeason: history.TeamSeason{TeamID: "a"}}, Rank: 2, Actual: value(2), Gap: value(.5001)}, {exploreTeamSeasonRecord: exploreTeamSeasonRecord{TeamSeason: history.TeamSeason{TeamID: "b"}}, Rank: 1, Actual: value(1), Gap: value(.5004)}, {exploreTeamSeasonRecord: exploreTeamSeasonRecord{TeamSeason: history.TeamSeason{TeamID: "c"}}, Actual: value(3)}}
+		rows := []exploreTeamSeasonRow{{TeamID: "a", Rank: 2, Actual: value(2), Gap: value(.5001)}, {TeamID: "b", Rank: 1, Actual: value(1), Gap: value(.5004)}, {TeamID: "c", Actual: value(3)}}
 		sortExploreTeamSeasons(rows, "gap", order)
 		want := "b"
 		if order == "asc" {

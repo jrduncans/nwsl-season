@@ -26,13 +26,13 @@ func generatedHalfwaySeason() ([]standings.Team, []standings.Game, []string) {
 		rotation[i] = i
 	}
 	games := make([]standings.Game, 0, 240)
-	for half := 0; half < 2; half++ {
+	for half := range 2 {
 		rotation = rotation[:0]
 		for i := range teams {
 			rotation = append(rotation, i)
 		}
-		for round := 0; round < 15; round++ {
-			for match := 0; match < 8; match++ {
+		for range 15 {
+			for match := range 8 {
 				home, away := rotation[match], rotation[15-match]
 				if half == 1 {
 					home, away = away, home
@@ -44,7 +44,7 @@ func generatedHalfwaySeason() ([]standings.Team, []standings.Game, []string) {
 			rotation[1] = last
 		}
 	}
-	for i := 0; i < 119; i++ {
+	for i := range 119 {
 		home, away := (i*7)%4, (i*5+1)%4
 		games[i].Status = standings.CompletedStatus
 		games[i].HomeScore, games[i].AwayScore = &home, &away

@@ -66,7 +66,7 @@ func seasonScenarioStore(data cache.SeasonData, nextIDs, seasonIDs []string, sea
 	if season != nil {
 		season.Run.Slate = scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceRestOfSeason, StartsAtUTC: slate.StartsAtUTC, LatestKickoffUTC: time.Date(2026, 7, 15, 19, 0, 0, 0, time.UTC), FixtureIDs: seasonIDs}
 	}
-	return fullFakeStore{fakeStore: fakeStore{season: data}, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: slate}, Results: []cache.ScenarioResult{{Result: next}}}, seasonScenario: season}
+	return fullFakeStore{season: data, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: slate}, Results: []cache.ScenarioResult{{Result: next}}}, seasonScenario: season}
 }
 
 func seasonResult() *cache.ScenarioSnapshot {
@@ -155,7 +155,7 @@ func TestClinchingPageShowsRestOfSeasonAndSeedingOnDecisionDay(t *testing.T) {
 	store := seasonScenarioStore(seasonEndData(1), []string{"future-5"}, []string{"future-5"}, seasonResult())
 	store.seasonScenario.Results[0].Clauses[0].Conditions = []scenarios.FixtureCondition{testScenarioCondition("future-5", 1)}
 	store.qualification = cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-5"}}}}}
-	store.seasonScenario.Results = append(store.seasonScenario.Results, cache.ScenarioResult{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8}})
+	store.seasonScenario.Results = append(store.seasonScenario.Results, cache.ScenarioResult{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8})
 	body := getClinching(t, store, "")
 	requireExact(t, body, ".clinching-no-help h2", "Clinch without help")
 	requireText(t, body, ".clinching-no-help", "Win 1 match to clinch a playoff spot", "Win each of these remaining matches: at Alpha & Co <script>alert(1)</script>.")

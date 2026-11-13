@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/jrduncans/nwsl-season/internal/app"
 	"github.com/jrduncans/nwsl-season/internal/cache"
@@ -90,12 +91,7 @@ func (r forecastWarmingRunner) forecastInputsForScope(season, stage string) bool
 	if err != nil {
 		return false
 	}
-	for _, candidate := range previous {
-		if season == candidate {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(previous, season)
 }
 
 func (r forecastWarmingRunner) Run(ctx context.Context, options syncer.RunOptions) (cache.SyncRun, error) {

@@ -1205,7 +1205,7 @@ func bracketPageFrom(page seasonPage, format competition.BracketFormat, data cac
 			}
 			label = "Winner of " + slotLabels[source]
 		}
-		return fixtureTeamView{teamNameView: teamNameView{Name: label}}
+		return fixtureTeamView{Name: label}
 	}
 	feeders := bracketSources(format, view)
 	feederOrder := map[string][]string{}
@@ -1252,7 +1252,7 @@ func bracketEntrantName(id string, teams map[string]teamNameView) string {
 // bracketEntrant carries the team's short code so narrow bracket cards can
 // show it in place of the full name, as fixture rows do on phones.
 func bracketEntrant(id string, teams map[string]teamNameView, codes map[string]string) fixtureTeamView {
-	return fixtureTeamView{teamNameView: teamNameView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL}, Code: codes[id]}
+	return fixtureTeamView{ID: id, Name: bracketEntrantName(id, teams), LogoURL: teams[id].LogoURL, Code: codes[id]}
 }
 
 func bracketGameViewFor(game cache.Game, xgoals map[string]cache.GameXG) bracketGameView {

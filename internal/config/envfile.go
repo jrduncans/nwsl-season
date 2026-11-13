@@ -82,8 +82,8 @@ func parseEnvironmentLine(line string) (name, value string, present bool, err er
 	if line == "" || strings.HasPrefix(line, "#") {
 		return "", "", false, nil
 	}
-	if strings.HasPrefix(line, "export ") {
-		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+	if after, ok := strings.CutPrefix(line, "export "); ok {
+		line = strings.TrimSpace(after)
 	}
 	separator := strings.IndexByte(line, '=')
 	if separator < 1 {

@@ -70,7 +70,7 @@ func TestExploreMarginCoverageFromArchive(t *testing.T) {
 		covered   int
 	}{{history.AllShots, all, 20}, {history.NonPenalty, np, 18}} {
 		matches := exploreMatches(tc.summaries[0].Teams[0].Matches, nil)
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			if matches[i].GoalsCovered != (!tc.basis.ExcludesPenalties()) {
 				t.Fatalf("basis %v, raw case %d coverage: %+v", tc.basis, i, matches[i])
 			}

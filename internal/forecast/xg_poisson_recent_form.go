@@ -3,6 +3,7 @@ package forecast
 import (
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"time"
@@ -117,9 +118,7 @@ func twoSeasonXGVenueSample(input FitInput) ([]standings.Game, map[string]Expect
 	}
 	history, xgoals := historyPool(input, 2)
 	games := append(history, input.Games...)
-	for id, xg := range input.XGoals {
-		xgoals[id] = xg
-	}
+	maps.Copy(xgoals, input.XGoals)
 	return games, xgoals, VenueSample{}
 }
 

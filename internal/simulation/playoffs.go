@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"fmt"
+	"maps"
 	"math/rand"
 	"sort"
 	"strings"
@@ -335,9 +336,7 @@ func (p *playoffSimulation) applyPostseason(request Request) error {
 	// Scenarios cannot unlock another scenario: only source-backed or
 	// seed-derived participants establish an eligible upcoming slot.
 	actualSlots := make(map[string]PostseasonMatch, len(state.Slots)+len(state.Scenarios))
-	for id, match := range state.Slots {
-		actualSlots[id] = match
-	}
+	maps.Copy(actualSlots, state.Slots)
 	scenarioSeen := 0
 	for _, slot := range p.format.Slots {
 		scenario, ok := state.Scenarios[slot.ID]

@@ -280,7 +280,7 @@ func developmentCandidates(ids map[string]bool, catalog []forecast.CatalogEntry)
 
 func csvSet(value string) (map[string]bool, error) {
 	result := map[string]bool{}
-	for _, item := range strings.Split(value, ",") {
+	for item := range strings.SplitSeq(value, ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
 			return nil, fmt.Errorf("empty list item")

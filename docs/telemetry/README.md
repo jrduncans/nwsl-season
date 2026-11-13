@@ -15,8 +15,12 @@ one observability product.
 
 ## Developer workflow
 
-After any change under `telemetry/registry`, run `make telemetry-check-generated`
-and `make telemetry-live-check` before handoff.
+The pre-commit hook runs `make telemetry-check-code` for production Go
+changes and `make telemetry-check-generated` for changes to the registry,
+policies, templates or generated artifacts, regenerating stale artifacts with
+`make telemetry-generate` (see README "Git hooks"). After any change under
+`telemetry/registry`, also run `make telemetry-live-check` before handoff; it
+needs Docker, so no hook runs it.
 
 Install [Mise](https://mise.jdx.dev/), then run:
 
@@ -42,7 +46,7 @@ event, and reject orphaned exception events.
 `telemetry-generate` refreshes the checked-in Markdown reference and the Go
 conventions package under `internal/telemetry/nwslconv`; it validates the
 registry before writing either artifact.
-`telemetry-check-generated` is the CI drift check and fails when either
+`telemetry-check-generated` is the drift check, run in CI by the `hk` workflow; it fails when either
 generated artifact differs from the checked-in result.
 `telemetry-live-check` starts Weaver and a pinned, development-only
 OpenTelemetry Collector in Docker, then drives a deterministic fake-ASA sync

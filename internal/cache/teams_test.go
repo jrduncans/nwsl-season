@@ -27,7 +27,7 @@ func TestUpsertTeamsRejectsInvalidInputBeforeWriting(t *testing.T) {
 		{name: "zero clock", teams: teamsTestCatalog(), metadata: FullRefreshMetadata{Trigger: SourceTriggerCLI}},
 		{name: "finish before start", teams: teamsTestCatalog(), metadata: FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: finished, FinishedAt: finished.Add(-time.Second)}},
 		{name: "raw finish before start within second", teams: teamsTestCatalog(), metadata: FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: finished.Add(900 * time.Millisecond), FinishedAt: finished.Add(100 * time.Millisecond)}},
-		{name: "raw due before finish within second", teams: teamsTestCatalog(), metadata: FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: finished.Add(-time.Minute), FinishedAt: finished.Add(900 * time.Millisecond), NextFullDueAt: teamsTestTimePtr(finished.Add(100 * time.Millisecond))}},
+		{name: "raw due before finish within second", teams: teamsTestCatalog(), metadata: FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: finished.Add(-time.Minute), FinishedAt: finished.Add(900 * time.Millisecond), NextFullDueAt: new(finished.Add(100 * time.Millisecond))}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			db := openTeamsTestDB(t)
@@ -306,8 +306,6 @@ func teamsTestMetadata(finished time.Time) FullRefreshMetadata {
 func teamsTestTime(hour int) time.Time {
 	return time.Date(2026, time.July, 1, hour, 0, 0, 0, time.UTC)
 }
-
-func teamsTestTimePtr(value time.Time) *time.Time { return &value }
 
 func teamsTestStored(t *testing.T, ctx context.Context, db *DB) []Team {
 	t.Helper()

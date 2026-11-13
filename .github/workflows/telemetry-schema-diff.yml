@@ -17,15 +17,19 @@ jobs:
   telemetry-schema-diff:
     name: Render telemetry schema diff
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out pull request
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Check out baseline registry
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: work/telemetry-baseline
-      - uses: jdx/mise-action@v5
+          persist-credentials: false
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
       - name: Generate Markdown schema diff
         run: >-
           make telemetry-diff
@@ -34,7 +38,7 @@ jobs:
       - name: Add schema diff to job summary
         run: cat ./work/telemetry-schema-diff/diff.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload schema diff
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: telemetry-schema-diff
           path: ./work/telemetry-schema-diff/diff.md

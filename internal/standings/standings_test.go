@@ -39,8 +39,8 @@ func TestCalculateIgnoresUnplayedPostponedAndIncompleteGames(t *testing.T) {
 		game("alpha", "bravo", "PreMatch", 4, 0),
 		game("alpha", "bravo", "Postponed", 5, 0),
 		game("alpha", "bravo", "Abandoned", 6, 0),
-		{HomeTeamID: "alpha", AwayTeamID: "bravo", Status: CompletedStatus, HomeScore: intPtr(1)},
-		{HomeTeamID: "alpha", AwayTeamID: "bravo", Status: CompletedStatus, AwayScore: intPtr(1)},
+		{HomeTeamID: "alpha", AwayTeamID: "bravo", Status: CompletedStatus, HomeScore: new(1)},
+		{HomeTeamID: "alpha", AwayTeamID: "bravo", Status: CompletedStatus, AwayScore: new(1)},
 	}
 
 	table := Calculate(teams, games, PerGameRules())
@@ -270,13 +270,9 @@ func game(homeID, awayID, status string, homeScore, awayScore int) Game {
 		HomeTeamID: homeID,
 		AwayTeamID: awayID,
 		Status:     status,
-		HomeScore:  intPtr(homeScore),
-		AwayScore:  intPtr(awayScore),
+		HomeScore:  new(homeScore),
+		AwayScore:  new(awayScore),
 	}
-}
-
-func intPtr(value int) *int {
-	return &value
 }
 
 func findRow(t *testing.T, table []TableRow, teamID string) TableRow {

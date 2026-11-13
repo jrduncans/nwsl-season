@@ -170,7 +170,7 @@ func TestUnpopulatedKnockoutsAreNotLinkedOrRenderedAsEmptyBrackets(t *testing.T)
 		{Scope: cache.SourceScope{Season: "2026", Stage: "NWSL Challenge Cup Final"}, Readiness: cache.SourceReadinessNotPublished},
 		{Scope: cache.SourceScope{Season: "2025", Stage: "Playoffs"}, Readiness: cache.SourceReadinessAvailable, ObservedGames: 1, ObservedTeams: 2},
 	}
-	store := seasonArchiveStore{fakeStore: fakeStore{season: testSeasonData()}, readiness: readiness}
+	store := seasonArchiveStore{season: testSeasonData(), readiness: readiness}
 	handler := NewHandler(store)
 
 	regular := httptest.NewRecorder()
@@ -190,7 +190,7 @@ func TestUnpopulatedKnockoutsAreNotLinkedOrRenderedAsEmptyBrackets(t *testing.T)
 	requireElements(t, populated.Body.String(), `[href="../2026/regular-season"]`)
 
 	empty := httptest.NewRecorder()
-	emptyStore := seasonArchiveStore{fakeStore: fakeStore{season: cache.SeasonData{}}, readiness: readiness}
+	emptyStore := seasonArchiveStore{season: cache.SeasonData{}, readiness: readiness}
 	NewHandler(emptyStore).ServeHTTP(empty, httptest.NewRequest(http.MethodGet, "/seasons/2026/playoffs", nil))
 	if empty.Code != http.StatusOK {
 		t.Fatalf("unpopulated playoff root = %d %s", empty.Code, empty.Body.String())
@@ -485,7 +485,7 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 }
 
 func TestUnavailableFeaturesDoNotReadUnknownScope(t *testing.T) {
-	store := &recordingStore{fakeStore: fakeStore{season: testSeasonData()}}
+	store := &recordingStore{season: testSeasonData()}
 	application := NewHandler(store)
 	for _, route := range []string{"schedule-difficulty", "forecast", "clinching", "model-evaluation"} {
 		response := httptest.NewRecorder()
@@ -654,7 +654,7 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	requireText(t, body, ".site-nav", "Forecast lab", "Matches", "Schedule difficulty")
 	requireAttr(t, body, "a.github-link", "href", "https://github.com/jrduncans/nwsl-season")
 	requireAttr(t, body, "a.github-link", "aria-label", "View the project source on GitHub")
-	if footer := strings.Index(body, "<footer"); footer < 0 || strings.Contains(body[:footer], "Data last fetched on") {
+	if before, _, ok := strings.Cut(body, "<footer"); !ok || strings.Contains(before, "Data last fetched on") {
 		t.Fatal("season page renders the data fetch time above the footer")
 	}
 	forbidRaw(t, body, "Toughest remaining schedule")
@@ -703,10 +703,10 @@ func TestSeasonRendersPersistedQualificationBadge(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	store := fullFakeStore{
-		fakeStore:     fakeStore{season: data},
+		season:        data,
 		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.Clinched}}},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Outcome: "complete"}, Results: []cache.ScenarioResult{
-			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, AlreadyEliminated: true}},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, AlreadyEliminated: true},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -725,10 +725,8 @@ func TestNonCurrentCatalogSeasonUsesCatalogRulesForStandingsScheduleAndQualifica
 	data := catalogSeasonData()
 	data.FixtureSnapshotID = "snapshot-2026"
 	store := &recordingFullFakeStore{
-		fullFakeStore: fullFakeStore{
-			fakeStore:     fakeStore{season: data},
-			qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}},
-		},
+		season:        data,
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}},
 	}
 	configured := testRules(17)
 	configured.Version = "configured-v1"
@@ -779,17 +777,17 @@ func TestClinchingPagePrioritizesOpportunities(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	store := fullFakeStore{
-		fakeStore: fakeStore{season: data},
+		season: data,
 		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
 			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
 			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
 			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpUnresolved, Reason: "calculation budget exhausted"}},
 		}},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}}}, CanBeEliminated: true, EliminationClauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}}}}}},
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityAlreadyClinched, AlreadyClinched: true}},
-			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch}},
-			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"}},
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true, Clauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}}}, CanBeEliminated: true, EliminationClauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}}}}},
+			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityAlreadyClinched, AlreadyClinched: true},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch},
+			{TeamID: "bravo", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -816,13 +814,11 @@ func TestClinchingNonCurrentCatalogSeasonUsesCatalogRulesVersion(t *testing.T) {
 	data := catalogSeasonData()
 	data.FixtureSnapshotID = "snapshot-2026"
 	store := &recordingFullFakeStore{
-		fullFakeStore: fullFakeStore{
-			fakeStore:     fakeStore{season: data},
-			qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}},
-			scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{
-				State: scenarios.SlateReady, Source: scenarios.SourceMatchday, FixtureIDs: []string{"future-1"},
-			}}},
-		},
+		season:        data,
+		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}},
+		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{
+			State: scenarios.SlateReady, Source: scenarios.SourceMatchday, FixtureIDs: []string{"future-1"},
+		}}},
 	}
 	configured := testRules(17)
 	configured.Version = "configured-v1"
@@ -850,12 +846,12 @@ func TestClinchingPageHidesSlateForNoHelpOnlyPath(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	store := fullFakeStore{
-		fakeStore: fakeStore{season: data},
+		season: data,
 		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
 			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
 		}},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch}},
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -875,7 +871,7 @@ func TestClinchingPageShowsCompletedQualificationWhenScenariosArePending(t *test
 	data.FixtureSnapshotID = "snapshot"
 	found := false
 	store := fullFakeStore{
-		fakeStore:     fakeStore{season: data},
+		season:        data,
 		scenarioFound: &found,
 		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
 			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.Clinched},
@@ -903,16 +899,16 @@ func TestClinchingPageGroupsNoHelpPathsByRelevantTeamPath(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	store := fullFakeStore{
-		fakeStore: fakeStore{season: data},
+		season: data,
 		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
 			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
 			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1", "future-2"}}},
 			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.NotClinched, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpGuaranteed, FixtureIDs: []string{"future-1"}}},
 		}},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityCannotClinch}},
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCannotClinch}},
-			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCannotClinch}},
+			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, State: scenarios.OpportunityCannotClinch},
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCannotClinch},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8, State: scenarios.OpportunityCannotClinch},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -953,7 +949,7 @@ func TestClinchingPageMovesLongerNoHelpPathsToSeasonSection(t *testing.T) {
 	}
 	clause := []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin, clinching.Draw}}}}}
 	store := fullFakeStore{
-		fakeStore: fakeStore{season: data},
+		season: data,
 		qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
 			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, Status: clinching.NotClinched, NoHelp: path("future-1", "future-2", "future-3")},
 			{TeamID: "alpha", Achievement: competition.AchievementHomePlayoff, TopK: 4, Status: clinching.NotClinched, NoHelp: path("future-1", "future-2")},
@@ -961,10 +957,10 @@ func TestClinchingPageMovesLongerNoHelpPathsToSeasonSection(t *testing.T) {
 			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8, Status: clinching.NotClinched, NoHelp: path("future-2")},
 		}},
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, CanClinch: true, Clauses: clause}},
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementHomePlayoff, TopK: 4, CanClinch: true, Clauses: clause}},
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, CanClinch: true, Clauses: clause}},
-			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8}},
+			{TeamID: "alpha", Achievement: competition.AchievementShield, TopK: 1, CanClinch: true, Clauses: clause},
+			{TeamID: "alpha", Achievement: competition.AchievementHomePlayoff, TopK: 4, CanClinch: true, Clauses: clause},
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 8, CanClinch: true, Clauses: clause},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 8},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -990,10 +986,10 @@ func TestClinchingPageShowsPlayoffEliminationScenario(t *testing.T) {
 	data := testSeasonData()
 	data.FixtureSnapshotID = "snapshot"
 	store := fullFakeStore{
-		fakeStore: fakeStore{season: data},
+		season: data,
 		scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{
-			{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch, CanBeEliminated: true, EliminationClauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}}}}}},
-			{Result: scenarios.Result{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch, AlreadyEliminated: true}},
+			{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch, CanBeEliminated: true, EliminationClauses: []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.AwayWin}}}}}},
+			{TeamID: "bravo", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCannotClinch, AlreadyEliminated: true},
 		}},
 	}
 	response := httptest.NewRecorder()
@@ -1469,7 +1465,7 @@ func TestForecastRendersDefaultUncertaintyAndMetadata(t *testing.T) {
 
 func TestForecastRendersChampionshipOddsWithEightTeamBracket(t *testing.T) {
 	data := testSeasonData()
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		data.Teams = append(data.Teams, standings.Team{ID: fmt.Sprintf("extra-%d", i), Name: fmt.Sprintf("Extra %d", i)})
 	}
 	rules := testRules(30)
@@ -2125,14 +2121,14 @@ func TestClinchingRequirementsOmitTheTeamsOwnResults(t *testing.T) {
 			Status: "PreMatch", HomeTeamID: "bravo", AwayTeamID: "charlie", Matchday: sql.NullInt64{Int64: 2, Valid: true},
 		})
 		store := fullFakeStore{
-			fakeStore: fakeStore{season: data},
+			season: data,
 			qualification: cache.QualificationSnapshot{Run: cache.QualificationRun{Outcome: "complete"}, Statuses: []cache.QualificationStatus{
 				{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, Status: clinching.NotClinched},
 			}},
 			scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, Source: scenarios.SourceMatchday, Matchday: 2, FixtureIDs: []string{"future-1", "other"}}}, Results: []cache.ScenarioResult{
-				{Result: scenarios.Result{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true,
+				{TeamID: "alpha", Achievement: competition.AchievementPlayoffs, TopK: 1, State: scenarios.OpportunityCanClinch, CanClinch: true,
 					Clauses:   []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{{GameID: "future-1", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}, {GameID: "other", AllowedOutcomes: []clinching.Outcome{clinching.HomeWin}}}}},
-					Necessary: necessary}},
+					Necessary: necessary},
 			}},
 		}
 		response := httptest.NewRecorder()

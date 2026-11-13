@@ -132,15 +132,13 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 	errs := make(chan error, len(tasks))
 	var group sync.WaitGroup
 	for range workers {
-		group.Add(1)
-		go func() {
-			defer group.Done()
+		group.Go(func() {
 			for task := range work {
 				if _, err := a.forecasts.results(ctx, []forecastTask{task}); err != nil {
 					errs <- fmt.Errorf("warm forecast model %s: %w", task.request.Model.Info().ID, err)
 				}
 			}
-		}()
+		})
 	}
 	for _, task := range tasks {
 		work <- task

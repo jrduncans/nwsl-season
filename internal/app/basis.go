@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"regexp"
 	"strings"
@@ -39,7 +40,7 @@ func penaltiesBasis(query url.Values) (history.ScoringBasis, error) {
 // malformed unrelated fields the way the other History state does.
 func penaltiesBasisRaw(rawQuery string) (history.ScoringBasis, error) {
 	var values []string
-	for _, part := range strings.Split(rawQuery, "&") {
+	for part := range strings.SplitSeq(rawQuery, "&") {
 		key, value, _ := strings.Cut(part, "=")
 		decoded, err := url.QueryUnescape(key)
 		if err != nil || decoded != penaltiesParam {
@@ -75,9 +76,7 @@ func penaltiesValue(value string) (history.ScoringBasis, error) {
 // basis is omitted so existing links and canonical URLs do not change.
 func withPenalties(values url.Values, basis history.ScoringBasis) url.Values {
 	copied := make(url.Values, len(values)+1)
-	for key, value := range values {
-		copied[key] = value
-	}
+	maps.Copy(copied, values)
 	copied.Del(penaltiesParam)
 	if basis.ExcludesPenalties() {
 		copied.Set(penaltiesParam, penaltiesExclude)

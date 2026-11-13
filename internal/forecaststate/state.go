@@ -4,6 +4,7 @@ package forecaststate
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -117,13 +118,9 @@ func (s State) Without(gameID string) State {
 
 func (s State) copy() State {
 	fixed := make(map[string]simulation.Outcome, len(s.Fixed))
-	for id, outcome := range s.Fixed {
-		fixed[id] = outcome
-	}
+	maps.Copy(fixed, s.Fixed)
 	winners := make(map[string]simulation.PostseasonMatch, len(s.PlayoffWinners))
-	for id, match := range s.PlayoffWinners {
-		winners[id] = match
-	}
+	maps.Copy(winners, s.PlayoffWinners)
 	return State{ModelID: s.ModelID, ComparisonModelID: s.ComparisonModelID, Fixed: fixed, PlayoffWinners: winners}
 }
 

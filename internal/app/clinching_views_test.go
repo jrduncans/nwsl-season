@@ -36,7 +36,7 @@ func TestClinchingPageBoundsSummaryAndRetainsExactPaths(t *testing.T) {
 				result.State, result.CanClinch, result.Clauses = scenarios.OpportunityCannotClinch, false, nil
 				result.CanBeEliminated, result.EliminationClauses = true, clauses
 			}
-			store := fullFakeStore{fakeStore: fakeStore{season: data}, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{{Result: result}}}}
+			store := fullFakeStore{season: data, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{{Result: result}}}}
 			response := httptest.NewRecorder()
 			NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
 			if response.Code != http.StatusOK {
@@ -85,7 +85,7 @@ func TestClinchingPageSummarizesSlateBeforeScenarios(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			slate := scenarios.Slate{State: scenarios.SlateReady, StartsAtUTC: time.Date(2026, 10, 16, 19, 0, 0, 0, time.UTC), LatestKickoffUTC: test.latest, FixtureIDs: []string{"future-1", "future-2"}}
-			store := fullFakeStore{fakeStore: fakeStore{season: data}, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: slate}, Results: []cache.ScenarioResult{{Result: result}}}}
+			store := fullFakeStore{season: data, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: slate}, Results: []cache.ScenarioResult{{Result: result}}}}
 			response := httptest.NewRecorder()
 			NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
 			if response.Code != http.StatusOK {
@@ -115,7 +115,7 @@ func TestClinchingPageDoesNotCallTiebreakDependentPathsIncomplete(t *testing.T) 
 		Clauses:     []scenarios.Clause{{Conditions: []scenarios.FixtureCondition{testScenarioCondition("future-1", 1)}}},
 		Limitation:  "additional paths may depend on score or unavailable tiebreak data; no outcome-only path is published",
 	}
-	store := fullFakeStore{fakeStore: fakeStore{season: data}, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{{Result: result}}}}
+	store := fullFakeStore{season: data, scenario: cache.ScenarioSnapshot{Run: cache.ScenarioRun{Slate: scenarios.Slate{State: scenarios.SlateReady, FixtureIDs: []string{"future-1"}}}, Results: []cache.ScenarioResult{{Result: result}}}}
 	response := httptest.NewRecorder()
 	NewHandlerWithOptions(store, Options{CurrentSeason: "2026", Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/clinching", nil))
 	if response.Code != http.StatusOK {

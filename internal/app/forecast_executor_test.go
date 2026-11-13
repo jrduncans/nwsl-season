@@ -84,7 +84,7 @@ func TestPrecacheForecastsCachesZeroAssumptionResultForEachModel(t *testing.T) {
 }
 
 func TestPrecacheForecastsSkipsUncatalogedConfiguredScope(t *testing.T) {
-	store := &recordingStore{fakeStore: fakeStore{season: testSeasonData()}}
+	store := &recordingStore{season: testSeasonData()}
 	application := newApplicationWithForecastExecutor(store, Options{CurrentSeason: "2099", ForecastIterations: 20, Location: time.UTC}, newForecastExecutor(1, time.Second))
 	if err := application.PrecacheForecasts(context.Background()); err != nil {
 		t.Fatal(err)

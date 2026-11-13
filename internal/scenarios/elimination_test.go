@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"context"
+	"maps"
 	"math/rand"
 	"strings"
 	"testing"
@@ -77,9 +78,7 @@ func bruteForceElimination(points map[string]int, teams []string, target string,
 		return false
 	}
 	current := map[string]int{}
-	for team, value := range points {
-		current[team] = value
-	}
+	maps.Copy(current, points)
 	return !survives(0, current)
 }
 
@@ -106,8 +105,8 @@ func TestGenerateFindsEliminationForcedByLaterFixture(t *testing.T) {
 	}
 	start := time.Date(2026, 9, 25, 20, 0, 0, 0, time.UTC)
 	slate, err := DefineSlate([]ScheduledGame{
-		{ID: "slate", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "e", KickoffUTC: start, Matchday: intPtr(1)},
-		{ID: "later", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: start.Add(7 * 24 * time.Hour), Matchday: intPtr(2)},
+		{ID: "slate", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "e", KickoffUTC: start, Matchday: new(1)},
+		{ID: "later", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: start.Add(7 * 24 * time.Hour), Matchday: new(2)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,9 +174,7 @@ func TestSeptember2026EliminationIncludesFutureFixtureCoupling(t *testing.T) {
 						for uta := range 3 {
 							outcomes := []int{0, 0, sea, kc, was, por, bay, uta}
 							current := make(map[string]int, len(points))
-							for team, value := range points {
-								current[team] = value
-							}
+							maps.Copy(current, points)
 							for i, game := range slate {
 								current[game.HomeTeamID] += []int{3, 1, 0}[outcomes[i]]
 								current[game.AwayTeamID] += []int{0, 1, 3}[outcomes[i]]

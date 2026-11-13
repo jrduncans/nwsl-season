@@ -1,4 +1,4 @@
-name: Telemetry Artifacts
+name: Telemetry Live Check
 
 on:
   pull_request:
@@ -16,10 +16,12 @@ permissions:
 
 jobs:
   telemetry-artifacts:
-    name: Validate generated telemetry artifacts
+    name: Check runtime telemetry against the registry
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
-      - run: make telemetry-check-generated
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
       - run: make telemetry-live-check

@@ -31,7 +31,7 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 	client := fakeASA{
 		teams: testTeams(),
 		games: []asa.Game{
-			testGame("game-1", "FullTime", ptr(1), ptr(0)),
+			testGame("game-1", "FullTime", new(1), new(0)),
 			testGame("game-2", "PreMatch", nil, nil),
 		},
 	}
@@ -51,7 +51,7 @@ func TestRunIsIdempotentAndUpdatesGames(t *testing.T) {
 		t.Fatalf("first run team counts = %+v, want recovered catalog counts", first)
 	}
 
-	client.games[0] = testGame("game-1", "FullTime", ptr(2), ptr(2))
+	client.games[0] = testGame("game-1", "FullTime", new(2), new(2))
 	client.games[0].LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
 	second, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"})
 	if err != nil {
@@ -100,7 +100,7 @@ func TestRunRecordsDetailedTelemetry(t *testing.T) {
 
 	service := Service{ASA: &fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}, Store: newTestDB(t)}
 	if _, err := service.Run(context.Background(), RunOptions{
 		Season: "2024", Stage: "Test Stage", ExpectedTeams: 2, GamesPerTeam: 1, Trigger: "cli",
@@ -145,7 +145,7 @@ func TestRunRecordsEachFailureAtItsOwningBoundary(t *testing.T) {
 
 	service := Service{ASA: &fakeASA{
 		teamsErr: errors.New("ASA teams unavailable"),
-		games:    []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games:    []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}, Store: newTestDB(t)}
 	if _, err := service.Run(context.Background(), RunOptions{Season: "2024", Stage: "Test Stage"}); err == nil {
 		t.Fatal("Run() error = nil, want fetch failure")
@@ -289,7 +289,7 @@ func TestRunAutomaticallyPrunesHistoryWhenConfigured(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	service := Service{ASA: &client, Store: db, HistoryRetention: 90 * 24 * time.Hour}
 
@@ -309,10 +309,9 @@ func TestRunRefreshesXGBeforeDerivedCalculations(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	order := []string{}
-	client := traceASA{fakeASA: fakeASA{
+	client := traceASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
-	}, order: &order, xg: []asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6}}}
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))}, order: &order, xg: []asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6}}}
 	service := Service{
 		ASA:           &client,
 		Store:         db,
@@ -333,7 +332,7 @@ func TestRunRefreshesDerivedCalculationsAfterUnchangedInventory(t *testing.T) {
 	order := []string{}
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	service := Service{
 		ASA:           &client,
@@ -410,10 +409,9 @@ func TestRunInvalidExpectedPointsPreservesLastGoodXGSnapshot(t *testing.T) {
 	db := newTestDB(t)
 	homePoints, awayPoints := 2.47, .367
 	order := []string{}
-	client := traceASA{fakeASA: fakeASA{
+	client := traceASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
-	}, order: &order, xg: []asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6, HomeXPoints: &homePoints, AwayXPoints: &awayPoints}}}
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))}, order: &order, xg: []asa.GameXGoals{{GameID: "game-1", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: 0.6, HomeXPoints: &homePoints, AwayXPoints: &awayPoints}}}
 	service := Service{ASA: &client, Store: db}
 	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"}); err != nil {
 		t.Fatal(err)
@@ -447,7 +445,7 @@ func TestRecalculateUsesCachedFixturesWithoutCallingASA(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	if _, err := (Service{ASA: &client, Store: db}).Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"}); err != nil {
 		t.Fatal(err)
@@ -494,7 +492,7 @@ func TestRecalculateCalculationsOutliveCallerButStopWithOwner(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	if _, err := (Service{ASA: &client, Store: db}).Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"}); err != nil {
 		t.Fatal(err)
@@ -535,7 +533,7 @@ func TestRecalculateReportsCurrentDecisionsOnParentSpan(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	if _, err := (Service{ASA: &client, Store: db}).Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"}); err != nil {
 		t.Fatal(err)
@@ -608,7 +606,7 @@ func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	service := Service{ASA: &client, Store: db}
 
@@ -620,7 +618,7 @@ func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 		t.Fatalf("ASA calls after first run = teams %d games %d, want 1 and 1", client.teamsCalls, client.gamesCalls)
 	}
 
-	client.games[0] = testGame("game-1", "FullTime", ptr(3), ptr(0))
+	client.games[0] = testGame("game-1", "FullTime", new(3), new(0))
 	client.games[0].LastUpdatedUTC = "2024-11-07 16:57:43 UTC"
 	second, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"})
 	if err != nil {
@@ -645,7 +643,7 @@ func TestRunHardDeletesMissingGamesAfterSuccessfulFetch(t *testing.T) {
 	client := fakeASA{
 		teams: testTeams(),
 		games: []asa.Game{
-			testGame("game-1", "FullTime", ptr(1), ptr(0)),
+			testGame("game-1", "FullTime", new(1), new(0)),
 			testGame("game-2", "PreMatch", nil, nil),
 		},
 	}
@@ -655,7 +653,7 @@ func TestRunHardDeletesMissingGamesAfterSuccessfulFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client.games = []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}
+	client.games = []asa.Game{testGame("game-1", "FullTime", new(1), new(0))}
 	run, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"})
 	if err != nil {
 		t.Fatal(err)
@@ -676,7 +674,7 @@ func TestRunRejectsIncompleteKnownScheduleAndPreservesExistingRows(t *testing.T)
 	client := fakeASA{
 		teams: testTeams(),
 		games: []asa.Game{
-			testGame("game-1", "FullTime", ptr(1), ptr(0)),
+			testGame("game-1", "FullTime", new(1), new(0)),
 			testGame("game-2", "PreMatch", nil, nil),
 		},
 	}
@@ -686,7 +684,7 @@ func TestRunRejectsIncompleteKnownScheduleAndPreservesExistingRows(t *testing.T)
 	if _, err := service.Run(ctx, options); err != nil {
 		t.Fatal(err)
 	}
-	client.games = []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}
+	client.games = []asa.Game{testGame("game-1", "FullTime", new(1), new(0))}
 	if _, err := service.Run(ctx, options); err == nil {
 		t.Fatal("Run() error = nil, want incomplete schedule validation error")
 	}
@@ -711,7 +709,7 @@ func TestRunRejectsEmptyGamesAndPreservesExistingRows(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	service := Service{ASA: &client, Store: db}
 
@@ -743,7 +741,7 @@ func TestRunRejectsSelfFixtureAndPreservesExistingRows(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	service := Service{ASA: &client, Store: db}
 
@@ -751,7 +749,7 @@ func TestRunRejectsSelfFixtureAndPreservesExistingRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	selfFixture := testGame("game-2", "FullTime", ptr(2), ptr(0))
+	selfFixture := testGame("game-2", "FullTime", new(2), new(0))
 	selfFixture.AwayTeamID = selfFixture.HomeTeamID
 	client.games = []asa.Game{selfFixture}
 	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"}); err == nil {
@@ -780,7 +778,7 @@ func TestRunRecordsFetchFailureAndPreservesExistingRows(t *testing.T) {
 	db := newTestDB(t)
 	client := fakeASA{
 		teams: testTeams(),
-		games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))},
+		games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))},
 	}
 	service := Service{ASA: &client, Store: db}
 
@@ -802,7 +800,7 @@ func TestRunRecordsFetchFailureAndPreservesExistingRows(t *testing.T) {
 func TestRunAllowsSyncAfterFailedAttempt(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
-	client := fakeASA{teams: testTeams(), games: []asa.Game{testGame("game-1", "FullTime", ptr(1), ptr(0))}}
+	client := fakeASA{teams: testTeams(), games: []asa.Game{testGame("game-1", "FullTime", new(1), new(0))}}
 	service := Service{ASA: &client, Store: db}
 
 	client.teamsErr = errors.New("upstream down")
@@ -884,7 +882,7 @@ func (f *historyASA) Teams(context.Context, asa.TeamsFilters) ([]asa.Team, error
 
 func (f *historyASA) Games(_ context.Context, filters asa.GamesFilters) ([]asa.Game, error) {
 	f.calls[filters.SeasonName]++
-	game := testGame("game-"+filters.SeasonName, "FullTime", ptr(2), ptr(1))
+	game := testGame("game-"+filters.SeasonName, "FullTime", new(2), new(1))
 	game.SeasonName = filters.SeasonName
 	return []asa.Game{game}, nil
 }
@@ -1000,7 +998,7 @@ func testGame(id, status string, homeScore, awayScore *int) asa.Game {
 func TestMapGamesPreservesKnockoutFactsAndRejectsIncompatiblePairs(t *testing.T) {
 	extraTime, penalties := false, true
 	homePenalties, awayPenalties := 5, 4
-	game := testGame("knockout", "FullTime", ptr(1), ptr(1))
+	game := testGame("knockout", "FullTime", new(1), new(1))
 	game.ExtraTime, game.Penalties = &extraTime, &penalties
 	game.HomePenalties, game.AwayPenalties = &homePenalties, &awayPenalties
 	mapped, err := mapGames(RunOptions{Season: "2024", Stage: "Test Stage"}, []asa.Game{game})
@@ -1034,12 +1032,12 @@ func TestMapGamesPreservesKnockoutFactsAndRejectsIncompatiblePairs(t *testing.T)
 		func() asa.Game {
 			value := game
 			no := false
-			value.Penalties, value.HomePenalties, value.AwayPenalties = &no, &zero, ptr(1)
+			value.Penalties, value.HomePenalties, value.AwayPenalties = &no, &zero, new(1)
 			return value
 		}(),
 		func() asa.Game {
 			value := game
-			value.Penalties, value.HomePenalties, value.AwayPenalties = nil, &zero, ptr(1)
+			value.Penalties, value.HomePenalties, value.AwayPenalties = nil, &zero, new(1)
 			return value
 		}(),
 		func() asa.Game {
@@ -1053,8 +1051,4 @@ func TestMapGamesPreservesKnockoutFactsAndRejectsIncompatiblePairs(t *testing.T)
 			t.Fatalf("invalid mapped game accepted: %+v", invalid)
 		}
 	}
-}
-
-func ptr(value int) *int {
-	return &value
 }

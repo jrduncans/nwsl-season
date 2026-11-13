@@ -48,31 +48,43 @@ def summarize(paths):
             f"| {cell(name)} | {status} | {duration} | "
             f"{counts['pass']} | {counts['fail']} | {counts['skip']} |"
         )
-    lines.extend([
-        "",
-        "Counts include tests and subtests. Test durations include child tests and "
-        "can overlap; they must not be added together. Suite seconds exclude compilation "
-        "and runner setup. Runner performance varies between builds.",
-    ])
+    lines.extend(
+        [
+            "",
+            (
+                "Counts include tests and subtests. Test durations include child tests and "
+                "can overlap; they must not be added together. Suite seconds exclude compilation "
+                "and runner setup. Runner performance varies between builds."
+            ),
+        ]
+    )
     for name, _, _, tests in runs:
-        lines.extend([
-            "",
-            f"### Slowest tests: {cell(name)}",
-            "",
-            "| Test | Result | Seconds |",
-            "| --- | --- | ---: |",
-        ])
-        for event in sorted(tests, key=lambda t: t.get("Elapsed", 0), reverse=True)[:20]:
+        lines.extend(
+            [
+                "",
+                f"### Slowest tests: {cell(name)}",
+                "",
+                "| Test | Result | Seconds |",
+                "| --- | --- | ---: |",
+            ]
+        )
+        for event in sorted(tests, key=lambda t: t.get("Elapsed", 0), reverse=True)[
+            :20
+        ]:
             lines.append(
                 f"| {cell(event['Test'])} | {event['Action']} | {event.get('Elapsed', 0):.2f} |"
             )
         failures = [t for t in tests if t["Action"] == "fail"]
         if failures:
-            lines.extend(["", "Failed tests: " + ", ".join(cell(t["Test"]) for t in failures)])
+            lines.extend(
+                ["", "Failed tests: " + ", ".join(cell(t["Test"]) for t in failures)]
+            )
     return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("results", type=Path, nargs="+", help="go test -json output files")
+    parser.add_argument(
+        "results", type=Path, nargs="+", help="go test -json output files"
+    )
     print(summarize(parser.parse_args().results), end="")

@@ -126,10 +126,7 @@ func place(view *View, format competition.BracketFormat, games []cache.Game) (un
 	for roundIndex := range view.Rounds {
 		round := &view.Rounds[roundIndex]
 		count := len(round.Slots)
-		end := cursor + count
-		if end > len(games) {
-			end = len(games)
-		}
+		end := min(cursor+count, len(games))
 		roundGames := games[cursor:end]
 		cursor = end
 		slots := roundSlots(round)

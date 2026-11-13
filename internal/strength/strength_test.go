@@ -168,7 +168,7 @@ func TestCalculateIgnoresUnknownAndNonRemainingGames(t *testing.T) {
 	games := []standings.Game{
 		game("a", "b", standings.CompletedStatus, 1, 0),
 		game("a", "b", "Postponed", 9, 0),
-		{ID: "unknown", Status: standings.CompletedStatus, HomeTeamID: "x", AwayTeamID: "b", HomeScore: intPtr(4), AwayScore: intPtr(0)},
+		{ID: "unknown", Status: standings.CompletedStatus, HomeTeamID: "x", AwayTeamID: "b", HomeScore: new(4), AwayScore: new(0)},
 		{ID: "future", Status: RemainingStatus, HomeTeamID: "a", AwayTeamID: "x"},
 	}
 	result := Calculate(teams, games)
@@ -181,7 +181,7 @@ func TestCalculateIgnoresUnknownAndNonRemainingGames(t *testing.T) {
 }
 
 func game(home, away, status string, homeScore, awayScore int) standings.Game {
-	return standings.Game{HomeTeamID: home, AwayTeamID: away, Status: status, HomeScore: intPtr(homeScore), AwayScore: intPtr(awayScore)}
+	return standings.Game{HomeTeamID: home, AwayTeamID: away, Status: status, HomeScore: new(homeScore), AwayScore: new(awayScore)}
 }
 
 func datedGame(home, away, status string, homeScore, awayScore int, kickoff time.Time) standings.Game {
@@ -190,8 +190,6 @@ func datedGame(home, away, status string, homeScore, awayScore int, kickoff time
 	value.Kickoff = kickoff
 	return value
 }
-
-func intPtr(value int) *int { return &value }
 
 func byID(rows []Row) map[string]Row {
 	result := make(map[string]Row, len(rows))

@@ -241,9 +241,9 @@ func TestExploreHeadToHeadSortAndNewestNames(t *testing.T) {
 	for _, column := range []string{"date", "venue", "result", "margin"} {
 		for _, order := range []string{"asc", "desc"} {
 			rows := []exploreHeadToHeadRow{
-				{exploreMatchRecord: exploreMatchRecord{Venue: "Away"}, Position: 0, Margin: -2, Points: 0},
-				{exploreMatchRecord: exploreMatchRecord{Venue: "Home"}, Position: 1, Margin: 1, Points: 3},
-				{exploreMatchRecord: exploreMatchRecord{Undated: true, Venue: "Away"}, Position: 2, Margin: 5, Points: 3},
+				{Venue: "Away", Position: 0, Margin: -2, Points: 0},
+				{Venue: "Home", Position: 1, Margin: 1, Points: 3},
+				{Undated: true, Venue: "Away", Position: 2, Margin: 5, Points: 3},
 			}
 			sortExploreHeadToHead(rows, column, order)
 			if !rows[2].Undated {
