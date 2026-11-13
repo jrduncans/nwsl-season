@@ -2,7 +2,8 @@ amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.
 import "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Builtins.pkl"
 // Using a coding agent? See https://hk.jdx.dev/agents
 
-// Top-level steps also form the check, fix and pre-commit hooks.
+// Top-level steps also form the check, fix and pre-commit hooks. Custom commands
+// declare their effect so `hk run check --safe` (the agent stop hook) accepts them.
 // E2E, race, telemetry-live-check (Docker) and the benchmark guards run only in CI.
 local linters = new Mapping {
     ["trailing_whitespace"] = Builtins.trailing_whitespace
@@ -37,7 +38,7 @@ local linters = new Mapping {
     ["telemetry_code"] = new Step {
         glob = List("cmd/**/*.go", "internal/**/*.go")
         exclude = List("**/*_test.go", "internal/telemetry/nwslconv/**")
-        check = "make telemetry-check-code"
+        check = new CommandSpec { command = "make telemetry-check-code"; effect = "read" }
     }
     // Registry and policy checks, then a diff against the generated docs and Go.
     // The fix regenerates both, after gofmt so the two never write the same files at once.
@@ -47,8 +48,8 @@ local linters = new Mapping {
         // Weaver warns on every run that the semconv dependency's manifest lacks
         // file_format (still true upstream in v1.45.0). Show output only on failure.
         output_summary = "hide"
-        check = "make telemetry-check-generated"
-        fix = "make telemetry-generate"
+        check = new CommandSpec { command = "make telemetry-check-generated"; effect = "read" }
+        fix = new CommandSpec { command = "make telemetry-generate"; effect = "write" }
         stage = List("docs/telemetry/catalog/**", "internal/telemetry/nwslconv/**")
     }
 }
@@ -72,7 +73,7 @@ hooks {
             // No glob: templates, static files and testdata affect tests too, and
             // the Go test cache makes an unchanged tree take under a second.
             ["go_test"] = new Step {
-                check = "go test ./..."
+                check = new CommandSpec { command = "go test ./..."; effect = "read" }
             }
             // Reachability-based, so any Go change can expose a vulnerability.
             // Needs the vulnerability database, so it runs here rather than per commit.

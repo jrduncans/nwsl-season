@@ -546,6 +546,11 @@ with `hk install --mise`.
 | Push | `go test ./...` and `govulncheck ./...` |
 | CI | The `hk` workflow runs `make check`, which covers every commit check except the `main` guard; Test runs the tests, race and E2E; Telemetry Live Check runs `make telemetry-live-check` (needs Docker); Vulnerability check runs `make vuln` daily, on pushes to `main`, and on pull requests that change Go files or modules |
 
+For coding agents, `hk agent hooks --target claude-code` (or `--target codex`)
+prints a Stop hook that runs `hk run check --safe` on modified files when the
+agent finishes, covering sessions that end without a commit. It passes in
+projects without hk, so it can go in user-level agent settings.
+
 `hk check --all` (or `make check`) runs the commit checks across the whole
 repository, and `hk fix --all` applies their fixes. `HK_SKIP_STEPS=<step>`
 skips one step for a single command.

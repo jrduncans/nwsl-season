@@ -2,9 +2,11 @@
 
 Git hooks from `hk.pkl` fix and lint staged files on commit (including the
 telemetry code and generated-artifact checks) and run `go test` and
-`govulncheck` on push. Never bypass them with `HK=0` or `--no-verify`. Where
-the hooks aren't installed, run `hk check` and `make test vuln` instead. If
-`govulncheck` can't reach its database, report the scan as skipped, not clean.
+`govulncheck` on push. Never bypass them with `HK=0` or `--no-verify`. An
+agent Stop hook may also run `hk run check --safe` on modified files when you
+finish; fix what it reports. Where the hooks aren't installed, run `hk check`
+and `make test vuln` instead. If `govulncheck` can't reach its database,
+report the scan as skipped, not clean.
 
 The hooks leave these to you. After the final edit to Go, templates,
 JavaScript or CSS, run `make test-e2e`. Also run, when they apply:
