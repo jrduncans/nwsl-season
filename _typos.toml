@@ -1,0 +1,9 @@
+# Settings for typos (run by hk; see hk.pkl).
+[files]
+extend-exclude = ["internal/app/static/vendor/"]
+
+[default.extend-words]
+# Three-letter team code in tests.
+HOM = "HOM"
+# Ordinal suffix, as in "2nd".
+nd = "nd"

@@ -527,12 +527,28 @@ share a cache.
 
 ## Build and verify
 
-`make verify` runs fmt, lint (including `gosec`), vet, test and test-e2e; run
-`make e2e-install` once first. Narrower targets such as `make test-clinching`
+`make check` runs every [hk](#git-hooks) check across the repository, including
+formatting and golangci-lint (with `gosec` and vet). `make verify` runs
+`make check`, test and test-e2e; run `make e2e-install` once first. Narrower targets such as `make test-clinching`
 and `make test-explore` suit iteration. `make race` runs the tests with the race
 detector, `make vuln` scans dependencies for known vulnerabilities, and the
 [telemetry guide](docs/telemetry/README.md) covers the telemetry checks.
 `make build` creates the binaries.
+
+### Git hooks
+
+[hk](https://hk.jdx.dev/) runs checks from `hk.pkl`; install its hooks once
+with `hk install --mise`.
+
+| When | Runs |
+| --- | --- |
+| Commit (staged files; fixes are applied and staged) | Go: golangci-lint fmt and run, `go fix`, `go mod tidy`. Workflows: jactionlint, zizmor. Shell: shellcheck, shellharden, shfmt. Python: ruff and ruff format. Telemetry: `make telemetry-check-code`, and `make telemetry-check-generated` (fixed by `make telemetry-generate`). Any file: typos (settings in `_typos.toml`), gitleaks on staged changes, whitespace, final newlines, line endings, byte order marks, merge-conflict markers, case conflicts, broken symlinks, shebang/executable agreement, files over 500 KB. Commits to `main` are refused. |
+| Push | `go test ./...` and `govulncheck ./...` |
+| CI | The `hk` workflow runs `make check`, which covers every commit check except the `main` guard; Test runs the tests, race and E2E; Telemetry Live Check runs `make telemetry-live-check` (needs Docker); Vulnerability check runs `make vuln` |
+
+`hk check --all` (or `make check`) runs the commit checks across the whole
+repository, and `hk fix --all` applies their fixes. `HK_SKIP_STEPS=<step>`
+skips one step for a single command.
 
 ### Test layers
 

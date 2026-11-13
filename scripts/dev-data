@@ -39,7 +39,7 @@ if [ ! -f "$source" ]; then
 	exit 1
 fi
 
-if [ "$refresh" = true ] || [ ! -f "$staging" ] || [ -n "$(find "$staging" -mmin +60)" ]; then
+if [ "$refresh" = true ] || [ ! -f "$staging" ] || [ "$(find "$staging" -mmin +60)" != "" ]; then
 	mkdir -p "$(dirname "$staging")"
 	partial="$staging.$$.partial"
 	trap 'rm -f "$partial"' EXIT

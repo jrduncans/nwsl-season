@@ -43,7 +43,7 @@ cleanup() {
 	if [ "$collector_started" = true ]; then
 		docker stop "$collector_name" >/dev/null 2>&1 || true
 	fi
-	if [ -n "$weaver_pid" ] && kill -0 "$weaver_pid" 2>/dev/null; then
+	if [ "$weaver_pid" != "" ] && kill -0 "$weaver_pid" 2>/dev/null; then
 		kill "$weaver_pid" 2>/dev/null || true
 	fi
 	if [ "$status" -ne 0 ]; then
@@ -157,10 +157,10 @@ if [ "$ready" != true ]; then
 fi
 
 NWSL_CONFIG_FILE=/dev/null \
-NWSL_TELEMETRY_LIVE_CHECK=1 \
-OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$collector_port" \
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
-go test ./internal/telemetrycontract -run '^TestRuntimeTelemetryMatchesRegistry$' -count=1
+	NWSL_TELEMETRY_LIVE_CHECK=1 \
+	OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:$collector_port" \
+	OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+	go test ./internal/telemetrycontract -run '^TestRuntimeTelemetryMatchesRegistry$' -count=1
 
 docker stop "$collector_name" >/dev/null
 collector_started=false

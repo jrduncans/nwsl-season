@@ -26,9 +26,9 @@ catalog.
   telemetry through a development-only OTLP/HTTP-to-OTLP/gRPC bridge and grade
   it against the registry with Weaver Live Check.
 
-Run `make telemetry-check`, `make telemetry-check-generated`, and
-`make telemetry-live-check` before
-committing a registry or generated-code change. See
+The pre-commit hook runs `make telemetry-check-generated`; also run
+`make telemetry-live-check` before committing a registry or generated-code
+change. See
 [`docs/telemetry/README.md`](../docs/telemetry/README.md) for the developer
 workflow, pull-request schema diffs, local registry MCP server, safe synthetic
 example emission, runtime-check port overrides, Collector image update
