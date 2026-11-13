@@ -24,9 +24,10 @@ TELEMETRY_DIFF_OUTPUT ?= ./work/telemetry-schema-diff
 verify: check test test-e2e
 
 # Formatting, linting (golangci-lint includes vet) and the other hk.pkl steps
-# across the repository; `hk fix --all` applies their fixes.
+# across the repository, reporting every failing step rather than the first;
+# `hk fix --all` applies their fixes.
 check:
-	$(HK) check --all
+	$(HK) check --all --no-fail-fast
 
 test:
 	go test ./...

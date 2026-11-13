@@ -2,7 +2,10 @@ name: Vulnerability check
 
 on:
   pull_request:
+    # govulncheck reports only reachable vulnerabilities, so a code change can
+    # expose one without a dependency change.
     paths:
+      - "**/*.go"
       - go.mod
       - go.sum
   push:

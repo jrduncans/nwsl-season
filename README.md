@@ -544,7 +544,7 @@ with `hk install --mise`.
 | --- | --- |
 | Commit (staged files; fixes are applied and staged) | Go: golangci-lint fmt and run, `go fix`, `go mod tidy`. Workflows: jactionlint, zizmor. Shell: shellcheck, shellharden, shfmt. Python: ruff and ruff format. Telemetry: `make telemetry-check-code`, and `make telemetry-check-generated` (fixed by `make telemetry-generate`). Any file: typos (settings in `_typos.toml`), gitleaks on staged changes, whitespace, final newlines, line endings, byte order marks, merge-conflict markers, case conflicts, broken symlinks, shebang/executable agreement, files over 500 KB. Commits to `main` are refused. |
 | Push | `go test ./...` and `govulncheck ./...` |
-| CI | The `hk` workflow runs `make check`, which covers every commit check except the `main` guard; Test runs the tests, race and E2E; Telemetry Live Check runs `make telemetry-live-check` (needs Docker); Vulnerability check runs `make vuln` |
+| CI | The `hk` workflow runs `make check`, which covers every commit check except the `main` guard; Test runs the tests, race and E2E; Telemetry Live Check runs `make telemetry-live-check` (needs Docker); Vulnerability check runs `make vuln` daily, on pushes to `main`, and on pull requests that change Go files or modules |
 
 `hk check --all` (or `make check`) runs the commit checks across the whole
 repository, and `hk fix --all` applies their fixes. `HK_SKIP_STEPS=<step>`
