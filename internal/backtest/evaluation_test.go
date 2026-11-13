@@ -265,7 +265,7 @@ func tinySeason() Season {
 func historicalGame(id, kickoff, home, away string, homeScore, awayScore int) Game {
 	parsed, _ := time.Parse(time.RFC3339, kickoff)
 	h, a := homeScore, awayScore
-	return Game{Game: standings.Game{ID: id, Status: standings.CompletedStatus, HomeTeamID: home, AwayTeamID: away, HomeScore: &h, AwayScore: &a}, Kickoff: parsed}
+	return Game{ID: id, Status: standings.CompletedStatus, HomeTeamID: home, AwayTeamID: away, HomeScore: &h, AwayScore: &a, Kickoff: parsed}
 }
 
 type historySpyModel struct {

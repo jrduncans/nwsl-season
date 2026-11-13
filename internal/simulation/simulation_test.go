@@ -230,7 +230,7 @@ func benchmarkSeason(completedGames int) ([]standings.Team, []standings.Game) {
 		teams[index] = standings.Team{ID: string(rune('a' + index)), Name: "Team " + string(rune('A'+index))}
 	}
 	games := make([]standings.Game, 0, 240)
-	for index := 0; index < 240; index++ {
+	for index := range 240 {
 		home, away := index%16, (index*7+1)%16
 		game := standings.Game{ID: "game-" + string(rune(1000+index)), HomeTeamID: teams[home].ID, AwayTeamID: teams[away].ID}
 		if index < completedGames {

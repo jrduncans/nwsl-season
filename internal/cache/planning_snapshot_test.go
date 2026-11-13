@@ -23,7 +23,7 @@ func TestPlanningSnapshotIsConsistentAndDefensive(t *testing.T) {
 		t.Fatal(err)
 	}
 	game := Game{ASAID: "one", Season: "2034", Stage: "Regular Season", KickoffUTC: "2034-01-01T00:00:00Z", Status: "FullTime", HomeTeamID: "home", AwayTeamID: "away", HomeScore: sql.NullInt64{Int64: 1, Valid: true}, AwayScore: sql.NullInt64{Valid: true}, LastUpdatedUTC: "2034-01-01T00:00:00Z", RawJSON: `{}`}
-	if _, err := db.ReplaceGameInventory(ctx, "2034", "Regular Season", []Game{game}, nil, FullRefreshMetadata{Trigger: SourceTriggerScheduler, StartedAt: now, FinishedAt: now, NextFullDueAt: cachePlanningTimePointer(now.Add(time.Hour))}); err != nil {
+	if _, err := db.ReplaceGameInventory(ctx, "2034", "Regular Season", []Game{game}, nil, FullRefreshMetadata{Trigger: SourceTriggerScheduler, StartedAt: now, FinishedAt: now, NextFullDueAt: new(now.Add(time.Hour))}); err != nil {
 		t.Fatal(err)
 	}
 	due := now.Add(2 * time.Hour)
@@ -61,5 +61,3 @@ func TestPlanningSnapshotIsConsistentAndDefensive(t *testing.T) {
 	}
 	t.Fatal("re-read scope missing")
 }
-
-func cachePlanningTimePointer(value time.Time) *time.Time { return &value }

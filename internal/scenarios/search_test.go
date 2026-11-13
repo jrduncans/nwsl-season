@@ -16,7 +16,7 @@ import (
 func TestGenerateFindsMinimalOutcomeOnlyClause(t *testing.T) {
 	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}}
 	game := standings.Game{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b"}
-	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestGenerateSearchesTiebreakOnlyUnresolvedBaseline(t *testing.T) {
 	}
 	slate, err := DefineSlate([]ScheduledGame{{
 		ID: "slate", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "sink-a",
-		KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4),
+		KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestGenerateSearchesTiebreakOnlyUnresolvedBaseline(t *testing.T) {
 func TestGenerateFindsPlayoffEliminationClause(t *testing.T) {
 	teams := []standings.Team{{ID: "a", Name: "Alpha"}, {ID: "b", Name: "Bravo"}}
 	game := standings.Game{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b"}
-	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestGenerateMarksAlreadyPointsEliminatedFromPlayoffs(t *testing.T) {
 		{ID: "played", Status: standings.CompletedStatus, HomeTeamID: "b", AwayTeamID: "a", HomeScore: &one, AwayScore: &zero},
 		{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c"},
 	}
-	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestGenerateMarksAlreadyEliminatedAfterScenarioBudgetExpires(t *testing.T) 
 		{ID: "played", Status: standings.CompletedStatus, HomeTeamID: "b", AwayTeamID: "a", HomeScore: &one, AwayScore: &zero},
 		{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c"},
 	}
-	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g1", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,8 +196,8 @@ func TestPlayoffEliminationUsesTheFullSeasonPointsCeiling(t *testing.T) {
 		{ID: "later", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "c"},
 	}
 	slate, err := DefineSlate([]ScheduledGame{
-		{ID: "slate", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)},
-		{ID: "later", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 8, 20, 0, 0, 0, time.UTC), Matchday: intPtr(5)},
+		{ID: "slate", Status: "PreMatch", HomeTeamID: "b", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4)},
+		{ID: "later", Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "c", KickoffUTC: time.Date(2026, 8, 8, 20, 0, 0, 0, time.UTC), Matchday: new(5)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -243,8 +243,6 @@ func TestResultValidateRejectsEmptyConditionOutcomes(t *testing.T) {
 	}
 }
 
-func intPtr(value int) *int { return &value }
-
 func TestGenerateMatchesNaiveAssignmentTruthTable(t *testing.T) {
 	// #nosec G404 -- a fixed pseudo-random stream makes this truth-table test reproducible.
 	random := rand.New(rand.NewSource(20260722))
@@ -265,7 +263,7 @@ func TestGenerateMatchesNaiveAssignmentTruthTable(t *testing.T) {
 		games = append(games, pending...)
 		scheduled := make([]ScheduledGame, len(pending))
 		for i, game := range pending {
-			scheduled[i] = ScheduledGame{ID: game.ID, Status: game.Status, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, KickoffUTC: time.Date(2026, 8, 1, 20+i, 0, 0, 0, time.UTC), Matchday: intPtr(4)}
+			scheduled[i] = ScheduledGame{ID: game.ID, Status: game.Status, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, KickoffUTC: time.Date(2026, 8, 1, 20+i, 0, 0, 0, time.UTC), Matchday: new(4)}
 		}
 		slate, err := DefineSlate(scheduled)
 		if err != nil {
@@ -291,7 +289,7 @@ func TestGenerateMatchesNaiveAssignmentTruthTable(t *testing.T) {
 		}
 
 		certified, unresolved := newAssignmentBits(27), newAssignmentBits(27)
-		for index := 0; index < 27; index++ {
+		for index := range 27 {
 			cube := assignmentCube(index, len(pending))
 			fixed := make([]clinching.FixedResult, len(pending))
 			for i, game := range pending {
@@ -395,7 +393,7 @@ func TestGenerateBatchMatchesIndependentAchievementSearches(t *testing.T) {
 	pending := games[2:]
 	scheduled := make([]ScheduledGame, len(pending))
 	for i, game := range pending {
-		scheduled[i] = ScheduledGame{ID: game.ID, Status: game.Status, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, KickoffUTC: time.Date(2026, 8, 1, 20+i, 0, 0, 0, time.UTC), Matchday: intPtr(4)}
+		scheduled[i] = ScheduledGame{ID: game.ID, Status: game.Status, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID, KickoffUTC: time.Date(2026, 8, 1, 20+i, 0, 0, 0, time.UTC), Matchday: new(4)}
 	}
 	slate, err := DefineSlate(scheduled)
 	if err != nil {
@@ -439,7 +437,7 @@ func TestGenerateBatchMatchesIndependentAchievementSearches(t *testing.T) {
 func TestGenerateDiscardsPartialCoverageAfterCancellation(t *testing.T) {
 	teams := []standings.Team{{ID: "target"}, {ID: "a"}}
 	game := standings.Game{ID: "g", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a"}
-	slate, err := DefineSlate([]ScheduledGame{{ID: "g", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: intPtr(4)}})
+	slate, err := DefineSlate([]ScheduledGame{{ID: "g", Status: "PreMatch", HomeTeamID: "target", AwayTeamID: "a", KickoffUTC: time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC), Matchday: new(4)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,12 +466,12 @@ func TestGenerateAttemptsSlateBeyondFormerFixtureLimit(t *testing.T) {
 	games := make([]standings.Game, 0, 11)
 	scheduled := make([]ScheduledGame, 0, 11)
 	start := time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC)
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		home, away := fmt.Sprintf("home-%d", i), fmt.Sprintf("away-%d", i)
 		teams = append(teams, standings.Team{ID: home}, standings.Team{ID: away})
 		id := fmt.Sprintf("g-%d", i)
 		games = append(games, standings.Game{ID: id, Status: "PreMatch", HomeTeamID: home, AwayTeamID: away})
-		scheduled = append(scheduled, ScheduledGame{ID: id, Status: "PreMatch", HomeTeamID: home, AwayTeamID: away, KickoffUTC: start, Matchday: intPtr(4)})
+		scheduled = append(scheduled, ScheduledGame{ID: id, Status: "PreMatch", HomeTeamID: home, AwayTeamID: away, KickoffUTC: start, Matchday: new(4)})
 	}
 	slate, err := DefineSlate(scheduled)
 	if err != nil {
@@ -526,10 +524,10 @@ func TestGenerateSkipsOversizedSlateWhenUniversalBlockerExists(t *testing.T) {
 	games := []standings.Game{{ID: "played", Status: standings.CompletedStatus, HomeTeamID: "a", AwayTeamID: "b", HomeScore: &one, AwayScore: &zero}}
 	scheduled := make([]ScheduledGame, 0, 11)
 	start := time.Date(2026, 8, 1, 20, 0, 0, 0, time.UTC)
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		id := fmt.Sprintf("slate-%d", i)
 		games = append(games, standings.Game{ID: id, Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b"})
-		scheduled = append(scheduled, ScheduledGame{ID: id, Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: start, Matchday: intPtr(4)})
+		scheduled = append(scheduled, ScheduledGame{ID: id, Status: "PreMatch", HomeTeamID: "a", AwayTeamID: "b", KickoffUTC: start, Matchday: new(4)})
 	}
 	slate, err := DefineSlate(scheduled)
 	if err != nil {

@@ -410,9 +410,7 @@ func TestConcurrentUseIsRaceFree(t *testing.T) {
 	client := fake.Client()
 	var wg sync.WaitGroup
 	for worker := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 20 {
 				id := fmt.Sprintf("g-%d-%d", worker, i)
 				fake.UpsertGame(game(id, "a", "b", "2026", "2026-05-01 20:00:00 UTC", "PreMatch"))
@@ -427,7 +425,7 @@ func TestConcurrentUseIsRaceFree(t *testing.T) {
 					fake.ResetRequests()
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

@@ -12,8 +12,8 @@ func TestMinimizeCoverageDerivesMaximalOutcomeCube(t *testing.T) {
 	games := []standings.Game{{ID: "first"}, {ID: "second"}}
 	certified := newAssignmentBits(9)
 	// Any decisive result in the first fixture, regardless of the second.
-	for first := 0; first < 3; first++ {
-		for second := 0; second < 3; second++ {
+	for first := range 3 {
+		for second := range 3 {
 			if first != 1 {
 				certified.set(first*3 + second)
 			}
@@ -44,8 +44,8 @@ func TestMinimizeCoverageFindsOverlappingPrimeClauses(t *testing.T) {
 	games := []standings.Game{{ID: "a"}, {ID: "b"}}
 	certified := newAssignmentBits(9)
 	// a home win OR b away win.
-	for a := 0; a < 3; a++ {
-		for b := 0; b < 3; b++ {
+	for a := range 3 {
+		for b := range 3 {
 			if a == 0 || b == 2 {
 				certified.set(a*3 + b)
 			}

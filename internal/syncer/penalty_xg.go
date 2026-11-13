@@ -112,7 +112,7 @@ func parseASATimestamp(value string) (time.Time, error) {
 			return at.UTC(), nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("unparseable date_time_utc %q", value)
+	return time.Time{}, fmt.Errorf("unparsable date_time_utc %q", value)
 }
 
 // validatePenaltyGame accepts a game's split only when its two team rows are

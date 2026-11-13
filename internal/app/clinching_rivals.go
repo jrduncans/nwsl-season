@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
@@ -330,12 +331,12 @@ func ownInKickoffOrder(own []scenarios.FixtureCondition, games map[string]cache.
 // ownResultsKey orders rows from wins through draws to losses, match by
 // match in kickoff order.
 func ownResultsKey(own []scenarios.FixtureCondition, teamID string, games map[string]cache.Game) string {
-	key := ""
+	var key strings.Builder
 	for _, condition := range own {
 		points := scenarioPoints(slices.Index(scenarioOutcomes, condition.AllowedOutcomes[0]), teamID, games[condition.GameID])
-		key += map[int]string{3: "0", 1: "1", 0: "2"}[points]
+		key.WriteString(map[int]string{3: "0", 1: "1", 0: "2"}[points])
 	}
-	return key
+	return key.String()
 }
 
 // clausesForOwn keeps the clauses that allow a row's own results and pins

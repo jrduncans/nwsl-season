@@ -1843,7 +1843,7 @@ type qualificationStatusResponse struct {
 	FixtureSnapshotID string    `json:"fixture_snapshot_id"`
 	RulesVersion      string    `json:"rules_version"`
 	Outcome           string    `json:"outcome,omitempty"`
-	FinishedAt        time.Time `json:"finished_at,omitempty"`
+	FinishedAt        time.Time `json:"finished_at"`
 	WrittenStatuses   int       `json:"written_statuses,omitempty"`
 	MatchesCurrent    bool      `json:"matches_current"`
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"sort"
@@ -130,8 +131,8 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	}
 	// Newest first, including unavailable seasons so an explicit selection never
 	// silently substitutes another year's data.
-	for i := len(summaries) - 1; i >= 0; i-- {
-		summary := summaries[i]
+	for _, summary := range slices.Backward(summaries) {
+
 		season := exploreTeamSeason{Season: summary.Season, Active: summary.InProgress()}
 		if summary.TeamComparisonEligible() {
 			for _, team := range summary.Teams {
@@ -280,9 +281,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 
 func exploreTeamURL(selection url.Values, changes map[string]string) string {
 	values := make(url.Values, len(selection))
-	for key, value := range selection {
-		values[key] = value
-	}
+	maps.Copy(values, selection)
 	for key, value := range changes {
 		values.Set(key, value)
 	}

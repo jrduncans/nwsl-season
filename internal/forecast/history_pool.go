@@ -1,6 +1,10 @@
 package forecast
 
-import "github.com/jrduncans/nwsl-season/internal/standings"
+import (
+	"maps"
+
+	"github.com/jrduncans/nwsl-season/internal/standings"
+)
 
 // historyPool returns either every available earlier season (when limit is
 // zero) or the requested number of most recently completed seasons. The
@@ -18,17 +22,13 @@ func historyPool(input FitInput, limit int) ([]standings.Game, map[string]Expect
 	xgoals := map[string]ExpectedGoals{}
 	for _, season := range seasons[first:] {
 		games = append(games, season.Games...)
-		for id, value := range season.XGoals {
-			xgoals[id] = value
-		}
+		maps.Copy(xgoals, season.XGoals)
 	}
 	return games, xgoals
 }
 
 func copyXGoals(source map[string]ExpectedGoals) map[string]ExpectedGoals {
 	values := make(map[string]ExpectedGoals, len(source))
-	for id, value := range source {
-		values[id] = value
-	}
+	maps.Copy(values, source)
 	return values
 }

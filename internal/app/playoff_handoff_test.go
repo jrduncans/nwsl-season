@@ -53,8 +53,8 @@ func handoffResponse(t *testing.T, store handoffStore, route string) string {
 }
 
 func TestPlayoffHandoffTransitionAndPublicationStates(t *testing.T) {
-	store := handoffStore{regular: resolvedHandoffSeason()}
-	store.readiness = []cache.SeasonReadinessSnapshot{{Scope: cache.SourceScope{Season: "2026", Stage: "Playoffs"}, Readiness: cache.SourceReadinessNotPublished}}
+	store := handoffStore{regular: resolvedHandoffSeason(),
+		readiness: []cache.SeasonReadinessSnapshot{{Scope: cache.SourceScope{Season: "2026", Stage: "Playoffs"}, Readiness: cache.SourceReadinessNotPublished}}}
 	final := store.regular.Games[0]
 	store.regular.Games[0].Status = fixtures.PreMatchStatus
 	store.regular.Games[0].HomeScore, store.regular.Games[0].AwayScore = sql.NullInt64{}, sql.NullInt64{}

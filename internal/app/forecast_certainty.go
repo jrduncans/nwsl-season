@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"maps"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/clinching"
@@ -91,9 +92,7 @@ func pointsEliminations(teams []standings.Team, games []standings.Game, places [
 		points[row.Team.ID] = row.Record.Points
 	}
 	maximum := map[string]int{}
-	for id, value := range points {
-		maximum[id] = value
-	}
+	maps.Copy(maximum, points)
 	for _, game := range games {
 		if game.Status == standings.CompletedStatus && game.HomeScore != nil && game.AwayScore != nil {
 			continue

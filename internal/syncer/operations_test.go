@@ -31,13 +31,13 @@ func TestPlayoffPublicationRehearsalPersistsBracketTransitions(t *testing.T) {
 	}
 	q2Pending := game("q2", "a", "b", "2025-11-08 01:00:00 UTC", nil, nil)
 	q2Pending.Status = "PreMatch"
-	q2Result := game("q2", "a", "b", "2025-11-08 01:00:00 UTC", ptr(2), ptr(0))
-	qf := []asa.Game{q2Pending, game("q3", "c", "d", "2025-11-08 17:00:00 UTC", ptr(1), ptr(0)), game("q1", "e", "f", "2025-11-09 17:30:00 UTC", ptr(1), ptr(0)), game("q4", "g", "h", "2025-11-09 20:00:00 UTC", ptr(1), ptr(0))}
+	q2Result := game("q2", "a", "b", "2025-11-08 01:00:00 UTC", new(2), new(0))
+	qf := []asa.Game{q2Pending, game("q3", "c", "d", "2025-11-08 17:00:00 UTC", new(1), new(0)), game("q1", "e", "f", "2025-11-09 17:30:00 UTC", new(1), new(0)), game("q4", "g", "h", "2025-11-09 20:00:00 UTC", new(1), new(0))}
 	completedQF := append([]asa.Game{}, qf...)
 	completedQF[0] = q2Result
-	semi := append(append([]asa.Game{}, completedQF...), game("s2", "c", "g", "2025-11-15 17:00:00 UTC", ptr(2), ptr(0)), game("s1", "e", "a", "2025-11-16 20:00:00 UTC", ptr(1), ptr(1)))
-	semi[5].Penalties, semi[5].HomePenalties, semi[5].AwayPenalties = boolPtr(true), ptr(3), ptr(1)
-	all := append(append([]asa.Game{}, semi...), game("final", "c", "e", "2025-11-23 01:00:00 UTC", ptr(0), ptr(1)))
+	semi := append(append([]asa.Game{}, completedQF...), game("s2", "c", "g", "2025-11-15 17:00:00 UTC", new(2), new(0)), game("s1", "e", "a", "2025-11-16 20:00:00 UTC", new(1), new(1)))
+	semi[5].Penalties, semi[5].HomePenalties, semi[5].AwayPenalties = new(true), new(3), new(1)
+	all := append(append([]asa.Game{}, semi...), game("final", "c", "e", "2025-11-23 01:00:00 UTC", new(0), new(1)))
 	client := &operationASA{teams: teams, games: map[string][]asa.Game{"": {}, "q2": {q2Result}, "q2,q3,q1,q4": qf, "q2,q3,q1,q4,s2,s1,final": all}, xg: map[string][]asa.GameXGoals{"final": {{GameID: "final", HomeTeamID: "c", AwayTeamID: "e", HomeTeamXGoals: 1.1, AwayTeamXGoals: 1.4}}}}
 	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2025, 11, 1, 0, 0, 0, 0, time.UTC))}
 	format, _ := competition.Lookup("2025", "Playoffs")
@@ -73,8 +73,8 @@ func TestPlayoffPublicationRehearsalPersistsBracketTransitions(t *testing.T) {
 	if err != nil || len(xg) != 1 || xg[0].GameID != "final" || !xg[0].HomeXG.Valid || xg[0].HomeXG.Float64 != 1.1 {
 		t.Fatalf("independent xG=%+v,%v", xg, err)
 	}
-	corrected := game("final", "c", "e", "2025-11-23 01:00:00 UTC", ptr(1), ptr(1))
-	corrected.Penalties, corrected.HomePenalties, corrected.AwayPenalties = boolPtr(true), ptr(4), ptr(2)
+	corrected := game("final", "c", "e", "2025-11-23 01:00:00 UTC", new(1), new(1))
+	corrected.Penalties, corrected.HomePenalties, corrected.AwayPenalties = new(true), new(4), new(2)
 	corrected.LastUpdatedUTC = "2025-11-25 01:00:00 UTC"
 	client.games["final"] = []asa.Game{corrected}
 	if view := run(Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2025", Stage: "Playoffs", Requested: []OperationGameRequest{{GameID: "final"}}}); view.State != bracket.StateReady || view.Rounds[2].Slots[0].Winner.TeamID != "c" {
@@ -82,15 +82,13 @@ func TestPlayoffPublicationRehearsalPersistsBracketTransitions(t *testing.T) {
 	}
 }
 
-func boolPtr(value bool) *bool { return &value }
-
 func TestExecuteTargetedOperationsUseOneSortedRequestAndPreserveOmissions(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	seedOperationScope(t, ctx, db, "one", "two")
 	dueOne := time.Date(2032, 1, 2, 2, 0, 0, 0, time.UTC)
 	dueTwo := time.Date(2032, 1, 2, 3, 0, 0, 0, time.UTC)
-	client := &operationASA{games: map[string][]asa.Game{"one,two": {testGame("one", "FullTime", ptr(1), ptr(0))}}, xg: map[string][]asa.GameXGoals{"one,two": {}}}
+	client := &operationASA{games: map[string][]asa.Game{"one,two": {testGame("one", "FullTime", new(1), new(0))}}, xg: map[string][]asa.GameXGoals{"one,two": {}}}
 	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 1, 1, 1, 0, 0, 0, time.UTC))}
 
 	gameResult, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationTargeted, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler, Requested: []OperationGameRequest{{GameID: "two", NextDueAt: &dueTwo}, {GameID: "one", NextDueAt: &dueOne}}})
@@ -136,7 +134,7 @@ func TestExecuteTargetedOperationsUseOneSortedRequestAndPreserveOmissions(t *tes
 func TestExecuteRecoversUnknownTeamsWithoutRefetchingGames(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
-	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {testGame("one", "FullTime", ptr(1), ptr(0))}}}
+	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {testGame("one", "FullTime", new(1), new(0))}}}
 	clock := fixedOperationClock(time.Date(2032, 2, 1, 0, 0, 0, 0, time.UTC), time.Date(2032, 2, 1, 0, 1, 0, 0, time.UTC))
 	result, err := (Service{ASA: client, Store: db, Now: clock}).Execute(ctx, Operation{Resource: OperationGames, Mode: OperationFull, Season: "2024", Stage: "Regular Season", Trigger: cache.SourceTriggerScheduler})
 	if err != nil {
@@ -154,8 +152,8 @@ func TestExecuteRecordsCachedAndASAGameFreshness(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	seedOperationScope(t, ctx, db, "one")
-	incoming := testGame("one", "FullTime", ptr(1), ptr(0))
-	incoming.HomeScore = ptr(2)
+	incoming := testGame("one", "FullTime", new(1), new(0))
+	incoming.HomeScore = new(2)
 	extraTime, penalties := false, true
 	homePenalties, awayPenalties := 5, 4
 	incoming.ExtraTime, incoming.Penalties = &extraTime, &penalties
@@ -218,7 +216,7 @@ func TestExecuteRecordsRejectedStaleGameResponseTelemetry(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	seedOperationScope(t, ctx, db, "one")
-	incoming := testGame("one", "FullTime", ptr(2), ptr(0))
+	incoming := testGame("one", "FullTime", new(2), new(0))
 	incoming.LastUpdatedUTC = "2024-11-07 14:57:43 UTC"
 	client := &operationASA{games: map[string][]asa.Game{"one": {incoming}}}
 
@@ -420,7 +418,7 @@ func TestExecuteRecordsRejectedStaleXGResponseTelemetry(t *testing.T) {
 func TestExecuteFullOperationOwnsExactlyOneResourceRequest(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
-	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {testGame("one", "FullTime", ptr(1), ptr(0))}}, xg: map[string][]asa.GameXGoals{"": {{GameID: "one", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: .8}}}}
+	client := &operationASA{teams: testTeams(), games: map[string][]asa.Game{"": {testGame("one", "FullTime", new(1), new(0))}}, xg: map[string][]asa.GameXGoals{"": {{GameID: "one", HomeTeamID: "home", AwayTeamID: "away", HomeTeamXGoals: 1.2, AwayTeamXGoals: .8}}}}
 	service := Service{ASA: client, Store: db, Now: fixedOperationClock(time.Date(2032, 4, 1, 0, 0, 0, 0, time.UTC))}
 
 	if _, err := service.Execute(ctx, Operation{Resource: OperationTeams, Mode: OperationFull, Trigger: cache.SourceTriggerCLI}); err != nil {

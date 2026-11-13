@@ -3,6 +3,7 @@ package competition
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -330,12 +331,7 @@ func (e Entry) Copy() Entry {
 }
 
 func (e Entry) Supports(capability Capability) bool {
-	for _, candidate := range e.Capabilities {
-		if candidate == capability {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(e.Capabilities, capability)
 }
 
 func Lookup(season, stage string) (Entry, bool) {

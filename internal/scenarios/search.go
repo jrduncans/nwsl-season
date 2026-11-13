@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -727,7 +728,7 @@ func necessary(bits assignmentBits, games []standings.Game) []FixtureCondition {
 	}
 	bits.each(func(i int) {
 		v := i
-		for j := len(games) - 1; j >= 0; j-- {
+		for j := range slices.Backward(games) {
 			z := v % 3
 			v /= 3
 			seen[j][[]clinching.Outcome{clinching.HomeWin, clinching.Draw, clinching.AwayWin}[z]] = true

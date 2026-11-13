@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -342,12 +343,7 @@ func (s *Scheduler) startupCatalogBootstrapDue() bool {
 		s.logger.Warn("read startup catalog bootstrap snapshot", "error", err)
 		return false
 	}
-	for _, job := range Plan(snapshot, s.config, s.now().UTC()) {
-		if catalogBootstrapJob(job) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(Plan(snapshot, s.config, s.now().UTC()), catalogBootstrapJob)
 }
 
 func catalogBootstrapJob(job Job) bool {

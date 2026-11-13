@@ -64,7 +64,7 @@ func (teams teamScoringTotals) addResult(game cache.Game, homeGoals, awayGoals i
 	}
 	for _, id := range []string{game.HomeTeamID, game.AwayTeamID} {
 		if teams[id] == nil {
-			teams[id] = &teamScoringAccumulator{TeamScoring: TeamScoring{TeamID: id}}
+			teams[id] = &teamScoringAccumulator{TeamID: id}
 		}
 		teams[id].Played++
 		match := TeamMatch{ID: game.ASAID, KickoffUTC: game.KickoffUTC, StadiumID: venue.StadiumID, Home: id == game.HomeTeamID, GoalsCovered: goalsCovered}

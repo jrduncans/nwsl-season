@@ -1,5 +1,7 @@
 package forecast
 
+import "maps"
+
 const (
 	xgPoissonHomeTwoSeasonsID = "xg-poisson-home-two-seasons-v1"
 	xgPoissonHomeHistoryID    = "xg-poisson-home-history-v1"
@@ -35,8 +37,6 @@ func (p xgPoissonHomeHistoryV1) Fit(input FitInput) (Predictor, error) {
 	}
 	history, xgoals := historyPool(input, p.seasons)
 	games := append(history, input.Games...)
-	for id, xg := range input.XGoals {
-		xgoals[id] = xg
-	}
+	maps.Copy(xgoals, input.XGoals)
 	return fitXGPoisson(input, games, xgoals, VenueSample{})
 }

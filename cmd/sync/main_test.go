@@ -209,8 +209,8 @@ func TestCountCalculationBudgetTimeouts(t *testing.T) {
 		{Method: clinching.ProofCheapBound, NoHelp: clinching.NoHelpPath{State: clinching.NoHelpUnresolved, Reason: "missing tiebreak data"}},
 	}}
 	scenario := cache.ScenarioSnapshot{Results: []cache.ScenarioResult{
-		{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"}},
-		{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "a clinch may depend on score"}},
+		{State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"},
+		{State: scenarios.OpportunityUnresolved, Limitation: "a clinch may depend on score"},
 	}}
 
 	got := countCalculationBudgetTimeouts(qualification, scenario)

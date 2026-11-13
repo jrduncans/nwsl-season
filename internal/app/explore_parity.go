@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"slices"
@@ -160,9 +161,7 @@ func exploreParity(query url.Values, seasons []history.SeasonParity, teamSeasons
 	}
 
 	selection := url.Values{}
-	for key, values := range query {
-		selection[key] = values
-	}
+	maps.Copy(selection, query)
 	selection.Set("view", "parity")
 	for index := range page.ParityData {
 		record := page.ParityData[index]

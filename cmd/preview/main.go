@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -126,12 +127,7 @@ func serve(scenario, addr, metric string, noScript bool, stdout, stderr io.Write
 }
 
 func validScenario(name string) bool {
-	for _, known := range apptest.ScenarioNames() {
-		if name == known {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(apptest.ScenarioNames(), name)
 }
 
 // seed fills a new cache at path with the scenario and returns the season the

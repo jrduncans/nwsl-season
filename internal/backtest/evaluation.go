@@ -565,10 +565,7 @@ func stageName(completed, total int) string {
 	if total <= 0 {
 		return stageNames[0]
 	}
-	index := int(5 * float64(completed) / float64(total))
-	if index > 4 {
-		index = 4
-	}
+	index := min(int(5*float64(completed)/float64(total)), 4)
 	return stageNames[index]
 }
 

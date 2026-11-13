@@ -23,7 +23,7 @@ func TestEvaluatePointsClassifications(t *testing.T) {
 	}
 	// A target already six points clear cannot be caught by either opponent.
 	six := 6
-	games := []standings.Game{{ID: "t-a", Status: standings.CompletedStatus, HomeTeamID: "t", AwayTeamID: "a", HomeScore: &six, AwayScore: intp(0)}, {ID: "t-b", Status: standings.CompletedStatus, HomeTeamID: "t", AwayTeamID: "b", HomeScore: &six, AwayScore: intp(0)}}
+	games := []standings.Game{{ID: "t-a", Status: standings.CompletedStatus, HomeTeamID: "t", AwayTeamID: "a", HomeScore: &six, AwayScore: new(0)}, {ID: "t-b", Status: standings.CompletedStatus, HomeTeamID: "t", AwayTeamID: "b", HomeScore: &six, AwayScore: new(0)}}
 	result, err = Evaluate(context.Background(), Request{Teams: teams, Games: games, FixtureOrder: []string{}, TargetTeamID: "t", Achievement: achievement})
 	if err != nil {
 		t.Fatal(err)
@@ -85,5 +85,3 @@ func TestCompletedTieCountsAccessibleTeamsDefinitelyAhead(t *testing.T) {
 		t.Fatalf("strictly-ahead evidence = %+v, want one definitely-ahead team", result.StrictlyAhead)
 	}
 }
-
-func intp(v int) *int { return &v }

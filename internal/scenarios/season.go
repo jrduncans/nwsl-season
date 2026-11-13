@@ -422,7 +422,7 @@ func (s *seasonSearch) walk(active uint64) {
 		}
 		return
 	}
-	for outcome := int8(0); outcome < 3; outcome++ {
+	for outcome := range int8(3) {
 		s.set(next, outcome)
 		s.walk(active)
 		s.clear(next)

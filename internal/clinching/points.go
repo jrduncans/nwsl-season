@@ -3,6 +3,7 @@ package clinching
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -98,9 +99,7 @@ func witnessFrom(g standings.Game, o Outcome) WitnessGame {
 }
 func completeWitness(p preparedSeason, assigned map[string]Outcome) []WitnessGame {
 	values := map[string]WitnessGame{}
-	for id, w := range p.witness {
-		values[id] = w
-	}
+	maps.Copy(values, p.witness)
 	for _, g := range p.decision {
 		o := Draw
 		if assigned != nil {
@@ -200,9 +199,7 @@ func feasibleThresholdWitnessAtLeast(p preparedSeason, threshold, atLeast int) q
 func improveThresholdWitness(p preparedSeason, threshold int, outcomes map[string]Outcome) queryResult {
 	current := cloneOutcomes(outcomes)
 	points := make(map[string]int, len(p.points))
-	for id, value := range p.points {
-		points[id] = value
-	}
+	maps.Copy(points, p.points)
 	for _, game := range p.decision {
 		applyOutcome(points, game, current[game.ID])
 	}
@@ -211,7 +208,7 @@ func improveThresholdWitness(p preparedSeason, threshold int, outcomes map[strin
 	// it needs only one valid counterexample, not the optimal assignment. More
 	// passes turn a shortcut used at every scenario-tree node into a second
 	// expensive solver; the exact solver below remains the fallback.
-	for pass := 0; pass < 1; pass++ {
+	for range 1 {
 		changed := false
 		for _, game := range p.decision {
 			bestOutcome := current[game.ID]
@@ -294,9 +291,7 @@ func outcomePoints(outcome Outcome, home bool) int {
 
 func countThresholdWitness(p preparedSeason, threshold int, outcomes map[string]Outcome) queryResult {
 	points := make(map[string]int, len(p.points))
-	for id, value := range p.points {
-		points[id] = value
-	}
+	maps.Copy(points, p.points)
 	for _, game := range p.decision {
 		applyOutcome(points, game, outcomes[game.ID])
 	}
@@ -336,9 +331,7 @@ func betterThresholdWitness(left, right queryResult) bool {
 
 func cloneOutcomes(values map[string]Outcome) map[string]Outcome {
 	clone := make(map[string]Outcome, len(values))
-	for id, outcome := range values {
-		clone[id] = outcome
-	}
+	maps.Copy(clone, values)
 	return clone
 }
 
@@ -364,9 +357,7 @@ func solveThresholdMaximumOracle(ctx context.Context, p preparedSeason, threshol
 	}
 	q.diag.ReducedTeams = len(contender)
 	points := map[string]int{}
-	for id, v := range p.points {
-		points[id] = v
-	}
+	maps.Copy(points, p.points)
 	edges := []standings.Game{}
 	for _, g := range p.decision {
 		a, b := contender[g.HomeTeamID], contender[g.AwayTeamID]
@@ -441,9 +432,7 @@ func solveThresholdMaximumOracle(ctx context.Context, p preparedSeason, threshol
 			return q, err
 		}
 		fixedCount += value.count
-		for id, o := range value.outcomes {
-			q.outcomes[id] = o
-		}
+		maps.Copy(q.outcomes, value.outcomes)
 	}
 	q.count = fixedCount
 	return q, nil
@@ -533,9 +522,7 @@ func solveComponent(ctx context.Context, ids []string, games []standings.Game, i
 }
 func cloneSolution(v componentSolution) componentSolution {
 	o := map[string]Outcome{}
-	for id, x := range v.outcomes {
-		o[id] = x
-	}
+	maps.Copy(o, v.outcomes)
 	v.outcomes = o
 	return v
 }

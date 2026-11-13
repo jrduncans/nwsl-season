@@ -28,8 +28,8 @@ func TestCalculationTelemetrySummarizesTeamSearches(t *testing.T) {
 		competition.AchievementShield: {TotalAssignments: 81, CertifiedAssignments: 2, UnresolvedAssignments: 3, Diagnostics: scenarios.Diagnostics{SearchNodes: 20, OracleCalls: 4, OracleCacheHits: 5, VisitedComplete: 6}},
 	})
 	attributes := scenarioAttributeMap(summary.attributes([]cache.ScenarioResult{
-		{Result: scenarios.Result{State: scenarios.OpportunityCanClinch}},
-		{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: scenarios.LimitationBudgetExhausted}},
+		{State: scenarios.OpportunityCanClinch},
+		{State: scenarios.OpportunityUnresolved, Limitation: scenarios.LimitationBudgetExhausted},
 	}))
 	for key, want := range map[string]int64{
 		"nwsl.scenario.team_search_count":                 2,
@@ -154,13 +154,13 @@ func TestParseKickoffAcceptsCacheFormats(t *testing.T) {
 }
 
 func TestShouldRetryComputeBudget(t *testing.T) {
-	if !shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"}}}}) {
+	if !shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{State: scenarios.OpportunityUnresolved, Limitation: "scenario computation budget exhausted"}}}) {
 		t.Fatal("compute-budget result should be retried")
 	}
-	if !shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityCanClinch, Limitation: scenarios.LimitationBudgetPartial}}}}) {
+	if !shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{State: scenarios.OpportunityCanClinch, Limitation: scenarios.LimitationBudgetPartial}}}) {
 		t.Fatal("partial compute-budget result should be retried")
 	}
-	if shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{Result: scenarios.Result{State: scenarios.OpportunityUnresolved, Limitation: "a clinch may depend on score"}}}}) {
+	if shouldRetryComputeBudget(cache.ScenarioSnapshot{Results: []cache.ScenarioResult{{State: scenarios.OpportunityUnresolved, Limitation: "a clinch may depend on score"}}}) {
 		t.Fatal("non-budget unresolved result should not be retried")
 	}
 }
