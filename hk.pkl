@@ -44,6 +44,9 @@ local linters = new Mapping {
     ["telemetry_generated"] = new Step {
         glob = List("telemetry/registry/**", "telemetry/policies/**", "telemetry/templates/**", "docs/telemetry/catalog/**", "internal/telemetry/nwslconv/**")
         depends = "golangci_lint_fmt"
+        // Weaver warns on every run that the semconv dependency's manifest lacks
+        // file_format (still true upstream in v1.45.0). Show output only on failure.
+        output_summary = "hide"
         check = "make telemetry-check-generated"
         fix = "make telemetry-generate"
         stage = List("docs/telemetry/catalog/**", "internal/telemetry/nwslconv/**")
