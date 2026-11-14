@@ -682,6 +682,12 @@ Run it as the same operating-system user as the server and point it at the
 same SQLite data directory so it can share the sync lease safely. A reverse
 proxy should monitor `/healthz` and `/cache/status`.
 
+`/robots.txt` asks crawlers not to follow Explore's query strings
+(`Disallow: /explore?`). Each combination of view, team, season and display is
+a separate URL, and in November 2026 one search crawler made about 21,000 such
+requests in two days. `/explore` itself stays crawlable. In production
+Cloudflare prepends its managed AI-crawler rules to this file.
+
 The server sets a strict Content Security Policy and related browser hardening
 headers on every response (see
 [`internal/app/security_headers.go`](internal/app/security_headers.go)). Pages

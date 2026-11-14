@@ -42,6 +42,28 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestRobotsTxtDisallowsExploreQueryStrings(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/robots.txt", nil)
+	response := httptest.NewRecorder()
+
+	NewHandler(nil).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/plain", got)
+	}
+	body := response.Body.String()
+	if body != "User-agent: *\nDisallow: /explore?\n" {
+		t.Fatalf("body = %q", body)
+	}
+	// A bare "Disallow: /explore" would also hide the Explore page itself.
+	if strings.Contains(body, "Disallow: /explore\n") {
+		t.Fatalf("robots.txt must keep /explore itself crawlable: %q", body)
+	}
+}
+
 func TestStageRoutesRedirectLegacyAndRenderPlayoffFacts(t *testing.T) {
 	data := testSeasonData()
 	for i := range data.Games {
