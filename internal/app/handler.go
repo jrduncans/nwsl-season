@@ -129,6 +129,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /seasons/{season}/{stage}/model-evaluation", application.modelEvaluation)
 	mux.HandleFunc("GET /seasons/{season}/{stage}/clinching", application.clinching)
 	mux.HandleFunc("GET /healthz", health)
+	mux.HandleFunc("GET /robots.txt", robotsTxt)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler(staticFS)))
 	return &Application{handler: withSecurityHeaders(withBasePath(mux)), app: application}
@@ -1771,6 +1772,20 @@ func health(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprintln(w, "ok")
+}
+
+// robotsBody asks crawlers not to follow Explore's query strings. Every
+// combination of view, team, season and display is its own URL, so a crawler
+// that follows them requests tens of thousands of near-identical pages.
+// /explore itself stays crawlable. In production Cloudflare prepends its
+// managed rules to this file; a crawler combines both "User-agent: *" groups,
+// and the longer Disallow match wins over Cloudflare's "Allow: /".
+const robotsBody = "User-agent: *\nDisallow: /explore?\n"
+
+func robotsTxt(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprint(w, robotsBody)
 }
 
 func cacheStatus(reader Store, season, stage, rulesVersion string) http.HandlerFunc {
