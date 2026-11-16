@@ -64,6 +64,15 @@ _Avoid_: game, fixture
 **Matchday**:
 The league's numbered round of regular-season matches, as published by ASA.
 
+**Match page**:
+One match's page: both teams' ranks and the default model's outlook factors,
+using only matches completed before kickoff.
+
+**Predicted goals**:
+The default model's scoring rate for one side in one match, as shown on the
+match page.
+_Avoid_: expected goals (that is xG)
+
 ## Season outcomes
 
 **Season outcome**:

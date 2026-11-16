@@ -192,9 +192,6 @@ func hrefs(t *testing.T, page playwright.Page, selector string) []string {
 	return links
 }
 
-// fixtureNPxG matches the non-penalty line under a fixture result's xG line.
-var fixtureNPxG = regexp.MustCompile(`^npxG \d+\.\d\d–\d+\.\d\d$`)
-
 func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
@@ -202,55 +199,58 @@ func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 		t.Run(vp.Name, func(t *testing.T) {
 			page := explorePage(t, base, vp, "seasons/2025/regular-season/fixtures")
 			var xgLines int
-			evalJSON(t, page, `() => document.querySelectorAll('.fixture-xg').length`, nil, &xgLines)
+			evalJSON(t, page, `() => document.querySelectorAll('.stat-line[data-stat="xG"]').length`, nil, &xgLines)
 			if xgLines == 0 {
 				t.Fatal("no fixture shows xG")
 			}
-			// Each npxG line sits directly after its match's xG line, on a line of
-			// its own below it, with the values left-aligned in one column. The
-			// line wrappers use display: contents, so measure the value spans.
-			var npLines []struct {
-				Text     string  `json:"text"`
-				AfterXG  bool    `json:"afterXG"`
-				Top      float64 `json:"top"`
-				Left     float64 `json:"left"`
-				Width    float64 `json:"width"`
-				XGBottom float64 `json:"xgBottom"`
-				XGLeft   float64 `json:"xgLeft"`
-				SameLen  bool    `json:"sameLen"`
+			// Each npxG line sits on its own row directly below its match's xG
+			// line, with the label centered between the two values and each
+			// value in the same column as the xG value above it. The line
+			// wrappers use display: contents, so measure the cells.
+			type box struct {
+				Top    float64 `json:"top"`
+				Bottom float64 `json:"bottom"`
+				Left   float64 `json:"left"`
+				Right  float64 `json:"right"`
 			}
-			evalJSON(t, page, `() => [...document.querySelectorAll('.fixture-npxg')].map((el) => {
+			var npLines []struct {
+				AfterXG bool   `json:"afterXG"`
+				Title   string `json:"title"`
+				Home    box    `json:"home"`
+				Label   box    `json:"label"`
+				Away    box    `json:"away"`
+				XGHome  box    `json:"xgHome"`
+				XGAway  box    `json:"xgAway"`
+			}
+			evalJSON(t, page, `() => [...document.querySelectorAll('.stat-line[data-stat="npxG"]')].map((el) => {
 				const xg = el.previousElementSibling;
-				const afterXG = !!xg && xg.classList.contains('fixture-xg');
-				const value = el.lastElementChild.getBoundingClientRect();
-				const xgValue = afterXG ? xg.lastElementChild.getBoundingClientRect() : { bottom: 0, left: 0 };
-				const sameLen = afterXG && xg.lastElementChild.textContent.trim().length === el.lastElementChild.textContent.trim().length;
-				return { text: el.textContent.trim(), afterXG, top: value.top, left: value.left, width: value.width, xgBottom: xgValue.bottom, xgLeft: xgValue.left, sameLen };
+				const afterXG = !!xg && xg.dataset.stat === 'xG';
+				const rect = (node) => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+				return {
+					afterXG, title: el.querySelector('dt').title,
+					home: rect(el.querySelector('.stat-home')), label: rect(el.querySelector('dt')), away: rect(el.querySelector('.stat-away')),
+					xgHome: afterXG ? rect(xg.querySelector('.stat-home')) : {}, xgAway: afterXG ? rect(xg.querySelector('.stat-away')) : {},
+				};
 			})`, nil, &npLines)
 			if len(npLines) == 0 || len(npLines) == xgLines {
 				t.Errorf("%d of %d matches show npxG, want only the matches with a penalty", len(npLines), xgLines)
 			}
-			for _, line := range npLines {
-				if !fixtureNPxG.MatchString(line.Text) {
-					t.Errorf("npxG line %q, want %q", line.Text, fixtureNPxG)
+			for i, line := range npLines {
+				if line.Title != "Non-penalty expected goals" {
+					t.Errorf("npxG %d title = %q", i, line.Title)
 				}
 				if !line.AfterXG {
-					t.Errorf("npxG line %q does not follow an xG line", line.Text)
-				} else if line.Top < line.XGBottom-1 {
-					t.Errorf("npxG line %q shares a line with its xG (top %.1f, xG bottom %.1f)", line.Text, line.Top, line.XGBottom)
+					t.Errorf("npxG %d does not follow an xG line", i)
+					continue
 				}
-				if line.Width == 0 {
-					t.Errorf("npxG value for %q has no rendered box", line.Text)
+				if line.Home.Top < line.XGHome.Bottom-1 {
+					t.Errorf("npxG %d shares a row with its xG", i)
 				}
-				if line.SameLen && math.Abs(line.Left-line.XGLeft) > 1 {
-					t.Errorf("npxG value for %q starts at x=%.1f, xG value at x=%.1f; want them aligned", line.Text, line.Left, line.XGLeft)
+				if !(line.Home.Right <= line.Label.Left+1 && line.Label.Right <= line.Away.Left+1) {
+					t.Errorf("npxG %d is not home value, label, away value: %+v", i, line)
 				}
-			}
-			var titles []string
-			evalJSON(t, page, `() => [...document.querySelectorAll('.fixture-npxg')].map((el) => el.title)`, nil, &titles)
-			for _, title := range titles {
-				if title != "Non-penalty expected goals" {
-					t.Errorf("npxG title = %q", title)
+				if math.Abs(line.Home.Right-line.XGHome.Right) > 1 || math.Abs(line.Away.Left-line.XGAway.Left) > 1 {
+					t.Errorf("npxG %d values do not line up with the xG values above them", i)
 				}
 			}
 			assertNoHorizontalOverflow(t, page)

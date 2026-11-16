@@ -134,16 +134,10 @@ func (p xgPredictor) Distribution(game standings.Game) (Distribution, error) {
 }
 
 func (p xgPredictor) rates(game standings.Game) (homeRate, awayRate float64, err error) {
-	if game.Status != "PreMatch" {
-		return 0, 0, fmt.Errorf("fixture %q is not remaining", game.ID)
+	ha, hd, aa, ad, err := p.strengthsFor(game)
+	if err != nil {
+		return 0, 0, err
 	}
-	h, hok := p.teams[game.HomeTeamID]
-	a, aok := p.teams[game.AwayTeamID]
-	if !hok || !aok {
-		return 0, 0, fmt.Errorf("fixture %q references an unknown team", game.ID)
-	}
-	ha, hd := xgStrengths(h, p.leagueRate)
-	aa, ad := xgStrengths(a, p.leagueRate)
 	return p.homeRate * ha * ad, p.awayRate * aa * hd, nil
 }
 func xgStrengths(t xgTotals, league float64) (float64, float64) {

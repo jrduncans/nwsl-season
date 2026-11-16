@@ -254,7 +254,8 @@ func TestChallengeCupGroupStageIsFactualAndChronological(t *testing.T) {
 		}
 		body := response.Body.String()
 		requireText(t, body, "[data-stage-selector] option", "Challenge Cup Group Stage")
-		requireText(t, body, "main", "2–1", "xG 1.40–0.70")
+		requireText(t, body, "main", "2–1")
+		requireExact(t, body, `.stat-line[data-stat="xG"]`, "xG 1.40 0.70")
 		forbidRaw(t, body, "Matchday 1", "Clinching scenarios", "Forecast lab", "Schedule difficulty")
 		for _, heading := range find(t, body, "h1") {
 			if text(heading) == "Standings" {
@@ -427,7 +428,8 @@ func TestUnknownCachedScopeRendersFactualOnlyPages(t *testing.T) {
 	if fixturesResponse.Code != http.StatusSeeOther || fixturesResponse.Header().Get("Location") != "../regular-season" {
 		t.Fatalf("factual match-list redirect=%d %q", fixturesResponse.Code, fixturesResponse.Header().Get("Location"))
 	}
-	requireText(t, seasonBody, "main", unknownFormatNotice, "2–1", "xG 2.36–1.11")
+	requireText(t, seasonBody, "main", unknownFormatNotice, "2–1")
+	requireExact(t, seasonBody, `.stat-line[data-stat="xG"]`, "xG 2.36 1.11")
 	forbidRaw(t, seasonBody, "expected regular-season", "Forecast lab", "Schedule difficulty", "Clinching scenarios", "fixture-outlook")
 }
 
@@ -1118,7 +1120,9 @@ func TestFixturesRendersResultsOnSeparatePage(t *testing.T) {
 	// The team filter select, its options and the fixture rows'
 	// data-fixture-home-team/away-team hooks are exercised by testFixturesPage in e2e.
 	requireExact(t, body, "main h1", "Matches")
-	requireText(t, body, "main", "2–1", "xG 2.36–1.11", "Matchday 1", "Show matches for")
+	requireText(t, body, "main", "2–1", "Matchday 1", "Show matches for")
+	requireExact(t, body, `.stat-line[data-stat="xG"] .stat-home`, "2.36")
+	requireExact(t, body, `.stat-line[data-stat="xG"] .stat-away`, "1.11")
 	requireElements(t, body, "[data-fixture-team-filter]", "[data-fixture-view-toggle]", "[data-fixture-view-button=results]", "[data-fixture-view-button=upcoming]", "[data-fixture-view=results]", "[data-fixture-view=upcoming]", `[href="../regular-season"]`, `[href="forecast"]`)
 	requireText(t, body, ".fixture-outlook-note", "Upcoming matches include an outlook.", "Outlooks use expected goals, venue, recovery time, and recent schedule load.")
 	requireAttr(t, body, ".fixture-outlook-model", "title", "Selected Forecast Lab model: xG Poisson (schedule load)")

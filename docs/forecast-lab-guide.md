@@ -616,6 +616,83 @@ completes or disappears, an assumption that names it becomes stale and the
 link shows an explanation with a recovery path rather than silently
 reinterpreting those assumptions.
 
+## Match page
+
+`/seasons/{season}/{stage}/matches/{id}` exists for every published
+Regular Season and Playoffs match; other competitions and unknown IDs return
+`404`. On Results and Matches, a row's score (or "vs") links to it, and a
+stretched link makes the whole row clickable. Its accessible name starts with
+the visible text, for example "2–1: Portland Thorns FC vs NC Courage, match
+details". A bracket slot links the same way from its round label, but only
+once ASA has published its fixture; expected pairings stay unlinked.
+
+**As of kickoff.** Everything on the page comes from matches completed before
+kickoff. For a completed target, the target and every completed match
+kicking off at or after it are treated as unplayed before the model is fitted
+and ranks are counted (`matchTrainingGames`). An upcoming target keeps every
+completed result, so its odds equal the Results outlook. Playoff matches use
+the whole regular season, as the playoff outlooks do. A rebuilt prediction for
+a past match can differ from what Results showed before kickoff if ASA has
+since revised xG or the default model has changed.
+
+The page has three sections, in the order a reader asks: who's favored (or
+how it went), how the teams rank, and how the model gets its number. The
+model's per-side scoring rate is called **predicted goals** everywhere, so
+"expected goals" keeps meaning xG.
+
+**Match card.** A larger version of the Results row: home team, then the
+score (or "vs"), then away team, with logos. Below the score, as on Results,
+are xG and npxG (npxG only when a penalty carried xG), then the predicted
+goals, each line written home value, label, away value (the same lines as
+Results) so the stack stays centered. Extra-time and shootout tags follow. Where Results would show an
+outlook (the Regular Season forecast capability, or for Playoffs the regular
+season's Forecast Lab availability), its bar sits at the bottom of the card,
+labeled "Before kickoff" on a completed match; playoff cards show each side's
+advance chance under its name. The line above the card gives the kickoff,
+the playoff round and "Neutral venue" for the final, and on regular-season
+pages any team on short rest (its elapsed days since its last match) or
+playing a third match in nine days.
+
+**Season ranks.** A mirrored table: home value and rank, the stat in the
+middle, away rank and value, so the same ranking sits side by side. Each
+team spans labeled Per match and Rank columns under its logo. On wider
+screens, empty gutter columns at both edges take the spare width, so the
+comparison stays compact and centered while the table matches the card's
+width. Rows come
+in three groups, Scored, Allowed and Differential, each with an emphasized xG
+row above a muted goals row, and the better rank on each row is marked. Ranks follow Explore's Rankings rules
+(see the [Explore guide](explore-guide.md#rankings)): per match, all-shots
+xG, competition ranks among teams with a completed match, lower is better for
+allowed stats, and xG ranks withheld for everyone if any team lacks xG for a
+played match. A line under the heading names the scope ("Before kickoff" or,
+for playoff matches, "Regular season") and the number of ranked teams. The
+section is omitted until both teams have played.
+
+**How the model gets there.** Always open, for the default model only, with
+no picker. A one-line formula precedes one table per side listing the factors
+whose product is that side's predicted goals, taken from the fitted predictor
+through `forecast.Explainer`:
+
+```text
+predicted goals = league venue rate × attack × opponent defense × rest
+```
+
+- The venue row is the league home or away xG rate. For the playoff final it
+  is "League neutral rate", the mean of the two, and predicted goals is the
+  mean of the side's two clamped rates, matching the neutral-final outlook.
+- The attack and defense rows show the shrunk multipliers, with the team's
+  raw xG (or xG allowed) per match over matches with xG beneath each label.
+- The rest row (regular season only) is `exp(±adjustment)` from schedule
+  load, shown only when the two teams' load differs. Playoff outlooks have no
+  schedule load.
+- When the 0.20–4.50 bound applies, a "Rate bound" row shows the rate that
+  was used.
+
+A short footnote names the model and notes that team factors start near 1.00.
+
+A "Head to head history" link opens Explore's Head to head with the pair
+selected.
+
 ## Forecasts are not clinching proofs
 
 Forecast Lab asks, *what does this model expect over many plausible complete
@@ -634,6 +711,10 @@ proof, its tiebreak boundary, and next-slate clinching conditions. Forecast
 probabilities never replace those badges or conditions.
 
 ## Where to look in the code
+
+- [`internal/forecast/breakdown.go`](../internal/forecast/breakdown.go) and
+  [`internal/app/match_page.go`](../internal/app/match_page.go) build the
+  match page's factor breakdown and as-of-kickoff ranks.
 
 - [`internal/forecast/catalog.go`](../internal/forecast/catalog.go) defines the
   six-model catalog and its current default.

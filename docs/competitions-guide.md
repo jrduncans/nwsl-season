@@ -83,7 +83,8 @@ unsupported request has no side effects.
 
 Season pages live at `/seasons/{season}/{stage-slug}` with optional
 `/fixtures`, `/schedule-difficulty`, `/forecast`, `/model-evaluation` and
-`/clinching` suffixes. The root and retired `/seasons` archive URL redirect to
+`/clinching` suffixes. Regular Season and Playoffs matches also have
+`/matches/{id}` pages (see [Forecast Lab](forecast-lab-guide.md#match-page)). The root and retired `/seasons` archive URL redirect to
 the configured current season (`NWSL_SYNC_SEASON`; it never rolls over by
 calendar). They use its primary stage until the local cache certifies safe
 regular-season completion, then switch to its cataloged Playoffs bracket.

@@ -51,17 +51,12 @@ func populateExploreTeamRanks(teams []exploreTeamRecord) {
 						}
 					}
 					if complete {
-						rank, tied := 1, false
+						present := make([]float64, len(values))
 						for j, value := range values {
-							if (measure == 1 && *value < *values[i]) || (measure != 1 && *value > *values[i]) {
-								rank++
-							}
-							tied = tied || (i != j && *value == *values[i])
+							present[j] = *value
 						}
-						row.Rank = ordinalRank(rank)
-						if tied {
-							row.Rank = "Tied " + row.Rank
-						}
+						rank, tied := competitionRank(present, i, measure == 1)
+						row.Rank = competitionRankText(rank, tied)
 						position := 0.0
 						if len(teams) > 1 {
 							position = 100 * float64(rank-1) / float64(len(teams)-1)
@@ -73,6 +68,26 @@ func populateExploreTeamRanks(teams []exploreTeamRecord) {
 			}
 		}
 	}
+}
+
+// competitionRank gives values[index] 1 + the number of strictly better
+// values, so ties share a rank and later ranks skip places.
+func competitionRank(values []float64, index int, lowerIsBetter bool) (rank int, tied bool) {
+	rank = 1
+	for j, value := range values {
+		if (lowerIsBetter && value < values[index]) || (!lowerIsBetter && value > values[index]) {
+			rank++
+		}
+		tied = tied || (j != index && value == values[index])
+	}
+	return rank, tied
+}
+
+func competitionRankText(rank int, tied bool) string {
+	if tied {
+		return "Tied " + ordinalRank(rank)
+	}
+	return ordinalRank(rank)
 }
 
 func ordinalRank(rank int) string {

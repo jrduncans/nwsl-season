@@ -1,0 +1,64 @@
+{{define "match"}}{{template "head" .}}
+<div class="title-row"><div>{{template "seasonContext" .}}
+  <h1 class="visually-hidden">{{.Match.HomeTeam.Name}} vs {{.Match.AwayTeam.Name}}</h1>
+  <p class="match-meta"><time data-local-time="{{.Match.KickoffUTC}}">{{.Match.Kickoff}}</time>{{with .RoundLabel}}<span>{{.}}</span>{{end}}{{if .Neutral}}<span>Neutral venue</span>{{end}}{{with .Rest}}<span>{{.}}</span>{{end}}</p>
+</div></div>
+
+<section class="match-board" aria-label="Match">
+  <div class="match-board-row">
+    {{template "matchBoardTeam" .Match.Home}}
+    <div class="match-board-result">
+      {{if .Match.Completed}}<strong class="match-board-score">{{.Match.Score}}</strong>{{else}}<span class="match-board-vs">vs</span>{{end}}
+      {{if .Lines}}{{template "statLines" .Lines}}{{end}}
+      {{if or .Match.ExtraTime .Match.Shootout}}<p class="match-board-tags">{{with .Match.ExtraTime}}<span class="fixture-meta-tag">{{.}}</span>{{end}}{{with .Match.Shootout}}<span class="fixture-meta-tag">{{.}}</span>{{end}}</p>{{end}}
+    </div>
+    {{template "matchBoardTeam" .Match.Away}}
+  </div>
+  {{with .Match}}{{if .Outlook}}{{template "fixtureOutlook" .}}{{end}}{{end}}
+</section>
+
+{{with .Ranks}}<section class="match-ranks">
+  <h2>Season ranks</h2>
+  <p class="note">{{.Scope}}.{{if .MissingXG}} xG ranks are withheld because some matches lack xG.{{end}}</p>
+  <div class="table-scroll match-rank-scroll"><table class="match-rank-table">
+    <caption class="visually-hidden">Season ranks: {{.Scope}}</caption>
+    <colgroup><col class="match-rank-col-gutter"><col class="match-rank-col-value"><col class="match-rank-col-place"><col class="match-rank-col-stat"><col class="match-rank-col-place"><col class="match-rank-col-value"><col class="match-rank-col-gutter"></colgroup>
+    <thead>
+      <tr><td class="match-rank-gutter"></td><th scope="colgroup" colspan="2" class="match-rank-home">{{template "matchRankTeam" .Home}}</th><td></td><th scope="colgroup" colspan="2" class="match-rank-away">{{template "matchRankTeam" .Away}}</th><td class="match-rank-gutter"></td></tr>
+      <tr class="match-rank-subhead"><td class="match-rank-gutter"></td><th scope="col" class="match-rank-home">Per match</th><th scope="col" class="match-rank-home">Rank</th><td></td><th scope="col" class="match-rank-away">Rank</th><th scope="col" class="match-rank-away">Per match</th><td class="match-rank-gutter"></td></tr>
+    </thead>
+    {{range .Groups}}<tbody>
+      <tr class="match-rank-group"><th colspan="7" scope="colgroup">{{.Label}}</th></tr>
+      {{template "matchRankRow" .XG}}
+      {{template "matchRankRow" .Goals}}
+    </tbody>{{end}}
+  </table></div>
+</section>{{end}}
+
+{{if .Sides}}<section class="match-model">
+  <h2>How the model gets there</h2>
+  <p class="match-model-formula">League rate × attack × opponent defense{{if not .Playoff}} × rest{{end}} = predicted goals</p>
+  <div class="match-sides">{{range .Sides}}<table class="match-factors">
+    <caption>{{template "teamName" .Team}}</caption>
+    <tbody>{{range .Rows}}<tr><th scope="row">{{.Label}}{{with .Detail}}<span class="match-factor-detail">{{.}}</span>{{end}}</th><td class="match-factor-value">{{.Value}}</td></tr>{{end}}</tbody>
+    <tfoot><tr><th scope="row">= Predicted goals</th><td class="match-factor-value">{{.Predicted}}</td></tr></tfoot>
+  </table>{{end}}</div>
+  <p class="match-model-foot">{{.ModelName}}. Team factors are pulled toward 1.00 early in the season.{{if .Playoff}} No schedule load in the playoffs.{{end}}{{if .Match.Completed}} Uses only matches before kickoff.{{end}}{{if .HasForecast}} <a href="{{.ForecastPath}}">Forecast lab</a>{{end}}</p>
+</section>{{end}}
+
+<p class="match-links"><a href="{{.HeadToHeadPath}}">Head to head history</a></p>
+{{template "foot" .}}{{end}}
+
+{{define "matchBoardTeam"}}<div class="match-board-team">{{if .LogoURL}}<img class="match-board-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span class="match-board-name">{{if .Seed}}<span class="bracket-seed">{{.Seed}}</span> {{end}}{{.Name}}</span>{{with .AdvanceText}}<span class="match-board-advance">Advance <strong>{{.}}</strong></span>{{end}}</div>{{end}}
+
+{{define "matchRankRow"}}<tr class="match-rank-{{if eq .Label "xG"}}xg{{else}}goals{{end}}">
+  <td class="match-rank-gutter"></td>
+  <td class="match-rank-home match-rank-value">{{.Home.Value}}</td>
+  <td class="match-rank-home match-rank-place{{if eq .Better "home"}} match-rank-better{{end}}">{{if .Home.Rank}}{{.Home.Rank}}{{else}}—{{end}}</td>
+  <th scope="row">{{.Label}}</th>
+  <td class="match-rank-away match-rank-place{{if eq .Better "away"}} match-rank-better{{end}}">{{if .Away.Rank}}{{.Away.Rank}}{{else}}—{{end}}</td>
+  <td class="match-rank-away match-rank-value">{{.Away.Value}}</td>
+  <td class="match-rank-gutter"></td>
+</tr>{{end}}
+
+{{define "matchRankTeam"}}<span class="match-rank-team" title="{{.Team.Name}}">{{if .Team.LogoURL}}<img class="team-logo" src="{{.Team.LogoURL}}" alt="" aria-hidden="true">{{end}}{{.Code}}</span>{{end}}

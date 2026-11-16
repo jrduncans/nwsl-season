@@ -76,6 +76,9 @@ type seasonPage struct {
 	Remaining              int
 	HasFixtureOutlooks     bool
 	MainPageMatches        bool
+	// MatchPathPrefix is the relative path under which match pages live, or
+	// empty when the competition has none.
+	MatchPathPrefix string
 }
 
 type bracketPage struct {
@@ -110,6 +113,8 @@ type bracketSlotView struct {
 	// Flipped marks a card whose rows follow the bracket path, so its
 	// published away side is shown first.
 	Flipped bool
+	// MatchPath links a published slot to its match page.
+	MatchPath string
 }
 
 // flip puts the upper feeder's team on top so connectors never cross; the
@@ -547,7 +552,9 @@ type fixtureGroupView struct {
 }
 
 type fixtureView struct {
-	ID         string
+	ID string
+	// MatchPath links the row to its match page; empty where none exists.
+	MatchPath  string
 	Kickoff    string
 	KickoffUTC string
 	HomeTeam   teamNameView
@@ -559,7 +566,10 @@ type fixtureView struct {
 	Score      string
 	XG         string
 	// NPXG is the match's non-penalty xG, set only when a penalty carried xG.
-	NPXG            string
+	NPXG string
+	// XGLines show xG (and npxG) per side under the score, home value then
+	// label then away value, as on the match page.
+	XGLines         []matchLine
 	Winner          string
 	Completed       bool
 	Remaining       bool
@@ -599,6 +609,8 @@ func (f fixtureView) Away() fixtureTeamView {
 // the fixtures page. Its shares remain numeric so the same values drive the
 // displayed percentages and the proportional bar.
 type fixtureOutlookView struct {
+	// Label replaces "Match outlook", e.g. "Before kickoff" on a completed match.
+	Label                              string
 	Playoff                            bool
 	HomeAdvanceText, AwayAdvanceText   string
 	ModelName                          string
@@ -1095,8 +1107,11 @@ func fixtureGroupsWithOutlooksFor(data cache.SeasonData, location *time.Location
 			if includeXG {
 				if xg, ok := xgoals[game.ASAID]; ok {
 					view.XG = fmt.Sprintf("%.2f–%.2f", xg.HomeXG.Float64, xg.AwayXG.Float64)
+					view.XGLines = []matchLine{{Label: "xG", Home: fmt.Sprintf("%.2f", xg.HomeXG.Float64), Away: fmt.Sprintf("%.2f", xg.AwayXG.Float64)}}
 					if split := xg.Penalties; split != nil && (split.HomeXG > 0 || split.AwayXG > 0) {
-						view.NPXG = fmt.Sprintf("%.2f–%.2f", math.Max(0, xg.HomeXG.Float64-split.HomeXG), math.Max(0, xg.AwayXG.Float64-split.AwayXG))
+						homeNP, awayNP := math.Max(0, xg.HomeXG.Float64-split.HomeXG), math.Max(0, xg.AwayXG.Float64-split.AwayXG)
+						view.NPXG = fmt.Sprintf("%.2f–%.2f", homeNP, awayNP)
+						view.XGLines = append(view.XGLines, matchLine{Label: "npxG", Title: "Non-penalty expected goals", Home: fmt.Sprintf("%.2f", homeNP), Away: fmt.Sprintf("%.2f", awayNP)})
 					}
 				}
 			}
@@ -1464,6 +1479,19 @@ func (p *bracketPage) applyOutlooks(outlooks map[string]fixtureOutlookView) {
 					value = value.reversed()
 				}
 				slot.Outlook = &value
+			}
+		}
+	}
+}
+
+// applyMatchPaths links slots whose fixture ASA has published. Expected
+// pairings without a fixture stay unlinked.
+func (p *bracketPage) applyMatchPaths() {
+	for ri := range p.Rounds {
+		for si := range p.Rounds[ri].Slots {
+			slot := &p.Rounds[ri].Slots[si]
+			if slot.Game != nil {
+				slot.MatchPath = matchPath(p.MatchPathPrefix, slot.Game.ID)
 			}
 		}
 	}

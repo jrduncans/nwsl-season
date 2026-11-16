@@ -128,6 +128,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /seasons/{season}/{stage}/forecast", application.forecast)
 	mux.HandleFunc("GET /seasons/{season}/{stage}/model-evaluation", application.modelEvaluation)
 	mux.HandleFunc("GET /seasons/{season}/{stage}/clinching", application.clinching)
+	mux.HandleFunc("GET /seasons/{season}/{stage}/matches/{id}", application.match)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /robots.txt", robotsTxt)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
@@ -846,6 +847,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
+				result.applyMatchPaths()
 				a.render(w, "bracket", result)
 				return
 			}
@@ -861,6 +863,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 				result.applySeeds(seeds.Seeds)
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 			}
+			result.applyMatchPaths()
 			a.render(w, "bracket", result)
 			return
 		}
@@ -1134,6 +1137,14 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		outlooks = outlooksFor(data)
 	}
 	resultFixtureGroups, upcomingFixtureGroups := fixtureGroupsByStatusWithOutlooksFor(data, a.options.Location, outlooks, scope.xgAvailable())
+	matchPrefix := matchPathPrefix(r.URL.Path, scope)
+	for _, groups := range [][]fixtureGroupView{resultFixtureGroups, upcomingFixtureGroups} {
+		for gi := range groups {
+			for i := range groups[gi].Games {
+				groups[gi].Games[i].MatchPath = matchPath(matchPrefix, groups[gi].Games[i].ID)
+			}
+		}
+	}
 	hasResults := len(resultFixtureGroups) > 0
 	hasUpcoming := len(upcomingFixtureGroups) > 0
 	presentation.HasUpcoming = hasUpcoming
@@ -1227,6 +1238,7 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		FixturesPath:           relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/fixtures"),
 		ScheduleDifficultyPath: relativeURL(r.URL.Path, stageURL(season, scope.Entry.Slug)+"/schedule-difficulty"),
 		HasFixtureOutlooks:     !retrospective && len(outlooks) > 0,
+		MatchPathPrefix:        matchPrefix,
 	}
 	if scope.Stage == "Regular Season" && finalStandingsSafe(presentation) {
 		if playoffs, ok := competition.Lookup(season, "Playoffs"); ok && playoffs.Public && playoffBracketEntry(playoffs) {
@@ -1732,17 +1744,18 @@ func stripBasePath(requestPath string) (string, bool) {
 }
 
 func relativeURL(fromPath, targetPath string) string {
-	// A stage's canonical route has no trailing slash. From a nested page, a
-	// plain "." resolves to the stage directory instead, which does not match a
-	// route. Step up and name the stage explicitly in that one case.
-	if targetPath != "/" && path.Dir(fromPath) == targetPath {
-		return "../" + path.Base(targetPath)
-	}
 	fromParts := urlPathParts(path.Dir(fromPath))
 	targetParts := urlPathParts(targetPath)
 	common := 0
 	for common < len(fromParts) && common < len(targetParts) && fromParts[common] == targetParts[common] {
 		common++
+	}
+	// Canonical routes have no trailing slash. When the target is an ancestor
+	// of the page's directory, "." or ".." would resolve to that directory with
+	// a trailing slash, which matches no route, so step up one more level and
+	// name the target's last segment.
+	if targetPath != "/" && len(targetParts) > 0 && common == len(targetParts) {
+		common--
 	}
 	parts := make([]string, 0, len(fromParts)-common+len(targetParts)-common)
 	for range fromParts[common:] {
