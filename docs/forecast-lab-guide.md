@@ -300,8 +300,15 @@ semifinals. Published home/away assignments get the model's venue effect in thos
 rounds; unpublished pairings give the higher seed home advantage. The Championship has a designated venue, so the model samples either
 team as the nominal home side with equal probability. This removes a systematic
 home assignment advantage; it does not attempt to model a team's actual travel
-or local support at that venue. Unpublished venue changes in earlier rounds are not known in advance.
-The model uses home/away assignment rather than stadium identity; it does not
+or local support at that venue. The exception is a final played at a
+finalist's own stadium: ASA has no neutral-site flag, so once the final is
+published, `championshipHost` compares its stadium ID with each finalist's
+usual stadium (the one it used most for regular-season home matches; a tie
+leaves it unknown). A match gives that finalist the ordinary home venue effect
+in the simulation, the bracket and match outlooks, and the match page. Until
+the final is published, or when neither finalist matches, it stays neutral.
+Unpublished venue changes in earlier rounds are not known in advance.
+Otherwise the model uses home/away assignment rather than stadium identity; it does not
 adjust for a published stadium move, travel, or local support.
 
 The model samples a 90-minute score for each playoff match. When that score is
@@ -649,9 +656,20 @@ outlook (the Regular Season forecast capability, or for Playoffs the regular
 season's Forecast Lab availability), its bar sits at the bottom of the card,
 labeled "Before kickoff" on a completed match; playoff cards show each side's
 advance chance under its name. The line above the card gives the kickoff,
-the playoff round and "Neutral venue" for the final, and on regular-season
+the playoff round and, for the final, its actual venue ("Neutral venue" or
+"At Washington Spirit's stadium"), and on regular-season
 pages any team on short rest (its elapsed days since its last match) or
 playing a third match in nine days.
+
+**Venue (Championship only).** Between that line and the card, a plain
+radio group labeled "Venue" offers Neutral, each team's code with "home", and
+marks the actual venue "(actual)". It is a page-level what-if, so it sits
+above everything it changes: the outlook, advance chances, predicted goals and
+the model's venue rows. It submits `venue=neutral|home|away` (oriented like
+the page) with `data-auto-submit`; anything else uses the actual venue. A
+chosen venue that is not the actual one relabels the outlook ("If KC home",
+"If neutral"), so a shared link or screenshot is never mistaken for the real
+venue. The bracket and championship odds always use the actual venue.
 
 **Season ranks.** A mirrored table: home value and rank, the stat in the
 middle, away rank and value, so the same ranking sits side by side. Each
@@ -677,9 +695,11 @@ through `forecast.Explainer`:
 predicted goals = league venue rate × attack × opponent defense × rest
 ```
 
-- The venue row is the league home or away xG rate. For the playoff final it
-  is "League neutral rate", the mean of the two, and predicted goals is the
-  mean of the side's two clamped rates, matching the neutral-final outlook.
+- The venue row is the league home or away xG rate. For a neutral playoff
+  final it is "League neutral rate", the mean of the two, and predicted goals
+  is the mean of the side's two clamped rates, matching the neutral-final
+  outlook. A final with a home side, actual or chosen, shows home and away
+  rates.
 - The attack and defense rows show the shrunk multipliers, with the team's
   raw xG (or xG allowed) per match over matches with xG beneath each label.
 - The rest row (regular season only) is `exp(±adjustment)` from schedule
@@ -776,7 +796,9 @@ two topology positions separately, so each position's candidate list sums to
 `simulation.PlayoffMatchOutlook` shares distribution selection and draw
 resolution with the simulator, using `PostseasonDistribution` when supported.
 A neutral final averages both home assignments, including each assignment's
-advance chance. Hypothetical slot winners are separate from recorded results;
+advance chance. A final at a finalist's usual stadium is not neutral:
+`PostseasonMatch.Hosted` marks its published Home as the host, and the
+simulator then gives that side the venue effect instead of sampling one. Hypothetical slot winners are separate from recorded results;
 only seed-derived or recorded participants permit a scenario, and a recorded
 result invalidates it. Both participant IDs and the winner enter the scenario
 identity, cache key, and deterministic random seed.

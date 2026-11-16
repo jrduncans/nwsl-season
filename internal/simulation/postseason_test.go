@@ -97,3 +97,35 @@ func TestCheckPostseasonMatchesRunValidation(t *testing.T) {
 		t.Fatalf("check rejected valid progress: %v", err)
 	}
 }
+
+func TestPostseasonHostedFinalGivesTheHostTheVenueEffect(t *testing.T) {
+	teams := testPlayoffTeams()
+	championship := func(final PostseasonMatch) map[string]float64 {
+		t.Helper()
+		state := &Postseason{Seeds: map[int]string{}, Slots: map[string]PostseasonMatch{
+			"quarterfinal-1": {Home: "a", Away: "h", Winner: "h"}, "quarterfinal-2": {Home: "d", Away: "e", Winner: "d"},
+			"quarterfinal-3": {Home: "b", Away: "g", Winner: "b"}, "quarterfinal-4": {Home: "c", Away: "f", Winner: "c"},
+			"semifinal-1": {Home: "d", Away: "h", Winner: "h"}, "semifinal-2": {Home: "b", Away: "c", Winner: "c"},
+			"final": final,
+		}}
+		for i, team := range teams {
+			state.Seeds[i+1] = team.ID
+		}
+		// The home side always wins, so the final's venue alone decides it.
+		result, err := Run(context.Background(), Request{Teams: teams, Model: fixedModel{score: forecast.Scoreline{Home: 1}}, Iterations: 400, PlayoffPlaces: 8, PlayoffBracket: testPlayoffBracket(t), Postseason: state})
+		if err != nil {
+			t.Fatal(err)
+		}
+		odds := map[string]float64{}
+		for _, row := range result.Teams {
+			odds[row.Team.ID] = row.ChampionshipProbability
+		}
+		return odds
+	}
+	if odds := championship(PostseasonMatch{Home: "h", Away: "c", Hosted: true}); odds["h"] != 1 {
+		t.Fatalf("hosted final odds = %v, want the host to win every run", odds)
+	}
+	if odds := championship(PostseasonMatch{Home: "h", Away: "c"}); odds["h"] < .4 || odds["c"] < .4 {
+		t.Fatalf("neutral final odds = %v, want the finalists to split it", odds)
+	}
+}

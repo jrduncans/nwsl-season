@@ -22,12 +22,17 @@ import (
 // the season has a forecast, explains the default model's match outlook.
 type matchPage struct {
 	seasonPage
-	Match      fixtureView
-	Playoff    bool
-	Neutral    bool
-	RoundLabel string
-	HomeCode   string
-	AwayCode   string
+	Match   fixtureView
+	Playoff bool
+	// Final marks the designated-site Championship. VenueNote names its
+	// actual venue, and VenueControl lets the reader choose the venue the
+	// outlook assumes.
+	Final        bool
+	VenueNote    string
+	VenueControl *matchVenueControl
+	RoundLabel   string
+	HomeCode     string
+	AwayCode     string
 	// Lines sit under the score: xG, npxG and predicted goals, each with
 	// the home value, a label, then the away value.
 	Lines          []matchLine
@@ -36,6 +41,13 @@ type matchPage struct {
 	ModelName      string
 	Ranks          *matchRanksView
 	HeadToHeadPath string
+}
+
+// matchVenueControl chooses whether the Championship outlook treats the
+// match as neutral or as a home match for either team. Values are "neutral",
+// "home" and "away", oriented like the page.
+type matchVenueControl struct {
+	Options []exploreSegment
 }
 
 type matchLine struct {
@@ -136,7 +148,7 @@ func (a *application) match(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	view, err := a.matchView(r.Context(), scope, data, game)
+	view, err := a.matchView(r.Context(), scope, data, game, r.URL.Query().Get("venue"))
 	if err != nil {
 		a.renderError(w, r, err)
 		return
@@ -149,7 +161,10 @@ func (a *application) match(w http.ResponseWriter, r *http.Request) {
 	a.render(w, "match", view)
 }
 
-func (a *application) matchView(ctx context.Context, scope requestCompetition, data cache.SeasonData, game cache.Game) (matchPage, error) {
+// matchView builds the page. For the Championship, venue chooses the venue
+// the outlook assumes ("neutral", "home" or "away"); anything else uses the
+// actual venue.
+func (a *application) matchView(ctx context.Context, scope requestCompetition, data cache.SeasonData, game cache.Game, venue string) (matchPage, error) {
 	var page matchPage
 	for _, group := range fixtureGroupsWithOutlooksFor(data, a.options.Location, nil, scope.xgAvailable()) {
 		for _, view := range group.Games {
@@ -170,7 +185,30 @@ func (a *application) matchView(ctx context.Context, scope requestCompetition, d
 		entry, _ := competition.Lookup(scope.Season, "Regular Season")
 		rules, verified := a.rulesForSeason(scope.Season, "Regular Season")
 		forecastReady = requestCompetition{Season: scope.Season, Stage: "Regular Season", Entry: entry, Cataloged: true}.forecastAvailable(rules, verified)
-		page.RoundLabel, page.Neutral = playoffRound(scope.Entry, data.Games, playoffSeedsFrom(scope.Season, regular), game.ASAID)
+		page.RoundLabel, page.Final = playoffRound(scope.Entry, data.Games, playoffSeedsFrom(scope.Season, regular), game.ASAID)
+	}
+	// host is the team the outlook treats as at home in the Championship, or
+	// "" for a neutral one. Other matches keep ASA's home designation.
+	host, actual := "", ""
+	if page.Final {
+		host = championshipHost(training.Games, game)
+		page.VenueNote, actual = "Neutral venue", "neutral"
+		switch host {
+		case game.HomeTeamID:
+			page.VenueNote, actual = "At "+page.Match.HomeTeam.Name+"'s stadium", "home"
+		case game.AwayTeamID:
+			page.VenueNote, actual = "At "+page.Match.AwayTeam.Name+"'s stadium", "away"
+		}
+		switch venue {
+		case "neutral":
+			host = ""
+		case "home":
+			host = game.HomeTeamID
+		case "away":
+			host = game.AwayTeamID
+		default:
+			venue = actual
+		}
 	}
 	codes := map[string]string{}
 	for _, team := range training.Teams {
@@ -180,6 +218,27 @@ func (a *application) matchView(ctx context.Context, scope requestCompetition, d
 		codes[team.ID] = scenarioTeamCode(team)
 	}
 	page.HomeCode, page.AwayCode = codes[game.HomeTeamID], codes[game.AwayTeamID]
+	// whatIf names a chosen venue that is not the actual one, for the outlook
+	// label, so a shared link or screenshot never passes it off as real.
+	whatIf := ""
+	if page.Final {
+		options := exploreSegments(venue,
+			exploreSegment{Value: "neutral", Label: "Neutral"},
+			exploreSegment{Value: "home", Label: page.HomeCode + " home"},
+			exploreSegment{Value: "away", Label: page.AwayCode + " home"})
+		for i := range options {
+			if options[i].Value == actual {
+				options[i].Label += " (actual)"
+			}
+			if options[i].Selected && venue != actual {
+				whatIf = "if " + options[i].Label // "if neutral" reads as a phrase.
+				if venue == "neutral" {
+					whatIf = "if neutral"
+				}
+			}
+		}
+		page.VenueControl = &matchVenueControl{Options: options}
+	}
 	target := standings.Game{ID: game.ASAID, Status: fixtures.PreMatchStatus, HomeTeamID: game.HomeTeamID, AwayTeamID: game.AwayTeamID}
 	if kickoff, err := fixtures.ParseKickoff(game.KickoffUTC); err == nil {
 		target.Kickoff = kickoff
@@ -207,18 +266,38 @@ func (a *application) matchView(ctx context.Context, scope requestCompetition, d
 	if forecastReady {
 		model := forecast.Default().Model
 		input := forecast.FitInput{Teams: training.Teams, Games: games, XGoals: xgoals, HistoricalVenue: forecastVenueSample(training)}
-		outlook, breakdown, predicted = matchPrediction(model, input, target, page.Playoff, page.Neutral)
+		// An away team hosting the Championship is predicted as the home side,
+		// then turned back to the page's orientation.
+		flipped := page.Final && host == game.AwayTeamID
+		predictionTarget := target
+		if flipped {
+			predictionTarget.HomeTeamID, predictionTarget.AwayTeamID = target.AwayTeamID, target.HomeTeamID
+		}
+		outlook, breakdown, predicted = matchPrediction(model, input, predictionTarget, page.Playoff, page.Final && host == "")
+		if flipped {
+			outlook = outlook.reversed()
+			breakdown.Home, breakdown.Away = breakdown.Away, breakdown.Home
+		}
 		if predicted {
 			if page.Match.Completed {
 				outlook.Label = "Before kickoff"
 			}
+			if whatIf != "" {
+				outlook.Label = "If" + whatIf[2:]
+				if page.Match.Completed {
+					outlook.Label = "Before kickoff, " + whatIf
+				}
+			}
 			page.Match.Outlook = &outlook
 			page.ModelName = model.Info().Name
 			predictedLine = &matchLine{Label: "Predicted", Home: fmt.Sprintf("%.2f", breakdown.Home.Expected), Away: fmt.Sprintf("%.2f", breakdown.Away.Expected)}
-			home := matchSide(page.Match.HomeTeam, page.HomeCode, page.AwayCode, true, breakdown.Home, breakdown.Neutral, stats[game.HomeTeamID], stats[game.AwayTeamID], rest)
-			away := matchSide(page.Match.AwayTeam, page.AwayCode, page.HomeCode, false, breakdown.Away, breakdown.Neutral, stats[game.AwayTeamID], stats[game.HomeTeamID], rest)
+			home := matchSide(page.Match.HomeTeam, page.HomeCode, page.AwayCode, !flipped, breakdown.Home, breakdown.Neutral, stats[game.HomeTeamID], stats[game.AwayTeamID], rest)
+			away := matchSide(page.Match.AwayTeam, page.AwayCode, page.HomeCode, flipped, breakdown.Away, breakdown.Neutral, stats[game.AwayTeamID], stats[game.HomeTeamID], rest)
 			page.Sides = []matchSideView{home, away}
 		}
+	}
+	if !predicted {
+		page.VenueControl = nil // Nothing on the page depends on the venue.
 	}
 	if page.Match.Completed && scope.xgAvailable() {
 		if xg, ok := forecastXGoals(data)[game.ASAID]; ok {

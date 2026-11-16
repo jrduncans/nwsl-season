@@ -252,7 +252,10 @@ verified, safe regular-season completion. Resolved final seeds and the verified
 format permit forecasting before fixture publication. Cached completed results,
 including confirmed shootout advancement, fix winners; only unresolved rounds
 are sampled. Published home/away assignments inform quarterfinal and semifinal
-venue effects, while the designated-site final remains neutral in the model.
+venue effects. The designated-site final is neutral in the model unless it is
+played at a finalist's usual stadium (see the
+[Forecast Lab guide](forecast-lab-guide.md#playoff-assumptions)); that never
+makes the final a hosting entitlement.
 Published kickoffs are linked from the bracket; playoff recovery and load
 adjustments are omitted and model fitting stays regular-season-only.
 

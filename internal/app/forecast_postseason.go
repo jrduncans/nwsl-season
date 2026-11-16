@@ -107,7 +107,11 @@ func (a *application) forecastPostseason(ctx context.Context, season string, dat
 	if view.State == bracket.StateFormatMismatch || view.State == bracket.StateUnresolved {
 		return withhold(playoffBracketDisagreement)
 	}
-	for _, round := range view.Rounds {
+	sources := make(map[string]cache.Game, len(playoffData.Games))
+	for _, game := range playoffData.Games {
+		sources[game.ASAID] = game
+	}
+	for ri, round := range view.Rounds {
 		for _, slot := range round.Slots {
 			if slot.Game == nil {
 				continue
@@ -117,6 +121,16 @@ func (a *application) forecastPostseason(ctx context.Context, season string, dat
 				match.Winner = slot.Winner.TeamID
 			} else if playoffPlayStarted(*slot.Game) {
 				return withhold(unresolvedPlayoffResult)
+			}
+			// The identity games above drop raw payloads, so read the venue
+			// from the source row.
+			if ri == len(view.Rounds)-1 {
+				if host := championshipHost(data.Games, sources[slot.Game.ASAID]); host != "" {
+					match.Hosted = true
+					if host != match.Home {
+						match.Home, match.Away = match.Away, match.Home
+					}
+				}
 			}
 			state.Slots[slot.ID] = match
 		}

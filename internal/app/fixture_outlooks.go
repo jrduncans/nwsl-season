@@ -121,7 +121,16 @@ func (a *application) playoffOutlooks(ctx context.Context, season string, data c
 					home, away = away, home
 				}
 			}
-			odds, err := simulation.PlayoffMatchOutlook(predictor, home, away, ri == len(view.Rounds)-1)
+			neutral := ri == len(view.Rounds)-1
+			if neutral && slot.Game != nil {
+				if host := championshipHost(training.Games, *slot.Game); host != "" {
+					neutral = false
+					if host != home {
+						home, away = away, home
+					}
+				}
+			}
+			odds, err := simulation.PlayoffMatchOutlook(predictor, home, away, neutral)
 			if err != nil || !validFixtureOutcomes(odds.OutcomeProbabilities) {
 				continue
 			}
