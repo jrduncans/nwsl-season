@@ -28,7 +28,9 @@ events only after narrowing to a trace.
 | --- | --- |
 | complete / success | ASA response validated and the resource-specific mutation/audit committed. |
 | no-op | A valid observation produced no material source-input change. |
-| omitted | A targeted response did not include a requested ID; it is a checked observation, not deletion. |
+| omitted | A targeted response did not include a requested ID; it is a checked observation, not deletion. A full inventory without a verified expectation keeps a newly omitted game until a later inventory confirms it (`nwsl.sync.omitted_games_retained`). |
+| placeholder | ASA listed a fixture before both participants were known; the row was skipped as unpublished (`nwsl.sync.placeholder_games_skipped`). |
+| uncached request | A targeted check asked for a game a newer full inventory had removed; it was skipped (`nwsl.sync.uncached_requests_skipped`). |
 | stale | Response data was older than durable data; it must not regress the cache. |
-| failure | Request, validation, mapping, persistence, or lease-acquisition failure; inspect `error.type` and `nwsl.error.code`. |
+| failure | Request, validation, mapping, persistence, or lease-acquisition failure; inspect `error.type` and `nwsl.error.code`. Only lease, no-response, and cancellation failures end the tick; other failed jobs let the rest of the tick's jobs run. |
 | deferred lease | No ASA request occurred because a competing server or maintenance process holds the required lease. |

@@ -36,11 +36,13 @@ Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounde
 | `nwsl.sync.games_unchanged` | int | Recommended | development | — | Number of game rows unchanged during the synchronization run. |
 | `nwsl.sync.games_updated` | int | Recommended | development | — | Number of game rows updated during the synchronization run. |
 | `nwsl.sync.mode` | string | Recommended | development | `["full","targeted"]` | Whether one source operation is authoritative or targeted. |
+| `nwsl.sync.omitted_games_retained` | int | Recommended | development | — | Number of cached games a full games inventory omitted for the first time and kept until a later inventory confirms the omission. |
 | `nwsl.sync.operation.outcome` | enum | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of one source operation. |
 | `nwsl.sync.outcome` | enum | Recommended | development | `["complete","conflict","failure"]` | The low-cardinality terminal outcome of the compatibility synchronization run. |
 | `nwsl.sync.partial_failure` | boolean | Recommended | development | — | Whether source work succeeded but one or more optional downstream components failed. |
 | `nwsl.sync.penalty_games_accepted` | int | Recommended | development | — | Number of games whose ASA penalty-pattern xG split passed validation. |
 | `nwsl.sync.penalty_games_rejected` | int | Recommended | development | — | Number of games whose ASA penalty-pattern xG split was rejected by validation. |
+| `nwsl.sync.placeholder_games_skipped` | int | Recommended | development | — | Number of ASA game rows skipped as unpublished placeholders because both participants were not yet identified. |
 | `nwsl.sync.qualification.outcome` | enum | Recommended | development | `["complete","current","failure","not_run","not_configured"]` | The low-cardinality outcome of the downstream qualification component. |
 | `nwsl.sync.qualification.refresh_reason` | string | Recommended | development | `["snapshot_current","snapshot_missing","forced","compute_budget_retry","not_evaluated"]` | The bounded qualification refresh or no-op reason. |
 | `nwsl.sync.qualification.refresh_required` | boolean | Recommended | development | — | Whether the qualification refresher determined that work was required. |
@@ -83,6 +85,7 @@ Resource, mode, trigger, outcome, decision, and refresh-reason fields use bounde
 | `nwsl.sync.teams_unchanged` | int | Recommended | development | — | Number of team rows unchanged during the synchronization run. |
 | `nwsl.sync.teams_updated` | int | Recommended | development | — | Number of team rows updated during the synchronization run. |
 | `nwsl.sync.trigger` | string | Recommended | development | `["scheduler","startup","cli","backfill","maintenance","venue_history","unspecified"]` | The low-cardinality caller that initiated synchronization or recalculation. |
+| `nwsl.sync.uncached_requests_skipped` | int | Recommended | development | — | Number of targeted game requests skipped because a newer full inventory had already removed the game. |
 | `nwsl.sync.update.decision` | enum | Recommended | development | `["updated","not_updated"]` | The bounded aggregate persistence decision for one source operation. |
 | `nwsl.sync.update.reason` | string | Recommended | development | `["source_data_changed","source_data_unchanged"]` | The bounded reason for the aggregate source persistence decision. |
 | `nwsl.sync.venue_history.outcome` | enum | Recommended | development | `["complete","failure"]` | The low-cardinality terminal outcome of historical venue refresh. |
@@ -405,9 +408,11 @@ One ASA resource request and its corresponding cache mutation.
 | `nwsl.stage` | string | Recommended | development | The low-cardinality competition stage associated with an operation. |
 | `nwsl.sync.downstream_inputs_changed` | boolean | Recommended | development | Whether one source operation changed inputs consumed by derived calculations. |
 | `nwsl.sync.mode` | string | Required | development | Whether one source operation is authoritative or targeted. |
+| `nwsl.sync.omitted_games_retained` | int | Conditional: Present on a completed full games operation. | development | Number of cached games a full games inventory omitted for the first time and kept until a later inventory confirms the omission. |
 | `nwsl.sync.operation.outcome` | enum | Required | development | The low-cardinality terminal outcome of one source operation. |
 | `nwsl.sync.penalty_games_accepted` | int | Recommended | development | Number of games whose ASA penalty-pattern xG split passed validation. |
 | `nwsl.sync.penalty_games_rejected` | int | Recommended | development | Number of games whose ASA penalty-pattern xG split was rejected by validation. |
+| `nwsl.sync.placeholder_games_skipped` | int | Conditional: Present on a completed games operation. | development | Number of ASA game rows skipped as unpublished placeholders because both participants were not yet identified. |
 | `nwsl.sync.requested_rows` | int | Recommended | development | Number of source identities requested by one source operation. |
 | `nwsl.sync.resource` | string | Required | development | The bounded ASA resource owned by one source operation. |
 | `nwsl.sync.returned_rows` | int | Recommended | development | Number of source rows returned by one source operation. |
@@ -423,6 +428,7 @@ One ASA resource request and its corresponding cache mutation.
 | `nwsl.sync.source_value_changed_count` | int | Recommended | development | Number of normalized source values changed. |
 | `nwsl.sync.source_value_initialized_count` | int | Recommended | development | Number of previously missing normalized source values initialized. |
 | `nwsl.sync.trigger` | string | Required | development | The low-cardinality caller that initiated synchronization or recalculation. |
+| `nwsl.sync.uncached_requests_skipped` | int | Conditional: Present on a completed targeted games operation. | development | Number of targeted game requests skipped because a newer full inventory had already removed the game. |
 | `nwsl.sync.update.decision` | enum | Recommended | development | The bounded aggregate persistence decision for one source operation. |
 | `nwsl.sync.update.reason` | string | Recommended | development | The bounded reason for the aggregate source persistence decision. |
 

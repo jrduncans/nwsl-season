@@ -557,6 +557,11 @@ func TestReplaceGameInventoryVenueFixtureAndXGInvalidationRules(t *testing.T) {
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{participant}, nil, inventoryMetadata()); err != nil {
 		t.Fatal(err)
 	}
+	confirm := inventoryMetadata()
+	confirm.StartedAt, confirm.FinishedAt = confirm.StartedAt.Add(time.Hour), confirm.FinishedAt.Add(time.Hour)
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{participant}, nil, confirm); err != nil {
+		t.Fatal(err)
+	}
 	summary, _ = db.VenueSummaries(ctx, []string{"2030"}, "Example")
 	if summary[0].Matches != 1 || summary[0].XGReady {
 		t.Fatalf("completed deletion venue=%+v", summary[0])
@@ -628,5 +633,63 @@ func TestReplaceGameInventoryKeepsLegacyReplaceSeasonCompatible(t *testing.T) {
 	}
 	if _, err := db.Season(ctx, "2030", "Example"); err != nil {
 		t.Fatalf("legacy season after new inventory: %v", err)
+	}
+}
+
+func TestReplaceGameInventoryConfirmsOmissionsBeforeDeleting(t *testing.T) {
+	t.Parallel()
+	db, ctx := inventoryDB(t)
+	at := func(hour int) FullRefreshMetadata {
+		due := time.Date(2030, 1, 8, hour, 0, 0, 0, time.UTC)
+		return FullRefreshMetadata{Trigger: SourceTriggerScheduler, StartedAt: time.Date(2030, 1, 1, hour, 0, 0, 0, time.UTC), FinishedAt: time.Date(2030, 1, 1, hour, 1, 0, 0, time.UTC), NextFullDueAt: &due}
+	}
+	played := inventoryGame("semi", "FullTime", 1, 2)
+	final := inventoryGame("final", "PreMatch", 0, 0)
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{played, final}, nil, at(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	// First omission: the played game stays, and confirmation is due in an hour.
+	first, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{final}, nil, at(2))
+	if err != nil || first.Audit.RowsDeleted != 0 || first.OmittedGamesRetained != 1 || len(first.Games) != 2 {
+		t.Fatalf("first omission=%+v,%v", first, err)
+	}
+	state, ok, err := db.SourceResourceScopeState(ctx, SourceResourceGames, "2030", "Example")
+	if err != nil || !ok || state.NextFullDueAt == nil || !state.NextFullDueAt.Equal(time.Date(2030, 1, 1, 3, 1, 0, 0, time.UTC)) {
+		t.Fatalf("confirmation due=%+v,%t,%v", state, ok, err)
+	}
+
+	// Reappearance clears the mark, so the next omission starts over.
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{played}, nil, at(3)); err != nil {
+		t.Fatal(err)
+	}
+	again, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{final}, nil, at(4))
+	if err != nil || again.Audit.RowsDeleted != 0 || again.OmittedGamesRetained != 1 {
+		t.Fatalf("omission after reappearance=%+v,%v", again, err)
+	}
+
+	// A later observation that still omits it confirms the deletion.
+	confirmed, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{final}, nil, at(5))
+	if err != nil || confirmed.Audit.RowsDeleted != 1 || confirmed.OmittedGamesRetained != 0 || len(confirmed.Games) != 1 || confirmed.Games[0].ASAID != "final" {
+		t.Fatalf("confirmed omission=%+v,%v", confirmed, err)
+	}
+	if state, _, _ := db.SourceResourceScopeState(ctx, SourceResourceGames, "2030", "Example"); state.NextFullDueAt == nil || !state.NextFullDueAt.Equal(time.Date(2030, 1, 8, 5, 0, 0, 0, time.UTC)) {
+		t.Fatalf("normal cadence not restored=%+v", state)
+	}
+}
+
+func TestReplaceGameInventoryDeletesOmissionsFromVerifiedInventoryAtOnce(t *testing.T) {
+	t.Parallel()
+	db, ctx := inventoryDB(t)
+	one, two := inventoryGame("one", "PreMatch", 0, 0), inventoryGame("two", "PreMatch", 0, 0)
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{one, two}, nil, inventoryMetadata()); err != nil {
+		t.Fatal(err)
+	}
+	replacement := inventoryGame("three", "PreMatch", 0, 0)
+	later := inventoryMetadata()
+	later.StartedAt, later.FinishedAt = later.StartedAt.Add(time.Hour), later.FinishedAt.Add(time.Hour)
+	result, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{one, replacement}, &competition.InventoryExpectation{Games: 2}, later)
+	if err != nil || result.Audit.RowsDeleted != 1 || result.OmittedGamesRetained != 0 || len(result.Games) != 2 {
+		t.Fatalf("verified replacement=%+v,%v", result, err)
 	}
 }

@@ -99,6 +99,14 @@ budget stay due because planning does not mutate their cadence state. Selected
 operations execute sequentially; there is no concurrent teams/games/xG fetch
 or single-target reconciliation path.
 
+A failed job ends the tick only when later jobs would fail the same way: the
+lease could not be taken, ASA gave no response (a transport or HTTP error or
+the request deadline, which the syncer wraps in `syncer.ErrSourceUnavailable`),
+or the tick was canceled. When ASA answered but the job's response was rejected
+or its cache write failed, the failure is recorded, the work stays due, and the
+remaining selected jobs still run, so one bad stage cannot starve the others.
+The tick's outcome is still a failure.
+
 At server startup only, the scheduler drains an otherwise due public catalog
 bootstrap in additional normal-budget batches separated by five seconds. That
 includes missing match inventory and each stage's first full xG load; it does
@@ -180,13 +188,29 @@ as xG rows are re-observed (for example `cmd/sync -backfill-catalog` or normal
 correction polling).
 
 The operation validates and maps the one ASA response before invoking its
-resource-specific cache API. Full match inventory replacement retains a prior
-complete inventory when an incoming known inventory is incomplete or uneven.
-Archived correction sweeps and command-line full refreshes carry the same
-verified catalog expectations, including award reconciliation. Targeted
-operations do not delete unrequested records. If a match write finds
+resource-specific cache API. A game row that only holds a fixture's place
+before its participants are known (PreMatch, no scores, and blank or identical
+home and away teams) is skipped as not yet published instead of rejecting the
+whole response; ASA lists an undecided final this way. Any other row with
+blank or identical participants still rejects the response. Full match inventory
+replacement retains a prior complete inventory when an incoming known inventory
+is incomplete or uneven. Archived correction sweeps and command-line full
+refreshes carry the same verified catalog expectations, including award
+reconciliation. Targeted operations do not delete unrequested records, and a
+targeted request for a game that a newer full inventory already removed is
+skipped rather than failing the operation. If a match write finds
 unknown teams, the service refreshes the catalog once and retries the same
 validated write without refetching matches.
+
+A full inventory that satisfied a verified catalog expectation is proven
+complete, so cached matches it omits are deleted at once. A stage without one,
+such as a Playoffs bracket still being published, needs two observations: the
+first successful full inventory that omits a cached match keeps it, records
+`game_result_checks.first_omitted_at` (schema 19), and makes the next full discovery due
+within an hour; a later successful full inventory that still omits it deletes
+it, and one that includes it again clears the mark. ASA's listing has been seen
+alternately leaving out a played semifinal and the final, so a single omission
+is not evidence of removal.
 
 When a response disagrees with the cache, these rules decide which copy wins:
 
@@ -197,6 +221,8 @@ When a response disagrees with the cache, these rules decide which copy wins:
   strictly later `last_updated_utc`.
 - **Empty inventory**: an empty full response is recorded as an observation but
   never deletes cached matches or publishes a stage.
+- **Omitted match**: see the two-observation rule above; omission from an
+  inventory without a verified expectation never deletes on its own.
 - **xG**: an available value replaces an unavailable marker. A differing
   available value replaces a cached one only when its observation finished
   strictly later than the cached check. Omission never erases an available

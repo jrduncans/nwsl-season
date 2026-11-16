@@ -1532,3 +1532,57 @@ func TestColdGamesRefreshKeepsVerifiedCatalogInventory(t *testing.T) {
 		}
 	}
 }
+
+// failFirstRunner fails only its first source operation with err.
+type failFirstRunner struct {
+	operations []syncer.Operation
+	err        error
+}
+
+func (r *failFirstRunner) Execute(_ context.Context, op syncer.Operation) (syncer.OperationResult, error) {
+	r.operations = append(r.operations, op)
+	if len(r.operations) == 1 {
+		return syncer.OperationResult{Operation: op}, r.err
+	}
+	return syncer.OperationResult{Operation: op, Games: &cache.GameRefreshResult{}}, nil
+}
+
+func TestSchedulerFailureStopsTickOnlyWithoutSourceResponse(t *testing.T) {
+	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"rejected response continues", errors.New(`game "final" has identical teams`), 2},
+		{"cache write failure continues", errors.New("commit game inventory refresh: disk I/O error"), 2},
+		{"unavailable source stops", fmt.Errorf("fetch games: %w: %w", syncer.ErrSourceUnavailable, errors.New("HTTP 503")), 1},
+		{"deadline stops", fmt.Errorf("fetch games: %w: %w", syncer.ErrSourceUnavailable, context.DeadlineExceeded), 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			upcoming := planningScope("2034", "Regular Season", cache.SourceReadinessNotPublished, nil)
+			upcoming.Readiness.Scope.Lifecycle = cache.SourceScopeUpcoming
+			scopes := []cache.PlanningScopeSnapshot{
+				planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil),
+				upcoming,
+			}
+			store := &planningStore{snapshot: cache.PlanningSnapshot{Scopes: scopes}}
+			runner := &failFirstRunner{err: tc.err}
+			config := testPlannerConfig()
+			config.Now = func() time.Time { return now }
+			s, err := New(store, runner, config, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.CheckNow(context.Background()); err == nil {
+				t.Fatal("CheckNow error = nil, want the failed job reported")
+			}
+			if len(runner.operations) != tc.want {
+				t.Fatalf("operations = %+v, want %d", runner.operations, tc.want)
+			}
+			if store.acquired != store.released {
+				t.Fatalf("leases = %d/%d", store.acquired, store.released)
+			}
+		})
+	}
+}

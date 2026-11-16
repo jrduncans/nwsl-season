@@ -3,7 +3,10 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"reflect"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -542,5 +545,101 @@ func TestCompatibilityFullRefreshUsesCatalogInventory(t *testing.T) {
 	op := compatibilityOperation(OperationGames, OperationFull, RunOptions{Season: "2025", Stage: "Regular Season", ExpectedTeams: 2, GamesPerTeam: 1}, cache.SourceTriggerCLI, time.Now())
 	if op.Expectation == nil || op.Expectation.Games != 1 {
 		t.Fatal("explicit expectation was lost")
+	}
+}
+
+// TestFullPlayoffDiscoverySurvivesPlaceholderAndFlappingListings replays the
+// 2026 semifinal weekend: ASA first listed the final as a same-team
+// placeholder, then alternately left out a played semifinal and the final.
+func TestFullPlayoffDiscoverySurvivesPlaceholderAndFlappingListings(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	if _, err := db.EnsureSourceScopes(ctx, "2026", "Playoffs", time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	teams := []asa.Team{}
+	for _, id := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		teams = append(teams, asa.Team{TeamID: id, TeamName: id})
+	}
+	game := func(id, home, away, kickoff string, homeScore, awayScore *int) asa.Game {
+		status := "FullTime"
+		if homeScore == nil {
+			status = "PreMatch"
+		}
+		return asa.Game{GameID: id, SeasonName: "2026", DateTimeUTC: kickoff, Status: status, HomeTeamID: home, AwayTeamID: away, HomeScore: homeScore, AwayScore: awayScore, KnockoutGame: true, LastUpdatedUTC: kickoff, RawJSON: `{}`}
+	}
+	quarterfinals := []asa.Game{
+		game("q1", "a", "b", "2026-11-07 03:00:00 UTC", new(1), new(0)),
+		game("q2", "c", "d", "2026-11-07 17:00:00 UTC", new(1), new(0)),
+		game("q3", "e", "f", "2026-11-08 17:30:00 UTC", new(1), new(0)),
+		game("q4", "g", "h", "2026-11-08 20:00:00 UTC", new(1), new(0)),
+	}
+	semi1 := game("s1", "a", "g", "2026-11-14 17:00:00 UTC", new(2), new(1))
+	semi2 := game("s2", "e", "c", "2026-11-15 20:00:00 UTC", new(1), new(2))
+	placeholder := game("final", "a", "a", "2026-11-22 01:00:00 UTC", nil, nil)
+	final := game("final", "a", "c", "2026-11-22 01:00:00 UTC", nil, nil)
+	with := func(extra ...asa.Game) []asa.Game { return append(append([]asa.Game{}, quarterfinals...), extra...) }
+
+	client := &fakeASA{teams: teams, gameResponses: [][]asa.Game{
+		with(semi1, semi2),
+		with(semi1, semi2, placeholder),
+		with(semi1, final),
+		with(semi1, semi2),
+	}}
+	clock := time.Date(2026, 11, 15, 20, 0, 0, 0, time.UTC)
+	service := Service{ASA: client, Store: db, Now: func() time.Time { return clock }}
+	discover := func() OperationResult {
+		t.Helper()
+		clock = clock.Add(time.Hour)
+		result, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationFull, Season: "2026", Stage: "Playoffs", Trigger: cache.SourceTriggerScheduler})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	cachedIDs := func() []string {
+		t.Helper()
+		data, err := db.Season(ctx, "2026", "Playoffs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, g := range data.Games {
+			ids = append(ids, g.ASAID)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+
+	discover()
+	if result := discover(); result.PlaceholderGamesSkipped != 1 || slices.Contains(cachedIDs(), "final") {
+		t.Fatalf("placeholder listing skipped=%d cached=%v", result.PlaceholderGamesSkipped, cachedIDs())
+	}
+	if result := discover(); result.Games.OmittedGamesRetained != 1 || !slices.Equal(cachedIDs(), []string{"final", "q1", "q2", "q3", "q4", "s1", "s2"}) {
+		t.Fatalf("semifinal omission retained=%d cached=%v", result.Games.OmittedGamesRetained, cachedIDs())
+	}
+	if result := discover(); result.Games.OmittedGamesRetained != 1 || result.Games.Audit.RowsDeleted != 0 || len(cachedIDs()) != 7 {
+		t.Fatalf("final omission retained=%d cached=%v", result.Games.OmittedGamesRetained, cachedIDs())
+	}
+}
+
+func TestSourceFetchFailuresAreMarkedUnavailable(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	service := Service{ASA: &fakeASA{gamesErr: errors.New("HTTP 503"), teamsErr: errors.New("HTTP 503")}, Store: db}
+	for _, op := range []Operation{
+		{Resource: OperationGames, Mode: OperationFull, Season: "2024", Stage: "Test Stage", Trigger: cache.SourceTriggerScheduler},
+		{Resource: OperationTeams, Mode: OperationFull, Trigger: cache.SourceTriggerScheduler},
+	} {
+		if _, err := service.Execute(ctx, op); !errors.Is(err, ErrSourceUnavailable) {
+			t.Fatalf("%s fetch error = %v, want ErrSourceUnavailable", op.Resource, err)
+		}
+	}
+	// A response ASA did return but that fails validation is not unavailability.
+	bad := testGame("game-1", "FullTime", new(1), new(0))
+	bad.AwayTeamID = bad.HomeTeamID
+	service.ASA = &fakeASA{teams: testTeams(), games: []asa.Game{bad}}
+	if _, err := service.Execute(ctx, Operation{Resource: OperationGames, Mode: OperationFull, Season: "2024", Stage: "Test Stage", Trigger: cache.SourceTriggerScheduler}); err == nil || errors.Is(err, ErrSourceUnavailable) {
+		t.Fatalf("rejected response error = %v", err)
 	}
 }

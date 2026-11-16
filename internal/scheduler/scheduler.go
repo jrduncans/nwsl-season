@@ -315,14 +315,20 @@ func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefresh
 		}
 		if outcome == nwslconv.SchedulerJobOutcomeFailure {
 			tickOutcome = nwslconv.SchedulerOutcomeFailure
-			break
+			if failureStopsTick(attempted, jobErr) {
+				break
+			}
+			// ASA answered but this job's response or write failed. The
+			// failure is recorded and stays due; it must not starve the
+			// unrelated jobs selected after it.
+			continue
 		}
-		if strings.HasPrefix(outcome, "deferred") {
+		if strings.HasPrefix(outcome, "deferred") && tickOutcome != nwslconv.SchedulerOutcomeFailure {
 			tickOutcome = nwslconv.SchedulerOutcomeDeferred
 		}
 		if job.Class == JobHot && result.Games != nil && result.FixtureInputsChanged && job.Operation.Season == s.config.Season && job.Operation.Stage == s.config.Stage {
 			derivedOutcome := s.recalculateCachedClinching(ctx, span, job.Operation.Season, job.Operation.Stage, "game_inputs_changed")
-			if derivedOutcome == nwslconv.SchedulerClinchingPreflightOutcomeFailure || derivedOutcome == nwslconv.SchedulerClinchingPreflightOutcomePartialFailure {
+			if (derivedOutcome == nwslconv.SchedulerClinchingPreflightOutcomeFailure || derivedOutcome == nwslconv.SchedulerClinchingPreflightOutcomePartialFailure) && tickOutcome != nwslconv.SchedulerOutcomeFailure {
 				tickOutcome = nwslconv.SchedulerOutcomePartialFailure
 			}
 		}
@@ -385,6 +391,14 @@ func currentInventoryAvailable(snapshot cache.PlanningSnapshot, season, stage st
 			len(scope.Games) > 0
 	}
 	return false
+}
+
+// failureStopsTick reports whether a failed job ends the tick. Failing to
+// take a lease (no request made), reaching no ASA response, and cancellation
+// all predict that later jobs would fail the same way, so the remaining
+// request budget is not spent on them.
+func failureStopsTick(attempted bool, err error) bool {
+	return !attempted || errors.Is(err, syncer.ErrSourceUnavailable) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.OperationResult, bool, error) {

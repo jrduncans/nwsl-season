@@ -49,7 +49,8 @@ refreshes the catalog once and retries.
 | `extra_time`, `penalties`, `home_penalties`, `away_penalties` | Same-named nullable columns | Bracket winners and shootout tallies |
 
 Absent is kept distinct from false or zero for the four extra-time and shootout
-fields. Referee, stadium, manager and attendance IDs are decoded but kept only
+fields. A PreMatch row without scores whose home and away team IDs are blank or
+identical is a placeholder for an undecided fixture and is not stored. Referee, stadium, manager and attendance IDs are decoded but kept only
 in `raw_json`.
 
 ## Game xG (`/nwsl/games/xgoals`)

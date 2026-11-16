@@ -291,6 +291,18 @@ groups:
         type: int
         stability: development
         brief: Number of games whose ASA penalty-pattern xG split was rejected by validation.
+      - id: nwsl.sync.placeholder_games_skipped
+        type: int
+        stability: development
+        brief: Number of ASA game rows skipped as unpublished placeholders because both participants were not yet identified.
+      - id: nwsl.sync.omitted_games_retained
+        type: int
+        stability: development
+        brief: Number of cached games a full games inventory omitted for the first time and kept until a later inventory confirms the omission.
+      - id: nwsl.sync.uncached_requests_skipped
+        type: int
+        stability: development
+        brief: Number of targeted game requests skipped because a newer full inventory had already removed the game.
       - id: nwsl.sync.venue_history_requested_season_count
         type: int
         stability: development
@@ -741,6 +753,15 @@ groups:
       - ref: nwsl.sync.source_stale_response_count
       - ref: nwsl.sync.penalty_games_accepted
       - ref: nwsl.sync.penalty_games_rejected
+      - ref: nwsl.sync.placeholder_games_skipped
+        requirement_level:
+          conditionally_required: Present on a completed games operation.
+      - ref: nwsl.sync.omitted_games_retained
+        requirement_level:
+          conditionally_required: Present on a completed full games operation.
+      - ref: nwsl.sync.uncached_requests_skipped
+        requirement_level:
+          conditionally_required: Present on a completed targeted games operation.
       - ref: error.type
         requirement_level:
           conditionally_required: Present when the source operation failed.

@@ -78,8 +78,38 @@ type OperationResult struct {
 	// incomplete active bracket; it never causes another request in this
 	// operation.
 	FullGamesDiscoveryAccelerated bool
+	// PlaceholderGamesSkipped counts ASA rows without identified participants
+	// that were treated as not yet published.
+	PlaceholderGamesSkipped int
 
 	penalties penaltyOutcome
+}
+
+// ErrSourceUnavailable marks a failure to get any ASA response: a transport
+// or HTTP error, or the request deadline. A failure after ASA answered (a
+// rejected response or a cache write error) is not wrapped with it.
+var ErrSourceUnavailable = errors.New("ASA source unavailable")
+
+// withoutPlaceholderGames drops ASA rows that hold a fixture's place before
+// both participants are known: a PreMatch row without scores whose home and
+// away teams are blank or identical. Such a row carries no fixture fact, so it
+// is treated as not yet published rather than failing the whole response.
+// Any other row with identical or blank participants is still rejected by
+// cache validation.
+func withoutPlaceholderGames(games []asa.Game) ([]asa.Game, int) {
+	kept := make([]asa.Game, 0, len(games))
+	for _, game := range games {
+		if placeholderGame(game) {
+			continue
+		}
+		kept = append(kept, game)
+	}
+	return kept, len(games) - len(kept)
+}
+
+func placeholderGame(game asa.Game) bool {
+	home, away := strings.TrimSpace(game.HomeTeamID), strings.TrimSpace(game.AwayTeamID)
+	return game.Status == fixtures.PreMatchStatus && game.HomeScore == nil && game.AwayScore == nil && (home == "" || away == "" || home == away)
 }
 
 // GameFreshnessSummary counts normalized fixture changes separately from
@@ -159,7 +189,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 	case OperationTeams:
 		teams, err := s.ASA.Teams(ctx, asa.TeamsFilters{})
 		if err != nil {
-			return result, fmt.Errorf("fetch teams: %w", err)
+			return result, fmt.Errorf("fetch teams: %w: %w", ErrSourceUnavailable, err)
 		}
 		recordASAResponse(trace.SpanFromContext(ctx), operation, len(teams))
 		mapped, err := mapTeams(teams)
@@ -182,9 +212,10 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		}
 		games, err := s.ASA.Games(ctx, filters)
 		if err != nil {
-			return result, fmt.Errorf("fetch games: %w", err)
+			return result, fmt.Errorf("fetch games: %w: %w", ErrSourceUnavailable, err)
 		}
 		recordASAResponse(trace.SpanFromContext(ctx), operation, len(games))
+		games, result.PlaceholderGamesSkipped = withoutPlaceholderGames(games)
 		mapped, err := mapGames(RunOptions{Season: operation.Season, Stage: operation.Stage}, games)
 		if err != nil {
 			return result, err
@@ -226,7 +257,7 @@ func (s Service) execute(ctx context.Context, store operationStore, operation Op
 		}
 		values, err := client.GameXGoals(ctx, filters)
 		if err != nil {
-			return result, fmt.Errorf("fetch game xG: %w", err)
+			return result, fmt.Errorf("fetch game xG: %w: %w", ErrSourceUnavailable, err)
 		}
 		recordASAResponse(trace.SpanFromContext(ctx), operation, len(values))
 		mapped, err := mapXGoals(values)
@@ -282,7 +313,12 @@ func operationResultAttributes(result OperationResult, err error) []attribute.Ke
 	}
 	attributes := []attribute.KeyValue{nwslconv.SyncOperationOutcome(nwslconv.SyncOperationOutcomeComplete), nwslconv.SyncReturnedRows(audit.ReturnedRows), nwslconv.SyncRowsInserted(audit.RowsInserted), nwslconv.SyncRowsUpdated(audit.RowsUpdated), nwslconv.SyncRowsUnchanged(audit.RowsUnchanged), nwslconv.SyncRowsDeleted(audit.RowsDeleted), nwslconv.SyncDownstreamInputsChanged(audit.DownstreamInputsChanged), nwslconv.SyncUpdateDecision(decision), nwslconv.SyncUpdateReason(reason)}
 	if result.Games != nil {
-		attributes = append(attributes, nwslconv.SyncSourceValueChanged(result.GameFreshness.ValueChanged > 0), nwslconv.SyncSourceValueChangedCount(result.GameFreshness.ValueChanged), nwslconv.SyncSourceValueInitializedCount(result.GameFreshness.ValueInitialized), nwslconv.SyncSourceMetadataChangedCount(result.GameFreshness.MetadataChanged), nwslconv.SyncSourceResponseRejected(result.GameFreshness.ResponseRejected > 0), nwslconv.SyncSourceResponseRejectedCount(result.GameFreshness.ResponseRejected), nwslconv.SyncSourceStaleResponseCount(result.GameFreshness.StaleRejected))
+		attributes = append(attributes, nwslconv.SyncSourceValueChanged(result.GameFreshness.ValueChanged > 0), nwslconv.SyncSourceValueChangedCount(result.GameFreshness.ValueChanged), nwslconv.SyncSourceValueInitializedCount(result.GameFreshness.ValueInitialized), nwslconv.SyncSourceMetadataChangedCount(result.GameFreshness.MetadataChanged), nwslconv.SyncSourceResponseRejected(result.GameFreshness.ResponseRejected > 0), nwslconv.SyncSourceResponseRejectedCount(result.GameFreshness.ResponseRejected), nwslconv.SyncSourceStaleResponseCount(result.GameFreshness.StaleRejected), nwslconv.SyncPlaceholderGamesSkipped(result.PlaceholderGamesSkipped))
+		if result.Operation.Mode == OperationFull {
+			attributes = append(attributes, nwslconv.SyncOmittedGamesRetained(result.Games.OmittedGamesRetained))
+		} else {
+			attributes = append(attributes, nwslconv.SyncUncachedRequestsSkipped(result.Games.UncachedRequestsSkipped))
+		}
 	}
 	if result.XG != nil {
 		var changed, initialized, metadata, missing, rejected, staleRejected int
