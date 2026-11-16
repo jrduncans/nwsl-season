@@ -107,6 +107,8 @@ func TestPages(t *testing.T) {
 		"forecast outlook views":    testForecastOutlookViews,
 		"forecast without script":   testForecastNoScript,
 		"fixtures":                  testFixturesPage,
+		"match page":                testMatchPage,
+		"restored form state":       testRestoredFormState,
 		"schedule difficulty":       testScheduleDifficultyPage,
 		"model evaluation":          testModelEvaluationPage,
 		"proxy prefix on all pages": testProxyPrefix,
@@ -915,6 +917,81 @@ func testFixturesPage(t *testing.T, f *fixture) {
 		selectValue(t, page.Locator("#fixture-team"), "")
 		// With every team shown, the select says so; the summary stays empty.
 		if err := expect.Locator(page.Locator("[data-fixture-filter-summary]")).ToHaveText(""); err != nil {
+			t.Error(err)
+		}
+		assertNoHorizontalOverflow(t, page)
+	})
+}
+
+// testRestoredFormState covers Back reloading a page: the browser then puts
+// earlier form values back after the scripts ran, without a change event.
+// Setting values the same way and firing pageshow must re-sync the page.
+func testRestoredFormState(t *testing.T, f *fixture) {
+	page := newPageWith(t, pageOptions{Viewport: Desktop})
+	visit(t, page, f.URL(seasonPath("fixtures")))
+	type state struct {
+		Season         string `json:"season"`
+		RenderedSeason string `json:"renderedSeason"`
+		Visible        int    `json:"visible"`
+		ForTeam        int    `json:"forTeam"`
+		Summary        string `json:"summary"`
+		UpcomingShown  bool   `json:"upcomingShown"`
+		ResultsHidden  bool   `json:"resultsHidden"`
+	}
+	var got state
+	evalJSON(t, page, `(team) => {
+		const season = document.querySelector('[data-season-selector]');
+		const rendered = Array.from(season.options).find((option) => option.defaultSelected).value;
+		season.value = Array.from(season.options).find((option) => !option.defaultSelected).value;
+		document.querySelector('[data-fixture-team-filter]').value = team;
+		document.querySelector('[data-fixture-view-button="upcoming"]').checked = true;
+		window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+		const rows = [...document.querySelectorAll('[data-fixture-home-team]')];
+		return {
+			season: season.value, renderedSeason: rendered,
+			visible: rows.filter((row) => !row.hidden).length,
+			forTeam: rows.filter((row) => row.dataset.fixtureHomeTeam === team || row.dataset.fixtureAwayTeam === team).length,
+			summary: document.querySelector('[data-fixture-filter-summary]').textContent,
+			upcomingShown: !document.querySelector('[data-fixture-view="upcoming"]').hidden,
+			resultsHidden: document.querySelector('[data-fixture-view="results"]').hidden,
+		};
+	}`, teamUnderTest, &got)
+	if got.Season != got.RenderedSeason {
+		t.Errorf("season picker shows %q on the %q page", got.Season, got.RenderedSeason)
+	}
+	if got.Visible != got.ForTeam || got.Summary == "" {
+		t.Errorf("restored team filter shows %d rows (want %d) with summary %q", got.Visible, got.ForTeam, got.Summary)
+	}
+	if !got.UpcomingShown || !got.ResultsHidden {
+		t.Errorf("restored Upcoming button shows the wrong list: %+v", got)
+	}
+}
+
+// testMatchPage opens a match from anywhere on its Results row, since the
+// score link is stretched over the row, and reads the as-of-kickoff page.
+func testMatchPage(t *testing.T, f *fixture) {
+	forEachViewport(t, func(t *testing.T, vp viewport) {
+		page := newPageWith(t, pageOptions{Viewport: vp})
+		visit(t, page, f.URL(seasonPath("fixtures")))
+		// A group with a kickoff today moves to the top of Results, so take
+		// the first row with a final score, not simply the first row.
+		row := page.Locator(`li.fixture-linked:visible:has(.fixture-match-link:text-matches("^\\d+–\\d+$"))`).First()
+		// The kickoff time sits under the link's overlay; Force clicks that
+		// spot rather than waiting for the time element itself to be hit.
+		if err := row.Locator("time").Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
+			t.Fatalf("click row: %v", err)
+		}
+		if err := page.WaitForURL("**/matches/*"); err != nil {
+			t.Fatal(err)
+		}
+		expect := playwright.NewPlaywrightAssertions()
+		if err := expect.Locator(page.Locator(".match-factors")).ToHaveCount(2); err != nil {
+			t.Error(err)
+		}
+		if err := expect.Locator(page.Locator(".match-board")).ToContainText("Before kickoff"); err != nil {
+			t.Error(err)
+		}
+		if err := expect.Locator(page.Locator(".match-rank-table .match-rank-xg")).ToHaveCount(3); err != nil {
 			t.Error(err)
 		}
 		assertNoHorizontalOverflow(t, page)

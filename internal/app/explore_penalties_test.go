@@ -485,12 +485,11 @@ func TestFixtureResultsShowNonPenaltyXGOnlyWhenAPenaltyHadXG(t *testing.T) {
 	}
 
 	body := renderFixturesPage(t, data)
-	requireText(t, body, ".fixture-xg", "xG 2.36–1.11", "xG 1.00–0.64")
-	forbidText(t, body, ".fixture-xg", "npxG")
-	requireText(t, body, ".fixture-npxg", "npxG 1.60–1.11")
-	forbidText(t, body, ".fixture-npxg", "·")
-	requireAttr(t, body, ".fixture-npxg", "title", "Non-penalty expected goals")
-	if got := len(find(t, body, ".fixture-npxg")); got != 1 {
+	// Each line is home value, label, away value.
+	requireExact(t, body, `.stat-line[data-stat="xG"]`, "xG 2.36 1.11", "xG 1.00 0.64")
+	requireExact(t, body, `.stat-line[data-stat="npxG"]`, "npxG 1.60 1.11")
+	requireAttr(t, body, `.stat-line[data-stat="npxG"] dt`, "title", "Non-penalty expected goals")
+	if got := len(find(t, body, `.stat-line[data-stat="npxG"]`)); got != 1 {
 		t.Errorf("%d npxG lines, want one", got)
 	}
 }

@@ -115,7 +115,14 @@ th:nth-child(2) { text-align: left; }
 }
 /* Fade the losing side lightly so a matchday scans by result; draws stay unmarked. */
 .fixtures li[data-winner="away"] > .fixture-match-team:nth-of-type(1), .fixtures li[data-winner="home"] > .fixture-match-team:nth-of-type(2) { opacity: .75; }
-.fixtures li:first-child { border-top: 0; }.fixtures li > .fixture-match-team:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.fixture-xg { margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.fixture-npxg { color: var(--muted); font-size: .75rem; font-weight: 700; white-space: nowrap; }.fixture-xg-pair { display: grid; grid-template-columns: auto auto; column-gap: .25em; margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }.fixture-xg-pair > .fixture-xg, .fixture-xg-pair > .fixture-npxg { display: contents; }.fixture-xg-pair .fixture-xg-label { justify-self: end; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }
+.stat-lines { display: grid; grid-template-columns: 1fr auto 1fr; grid-auto-flow: row dense; gap: .05rem .45rem; width: 100%; margin: .2rem 0 0; font-size: .75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-line { display: contents; }
+.stat-line dt { grid-column: 2; color: var(--muted); font-weight: 700; text-align: center; }
+.stat-line dd { margin: 0; color: var(--muted); font-weight: 700; }
+.stat-line .stat-home { grid-column: 1; text-align: right; }
+.stat-line .stat-away { grid-column: 3; text-align: left; }
+.match-board .stat-line dd { color: var(--ink); }
+.fixtures li:first-child { border-top: 0; }.fixtures li > .fixture-match-team:nth-of-type(2) { text-align: right; }.fixture-result { display: grid; justify-items: center; line-height: 1.2; }.scheduled { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem; color: var(--muted); font-size: .8rem; text-align: right; }.scheduled:empty { visibility: hidden; }.fixture-meta-tag, .bracket-meta-tag { display: inline-block; padding: .1rem .35rem; border-radius: 1rem; color: var(--muted); background: var(--paper); font-size: .7rem; font-weight: 800; line-height: 1.35; white-space: nowrap; }
 .fixture-outlook-note { margin: .65rem 0 0; }
 .fixture-outlook { display: grid; grid-column: 2 / 5; gap: .25rem; min-width: 0; padding-top: .1rem; }
 .fixture-outlook-model { color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
@@ -678,7 +685,7 @@ th:nth-child(2) { text-align: left; }
 .explore-rank-number span { font-size: .9rem; font-weight: 400; color: var(--muted); }
 .explore-rank-value { margin: .4rem 0 1.2rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .explore-rank-track { position: relative; height: .4rem; border-radius: 1rem; background: var(--line); }
-.explore-rank-track i { position: absolute; top: 50%; width: .8rem; height: .8rem; border: 2px solid var(--panel); border-radius: 50%; background: var(--green-deep); transform: translate(-50%, -50%); }
+.explore-rank-track i { position: absolute; top: 50%; width: 1rem; height: 1rem; border: 2px solid var(--panel); border-radius: 50%; background: var(--green-deep); transform: translate(-50%, -50%); }
 @media (max-width: 700px) { .explore-rankings { grid-template-columns: 1fr; gap: .65rem; } .explore-rank-card { padding: .85rem 1rem; } .explore-rank-card h4 { margin-bottom: .4rem; } .explore-rank-number { font-size: 1.35rem; } .explore-rank-value { margin: .3rem 0 .9rem; } }
 
 .explore-parity-wrap { height: 320px; }
@@ -1019,3 +1026,77 @@ th:nth-child(2) { text-align: left; }
   .playoff-impact-table :is(thead th[rowspan], tbody th) { width: 5rem; min-width: 5rem; }
   .playoff-impact-table .team-logo { display: none; }
 }
+/* Match links: the score is the link, stretched over its row or bracket card. */
+.fixtures li.fixture-linked, .bracket-slot-linked { position: relative; }
+.fixture-match-link, .bracket-match-link { color: inherit; text-decoration: none; }
+.fixture-match-link::after, .bracket-match-link::after { content: ""; position: absolute; inset: 0; }
+.fixtures li.fixture-linked:hover { background: var(--green-soft); }
+.fixture-match-link:hover, .bracket-match-link:hover { text-decoration: underline; }
+.fixture-match-link:focus-visible, .bracket-match-link:focus-visible { outline: none; }
+.fixture-match-link:focus-visible::after, .bracket-match-link:focus-visible::after { outline: 3px solid var(--green); outline-offset: -3px; border-radius: .5rem; }
+.bracket-slot-linked:hover { border-color: var(--green); }
+.match-meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: .5rem 0 0; color: var(--muted); font-size: .9rem; font-weight: 700; }
+.match-board { display: grid; gap: 1rem; max-width: 44rem; margin-bottom: 2.5rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.match-board-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; }
+.match-board-team { display: grid; justify-items: center; gap: .35rem; min-width: 0; text-align: center; }
+.match-board-logo { width: 3.5rem; height: 3.5rem; object-fit: contain; }
+.match-board-name { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+.match-board-advance { color: var(--muted); font-size: .85rem; }
+.match-board-advance strong { color: var(--ink); }
+.match-board-result { display: grid; justify-items: center; gap: .3rem; min-width: 7rem; }
+.match-board-score { font-size: 2.5rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.match-board-vs { color: var(--muted); font-size: 1.25rem; font-weight: 800; }
+.match-board .stat-lines { font-size: .8rem; }
+.match-board-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: .25rem; margin: 0; }
+.match-board .fixture-outlook { grid-column: auto; }
+.match-ranks, .match-model { max-width: 44rem; }
+.match-ranks h2, .match-model h2 { margin: 0; font-size: 1.25rem; }
+.match-ranks .note { margin: .15rem 0 .6rem; color: var(--muted); font-size: .875rem; }
+.match-rank-table { width: 100%; border: 1px solid var(--line); border-collapse: separate; border-spacing: 0; border-radius: .5rem; overflow: hidden; background: var(--panel); font-size: .95rem; }
+.match-rank-table th, .match-rank-table td { padding: .45rem .6rem; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.match-rank-table thead > tr > * { border-top: 0; border-bottom: 0; background: var(--green-soft); }
+.match-rank-table thead tr:first-child > * { padding-bottom: .1rem; }
+.match-rank-table .match-rank-subhead > * { padding-top: 0; border-bottom: 2px solid var(--line); color: var(--muted); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.match-rank-table .match-rank-home { text-align: right; }
+.match-rank-table .match-rank-away { text-align: left; }
+.match-rank-table tbody th { width: 6.5rem; min-width: 6rem; color: var(--muted); font-size: .8rem; font-weight: 700; text-align: center; }
+.match-rank-table .match-rank-group th { padding: .55rem .6rem .1rem; border-top: 1px solid var(--line); background: none; color: var(--ink); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.match-rank-table tbody:first-of-type .match-rank-group th { border-top: 0; }
+.match-rank-table .match-rank-xg > *, .match-rank-table .match-rank-goals > * { border-top: 0; }
+.match-rank-table .match-rank-xg > * { padding-top: .2rem; padding-bottom: .1rem; }
+.match-rank-table .match-rank-goals > * { padding-top: 0; padding-bottom: .55rem; color: var(--muted); font-size: .8rem; }
+.match-rank-scroll { width: 100%; }
+.match-rank-scroll .match-rank-table { border: 0; border-radius: 0; }
+.match-rank-table thead tr:first-child th { white-space: normal; }
+.match-rank-team { display: inline-flex; align-items: center; gap: .35rem; font-weight: 800; }
+.match-rank-team .team-logo { width: 1.4rem; height: 1.4rem; flex-basis: 1.4rem; }
+/* Gutters take the spare width so the comparison stays compact and centered.
+   Fixed layout with explicit column widths splits it evenly in every browser;
+   automatic layout gave Safari's left gutter all of it. */
+.match-rank-table { table-layout: fixed; }
+.match-rank-col-value { width: 4.5rem; }
+.match-rank-col-place { width: 6.5rem; }
+.match-rank-col-stat { width: 6.5rem; }
+.match-rank-table .match-rank-gutter { padding: 0; }
+.match-rank-table td.match-rank-value { width: 4.5rem; min-width: 4.5rem; color: var(--muted); font-size: .85rem; }
+.match-rank-table .match-rank-goals td.match-rank-value { font-size: .8rem; }
+.match-rank-table td.match-rank-place { width: 6.5rem; min-width: 6.5rem; font-weight: 400; }
+.match-rank-table .match-rank-xg td.match-rank-place { font-size: 1.05rem; }
+/* Only the better xG rank is bold; every other rank is regular weight, so the
+green rank stands out without an underline that would read as a link. */
+.match-rank-table .match-rank-xg .match-rank-better { color: var(--green); font-weight: 800; }
+.match-rank-table .match-rank-goals td.match-rank-place { font-weight: 400; }
+.match-model { margin-top: 2.5rem; }
+.match-model-formula { margin: .15rem 0 .75rem; color: var(--muted); font-size: .85rem; }
+.match-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 1rem; }
+.match-factors { align-self: start; border: 1px solid var(--line); border-radius: .5rem; border-collapse: separate; border-spacing: 0; background: var(--panel); font-size: .875rem; }
+.match-factors caption { padding: 0 0 .4rem; text-align: left; font-weight: 800; }
+.match-factors caption .team-name { font-size: inherit; }
+.match-factors th, .match-factors td { padding: .4rem .75rem; border-top: 1px solid var(--line); text-align: left; vertical-align: top; font-weight: 600; }
+.match-factors tbody tr:first-child > * { border-top: 0; }
+.match-factor-detail { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
+.match-factors .match-factor-value { font-variant-numeric: tabular-nums; text-align: right; }
+.match-factors tfoot > tr > * { border-top: 2px solid var(--line); font-weight: 800; }
+.match-model-foot { margin: .6rem 0 0; color: var(--muted); font-size: .75rem; }
+.match-links { margin-top: 1.5rem; font-weight: 700; }
+@media (max-width: 700px) { .match-board { padding: 1rem .75rem; } .match-board-row { gap: .5rem; } .match-board-logo { width: 2.5rem; height: 2.5rem; } .match-board-name { font-size: .95rem; } .match-board-score { font-size: 2rem; } .match-board-result { min-width: 0; } .match-rank-table th, .match-rank-table td { padding: .5rem .5rem; } .match-rank-table td.match-rank-value, .match-rank-table td.match-rank-place { width: auto; min-width: 0; } .match-rank-table { table-layout: auto; } .match-rank-table col { width: auto; } .match-rank-table col.match-rank-col-gutter { width: 0; } .match-rank-table tbody th { min-width: 0; } .match-rank-table th, .match-rank-table td { padding-right: .4rem; padding-left: .4rem; } }

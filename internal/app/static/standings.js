@@ -9,6 +9,18 @@ document.addEventListener("change", (event) => {
   links.find((link) => link.dataset.penaltiesChoice === select.value)?.click();
 }, true);
 
+// Back can reload a page rather than restore it from the back/forward cache,
+// and the browser then puts earlier form values back after these scripts have
+// run, without a change event. Every pageshow (fresh load, reload or cache
+// restore) re-syncs controls with the page. The pickers name the page itself,
+// so they return to the option the server rendered as selected.
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll("[data-season-selector], [data-stage-selector]").forEach((select) => {
+    const rendered = Array.from(select.options).find((option) => option.defaultSelected);
+    if (rendered) select.value = rendered.value;
+  });
+});
+
 document.addEventListener("change", (event) => {
   const season = event.target.closest("[data-season-selector]");
   if (season) {
@@ -480,6 +492,8 @@ function setupFixtureTeamFilter() {
   };
 
   filter.addEventListener("change", update);
+  // Keep a team the browser restored after Back, and show its matches.
+  window.addEventListener("pageshow", update);
   update();
 }
 
@@ -522,6 +536,9 @@ function setupFixtureViews() {
   toggle.addEventListener("change", (event) => show(event.target.value));
   toggle.hidden = false;
   show("results");
+  // Keep the view the browser restored after Back, so the list matches the
+  // checked button (and the restored scroll position).
+  window.addEventListener("pageshow", () => show(toggle.querySelector("input:checked")?.value ?? "results"));
 }
 
 // Schedule difficulty: the measure switcher re-plots and re-sorts the rows

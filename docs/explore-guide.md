@@ -263,7 +263,7 @@ basis (ASA publishes no non-penalty xPoints). Mixed views that combine points
 with non-penalty goals or xG show the note "Points include penalties; ASA
 publishes no non-penalty xPoints." Labels follow the basis (`xG` → `npxG`, `Goals` →
 `Non-penalty goals`, `xGD` → `npxGD`) through `basisText` in Go and `T` in
-`explore.js`. Match results add an `npxG` line when a match had penalty xG.
+`explore.js`. Match results show xG under the score as home value, `xG`, away value, and add an `npxG` line the same way when a match had penalty xG; the match page uses the same lines.
 
 ## League trends
 
@@ -632,6 +632,9 @@ and the Exclude penalties switch; with no chart, the view has no chart card.
 Each stat's card shows its rank ("Tied 4th of 16"), value and a marker on an
 unlabeled track; the rank text carries the meaning, so the page adds no tie
 or endpoint explanation.
+
+Match pages compare both teams with the same ranking rules, as of kickoff; see
+[the Forecast Lab guide](forecast-lab-guide.md#match-page).
 
 ### Match by match
 
