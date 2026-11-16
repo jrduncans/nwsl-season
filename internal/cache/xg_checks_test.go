@@ -57,7 +57,7 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=18", "DELETE FROM schema_migrations WHERE version=17", "DELETE FROM schema_migrations WHERE version=16", "DELETE FROM schema_migrations WHERE version=15", "DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12"} {
+	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=19", "DELETE FROM schema_migrations WHERE version=18", "DELETE FROM schema_migrations WHERE version=17", "DELETE FROM schema_migrations WHERE version=16", "DELETE FROM schema_migrations WHERE version=15", "DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12"} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
 			if closeErr := legacy.Close(); closeErr != nil {
 				t.Errorf("close legacy database: %v", closeErr)
@@ -79,7 +79,7 @@ func TestMigrationTwelveBackfillsXGChecks(t *testing.T) {
 		t.Fatalf("backfill=%+v,%v", states, err)
 	}
 	var version, audits, runs int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 18 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 19 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_refresh_audits WHERE resource='game_xg'`).Scan(&audits); err != nil {
@@ -258,8 +258,10 @@ func TestFullStageXGPreservesTargetedDueAndParentInvalidation(t *testing.T) {
 	if _, ok, err := db.GameXGCheckState(ctx, "one"); err != nil || ok {
 		t.Fatalf("participant invalidation left state=%t,%v", ok, err)
 	}
-	if _, err := db.ReplaceGameInventory(ctx, "2031", "Checks", []Game{changed}, nil, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, 7, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, 7, 1, 0, 0, time.UTC)}); err != nil {
-		t.Fatal(err)
+	for _, hour := range []int{7, 8} { // first omission retains, second confirms
+		if _, err := db.ReplaceGameInventory(ctx, "2031", "Checks", []Game{changed}, nil, FullRefreshMetadata{Trigger: SourceTriggerCLI, StartedAt: time.Date(2031, 1, 1, hour, 0, 0, 0, time.UTC), FinishedAt: time.Date(2031, 1, 1, hour, 1, 0, 0, time.UTC)}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, ok, err := db.GameXGCheckState(ctx, "two"); err != nil || ok {
 		t.Fatalf("parent deletion did not cascade=%t,%v", ok, err)

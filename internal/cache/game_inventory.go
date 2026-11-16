@@ -25,6 +25,12 @@ type GameRefreshResult struct {
 	// observation. It lets callers explain an update decision against the
 	// exact source version that was already live, without another read.
 	PreviousGames []Game
+	// UncachedRequestsSkipped counts targeted requests for games that a newer
+	// full inventory had already removed; they are skipped, not failures.
+	UncachedRequestsSkipped int
+	// OmittedGamesRetained counts cached games a full inventory left out for
+	// the first time. They stay cached until a confirming observation.
+	OmittedGamesRetained int
 }
 
 var ErrUnknownGameTeams = errors.New("game inventory references unknown teams")
@@ -142,16 +148,34 @@ func (c *DB) ReplaceGameInventory(ctx context.Context, season, stage string, gam
 	for _, game := range games {
 		keep[game.ASAID] = struct{}{}
 	}
+	retained, err := reconcileOmittedGames(ctx, tx, before, keep, expected == nil, audit.FinishedAt)
+	if err != nil {
+		return GameRefreshResult{}, err
+	}
+	retainedIDs := make(map[string]struct{}, len(retained))
+	for _, id := range retained {
+		retainedIDs[id] = struct{}{}
+	}
 	for _, game := range before {
-		if _, ok := keep[game.ASAID]; !ok && gameFullTime(game) {
+		_, kept := keep[game.ASAID]
+		_, held := retainedIDs[game.ASAID]
+		if !kept && !held && gameFullTime(game) {
 			coverageInvalid = true
 		}
 	}
-	deleted, err := deleteMissingGames(ctx, tx, season, stage, gameIDs(games))
+	deleted, err := deleteMissingGames(ctx, tx, season, stage, append(gameIDs(games), retained...))
 	if err != nil {
 		return GameRefreshResult{}, err
 	}
 	audit.RowsDeleted = deleted
+	if len(retained) > 0 {
+		// Confirm the omission soon rather than at the stage's normal cadence,
+		// so a game ASA really removed does not linger.
+		confirm := audit.FinishedAt.Add(omissionConfirmationDelay)
+		if due == nil || due.After(confirm) {
+			due = &confirm
+		}
+	}
 
 	post, err := seasonGames(ctx, tx, season, stage)
 	if err != nil {
@@ -184,7 +208,59 @@ func (c *DB) ReplaceGameInventory(ctx context.Context, season, stage string, gam
 	if err := tx.Commit(); err != nil {
 		return GameRefreshResult{}, fmt.Errorf("commit game inventory refresh: %w", err)
 	}
-	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before)}, nil
+	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before), OmittedGamesRetained: len(retained)}, nil
+}
+
+// omissionConfirmationDelay is how soon a full inventory that left out a
+// cached game is rechecked before that game is deleted.
+const omissionConfirmationDelay = time.Hour
+
+// reconcileOmittedGames applies the two-observation deletion rule to an
+// inventory whose completeness is unverified (confirm). A cached game missing
+// from such a successful full inventory for the first time is kept and marked;
+// it is deleted only when a later successful full inventory also leaves it
+// out. An inventory that already satisfied a verified expectation is proven
+// complete, so its omissions are deleted at once. A game that reappears loses
+// its mark. It returns the IDs to keep despite their omission.
+func reconcileOmittedGames(ctx context.Context, tx *sql.Tx, before []Game, incoming map[string]struct{}, confirm bool, observedAt time.Time) ([]string, error) {
+	retained := []string{}
+	for _, game := range before {
+		if _, found := incoming[game.ASAID]; found {
+			if _, err := tx.ExecContext(ctx, `UPDATE game_result_checks SET first_omitted_at=NULL WHERE asa_game_id=? AND first_omitted_at IS NOT NULL`, game.ASAID); err != nil {
+				return nil, fmt.Errorf("clear game omission %q: %w", game.ASAID, err)
+			}
+			continue
+		}
+		if !confirm {
+			continue
+		}
+		var since sql.NullString
+		err := tx.QueryRowContext(ctx, `SELECT first_omitted_at FROM game_result_checks WHERE asa_game_id=?`, game.ASAID).Scan(&since)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("load game omission %q: %w", game.ASAID, err)
+		}
+		if since.Valid {
+			first, err := time.Parse(time.RFC3339, since.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse game omission %q: %w", game.ASAID, err)
+			}
+			if first.Before(observedAt) {
+				continue // Confirmed by this later observation: delete.
+			}
+			retained = append(retained, game.ASAID)
+			continue
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = tx.ExecContext(ctx, `INSERT INTO game_result_checks (asa_game_id,last_checked_at,first_omitted_at) VALUES (?,?,?)`, game.ASAID, formatTime(observedAt), formatTime(observedAt))
+		} else {
+			_, err = tx.ExecContext(ctx, `UPDATE game_result_checks SET first_omitted_at=? WHERE asa_game_id=?`, formatTime(observedAt), game.ASAID)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("mark game omission %q: %w", game.ASAID, err)
+		}
+		retained = append(retained, game.ASAID)
+	}
+	return retained, nil
 }
 
 func validateGameInventoryInput(season, stage string, games []Game, expected *competition.InventoryExpectation) error {

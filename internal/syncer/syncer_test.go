@@ -637,7 +637,7 @@ func TestRunAllowsConsecutiveSyncs(t *testing.T) {
 	}
 }
 
-func TestRunHardDeletesMissingGamesAfterSuccessfulFetch(t *testing.T) {
+func TestRunHardDeletesMissingGamesAfterConfirmingFetch(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	client := fakeASA{
@@ -647,14 +647,24 @@ func TestRunHardDeletesMissingGamesAfterSuccessfulFetch(t *testing.T) {
 			testGame("game-2", "PreMatch", nil, nil),
 		},
 	}
-	service := Service{ASA: &client, Store: db}
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	service := Service{ASA: &client, Store: db, Now: func() time.Time { return clock }}
 
 	if _, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"}); err != nil {
 		t.Fatal(err)
 	}
 
 	client.games = []asa.Game{testGame("game-1", "FullTime", new(1), new(0))}
+	clock = clock.Add(time.Hour)
 	run, err := service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.GamesDeleted != 0 || cachedGameCount(t, ctx, db, "2024", "Test Stage") != 2 {
+		t.Fatalf("first omission deleted games = %d", run.GamesDeleted)
+	}
+	clock = clock.Add(time.Hour)
+	run, err = service.Run(ctx, RunOptions{Season: "2024", Stage: "Test Stage"})
 	if err != nil {
 		t.Fatal(err)
 	}

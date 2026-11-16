@@ -460,7 +460,7 @@ func TestGameXGReadsValidateAndAreScoped(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 18 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 19 {
 		t.Fatalf("schema=%d,%v", version, err)
 	}
 	if _, ok, err := db.GameXGState(ctx, "missing"); err != nil || ok {
@@ -759,6 +759,10 @@ func TestStageXGOmissionsDoNotDeleteAndFixtureAuthorityDoes(t *testing.T) {
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Cascade", []Game{changed, pre}, nil, xgMetadataAt(time.Date(2030, 4, 1, 4, 0, 0, 0, time.UTC))); err != nil {
 		t.Fatal(err)
 	}
+	// The first omission keeps "two"; a later omission confirms its deletion.
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Cascade", []Game{changed, pre}, nil, xgMetadataAt(time.Date(2030, 4, 1, 5, 0, 0, 0, time.UTC))); err != nil {
+		t.Fatal(err)
+	}
 	for _, id := range []string{"one", "two"} {
 		if _, ok, err := db.GameXGState(ctx, id); err != nil || ok {
 			t.Fatalf("fixture authority left incompatible xG %q: %v", id, err)
@@ -814,7 +818,7 @@ func TestStageXGHasNoSchemaArtifacts(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || schemaVersion != 18 || version != 18 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || schemaVersion != 19 || version != 19 {
 		t.Fatalf("schema version=%d const=%d err=%v", version, schemaVersion, err)
 	}
 	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(game_xg)`)

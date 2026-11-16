@@ -404,9 +404,27 @@ func TestUpsertCheckedGamesRejectsIdentityWithoutWrites(t *testing.T) {
 	if state, ok, _ := db.GameResultCheckState(ctx, "one"); !ok || !reflect.DeepEqual(before, state) {
 		t.Fatalf("failed write changed state=%+v", state)
 	}
-	if _, err := db.UpsertCheckedGames(ctx, "2030", "Example", []CheckedGameRequest{checkRequest("missing", 2)}, []Game{}, checkMetadata(2)); err == nil {
-		t.Fatal("missing request accepted")
+	// A request for a game a newer full inventory removed is skipped, not a
+	// failure, and the cached game alongside it is still checked.
+	returned := game
+	skipped, err := db.UpsertCheckedGames(ctx, "2030", "Example", []CheckedGameRequest{checkRequest("missing", 2), checkRequest("one", 2)}, []Game{returned, inventoryGameWithID(returned, "missing")}, checkMetadata(2))
+	if err != nil || skipped.UncachedRequestsSkipped != 1 || skipped.Audit.Outcome != SourceRefreshSuccess {
+		t.Fatalf("uncached request=%+v,%v", skipped, err)
 	}
+	if _, ok, _ := db.GameResultCheckState(ctx, "missing"); ok {
+		t.Fatal("skipped request created check state")
+	}
+	if state, ok, _ := db.GameResultCheckState(ctx, "one"); !ok || !state.LastCheckedAt.After(before.LastCheckedAt) {
+		t.Fatalf("cached request beside skipped one not checked=%+v", state)
+	}
+	if games, _ := db.seasonGames(ctx, "2030", "Example"); len(games) != 1 {
+		t.Fatalf("targeted check added inventory=%+v", games)
+	}
+}
+
+func inventoryGameWithID(game Game, id string) Game {
+	game.ASAID = id
+	return game
 }
 
 func TestGameResultCheckReadDefensiveAndCascade(t *testing.T) {
@@ -491,7 +509,7 @@ func TestTargetedValidationFailuresLeaveAllPersistenceUntouched(t *testing.T) {
 	cases := []struct {
 		req []CheckedGameRequest
 		ret []Game
-	}{{[]CheckedGameRequest{{ASAID: " one"}}, []Game{}}, {[]CheckedGameRequest{{ASAID: ""}}, []Game{}}, {[]CheckedGameRequest{{ASAID: "one", NextDueAt: &badDue}}, []Game{}}, {[]CheckedGameRequest{{ASAID: "one"}}, []Game{g, g}}, {[]CheckedGameRequest{{ASAID: "one"}}, []Game{malformed}}, {[]CheckedGameRequest{{ASAID: "missing"}}, []Game{}}, {[]CheckedGameRequest{{ASAID: "one"}}, []Game{other}}}
+	}{{[]CheckedGameRequest{{ASAID: " one"}}, []Game{}}, {[]CheckedGameRequest{{ASAID: ""}}, []Game{}}, {[]CheckedGameRequest{{ASAID: "one", NextDueAt: &badDue}}, []Game{}}, {[]CheckedGameRequest{{ASAID: "one"}}, []Game{g, g}}, {[]CheckedGameRequest{{ASAID: "one"}}, []Game{malformed}}, {[]CheckedGameRequest{{ASAID: "one"}}, []Game{other}}}
 	for _, tc := range cases {
 		if _, err := db.UpsertCheckedGames(ctx, "2030", "Example", tc.req, tc.ret, checkMetadata(2)); err == nil {
 			t.Fatal("invalid targeted write accepted")
@@ -835,8 +853,17 @@ func TestFullInventoryMaintainsGameCheckStateAndDue(t *testing.T) {
 	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{terminal}, nil, deleteMetadata); err != nil {
 		t.Fatal(err)
 	}
+	if _, ok, _ := db.GameResultCheckState(ctx, "two"); !ok {
+		t.Fatal("first omission did not retain state")
+	}
+	confirmMetadata := deleteMetadata
+	confirmMetadata.StartedAt = time.Date(2030, 1, 1, 14, 0, 0, 0, time.UTC)
+	confirmMetadata.FinishedAt = time.Date(2030, 1, 1, 14, 1, 0, 0, time.UTC)
+	if _, err := db.ReplaceGameInventory(ctx, "2030", "Example", []Game{terminal}, nil, confirmMetadata); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok, _ := db.GameResultCheckState(ctx, "two"); ok {
-		t.Fatal("authoritative deletion did not cascade state")
+		t.Fatal("confirmed deletion did not cascade state")
 	}
 	empty, err := db.ReplaceGameInventory(ctx, "2032", "Empty", []Game{}, nil, fullMetadata)
 	if err != nil || empty.SyncRun != nil {
@@ -884,7 +911,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=18", "DELETE FROM schema_migrations WHERE version=17", "DELETE FROM schema_migrations WHERE version=16", "DELETE FROM schema_migrations WHERE version=15", "DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12", "DROP INDEX game_result_checks_due_idx", "DROP TABLE game_result_checks", "DELETE FROM schema_migrations WHERE version=11"} {
+	for _, q := range []string{"DELETE FROM schema_migrations WHERE version=19", "DELETE FROM schema_migrations WHERE version=18", "DELETE FROM schema_migrations WHERE version=17", "DELETE FROM schema_migrations WHERE version=16", "DELETE FROM schema_migrations WHERE version=15", "DELETE FROM schema_migrations WHERE version=14", "DELETE FROM schema_migrations WHERE version=13", "DROP INDEX game_xg_checks_due_idx", "DROP TABLE game_xg_checks", "DELETE FROM schema_migrations WHERE version=12", "DROP INDEX game_result_checks_due_idx", "DROP TABLE game_result_checks", "DELETE FROM schema_migrations WHERE version=11"} {
 		if _, err := legacy.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
 		}
@@ -911,7 +938,7 @@ func TestMigrationElevenBackfillsRealV10AndIsIdempotent(t *testing.T) {
 	}
 	defer db.Close()
 	var version int
-	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 18 {
+	if err := db.db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 19 {
 		t.Fatalf("version=%d,%v", version, err)
 	}
 	var index int

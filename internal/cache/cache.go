@@ -26,7 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 18
+const schemaVersion = 19
 
 // MaxGameExpectedPoints is the most league points a team can expect from one
 // match. ASA's game-level expected-points values estimate that allocation, so
@@ -814,6 +814,24 @@ func (c *DB) Migrate(ctx context.Context) error {
 			}
 		}
 		if err := recordMigration(ctx, tx, 18); err != nil {
+			return err
+		}
+	}
+	if version < 19 {
+		table, err := tableHasColumns(ctx, tx, "game_result_checks", "asa_game_id")
+		if err != nil {
+			return err
+		}
+		exists, err := tableHasColumns(ctx, tx, "game_result_checks", "first_omitted_at")
+		if err != nil {
+			return err
+		}
+		if table && !exists {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE game_result_checks ADD COLUMN first_omitted_at TEXT`); err != nil {
+				return fmt.Errorf("apply migration 19: %w", err)
+			}
+		}
+		if err := recordMigration(ctx, tx, 19); err != nil {
 			return err
 		}
 	}

@@ -351,11 +351,13 @@ const (
 	SyncOldPenaltiesKey                                      = attribute.Key("nwsl.sync.old.penalties")
 	SyncOldPenaltiesPresentKey                               = attribute.Key("nwsl.sync.old.penalties_present")
 	SyncOldStatusKey                                         = attribute.Key("nwsl.sync.old.status")
+	SyncOmittedGamesRetainedKey                              = attribute.Key("nwsl.sync.omitted_games_retained")
 	SyncOperationOutcomeKey                                  = attribute.Key("nwsl.sync.operation.outcome")
 	SyncOutcomeKey                                           = attribute.Key("nwsl.sync.outcome")
 	SyncPartialFailureKey                                    = attribute.Key("nwsl.sync.partial_failure")
 	SyncPenaltyGamesAcceptedKey                              = attribute.Key("nwsl.sync.penalty_games_accepted")
 	SyncPenaltyGamesRejectedKey                              = attribute.Key("nwsl.sync.penalty_games_rejected")
+	SyncPlaceholderGamesSkippedKey                           = attribute.Key("nwsl.sync.placeholder_games_skipped")
 	SyncQualificationOutcomeKey                              = attribute.Key("nwsl.sync.qualification.outcome")
 	SyncQualificationRefreshReasonKey                        = attribute.Key("nwsl.sync.qualification.refresh_reason")
 	SyncQualificationRefreshRequiredKey                      = attribute.Key("nwsl.sync.qualification.refresh_required")
@@ -403,6 +405,7 @@ const (
 	SyncTeamsUnchangedKey                                    = attribute.Key("nwsl.sync.teams_unchanged")
 	SyncTeamsUpdatedKey                                      = attribute.Key("nwsl.sync.teams_updated")
 	SyncTriggerKey                                           = attribute.Key("nwsl.sync.trigger")
+	SyncUncachedRequestsSkippedKey                           = attribute.Key("nwsl.sync.uncached_requests_skipped")
 	SyncUpdateDecisionKey                                    = attribute.Key("nwsl.sync.update.decision")
 	SyncUpdateReasonKey                                      = attribute.Key("nwsl.sync.update.reason")
 	SyncUpdateKindKey                                        = attribute.Key("nwsl.sync.update_kind")
@@ -1830,6 +1833,11 @@ func SyncOldStatus(value string) attribute.KeyValue {
 	return SyncOldStatusKey.String(value)
 }
 
+// SyncOmittedGamesRetained returns an attribute value for nwsl.sync.omitted_games_retained.
+func SyncOmittedGamesRetained(value int) attribute.KeyValue {
+	return SyncOmittedGamesRetainedKey.Int(value)
+}
+
 // SyncOperationOutcome returns an attribute value for nwsl.sync.operation.outcome.
 func SyncOperationOutcome(value string) attribute.KeyValue {
 	return SyncOperationOutcomeKey.String(value)
@@ -1864,6 +1872,11 @@ func SyncPenaltyGamesAccepted(value int) attribute.KeyValue {
 // SyncPenaltyGamesRejected returns an attribute value for nwsl.sync.penalty_games_rejected.
 func SyncPenaltyGamesRejected(value int) attribute.KeyValue {
 	return SyncPenaltyGamesRejectedKey.Int(value)
+}
+
+// SyncPlaceholderGamesSkipped returns an attribute value for nwsl.sync.placeholder_games_skipped.
+func SyncPlaceholderGamesSkipped(value int) attribute.KeyValue {
+	return SyncPlaceholderGamesSkippedKey.Int(value)
 }
 
 // SyncQualificationOutcome returns an attribute value for nwsl.sync.qualification.outcome.
@@ -2123,6 +2136,11 @@ func SyncTeamsUpdated(value int) attribute.KeyValue {
 // SyncTrigger returns an attribute value for nwsl.sync.trigger.
 func SyncTrigger(value string) attribute.KeyValue {
 	return SyncTriggerKey.String(value)
+}
+
+// SyncUncachedRequestsSkipped returns an attribute value for nwsl.sync.uncached_requests_skipped.
+func SyncUncachedRequestsSkipped(value int) attribute.KeyValue {
+	return SyncUncachedRequestsSkippedKey.Int(value)
 }
 
 // SyncUpdateDecision returns an attribute value for nwsl.sync.update.decision.

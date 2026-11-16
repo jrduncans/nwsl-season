@@ -106,11 +106,15 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 	}
 	defer rollback(tx)
 	old := map[string]Game{}
+	cachedRequests := make([]CheckedGameRequest, 0, len(requests))
 	for _, r := range requests {
 		var g Game
 		err := tx.QueryRowContext(ctx, `SELECT asa_game_id,season,stage,kickoff_utc,status,home_team_id,away_team_id,home_score,away_score,matchday,expanded_minutes,knockout_game,extra_time,penalties,home_penalties,away_penalties,last_updated_utc,raw_json FROM games WHERE asa_game_id=?`, r.ASAID).Scan(&g.ASAID, &g.Season, &g.Stage, &g.KickoffUTC, &g.Status, &g.HomeTeamID, &g.AwayTeamID, &g.HomeScore, &g.AwayScore, &g.Matchday, &g.ExpandedMinutes, &g.KnockoutGame, &g.ExtraTime, &g.Penalties, &g.HomePenalties, &g.AwayPenalties, &g.LastUpdatedUTC, &g.RawJSON)
 		if errors.Is(err, sql.ErrNoRows) {
-			return GameRefreshResult{}, fmt.Errorf("requested game %q is not cached", r.ASAID)
+			// A full inventory committed after this check was planned removed
+			// the game. That newer authoritative observation wins; a targeted
+			// check never adds inventory, so the request is skipped.
+			continue
 		}
 		if err != nil {
 			return GameRefreshResult{}, err
@@ -119,7 +123,17 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 			return GameRefreshResult{}, fmt.Errorf("requested game %q is outside scope", r.ASAID)
 		}
 		old[g.ASAID] = g
+		cachedRequests = append(cachedRequests, r)
 	}
+	uncachedSkipped := len(requests) - len(cachedRequests)
+	requests = cachedRequests
+	cachedReturned := make([]Game, 0, len(returned))
+	for _, g := range returned {
+		if _, found := old[g.ASAID]; found {
+			cachedReturned = append(cachedReturned, g)
+		}
+	}
+	returned = cachedReturned
 	for _, g := range returned {
 		cached := old[g.ASAID]
 		if cached.HomeTeamID != g.HomeTeamID || cached.AwayTeamID != g.AwayTeamID {
@@ -204,7 +218,7 @@ func (c *DB) UpsertCheckedGames(ctx context.Context, season, stage string, reque
 	if err := tx.Commit(); err != nil {
 		return GameRefreshResult{}, fmt.Errorf("commit targeted game refresh: %w", err)
 	}
-	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before), FullGamesDiscoveryAccelerated: discoveryAccelerated}, nil
+	return GameRefreshResult{Audit: audit, SyncRun: run, Teams: cloneTeams(teams), Games: cloneGames(post), PreviousGames: cloneGames(before), FullGamesDiscoveryAccelerated: discoveryAccelerated, UncachedRequestsSkipped: uncachedSkipped}, nil
 }
 
 // accelerateIncompleteBracketDiscovery makes the next scheduler plan revisit
