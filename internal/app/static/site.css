@@ -1,4 +1,4 @@
-:root { color-scheme: light; --ink: #17211d; --muted: #5f6e66; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --scoring-allowed: #a04e20; --chart-actual: #0b5136; --chart-expected: #9061c5; --chart-chance: rgba(95, 110, 102, .16); --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
+:root { color-scheme: light; --ink: #1c1c1e; --muted: #636369; --paper: #fbfcf8; --panel: #fff; --line: #d9e0da; --green: #136f4a; --green-soft: #e6f4ec; --green-deep: #0b5136; --red: #a22f2f; --gold: #9b6500; --scoring-allowed: #a04e20; --chart-actual: #0b5136; --chart-expected: #9061c5; --chart-chance: rgba(99, 99, 105, .16); --hypo: #5b3f96; --hypo-soft: #f1ecfb; }
 * { box-sizing: border-box; }
 /* Keep page width steady when a view grows a scrollbar; phones overlay theirs. */
 @media (min-width: 701px) { html { scrollbar-gutter: stable; } }
@@ -10,12 +10,12 @@ a { color: var(--green); }
 .brand:focus-visible { outline: 3px solid white; outline-offset: 4px; border-radius: .2rem; }
 .brand-mark { font-size: 1.5rem; font-weight: 800; letter-spacing: .04em; }
 /* Uppercase in CSS keeps the source text and accessible name in normal case. */
-.brand-tagline { margin-top: .2rem; color: #cbd4ce; font-size: .68rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.brand-tagline { margin-top: .2rem; color: #c8c8cc; font-size: .68rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .site-nav ul { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .2rem; margin: 0; padding: 0; list-style: none; }
-.site-nav a { display: block; padding: .35rem .55rem; border-radius: .3rem; color: #cbd4ce; font-size: .875rem; font-weight: 700; text-decoration: none; }
+.site-nav a { display: block; padding: .35rem .55rem; border-radius: .3rem; color: #c8c8cc; font-size: .875rem; font-weight: 700; text-decoration: none; }
 .site-nav a:hover, .site-nav a:focus-visible { color: white; background: rgb(255 255 255 / 12%); }
 .site-nav a[aria-current="page"] { color: var(--ink); background: white; }
-.site-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 4rem; color: #cbd4ce; font-size: .875rem; }
+.site-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 4rem; color: #c8c8cc; font-size: .875rem; }
 .github-link { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .35rem; color: white; }
 .github-link:hover { color: white; background: rgb(255 255 255 / 12%); }
 .github-link:focus-visible { outline: 3px solid white; outline-offset: 2px; }
@@ -380,7 +380,7 @@ th:nth-child(2) { text-align: left; }
 .schedule-key-track .schedule-mini-marker { --schedule-scale: 1; --schedule-opacity: 1; }
 .schedule-key-track .schedule-marker-easier { left: 18%; }
 .schedule-key-track .schedule-marker-harder { left: 82%; }
-.schedule-cell[open] .schedule-explanation { position: absolute; z-index: 5; top: calc(100% + .35rem); right: 0; width: min(18rem, calc(100vw - 2rem)); box-shadow: 0 .35rem 1rem rgb(23 33 29 / 16%); }
+.schedule-cell[open] .schedule-explanation { position: absolute; z-index: 5; top: calc(100% + .35rem); right: 0; width: min(18rem, calc(100vw - 2rem)); box-shadow: 0 .35rem 1rem rgb(28 28 30 / 16%); }
 .standings tbody tr:nth-last-child(-n+2) .schedule-cell[open] .schedule-explanation { top: auto; bottom: calc(100% + .35rem); }
 .schedule-explanation { padding: .55rem .75rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--paper); color: var(--muted); font-size: .875rem; text-align: left; white-space: normal; }
 .schedule-explanation p { margin: .15rem 0; }
