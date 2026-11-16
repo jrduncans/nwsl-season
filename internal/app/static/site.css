@@ -1037,6 +1037,12 @@ th:nth-child(2) { text-align: left; }
 .bracket-slot-linked:hover { border-color: var(--green); }
 .match-meta { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: .5rem 0 0; color: var(--muted); font-size: .9rem; font-weight: 700; }
 .match-board { display: grid; gap: 1rem; max-width: 44rem; margin-bottom: 2.5rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel); }
+.match-venue { max-width: 44rem; margin: 0 0 1rem; }
+.match-venue fieldset { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; border: 0; }
+.match-venue legend { width: 100%; margin-bottom: .1rem; color: var(--muted); font-size: .875rem; font-weight: 700; }
+.match-venue label { display: inline-flex; align-items: center; gap: .35rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: .3rem; background: white; font-size: .9rem; }
+.match-venue input { accent-color: var(--green); }
+.match-venue .button { margin-top: .5rem; }
 .match-board-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; }
 .match-board-team { display: grid; justify-items: center; gap: .35rem; min-width: 0; text-align: center; }
 .match-board-logo { width: 3.5rem; height: 3.5rem; object-fit: contain; }

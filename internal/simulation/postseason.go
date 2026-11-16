@@ -18,8 +18,11 @@ type Postseason struct {
 
 // PostseasonMatch records an identified source match. Winner is empty only
 // for a validated, unplayed fixture. Kickoffs do not adjust playoff strengths.
+// Hosted reports that Home plays the designated-site final at its own
+// stadium, so that final gets the venue effect instead of being neutral.
 type PostseasonMatch struct {
 	Home, Away, Winner string
+	Hosted             bool `json:",omitempty"`
 }
 
 // Material is a canonical representation for cache identity and random seeds.

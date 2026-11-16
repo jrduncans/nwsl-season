@@ -239,7 +239,7 @@ func (p *playoffSimulation) run(table []standings.TableRow, rng *rand.Rand, coun
 		if seedByID[first] > seedByID[second] {
 			first, second = second, first
 		}
-		neutral := slot.RoundID == finalRound
+		neutral := slot.RoundID == finalRound && !actual.Hosted
 		if actual.Home != "" {
 			first, second = actual.Home, actual.Away
 		}
@@ -391,6 +391,7 @@ func (p *playoffSimulation) winner(first, second string, neutral bool, rng *rand
 	home, away := first, second
 	// Averaging both home assignments removes a systematic venue advantage
 	// from the designated-site final without fitting a separate neutral model.
+	// A final at a finalist's own stadium is not neutral; see Hosted.
 	if neutral && rng.Intn(2) == 0 {
 		home, away = away, home
 	}

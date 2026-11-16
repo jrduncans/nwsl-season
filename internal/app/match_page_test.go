@@ -158,6 +158,8 @@ func TestPlayoffFinalMatchPageIsNeutralAndMatchesTheBracket(t *testing.T) {
 
 	body := handoffResponse(t, store, "/seasons/2026/playoffs/matches/final")
 	requireText(t, body, ".match-meta", "Final", "Neutral venue")
+	requireAttr(t, body, ".match-venue input[checked]", "value", "neutral")
+	requireText(t, body, ".match-venue", "Neutral (actual)")
 	requireText(t, body, ".match-board", "Advance "+odds.HomeAdvanceText, "Advance "+odds.AwayAdvanceText)
 	requireText(t, body, ".match-board", "Extra time "+odds.DrawText)
 	requireText(t, body, ".match-factors", "League neutral rate")

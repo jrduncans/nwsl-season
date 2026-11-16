@@ -1,8 +1,10 @@
 {{define "match"}}{{template "head" .}}
 <div class="title-row"><div>{{template "seasonContext" .}}
   <h1 class="visually-hidden">{{.Match.HomeTeam.Name}} vs {{.Match.AwayTeam.Name}}</h1>
-  <p class="match-meta"><time data-local-time="{{.Match.KickoffUTC}}">{{.Match.Kickoff}}</time>{{with .RoundLabel}}<span>{{.}}</span>{{end}}{{if .Neutral}}<span>Neutral venue</span>{{end}}{{with .Rest}}<span>{{.}}</span>{{end}}</p>
+  <p class="match-meta"><time data-local-time="{{.Match.KickoffUTC}}">{{.Match.Kickoff}}</time>{{with .RoundLabel}}<span>{{.}}</span>{{end}}{{with .VenueNote}}<span>{{.}}</span>{{end}}{{with .Rest}}<span>{{.}}</span>{{end}}</p>
 </div></div>
+
+{{with .VenueControl}}<form method="get" class="match-venue" data-auto-submit><fieldset><legend>Venue</legend>{{range .Options}}<label><input type="radio" name="venue" value="{{.Value}}"{{if .Selected}} checked{{end}}><span>{{.Label}}</span></label>{{end}}</fieldset><noscript><button class="button" type="submit">Apply</button></noscript></form>{{end}}
 
 <section class="match-board" aria-label="Match">
   <div class="match-board-row">
