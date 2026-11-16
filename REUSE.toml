@@ -1,0 +1,21 @@
+# Licensing map in the REUSE format (https://reuse.software/spec/).
+# Code and documentation are MIT. Data from American Soccer Analysis, and data
+# calculated from it, is CC BY-SA 4.0, as ASA licenses its API data.
+version = 1
+
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 NWSL by the Numbers contributors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [
+  "internal/asa/testdata/**",
+  "internal/apptest/testdata/**",
+  "testdata/**",
+  "docs/model-evaluation-v1.json",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "American Soccer Analysis <https://www.americansocceranalysis.com/>; adapted by NWSL by the Numbers contributors"
+SPDX-License-Identifier = "CC-BY-SA-4.0"

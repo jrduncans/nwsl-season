@@ -14,3 +14,7 @@ shfmt = "3.14.1"
 gitleaks = "8.30.1"
 typos = "1.52.2"
 ruff = "0.17.4"
+# mise installs pipx: tools with uv.
+uv = "0.13.8"
+# reuse needs an encoding detector; charset-normalizer is the pure-Python one.
+"pipx:reuse" = { version = "6.3.0", extras = "charset-normalizer" }

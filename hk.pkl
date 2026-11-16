@@ -34,6 +34,12 @@ local linters = new Mapping {
     ["shellharden"] = Builtins.shellharden
     ["shfmt"] = Builtins.shfmt
     ["zizmor"] = Builtins.zizmor
+    // Every file needs license info from REUSE.toml (ASA data is CC BY-SA 4.0).
+    // The script lints a copy of the git index, so it never stats config.env.
+    ["reuse"] = new Step {
+        glob = List("**")
+        check = new CommandSpec { command = "scripts/reuse-lint --quiet"; effect = "read" }
+    }
     // Raw nwsl.* attribute constructors belong only in the generated package.
     ["telemetry_code"] = new Step {
         glob = List("cmd/**/*.go", "internal/**/*.go")

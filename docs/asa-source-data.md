@@ -5,6 +5,18 @@ data the app stores, and what uses each field. For how and when the data is
 fetched, see the [synchronization guide](sync-logic-guide.md). The bundled
 [ASA OpenAPI definition](asa_openapi.json) is the upstream contract.
 
+## License
+
+ASA licenses its API data under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The site
+footer credits ASA, links the license, and says that figures calculated from
+the data are shared under the same license; keep it on every page. Commit ASA
+data, or data calculated from it, only under a path that
+[`REUSE.toml`](../REUSE.toml) marks `CC-BY-SA-4.0`, and add new paths there.
+The `reuse` commit hook checks that every file has a license, but it can't
+tell ASA data from our own, so it won't catch ASA data under an MIT path.
+Any future export must carry the same credit and license.
+
 ## Scope
 
 ASA's NWSL season filters begin in 2016 and use these stages: `Regular Season`,
