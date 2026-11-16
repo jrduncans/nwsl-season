@@ -973,7 +973,9 @@ func testMatchPage(t *testing.T, f *fixture) {
 	forEachViewport(t, func(t *testing.T, vp viewport) {
 		page := newPageWith(t, pageOptions{Viewport: vp})
 		visit(t, page, f.URL(seasonPath("fixtures")))
-		row := page.Locator("li.fixture-linked:visible").First()
+		// A group with a kickoff today moves to the top of Results, so take
+		// the first row with a final score, not simply the first row.
+		row := page.Locator(`li.fixture-linked:visible:has(.fixture-match-link:text-matches("^\\d+–\\d+$"))`).First()
 		// The kickoff time sits under the link's overlay; Force clicks that
 		// spot rather than waiting for the time element itself to be hit.
 		if err := row.Locator("time").Click(playwright.LocatorClickOptions{Force: playwright.Bool(true)}); err != nil {
