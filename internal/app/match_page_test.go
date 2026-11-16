@@ -39,6 +39,11 @@ func TestUpcomingMatchPageExplainsTheResultsOutlook(t *testing.T) {
 	outlook := fixtureOutlooks(data)["future-1"]
 	requireText(t, body, ".match-board", "Match outlook", outlook.HomeWinText, outlook.DrawText, outlook.AwayWinText)
 	requireText(t, body, "main h1", "Alpha & Co", "Bravo FC")
+	// The match is already chosen, so the season and competition are labels, not controls.
+	if selectors := find(t, body, "[data-season-selector], [data-stage-selector]"); len(selectors) != 0 {
+		t.Errorf("got %d season/competition selectors on a match page", len(selectors))
+	}
+	requireText(t, body, ".season-context", "2026", "Regular Season")
 	if tables := find(t, body, ".match-factors"); len(tables) != 2 {
 		t.Fatalf("got %d factor tables", len(tables))
 	}
