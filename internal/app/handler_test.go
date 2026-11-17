@@ -683,7 +683,9 @@ func TestSeasonRendersStandingsAndFreshness(t *testing.T) {
 	}
 	forbidRaw(t, body, "Toughest remaining schedule")
 	forbidText(t, body, "main h1", "Remaining schedule difficulty")
-	requireText(t, body, ".site-footer", "Data last fetched on Jul 9, 2026 at 8:00 PM UTC.")
+	requireText(t, body, ".site-footer", "Data from American Soccer Analysis, licensed CC BY-SA 4.0.", "shared under the same license.", "Data last fetched on Jul 9, 2026 at 8:00 PM UTC.")
+	requireAttr(t, body, ".site-footer span a", "href", "https://www.americansocceranalysis.com/")
+	requireAttr(t, body, ".site-footer a[rel=license]", "href", "https://creativecommons.org/licenses/by-sa/4.0/")
 	requireAttr(t, body, ".site-footer time", "datetime", "2026-07-09T20:00:00Z")
 	requireAttr(t, body, ".site-footer time", "data-local-time", "2026-07-09T20:00:00Z")
 	requireText(t, body, "main .segmented-options span", "Goals", "xG", "Per match", "Totals")

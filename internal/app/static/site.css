@@ -16,6 +16,7 @@ a { color: var(--green); }
 .site-nav a:hover, .site-nav a:focus-visible { color: white; background: rgb(255 255 255 / 12%); }
 .site-nav a[aria-current="page"] { color: var(--ink); background: white; }
 .site-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 4rem; color: #c8c8cc; font-size: .875rem; }
+.site-footer span a { color: white; }
 .github-link { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .35rem; color: white; }
 .github-link:hover { color: white; background: rgb(255 255 255 / 12%); }
 .github-link:focus-visible { outline: 3px solid white; outline-offset: 2px; }

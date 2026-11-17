@@ -26,6 +26,10 @@ enabled (`ChromiumSandbox: true`).
 Page requests read only the local SQLite cache; only the scheduler and
 `cmd/sync` call ASA.
 
+ASA data is CC BY-SA 4.0. Commit ASA-derived fixtures only under paths that
+`REUSE.toml` marks `CC-BY-SA-4.0`; see
+[ASA source data "License"](docs/asa-source-data.md#license).
+
 Production compresses responses at the proxy, so weigh page-size trade-offs
 by compressed (gzip or zstd) size, not raw size. See
 [README "Runtime and deployment"](README.md#runtime-and-deployment).

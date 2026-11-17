@@ -542,7 +542,7 @@ with `hk install --mise`.
 
 | When | Runs |
 | --- | --- |
-| Commit (staged files; fixes are applied and staged) | Go: golangci-lint fmt and run, `go fix`, `go mod tidy`. Workflows: jactionlint, zizmor. Shell: shellcheck, shellharden, shfmt. Python: ruff and ruff format. Telemetry: `make telemetry-check-code`, and `make telemetry-check-generated` (fixed by `make telemetry-generate`). Any file: typos (settings in `_typos.toml`), gitleaks on staged changes, whitespace, final newlines, line endings, byte order marks, merge-conflict markers, case conflicts, broken symlinks, shebang/executable agreement, files over 500 KB. Commits to `main` are refused. |
+| Commit (staged files; fixes are applied and staged) | Go: golangci-lint fmt and run, `go fix`, `go mod tidy`. Workflows: jactionlint, zizmor. Shell: shellcheck, shellharden, shfmt. Python: ruff and ruff format. Telemetry: `make telemetry-check-code`, and `make telemetry-check-generated` (fixed by `make telemetry-generate`). Any file: REUSE licensing (`scripts/reuse-lint`, against `REUSE.toml`), typos (settings in `_typos.toml`), gitleaks on staged changes, whitespace, final newlines, line endings, byte order marks, merge-conflict markers, case conflicts, broken symlinks, shebang/executable agreement, files over 500 KB. Commits to `main` are refused. |
 | Push | `go test ./...` and `govulncheck ./...` |
 | CI | The `hk` workflow runs `make check`, which covers every commit check except the `main` guard; Test runs the tests, race and E2E; Telemetry Live Check runs `make telemetry-live-check` (needs Docker); Vulnerability check runs `make vuln` daily, on pushes to `main`, and on pull requests that change Go files or modules |
 
@@ -701,6 +701,17 @@ The cache database is stored at
 operations and recovery, and automatically prunes superseded history after a
 successful sync according to `NWSL_HISTORY_RETENTION`. Back up the SQLite data
 directory even though the current season data can be rebuilt from ASA.
+
+## License
+
+The code and documentation are under the [MIT License](LICENSE). Data from
+American Soccer Analysis is licensed
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Anything this
+project calculates from it and shares, on the website or in this repository,
+is under the same license. The site footer gives that credit on every page.
+[`REUSE.toml`](REUSE.toml) lists which committed files hold ASA data, and
+[`LICENSES/`](LICENSES) has both license texts. The commit hook runs
+`scripts/reuse-lint`, which fails when a committed file has no license.
 
 ## Documentation
 

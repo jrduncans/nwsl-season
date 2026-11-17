@@ -1,0 +1,15 @@
+#!/bin/sh
+# Checks REUSE licensing (REUSE.toml, LICENSES/) against the files in the git
+# index, which is what a commit would contain.
+#
+# `reuse lint` scans the working tree and fails on config.env, which may be a
+# 1Password-backed FIFO: git leaves FIFOs out of its ignored-file listing, so
+# reuse never learns to skip it. Linting a copy of the index holds only
+# tracked and staged files and never touches config.env.
+set -eu
+
+copy=$(mktemp -d)
+trap 'rm -rf "$copy"' EXIT
+
+git checkout-index --all --prefix="$copy/"
+reuse --root "$copy" lint "$@"
