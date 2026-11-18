@@ -2,19 +2,19 @@
 node = "26.13.1"
 go = "1.27.4"
 golangci-lint = "2.15.0"
-"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.10.0"
 "github:open-telemetry/weaver" = "0.28.0"
 # hk and the linters its steps run; keep hk in step with the package version in hk.pkl.
-hk = "2.12.0"
-jactionlint = "2.5.0"
+hk = "2.13.0"
+jactionlint = "2.6.0"
 zizmor = "1.32.0"
 pinact = "5.0.2"
 shellharden = "4.3.2"
 shfmt = "3.14.1"
 gitleaks = "8.30.1"
 typos = "1.52.2"
-ruff = "0.17.4"
+ruff = "0.17.5"
 # mise installs pipx: tools with uv.
-uv = "0.13.8"
+uv = "0.13.9"
 # reuse needs an encoding detector; charset-normalizer is the pure-Python one.
 "pipx:reuse" = { version = "6.3.0", extras = "charset-normalizer" }
