@@ -43,7 +43,7 @@ func TestSecurityHeadersApplyToEveryResponseKind(t *testing.T) {
 }
 
 func TestContentSecurityPolicyRejectsInlineScriptAndUnlistedOrigins(t *testing.T) {
-	for _, directive := range []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "img-src 'self' " + clubLogoOrigin, "frame-ancestors 'none'"} {
+	for _, directive := range []string{"default-src 'none'", "script-src 'self'", "style-src 'self'", "img-src 'self' " + clubLogoOrigin, "connect-src 'self'", "frame-ancestors 'none'"} {
 		if !strings.Contains(contentSecurityPolicy, directive) {
 			t.Errorf("policy %q lacks %q", contentSecurityPolicy, directive)
 		}
@@ -97,7 +97,9 @@ func TestTemplatesAndScriptsStayWithinContentSecurityPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	blockedScriptAPI := regexp.MustCompile(`\beval\(|new Function\(|\bfetch\(|XMLHttpRequest|EventSource|WebSocket|sendBeacon`)
+	// connect-src allows same-origin fetch, which explore.js uses for its
+	// payloads; other request APIs stay unused.
+	blockedScriptAPI := regexp.MustCompile(`\beval\(|new Function\(|XMLHttpRequest|EventSource|WebSocket|sendBeacon`)
 	for _, path := range []string{"static/explore.js", "static/explore-geometry.js", "static/standings.js"} {
 		content, err := fs.ReadFile(pageFiles, path)
 		if err != nil {

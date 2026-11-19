@@ -757,6 +757,9 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 		if _, err := page.Reload(); err != nil {
 			t.Fatal(err)
 		}
+		if err := settle(page); err != nil {
+			t.Fatal(err)
+		}
 		if err := expect.Locator(page.Locator("[data-h2h-points-tiles]")).ToBeVisible(); err != nil {
 			t.Fatal(err)
 		}

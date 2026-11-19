@@ -69,7 +69,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 		t.Errorf("table seasons = %s", got)
 	}
 	var data []exploreParityRecord
-	if err := json.Unmarshal([]byte(text(find(t, body, "#explore-parity-data")[0])), &data); err != nil {
+	if err := json.Unmarshal([]byte(explorePayload(t, NewHandler(store), "/explore", body, "explore-parity-data")), &data); err != nil {
 		t.Fatal(err)
 	}
 	if len(data) != 10 || data[0].Season != "2016" || !data[9].Active {

@@ -63,7 +63,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 		"not a cause",
 	)
 	forbidText(t, body, "[data-panel=home-advantage]", "Points include penalties")
-	data := text(find(t, body, "#explore-home-data")[0])
+	data := explorePayload(t, NewHandler(store), "/explore", body, "explore-home-data")
 	if strings.Contains(data, `"2022"`) || !strings.Contains(data, `"season":"2019"`) || !strings.Contains(data, `"xg":null`) {
 		t.Errorf("home advantage chart data = %s, want eligible seasons only with a null xG for 2019", data)
 	}

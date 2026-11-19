@@ -64,7 +64,7 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be summarized.")
 		return
 	}
-	a.renderExplore(w, r, summaries, inputs, basis)
+	a.renderExplore(w, r, summaries, inputs, basis, exploreDataRequest{})
 }
 
 // withoutQueryParameter removes one already-validated selection without
@@ -150,7 +150,7 @@ func (exploreScoringPage) Both(text string) basisPair {
 }
 
 // Pair orients a text on the page's basis and the same text on the other
-// basis (from OtherBasis) as a basisPair.
+// basis as a basisPair.
 func (p exploreScoringPage) Pair(current, other string) basisPair {
 	if p.NonPenalty {
 		return basisPair{All: other, NP: current}

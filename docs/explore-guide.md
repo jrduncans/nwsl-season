@@ -38,7 +38,7 @@ lists every view and Compare teams display in tab order with its label and view
 group, and holds each view's selection rules: points-only selection, points
 note, whether it carries both scoring bases (so switching basis needs no
 reload), and its forecast needs. The server validates views, builds the tabs
-and applies those rules from it, and emits it as the `explore-views` payload so
+and applies those rules from it, and sends it in the shared payload (`views`) so
 `explore.js` applies the same rules in place. Explore uses the current season's
 navigation with Explore marked active.
 
@@ -46,13 +46,51 @@ View and control selections live in the URL and restore through reload and Back/
 The server renders each view with GET forms, sortable header links and native
 disclosures, so everything works without JavaScript except Match by match's
 chart card, whose controls apply only through the script; the script switches views
-and selections in place from the same payload, without another data request.
-Every view's data rides in that page, so the payload is kept compact. Each
-regular-season match is stored once, in Head to head's match list
-(`explore-h2h-data`); team records list their matches as indexes into it, and
-`explore.js` expands them on the rendered basis into the records Go renders
-from (`linkExploreTeamMatches`). Templates embed payloads through `payload`,
-which rounds fractional numbers to six decimal places.
+and selections in place from its payloads, without another request per
+selection (see [Browser payloads](#browser-payloads)). The payloads carry every
+view's data, so they are kept compact. Each regular-season match is stored
+once, in Head to head's match list (`h2h`); team records list their matches as
+indexes into it, and `explore.js` expands them on the rendered basis into the
+records Go renders from (`linkExploreTeamMatches`). Payloads are encoded
+through `payload`, which rounds fractional numbers to six decimal places.
+### Browser payloads
+
+The page links its chart data instead of embedding it, because the data is
+the same for every query string on a basis and makes up most of the bytes.
+`renderExplore` builds three parts (`internal/app/explore_data.go`), each
+served from `/explore/data/{part}.json`:
+
+- `shared.json`: payloads that carry both bases or none: Head to head's match
+  list (`h2h`), Team-seasons (`teamSeasons`), thresholds, parity and the view
+  registry.
+- `all.json` and `non-penalty.json`: one basis's Scoring trend and Goal
+  distribution records (`chartData`), team records (`teamSeasons`), Season by
+  season's league context and Home advantage, and the season an unspecified
+  season takes on that basis.
+
+Each link carries `v`, a hash of the part's content, so the version changes
+exactly when the data does, whatever the footer's fetch time says. The
+endpoint builds the part from the default selection on the requested basis,
+the same bytes any page on that basis links, so a request for the current
+version is served `Cache-Control: public, max-age=31536000, immutable`. Any
+other version gets the current part with `no-cache` and an `ETag`, like
+`/static/`. A SkipsForecast view (thresholds) builds no forecast benchmarks, so
+its basis links add `benchmarks=off` and get their own version.
+`TestExploreDataMatchesPage` checks that every selection on a basis links the
+same versions and that the endpoint serves them.
+
+The root element carries the links (`data-shared-url`, `data-basis-url`, and
+`data-other-basis-url` when the selection has the other basis), and the head
+preloads the shared and basis parts so they download while the page parses.
+`explore.js` awaits those two before it draws anything, then fetches the other
+basis in the background; `data-other-basis` reports that fetch as `loading`,
+`ready` or `failed`, and browser tests wait for it. Until the first two arrive the page marks itself
+`data-loading` and works as it does without script: a changed control submits
+its form for a server render. A switch to the other basis before it arrives
+takes a server render too. If a payload fails to load, the page says so and
+keeps working without script. Crawlers that don't run script never request
+the payloads.
+
 Validated view-specific parameters return a 400 "Invalid Explore selection"
 page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
 `internal/app/static/vendor`.
@@ -235,8 +273,9 @@ JavaScript the checkbox switches basis in place in every view:
 
 - The payloads that change with the basis (Scoring trend and Goal distribution
   records, team records, Season by season's league context and Home
-  advantage) are also embedded on the other basis (`explore-other-basis`).
-  `explore.js` swaps them in and redraws.
+  advantage) are also linked on the other basis (`data-other-basis-url`).
+  `explore.js` fetches them after the page is ready, swaps them in and
+  redraws.
 - Server-rendered text that names the basis is rendered on both bases: labels
   through the `basisText` template (`Both`), data-dependent notes through
   `basisNote` (`Pair` with the other basis's view), and sentences such as

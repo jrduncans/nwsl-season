@@ -51,16 +51,16 @@ func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 				t.Fatal(err)
 			}
 			var matches bool
-			evalJSON(t, page, `() => {
+			evalJSON(t, page, `(teamSeasons) => {
    const p = new URLSearchParams(location.search), m = ['for','against','difference','points'].indexOf(p.get('team-seasons-measure') || 'points'), by = ['actual','expected','gap'].indexOf(p.get('team-seasons-rank-by') || 'actual');
-   const records = JSON.parse(document.querySelector('#explore-team-seasons-data').textContent).all;
+   const records = teamSeasons.all;
    return [...document.querySelectorAll('[data-team-seasons-row]')].every(bar => {
     const r = records.find(r => r.id === bar.dataset.teamId && r.season === bar.dataset.season);
     const row = [...document.querySelectorAll('[data-team-seasons-rows] tr')].find(tr => tr.dataset.teamId === r.id && tr.dataset.season === r.season);
     const logo = bar.querySelector('img');
     return row.children[0].textContent === String(r.values[m].ranks[by]) && Number(row.children[4+by].textContent) === Number(bar.querySelector('strong').textContent) && logo.getAttribute('alt') === '' && logo.getAttribute('src') === r.logo && row.querySelector('img').getAttribute('src') === r.logo;
    });
-  }`, nil, &matches)
+  }`, sharedPayload(t, page)["teamSeasons"], &matches)
 			if !matches {
 				t.Fatalf("chart/table/logo disagree %s %s", measure, by)
 			}
@@ -269,16 +269,16 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			for _, measure := range []string{"points", "for", "against", "difference"} {
 				chooseOption(t, page, "[data-segmented=team-seasons-measure]", measure)
 				var correct bool
-				evalJSON(t, page, `() => {
+				evalJSON(t, page, `(teamSeasons) => {
      const chart = Chart.getChart(document.querySelector('[data-chart="team-seasons-scatter"]'));
      const m = ['for','against','difference','points'].indexOf(new URLSearchParams(location.search).get('team-seasons-measure') || 'points');
-     const rows = JSON.parse(document.querySelector('#explore-team-seasons-data').textContent).all.filter(row => row.values[m].eligible && row.values[m].expected !== null);
+     const rows = teamSeasons.all.filter(row => row.values[m].eligible && row.values[m].expected !== null);
      return chart.data.datasets[0].data.length === rows.length && chart.scales.x.min === chart.scales.y.min && chart.scales.x.max === chart.scales.y.max &&
        (m !== 3 || chart.scales.x.min === 0 && chart.scales.x.max === 3) &&
        chart.options.scales.x.title.text.includes('(expected)') && chart.options.scales.y.title.text.includes('(actual)') &&
        chart.data.datasets[0].data.every((v,i) => v.x === chart.teamRows[i].values[m].expected && v.y === chart.teamRows[i].values[m].actual) &&
        chart.teamRows.some((row,i) => row.active && chart.getDatasetMeta(0).data[i].options.backgroundColor !== chart.getDatasetMeta(0).data[i].options.borderColor);
-    }`, nil, &correct)
+    }`, sharedPayload(t, page)["teamSeasons"], &correct)
 				if !correct {
 					t.Fatalf("scatter disagrees with payload, axes or hollow marks on %s", measure)
 				}
@@ -454,6 +454,9 @@ func TestExploreTeamSeasonsScatterReloadAndEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := page.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if err := settle(page); err != nil {
 		t.Fatal(err)
 	}
 	if err := expect.Locator(page.Locator("[data-team-seasons-identification]")).ToBeHidden(); err != nil {

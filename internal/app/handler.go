@@ -98,7 +98,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "canonicalURL": func(page any) string { return canonicalURL(options.PublicURL, page) }}).ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "canonicalURL": func(page any) string { return canonicalURL(options.PublicURL, page) }, "preloads": preloads}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -114,6 +114,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /history", application.legacyHistory)
 	mux.HandleFunc("GET /history/scoring", application.legacyHistory)
 	mux.HandleFunc("GET /explore", application.explore)
+	mux.HandleFunc("GET "+exploreDataPath+"{part}", application.exploreData)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
 	mux.HandleFunc("GET /seasons/{season}", application.season)
@@ -1718,7 +1719,7 @@ func stripBasePath(requestPath string) (string, bool) {
 		}
 		return "/explore", true
 	}
-	if requestPath == "/" || requestPath == "/seasons" || strings.HasPrefix(requestPath, "/seasons/") || requestPath == "/history" || strings.HasPrefix(requestPath, "/history/") || strings.HasPrefix(requestPath, "/static/") || requestPath == "/healthz" || requestPath == "/cache/status" {
+	if requestPath == "/" || requestPath == "/seasons" || strings.HasPrefix(requestPath, "/seasons/") || requestPath == "/history" || strings.HasPrefix(requestPath, "/history/") || strings.HasPrefix(requestPath, "/static/") || strings.HasPrefix(requestPath, exploreDataPath) || requestPath == "/healthz" || requestPath == "/cache/status" {
 		return requestPath, true
 	}
 	if strings.HasSuffix(requestPath, "/seasons") {
@@ -1727,7 +1728,7 @@ func stripBasePath(requestPath string) (string, bool) {
 	if strings.HasSuffix(requestPath, "/history") {
 		return "/history", true
 	}
-	for _, suffix := range []string{"/seasons/", "/history/", "/static/"} {
+	for _, suffix := range []string{"/seasons/", "/history/", "/static/", exploreDataPath} {
 		if index := strings.Index(requestPath, suffix); index > 0 {
 			return requestPath[index:], true
 		}

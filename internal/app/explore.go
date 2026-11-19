@@ -35,12 +35,14 @@ type explorePage struct {
 	// engines index one Explore page instead of every combination of view,
 	// team, season and display. It is empty on bare /explore.
 	canonical canonicalLink
-	// Views is the view registry, for the tabs and for explore.js.
+	// Views is the view registry, for the tabs.
 	Views []exploreViewGroup
-	// OtherBasis carries the basis-specific payloads on the basis the page
-	// was not rendered on, so explore.js switches penalties in place. It is
-	// nil when the selection is invalid on that basis.
-	OtherBasis *exploreBasisData
+	// Data links the browser payloads; see explore_data.go.
+	Data exploreDataLinks
+	// hasOtherBasis reports whether the page holds the other basis too, so
+	// explore.js switches penalties in place. It is false when the selection
+	// is invalid on that basis.
+	hasOtherBasis bool
 	// Other holds the server-rendered text and league rows on that basis,
 	// rendered beside the page's own and shown by CSS after a switch.
 	Other exploreOtherBasisView
@@ -130,14 +132,14 @@ func otherBasisOf(basis history.ScoringBasis) history.ScoringBasis {
 
 // exploreBasisData is every payload that changes with the scoring basis.
 type exploreBasisData struct {
-	// DefaultTeamSeason and DefaultHistoryTeam are the selections an
-	// unspecified season or team takes on this basis.
-	DefaultTeamSeason  string                       `json:"defaultTeamSeason"`
-	DefaultHistoryTeam string                       `json:"defaultHistoryTeam"`
-	ChartData          []exploreChartRecord         `json:"chartData"`
-	TeamSeasons        []exploreTeamSeason          `json:"teamSeasons"`
-	HistoryContext     [4]exploreMetricContext      `json:"historyContext"`
-	HomeAdvantage      []exploreHomeAdvantageRecord `json:"homeAdvantage"`
+	// DefaultTeamSeason is the season an unspecified season takes on this
+	// basis when the query names none. The default team is the same on both
+	// bases.
+	DefaultTeamSeason string                       `json:"defaultTeamSeason"`
+	ChartData         []exploreChartRecord         `json:"chartData"`
+	TeamSeasons       []exploreTeamSeason          `json:"teamSeasons"`
+	HistoryContext    [4]exploreMetricContext      `json:"historyContext"`
+	HomeAdvantage     []exploreHomeAdvantageRecord `json:"homeAdvantage"`
 }
 
 // explorePenaltiesSwitch is the Exclude penalties switch. Form names the
@@ -178,7 +180,9 @@ type exploreRecord struct {
 	Goals, XG, Gap                                  *float64
 }
 
-func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason, basis history.ScoringBasis) {
+// renderExplore renders the Explore page, or with data.Part one of its
+// payloads.
+func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summaries []history.SeasonScoring, archive []cache.HistoricalSeason, basis history.ScoringBasis, data exploreDataRequest) {
 	view := exploreRequestedView(r.URL.Query())
 	descriptor, ok := exploreViewFor(view)
 	if !ok {
@@ -190,6 +194,10 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
+	skipsForecast := descriptor.SkipsForecast
+	if data.Part != "" {
+		skipsForecast = data.SkipForecast
+	}
 	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreGroupOf(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query()), Views: exploreViewGroups, query: r.URL.Query()}
 	// The Explore workspace keeps its own selection in the query, so the
 	// penalties forms change only the penalties parameter.
@@ -200,11 +208,6 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		return
 	}
 	page.exploreHomeAdvantageView, err = exploreHomeAdvantage(r.URL.Query(), history.HomeAdvantage(summaries), basis)
-	if err != nil {
-		a.renderExploreBadRequest(w, r, err)
-		return
-	}
-	page.exploreParityView, err = exploreParity(r.URL.Query(), history.Parity(summaries), teams.TeamSeasons)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return
@@ -256,6 +259,13 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
+	// Parity is points-only, so it keeps all-shots eligibility on either
+	// basis, like Team-seasons and thresholds.
+	page.exploreParityView, err = exploreParity(r.URL.Query(), history.Parity(allSummaries), officialTeams.TeamSeasons)
+	if err != nil {
+		a.renderExploreBadRequest(w, r, err)
+		return
+	}
 	officialProfile, err := exploreTeamHistory(officialQuery, officialTeams.TeamSeasons)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
@@ -303,7 +313,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	// Validate selections before spending forecast capacity. Populate every
 	// eligible active season once so browser selections retain one snapshot.
 	// Historical thresholds never depend on forecast availability or capacity.
-	if !descriptor.SkipsForecast {
+	if !skipsForecast {
 		a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
 	}
 	if err := linkExploreTeamMatches(teams.TeamSeasons, &page.H2HData); err != nil {
@@ -317,19 +327,10 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		otherTeams, err = exploreTeams(withPenalties(r.URL.Query(), otherBasis), otherSummaries, archive)
 	}
 	if err == nil {
-		if !descriptor.SkipsForecast {
+		if !skipsForecast {
 			a.populateExploreForecastBenchmarks(r.Context(), &otherTeams, archive)
 		}
 		err = linkExploreTeamMatches(otherTeams.TeamSeasons, &page.H2HData)
-	}
-	var otherHistory exploreTeamHistoryView
-	if err == nil {
-		// Like the page's own attributes, the defaults name any selected team.
-		historyQuery := url.Values{}
-		if view != "head-to-head" && r.URL.Query().Has("team") {
-			historyQuery.Set("team", r.URL.Query().Get("team"))
-		}
-		otherHistory, err = exploreTeamHistoryFor(withPenalties(historyQuery, otherBasis), otherTeams.TeamSeasons, officialTeams.TeamSeasons)
 	}
 	var otherHome exploreHomeAdvantageView
 	var otherDistribution exploreDistributionView
@@ -347,13 +348,34 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 			HomeAdvantage: otherHome,
 		}
 		page.Other.HomeAdvantage.HomeAdvantageRows = tagBasis(otherHome.HomeAdvantageRows, otherBasis)
-		page.OtherBasis = &exploreBasisData{
-			DefaultTeamSeason: otherTeams.TeamSeason, DefaultHistoryTeam: otherHistory.HistoryTeam.ID,
-			ChartData:      exploreChartRecords(otherSummaries),
-			TeamSeasons:    otherTeams.TeamSeasons,
-			HistoryContext: exploreHistoryContextData(otherTeams.TeamSeasons, otherBasis),
-			HomeAdvantage:  exploreHomeAdvantageRecords(history.HomeAdvantage(otherSummaries)),
+		page.hasOtherBasis = true
+	}
+	// The payloads hold no query-dependent selection, so every page on a
+	// basis links the same ones.
+	values := map[string]any{
+		"shared":        exploreSharedData{H2H: page.H2HData, TeamSeasons: page.TeamSeasonsData, Thresholds: page.ThresholdData, Parity: page.ParityData, Views: exploreViewGroups},
+		basisKey(basis): exploreBasisPayload(basis, summaries, teams),
+	}
+	if page.hasOtherBasis {
+		values[basisKey(otherBasis)] = exploreBasisPayload(otherBasis, otherSummaries, otherTeams)
+	}
+	parts := make(map[string]exploreDataPart, len(values))
+	for key, value := range values {
+		if parts[key], err = encodeExploreData(value); err != nil {
+			a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error())
+			return
 		}
+	}
+	if data.Part != "" {
+		writeExploreData(w, r, data, parts[data.Part])
+		return
+	}
+	page.Data = exploreDataLinks{
+		Shared: exploreDataURL(r.URL.Path, "shared", false, parts["shared"].version),
+		Basis:  exploreDataURL(r.URL.Path, basisKey(basis), skipsForecast, parts[basisKey(basis)].version),
+	}
+	if page.hasOtherBasis {
+		page.Data.Other = exploreDataURL(r.URL.Path, basisKey(otherBasis), skipsForecast, parts[basisKey(otherBasis)].version)
 	}
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
@@ -451,7 +473,7 @@ func tagBasis[Row basisRow](rows []Row, basis history.ScoringBasis) []Row {
 // on the other basis, which is empty when the page has no other basis.
 func (p explorePage) otherPair(text func(basis history.ScoringBasis, other bool) string) basisPair {
 	other := ""
-	if p.OtherBasis != nil {
+	if p.hasOtherBasis {
 		other = text(otherBasisOf(p.Basis), true)
 	}
 	return p.Pair(text(p.Basis, false), other)

@@ -115,8 +115,7 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 		t.Fatalf("status=%d reads=%d/%d", response.Code, store.archiveCalls, store.seasonCalls)
 	}
-	_, payload, _ := strings.Cut(body, `<script type="application/json" id="explore-context-data">`)
-	payload, _, _ = strings.Cut(payload, "</script>")
+	payload := explorePayload(t, handler, "/nwsl-season/explore", body, "explore-context-data")
 	var metrics [4]exploreMetricContext
 	if err := json.Unmarshal([]byte(payload), &metrics); err != nil {
 		t.Fatal(err)

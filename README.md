@@ -697,9 +697,9 @@ pages also name `/explore` as canonical and mark their query-only links
 The server sets a strict Content Security Policy and related browser hardening
 headers on every response (see
 [`internal/app/security_headers.go`](internal/app/security_headers.go)). Pages
-may load only same-origin scripts and stylesheets, and images only from the
-site and ASA's club-logo host. Adding a new resource origin requires updating
-that policy. The proxy should pass these headers through unchanged. It owns
+may load only same-origin scripts and stylesheets, images only from the site
+and ASA's club-logo host, and fetch only same-origin data (Explore's
+payloads). Adding a new resource origin requires updating that policy. The proxy should pass these headers through unchanged. It owns
 `Strict-Transport-Security`, because HTTPS is terminated there.
 
 The cache database is stored at
