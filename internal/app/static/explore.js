@@ -2211,7 +2211,7 @@
         target.set('trend-sort', column.key); target.delete('trend-order');
         if (nextDesc) target.set('trend-order', 'desc');
         heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
-        const link = archiveElement('a', column.label); link.href = `?${target}`; link.dataset.trendSort = column.key;
+        const link = archiveElement('a', column.label); link.href = `?${target}`; link.rel = 'nofollow'; link.dataset.trendSort = column.key;
         link.setAttribute('aria-label', `Sort by ${column.label}`); heading.replaceChildren(link);
       }
       return heading;

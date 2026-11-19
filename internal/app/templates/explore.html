@@ -3,11 +3,11 @@
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
-{{range .Views}}<a href="?view={{(index .Views 0).Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" data-group-choice="{{.Key}}"{{if eq $.ViewGroup .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+{{range .Views}}<a href="?view={{(index .Views 0).Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" rel="nofollow" data-group-choice="{{.Key}}"{{if eq $.ViewGroup .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}</nav>
 {{range .Views}}<nav class="explore-subviews" data-group-views="{{.Key}}" aria-label="{{.Label}} views"{{if ne $.ViewGroup .Key}} hidden{{end}}>
-{{range .Views}}{{$view := .Key}}{{range .Displays}}<a href="{{index $.TeamDisplayURLs .Key}}" data-team-display="{{.Key}}"{{if and (eq $.View $view) (eq $.TeamDisplay .Key)}} aria-current="page"{{end}}>{{.Label}}</a>
-{{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+{{range .Views}}{{$view := .Key}}{{range .Displays}}<a href="{{index $.TeamDisplayURLs .Key}}" rel="nofollow" data-team-display="{{.Key}}"{{if and (eq $.View $view) (eq $.TeamDisplay .Key)}} aria-current="page"{{end}}>{{.Label}}</a>
+{{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" rel="nofollow" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}{{end}}</nav>
 {{end}}<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
 <div class="explore-heading"><h2 id="explore-trend-title">{{template "basisText" ($.Both "Goals and chances per match")}}</h2><form method="get" id="trend-controls" class="explore-team-controls">{{template "penaltiesFormFields" $}}<noscript><button class="button" type="submit">Apply</button></noscript></form></div>
@@ -63,7 +63,7 @@
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="{{if $.NonPenalty}}Non-penalty goal{{else}}Goal{{end}} distribution values" data-aria-all="Goal distribution values" data-aria-np="Non-penalty goal distribution values"><table class="explore-table explore-distribution-table">
 <caption><span>Count (share of matches).</span></caption>
-<thead><tr>{{range .DistributionColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-distribution-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a></th>{{end}}</tr></thead>
+<thead><tr>{{range .DistributionColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" rel="nofollow" data-distribution-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a></th>{{end}}</tr></thead>
 <tbody data-distribution-rows>{{range .DistributionRows}}{{template "exploreDistributionRow" .}}{{end}}{{range $.Other.DistributionRows}}{{template "exploreDistributionRow" .}}{{end}}</tbody>
 </table></div>
 </details>
@@ -101,7 +101,7 @@
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Home advantage values"><table class="explore-table explore-home-table">
 <caption><span>Home minus away, per match. Home W–D–L is each result's share of played matches.</span></caption>
-<thead><tr>{{range .HomeAdvantageColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-home-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a></th>{{end}}</tr></thead>
+<thead><tr>{{range .HomeAdvantageColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" rel="nofollow" data-home-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a></th>{{end}}</tr></thead>
 <tbody data-home-rows>{{range .HomeAdvantageRows}}{{template "exploreHomeRow" .}}{{end}}{{range $.Other.HomeAdvantage.HomeAdvantageRows}}{{template "exploreHomeRow" .}}{{end}}</tbody>
 </table></div>
 </details>
@@ -150,8 +150,8 @@
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Parity values"><table class="explore-table explore-parity-table">
 <caption><span>Points per game (PPG). Spreads are standard deviations across every team; the chance level is the spread from random results alone. Select a season to show its teams.</span></caption>
-<thead><tr>{{range .ParityColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-parity-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
-<tbody data-parity-rows>{{range .ParityRows}}<tr><th scope="row" data-value="{{.Season}}"><a href="{{.SeasonURL}}" data-parity-season-link="{{.Season}}"{{if .Selected}} aria-current="true"{{end}}>{{.Season}}</a>{{if .Active}} (in progress){{end}}</th><td data-value="{{len .Teams}}">{{len .Teams}}</td><td data-value="{{.Matches}}">{{printf "%.1f" .Matches}}</td><td data-value="{{.Spread}}">{{$.ParityValue .Spread}}</td><td data-value="{{.Chance}}">{{$.ParityValue .Chance}}</td><td data-value="{{if .XSpread}}{{.XSpread}}{{end}}">{{$.ParityValue .XSpread}}</td><td data-value="{{.Gap}}">{{$.ParityValue .Gap}}</td><td data-value="{{.IQR}}">{{$.ParityValue .IQR}}</td></tr>{{end}}</tbody>
+<thead><tr>{{range .ParityColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" rel="nofollow" data-parity-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
+<tbody data-parity-rows>{{range .ParityRows}}<tr><th scope="row" data-value="{{.Season}}"><a href="{{.SeasonURL}}" rel="nofollow" data-parity-season-link="{{.Season}}"{{if .Selected}} aria-current="true"{{end}}>{{.Season}}</a>{{if .Active}} (in progress){{end}}</th><td data-value="{{len .Teams}}">{{len .Teams}}</td><td data-value="{{.Matches}}">{{printf "%.1f" .Matches}}</td><td data-value="{{.Spread}}">{{$.ParityValue .Spread}}</td><td data-value="{{.Chance}}">{{$.ParityValue .Chance}}</td><td data-value="{{if .XSpread}}{{.XSpread}}{{end}}">{{$.ParityValue .XSpread}}</td><td data-value="{{.Gap}}">{{$.ParityValue .Gap}}</td><td data-value="{{.IQR}}">{{$.ParityValue .IQR}}</td></tr>{{end}}</tbody>
 </table></div>
 </details>
 {{else}}<p>No seasons currently have enough complete results to compare.</p>{{end}}
@@ -213,7 +213,7 @@
 <div class="explore-scatter-selection-teams" data-team-scatter-selection-teams></div>
 </section>
 <p class="note" data-team-scatter-hint hidden>Click a point to keep its details. Click a hollow circle to move the guides.</p>
-<p class="note" data-team-scatter-table-link><a href="{{index .TeamDisplayURLs "table"}}" data-team-display="table">See every team's values in the table</a>.</p>
+<p class="note" data-team-scatter-table-link><a href="{{index .TeamDisplayURLs "table"}}" rel="nofollow" data-team-display="table">See every team's values in the table</a>.</p>
 </div>
 <div data-team-quadrant-plot hidden>
 <p class="note" id="explore-team-quadrant-note">Up means more scored; right means fewer allowed. Dashed lines divide the four quadrants at the average.</p>
@@ -223,7 +223,7 @@
 <div class="explore-chart-wrap explore-team-scatter-wrap explore-team-quadrant-wrap" data-team-quadrant-chart-wrap><div class="explore-team-scatter-chart-area"><div class="explore-legend explore-in-chart-legend explore-team-quadrant-legend" id="explore-team-quadrant-legend" data-team-quadrant-legend><span class="explore-actual-key" data-quadrant-goals-key>● {{template "basisText" ($.Both "Goals")}}</span><span class="explore-expected-key" data-quadrant-xg-key>◆ {{template "basisText" ($.Both "xG")}}</span><span data-quadrant-connection-key><i class="explore-quadrant-line-key" aria-hidden="true"></i>{{template "basisText" ($.Both "Goals ↔ xG pairs")}}</span></div><canvas data-chart="team-quadrant" tabindex="0" role="img" aria-label="Team scored versus allowed" aria-describedby="explore-chart-help explore-team-quadrant-note explore-team-quadrant-missing explore-team-quadrant-legend"></canvas><div class="explore-scatter-logo-layer" data-team-scatter-logo-layer hidden aria-hidden="true"></div></div></div>
 <div class="explore-scatter-selection" data-team-quadrant-selection hidden aria-live="polite" aria-atomic="true"><div class="explore-scatter-selection-heading"><h3>Selected teams</h3><button type="button" class="button" data-team-quadrant-clear>Clear selection</button></div><div class="explore-scatter-selection-teams" data-team-quadrant-selection-teams></div></div>
 <p class="note" data-team-quadrant-hint>Hover or tap a point to inspect it. Click to keep its details. Arrow keys inspect every point; Escape clears the selection.</p>
-<p class="note"><a href="{{index .TeamDisplayURLs "table"}}" data-team-display="table">See every team's values in the table</a>.</p>
+<p class="note"><a href="{{index .TeamDisplayURLs "table"}}" rel="nofollow" data-team-display="table">See every team's values in the table</a>.</p>
 </div>
 <div data-team-table>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
@@ -381,7 +381,7 @@
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Season trend match values"><table class="explore-table explore-season-trend-table">
 <caption><span data-trend-table-caption>{{.TrendCaption}}</span></caption>
-<thead><tr data-trend-headings>{{range .TrendTableColumns}}<th scope="col"{{if .Key}} aria-sort="{{.Sort}}"{{end}}>{{if .Key}}<a href="{{.URL}}" data-trend-sort="{{.Key}}" aria-label="Sort by {{.Label}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</th>{{end}}</tr></thead>
+<thead><tr data-trend-headings>{{range .TrendTableColumns}}<th scope="col"{{if .Key}} aria-sort="{{.Sort}}"{{end}}>{{if .Key}}<a href="{{.URL}}" rel="nofollow" data-trend-sort="{{.Key}}" aria-label="Sort by {{.Label}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</th>{{end}}</tr></thead>
 <tbody data-trend-rows>{{range .TrendRows}}<tr>{{range $index, $value := .DisplayValues}}{{if eq $index 0}}<th scope="row">{{$value}}</th>{{else}}<td>{{$value}}</td>{{end}}{{end}}</tr>{{end}}</tbody>
 </table></div>
 </details>
@@ -405,8 +405,8 @@
 <script src="{{.GeometryPath}}" defer></script>
 <script src="{{.MarginsPath}}" defer></script>
 {{template "foot" .}}{{end}}
-{{define "exploreTeamColumn"}}<a href="{{.URL}}" data-team-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a>{{end}}
-{{define "exploreHistoryColumn"}}<a href="{{.URL}}" data-history-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a>{{end}}
+{{define "exploreTeamColumn"}}<a href="{{.URL}}" rel="nofollow" data-team-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a>{{end}}
+{{define "exploreHistoryColumn"}}<a href="{{.URL}}" rel="nofollow" data-history-sort="{{.Key}}" {{template "columnAria" .}}>{{template "columnLabel" .}}</a>{{end}}
 {{/* A sortable column's label and accessible name, on both bases when they name the basis. */}}
 {{define "columnAria"}}aria-label="Sort by {{.Description}}"{{if .Descriptions.NP}} data-aria-all="Sort by {{.Descriptions.All}}" data-aria-np="Sort by {{.Descriptions.NP}}"{{end}}{{end}}
 {{define "columnLabel"}}{{if .Labels.NP}}{{template "basisText" .Labels}}{{else}}{{.Label}}{{end}}{{end}}

@@ -55,12 +55,26 @@ func TestRobotsTxtDisallowsExploreQueryStrings(t *testing.T) {
 		t.Fatalf("Content-Type = %q, want text/plain", got)
 	}
 	body := response.Body.String()
-	if body != "User-agent: *\nDisallow: /explore?\n" {
-		t.Fatalf("body = %q", body)
-	}
 	// A bare "Disallow: /explore" would also hide the Explore page itself.
 	if strings.Contains(body, "Disallow: /explore\n") {
 		t.Fatalf("robots.txt must keep /explore itself crawlable: %q", body)
+	}
+	// Cloudflare prepends its own "User-agent: *" group with "Allow: /", and
+	// some crawlers read only the most specific group that names them, so each
+	// crawler that followed Explore's query strings needs its own group.
+	groups := map[string][]string{}
+	for group := range strings.SplitSeq(strings.TrimSpace(body), "\n\n") {
+		agent, rules, _ := strings.Cut(group, "\n")
+		name, ok := strings.CutPrefix(agent, "User-agent: ")
+		if !ok {
+			t.Fatalf("group does not start with a user agent: %q", group)
+		}
+		groups[name] = strings.Split(rules, "\n")
+	}
+	for _, agent := range []string{"*", "Amzn-SearchBot", "KeenableBot", "meta-webindexer"} {
+		if rules := groups[agent]; !slices.Equal(rules, []string{"Disallow: /explore?"}) {
+			t.Errorf("group %q rules = %q, want only Disallow: /explore?", agent, rules)
+		}
 	}
 }
 

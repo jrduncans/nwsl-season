@@ -98,7 +98,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }}).ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "canonicalURL": func(page any) string { return canonicalURL(options.PublicURL, page) }}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -1791,9 +1791,23 @@ func health(w http.ResponseWriter, _ *http.Request) {
 // combination of view, team, season and display is its own URL, so a crawler
 // that follows them requests tens of thousands of near-identical pages.
 // /explore itself stays crawlable. In production Cloudflare prepends its
-// managed rules to this file; a crawler combines both "User-agent: *" groups,
-// and the longer Disallow match wins over Cloudflare's "Allow: /".
-const robotsBody = "User-agent: *\nDisallow: /explore?\n"
+// managed rules to this file, including a "User-agent: *" group with
+// "Allow: /". A crawler that combines both "*" groups lets the longer
+// Disallow match win, but some read only the most specific group that names
+// them, so the crawlers that followed Explore's query strings in November
+// 2026 get groups of their own.
+const robotsBody = `User-agent: *
+Disallow: /explore?
+
+User-agent: Amzn-SearchBot
+Disallow: /explore?
+
+User-agent: KeenableBot
+Disallow: /explore?
+
+User-agent: meta-webindexer
+Disallow: /explore?
+`
 
 func robotsTxt(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

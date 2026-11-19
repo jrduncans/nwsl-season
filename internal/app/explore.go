@@ -31,6 +31,10 @@ type explorePage struct {
 	// load before explore.js (the page's ScriptPath).
 	GeometryPath string
 	MarginsPath  string
+	// canonical points query-string variants at bare /explore, so search
+	// engines index one Explore page instead of every combination of view,
+	// team, season and display. It is empty on bare /explore.
+	canonical canonicalLink
 	// Views is the view registry, for the tabs and for explore.js.
 	Views []exploreViewGroup
 	// OtherBasis carries the basis-specific payloads on the basis the page
@@ -382,6 +386,9 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.DistributionRows = tagBasis(page.DistributionRows, basis)
 	page.HomeAdvantageRows = tagBasis(page.HomeAdvantageRows, basis)
 	page.ChartData = exploreChartRecords(summaries)
+	if r.URL.RawQuery != "" {
+		page.canonical = canonicalLink{Path: "/explore", Relative: relativeURL(r.URL.Path, "/explore")}
+	}
 	a.render(w, "explore", page)
 }
 
@@ -485,3 +492,5 @@ func (p explorePage) HomeNotes() []basisPair {
 		p.otherPair(func(_ history.ScoringBasis, other bool) string { return view(other).HomeAdvantageActiveStatus }),
 	}
 }
+
+func (p explorePage) canonicalLink() canonicalLink { return p.canonical }

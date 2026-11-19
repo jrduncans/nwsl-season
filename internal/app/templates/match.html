@@ -48,7 +48,7 @@
   <p class="match-model-foot">{{.ModelName}}. Team factors are pulled toward 1.00 early in the season.{{if .Playoff}} No schedule load in the playoffs.{{end}}{{if .Match.Completed}} Uses only matches before kickoff.{{end}}{{if .HasForecast}} <a href="{{.ForecastPath}}">Forecast lab</a>{{end}}</p>
 </section>{{end}}
 
-<p class="match-links"><a href="{{.HeadToHeadPath}}">Head to head history</a></p>
+<p class="match-links"><a href="{{.HeadToHeadPath}}" rel="nofollow">Head to head history</a></p>
 {{template "foot" .}}{{end}}
 
 {{define "matchBoardTeam"}}<div class="match-board-team">{{if .LogoURL}}<img class="match-board-logo" src="{{.LogoURL}}" alt="" aria-hidden="true">{{end}}<span class="match-board-name">{{if .Seed}}<span class="bracket-seed">{{.Seed}}</span> {{end}}{{.Name}}</span>{{with .AdvanceText}}<span class="match-board-advance">Advance <strong>{{.}}</strong></span>{{end}}</div>{{end}}
