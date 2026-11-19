@@ -82,7 +82,7 @@ func explorePage(t *testing.T, base string, vp viewport, path string) playwright
 // reaching Go as unusable numbers.
 func evalJSON(t *testing.T, page playwright.Page, fn string, arg any, out any) {
 	t.Helper()
-	result, err := page.Evaluate(`(arg) => JSON.stringify((`+fn+`)(arg))`, arg)
+	result, err := page.Evaluate(`async (arg) => JSON.stringify(await (`+fn+`)(arg))`, arg)
 	if err != nil {
 		t.Fatalf("evaluate on %s: %v\n%s", page.URL(), err, fn)
 	}
@@ -93,6 +93,31 @@ func evalJSON(t *testing.T, page playwright.Page, fn string, arg any, out any) {
 	if err := json.Unmarshal([]byte(text), out); err != nil {
 		t.Fatalf("decode %q: %v", text, err)
 	}
+}
+
+// sharedPayload fetches the Explore page's shared payload outside the
+// browser, so tests that count the page's requests can still read it.
+func sharedPayload(t *testing.T, page playwright.Page) map[string]any {
+	t.Helper()
+	var link string
+	evalJSON(t, page, `() => new URL(document.querySelector('[data-explore]').dataset.sharedUrl, location.href).href`, nil, &link)
+	parsed, err := url.Parse(link)
+	if err != nil {
+		t.Fatalf("parse %s: %v", link, err)
+	}
+	if _, registered := browserOrigins.Load(parsed.Scheme + "://" + parsed.Host); !registered {
+		t.Fatalf("shared payload %s is not on a fixture server", link)
+	}
+	response, err := http.Get(link) //nolint:gosec // G107: link is checked against the registered fixture servers above.
+	if err != nil {
+		t.Fatalf("fetch %s: %v", link, err)
+	}
+	defer response.Body.Close()
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode %s: %v", link, err)
+	}
+	return payload
 }
 
 // queryOf returns the page's current query parameters.

@@ -1,5 +1,5 @@
 {{define "explore"}}{{template "head" .}}
-<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}}data-basis="{{.BasisKey}}" data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-threshold-season="{{.ThresholdDefault}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}" data-default-h2h-team="{{.H2HTeam.ID}}">
+<div class="explore" data-explore {{if .NonPenalty}}data-penalties="exclude" {{end}}data-basis="{{.BasisKey}}" data-view="{{.View}}" data-default-team-season="{{.TeamSeason}}" data-default-threshold-season="{{.ThresholdDefault}}" data-default-parity-season="{{.ParityDefaultSeason}}" data-default-history-team="{{.HistoryTeam.ID}}" data-default-h2h-team="{{.H2HTeam.ID}}" data-shared-url="{{.Data.Shared}}" data-basis-url="{{.Data.Basis}}"{{with .Data.Other}} data-other-basis-url="{{.}}"{{end}}>
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
@@ -9,7 +9,8 @@
 {{range .Views}}{{$view := .Key}}{{range .Displays}}<a href="{{index $.TeamDisplayURLs .Key}}" rel="nofollow" data-team-display="{{.Key}}"{{if and (eq $.View $view) (eq $.TeamDisplay .Key)}} aria-current="page"{{end}}>{{.Label}}</a>
 {{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" rel="nofollow" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}{{end}}</nav>
-{{end}}<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
+{{end}}<p class="explore-data-warning" data-explore-unavailable hidden>Charts and in-page switching could not load. The tables still work; reload the page to try again.</p>
+<section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
 <div class="explore-heading"><h2 id="explore-trend-title">{{template "basisText" ($.Both "Goals and chances per match")}}</h2><form method="get" id="trend-controls" class="explore-team-controls">{{template "penaltiesFormFields" $}}<noscript><button class="button" type="submit">Apply</button></noscript></form></div>
 <div class="explore-chart-card" data-trend-card>
 <div class="explore-chart-options">
@@ -389,16 +390,6 @@
 </section>
 <p class="visually-hidden" id="explore-chart-help">Use arrow keys to move between data points, Home or End to jump, and Escape to clear the tooltip.</p>
 <output class="visually-hidden" data-chart-status aria-live="polite" aria-atomic="true"></output>
-<script type="application/json" id="explore-data">{{payload .ChartData}}</script>
-<script type="application/json" id="explore-team-data">{{payload .TeamSeasons}}</script>
-<script type="application/json" id="explore-context-data">{{payload .HistoryContextData}}</script>
-<script type="application/json" id="explore-home-data">{{payload .HomeAdvantageData}}</script>
-<script type="application/json" id="explore-h2h-data">{{payload .H2HData}}</script>
-<script type="application/json" id="explore-team-seasons-data">{{payload .TeamSeasonsData}}</script>
-<script type="application/json" id="explore-threshold-data">{{payload .ThresholdData}}</script>
-<script type="application/json" id="explore-parity-data">{{payload .ParityData}}</script>
-<script type="application/json" id="explore-views">{{payload .Views}}</script>
-<script type="application/json" id="explore-other-basis">{{payload .OtherBasis}}</script>
 </div>
 <script src="{{.ChartLibraryPath}}" defer></script>
 <script src="{{.ChartLabelsPath}}" defer></script>

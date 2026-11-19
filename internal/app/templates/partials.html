@@ -23,6 +23,9 @@
   {{- end}}
   <link rel="me" href="https://hachyderm.io/@jrduncans">
   <link rel="stylesheet" href="{{.StylesheetPath}}">
+  {{- range preloads .}}
+  <link rel="preload" href="{{.}}" as="fetch" crossorigin>
+  {{- end}}
 </head>
 <body>
   <header class="site-header">

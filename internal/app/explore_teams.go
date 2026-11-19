@@ -73,8 +73,11 @@ func basisColumn(basis history.ScoringBasis, key, label, description string) exp
 }
 
 type exploreTeamsView struct {
-	TeamSeasons                                 []exploreTeamSeason
-	TeamSeason, TeamMeasure                     string
+	TeamSeasons             []exploreTeamSeason
+	TeamSeason, TeamMeasure string
+	// DefaultTeamSeason is the season an unspecified season takes on this
+	// basis, whatever the query selects.
+	DefaultTeamSeason                           string
 	TeamActualLabel, TeamXGLabel                string
 	TeamDisplay, TeamSort, TeamOrder, TeamUnits string
 	TeamQuadrantData                            string
@@ -187,6 +190,7 @@ func exploreTeams(query url.Values, summaries []history.SeasonScoring, archive [
 	if page.TeamSeason == "" && len(page.TeamSeasons) > 0 {
 		page.TeamSeason = page.TeamSeasons[0].Season
 	}
+	page.DefaultTeamSeason = page.TeamSeason
 	if values, present := query["season"]; present {
 		if len(values) != 1 || !seasonYearPattern.MatchString(values[0]) {
 			return page, fmt.Errorf("season must be one supported four-digit year")

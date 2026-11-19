@@ -67,7 +67,10 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 	}
 	requireText(t, excluded, "[data-h2h-official]", "W–D–L and points use official results")
 	// Both bases share a payload; official W–D–L and points remain fixed.
-	for _, selector := range []string{"#explore-h2h-data", ".explore-h2h-wdl"} {
+	if explorePayload(t, NewHandler(store), path, body, "explore-h2h-data") != archivePayload(t, archive, path, excluded, "explore-h2h-data") {
+		t.Fatal("basis changed the head-to-head payload")
+	}
+	for _, selector := range []string{".explore-h2h-wdl"} {
 		if text(find(t, body, selector)[0]) != text(find(t, excluded, selector)[0]) {
 			t.Fatalf("basis changed %s", selector)
 		}
@@ -78,14 +81,14 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 			t.Fatal("sort must open table")
 		}
 	}
+	payload := explorePayload(t, NewHandler(store), path, body, "explore-h2h-data")
 	var data exploreHeadToHeadPayload
-	if err := json.Unmarshal([]byte(text(find(t, body, "#explore-h2h-data")[0])), &data); err != nil {
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
 		t.Fatal(err)
 	}
 	if len(data.Teams) != 16 {
 		t.Fatal("all teams must switch from payload")
 	}
-	payload := text(find(t, body, "#explore-h2h-data")[0])
 	if len(payload) >= 550_000 {
 		t.Fatalf("head-to-head payload %d bytes exceeds 550KB", len(payload))
 	}
@@ -225,7 +228,7 @@ func TestExploreHeadToHeadSortAndNewestNames(t *testing.T) {
 	requireText(t, body, "[data-h2h-opponent]", "Newest Seattle (26)")
 	requireText(t, body, "[data-h2h-rows]", "Seattle Reign FC")
 	var payload exploreHeadToHeadPayload
-	if err := json.Unmarshal([]byte(text(find(t, body, "#explore-h2h-data")[0])), &payload); err != nil {
+	if err := json.Unmarshal([]byte(archivePayload(t, archive, "/explore", body, "explore-h2h-data")), &payload); err != nil {
 		t.Fatal(err)
 	}
 	for _, season := range payload.Seasons {

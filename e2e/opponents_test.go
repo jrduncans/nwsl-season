@@ -170,6 +170,9 @@ func TestExploreOpponentAdjustmentTogglesInPlace(t *testing.T) {
 			if _, err := page.Reload(); err != nil {
 				t.Fatal(err)
 			}
+			if err := settle(page); err != nil {
+				t.Fatal(err)
+			}
 			if reloaded := read(); !reflect.DeepEqual(reloaded, adjusted) {
 				t.Fatalf("reload = %+v, want %+v", reloaded, adjusted)
 			}

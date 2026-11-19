@@ -106,7 +106,7 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 	}
 	requireText(t, body, ".explore-archive-break", "124 more team-seasons")
 	var payload exploreTeamSeasonsPayload
-	if err := json.Unmarshal([]byte(text(find(t, body, "#explore-team-seasons-data")[0])), &payload); err != nil {
+	if err := json.Unmarshal([]byte(explorePayload(t, NewHandler(store), "/explore", body, "explore-team-seasons-data")), &payload); err != nil {
 		t.Fatal(err)
 	}
 	for _, row := range payload.All {
@@ -305,7 +305,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			requireAttr(t, body, `[data-segmented=team-seasons-display] input[value="scatter"]`, "checked", "")
 			requireText(t, body, "[data-team-seasons-title]", "vs expected per match, since 2016")
 			var payload exploreTeamSeasonsPayload
-			if err := json.Unmarshal([]byte(text(find(t, body, "#explore-team-seasons-data")[0])), &payload); err != nil {
+			if err := json.Unmarshal([]byte(archivePayload(t, archive, "/explore", body, "explore-team-seasons-data")), &payload); err != nil {
 				t.Fatal(err)
 			}
 			missing := 0

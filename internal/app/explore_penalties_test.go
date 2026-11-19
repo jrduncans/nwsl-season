@@ -414,7 +414,9 @@ func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *te
 	requireText(t, body, "[data-panel=table]", "No seasons currently have enough complete results to compare.")
 	_, teams := getPage(t, archive, "/explore?view=teams&penalties=exclude")
 	requireElements(t, teams, `[data-team-empty]`)
-	forbidText(t, teams, "#explore-team-data", `"alpha"`)
+	if payload := archivePayload(t, archive, "/explore", teams, "explore-team-data"); strings.Contains(payload, `"alpha"`) {
+		t.Errorf("non-penalty team payload names alpha: %s", payload)
+	}
 	// The default basis is unaffected by the missing split.
 	_, defaults := getPage(t, archive, "/explore?view=table")
 	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00")

@@ -53,14 +53,16 @@ func TestExploreForecastBenchmarksUseDefaultProjectionAndSharedCache(t *testing.
 	}
 	for _, ref := range []string{"shield", "playoff", "top-four"} {
 		response := httptest.NewRecorder()
-		app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&team=team-0&trend-view=relative&average-reference="+ref, nil))
-		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), model.Info().Name) {
+		target := "/explore?view=season-trend&team=team-0&trend-view=relative&average-reference=" + ref
+		app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != http.StatusOK || !strings.Contains(explorePayload(t, app, target, response.Body.String(), "explore-team-data"), model.Info().Name) {
 			t.Fatalf("projection unavailable: %d", response.Code)
 		}
 		// Active-season groups name the projected group, not its size.
 		requireExact(t, response.Body.String(), "[data-trend-reference] option", "Projected playoff-team average", "Projected home playoff average", "Shield favorite")
 	}
-	if calls != 1 || store.archiveCalls != 3 || store.seasonCalls != 0 {
+	// Each page and its basis payload read the archive once.
+	if calls != 1 || store.archiveCalls != 6 || store.seasonCalls != 0 {
 		t.Fatalf("shared cache/snapshot: runs=%d archive=%d season=%d", calls, store.archiveCalls, store.seasonCalls)
 	}
 	summaries, err := history.SummarizeScoring(archive)
@@ -98,8 +100,9 @@ func TestExploreForecastBenchmarksWithRealDefaultModel(t *testing.T) {
 	}
 	app := NewApplication(&archiveHTTPStore{archive: archive}, Options{ForecastIterations: 20})
 	response := httptest.NewRecorder()
-	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&team=team-0&trend-view=relative&average-reference=shield", nil))
-	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "Shield favorite unavailable") || !strings.Contains(response.Body.String(), forecast.Default().Model.Info().Name) {
+	target := "/explore?view=season-trend&team=team-0&trend-view=relative&average-reference=shield"
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "Shield favorite unavailable") || !strings.Contains(explorePayload(t, app, target, response.Body.String(), "explore-team-data"), forecast.Default().Model.Info().Name) {
 		t.Fatalf("real baseline forecast unavailable: %d", response.Code)
 	}
 	if len(app.app.forecasts.cache) != 1 {

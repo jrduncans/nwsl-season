@@ -36,7 +36,7 @@ type exploreViewGroup struct {
 }
 
 // exploreView describes one Explore view for the server and, through the
-// explore-views payload, for explore.js.
+// shared payload's views, for explore.js.
 type exploreView struct {
 	Key   string `json:"key"`
 	Label string `json:"-"`

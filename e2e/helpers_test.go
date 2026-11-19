@@ -290,12 +290,17 @@ func visit(t *testing.T, page playwright.Page, rawURL string) {
 	logNavigationTiming(t, page)
 }
 
-// settle returns after the page has rendered two animation frames and run its
+// settle returns once Explore's script has loaded its payloads, including
+// the other basis's in the background (data-loading and data-other-basis),
+// and the page has rendered two animation frames and run its
 // already-queued tasks, which is when errors thrown by load-time and
 // first-paint script work have been reported. It does not wait on a timer.
 // Playwright delivers events in order, so any console, pageerror or request
 // event raised before settle returns is recorded before it returns.
 func settle(page playwright.Page) error {
+	if _, err := page.WaitForFunction(`() => !document.querySelector('[data-explore][data-loading], [data-explore][data-other-basis="loading"]')`, nil); err != nil {
+		return err
+	}
 	_, err := page.Evaluate(`() => new Promise((resolve) => {
 		// The timer only bounds the wait if the browser throttles animation
 		// frames for a background page; normally the frames settle first.

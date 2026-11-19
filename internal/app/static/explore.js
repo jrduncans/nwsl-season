@@ -1,6 +1,26 @@
-(() => {
+(async () => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
+  // The page links its payloads (explore_data.go) instead of embedding them.
+  // Until they load, data-loading marks the page, which works as it does
+  // without script: a changed control submits its form for a server render.
+  root.dataset.loading = '';
+  const initialParams = new URLSearchParams(location.search);
+  const submitUnready = event => {
+    const form = event.target.form;
+    if (form && (root.contains(form) || root.contains(event.target))) form.submit();
+  };
+  document.addEventListener('change', submitUnready, true);
+  const loadJSON = url => fetch(url).then(response => response.ok ? response.json() : Promise.reject(new Error(`${url}: HTTP ${response.status}`)));
+  let shared, rendered;
+  try {
+    [shared, rendered] = await Promise.all([loadJSON(root.dataset.sharedUrl), loadJSON(root.dataset.basisUrl)]);
+  } catch (error) {
+    root.querySelector('[data-explore-unavailable]').hidden = false;
+    delete root.dataset.loading;
+    throw error;
+  }
+  document.removeEventListener('change', submitUnready, true);
   // Switching the penalties basis swaps in the other basis's payloads and
   // redraws in place, or takes a full server render when the page has none.
   // The capture phase keeps the view forms' in-page change handlers from also
@@ -17,18 +37,16 @@
   }, true);
   // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
   const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
-  let records = JSON.parse(root.querySelector('#explore-data').textContent) || [];
-  let teamSeasons = JSON.parse(root.querySelector('#explore-team-data').textContent) || [];
-  const h2hData = JSON.parse(root.querySelector('#explore-h2h-data').textContent) || [];
-  let historyContextData = JSON.parse(root.querySelector('#explore-context-data').textContent);
-  let homeRecords = JSON.parse(root.querySelector('#explore-home-data').textContent) || [];
-  // The same four payloads on the basis the server did not render, or null.
-  const otherBasis = JSON.parse(root.querySelector('#explore-other-basis').textContent);
-  const thresholdRecords = JSON.parse(root.querySelector('#explore-threshold-data').textContent) || [];
-  const parityRecords = JSON.parse(root.querySelector('#explore-parity-data').textContent) || [];
+  let records = rendered.chartData || [];
+  let teamSeasons = rendered.teamSeasons || [];
+  const h2hData = shared.h2h;
+  let historyContextData = rendered.historyContext;
+  let homeRecords = rendered.homeAdvantage || [];
+  const thresholdRecords = shared.thresholds || [];
+  const parityRecords = shared.parity || [];
   // The view registry (explore_views.go): views in tab order, by group, with
   // the selection rules the server applies.
-  const viewGroups = JSON.parse(root.querySelector('#explore-views').textContent);
+  const viewGroups = shared.views;
   const views = new Map(viewGroups.flatMap(group => group.views.map(view => [view.key, {...view, group: group.key}])));
   const teamDisplays = views.get('teams').displays.map(display => display.key);
   // A rule matches when any alternative does: every named parameter, or the
@@ -114,11 +132,23 @@
   expandTeamMatches(teamSeasons, renderedNonPenalty);
   const basisPayloads = {[renderedNonPenalty]: {records, teamSeasons, historyContextData, homeRecords,
     defaults: {defaultTeamSeason: root.dataset.defaultTeamSeason, defaultHistoryTeam: root.dataset.defaultHistoryTeam}}};
-  if (otherBasis) {
-    const payloads = {records: otherBasis.chartData || [], teamSeasons: otherBasis.teamSeasons || [], historyContextData: otherBasis.historyContext, homeRecords: otherBasis.homeAdvantage || [],
-      defaults: {defaultTeamSeason: otherBasis.defaultTeamSeason, defaultHistoryTeam: otherBasis.defaultHistoryTeam}};
-    expandTeamMatches(payloads.teamSeasons, !renderedNonPenalty);
-    basisPayloads[!renderedNonPenalty] = payloads;
+  // The same four payloads on the basis the server did not render, when the
+  // selection has one. They load after the page is ready; until then a
+  // switch takes a server render. As on the server, a season in the URL the
+  // page loaded with is the default on both bases, and so is the team.
+  // data-other-basis reports the fetch: loading, then ready or failed.
+  if (root.dataset.otherBasisUrl) {
+    root.dataset.otherBasis = 'loading';
+    loadJSON(root.dataset.otherBasisUrl).then(other => {
+      const payloads = {records: other.chartData || [], teamSeasons: other.teamSeasons || [], historyContextData: other.historyContext, homeRecords: other.homeAdvantage || [],
+        defaults: {defaultTeamSeason: initialParams.get('season') || other.defaultTeamSeason, defaultHistoryTeam: basisPayloads[renderedNonPenalty].defaults.defaultHistoryTeam}};
+      expandTeamMatches(payloads.teamSeasons, !renderedNonPenalty);
+      basisPayloads[!renderedNonPenalty] = payloads;
+      root.dataset.otherBasis = 'ready';
+    }, error => {
+      root.dataset.otherBasis = 'failed';
+      console.warn('Explore could not load the other basis; switching penalties will reload the page.', error);
+    });
   }
   // useBasis puts the payloads for one basis in use, dropping every chart so
   // the next render rebuilds it from them. It reports false when the page
@@ -2468,7 +2498,7 @@
       return card;
     }));
   }
-  const archivePayload = JSON.parse(root.querySelector('#explore-team-seasons-data').textContent);
+  const archivePayload = shared.teamSeasons;
   const archiveControls = root.querySelector('[data-team-seasons-controls]');
   // The chart card's controls submit with the form above them; its segmented
   // controls are RadioNodeLists.
@@ -3510,4 +3540,5 @@
   window.addEventListener('popstate', applyURL);
   styleTable();
   applyURL();
+  delete root.dataset.loading;
 })();

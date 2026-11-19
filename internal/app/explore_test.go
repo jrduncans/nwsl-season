@@ -59,7 +59,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 					Season string
 					Active bool
 				}
-				payload := text(find(t, body, "#"+id)[0])
+				payload := archivePayload(t, archive, "/explore", body, id)
 				if err := json.Unmarshal([]byte(payload), &records); err != nil {
 					t.Fatalf("%s: %v", id, err)
 				}
@@ -68,7 +68,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 				}
 			}
 			if tc.active {
-				if payload := text(find(t, body, "#explore-threshold-data")[0]); strings.Contains(payload, `"2026"`) {
+				if payload := archivePayload(t, archive, "/explore", body, "explore-threshold-data"); strings.Contains(payload, `"2026"`) {
 					t.Error("2026 thresholds are available before the regular season is verified complete")
 				}
 				return
@@ -107,8 +107,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 					t.Errorf("missing %q", want)
 				}
 			}
-			_, data, found := strings.Cut(body, `<script type="application/json" id="explore-data">`)
-			data, _, _ = strings.Cut(data, "</script>")
+			data, found := explorePayload(t, NewHandler(store), path, body, "explore-data"), true
 			var records []exploreChartRecord
 			if !found || json.Unmarshal([]byte(data), &records) != nil || len(records) != 2 {
 				t.Fatalf("invalid chart payload: %s", data)
@@ -128,8 +127,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 					t.Errorf("%s distribution counts %d != matches %d", record.Season, count, record.Played)
 				}
 			}
-			_, data, found = strings.Cut(body, `<script type="application/json" id="explore-team-data">`)
-			data, _, _ = strings.Cut(data, "</script>")
+			data = explorePayload(t, NewHandler(store), path, body, "explore-team-data")
 			var seasons []exploreTeamSeason
 			if !found || json.Unmarshal([]byte(data), &seasons) != nil || len(seasons) != 2 {
 				t.Fatalf("invalid team payload: %s", data)

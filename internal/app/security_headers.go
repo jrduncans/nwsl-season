@@ -11,7 +11,7 @@ import (
 // unexpected resources, submit forms elsewhere, or frame the site.
 //
 // Pages load only same-origin scripts and stylesheets, same-origin images plus
-// ASA's club logos, and make no fetch requests. Inline style attributes remain
+// ASA's club logos, and fetch only same-origin data (Explore's payloads). Inline style attributes remain
 // allowed because templates position bars and markers from computed values;
 // html/template's CSS escaper sanitizes those values. Adding a new resource
 // origin or a browser request requires updating this policy deliberately.
@@ -21,6 +21,7 @@ var contentSecurityPolicy = strings.Join([]string{
 	"style-src 'self'",
 	"style-src-attr 'unsafe-inline'",
 	"img-src 'self' " + clubLogoOrigin,
+	"connect-src 'self'",
 	"form-action 'self'",
 	"base-uri 'none'",
 	"frame-ancestors 'none'",

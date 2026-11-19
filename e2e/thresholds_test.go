@@ -73,7 +73,7 @@ func TestExploreThresholds(t *testing.T) {
 				}
 			}
 			// Restore original values after exercising coincident geometry.
-			evalJSON(t, page, `()=>{const c=Chart.getChart(document.querySelector('[data-chart="thresholds"]'));const rows=JSON.parse(document.querySelector('#explore-threshold-data').textContent);c.data.datasets[1].data[7]=rows.find(r=>r.season==='2023').values[1].ppg;c.update('none');return true}`, nil, new(bool))
+			evalJSON(t, page, `async()=>{const c=Chart.getChart(document.querySelector('[data-chart="thresholds"]'));const rows=(await fetch(document.querySelector('[data-explore]').dataset.sharedUrl).then(r => r.json())).thresholds;c.data.datasets[1].data[7]=rows.find(r=>r.season==='2023').values[1].ppg;c.update('none');return true}`, nil, new(bool))
 			if err := canvas.Focus(); err != nil {
 				t.Fatal(err)
 			}
@@ -102,6 +102,9 @@ func TestExploreThresholds(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := page.Reload(); err != nil {
+				t.Fatal(err)
+			}
+			if err := settle(page); err != nil {
 				t.Fatal(err)
 			}
 			if err := expect.Locator(page.Locator(`[data-threshold-detail="2016"]`)).ToBeVisible(); err != nil {
@@ -142,6 +145,9 @@ func TestExploreThresholds(t *testing.T) {
 				}
 			}
 			if _, err := page.Reload(); err != nil {
+				t.Fatal(err)
+			}
+			if err := settle(page); err != nil {
 				t.Fatal(err)
 			}
 			if err := expect.Locator(page.Locator("[data-segmented=threshold-outcome] input:checked")).ToHaveValue("bye"); err != nil {

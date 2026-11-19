@@ -100,12 +100,8 @@ func TestExploreRegistryMatchesRenderedTabsPanelsAndPayload(t *testing.T) {
 	if !slices.Equal(tabs, wantTabs) {
 		t.Errorf("view tabs = %v, want %v", tabs, wantTabs)
 	}
-	nodes := find(t, body, "script#explore-views")
-	if len(nodes) != 1 || nodes[0].FirstChild == nil {
-		t.Fatal("registry payload missing")
-	}
 	var emitted []exploreViewGroup
-	if err := json.Unmarshal([]byte(nodes[0].FirstChild.Data), &emitted); err != nil {
+	if err := json.Unmarshal([]byte(archivePayload(t, penaltyArchive(t, 20), "/explore", body, "explore-views")), &emitted); err != nil {
 		t.Fatalf("registry payload: %v", err)
 	}
 	if len(emitted) != len(exploreViewGroups) || len(emitted[1].Views) != len(exploreViewGroups[1].Views) || emitted[1].Views[1].Key != "season-trend" || !emitted[1].Views[1].NeedsForecast {
