@@ -260,7 +260,7 @@ from the copied fixtures when requested.
 | `PORT` | `8080` | Port used when `NWSL_HTTP_ADDR` is unset. |
 | `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache. |
 | `NWSL_ASA_BASE_URL` | `https://app.americansocceranalysis.com/api/v1` | ASA API root used by the server's scheduler and as the `sync -base-url` default. Must be an absolute `http` or `https` URL with a host name and no user information, query string, or fragment; override it only to point at a local fake ASA in tests. |
-| `NWSL_PUBLIC_URL` | `https://nwsl.jrduncans.com` | Absolute site root, including any proxy mount path, used for the share image URL in social sharing tags. Same validation as `NWSL_ASA_BASE_URL`. |
+| `NWSL_PUBLIC_URL` | `https://nwsl.jrduncans.com` | Absolute site root, including any proxy mount path, used for the share image URL in social sharing tags and for canonical links. Same validation as `NWSL_ASA_BASE_URL`. |
 | `NWSL_SYNC_SCHEDULER` | `true` | Set to `false` to serve the existing cache without starting the scheduler, which is the server's only ASA caller. Development worktrees do this automatically. |
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
@@ -686,7 +686,13 @@ proxy should monitor `/healthz` and `/cache/status`.
 (`Disallow: /explore?`). Each combination of view, team, season and display is
 a separate URL, and in November 2026 one search crawler made about 21,000 such
 requests in two days. `/explore` itself stays crawlable. In production
-Cloudflare prepends its managed AI-crawler rules to this file.
+Cloudflare prepends its managed AI-crawler rules to this file, including a
+`User-agent: *` group with `Allow: /`. Some crawlers read only the most
+specific group that names them, so the file also repeats the rule in named
+groups for the crawlers that followed Explore's query strings
+(`Amzn-SearchBot`, `KeenableBot`, `meta-webindexer`). Explore's query-string
+pages also name `/explore` as canonical and mark their query-only links
+`nofollow` (see [How Explore works](docs/explore-guide.md)).
 
 The server sets a strict Content Security Policy and related browser hardening
 headers on every response (see

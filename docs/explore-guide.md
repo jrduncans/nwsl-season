@@ -57,6 +57,14 @@ Validated view-specific parameters return a 400 "Invalid Explore selection"
 page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
 `internal/app/static/vendor`.
 
+Search engines should index only bare `/explore`. Every combination of view,
+team, season, display and sort is its own URL, so any request with a query
+string gets `<link rel="canonical">` pointing at `/explore` (absolute when
+`NWSL_PUBLIC_URL` is set), and every tab, display, sort and selection link that
+only changes the query string, including those `explore.js` builds, carries
+`rel="nofollow"`. Links to bare `/explore` stay followable. `robots.txt` also
+disallows `/explore?` (see README "Runtime and deployment").
+
 ### Principles for every view
 
 Explore exists so visitors can notice patterns, unusual team-seasons and

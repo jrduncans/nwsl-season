@@ -50,7 +50,7 @@
 <details class="explore-context-details" data-team-seasons-values{{if .TeamSeasonsExpanded}} open{{end}}><summary data-team-seasons-summary>{{$.TableLabel (len .TeamSeasonsRows) "team-season"}}</summary>
 <p class="explore-table-scroll-hint">Scroll for more columns →</p>
 <div class="table-scroll" tabindex="0" role="region" aria-label="Team-seasons values" data-team-seasons-table><table class="explore-table explore-archive-table"><caption data-team-seasons-table-caption>{{.TeamSeasonsActualLabel}} per match. Expected: {{.TeamSeasonsExpectedLabel}}. Gap: actual − expected. Tied rows share a competition rank.</caption>
-<thead><tr>{{range .TeamSeasonsColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" data-team-seasons-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
+<thead><tr>{{range .TeamSeasonsColumns}}<th scope="col" aria-sort="{{.Sort}}"><a href="{{.URL}}" rel="nofollow" data-team-seasons-sort="{{.Key}}" aria-label="Sort by {{.Description}}">{{.Label}}</a></th>{{end}}</tr></thead>
 <tbody data-team-seasons-rows>{{range .TeamSeasonsRows}}<tr data-team-id="{{.TeamID}}" data-season="{{.Season}}"><td>{{if .Rank}}{{.Rank}}{{else}}{{.Reason}}{{end}}</td><th scope="row">{{template "teamName" .Team}}</th><td>{{.Season}}{{if .Active}} (in progress through {{.Played}} matches){{end}}</td><td>{{.Played}}</td><td>{{$.TeamSeasonsValue .Actual "Unavailable"}}</td><td>{{$.TeamSeasonsValue .Expected $.TeamSeasonsMissingLabel}}</td><td>{{$.TeamSeasonsSigned .Gap $.TeamSeasonsMissingLabel}}</td></tr>{{end}}</tbody></table></div></details>
 </section>
 {{end}}

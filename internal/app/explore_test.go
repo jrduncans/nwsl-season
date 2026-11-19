@@ -364,9 +364,9 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore", nil))
 	body := response.Body.String()
 	links := []string{
-		`<a href="?view=teams" data-group-choice="teams" aria-current="page">Compare teams</a>`,
-		`<a href="?view=team-rankings" data-group-choice="profile">Team profile</a>`,
-		`<a href="?view=trend" data-group-choice="league">League trends</a>`,
+		`<a href="?view=teams" rel="nofollow" data-group-choice="teams" aria-current="page">Compare teams</a>`,
+		`<a href="?view=team-rankings" rel="nofollow" data-group-choice="profile">Team profile</a>`,
+		`<a href="?view=trend" rel="nofollow" data-group-choice="league">League trends</a>`,
 	}
 	previous := -1
 	for _, link := range links {
@@ -852,5 +852,59 @@ func TestExploreThresholdsLeaveGapsForTiesWhileSourceScopeIsActive(t *testing.T)
 	requireText(t, body, `[data-threshold-detail="2026"]`, "Tied finishing order remains ambiguous")
 	if rows := find(t, body, `[data-threshold-table-rows] tr[data-season="2026"]`); len(rows) != 0 {
 		t.Errorf("tied season published %d cutoff rows, want gaps", len(rows))
+	}
+}
+
+// Explore's query-string variants all point search engines at bare /explore,
+// and every link that only changes the query string is nofollow, so crawlers
+// aren't drawn into every combination of view, team, season and display.
+func TestExploreQueryVariantsAreCanonicalAndNofollow(t *testing.T) {
+	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
+		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
+		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 4},
+	})}
+	render := func(t *testing.T, handler http.Handler, target string) string {
+		t.Helper()
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d", target, response.Code)
+		}
+		return response.Body.String()
+	}
+	canonical := regexp.MustCompile(`<link rel="canonical" href="([^"]*)">`)
+
+	if match := canonical.FindStringSubmatch(render(t, NewHandler(store), "/explore")); match != nil {
+		t.Errorf("bare /explore names a canonical link: %q", match[0])
+	}
+	for _, query := range []string{"view=teams&display=table&team-sort=name", "view=head-to-head", "view=thresholds&threshold-season=2025", "view=parity", "view=team-seasons", "view=season-trend"} {
+		body := render(t, NewHandler(store), "/explore?"+query)
+		if match := canonical.FindStringSubmatch(body); match == nil || match[1] != "explore" {
+			t.Errorf("%s: canonical = %v, want href \"explore\"", query, match)
+		}
+		anchors := regexp.MustCompile(`<a [^>]*>`).FindAllString(body, -1)
+		queryLinks := 0
+		for _, anchor := range anchors {
+			if !strings.Contains(anchor, `href="?`) {
+				continue
+			}
+			queryLinks++
+			if !strings.Contains(anchor, ` rel="nofollow"`) {
+				t.Errorf("%s: query-string link is followable: %s", query, anchor)
+			}
+		}
+		if queryLinks == 0 {
+			t.Errorf("%s: no query-string links rendered", query)
+		}
+		for _, anchor := range anchors {
+			if strings.Contains(anchor, `href="explore"`) && strings.Contains(anchor, "nofollow") {
+				t.Errorf("%s: link to bare /explore is nofollow: %s", query, anchor)
+			}
+		}
+	}
+
+	public := NewHandlerWithOptions(store, Options{PublicURL: "https://example.test/"})
+	if match := canonical.FindStringSubmatch(render(t, public, "/explore?view=parity")); match == nil || match[1] != "https://example.test/explore" {
+		t.Errorf("canonical with a public URL = %v, want https://example.test/explore", match)
 	}
 }
