@@ -167,7 +167,6 @@
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
 <div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team{{else if eq .TeamDisplay "scatter"}}Actual vs expected by team{{else if eq .TeamDisplay "quadrant"}}Scored vs allowed by team{{else}}Actual vs expected{{end}}</h2>
 <form method="get" id="team-controls" data-team-controls class="explore-team-controls">
-
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
 <input type="hidden" name="team-sort" value="{{.TeamSort}}">
 <input type="hidden" name="team-order" value="{{.TeamOrder}}">
@@ -239,7 +238,6 @@
 <section data-panel="team-rankings"{{if ne .View "team-rankings"}} hidden{{end}} aria-labelledby="explore-team-rankings-title">
 <h2 id="explore-team-rankings-title">Team rankings</h2>
 <form method="get" data-team-rankings-controls class="explore-team-controls">
-
 <label>Season <select name="season">{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team"{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 {{template "segmented" .RankingUnitsControl}}
@@ -260,7 +258,6 @@
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
 <h2 id="explore-team-history-title">Season-by-season {{if eq .TeamMeasure "points"}}points{{else}}scoring{{end}}</h2>
 <form method="get" id="team-history-controls" data-team-history-controls class="explore-team-controls">
-
 <input type="hidden" name="history-sort" value="{{.HistorySort}}">
 <input type="hidden" name="history-order" value="{{.HistoryOrder}}">
 <label>Team <select name="team" data-history-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>

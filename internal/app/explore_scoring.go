@@ -233,8 +233,7 @@ type exploreFormField struct {
 }
 
 // exploreFormFields lists a query as hidden form fields in a stable order.
-// exploreFormFields carries a selection through a form as hidden fields. The
-// form submits to the view's own path, so the view itself is left out.
+// The form submits to the view's own path, so the view itself is left out.
 func exploreFormFields(values url.Values) []exploreFormField {
 	fields := []exploreFormField{}
 	for _, name := range slices.Sorted(maps.Keys(values)) {

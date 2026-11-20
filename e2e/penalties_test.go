@@ -192,6 +192,46 @@ func hrefs(t *testing.T, page playwright.Page, selector string) []string {
 	return links
 }
 
+// TestExplorePenaltiesKeepsHiddenPanelLinksRelative switches the basis in
+// place on one view's page. A query-only link in another view's hidden panel
+// belongs to that panel's view, so it must take the new basis but stay a
+// query string rather than become a link to the view shown now.
+func TestExplorePenaltiesKeepsHiddenPanelLinksRelative(t *testing.T) {
+	t.Parallel()
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Desktop, "explore/scoring-table")
+	if err := page.Locator(penaltiesSelect).First().Click(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := page.WaitForFunction(`() => new URLSearchParams(location.search).get('penalties') === 'exclude'`, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := settle(page); err != nil {
+		t.Fatal(err)
+	}
+	// Team-seasons sort links stay as the server rendered them until their
+	// view is shown; Home advantage's sort links are rebuilt with their view.
+	var links []struct{ Href, Path string }
+	evalJSON(t, page, `() => [...document.querySelectorAll('[data-panel="team-seasons"] a[data-team-seasons-sort], [data-panel="home-advantage"] a[data-home-sort]')]
+		.map((link) => ({href: link.getAttribute('href'), path: new URL(link.href).pathname}))`, nil, &links)
+	if len(links) == 0 {
+		t.Fatal("no hidden-panel links rendered")
+	}
+	queryOnly := 0
+	for _, link := range links {
+		if strings.HasPrefix(link.Href, "?") {
+			queryOnly++
+		} else if strings.HasSuffix(link.Path, "/explore/scoring-table") {
+			t.Errorf("hidden panel link %q points at the view shown now", link.Href)
+		}
+		if !strings.Contains(link.Href, "penalties=exclude") {
+			t.Errorf("hidden panel link %q lost the basis", link.Href)
+		}
+	}
+	if queryOnly == 0 {
+		t.Errorf("no query-only hidden-panel link stayed a query string: %v", links)
+	}
+}
+
 func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)

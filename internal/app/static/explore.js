@@ -3313,6 +3313,16 @@
     // Every in-page link carries the penalties selection, including links in
     // views the server rendered on the other basis.
     root.querySelectorAll('a[href]').forEach(link => {
+      const href = link.getAttribute('href');
+      // A query-only link belongs to its own panel's view, which may not be
+      // the one shown now, so it stays a query string.
+      if (href.startsWith('?')) {
+        const selection = new URLSearchParams(href.slice(1));
+        if ((selection.get('penalties') === 'exclude') === nonPenalty) return;
+        if (nonPenalty) selection.set('penalties', 'exclude'); else selection.delete('penalties');
+        link.setAttribute('href', `?${selection}`);
+        return;
+      }
       const url = new URL(link.href);
       if (!isExploreLink(url)) return;
       const selection = paramsOf(url);

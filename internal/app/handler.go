@@ -1746,8 +1746,10 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "history" && parts[1] == "scoring" {
 		return "/history/scoring", true
 	}
-	if _, ok := exploreViewForSlug(parts[len(parts)-1]); ok && len(parts) == 2 && parts[0] == "explore" {
-		return "/" + strings.Join(parts, "/"), true
+	if len(parts) == 2 && parts[0] == "explore" {
+		if _, ok := exploreViewForSlug(parts[1]); ok {
+			return "/" + strings.Join(parts, "/"), true
+		}
 	}
 	return requestPath, false
 }

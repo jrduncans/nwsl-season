@@ -2,7 +2,6 @@
 <section data-panel="head-to-head"{{if ne .View "head-to-head"}} hidden{{end}} aria-labelledby="explore-h2h-title">
 <div class="explore-h2h-controls">
 <form method="get" class="explore-team-controls" data-h2h-controls data-h2h-team-form>
-
 <input type="hidden" name="h2h-series" data-h2h-carried-series value="{{.H2HSeries}}"{{if .H2HMargins}} disabled{{end}}>
 {{if .NonPenalty}}<input type="hidden" name="penalties" value="exclude">{{end}}
 <input type="hidden" name="h2h-sort" value="{{.H2HSort}}"{{if not .H2HExpanded}} disabled{{end}}><input type="hidden" name="h2h-order" value="{{.H2HOrder}}"{{if not .H2HExpanded}} disabled{{end}}>
