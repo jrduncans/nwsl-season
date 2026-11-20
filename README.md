@@ -726,6 +726,15 @@ pages name none. `render` fills it in from the request through the
 `pageHead` every page type embeds (see
 [`internal/app/canonical.go`](internal/app/canonical.go)).
 
+Each page also builds its own `<title>` and meta description, which the Open
+Graph tags reuse, from data its handler already has
+([`internal/app/page_meta.go`](internal/app/page_meta.go)): "2025 NWSL
+standings", "2026 NWSL results and fixtures", or the score, or the date for an
+upcoming match, so a match title says which meeting it is. The title keeps the
+" · NWSL by the Numbers" suffix only when the whole fits within 60 characters,
+and descriptions stay under 155. Page headings are unchanged. Error pages keep
+the generic site description.
+
 The server sets a strict Content Security Policy and related browser hardening
 headers on every response (see
 [`internal/app/security_headers.go`](internal/app/security_headers.go)). Pages

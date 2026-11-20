@@ -382,6 +382,13 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		label = descriptor.displayLabel(page.TeamDisplay)
 	}
 	page.Title = label + " · Explore"
+	firstSeason := ""
+	for _, summary := range summaries {
+		if firstSeason == "" || summary.Season < firstSeason {
+			firstSeason = summary.Season
+		}
+	}
+	page.Description = exploreDescription(firstSeason)
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.GeometryPath = staticURL(r.URL.Path, "explore-geometry.js")
 	page.MarginsPath = staticURL(r.URL.Path, "explore-margins.js")

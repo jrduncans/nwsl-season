@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,9 +46,9 @@ func TestPagesNameTheirOwnPathAsCanonical(t *testing.T) {
 
 func TestErrorPagesNameNoCanonical(t *testing.T) {
 	response := httptest.NewRecorder()
-	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/matches/missing", nil))
-	if response.Code == http.StatusOK {
-		t.Fatalf("status = %d, want an error", response.Code)
+	NewHandlerWithOptions(fakeStore{season: testSeasonData()}, Options{Rules: testRules(30), Location: time.UTC}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season/forecast?v=99", nil))
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `class="error-card"`) {
+		t.Fatalf("status = %d, want the 400 error page", response.Code)
 	}
 	if match := canonicalLinkPattern.FindString(response.Body.String()); match != "" {
 		t.Errorf("error page names a canonical link: %s", match)

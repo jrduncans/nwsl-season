@@ -10,6 +10,9 @@ type pageHead struct {
 	// index one URL instead of every query-string variant. Error pages
 	// leave it empty and name none.
 	CanonicalURL string
+	// Description is the page's meta description; see page_meta.go. Pages
+	// without one, such as error pages, use siteDescription.
+	Description string
 }
 
 func (h *pageHead) head() *pageHead { return h }

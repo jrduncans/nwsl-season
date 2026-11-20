@@ -15,11 +15,11 @@ func TestPagesCarrySocialSharingTags(t *testing.T) {
 		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	const description = "Standings, results, xG, clinching scenarios, and playoff forecasts for the NWSL."
+	const description = "2026 NWSL regular-season table with points, goal difference and expected goals for all 2 teams."
 	requireAttr(t, body, `meta[name="description"]`, "content", description)
 	requireAttr(t, body, `meta[property="og:description"]`, "content", description)
 	requireAttr(t, body, `meta[property="og:site_name"]`, "content", "NWSL by the Numbers")
-	requireAttr(t, body, `meta[property="og:title"]`, "content", "2026 season · NWSL by the Numbers")
+	requireAttr(t, body, `meta[property="og:title"]`, "content", "2026 NWSL standings · NWSL by the Numbers")
 	requireAttr(t, body, `meta[property="og:image"]`, "content", "https://nwsl.example.test/static/share.png?v="+staticVersions[shareImageName])
 	requireAttr(t, body, `meta[name="twitter:card"]`, "content", "summary_large_image")
 
