@@ -68,7 +68,7 @@ func TestExploreHeadToHeadPhoneLayout(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, width := range []int{320, 335, 360, 375, 390} {
-		page := explorePage(t, base, viewport{Name: "phone-fold", Width: width, Height: 812}, "explore?view=head-to-head&opponent="+seattleH2H)
+		page := explorePage(t, base, viewport{Name: "phone-fold", Width: width, Height: 812}, "explore/head-to-head?opponent="+seattleH2H)
 		assertHeadToHeadTiles(t, page)
 		assertNoHorizontalOverflow(t, page)
 		var visible bool
@@ -87,7 +87,7 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
-	page := explorePage(t, base, Mobile, "explore?view=head-to-head&opponent="+seattleH2H)
+	page := explorePage(t, base, Mobile, "explore/head-to-head?opponent="+seattleH2H)
 	defer expectInPlace(t, page, "head-to-head controls, sorts, Back/Forward")()
 	if err := expect.Locator(page.Locator("[data-h2h-summary]")).ToHaveText("Table: all 24 meetings"); err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestExploreHeadToHeadNoScriptAndEmpty(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, vp := range []viewport{Desktop, Mobile, {Name: "small-phone", Width: 335, Height: 812}} {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
-		visitStatic(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
+		visitStatic(t, page, base+"explore/head-to-head?opponent="+seattleH2H)
 		if err := expect.Locator(page.Locator("[data-h2h-fallback] li")).ToHaveCount(24); err != nil {
 			t.Fatal(err)
 		}
@@ -214,7 +214,7 @@ func TestExploreHeadToHeadNoScriptAndEmpty(t *testing.T) {
 	}
 	for _, noScript := range []bool{false, true} {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
-		path := base + "explore?view=head-to-head&opponent=odMX2OJqYL"
+		path := base + "explore/head-to-head?opponent=odMX2OJqYL"
 		if noScript {
 			visitStatic(t, page, path)
 		} else {
@@ -235,7 +235,7 @@ func TestExploreHeadToHeadNoScriptAndEmpty(t *testing.T) {
 
 func TestExploreHeadToHeadProfileTab(t *testing.T) {
 	t.Parallel()
-	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Desktop, "explore?view=team-history&penalties=exclude")
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Desktop, "explore/season-by-season?penalties=exclude")
 	defer expectInPlace(t, page, "Head to head profile tab")()
 	if err := page.Locator("[data-view-choice=head-to-head]").Click(); err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ func TestExploreHeadToHeadTooltip(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	page := newPageWith(t, pageOptions{Viewport: Mobile, Touch: true})
-	visit(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
+	visit(t, page, base+"explore/head-to-head?opponent="+seattleH2H)
 	defer expectInPlace(t, page, "transient meeting tooltips")()
 	canvas := page.Locator(`[data-chart="head-to-head"]`)
 	if err := canvas.ScrollIntoViewIfNeeded(); err != nil {
@@ -370,7 +370,7 @@ func TestExploreHeadToHeadExpectedInPlace(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	page := newPageWith(t, pageOptions{Viewport: Mobile, Touch: true})
-	visit(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H)
+	visit(t, page, base+"explore/head-to-head?opponent="+seattleH2H)
 	defer expectInPlace(t, page, "series, penalties and history from shared payload")()
 	chooseOption(t, page, "[data-segmented=h2h-series]", "both")
 	if err := expect.Locator(page.Locator("[data-h2h-penalties]")).ToBeVisible(); err != nil {
@@ -495,7 +495,7 @@ func TestExploreHeadToHeadExpectedNoScriptAndCoverage(t *testing.T) {
 		t.Fatal("fixture has no covered Bay–Houston meeting")
 	}
 	base := exploreBaseArchive(t, archive)
-	path := "explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both"
+	path := "explore/head-to-head?team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both"
 	var serverTotals string
 	for _, noScript := range []bool{true, false} {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
@@ -590,7 +590,7 @@ func TestExploreHeadToHeadMarginsAlias(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, noScript := range []bool{false, true} {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
-		path := base + "explore?view=head-to-head&opponent=" + seattleH2H + "&h2h-series=expected"
+		path := base + "explore/head-to-head?opponent=" + seattleH2H + "&h2h-series=expected"
 		if noScript {
 			visitStatic(t, page, path)
 		} else {
@@ -729,7 +729,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&penalties=exclude")
+		page := explorePage(t, base, vp, "explore/head-to-head?opponent="+seattleH2H+"&penalties=exclude")
 		chooseOption(t, page, "[data-segmented=h2h-series]", "points")
 		if err := page.WaitForURL("**h2h-series=points**"); err != nil {
 			t.Fatal(err)
@@ -765,7 +765,7 @@ func TestExploreHeadToHeadPoints(t *testing.T) {
 		}
 	}
 	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-	visitStatic(t, page, base+"explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=points")
+	visitStatic(t, page, base+"explore/head-to-head?opponent="+seattleH2H+"&h2h-series=points")
 	if err := expect.Locator(page.Locator("[data-h2h-fallback] li").First()).ToContainText("Points − xPoints:"); err != nil {
 		t.Fatal(err)
 	}
@@ -800,9 +800,9 @@ func TestExplorePointsTileFormattingParity(t *testing.T) {
 	}
 	base := exploreBaseArchive(t, archive)
 	for _, path := range []string{
-		"explore?view=head-to-head&h2h-series=points&opponent=" + seattleH2H,
-		"explore?view=head-to-head&h2h-series=points&opponent=aDQ0lzvQEv",
-		"explore?view=season-trend&season=2026&team=315VnJ759x&trend-view=points&smoothing=none",
+		"explore/head-to-head?h2h-series=points&opponent=" + seattleH2H,
+		"explore/head-to-head?h2h-series=points&opponent=aDQ0lzvQEv",
+		"explore/match-by-match?season=2026&team=315VnJ759x&trend-view=points&smoothing=none",
 	} {
 		var rendered [2][]string
 		for i, noScript := range []bool{true, false} {
@@ -839,7 +839,7 @@ func TestExploreHeadToHeadGoalGapPanels(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, vp := range []viewport{Desktop, Mobile} {
-		page := explorePage(t, base, vp, "explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=both")
+		page := explorePage(t, base, vp, "explore/head-to-head?opponent="+seattleH2H+"&h2h-series=both")
 		defer expectInPlace(t, page, "goal gap panel switches")()
 		assertGoalGapPanels(t, page, []string{"head-to-head", "head-to-head-xg"})
 		setPenalties(t, page, "[data-h2h-penalties]", true)
@@ -858,7 +858,7 @@ func TestExploreHeadToHeadGoalGapPanels(t *testing.T) {
 
 func TestExploreHeadToHeadKeyboardIgnoresQueuedPointerEvents(t *testing.T) {
 	t.Parallel()
-	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore?view=head-to-head&opponent="+seattleH2H+"&h2h-series=both")
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore/head-to-head?opponent="+seattleH2H+"&h2h-series=both")
 	canvas := page.Locator("[data-chart=head-to-head]")
 	if err := canvas.ScrollIntoViewIfNeeded(); err != nil {
 		t.Fatal(err)

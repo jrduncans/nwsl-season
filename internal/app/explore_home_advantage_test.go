@@ -20,7 +20,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 20},
 	})}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=home-advantage", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/home-advantage", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 	}
@@ -28,7 +28,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 	if store.archiveCalls != 1 || store.seasonCalls != 0 || store.statusCalls != 0 {
 		t.Errorf("reads: archive=%d season=%d status=%d, want one archive read only", store.archiveCalls, store.seasonCalls, store.statusCalls)
 	}
-	requireExact(t, body, "title", "Home advantage · Explore · NWSL by the Numbers")
+	requireExact(t, body, "title", "NWSL home advantage by season · NWSL by the Numbers")
 	requireAttr(t, body, `a[data-view-choice="home-advantage"]`, "aria-current", "page")
 	requireExact(t, body, "#explore-home-title", "Home advantage per match")
 	requireAttr(t, body, `canvas[data-chart="home-goals"]`, "role", "img")
@@ -63,7 +63,7 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 		"not a cause",
 	)
 	forbidText(t, body, "[data-panel=home-advantage]", "Points include penalties")
-	data := explorePayload(t, NewHandler(store), "/explore", body, "explore-home-data")
+	data := explorePayload(t, NewHandler(store), "/explore/home-advantage", body, "explore-home-data")
 	if strings.Contains(data, `"2022"`) || !strings.Contains(data, `"season":"2019"`) || !strings.Contains(data, `"xg":null`) {
 		t.Errorf("home advantage chart data = %s, want eligible seasons only with a null xG for 2019", data)
 	}
@@ -71,8 +71,8 @@ func TestExploreHomeAdvantageRendersEligibleSeasonsFromOneArchiveRead(t *testing
 
 func TestExploreHomeAdvantageNonPenaltyBasisChangesOnlyGoalsAndXG(t *testing.T) {
 	archive := penaltyArchive(t, 20)
-	_, all := getPage(t, archive, "/explore?view=home-advantage")
-	code, np := getPage(t, archive, "/explore?view=home-advantage&penalties=exclude")
+	_, all := getPage(t, archive, "/explore/home-advantage")
+	code, np := getPage(t, archive, "/explore/home-advantage?penalties=exclude")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}
@@ -86,12 +86,12 @@ func TestExploreHomeAdvantageNonPenaltyBasisChangesOnlyGoalsAndXG(t *testing.T) 
 	requireExact(t, np, "thead a[data-home-sort=xg]", "npxG")
 	requireExact(t, np, "thead a[data-home-sort=points]", "Points")
 	requireExact(t, all, "thead a[data-home-sort=goals]", "Goals")
-	requireAttr(t, np, "thead a[data-home-sort=goals]", "href", "?home-order=desc&home-sort=goals&penalties=exclude&view=home-advantage")
+	requireAttr(t, np, "thead a[data-home-sort=goals]", "href", "?home-order=desc&home-sort=goals&penalties=exclude")
 	forbidText(t, all, "[data-panel=home-advantage]", "Points include penalties")
 
 	// A season missing a penalty breakdown is incomplete on this basis, exactly
 	// as in the Scoring trend.
-	_, partial := getPage(t, penaltyArchive(t, 19), "/explore?view=home-advantage&penalties=exclude")
+	_, partial := getPage(t, penaltyArchive(t, 19), "/explore/home-advantage?penalties=exclude")
 	requireText(t, partial, "[data-panel=home-advantage]", "No seasons currently have enough complete results to compare.")
 }
 
@@ -137,9 +137,9 @@ func TestExploreHomeAdvantageSortedURLRendersOpenSortableTable(t *testing.T) {
 		"2018": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 		"2019": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
 	})
-	_, closed := getPage(t, archive, "/explore?view=home-advantage")
+	_, closed := getPage(t, archive, "/explore/home-advantage")
 	forbidRaw(t, closed, `data-home-values open`)
-	_, body := getPage(t, archive, "/explore?view=home-advantage&home-sort=season&home-order=asc")
+	_, body := getPage(t, archive, "/explore/home-advantage?home-sort=season&home-order=asc")
 	requireAttr(t, body, `details[data-home-values]`, "open", "")
 	requireAttr(t, body, `th[aria-sort=ascending]`, "aria-sort", "ascending")
 	requireText(t, body, "[data-home-rows]", "2018", "2019")
@@ -147,12 +147,12 @@ func TestExploreHomeAdvantageSortedURLRendersOpenSortableTable(t *testing.T) {
 		t.Errorf("first row = %s, want 2018 on an ascending season sort", first)
 	}
 	// The sort links keep the rest of the selection and flip direction.
-	requireAttr(t, body, "thead a[data-home-sort=season]", "href", "?home-order=desc&home-sort=season&view=home-advantage")
-	requireAttr(t, body, "thead a[data-home-sort=goals]", "href", "?home-order=desc&home-sort=goals&view=home-advantage")
+	requireAttr(t, body, "thead a[data-home-sort=season]", "href", "?home-order=desc&home-sort=season")
+	requireAttr(t, body, "thead a[data-home-sort=goals]", "href", "?home-order=desc&home-sort=goals")
 }
 
 func TestExploreHomeAdvantageEmptyArchiveStillRenders(t *testing.T) {
-	code, body := getPage(t, testArchive(t, map[string]archiveState{}), "/explore?view=home-advantage")
+	code, body := getPage(t, testArchive(t, map[string]archiveState{}), "/explore/home-advantage")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}

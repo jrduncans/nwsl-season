@@ -18,7 +18,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioOverview)
 	store := &archiveHTTPStore{archive: archive}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=parity", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/parity", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 	}
@@ -26,7 +26,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 	if store.archiveCalls != 1 || store.seasonCalls != 0 || store.statusCalls != 0 {
 		t.Errorf("reads: archive=%d season=%d status=%d, want one archive read only", store.archiveCalls, store.seasonCalls, store.statusCalls)
 	}
-	requireExact(t, body, "title", "Parity · Explore · NWSL by the Numbers")
+	requireExact(t, body, "title", "NWSL parity by season · NWSL by the Numbers")
 	requireAttr(t, body, `a[data-view-choice="parity"]`, "aria-current", "page")
 	requireAttr(t, body, `canvas[data-chart="parity"]`, "role", "img")
 	requireText(t, body, "[data-panel=parity]",
@@ -69,7 +69,7 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 		t.Errorf("table seasons = %s", got)
 	}
 	var data []exploreParityRecord
-	if err := json.Unmarshal([]byte(explorePayload(t, NewHandler(store), "/explore", body, "explore-parity-data")), &data); err != nil {
+	if err := json.Unmarshal([]byte(explorePayload(t, NewHandler(store), "/explore/parity", body, "explore-parity-data")), &data); err != nil {
 		t.Fatal(err)
 	}
 	if len(data) != 10 || data[0].Season != "2016" || !data[9].Active {
@@ -92,22 +92,22 @@ func TestExploreParityRendersEverySeasonFromOneArchiveRead(t *testing.T) {
 
 func TestExploreParitySelectsSeasonsAndSeries(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioOverview)
-	_, active := getPage(t, archive, "/explore?view=parity&season=2026")
+	_, active := getPage(t, archive, "/explore/parity?season=2026")
 	requireExact(t, active, "[data-parity-strip-title]", "Teams in 2026 (in progress through 20 matches)")
 	requireAttr(t, active, `a[data-parity-season-link="2026"]`, "aria-current", "true")
 
-	_, actual := getPage(t, archive, "/explore?view=parity&season=2018")
+	_, actual := getPage(t, archive, "/explore/parity?season=2018")
 	requireExact(t, actual, "[data-parity-strip-title]", "Teams in 2018")
 	requireAttr(t, actual, "[data-parity-expected-legend]", "hidden", "")
 	forbidText(t, actual, ".explore-parity-list", "xPPG")
 
-	_, both := getPage(t, archive, "/explore?view=parity&season=2018&parity-series=both")
+	_, both := getPage(t, archive, "/explore/parity?season=2018&parity-series=both")
 	forbidRaw(t, both, `data-parity-expected-legend hidden`)
 	requireText(t, both, ".explore-parity-list", "xPPG")
 	requireAttr(t, both, `[data-segmented=parity-series] input[value="both"][form=parity-controls]`, "checked", "")
 	// Season links keep the rest of the selection.
-	requireAttr(t, both, `a[data-parity-season-link="2016"]`, "href", "?parity-series=both&season=2016&view=parity")
-	requireAttr(t, both, "thead a[data-parity-sort=spread]", "href", "?parity-order=desc&parity-series=both&parity-sort=spread&season=2018&view=parity")
+	requireAttr(t, both, `a[data-parity-season-link="2016"]`, "href", "?parity-series=both&season=2016")
+	requireAttr(t, both, "thead a[data-parity-sort=spread]", "href", "?parity-order=desc&parity-series=both&parity-sort=spread&season=2018")
 }
 
 func TestExploreParityFallsBackFromAnUnplottedCatalogSeason(t *testing.T) {
@@ -121,7 +121,7 @@ func TestExploreParityFallsBackFromAnUnplottedCatalogSeason(t *testing.T) {
 			archive[index].Data.Games = archive[index].Data.Games[:10]
 		}
 	}
-	code, body := getPage(t, archive, "/explore?view=parity&season=2026")
+	code, body := getPage(t, archive, "/explore/parity?season=2026")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}
@@ -137,8 +137,8 @@ func TestExploreParityFallsBackFromAnUnplottedCatalogSeason(t *testing.T) {
 
 func TestExploreParityIgnoresAndDropsNonPenaltyBasis(t *testing.T) {
 	archive := penaltyArchive(t, 20)
-	_, all := getPage(t, archive, "/explore?view=parity")
-	_, np := getPage(t, archive, "/explore?view=parity&penalties=exclude")
+	_, all := getPage(t, archive, "/explore/parity")
+	_, np := getPage(t, archive, "/explore/parity?penalties=exclude")
 	forbidText(t, np, "[data-panel=parity]", "Points include penalties")
 	requireAttr(t, np, "[data-panel=parity] label.penalties-select", "hidden", "")
 	forbidRaw(t, np, `data-parity-controls><input type="hidden" name="penalties"`)
@@ -147,7 +147,7 @@ func TestExploreParityIgnoresAndDropsNonPenaltyBasis(t *testing.T) {
 		t.Errorf("values changed with the basis: %q vs %q", a, b)
 	}
 	// Penalty-split coverage cannot affect Parity eligibility.
-	_, partial := getPage(t, penaltyArchive(t, 19), "/explore?view=parity&penalties=exclude")
+	_, partial := getPage(t, penaltyArchive(t, 19), "/explore/parity?penalties=exclude")
 	forbidText(t, partial, "[data-panel=parity]", "No seasons currently have enough complete results to compare.")
 }
 
@@ -185,9 +185,9 @@ func TestExploreParitySortUsesUnroundedValuesAndKeepsMissingLast(t *testing.T) {
 
 func TestExploreParitySortedURLRendersOpenSortableTable(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioOverview)
-	_, closed := getPage(t, archive, "/explore?view=parity")
+	_, closed := getPage(t, archive, "/explore/parity")
 	forbidRaw(t, closed, `data-parity-values open`)
-	_, body := getPage(t, archive, "/explore?view=parity&parity-sort=spread&parity-order=asc")
+	_, body := getPage(t, archive, "/explore/parity?parity-sort=spread&parity-order=asc")
 	requireAttr(t, body, `details[data-parity-values]`, "open", "")
 	requireAttr(t, body, `th[aria-sort=ascending] a`, "data-parity-sort", "spread")
 	// The no-JS form keeps the sort when it changes the season.
@@ -208,7 +208,7 @@ func TestExploreParitySortedURLRendersOpenSortableTable(t *testing.T) {
 }
 
 func TestExploreParityEmptyArchiveStillRenders(t *testing.T) {
-	code, body := getPage(t, testArchive(t, map[string]archiveState{}), "/explore?view=parity")
+	code, body := getPage(t, testArchive(t, map[string]archiveState{}), "/explore/parity")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}

@@ -40,6 +40,15 @@ type exploreViewGroup struct {
 type exploreView struct {
 	Key   string `json:"key"`
 	Label string `json:"-"`
+	// Slug names the view's path, /explore/<slug>; the default view has none
+	// and lives at /explore. See exploreViewPath.
+	Slug string `json:"slug,omitempty"`
+	// Title and Description are the view page's <title> and meta
+	// description. DocumentTitle is Title as the <title> shows it, which
+	// explore.js sets when it switches views in place.
+	Title         string `json:"-"`
+	Description   string `json:"-"`
+	DocumentTitle string `json:"title"`
 	// Displays are Compare teams' tabs; the first is the default display.
 	Displays []exploreDisplay `json:"displays,omitempty"`
 	// Defaults supply blank parameters for the view's rules.
@@ -70,7 +79,9 @@ type exploreDisplay struct {
 var exploreViewGroups = []exploreViewGroup{
 	{Key: "teams", Label: "Compare teams", Views: []exploreView{
 		{
-			Key: "teams",
+			Key:         "teams",
+			Title:       "NWSL teams: actual vs expected",
+			Description: "How each NWSL team's goals, points and goals allowed compare with xG and xPoints in a season, as a chart, gap, outlier plot or table.",
 			Displays: []exploreDisplay{
 				{"chart", "Actual vs expected"}, {"gap", "Gap to expected"}, {"scatter", "Outlier plot"},
 				{"quadrant", "Scored vs allowed"}, {"table", "Table"},
@@ -81,31 +92,94 @@ var exploreViewGroups = []exploreViewGroup{
 		},
 	}},
 	{Key: "profile", Label: "Team profile", Views: []exploreView{
-		{Key: "team-rankings", Label: "Rankings"},
 		{
-			Key: "season-trend", Label: "Match by match",
+			Key: "team-rankings", Label: "Rankings", Slug: "rankings",
+			Title: "NWSL team rankings", Description: "Where an NWSL team ranked in the league each season, measure by measure.",
+		},
+		{
+			Key: "season-trend", Label: "Match by match", Slug: "match-by-match",
+			Title: "NWSL team form match by match", Description: "An NWSL team's results, goals and xG match by match through a season, with rolling averages.",
 			Defaults:           map[string]string{"trend-view": "balance", "average-series": "goals"},
 			PointsOnly:         exploreRule{{"trend-view": {"points"}}, {"trend-view": {"relative"}, "average-series": {"points", "xpoints"}}},
 			OpponentAdjustment: exploreRule{{"trend-view": {"balance", "difference", "points"}}},
 			NeedsForecast:      true,
 		},
-		{Key: "team-history", Label: "Season by season", PointsOnly: exploreRule{{"measure": {"points"}}}, PointsNote: exploreRule{{}}},
-		{Key: "head-to-head", Label: "Head to head", PointsOnly: exploreRule{{"h2h-series": {"points"}}}, BothBases: true},
+		{
+			Key: "team-history", Label: "Season by season", Slug: "season-by-season",
+			Title: "NWSL team history season by season", Description: "An NWSL team's goals, xG, points and xPoints season by season.",
+			PointsOnly: exploreRule{{"measure": {"points"}}}, PointsNote: exploreRule{{}},
+		},
+		{
+			Key: "head-to-head", Label: "Head to head", Slug: "head-to-head",
+			Title: "NWSL head-to-head records", Description: "Every NWSL meeting between two teams, with results, goals and xG.",
+			PointsOnly: exploreRule{{"h2h-series": {"points"}}}, BothBases: true,
+		},
 	}},
 	{Key: "league", Label: "League trends", Views: []exploreView{
-		{Key: "trend", Label: "Scoring trend"},
-		{Key: "distribution", Label: "Goal distribution"},
-		{Key: "home-advantage", Label: "Home advantage"},
-		{Key: "parity", Label: "Parity", PointsOnly: exploreRule{{}}},
-		{Key: "thresholds", Label: "Shield and playoff thresholds", PointsOnly: exploreRule{{}}, BothBases: true, SkipsForecast: true},
 		{
-			Key: "team-seasons", Label: "Team-seasons",
+			Key: "trend", Label: "Scoring trend", Slug: "scoring-trend",
+			Title: "NWSL scoring trends by season", Description: "Goals and xG per match in every NWSL regular season.",
+		},
+		{
+			Key: "distribution", Label: "Goal distribution", Slug: "goal-distribution",
+			Title: "NWSL goal distribution by season", Description: "The share of NWSL regular-season matches with 0, 1, 2, 3 or 4+ goals, season by season.",
+		},
+		{
+			Key: "home-advantage", Label: "Home advantage", Slug: "home-advantage",
+			Title: "NWSL home advantage by season", Description: "How much better NWSL home teams do per match in goals, xG, points and xPoints, season by season.",
+		},
+		{
+			Key: "parity", Label: "Parity", Slug: "parity",
+			Title: "NWSL parity by season", Description: "How evenly matched NWSL teams were each season, measured by the spread of their points.",
+			PointsOnly: exploreRule{{}},
+		},
+		{
+			Key: "thresholds", Label: "Shield and playoff thresholds", Slug: "playoff-thresholds",
+			Title: "NWSL points needed for the playoffs and Shield", Description: "How many points it took to win the NWSL Shield, earn a home playoff game or a bye, and make the playoffs each season.",
+			PointsOnly: exploreRule{{}}, BothBases: true, SkipsForecast: true,
+		},
+		{
+			Key: "team-seasons", Label: "Team-seasons", Slug: "team-seasons",
+			Title: "Best and worst NWSL team-seasons", Description: "Every NWSL team-season ranked by points, goals, xG and more.",
 			Defaults:   map[string]string{"team-seasons-measure": "points"},
 			PointsOnly: exploreRule{{"team-seasons-measure": {"points"}}},
 			BothBases:  true,
 		},
-		{Key: "table", Label: "Scoring table"},
+		{
+			Key: "table", Label: "Scoring table", Slug: "scoring-table",
+			Title: "NWSL scoring by season", Description: "Goals, xG and goals minus xG per match for every NWSL regular season.",
+		},
 	}},
+}
+
+func init() {
+	for i := range exploreViewGroups {
+		for j := range exploreViewGroups[i].Views {
+			view := &exploreViewGroups[i].Views[j]
+			view.DocumentTitle = documentTitle(view.Title)
+		}
+	}
+}
+
+// exploreViewPath is the view's page, from the site root: /explore/<slug>,
+// or /explore for the default view. Selections stay in the query string.
+func exploreViewPath(view exploreView) string {
+	if view.Slug == "" {
+		return "/explore"
+	}
+	return "/explore/" + view.Slug
+}
+
+// exploreViewForSlug finds the view a /explore/<slug> path names.
+func exploreViewForSlug(slug string) (exploreView, bool) {
+	for _, group := range exploreViewGroups {
+		for _, view := range group.Views {
+			if slug != "" && view.Slug == slug {
+				return view, true
+			}
+		}
+	}
+	return exploreView{}, false
 }
 
 func exploreViewFor(key string) (exploreView, bool) {
@@ -153,15 +227,6 @@ func (view exploreView) displayKeys() []string {
 		keys = append(keys, display.Key)
 	}
 	return keys
-}
-
-func (view exploreView) displayLabel(key string) string {
-	for _, display := range view.Displays {
-		if display.Key == key {
-			return display.Label
-		}
-	}
-	return ""
 }
 
 // exploreRequestedView returns the view a query asks for, before validation.

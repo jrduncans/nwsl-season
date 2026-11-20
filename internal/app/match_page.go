@@ -157,7 +157,8 @@ func (a *application) match(w http.ResponseWriter, r *http.Request) {
 	// The match is already chosen, so switching season or competition has no destination.
 	view.SeasonSelector, view.StageSelector = nil, nil
 	view.Title, view.Description = matchMeta(scope, view.Match, a.options.Location, view.ModelName != "")
-	view.HeadToHeadPath = relativeURL(r.URL.Path, "/explore") + "?" + url.Values{"view": {"head-to-head"}, "team": {game.HomeTeamID}, "opponent": {game.AwayTeamID}}.Encode()
+	headToHead, _ := exploreViewFor("head-to-head")
+	view.HeadToHeadPath = relativeURL(r.URL.Path, exploreViewPath(headToHead)) + "?" + url.Values{"team": {game.HomeTeamID}, "opponent": {game.AwayTeamID}}.Encode()
 	a.render(w, r, "match", &view)
 }
 

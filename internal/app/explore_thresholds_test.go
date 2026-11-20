@@ -14,7 +14,7 @@ import (
 func TestExploreThresholdsUsesOneArchiveAndNativeDetails(t *testing.T) {
 	store := &archiveHTTPStore{archive: apptest.Scenario(t, apptest.ScenarioOverview)}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=thresholds&threshold-season=2022&penalties=exclude", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/playoff-thresholds?threshold-season=2022&penalties=exclude", nil))
 	if response.Code != 200 {
 		t.Fatalf("%d: %s", response.Code, response.Body.String())
 	}
@@ -31,7 +31,7 @@ func TestExploreThresholdsUsesOneArchiveAndNativeDetails(t *testing.T) {
 		t.Fatal("penalties control in points-only view")
 	}
 	for _, query := range []string{"threshold-season=", "threshold-season=2020", "threshold-season=2026", "threshold-season=2022&threshold-season=2023", "threshold-outcome=bogus", "threshold-sort=bogus", "threshold-order=up"} {
-		status, _ := getPage(t, store.archive, "/explore?view=thresholds&"+query)
+		status, _ := getPage(t, store.archive, "/explore/playoff-thresholds?"+query)
 		if status != http.StatusBadRequest {
 			t.Errorf("%s: %d", query, status)
 		}
@@ -81,7 +81,7 @@ func TestExploreThresholdsRecordedArchiveReconcilesAllCutoffs(t *testing.T) {
 			}
 		}
 	}
-	for _, path := range []string{"/explore?view=thresholds&threshold-season=2023", "/explore?view=thresholds&threshold-season=2023&penalties=exclude"} {
+	for _, path := range []string{"/explore/playoff-thresholds?threshold-season=2023", "/explore/playoff-thresholds?threshold-season=2023&penalties=exclude"} {
 		status, body := getPage(t, archive, path)
 		if status != 200 {
 			t.Fatalf("%d", status)
@@ -132,7 +132,7 @@ func TestExploreThresholdTableFiltersAndSortsOneOutcome(t *testing.T) {
 					t.Fatal("incorrect PPG ordering", values)
 				}
 			}
-			status, body := getPage(t, archive, "/explore?view=thresholds&"+query.Encode())
+			status, body := getPage(t, archive, "/explore/playoff-thresholds?"+query.Encode())
 			if status != 200 {
 				t.Fatal(status)
 			}

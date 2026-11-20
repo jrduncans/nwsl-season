@@ -3,11 +3,11 @@
 <header><h1>Explore</h1></header>
 {{template "penaltiesHelp"}}
 <nav class="explore-views" aria-label="Explore analyses">
-{{range .Views}}<a href="?view={{(index .Views 0).Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" rel="nofollow" data-group-choice="{{.Key}}"{{if eq $.ViewGroup .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+{{range .Views}}<a href="{{$.ViewHref (index .Views 0).Key}}"{{if $.NonPenalty}} rel="nofollow"{{end}} data-group-choice="{{.Key}}"{{if eq $.ViewGroup .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}</nav>
 {{range .Views}}<nav class="explore-subviews" data-group-views="{{.Key}}" aria-label="{{.Label}} views"{{if ne $.ViewGroup .Key}} hidden{{end}}>
 {{range .Views}}{{$view := .Key}}{{range .Displays}}<a href="{{index $.TeamDisplayURLs .Key}}" rel="nofollow" data-team-display="{{.Key}}"{{if and (eq $.View $view) (eq $.TeamDisplay .Key)}} aria-current="page"{{end}}>{{.Label}}</a>
-{{else}}<a href="?view={{.Key}}{{if $.NonPenalty}}&amp;penalties=exclude{{end}}" rel="nofollow" data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+{{else}}<a href="{{$.ViewHref .Key}}"{{if $.NonPenalty}} rel="nofollow"{{end}} data-view-choice="{{.Key}}"{{if eq $.View .Key}} aria-current="page"{{end}}>{{.Label}}</a>
 {{end}}{{end}}</nav>
 {{end}}<p class="explore-data-warning" data-explore-unavailable hidden>Charts and in-page switching could not load. The tables still work; reload the page to try again.</p>
 <section data-panel="trend"{{if ne .View "trend"}} hidden{{end}} aria-labelledby="explore-trend-title">
@@ -36,7 +36,7 @@
 </section>
 <section data-panel="distribution"{{if ne .View "distribution"}} hidden{{end}} aria-labelledby="explore-distribution-title">
 <div class="explore-heading"><h2 id="explore-distribution-title">Share of regular-season matches {{if eq .DistributionBin "all"}}by total {{$.GoalsWord}}{{else}}with {{if eq .DistributionBin "4"}}{{template "basisText" ($.Both "4+ goals")}}{{else if eq .DistributionBin "1"}}{{template "basisText" ($.Both "1 goal")}}{{else}}{{$.T (printf "%s goals" .DistributionBin)}}{{end}}{{end}}</h2>
-{{if .HasDistributionBars}}<form method="get" id="distribution-controls" class="explore-team-controls" data-distribution-controls><input type="hidden" name="view" value="distribution"><noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
+{{if .HasDistributionBars}}<form method="get" id="distribution-controls" class="explore-team-controls" data-distribution-controls><noscript><button class="button" type="submit">Show distribution</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 {{if .HasDistributionBars}}
 <div class="explore-chart-card" data-distribution-card>
 <div class="explore-chart-options">
@@ -113,7 +113,7 @@
 {{template "exploreHeadToHead" .}}
 <section data-panel="parity"{{if ne .View "parity"}} hidden{{end}} aria-labelledby="explore-parity-title">
 <div class="explore-heading"><h2 id="explore-parity-title">How evenly matched teams were</h2>
-{{if .ParityData}}<form method="get" id="parity-controls" class="explore-team-controls" data-parity-controls><input type="hidden" name="view" value="parity">{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
+{{if .ParityData}}<form method="get" id="parity-controls" class="explore-team-controls" data-parity-controls>{{if .ParityExpanded}}<input type="hidden" name="parity-sort" value="{{.ParitySort}}"><input type="hidden" name="parity-order" value="{{.ParityOrder}}">{{end}}<label>Season <select name="season" data-parity-season>{{range .ParityData}}<option value="{{.Season}}"{{if eq .Season $.ParitySeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>{{template "penaltiesSelect" ($.PenaltiesSwitch "")}}<noscript><button class="button" type="submit">Show season</button></noscript></form>{{else}}{{template "penaltiesForm" $}}{{end}}</div>
 {{if .ParityData}}
 <div class="explore-chart-card" data-parity-card>
 <div class="explore-chart-options">
@@ -167,7 +167,7 @@
 <section data-panel="teams"{{if ne .View "teams"}} hidden{{end}} aria-labelledby="explore-teams-title">
 <div class="explore-heading"><h2 id="explore-teams-title">{{if eq .TeamDisplay "gap"}}Actual − expected by team{{else if eq .TeamDisplay "scatter"}}Actual vs expected by team{{else if eq .TeamDisplay "quadrant"}}Scored vs allowed by team{{else}}Actual vs expected{{end}}</h2>
 <form method="get" id="team-controls" data-team-controls class="explore-team-controls">
-<input type="hidden" name="view" value="teams">
+
 <input type="hidden" name="display" value="{{.TeamDisplay}}">
 <input type="hidden" name="team-sort" value="{{.TeamSort}}">
 <input type="hidden" name="team-order" value="{{.TeamOrder}}">
@@ -239,7 +239,7 @@
 <section data-panel="team-rankings"{{if ne .View "team-rankings"}} hidden{{end}} aria-labelledby="explore-team-rankings-title">
 <h2 id="explore-team-rankings-title">Team rankings</h2>
 <form method="get" data-team-rankings-controls class="explore-team-controls">
-<input type="hidden" name="view" value="team-rankings">
+
 <label>Season <select name="season">{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team"{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 {{template "segmented" .RankingUnitsControl}}
@@ -260,7 +260,7 @@
 <section data-panel="team-history"{{if ne .View "team-history"}} hidden{{end}} aria-labelledby="explore-team-history-title">
 <h2 id="explore-team-history-title">Season-by-season {{if eq .TeamMeasure "points"}}points{{else}}scoring{{end}}</h2>
 <form method="get" id="team-history-controls" data-team-history-controls class="explore-team-controls">
-<input type="hidden" name="view" value="team-history">
+
 <input type="hidden" name="history-sort" value="{{.HistorySort}}">
 <input type="hidden" name="history-order" value="{{.HistoryOrder}}">
 <label>Team <select name="team" data-history-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
@@ -313,7 +313,7 @@
 <section data-panel="season-trend"{{if ne .View "season-trend"}} hidden{{end}} aria-labelledby="explore-season-trend-title">
 <h2 id="explore-season-trend-title" class="visually-hidden">Match by match</h2>
 <form method="get" id="season-trend-controls" data-season-trend-controls class="explore-team-controls">
-<input type="hidden" name="view" value="season-trend"><input type="hidden" name="trend-sort" value="{{.TrendSort}}"{{if eq .TrendSort "match"}} disabled{{end}}><input type="hidden" name="trend-order" value="{{.TrendOrder}}"{{if eq .TrendOrder "asc"}} disabled{{end}}>
+<input type="hidden" name="trend-sort" value="{{.TrendSort}}"{{if eq .TrendSort "match"}} disabled{{end}}><input type="hidden" name="trend-order" value="{{.TrendOrder}}"{{if eq .TrendOrder "asc"}} disabled{{end}}>
 <label>Season <select name="season" data-trend-season{{if not .TeamSeasons}} disabled{{end}}>{{range .TeamSeasons}}<option value="{{.Season}}"{{if eq .Season $.TeamSeason}} selected{{end}}>{{.Season}}</option>{{end}}</select></label>
 <label>Team <select name="team" data-trend-team{{if not .HistoryTeamOptions}} disabled{{end}}>{{range .HistoryTeamOptions}}<option value="{{.ID}}"{{if eq .ID $.HistoryTeam.ID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
 <input type="hidden" name="series" data-trend-carried-series value="{{.HistorySeries}}">

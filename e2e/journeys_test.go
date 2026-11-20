@@ -1091,11 +1091,11 @@ func TestJ5MissingXG(t *testing.T) {
 			// Every team's matches are only partly covered, so no team has a
 			// complete xG comparison.
 			for _, display := range []string{"gap", "scatter"} {
-				contain("explore?view=teams&display="+display,
+				contain("explore?display="+display,
 					"Some match xG data is missing. Affected teams have no xG comparison yet.",
 					"No teams have complete xG differential for this measure yet.")
 			}
-			visit(t, page, j.URL("explore?view=teams&display=quadrant&quadrant-data=xg"))
+			visit(t, page, j.URL("explore?display=quadrant&quadrant-data=xg"))
 			if err := expect.Locator(page.Locator("[data-team-quadrant-missing]")).ToContainText("Incomplete xG for"); err != nil {
 				t.Errorf("quadrant plot should list the teams with incomplete xG: %v", err)
 			}

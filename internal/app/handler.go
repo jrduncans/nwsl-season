@@ -114,6 +114,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /history", application.legacyHistory)
 	mux.HandleFunc("GET /history/scoring", application.legacyHistory)
 	mux.HandleFunc("GET /explore", application.explore)
+	mux.HandleFunc("GET /explore/{slug}", application.explore)
 	mux.HandleFunc("GET "+exploreDataPath+"{part}", application.exploreData)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
@@ -1745,10 +1746,19 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "history" && parts[1] == "scoring" {
 		return "/history/scoring", true
 	}
+	if _, ok := exploreViewForSlug(parts[len(parts)-1]); ok && len(parts) == 2 && parts[0] == "explore" {
+		return "/" + strings.Join(parts, "/"), true
+	}
 	return requestPath, false
 }
 
 func stripBasePath(requestPath string) (string, bool) {
+	// An Explore view's own page, /explore/<slug>.
+	if index := strings.LastIndex(requestPath, "/explore/"); index >= 0 {
+		if _, ok := exploreViewForSlug(strings.TrimSuffix(requestPath[index+len("/explore/"):], "/")); ok {
+			return requestPath[index:], true
+		}
+	}
 	if strings.HasSuffix(strings.TrimSuffix(requestPath, "/"), "/explore") {
 		if strings.HasSuffix(requestPath, "/") {
 			return "/explore/", true
@@ -1824,26 +1834,33 @@ func health(w http.ResponseWriter, _ *http.Request) {
 	_, _ = fmt.Fprintln(w, "ok")
 }
 
-// robotsBody asks crawlers not to follow Explore's query strings. Every
-// combination of view, team, season and display is its own URL, so a crawler
-// that follows them requests tens of thousands of near-identical pages.
-// /explore itself stays crawlable. In production Cloudflare prepends its
-// managed rules to this file, including a "User-agent: *" group with
-// "Allow: /". A crawler that combines both "*" groups lets the longer
+// robotsBody asks crawlers not to follow Explore's query strings. Each view
+// has its own crawlable path, but every combination of team, season and
+// display under it is its own URL too, so a crawler that follows them requests
+// tens of thousands of near-identical pages. "/explore*?" covers bare
+// /explore and every view path; Google and Bing match "*". Explore's versioned
+// payloads under /explore/data/ stay allowed (the longer Allow wins) so a
+// crawler that renders the page can draw its charts. In production Cloudflare
+// prepends its managed rules to this file, including a "User-agent: *" group
+// with "Allow: /". A crawler that combines both "*" groups lets the longer
 // Disallow match win, but some read only the most specific group that names
-// them, so the crawlers that followed Explore's query strings in November
-// 2026 get groups of their own.
+// them, so the crawlers that followed Explore's query strings in November 2026
+// get groups of their own.
 const robotsBody = `User-agent: *
-Disallow: /explore?
+Disallow: /explore*?
+Allow: /explore/data/
 
 User-agent: Amzn-SearchBot
-Disallow: /explore?
+Disallow: /explore*?
+Allow: /explore/data/
 
 User-agent: KeenableBot
-Disallow: /explore?
+Disallow: /explore*?
+Allow: /explore/data/
 
 User-agent: meta-webindexer
-Disallow: /explore?
+Disallow: /explore*?
+Allow: /explore/data/
 `
 
 // robotsTxt serves robotsBody and, when a public URL makes the sitemap

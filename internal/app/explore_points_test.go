@@ -82,7 +82,7 @@ func TestExploreAdjustedPointsTiles(t *testing.T) {
 func TestExplorePointsTrendFallback(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&trend-view=points&smoothing=none"
+	path := "/explore/match-by-match?season=2025&trend-view=points&smoothing=none"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -135,7 +135,7 @@ func TestExplorePointsTrendFallback(t *testing.T) {
 func TestExploreHeadToHeadPoints(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
-	path := "/explore?view=head-to-head&opponent=" + h2hSeattleID + "&h2h-series=points"
+	path := "/explore/head-to-head?opponent=" + h2hSeattleID + "&h2h-series=points"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -186,7 +186,7 @@ func TestExplorePointsEmptyVenue(t *testing.T) {
 func TestExplorePointsSortFormState(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&trend-view=points&smoothing=none"
+	path := "/explore/match-by-match?season=2025&trend-view=points&smoothing=none"
 	for _, order := range []string{"asc", "desc"} {
 		_, body := getPage(t, archive, path+"&trend-sort=points-gap&trend-order="+order)
 		input := find(t, body, "[data-season-trend-controls] input[name=trend-sort]")[0]
@@ -207,7 +207,7 @@ func TestExplorePointsSortFormState(t *testing.T) {
 	}
 	for _, selection := range []string{"trend-view=compare&smoothing=5", "trend-view=balance&smoothing=none"} {
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=season-trend&"+selection+"&trend-sort=points-gap&trend-order=desc", nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/match-by-match?"+selection+"&trend-sort=points-gap&trend-order=desc", nil))
 		if response.Code != http.StatusFound {
 			t.Fatalf("stale sort status: %d", response.Code)
 		}
@@ -215,7 +215,7 @@ func TestExplorePointsSortFormState(t *testing.T) {
 		if err != nil || target.Path != "" || target.Query().Has("trend-sort") || target.Query().Has("trend-order") {
 			t.Fatalf("canonical sort redirect: %s, %v", target, err)
 		}
-		if target.Query().Get("smoothing") == "" || target.Query().Get("view") != "season-trend" {
+		if target.Query().Get("smoothing") == "" || target.Query().Has("view") {
 			t.Fatal("redirect lost selection")
 		}
 	}

@@ -14,7 +14,7 @@ import (
 func TestExploreTeamSeasonsModesAndTable(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
-	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore?view=team-seasons")
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore/team-seasons")
 	defer expectInPlace(t, page, "Team-seasons modes, penalties and sorting")()
 	if err := expect.Locator(page.Locator("[data-team-seasons-values]")).Not().ToHaveAttribute("open", ""); err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestExploreTeamSeasonsNoScript(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-	visitStatic(t, page, base+"explore?view=team-seasons&penalties=exclude")
+	visitStatic(t, page, base+"explore/team-seasons?penalties=exclude")
 	if err := expect.Locator(page.Locator("[data-team-seasons-values]")).Not().ToHaveAttribute("open", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -212,9 +212,9 @@ func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 	for _, noScript := range []bool{false, true} {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: noScript})
 		if noScript {
-			visitStatic(t, page, small+"explore?view=team-seasons")
+			visitStatic(t, page, small+"explore/team-seasons")
 		} else {
-			visit(t, page, small+"explore?view=team-seasons")
+			visit(t, page, small+"explore/team-seasons")
 		}
 		if err := expect.Locator(page.Locator("[data-team-seasons-row]")).ToHaveCount(14); err != nil {
 			t.Fatal(err)
@@ -230,7 +230,7 @@ func TestExploreTeamSeasonsSmallPopulationAndActiveGate(t *testing.T) {
 		}
 		assertNoHorizontalOverflow(t, page)
 	}
-	page := explorePage(t, exploreBaseArchive(t, apptest.CompleteScenarioInventories(t, apptest.TeamHistoryBelowGate(t))), Mobile, "explore?view=team-seasons")
+	page := explorePage(t, exploreBaseArchive(t, apptest.CompleteScenarioInventories(t, apptest.TeamHistoryBelowGate(t))), Mobile, "explore/team-seasons")
 	if err := expect.Locator(page.Locator("[data-team-seasons-rows] tr")).ToHaveCount(86); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 	for _, vp := range []viewport{Desktop, Mobile} {
 		t.Run(fmt.Sprintf("%dpx", vp.Width), func(t *testing.T) {
 			page := newPageWith(t, pageOptions{Viewport: vp, Touch: vp == Mobile})
-			visit(t, page, base+"explore?view=team-seasons&team-seasons-rank-by=gap")
+			visit(t, page, base+"explore/team-seasons?team-seasons-rank-by=gap")
 			expect := playwright.NewPlaywrightAssertions()
 			defer expectInPlace(t, page, "scatter display, measures, identification and history")()
 			clickDisplay := func(display string) {
@@ -402,7 +402,7 @@ func TestExploreTeamSeasonsScatterNoScript(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	for _, vp := range []viewport{Desktop, Mobile} {
 		page := newPageWith(t, pageOptions{Viewport: vp, NoScript: true})
-		visitStatic(t, page, base+"explore?view=team-seasons&team-seasons-rank-by=expected")
+		visitStatic(t, page, base+"explore/team-seasons?team-seasons-rank-by=expected")
 		chooseOption(t, page, "[data-segmented=team-seasons-display]", "scatter")
 		if err := page.Locator("[data-team-seasons-submit]").Click(); err != nil {
 			t.Fatal(err)
@@ -442,7 +442,7 @@ func TestExploreTeamSeasonsScatterNoScript(t *testing.T) {
 func TestExploreTeamSeasonsScatterReloadAndEmpty(t *testing.T) {
 	t.Parallel()
 	expect := playwright.NewPlaywrightAssertions()
-	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore?view=team-seasons&team-seasons-display=scatter")
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Mobile, "explore/team-seasons?team-seasons-display=scatter")
 	canvas := page.Locator(`[data-chart="team-seasons-scatter"]`)
 	if err := canvas.Press("Home"); err != nil {
 		t.Fatal(err)
@@ -465,7 +465,7 @@ func TestExploreTeamSeasonsScatterReloadAndEmpty(t *testing.T) {
 	if err := expect.Locator(canvas).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}
-	empty := explorePage(t, exploreBase(t, apptest.ScenarioEmpty), Mobile, "explore?view=team-seasons&team-seasons-display=scatter")
+	empty := explorePage(t, exploreBase(t, apptest.ScenarioEmpty), Mobile, "explore/team-seasons?team-seasons-display=scatter")
 	if err := expect.Locator(empty.Locator("[data-team-seasons-scatter-empty]")).ToBeVisible(); err != nil {
 		t.Fatal(err)
 	}

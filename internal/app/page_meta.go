@@ -128,16 +128,6 @@ func modelEvaluationMeta() (string, string) {
 	return "NWSL forecast model evaluation", "How closely each forecast model predicted the final NWSL regular-season table at different points in past seasons."
 }
 
-// exploreDescription describes Explore as a whole: its query-string views
-// all name bare /explore as canonical.
-func exploreDescription(firstSeason string) string {
-	since := ""
-	if firstSeason != "" {
-		since = " since " + firstSeason
-	}
-	return "NWSL history" + since + ": scoring trends, team records, parity, home advantage and head-to-head results."
-}
-
 // matchMeta names the meeting: the score once it's played, the date before,
 // so two teams' several meetings don't share a title.
 func matchMeta(scope requestCompetition, match fixtureView, location *time.Location, outlook bool) (string, string) {

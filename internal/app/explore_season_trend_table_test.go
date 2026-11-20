@@ -13,7 +13,7 @@ import (
 func TestExploreTrendTableColumnsAndNativeSorting(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	base := "/explore?view=season-trend&season=2025&team=odMX2OJqYL"
+	base := "/explore/match-by-match?season=2025&team=odMX2OJqYL"
 	common := []string{"Match", "Date (venue local)", "Venue", "Opponent", "Score", "Result", "Points", "xG for", "xG against", "xPoints"}
 	for _, chart := range []struct {
 		view    string
@@ -55,7 +55,7 @@ func TestExploreTrendTableColumnsAndNativeSorting(t *testing.T) {
 			if target.Query().Get("trend-view") != chart.view || target.Query().Get("smoothing") != mode {
 				t.Fatal("sort lost chart selection")
 			}
-			code, sorted := getPage(t, archive, "/explore"+target.String())
+			code, sorted := getPage(t, archive, "/explore/match-by-match"+target.String())
 			if code != http.StatusOK {
 				t.Fatal(code)
 			}
@@ -70,7 +70,7 @@ func TestExploreTrendTableColumnsAndNativeSorting(t *testing.T) {
 func TestExploreTrendTableValidationAndChartFallback(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	base := "/nwsl-season/explore?view=season-trend&season=2025"
+	base := "/nwsl-season/explore/match-by-match?season=2025"
 	for _, bad := range []string{"trend-sort=", "trend-sort=other", "trend-sort=venue&trend-sort=result", "trend-order=", "trend-order=up", "trend-order=asc&trend-order=asc"} {
 		code, _ := getPage(t, archive, base+"&"+bad)
 		if code != http.StatusBadRequest {

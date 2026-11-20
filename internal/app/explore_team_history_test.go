@@ -50,7 +50,7 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 	// The HTML fallback contains every measure, even when the chart shows one.
 	store := &archiveHTTPStore{archive: archive}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=team-history&team=alpha&measure=against", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/season-by-season?team=alpha&measure=against", nil))
 	body := response.Body.String()
 	for _, fragment := range []string{`data-panel="team-history" aria-labelledby=`, `value="alpha" selected`, `<th scope="row">2026</th>`, `<th scope="colgroup" colspan="2"><span data-basis-only="all">Goals allowed</span><span data-basis-only="non-penalty">Non-penalty goals allowed</span></th>`, `<td>-1.00</td><td>1.00</td>`, `Some seasons have incomplete xG and xPoints for this team`, `Show team history`} {
 		if !strings.Contains(body, fragment) {
@@ -141,7 +141,7 @@ func TestExploreTeamHistoryHeadingNamesTheView(t *testing.T) {
 		"view=team-history&measure=points": "Season-by-season points</h2>",
 	} {
 		response := httptest.NewRecorder()
-		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?"+query, nil))
+		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, exploreTarget(query), nil))
 		if !strings.Contains(response.Body.String(), heading) {
 			t.Errorf("%s: missing heading %q", query, heading)
 		}
@@ -154,7 +154,7 @@ func TestExploreTeamHistoryEmptyArchive(t *testing.T) {
 		t.Fatalf("empty archive: %+v, %v", page, err)
 	}
 	response := httptest.NewRecorder()
-	NewHandler(&archiveHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-history", nil))
+	NewHandler(&archiveHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/season-by-season", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `data-team-history-empty>No team history`) {
 		t.Fatalf("empty history: %d %s", response.Code, response.Body.String())
 	}
@@ -210,7 +210,7 @@ func TestExploreTeamHistorySortsEveryColumnBeforeRounding(t *testing.T) {
 							wantOrder, wantSort = "asc", "descending"
 						}
 					}
-					if link.Query().Get("view") != "team-history" || link.Query().Get("team") != "alpha" || link.Query().Get("measure") != "against" || link.Query().Get("history-sort") != column.Key || link.Query().Get("history-order") != wantOrder || column.Sort != wantSort {
+					if link.Query().Get("team") != "alpha" || link.Query().Get("measure") != "against" || link.Query().Get("history-sort") != column.Key || link.Query().Get("history-order") != wantOrder || column.Sort != wantSort {
 						t.Fatalf("sort link or state lost selection: %+v", column)
 					}
 				}
@@ -229,7 +229,7 @@ func TestExploreTeamHistorySortURLsAndFallback(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	handler := NewHandler(&archiveHTTPStore{archive: archive})
-	path := "/nwsl-season/explore?view=team-history&team=alpha&measure=against&history-sort=for-actual&history-order=desc"
+	path := "/nwsl-season/explore/season-by-season?team=alpha&measure=against&history-sort=for-actual&history-order=desc"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 	body := response.Body.String()
@@ -252,7 +252,7 @@ func TestExploreTeamHistorySortURLsAndFallback(t *testing.T) {
 		"history-order=", "history-order=bad", "history-order=asc&history-order=desc",
 	} {
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-history&"+query, nil))
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/season-by-season?"+query, nil))
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("query %s: status %d, want 400", query, response.Code)
 		}

@@ -96,13 +96,13 @@ func TestExploreTeamRankingsFallbackAndEmptySelections(t *testing.T) {
 		query string
 		want  []string
 	}{
-		{"season=2026&team=alpha", []string{`data-panel="team-rankings" aria-labelledby=`, `data-view-choice="team-rankings" aria-current="page"`, `<input type="hidden" name="view" value="team-rankings">`, `2026 · 20 played · 2 teams · In progress`, `Tied 1st`, ` per match`, `style="left:0.0000%"`, `data-rankings-warning hidden`}},
+		{"season=2026&team=alpha", []string{`data-panel="team-rankings" aria-labelledby=`, `data-view-choice="team-rankings" aria-current="page"`, `2026 · 20 played · 2 teams · In progress`, `Tied 1st`, ` per match`, `style="left:0.0000%"`, `data-rankings-warning hidden`}},
 		{"season=2025&team=alpha&units=total", []string{`data-rankings-warning>`, `name="units" value="total" checked><span>Totals`, ` total`, `League xG ranks are unavailable`, `Unavailable`}},
 		{"season=2024&team=alpha", []string{`data-rankings-empty>`, `data-rankings-results hidden`}},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=team-rankings&"+tc.query, nil))
+			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/rankings?"+tc.query, nil))
 			if response.Code != http.StatusOK {
 				t.Fatalf("status=%d: %s", response.Code, response.Body.String())
 			}
@@ -122,7 +122,7 @@ func TestExploreTeamRankingsFallbackAndEmptySelections(t *testing.T) {
 	}
 	for _, query := range []string{"team=unknown", "team=", "team=alpha&team=beta", "units=bad", "units=total&units=total", "season=1900", "season=2026&season=2025"} {
 		response := httptest.NewRecorder()
-		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-rankings&"+query, nil))
+		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/rankings?"+query, nil))
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("query %s status=%d", query, response.Code)
 		}

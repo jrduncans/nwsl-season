@@ -67,7 +67,7 @@ func TestExploreTeamSeasonsHeadings(t *testing.T) {
 	} {
 		for i, by := range teamSeasonsRankBys {
 			query := url.Values{"view": {"team-seasons"}, "team-seasons-measure": {tc.measure}, "team-seasons-rank-by": {by}, "penalties": {tc.penalties}}
-			code, body := getPage(t, archive, "/explore?"+query.Encode())
+			code, body := getPage(t, archive, exploreTarget(query.Encode()))
 			if code != http.StatusOK {
 				t.Fatalf("%s: status %d", query.Encode(), code)
 			}
@@ -82,7 +82,7 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
 	store := &archiveHTTPStore{archive: archive}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=team-seasons", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/team-seasons", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", response.Code, response.Body.String())
 	}
@@ -90,7 +90,7 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 		t.Fatalf("unexpected reads: %+v", store)
 	}
 	body := response.Body.String()
-	requireExact(t, body, "title", "Team-seasons · Explore · NWSL by the Numbers")
+	requireExact(t, body, "title", "Best and worst NWSL team-seasons · NWSL by the Numbers")
 	forbidRaw(t, body, "data-team-seasons-detail", "data-team-seasons-hint", `name="team-season"`, "data-team-seasons-link")
 	if len(find(t, body, "[data-team-seasons-values][open]")) != 0 {
 		t.Fatal("default table expanded")
@@ -106,7 +106,7 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 	}
 	requireText(t, body, ".explore-archive-break", "124 more team-seasons")
 	var payload exploreTeamSeasonsPayload
-	if err := json.Unmarshal([]byte(explorePayload(t, NewHandler(store), "/explore", body, "explore-team-seasons-data")), &payload); err != nil {
+	if err := json.Unmarshal([]byte(explorePayload(t, NewHandler(store), "/explore/team-seasons", body, "explore-team-seasons-data")), &payload); err != nil {
 		t.Fatal(err)
 	}
 	for _, row := range payload.All {
@@ -120,7 +120,7 @@ func TestExploreTeamSeasonsArchiveAndModes(t *testing.T) {
 	requireExact(t, body, "[data-team-seasons-axis] span", "3")
 	for measureIndex, measure := range teamSeasonsMeasures {
 		for byIndex, by := range teamSeasonsRankBys {
-			path := "/explore?view=team-seasons&team-seasons-measure=" + measure + "&team-seasons-rank-by=" + by
+			path := "/explore/team-seasons?team-seasons-measure=" + measure + "&team-seasons-rank-by=" + by
 			code, body := getPage(t, archive, path)
 			if code != http.StatusOK {
 				t.Fatalf("%s: %d", path, code)
@@ -174,7 +174,7 @@ func TestExploreTeamSeasonsIndependentCoverageAndGate(t *testing.T) {
 		{"315VnJ759x", "points", "xPoints incomplete"}, {"odMX2OJqYL", "for", "xG incomplete"},
 	} {
 		for _, by := range teamSeasonsRankBys {
-			_, body := getPage(t, archive, "/explore?view=team-seasons&team-seasons-measure="+tc.measure+"&team-seasons-rank-by="+by)
+			_, body := getPage(t, archive, "/explore/team-seasons?team-seasons-measure="+tc.measure+"&team-seasons-rank-by="+by)
 			rows := find(t, body, fmt.Sprintf(`[data-team-seasons-rows] tr[data-team-id="%s"][data-season="2026"]`, tc.id))
 			if len(rows) != 1 {
 				t.Fatalf("%s %s: missing team-season", tc.measure, by)
@@ -185,20 +185,20 @@ func TestExploreTeamSeasonsIndependentCoverageAndGate(t *testing.T) {
 			}
 		}
 	}
-	_, body := getPage(t, apptest.TeamHistoryBelowGate(t), "/explore?view=team-seasons")
+	_, body := getPage(t, apptest.TeamHistoryBelowGate(t), "/explore/team-seasons")
 	if len(find(t, body, "[data-team-seasons-rows] tr")) != 128 || len(find(t, body, `[data-team-seasons-rows] tr[data-season="2026"]`)) != 0 {
 		t.Fatal("below-gate population")
 	}
-	_, body = getPage(t, archive, "/explore?view=team-seasons")
+	_, body = getPage(t, archive, "/explore/team-seasons")
 	requireText(t, body, "[data-team-seasons-rows]", "in progress through 12 matches")
-	_, body = getPage(t, testArchive(t, map[string]archiveState{}), "/explore?view=team-seasons")
+	_, body = getPage(t, testArchive(t, map[string]archiveState{}), "/explore/team-seasons")
 	requireText(t, body, "[data-team-seasons-chart-empty]", "No ranked team-seasons")
 }
 
 func TestExploreTeamSeasonsTableExpansionAndNoBreak(t *testing.T) {
 	archive := apptest.TeamHistorySmall(t)
-	for _, suffix := range []string{"", "&team-seasons-sort=rank", "&team-seasons-order=asc"} {
-		_, body := getPage(t, archive, "/explore?view=team-seasons"+suffix)
+	for _, suffix := range []string{"", "?team-seasons-sort=rank", "?team-seasons-order=asc"} {
+		_, body := getPage(t, archive, "/explore/team-seasons"+suffix)
 		requireExact(t, body, "[data-team-seasons-summary]", "Table: all 16 team-seasons")
 		requireText(t, body, "[data-team-seasons-high]", "Highest points per match")
 		requireText(t, body, "[data-team-seasons-low]", "Lowest points per match")
@@ -212,7 +212,7 @@ func TestExploreTeamSeasonsTableExpansionAndNoBreak(t *testing.T) {
 	}
 	// Preserve the established handling of view; this feature owns no new rules.
 	for _, query := range []string{"view=", "view=team-seasons&view=trend"} {
-		code, _ := getPage(t, archive, "/explore?"+query)
+		code, _ := getPage(t, archive, exploreTarget(query))
 		if code != 200 {
 			t.Fatalf("view validation changed: %s %d", query, code)
 		}
@@ -226,7 +226,7 @@ func TestExploreTeamSeasonsRejectsInvalidState(t *testing.T) {
 		queries = append(queries, key+"=", key+"=bad", key+"="+allowed[0]+"&"+key+"="+allowed[0])
 	}
 	for _, q := range queries {
-		code, body := getPage(t, archive, "/explore?view=team-seasons&"+q)
+		code, body := getPage(t, archive, "/explore/team-seasons?"+q)
 		if code != 400 {
 			t.Errorf("%s: %d", q, code)
 		}
@@ -255,7 +255,7 @@ func TestExploreTeamSeasonsSortAndPointsBasis(t *testing.T) {
 	}
 	archive := penaltyArchive(t, 20)
 	for _, by := range teamSeasonsRankBys {
-		path := "/explore?view=team-seasons&team-seasons-rank-by=" + by
+		path := "/explore/team-seasons?team-seasons-rank-by=" + by
 		_, all := getPage(t, archive, path)
 		code, np := getPage(t, archive, path+"&penalties=exclude")
 		if code != 200 {
@@ -278,11 +278,11 @@ func TestExploreTeamSeasonsSortAndPointsBasis(t *testing.T) {
 	}
 	// Incomplete non-penalty coverage cannot silently remove points rows.
 	archive[0].Data.XGoals[0].Penalties = nil
-	_, body := getPage(t, archive, "/explore?view=team-seasons&penalties=exclude")
+	_, body := getPage(t, archive, "/explore/team-seasons?penalties=exclude")
 	if len(find(t, body, "[data-team-seasons-rows] tr")) != 2 {
 		t.Fatal("points basis eligibility")
 	}
-	_, body = getPage(t, archive, "/explore?view=team-seasons&team-seasons-measure=for&penalties=exclude")
+	_, body = getPage(t, archive, "/explore/team-seasons?team-seasons-measure=for&penalties=exclude")
 	requireText(t, body, "[data-team-seasons-chart-empty]", "No ranked team-seasons")
 	requireAttr(t, body, "[data-team-seasons-points-note]", "hidden", "")
 	if len(find(t, body, "[data-team-seasons-rows] tr")) != 0 {
@@ -295,7 +295,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 	for _, measure := range teamSeasonsMeasures {
 		var baseline string
 		for _, by := range teamSeasonsRankBys {
-			path := "/explore?view=team-seasons&team-seasons-display=scatter&team-seasons-measure=" + measure + "&team-seasons-rank-by=" + by
+			path := "/explore/team-seasons?team-seasons-display=scatter&team-seasons-measure=" + measure + "&team-seasons-rank-by=" + by
 			code, body := getPage(t, archive, path)
 			if code != http.StatusOK {
 				t.Fatalf("%s: %d", path, code)
@@ -305,7 +305,7 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 			requireAttr(t, body, `[data-segmented=team-seasons-display] input[value="scatter"]`, "checked", "")
 			requireText(t, body, "[data-team-seasons-title]", "vs expected per match, since 2016")
 			var payload exploreTeamSeasonsPayload
-			if err := json.Unmarshal([]byte(archivePayload(t, archive, "/explore", body, "explore-team-seasons-data")), &payload); err != nil {
+			if err := json.Unmarshal([]byte(archivePayload(t, archive, path, body, "explore-team-seasons-data")), &payload); err != nil {
 				t.Fatal(err)
 			}
 			missing := 0
@@ -333,9 +333,9 @@ func TestExploreTeamSeasonsScatter(t *testing.T) {
 		}
 	}
 	// Verify the existing fixture's independent metric coverage is retained.
-	_, body := getPage(t, archive, "/explore?view=team-seasons&team-seasons-display=scatter")
+	_, body := getPage(t, archive, "/explore/team-seasons?team-seasons-display=scatter")
 	requireText(t, body, `[data-team-seasons-rows] tr[data-team-id="315VnJ759x"][data-season="2026"]`, "xPoints incomplete")
-	_, body = getPage(t, archive, "/explore?view=team-seasons&team-seasons-display=scatter&team-seasons-measure=against&penalties=exclude")
+	_, body = getPage(t, archive, "/explore/team-seasons?team-seasons-display=scatter&team-seasons-measure=against&penalties=exclude")
 	requireText(t, body, "[data-team-seasons-scatter-description]", "npxG allowed")
 	requireText(t, body, "[data-team-seasons-scatter-meaning]", "more non-penalty goals allowed than npxG allowed")
 }

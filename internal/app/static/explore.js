@@ -1,6 +1,18 @@
 (async () => {
   const root = document.querySelector('[data-explore]');
   if (!root) return;
+  // Switching views in place moves between /explore and /explore/<slug>,
+  // which changes what a page-relative URL means. Pin each one the server
+  // rendered to the URL it means now, before any switch. Query-only and
+  // fragment links stay relative: they mean the view shown when followed.
+  const pinnable = value => value && !/^(?:[a-z][a-z0-9+.-]*:|\/|\?|#)/i.test(value);
+  document.querySelectorAll('[href], [src]').forEach(element => ['href', 'src'].forEach(name => {
+    const value = element.getAttribute(name);
+    if (pinnable(value)) element.setAttribute(name, new URL(value, location.href).href);
+  }));
+  for (const key of ['sharedUrl', 'basisUrl', 'otherBasisUrl']) {
+    if (pinnable(root.dataset[key])) root.dataset[key] = new URL(root.dataset[key], location.href).href;
+  }
   // The page links its payloads (explore_data.go) instead of embedding them.
   // Until they load, data-loading marks the page, which works as it does
   // without script: a changed control submits its form for a server render.
@@ -29,14 +41,12 @@
     const checkbox = event.target.closest?.('[data-penalties-selector]');
     if (!checkbox) return;
     event.stopPropagation();
-    const url = new URL(location.href);
-    if (checkbox.checked) url.searchParams.set('penalties', 'exclude'); else url.searchParams.delete('penalties');
-    if (!switchesBasis(url.searchParams) || !useBasis(checkbox.checked)) { location.assign(url); return; }
-    history.pushState(null, '', url);
+    const params = currentParams();
+    if (checkbox.checked) params.set('penalties', 'exclude'); else params.delete('penalties');
+    if (!switchesBasis(params) || !useBasis(checkbox.checked)) { location.assign(hrefFor(params)); return; }
+    history.pushState(null, '', hrefFor(params));
     applyURL();
   }, true);
-  // The server renders "<tab> · Explore · <site>"; tab names never contain " · ".
-  const titleSuffix = document.title.slice(document.title.indexOf(' · ') + 3);
   let records = rendered.chartData || [];
   let teamSeasons = rendered.teamSeasons || [];
   const h2hData = shared.h2h;
@@ -55,6 +65,36 @@
     Object.entries(alternative).every(([name, allowed]) => allowed.includes(params.get(name) || defaults[name] || '')));
   // Scoring trend was once the default view, so its metric links omitted it.
   const requestedView = params => params.get('view') || (params.has('metric') ? 'trend' : viewGroups[0].views[0].key);
+  // Each view has its own page, /explore/<slug>, with the default view at
+  // bare /explore, and the query string holds its selections. The script
+  // keeps the view among its parameters as `view` and converts only at the
+  // URL boundary: paramsOf reads a URL, hrefFor writes one.
+  const exploreRoot = location.pathname.replace(/\/explore(?:\/[^/]+)?\/?$/, '/explore');
+  const slugViews = new Map([...views.values()].filter(view => view.slug).map(view => [view.slug, view.key]));
+  const paramsOf = url => {
+    const params = new URLSearchParams(url.search);
+    const view = url.pathname === exploreRoot ? viewGroups[0].views[0].key : slugViews.get(url.pathname.slice(exploreRoot.length + 1));
+    if (view && !params.has('view')) params.set('view', view);
+    return params;
+  };
+  const currentParams = () => paramsOf(location);
+  const hrefFor = selection => {
+    const params = new URLSearchParams(selection);
+    const slug = views.get(requestedView(params))?.slug;
+    params.delete('view');
+    // At bare /explore a lone metric would read as the legacy Scoring trend
+    // link (see legacyTrendQuery), and it means nothing to the default view.
+    if (!slug && params.has('metric') && [...params.keys()].every(key => key === 'metric' || key === 'penalties')) params.delete('metric');
+    const query = params.toString();
+    return `${exploreRoot}${slug ? `/${slug}` : ''}${query ? `?${query}` : ''}`;
+  };
+  // A link that carries selections is nofollow; a view's own page isn't.
+  const linkTo = (link, selection) => {
+    link.href = hrefFor(selection);
+    if (new URL(link.href).search) link.rel = 'nofollow'; else link.removeAttribute('rel');
+  };
+  const isExploreLink = url => url.origin === location.origin && !url.pathname.startsWith(`${exploreRoot}/data/`)
+    && (url.pathname === exploreRoot || url.pathname.startsWith(`${exploreRoot}/`));
   // The Season by season chart card's controls submit with the form above it;
   // its segmented controls are RadioNodeLists.
   const historyPanel = root.querySelector('[data-panel="team-history"]');
@@ -657,7 +697,7 @@
       if (link.dataset.thresholdYear === thresholdSelected) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
       const selection = new URLSearchParams(params);
       selection.set('view', 'thresholds'); selection.set('threshold-season', link.dataset.thresholdYear);
-      link.href = `?${selection}`;
+      linkTo(link, selection);
     });
     const outcomeKeys = ['shield', 'home', 'bye', 'playoffs'];
     const outcome = outcomeKeys.includes(params.get('threshold-outcome')) ? params.get('threshold-outcome') : 'playoffs';
@@ -687,7 +727,7 @@
       selection.set('view', 'thresholds'); selection.set('threshold-season', thresholdSelected);
       selection.set('threshold-outcome', outcome); selection.set('threshold-sort', key);
       selection.set('threshold-order', selected ? (order === 'asc' ? 'desc' : 'asc') : key === 'team' ? 'asc' : 'desc');
-      link.href = `?${selection}`;
+      linkTo(link, selection);
     });
     if (params.has('threshold-outcome') || params.has('threshold-sort')) root.querySelector('[data-threshold-table]').open = true;
     const canvas = root.querySelector('[data-chart="thresholds"]');
@@ -881,7 +921,7 @@
   window.addEventListener('resize', () => {
     cancelAnimationFrame(parityResize);
     parityResize = requestAnimationFrame(() => {
-      if (!root.querySelector('[data-panel="parity"]')?.hidden) showParity(new URL(location.href).searchParams);
+      if (!root.querySelector('[data-panel="parity"]')?.hidden) showParity(currentParams());
     });
   });
   function teamDescription(chart, index) {
@@ -936,10 +976,10 @@
     });
   }
   function teamLink(changes) {
-    const params = new URLSearchParams(location.search);
+    const params = currentParams();
     params.set('view', 'teams');
     Object.entries(changes).forEach(([key, value]) => params.set(key, value));
-    return `?${params}`;
+    return hrefFor(params);
   }
   function teamYAxis(labels) {
     return {offset: true, grid: {color: color('--line'), drawTicks: false}, border: {display: false}, ticks: {autoSkip: false, display: false}, afterFit: scale => {
@@ -1636,7 +1676,7 @@
       const selection = new URLSearchParams(params);
       selection.set('view', 'team-history'); selection.set('team', historyTeam.value);
       selection.set('history-sort', key); selection.set('history-order', selected && order === 'desc' ? 'asc' : 'desc');
-      link.href = `?${selection}`;
+      linkTo(link, selection);
     });
     const metric = teamSortMetric(column);
     return [...rows].sort((a, b) => {
@@ -1963,7 +2003,7 @@
       selection.set('view', 'distribution');
       selection.set('distribution-sort', link.dataset.distributionSort);
       selection.set('distribution-order', selected && direction === 'desc' ? 'asc' : 'desc');
-      link.href = `?${selection}`;
+      linkTo(link, selection);
     });
   }
   function sortHomeTable(params) {
@@ -1987,7 +2027,7 @@
       selection.set('view', 'home-advantage');
       selection.set('home-sort', link.dataset.homeSort);
       selection.set('home-order', selected && direction === 'desc' ? 'asc' : 'desc');
-      link.href = `?${selection}`;
+      linkTo(link, selection);
     });
   }
   function sortParityTable(params) {
@@ -2012,13 +2052,13 @@
       const target = new URLSearchParams(selection);
       target.set('parity-sort', link.dataset.paritySort);
       target.set('parity-order', selected && direction === 'desc' ? 'asc' : 'desc');
-      link.href = `?${target}`;
+      linkTo(link, target);
     });
     const year = paritySeason(params);
     root.querySelectorAll('[data-parity-season-link]').forEach(link => {
       const target = new URLSearchParams(selection);
       target.set('season', link.dataset.paritySeasonLink);
-      link.href = `?${target}`;
+      linkTo(link, target);
       if (link.dataset.paritySeasonLink === year) link.setAttribute('aria-current', 'true'); else link.removeAttribute('aria-current');
     });
   }
@@ -2241,7 +2281,7 @@
         target.set('trend-sort', column.key); target.delete('trend-order');
         if (nextDesc) target.set('trend-order', 'desc');
         heading.setAttribute('aria-sort', active ? desc ? 'descending' : 'ascending' : 'none');
-        const link = archiveElement('a', column.label); link.href = `?${target}`; link.rel = 'nofollow'; link.dataset.trendSort = column.key;
+        const link = archiveElement('a', column.label); linkTo(link, target); link.rel = 'nofollow'; link.dataset.trendSort = column.key;
         link.setAttribute('aria-label', `Sort by ${column.label}`); heading.replaceChildren(link);
       }
       return heading;
@@ -2519,7 +2559,7 @@
     const measure = target.get('team-seasons-measure') || 'points';
     if (measure === 'points' || target.get('penalties') === 'include') target.delete('penalties');
     if (target.get('team-seasons-display') === 'ranking') target.delete('team-seasons-display');
-    return `?${target}`;
+    return hrefFor(target);
   };
   function archiveElement(tag, text, className) {
     const element = document.createElement(tag);
@@ -3024,7 +3064,7 @@
       const target = new URLSearchParams(params);
       target.set('view', 'head-to-head'); target.set('team', data.team.ID); target.set('opponent', pair.opponent.ID);
       target.set('h2h-sort', link.dataset.h2hSort); target.set('h2h-order', active && order === 'asc' ? 'desc' : 'asc');
-      link.href = `?${target}`;
+      linkTo(link, target);
     });
     // The same labels remain available to assistive technology and become the
     // chronological chart fallback when JavaScript is off.
@@ -3248,7 +3288,7 @@
 
 
   function applyURL() {
-    const params = new URL(location.href).searchParams;
+    const params = currentParams();
     const requested = requestedView(params);
     const view = views.has(requested) ? requested : viewGroups[0].views[0].key;
     // Some requests skip forecast work. Entering a view that needs its
@@ -3256,7 +3296,7 @@
     if (views.get(root.dataset.view)?.skipsForecast && views.get(view).needsForecast) { location.assign(location.href); return; }
     if (isPointsOnlySelection(params) && params.get('penalties') === 'exclude') {
       params.delete('penalties');
-      history.replaceState(null, '', `?${params}`);
+      history.replaceState(null, '', hrefFor(params));
       if (!useBasis(false)) { location.assign(location.href); return; }
     }
     // Server-rendered text names the rendered basis, so only a view redrawn
@@ -3272,15 +3312,17 @@
     root.querySelectorAll('[data-penalties-selector]').forEach(checkbox => { checkbox.checked = nonPenalty; });
     // Every in-page link carries the penalties selection, including links in
     // views the server rendered on the other basis.
-    root.querySelectorAll('a[href^="?"]').forEach(link => {
-      const selection = new URLSearchParams(link.getAttribute('href').slice(1));
+    root.querySelectorAll('a[href]').forEach(link => {
+      const url = new URL(link.href);
+      if (!isExploreLink(url)) return;
+      const selection = paramsOf(url);
       if ((selection.get('penalties') === 'exclude') === nonPenalty) return;
       if (nonPenalty) selection.set('penalties', 'exclude'); else selection.delete('penalties');
-      link.setAttribute('href', `?${selection}`);
+      linkTo(link, selection);
     });
     root.querySelectorAll('[data-aria-all]').forEach(element => element.setAttribute('aria-label', nonPenalty ? element.dataset.ariaNp : element.dataset.ariaAll));
     styleTable();
-    if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', `?${params}`); }
+    if (view === 'head-to-head' && ['actual', 'expected'].includes(params.get('h2h-series'))) { params.delete('h2h-series'); history.replaceState(null, '', hrefFor(params)); }
     dismiss();
     root.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== view; });
     // Views with their own penalties control render no generic selector.
@@ -3302,8 +3344,7 @@
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
-    const currentTab = root.querySelector('[data-group-views]:not([hidden]) [aria-current]');
-    if (currentTab) document.title = `${currentTab.textContent} · ${titleSuffix}`;
+    document.title = views.get(view).title;
     metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
     root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
       ? T('Goals − xG per match') : T('Goals and chances per match');
@@ -3343,7 +3384,7 @@
     root.querySelectorAll('[data-view-choice], [data-group-choice]').forEach(link => {
       const target = link.dataset.viewChoice || viewGroups.find(group => group.key === link.dataset.groupChoice).views[0].key;
       const selection = new URLSearchParams(params); selection.set('view', target);
-      link.href = `?${selection}`;
+      linkTo(link, selection);
     });
     if (view === 'trend' && charts.trend) {
       const chart = charts.trend;
@@ -3375,31 +3416,28 @@
     sortParityTable(params);
   }
   function update(changes) {
-    const url = new URL(location.href);
-    Object.entries(changes).forEach(([key, value]) => { if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value); });
-    const becomingPointsOnly = isPointsOnlySelection(url.searchParams);
-    if (becomingPointsOnly) url.searchParams.delete('penalties');
-    if (becomingPointsOnly && !useBasis(false)) { location.assign(url); return; }
-    if (url.searchParams.get('view') === 'season-trend') {
-      const params = url.searchParams;
-      if (!trendSortAvailable(params)) {
-        params.delete('trend-sort'); params.delete('trend-order');
-      }
+    const params = currentParams();
+    Object.entries(changes).forEach(([key, value]) => { if (value === null) params.delete(key); else params.set(key, value); });
+    const becomingPointsOnly = isPointsOnlySelection(params);
+    if (becomingPointsOnly) params.delete('penalties');
+    if (becomingPointsOnly && !useBasis(false)) { location.assign(hrefFor(params)); return; }
+    if (params.get('view') === 'season-trend' && !trendSortAvailable(params)) {
+      params.delete('trend-sort'); params.delete('trend-order');
     }
-    history.pushState(null, '', url);
+    history.pushState(null, '', hrefFor(params));
     applyURL();
   }
   root.addEventListener('click', event => {
     const trendSort = event.target.closest('[data-trend-sort]');
     if (trendSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(trendSort.href).searchParams;
+      const params = paramsOf(new URL(trendSort.href));
       update({'trend-sort': params.get('trend-sort'), 'trend-order': params.get('trend-order')});
     }
     const h2hSort = event.target.closest('[data-h2h-sort]');
     if (h2hSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(h2hSort.href).searchParams;
+      const params = paramsOf(new URL(h2hSort.href));
       update({view: 'head-to-head', 'h2h-sort': params.get('h2h-sort'), 'h2h-order': params.get('h2h-order')});
     }
     const archiveDisplay = event.target.closest('[data-team-seasons-display]');
@@ -3410,13 +3448,13 @@
     const archiveSort = event.target.closest('[data-team-seasons-sort]');
     if (archiveSort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(archiveSort.href).searchParams;
+      const params = paramsOf(new URL(archiveSort.href));
       update({view: 'team-seasons', 'team-seasons-sort': params.get('team-seasons-sort'), 'team-seasons-order': params.get('team-seasons-order')});
     }
-    const thresholdLink = event.target.closest('[data-panel="thresholds"] a[href^="?view=thresholds"]');
+    const thresholdLink = event.target.closest('[data-panel="thresholds"] a[data-threshold-year], [data-panel="thresholds"] a[data-threshold-sort]');
     if (thresholdLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const selection = new URL(thresholdLink.getAttribute('href'), location.href).searchParams;
+      const selection = paramsOf(new URL(thresholdLink.href));
       if (thresholdLink.hasAttribute('data-threshold-sort')) {
         update({view: 'thresholds', 'threshold-outcome': selection.get('threshold-outcome'), 'threshold-sort': selection.get('threshold-sort'), 'threshold-order': selection.get('threshold-order')});
       } else update({view: 'thresholds', 'threshold-season': selection.get('threshold-season')});
@@ -3424,7 +3462,7 @@
     const paritySort = event.target.closest('[data-parity-sort]');
     if (paritySort && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(paritySort.href).searchParams;
+      const params = paramsOf(new URL(paritySort.href));
       update({view: 'parity', 'parity-sort': params.get('parity-sort'), 'parity-order': params.get('parity-order')});
     }
     const parityLink = event.target.closest('[data-parity-season-link]');
@@ -3435,25 +3473,25 @@
     const homeLink = event.target.closest('[data-home-sort]');
     if (homeLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(homeLink.href).searchParams;
+      const params = paramsOf(new URL(homeLink.href));
       update({view: 'home-advantage', 'home-sort': params.get('home-sort'), 'home-order': params.get('home-order')});
     }
     const distributionLink = event.target.closest('[data-distribution-sort]');
     if (distributionLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(distributionLink.href).searchParams;
+      const params = paramsOf(new URL(distributionLink.href));
       update({view: 'distribution', 'distribution-sort': params.get('distribution-sort'), 'distribution-order': params.get('distribution-order')});
     }
     const historyLink = event.target.closest('[data-history-sort]');
     if (historyLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(historyLink.href).searchParams;
+      const params = paramsOf(new URL(historyLink.href));
       update({'history-sort': params.get('history-sort'), 'history-order': params.get('history-order')});
     }
     const teamLink = event.target.closest('[data-team-display], [data-team-sort]');
     if (teamLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const params = new URL(teamLink.href).searchParams;
+      const params = paramsOf(new URL(teamLink.href));
       const changes = {view: 'teams', display: params.get('display')};
       if (teamLink.hasAttribute('data-team-sort')) {
         changes['team-sort'] = params.get('team-sort'); changes['team-order'] = params.get('team-order');
@@ -3463,8 +3501,7 @@
     const link = event.target.closest('[data-view-choice], [data-group-choice]');
     if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
       event.preventDefault();
-      const selection = new URL(link.href).searchParams;
-      const changes = {view: selection.get('view')};
+      const changes = {view: paramsOf(new URL(link.href)).get('view')};
       update(changes);
     }
     const sort = event.target.closest('[data-sort]');

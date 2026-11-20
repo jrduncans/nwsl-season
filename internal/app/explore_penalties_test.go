@@ -27,15 +27,29 @@ func penaltyArchive(t *testing.T, splits int) []cache.HistoricalSeason {
 func getPage(t *testing.T, archive []cache.HistoricalSeason, target string) (int, string) {
 	t.Helper()
 	response := httptest.NewRecorder()
-	NewHandlerWithOptions(&archiveHTTPStore{archive: archive}, Options{ForecastIterations: 20}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	handler := NewHandlerWithOptions(&archiveHTTPStore{archive: archive}, Options{ForecastIterations: 20})
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	// A view named in the query redirects to its page; render that page.
+	if response.Code == http.StatusPermanentRedirect {
+		base, err := url.Parse(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := base.Parse(response.Header().Get("Location"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		response = httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, next.RequestURI(), nil))
+	}
 	return response.Code, response.Body.String()
 }
 
 func TestPenaltiesParameterIsRejectedLikeAnInvalidMeasure(t *testing.T) {
 	archive := penaltyArchive(t, 20)
 	for _, target := range []string{
-		"/explore?view=teams&penalties=bogus", "/explore?penalties=", "/explore?penalties=include&penalties=exclude",
-		"/explore?view=trend&penalties=Exclude",
+		"/explore?penalties=bogus", "/explore?penalties=", "/explore?penalties=include&penalties=exclude",
+		"/explore/scoring-trend?penalties=Exclude",
 	} {
 		code, body := getPage(t, archive, target)
 		if code != http.StatusBadRequest {
@@ -43,7 +57,7 @@ func TestPenaltiesParameterIsRejectedLikeAnInvalidMeasure(t *testing.T) {
 		}
 		requireText(t, body, "main", "penalties must be include or exclude")
 	}
-	code, body := getPage(t, archive, "/explore?view=teams&measure=bogus")
+	code, body := getPage(t, archive, "/explore?measure=bogus")
 	if code != http.StatusBadRequest {
 		t.Fatalf("invalid measure status = %d", code)
 	}
@@ -54,8 +68,8 @@ func TestPenaltiesParameterIsRejectedLikeAnInvalidMeasure(t *testing.T) {
 
 func TestPenaltiesDefaultBasisKeepsLinksAndOnlyAddsTheControl(t *testing.T) {
 	archive := penaltyArchive(t, 20)
-	_, plain := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025")
-	_, included := getPage(t, archive, "/explore?view=team-history&team=alpha&season=2025&penalties=include")
+	_, plain := getPage(t, archive, "/explore/season-by-season?team=alpha&season=2025")
+	_, included := getPage(t, archive, "/explore/season-by-season?team=alpha&season=2025&penalties=include")
 	// The explicit default differs only in the echoed selection state.
 	forbidElements(t, plain, `input[data-penalties-selector][checked]`)
 	forbidElements(t, included, `input[data-penalties-selector][checked]`)
@@ -123,7 +137,7 @@ func TestExplorePenaltiesCheckboxSubmitsWithoutJavaScript(t *testing.T) {
 	archive := penaltyArchive(t, 20)
 	for _, panel := range []string{"trend", "distribution", "home-advantage", "table"} {
 		t.Run(panel, func(t *testing.T) {
-			_, body := getPage(t, archive, "/explore?view="+panel+"&metric=gap&penalties=exclude")
+			_, body := getPage(t, archive, exploreViewURL(panel, "metric=gap&penalties=exclude"))
 			forms := find(t, body, `section[data-panel=`+panel+`] form[method=get]`)
 			var form *html.Node
 			for _, candidate := range forms {
@@ -139,7 +153,8 @@ func TestExplorePenaltiesCheckboxSubmitsWithoutJavaScript(t *testing.T) {
 			for _, input := range findIn(t, form, `input[type=hidden]`) {
 				fields[attr(input, "name")] = attr(input, "value")
 			}
-			if fields["view"] != panel {
+			// The form submits to the view's own page, so it names no view.
+			if _, ok := fields["view"]; ok {
 				t.Errorf("form carries view %q", fields["view"])
 			}
 			if panel != "distribution" && fields["metric"] != "gap" {
@@ -226,7 +241,7 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 		"view=team-rankings", "view=season-trend", "view=team-history", "view=trend", "view=distribution", "view=table",
 	} {
 		t.Run(view, func(t *testing.T) {
-			code, body := getPage(t, archive, "/explore?"+view+"&team=alpha&penalties=exclude")
+			code, body := getPage(t, archive, exploreTarget(view+"&team=alpha&penalties=exclude"))
 			if code != http.StatusOK {
 				t.Fatalf("status = %d", code)
 			}
@@ -280,25 +295,25 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 	}
 
 	// Labels switch on the server-rendered markup.
-	_, table := getPage(t, archive, "/explore?view=table&penalties=exclude")
+	_, table := getPage(t, archive, "/explore/scoring-table?penalties=exclude")
 	requireText(t, table, "[data-panel=table] thead", "Non-penalty goals/match", "npxG/match", "Non-penalty goals − npxG/match")
 	requireRowText(t, table, "[data-panel=table] tbody tr", "2025", "20", "2.00", "0.24", "1.76")
-	_, trend := getPage(t, archive, "/explore?view=trend&penalties=exclude")
+	_, trend := getPage(t, archive, "/explore/scoring-trend?penalties=exclude")
 	requireText(t, trend, "[data-panel=trend]", "Non-penalty goals and chances per match", "Non-penalty expected goals (npxG)", "Above npxG")
 	// Data-control option labels never change with the basis; the adjacent
 	// Penalties select states it.
 	for _, view := range []string{"trend", "distribution", "teams", "team-history", "season-trend", "team-rankings", "table"} {
-		_, body := getPage(t, archive, "/explore?view="+view+"&penalties=exclude")
+		_, body := getPage(t, archive, exploreViewURL(view, "penalties=exclude"))
 		for _, option := range find(t, body, `select option`) {
 			if label := strings.TrimSpace(text(option)); strings.Contains(label, "on-penalty") || strings.Contains(label, "npxG") {
 				t.Errorf("%s: option label %q changed with the basis", view, label)
 			}
 		}
 	}
-	_, distribution := getPage(t, archive, "/explore?view=distribution&penalties=exclude")
+	_, distribution := getPage(t, archive, "/explore/goal-distribution?penalties=exclude")
 	requireText(t, distribution, "[data-panel=distribution]", "by total non-penalty goals", "2 non-penalty goals", "Bins count non-penalty goals per match")
 	requireText(t, distribution, "[data-panel=distribution] table thead", "2 non-penalty goals")
-	_, defaults := getPage(t, archive, "/explore?view=table")
+	_, defaults := getPage(t, archive, "/explore/scoring-table")
 	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00", "2.00")
 
 	// The points note appears wherever points or xPoints are shown, only on the
@@ -314,23 +329,23 @@ func TestExplorePenaltiesExcludedRendersEveryViewWithTheBasisAndNote(t *testing.
 		return false
 	}
 	for target, want := range map[string]bool{
-		"/explore?view=teams&display=chart&measure=points&penalties=exclude":                      false,
-		"/explore?view=teams&display=table&penalties=exclude":                                     true,
-		"/explore?view=teams&display=chart&measure=for&penalties=exclude":                         false,
-		"/explore?view=teams&display=quadrant&measure=points&penalties=exclude":                   false,
-		"/explore?view=team-history&measure=points&penalties=exclude":                             false,
-		"/explore?view=season-trend&trend-view=points&penalties=exclude":                          false,
-		"/explore?view=season-trend&trend-view=relative&average-series=xpoints&penalties=exclude": false,
-		"/explore?view=team-history&penalties=exclude":                                            true,
-		"/explore?view=season-trend&trend-view=compare&penalties=exclude":                         false,
-		"/explore?view=teams&display=chart&measure=points":                                        false,
-		"/explore?view=team-history":                                                              false,
+		"/explore?display=chart&measure=points&penalties=exclude":                              false,
+		"/explore?display=table&penalties=exclude":                                             true,
+		"/explore?display=chart&measure=for&penalties=exclude":                                 false,
+		"/explore?display=quadrant&measure=points&penalties=exclude":                           false,
+		"/explore/season-by-season?measure=points&penalties=exclude":                           false,
+		"/explore/match-by-match?trend-view=points&penalties=exclude":                          false,
+		"/explore/match-by-match?trend-view=relative&average-series=xpoints&penalties=exclude": false,
+		"/explore/season-by-season?penalties=exclude":                                          true,
+		"/explore/match-by-match?trend-view=compare&penalties=exclude":                         false,
+		"/explore?display=chart&measure=points":                                                false,
+		"/explore/season-by-season":                                                            false,
 	} {
 		if got := shown(target); got != want {
 			t.Errorf("%s: points note shown = %v, want %v", target, got, want)
 		}
 	}
-	_, body := getPage(t, archive, "/explore?view=team-history&penalties=exclude")
+	_, body := getPage(t, archive, "/explore/season-by-season?penalties=exclude")
 	requireText(t, body, "[data-points-note=team-history]", pointsBasisNote)
 }
 
@@ -407,18 +422,18 @@ func TestWithoutQueryParameterPreservesRemainingOrder(t *testing.T) {
 
 func TestExplorePenaltiesIncompleteSeasonIsExcludedWithTheNonPenaltyReason(t *testing.T) {
 	archive := penaltyArchive(t, 19)
-	code, body := getPage(t, archive, "/explore?view=table&penalties=exclude")
+	code, body := getPage(t, archive, "/explore/scoring-table?penalties=exclude")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}
 	requireText(t, body, "[data-panel=table]", "No seasons currently have enough complete results to compare.")
-	_, teams := getPage(t, archive, "/explore?view=teams&penalties=exclude")
+	_, teams := getPage(t, archive, "/explore?penalties=exclude")
 	requireElements(t, teams, `[data-team-empty]`)
 	if payload := archivePayload(t, archive, "/explore", teams, "explore-team-data"); strings.Contains(payload, `"alpha"`) {
 		t.Errorf("non-penalty team payload names alpha: %s", payload)
 	}
 	// The default basis is unaffected by the missing split.
-	_, defaults := getPage(t, archive, "/explore?view=table")
+	_, defaults := getPage(t, archive, "/explore/scoring-table")
 	requireRowText(t, defaults, "[data-panel=table] tbody tr", "2025", "20", "3.00", "1.00")
 }
 

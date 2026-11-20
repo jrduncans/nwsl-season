@@ -18,7 +18,7 @@ func TestExploreThresholds(t *testing.T) {
 	for _, vp := range []viewport{Desktop, Mobile} {
 		t.Run(vp.Name, func(t *testing.T) {
 			page := newPageWith(t, pageOptions{Viewport: vp, Touch: vp.Name == "mobile"})
-			visit(t, page, base+"explore?view=thresholds&threshold-season=2023")
+			visit(t, page, base+"explore/playoff-thresholds?threshold-season=2023")
 			canvas := page.Locator(`[data-chart="thresholds"]`)
 			var chart struct {
 				Labels []string     `json:"labels"`
@@ -166,7 +166,7 @@ func TestExploreThresholds(t *testing.T) {
 	}
 	t.Run("without scripts", func(t *testing.T) {
 		page := newPageWith(t, pageOptions{Viewport: Mobile, NoScript: true})
-		if _, err := page.Goto(base + "explore?view=thresholds"); err != nil {
+		if _, err := page.Goto(base + "explore/playoff-thresholds"); err != nil {
 			t.Fatal(err)
 		}
 		selectValue(t, page.Locator("[data-threshold-season]"), "2022")

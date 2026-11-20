@@ -225,12 +225,11 @@ func exploreHeadToHead(query url.Values, summaries, npSummaries []history.Season
 		if target.Get("penalties") == "include" {
 			target.Del("penalties")
 		}
-		target.Set("view", "head-to-head")
 		target.Set("team", selected.ID)
 		target.Set("opponent", page.H2HPair.Opponent.ID)
 		target.Set("h2h-sort", column.Key)
 		target.Set("h2h-order", order)
-		column.URL = "?" + target.Encode()
+		column.URL = exploreSelectionURL(target)
 	}
 	return page, nil
 }

@@ -80,7 +80,6 @@ func exploreTrendSortLinks(columns []exploreTrendColumn, query url.Values, selec
 		if target.Get(penaltiesParam) == penaltiesInclude {
 			target.Del(penaltiesParam)
 		}
-		target.Set("view", "season-trend")
 		target.Set("trend-sort", column.Key)
 		next := "asc"
 		column.Sort = "none"
@@ -97,7 +96,7 @@ func exploreTrendSortLinks(columns []exploreTrendColumn, query url.Values, selec
 		if next != "asc" {
 			target.Set("trend-order", next)
 		}
-		column.URL = "?" + target.Encode()
+		column.URL = exploreSelectionURL(target)
 	}
 	return columns
 }

@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -44,7 +45,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 				archive[0].Data.Games[0].Status = fixtures.PreMatchStatus
 				teamPlayed--
 			}
-			code, body := getPage(t, archive, "/explore?view=season-trend&season=2026&team=alpha")
+			code, body := getPage(t, archive, "/explore/match-by-match?season=2026&team=alpha")
 			if code != http.StatusOK {
 				t.Fatalf("status = %d", code)
 			}
@@ -59,7 +60,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 					Season string
 					Active bool
 				}
-				payload := archivePayload(t, archive, "/explore", body, id)
+				payload := archivePayload(t, archive, "/explore/match-by-match", body, id)
 				if err := json.Unmarshal([]byte(payload), &records); err != nil {
 					t.Fatalf("%s: %v", id, err)
 				}
@@ -68,13 +69,13 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 				}
 			}
 			if tc.active {
-				if payload := archivePayload(t, archive, "/explore", body, "explore-threshold-data"); strings.Contains(payload, `"2026"`) {
+				if payload := archivePayload(t, archive, "/explore/match-by-match", body, "explore-threshold-data"); strings.Contains(payload, `"2026"`) {
 					t.Error("2026 thresholds are available before the regular season is verified complete")
 				}
 				return
 			}
 
-			code, body = getPage(t, archive, "/explore?view=thresholds&threshold-season=2026")
+			code, body = getPage(t, archive, "/explore/playoff-thresholds?threshold-season=2026")
 			if code != http.StatusOK {
 				t.Fatalf("2026 thresholds status = %d", code)
 			}
@@ -90,7 +91,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 }
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore?view=trend&metric=gap", "/nwsl-season/explore?view=distribution", "/explore?view=table", "/nwsl-season/explore?view=team-rankings&team=alpha", "/nwsl-season/explore?view=teams", "/nwsl-season/explore?view=teams&display=gap", "/nwsl-season/explore?view=teams&display=scatter", "/nwsl-season/explore?view=team-history&team=alpha"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore/scoring-trend?metric=gap", "/nwsl-season/explore/goal-distribution", "/explore/scoring-table", "/nwsl-season/explore/rankings?team=alpha", "/nwsl-season/explore", "/nwsl-season/explore?display=gap", "/nwsl-season/explore?display=scatter", "/nwsl-season/explore/season-by-season?team=alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 				"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19},
@@ -102,7 +103,7 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 			if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 				t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, body)
 			}
-			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `name="metric" value="gap"><span>Goals − xG</span>`, `src="static/explore.js?v=`, `src="static/vendor/chart.js-4.5.1/chart.umd.min.js?v=`} {
+			for _, want := range []string{`<h1>Explore</h1>`, `data-panel="trend"`, `data-panel="distribution"`, `data-panel="table"`, `data-chart="trend"`, `data-chart="distribution"`, `data-team-scatter-logos checked`, `name="metric" value="gap"><span>Goals − xG</span>`, `static/explore.js?v=`, `static/vendor/chart.js-4.5.1/chart.umd.min.js?v=`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)
 				}
@@ -157,19 +158,13 @@ func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
 					t.Errorf("missing main-site navigation %q", label)
 				}
 			}
-			if !strings.Contains(body, `href="explore" aria-current="page">Explore</a>`) {
+			internalPath, _ := stripBasePath(strings.Split(path, "?")[0])
+			if !strings.Contains(body, `href="`+relativeURL(internalPath, "/explore")+`" aria-current="page">Explore</a>`) {
 				t.Error("Explore is not the active navigation item")
 			}
 			for _, unwanted := range []string{"Current season", "data-close", "data-year-button", "data-readout", "data-bin=", "Inventory verified", "Inventory unverified", "No regular season", "selected-season-heading", "About this data"} {
 				if strings.Contains(body, unwanted) {
 					t.Errorf("unexpected %q", unwanted)
-				}
-			}
-			// Explore's season selections always name their view; a bare
-			// ?season= link would be the retired historical season selector.
-			for _, link := range regexp.MustCompile(`href="\?season=[^"]*"`).FindAllString(body, -1) {
-				if !strings.Contains(link, "view=") {
-					t.Errorf("season link without a view: %s", link)
 				}
 			}
 		})
@@ -183,7 +178,7 @@ func TestExploreDistributionValuesMatchEligibleChartSeasons(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 4},
 	})}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=distribution", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/goal-distribution", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 	}
@@ -241,7 +236,7 @@ func TestExploreDistributionSortUsesExactShareAndNativeLinks(t *testing.T) {
 					continue
 				}
 				link, err := url.Parse(column.URL)
-				if err != nil || link.Query().Get("distribution-sort") != tc.column || link.Query().Get("distribution-order") == tc.order || link.Query().Get("view") != "distribution" {
+				if err != nil || link.Query().Get("distribution-sort") != tc.column || link.Query().Get("distribution-order") == tc.order {
 					t.Fatalf("sort link did not toggle order: %s", column.URL)
 				}
 			}
@@ -256,7 +251,7 @@ func TestExploreDistributionBinSelection(t *testing.T) {
 	for _, bin := range []string{"all", "0", "1", "2", "3", "4"} {
 		t.Run(bin, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			path := "/explore?view=distribution&distribution-bin=" + bin
+			path := "/explore/goal-distribution?distribution-bin=" + bin
 			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
@@ -296,7 +291,7 @@ func TestExploreDistributionSortedURLRendersOpenSortableTable(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 4},
 	})}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=distribution&distribution-sort=bin-3&distribution-order=asc", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/goal-distribution?distribution-sort=bin-3&distribution-order=asc", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 	}
@@ -336,8 +331,15 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		{"view=season-trend", "profile", `data-view-choice="season-trend" aria-current="page">Match by match</a>`},
 		{"view=team-history", "profile", `data-view-choice="team-history" aria-current="page">Season by season</a>`},
 	} {
+		target := exploreTarget(tc.query)
 		response := httptest.NewRecorder()
-		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?"+tc.query, nil))
+		NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code == http.StatusPermanentRedirect {
+			next, _ := url.Parse(target)
+			next, _ = next.Parse(response.Header().Get("Location"))
+			response = httptest.NewRecorder()
+			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, next.RequestURI(), nil))
+		}
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s: status = %d", tc.query, response.Code)
 		}
@@ -345,9 +347,8 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 		if !strings.Contains(body, tc.current) {
 			t.Errorf("%s: missing current view %q", tc.query, tc.current)
 		}
-		_, label, _ := strings.Cut(tc.current, `aria-current="page">`)
-		label = strings.TrimSuffix(label, "</a>")
-		if title := "<title>" + label + " · Explore · NWSL by the Numbers</title>"; !strings.Contains(body, title) {
+		view, _ := exploreViewFor(attr(find(t, body, "[data-explore]")[0], "data-view"))
+		if title := "<title>" + html.EscapeString(view.DocumentTitle) + "</title>"; !strings.Contains(body, title) {
 			t.Errorf("%s: missing view title %q", tc.query, title)
 		}
 		for group, label := range groups {
@@ -362,9 +363,9 @@ func TestExploreNavigationGroupsViewsByScope(t *testing.T) {
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore", nil))
 	body := response.Body.String()
 	links := []string{
-		`<a href="?view=teams" rel="nofollow" data-group-choice="teams" aria-current="page">Compare teams</a>`,
-		`<a href="?view=team-rankings" rel="nofollow" data-group-choice="profile">Team profile</a>`,
-		`<a href="?view=trend" rel="nofollow" data-group-choice="league">League trends</a>`,
+		`<a href="explore" data-group-choice="teams" aria-current="page">Compare teams</a>`,
+		`<a href="explore/rankings" data-group-choice="profile">Team profile</a>`,
+		`<a href="explore/scoring-trend" data-group-choice="league">League trends</a>`,
 	}
 	previous := -1
 	for _, link := range links {
@@ -384,27 +385,27 @@ func TestExploreRouteValidation(t *testing.T) {
 		location string
 	}{
 		{"/explore?view=bad", http.StatusBadRequest, ""},
-		{"/explore?view=teams&season=1900", http.StatusBadRequest, ""},
-		{"/explore?view=teams&season=2026&season=2025", http.StatusBadRequest, ""},
-		{"/explore?view=teams&season=", http.StatusBadRequest, ""},
-		{"/explore?view=teams&measure=bad", http.StatusBadRequest, ""},
-		{"/explore?view=teams&measure=for&measure=against", http.StatusBadRequest, ""},
-		{"/explore?view=teams&units=bad", http.StatusBadRequest, ""},
-		{"/explore?view=teams&units=", http.StatusBadRequest, ""},
-		{"/explore?view=teams&units=total&units=per-match", http.StatusBadRequest, ""},
-		{"/explore?view=teams&display=bad", http.StatusBadRequest, ""},
-		{"/explore?view=teams&display=gap&display=chart", http.StatusBadRequest, ""},
-		{"/explore?view=teams&display=scatter&display=chart", http.StatusBadRequest, ""},
-		{"/explore?view=teams&display=quadrant&display=chart", http.StatusBadRequest, ""},
-		{"/explore?view=teams&quadrant-data=", http.StatusBadRequest, ""},
-		{"/explore?view=teams&quadrant-data=invalid", http.StatusBadRequest, ""},
-		{"/explore?view=teams&quadrant-data=goals&quadrant-data=xg", http.StatusBadRequest, ""},
-		{"/explore?view=teams&team-sort=bad", http.StatusBadRequest, ""},
-		{"/explore?view=teams&team-order=bad", http.StatusBadRequest, ""},
-		{"/explore?view=team-history&team=unknown", http.StatusBadRequest, ""},
-		{"/explore?view=team-history&team=", http.StatusBadRequest, ""},
-		{"/explore?view=team-history&team=alpha&team=bravo", http.StatusBadRequest, ""},
-		{"/explore?view=team-history&measure=bad", http.StatusBadRequest, ""},
+		{"/explore?season=1900", http.StatusBadRequest, ""},
+		{"/explore?season=2026&season=2025", http.StatusBadRequest, ""},
+		{"/explore?season=", http.StatusBadRequest, ""},
+		{"/explore?measure=bad", http.StatusBadRequest, ""},
+		{"/explore?measure=for&measure=against", http.StatusBadRequest, ""},
+		{"/explore?units=bad", http.StatusBadRequest, ""},
+		{"/explore?units=", http.StatusBadRequest, ""},
+		{"/explore?units=total&units=per-match", http.StatusBadRequest, ""},
+		{"/explore?display=bad", http.StatusBadRequest, ""},
+		{"/explore?display=gap&display=chart", http.StatusBadRequest, ""},
+		{"/explore?display=scatter&display=chart", http.StatusBadRequest, ""},
+		{"/explore?display=quadrant&display=chart", http.StatusBadRequest, ""},
+		{"/explore?quadrant-data=", http.StatusBadRequest, ""},
+		{"/explore?quadrant-data=invalid", http.StatusBadRequest, ""},
+		{"/explore?quadrant-data=goals&quadrant-data=xg", http.StatusBadRequest, ""},
+		{"/explore?team-sort=bad", http.StatusBadRequest, ""},
+		{"/explore?team-order=bad", http.StatusBadRequest, ""},
+		{"/explore/season-by-season?team=unknown", http.StatusBadRequest, ""},
+		{"/explore/season-by-season?team=", http.StatusBadRequest, ""},
+		{"/explore/season-by-season?team=alpha&team=bravo", http.StatusBadRequest, ""},
+		{"/explore/season-by-season?measure=bad", http.StatusBadRequest, ""},
 		{"/explore?distribution-sort=bad", http.StatusBadRequest, ""},
 		{"/explore?distribution-sort=", http.StatusBadRequest, ""},
 		{"/explore?distribution-sort=bin-0&distribution-sort=bin-1", http.StatusBadRequest, ""},
@@ -412,20 +413,29 @@ func TestExploreRouteValidation(t *testing.T) {
 		{"/explore?distribution-bin=", http.StatusBadRequest, ""},
 		{"/explore?distribution-bin=5", http.StatusBadRequest, ""},
 		{"/explore?distribution-bin=all&distribution-bin=1", http.StatusBadRequest, ""},
-		{"/explore?view=home-advantage&home-sort=bad", http.StatusBadRequest, ""},
-		{"/explore?view=home-advantage&home-sort=", http.StatusBadRequest, ""},
-		{"/explore?view=home-advantage&home-sort=goals&home-sort=xg", http.StatusBadRequest, ""},
-		{"/explore?view=home-advantage&home-order=bad", http.StatusBadRequest, ""},
-		{"/explore?view=home-advantage&home-order=asc&home-order=desc", http.StatusBadRequest, ""},
-		{"/explore?view=parity&parity-sort=bad", http.StatusBadRequest, ""},
-		{"/explore?view=parity&parity-sort=", http.StatusBadRequest, ""},
-		{"/explore?view=parity&parity-order=bad", http.StatusBadRequest, ""},
-		{"/explore?view=parity&parity-series=xg", http.StatusBadRequest, ""},
-		{"/explore?view=parity&parity-series=actual&parity-series=both", http.StatusBadRequest, ""},
-		{"/explore?view=parity&season=1999", http.StatusBadRequest, ""},
-		{"/explore?view=parity&season=", http.StatusBadRequest, ""},
+		{"/explore/home-advantage?home-sort=bad", http.StatusBadRequest, ""},
+		{"/explore/home-advantage?home-sort=", http.StatusBadRequest, ""},
+		{"/explore/home-advantage?home-sort=goals&home-sort=xg", http.StatusBadRequest, ""},
+		{"/explore/home-advantage?home-order=bad", http.StatusBadRequest, ""},
+		{"/explore/home-advantage?home-order=asc&home-order=desc", http.StatusBadRequest, ""},
+		{"/explore/parity?parity-sort=bad", http.StatusBadRequest, ""},
+		{"/explore/parity?parity-sort=", http.StatusBadRequest, ""},
+		{"/explore/parity?parity-order=bad", http.StatusBadRequest, ""},
+		{"/explore/parity?parity-series=xg", http.StatusBadRequest, ""},
+		{"/explore/parity?parity-series=actual&parity-series=both", http.StatusBadRequest, ""},
+		{"/explore/parity?season=1999", http.StatusBadRequest, ""},
+		{"/explore/parity?season=", http.StatusBadRequest, ""},
 		{"/explore/", http.StatusSeeOther, "../explore"},
 		{"/nwsl-season/explore/?view=table", http.StatusSeeOther, "../explore?view=table"},
+		{"/nwsl-season/explore/parity/?season=2025", http.StatusSeeOther, "../parity?season=2025"},
+		{"/explore/unknown", http.StatusNotFound, ""},
+		{"/explore/teams", http.StatusNotFound, ""},
+		{"/explore?view=parity&season=2025", http.StatusPermanentRedirect, "explore/parity?season=2025"},
+		{"/explore/parity?view=table", http.StatusPermanentRedirect, "scoring-table"},
+		{"/explore/parity?view=teams&display=gap", http.StatusPermanentRedirect, "../explore?display=gap"},
+		{"/explore?view=teams&metric=gap", http.StatusPermanentRedirect, "explore"},
+		{"/explore?metric=gap&penalties=exclude", http.StatusPermanentRedirect, "explore/scoring-trend?metric=gap&penalties=exclude"},
+		{"/nwsl-season/explore?view=parity", http.StatusPermanentRedirect, "explore/parity"},
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
@@ -507,8 +517,8 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		path string
 		want []string
 	}{
-		{"/explore?view=teams&display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`name="measure" value="points" form="team-controls" checked><span>Points</span>`, `name="units" value="total" form="team-controls" checked><span>Totals</span>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
-		{"/explore?view=team-history&team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`name="measure" value="points" form="team-history-controls" checked><span>Points</span>`, `name="series" value="xg" form="team-history-controls" checked><span>xPoints</span>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
+		{"/explore?display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`name="measure" value="points" form="team-controls" checked><span>Points</span>`, `name="units" value="total" form="team-controls" checked><span>Totals</span>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
+		{"/explore/season-by-season?team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`name="measure" value="points" form="team-history-controls" checked><span>Points</span>`, `name="series" value="xg" form="team-history-controls" checked><span>xPoints</span>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
 	} {
 		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()
@@ -643,7 +653,7 @@ func TestExploreTeamGapDisplayPreservesSelection(t *testing.T) {
 				t.Fatal(err)
 			}
 			values := link.Query()
-			if values.Get("view") != "teams" || values.Get("display") != tc.display || values.Get("season") != "2025" || values.Get("measure") != "against" || values.Get("team-sort") != "for-expected" || values.Get("team-order") != "asc" {
+			if values.Has("view") || values.Get("display") != tc.display || values.Get("season") != "2025" || values.Get("measure") != "against" || values.Get("team-sort") != "for-expected" || values.Get("team-order") != "asc" {
 				t.Fatalf("link did not preserve selection: %s", tc.link)
 			}
 		})
@@ -656,7 +666,7 @@ func TestExploreTeamScatterDirectURLRendersSelectedPlotAndTableFallback(t *testi
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19},
 	})}
 	response := httptest.NewRecorder()
-	path := "/explore?view=teams&display=scatter&season=2025&measure=against"
+	path := "/explore?display=scatter&season=2025&measure=against"
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 	if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 		t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, response.Body.String())
@@ -694,7 +704,7 @@ func TestExploreTeamQuadrantSelectionsAndCacheOnlyFallback(t *testing.T) {
 					"2026": {Lifecycle: cache.SourceScopeActive, Goals: 3, XGCovered: 19},
 				})}
 				response := httptest.NewRecorder()
-				path := "/nwsl-season/explore?view=teams&display=quadrant&season=2026&measure=points&quadrant-data=" + mode + "&units=" + units
+				path := "/nwsl-season/explore?display=quadrant&season=2026&measure=points&quadrant-data=" + mode + "&units=" + units
 				NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 				if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 					t.Fatalf("status=%d reads=%d/%d body=%s", response.Code, store.archiveCalls, store.seasonCalls, response.Body.String())
@@ -843,7 +853,7 @@ func TestExploreThresholdsLeaveGapsForTiesWhileSourceScopeIsActive(t *testing.T)
 	})
 	// Every team has the same record, so no rank is determined by results.
 	archive[0].Data = completeCatalogSeasonData()
-	code, body := getPage(t, archive, "/explore?view=thresholds&threshold-season=2026")
+	code, body := getPage(t, archive, "/explore/playoff-thresholds?threshold-season=2026")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d", code)
 	}
@@ -853,9 +863,10 @@ func TestExploreThresholdsLeaveGapsForTiesWhileSourceScopeIsActive(t *testing.T)
 	}
 }
 
-// Explore and its query-string variants all point search engines at bare
-// /explore, and every link that only changes the query string is nofollow, so crawlers
-// aren't drawn into every combination of view, team, season and display.
+// Each Explore view's page is its own canonical page, and its query-string
+// variants point search engines at it. Links that carry selections are
+// nofollow, so crawlers aren't drawn into every combination of team, season
+// and display, while the tabs link each view's page plainly.
 func TestExploreQueryVariantsAreCanonicalAndNofollow(t *testing.T) {
 	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 		"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3},
@@ -872,34 +883,94 @@ func TestExploreQueryVariantsAreCanonicalAndNofollow(t *testing.T) {
 	}
 	canonical := regexp.MustCompile(`<link rel="canonical" href="([^"]*)">`)
 
-	for _, query := range []string{"", "view=teams&display=table&team-sort=name", "view=head-to-head", "view=thresholds&threshold-season=2025", "view=parity", "view=team-seasons", "view=season-trend"} {
-		body := render(t, NewHandler(store), "/explore?"+query)
-		if match := canonical.FindStringSubmatch(body); match == nil || match[1] != "explore" {
-			t.Errorf("%s: canonical = %v, want href \"explore\"", query, match)
+	for _, tc := range []struct{ target, canonical string }{
+		{"/explore", "explore"},
+		{"/explore?display=table&team-sort=name", "explore"},
+		{"/explore/head-to-head", "head-to-head"},
+		{"/explore/playoff-thresholds?threshold-season=2025", "playoff-thresholds"},
+		{"/explore/parity?season=2025", "parity"},
+		{"/explore/team-seasons", "team-seasons"},
+		{"/explore/match-by-match", "match-by-match"},
+	} {
+		body := render(t, NewHandler(store), tc.target)
+		if match := canonical.FindStringSubmatch(body); match == nil || match[1] != tc.canonical {
+			t.Errorf("%s: canonical = %v, want href %q", tc.target, match, tc.canonical)
 		}
 		anchors := regexp.MustCompile(`<a [^>]*>`).FindAllString(body, -1)
 		queryLinks := 0
 		for _, anchor := range anchors {
-			if !strings.Contains(anchor, `href="?`) {
+			href := regexp.MustCompile(`href="([^"]*)"`).FindStringSubmatch(anchor)
+			if href == nil || strings.Contains(href[1], "://") || strings.HasPrefix(href[1], "#") {
 				continue
 			}
-			queryLinks++
-			if !strings.Contains(anchor, ` rel="nofollow"`) {
-				t.Errorf("%s: query-string link is followable: %s", query, anchor)
+			link, err := url.Parse(html.UnescapeString(href[1]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			target, _ := url.Parse(tc.target)
+			resolved := target.ResolveReference(link)
+			if resolved.Path != "/explore" && !strings.HasPrefix(resolved.Path, "/explore/") {
+				continue
+			}
+			nofollow := strings.Contains(anchor, ` rel="nofollow"`)
+			if resolved.RawQuery != "" {
+				queryLinks++
+				if !nofollow {
+					t.Errorf("%s: query-string link is followable: %s", tc.target, anchor)
+				}
+			} else if nofollow {
+				t.Errorf("%s: link to a view's page is nofollow: %s", tc.target, anchor)
 			}
 		}
 		if queryLinks == 0 {
-			t.Errorf("%s: no query-string links rendered", query)
+			t.Errorf("%s: no query-string links rendered", tc.target)
 		}
-		for _, anchor := range anchors {
-			if strings.Contains(anchor, `href="explore"`) && strings.Contains(anchor, "nofollow") {
-				t.Errorf("%s: link to bare /explore is nofollow: %s", query, anchor)
+		for _, group := range exploreViewGroups {
+			for _, view := range group.Views {
+				if href := relativeURL(requestPath(tc.target), exploreViewPath(view)); !strings.Contains(body, `href="`+href+`"`) {
+					t.Errorf("%s: no plain link to %s (%q)", tc.target, exploreViewPath(view), href)
+				}
 			}
 		}
 	}
 
 	public := NewHandlerWithOptions(store, Options{PublicURL: "https://example.test/"})
-	if match := canonical.FindStringSubmatch(render(t, public, "/explore?view=parity")); match == nil || match[1] != "https://example.test/explore" {
-		t.Errorf("canonical with a public URL = %v, want https://example.test/explore", match)
+	if match := canonical.FindStringSubmatch(render(t, public, "/explore/parity?season=2025")); match == nil || match[1] != "https://example.test/explore/parity" {
+		t.Errorf("canonical with a public URL = %v, want https://example.test/explore/parity", match)
 	}
+}
+
+func requestPath(requestTarget string) string {
+	path, _, _ := strings.Cut(requestTarget, "?")
+	return path
+}
+
+// exploreViewURL is a view's page with a query string, as a request target.
+func exploreViewURL(key, query string) string {
+	view, ok := exploreViewFor(key)
+	if !ok {
+		panic("unknown Explore view " + key)
+	}
+	if query == "" {
+		return exploreViewPath(view)
+	}
+	return exploreViewPath(view) + "?" + query
+}
+
+// exploreTarget turns a selection written as a query, with any view as
+// view=<key>, into the request target for that view's page.
+func exploreTarget(query string) string {
+	values, err := url.ParseQuery(query)
+	if err != nil || len(values["view"]) != 1 {
+		return "/explore?" + query
+	}
+	key := values.Get("view")
+	if _, ok := exploreViewFor(key); !ok {
+		return "/explore?" + query
+	}
+	rest := withoutQueryParameter(query, "view")
+	if remaining, _ := url.ParseQuery(rest); key == exploreViewGroups[0].Views[0].Key && legacyTrendQuery(remaining) {
+		return "/explore?" + query // Let the server resolve the ambiguity.
+	}
+	return exploreViewURL(key, rest)
 }

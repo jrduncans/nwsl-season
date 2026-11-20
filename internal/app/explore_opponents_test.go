@@ -19,13 +19,13 @@ const opponentsTeam = "odMX2OJqYL"
 func TestExploreOpponentsSelectionIsValidated(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
 	for _, query := range []string{"opponents=", "opponents=adjusted&opponents=adjusted", "opponents=on", "trend-view=compare&opponents=Adjusted"} {
-		code, body := getPage(t, archive, "/explore?view=season-trend&"+query)
+		code, body := getPage(t, archive, "/explore/match-by-match?"+query)
 		if code != http.StatusBadRequest {
 			t.Errorf("%s status = %d, want 400", query, code)
 		}
 		requireText(t, body, "main", "opponents must be adjusted")
 	}
-	if code, _ := getPage(t, archive, "/explore?view=season-trend&opponents=adjusted"); code != http.StatusOK {
+	if code, _ := getPage(t, archive, "/explore/match-by-match?opponents=adjusted"); code != http.StatusOK {
 		t.Fatalf("adjusted status = %d", code)
 	}
 }
@@ -93,7 +93,7 @@ func TestExploreOpponentAdjustmentDividesTheSelectedBasis(t *testing.T) {
 
 func TestExploreOpponentAdjustmentPage(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&team=" + opponentsTeam + "&smoothing=none&opponents=adjusted"
+	path := "/explore/match-by-match?team=" + opponentsTeam + "&smoothing=none&opponents=adjusted"
 	code, body := getPage(t, archive, path+"&season=2025")
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -111,21 +111,21 @@ func TestExploreOpponentAdjustmentPage(t *testing.T) {
 	requireExact(t, unchecked, "[data-trend-margin-official]", "W–D–L and points use official results.")
 	requireExact(t, unchecked, "[data-season-trend-note]", opponentAdjustmentNote)
 	requireText(t, body, "[data-trend-headings]", "Adjusted goals for", "Adjusted goals against", "Adjusted xG for", "Adjusted xG against")
-	requireAttr(t, body, "[data-trend-sort=adjusted-xg-for]", "href", "?opponents=adjusted&season=2025&smoothing=none&team="+opponentsTeam+"&trend-order=desc&trend-sort=adjusted-xg-for&view=season-trend")
+	requireAttr(t, body, "[data-trend-sort=adjusted-xg-for]", "href", "?opponents=adjusted&season=2025&smoothing=none&team="+opponentsTeam+"&trend-order=desc&trend-sort=adjusted-xg-for")
 
 	// The active season's ratings lack one match's xG, which the note says.
 	_, active := getPage(t, archive, path+"&season=2026")
 	requireExact(t, active, "[data-season-trend-note]", opponentAdjustmentNote+" Opponent ratings use 231 of 232 matches with xG.")
 
 	// Rolling lines average adjusted values under adjusted labels.
-	_, rolling := getPage(t, archive, "/explore?view=season-trend&team="+opponentsTeam+"&opponents=adjusted&season=2025&trend-view=difference")
+	_, rolling := getPage(t, archive, "/explore/match-by-match?team="+opponentsTeam+"&opponents=adjusted&season=2025&trend-view=difference")
 	requireText(t, rolling, "[data-trend-headings]", "Adjusted goal margin", "Adjusted xG margin")
 
 	// Sorting by an adjusted column needs the adjustment.
 	if code, _ := getPage(t, archive, path+"&season=2025&trend-sort=adjusted-xg-for"); code != http.StatusOK {
 		t.Fatalf("adjusted sort status = %d", code)
 	}
-	if code, _ := getPage(t, archive, "/explore?view=season-trend&season=2025&trend-sort=adjusted-xg-for"); code != http.StatusFound {
+	if code, _ := getPage(t, archive, "/explore/match-by-match?season=2025&trend-sort=adjusted-xg-for"); code != http.StatusFound {
 		t.Fatalf("unadjusted sort by adjusted column status = %d, want 302", code)
 	}
 }
@@ -134,7 +134,7 @@ func TestExploreOpponentAdjustmentPage(t *testing.T) {
 // value and keep it.
 func TestExploreOpponentAdjustmentIsIgnoredWhereHidden(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	_, compare := getPage(t, archive, "/explore?view=season-trend&season=2025&team="+opponentsTeam+"&trend-view=compare&opponents=adjusted")
+	_, compare := getPage(t, archive, "/explore/match-by-match?season=2025&team="+opponentsTeam+"&trend-view=compare&opponents=adjusted")
 	requireElements(t, compare, "[data-trend-opponents-control][hidden]", "[data-trend-opponents][checked]")
 	forbidText(t, compare, "[data-trend-headings]", "Adjusted")
 
@@ -143,7 +143,7 @@ func TestExploreOpponentAdjustmentIsIgnoredWhereHidden(t *testing.T) {
 			archive[index].Data.XGoals = nil
 		}
 	}
-	code, body := getPage(t, archive, "/explore?view=season-trend&season=2025&team="+opponentsTeam+"&smoothing=none&opponents=adjusted")
+	code, body := getPage(t, archive, "/explore/match-by-match?season=2025&team="+opponentsTeam+"&smoothing=none&opponents=adjusted")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
@@ -247,20 +247,20 @@ func TestExploreOpponentAdjustedPoints(t *testing.T) {
 		}
 	}
 
-	path := "/explore?view=season-trend&season=2025&team=" + opponentsTeam + "&trend-view=points&opponents=adjusted"
+	path := "/explore/match-by-match?season=2025&team=" + opponentsTeam + "&trend-view=points&opponents=adjusted"
 	_, body := getPage(t, archive, path+"&smoothing=none")
 	forbidElements(t, body, "[data-trend-opponents-control][hidden]")
 	requireExact(t, body, "[data-season-trend-note]", "xPoints: ASA’s expected points for each match. "+opponentAdjustmentNote)
 	// The note describes the switch, so unchecking it leaves the note as is.
 	_, unchecked := getPage(t, archive, strings.Replace(path, "&opponents=adjusted", "", 1)+"&smoothing=none")
 	requireExact(t, unchecked, "[data-season-trend-note]", "xPoints: ASA’s expected points for each match. "+opponentAdjustmentNote)
-	_, hidden := getPage(t, archive, "/explore?view=season-trend&season=2025&team="+opponentsTeam+"&trend-view=compare&smoothing=none")
+	_, hidden := getPage(t, archive, "/explore/match-by-match?season=2025&team="+opponentsTeam+"&trend-view=compare&smoothing=none")
 	forbidText(t, hidden, "[data-season-trend-note]", "Adjust for opponents")
 	requireText(t, body, "[data-trend-points-tiles]", " xPoints", " expected")
 	forbidText(t, body, "[data-trend-points-tiles]", "Adjusted")
 	requireText(t, body, "[data-trend-headings]", "Adjusted points", "Adjusted xPoints", "Points − xPoints")
 	forbidText(t, body, "[data-trend-headings]", "Adjusted goals")
-	requireAttr(t, body, "[data-trend-sort=adjusted-points]", "href", "?opponents=adjusted&season=2025&smoothing=none&team="+opponentsTeam+"&trend-order=desc&trend-sort=adjusted-points&trend-view=points&view=season-trend")
+	requireAttr(t, body, "[data-trend-sort=adjusted-points]", "href", "?opponents=adjusted&season=2025&smoothing=none&team="+opponentsTeam+"&trend-order=desc&trend-sort=adjusted-points&trend-view=points")
 	_, rolling := getPage(t, archive, path)
 	requireText(t, rolling, "[data-trend-headings]", "Adjusted points · 5-match average", "Adjusted xPoints · 5-match average")
 	if code, _ := getPage(t, archive, path+"&trend-sort=adjusted-xpoints&trend-order=desc"); code != http.StatusOK {

@@ -90,10 +90,10 @@ func TestExploreDataMatchesPage(t *testing.T) {
 	links := map[string]map[string]string{}
 	for _, query := range queries {
 		for _, penalties := range []string{"", "penalties=exclude"} {
-			target := "/explore?" + strings.Trim(query+"&"+penalties, "&")
+			target := exploreTarget(strings.Trim(query+"&"+penalties, "&"))
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
-			if response.Code == http.StatusFound {
+			if response.Code == http.StatusFound || response.Code == http.StatusPermanentRedirect {
 				continue // A legacy or default selection redirects.
 			}
 			if response.Code != http.StatusOK {
@@ -139,11 +139,11 @@ func TestExploreDataMatchesPage(t *testing.T) {
 func TestExploreDataCaching(t *testing.T) {
 	archive := penaltyArchive(t, 20)
 	handler := NewHandlerWithOptions(&archiveHTTPStore{archive: archive}, Options{ForecastIterations: 20})
-	code, body := getPage(t, archive, "/nwsl-season/explore?view=teams")
+	code, body := getPage(t, archive, "/nwsl-season/explore")
 	if code != http.StatusOK {
 		t.Fatalf("status %d", code)
 	}
-	link := exploreDataLink(t, "/nwsl-season/explore?view=teams", body, "data-basis-url")
+	link := exploreDataLink(t, "/nwsl-season/explore", body, "data-basis-url")
 	if !strings.HasPrefix(link, "/nwsl-season/explore/data/all.json?v=") {
 		t.Fatalf("basis link = %q", link)
 	}
