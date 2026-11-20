@@ -98,7 +98,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "canonicalURL": func(page any) string { return canonicalURL(options.PublicURL, page) }, "preloads": preloads}).ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "canonicalURL": func(page any) string { return canonicalURL(options.PublicURL, page) }, "preloads": preloads, "staticSibling": staticSibling}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -132,6 +132,9 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /seasons/{season}/{stage}/matches/{id}", application.match)
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /robots.txt", robotsTxt)
+	for iconPath := range rootIcons {
+		mux.HandleFunc("GET "+iconPath, rootIcon)
+	}
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler(staticFS)))
 	return &Application{handler: withSecurityHeaders(withCacheHeaders(options.CurrentSeason, withBasePath(mux))), app: application}

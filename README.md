@@ -662,6 +662,15 @@ from `assets/share-image.svg`; after editing the SVG, regenerate it with
 Its absolute URL comes from `NWSL_PUBLIC_URL`, and it is the one static file
 served with `Cross-Origin-Resource-Policy: cross-origin` so other sites can
 show it.
+The site icon's source is `internal/app/static/favicon.svg`, which pages link
+directly. `favicon.ico` (16, 32 and 48 px) and the 180 px
+`apple-touch-icon.png` are rendered from it; browsers also request both from
+the site root, so the server answers `/favicon.ico` and
+`/apple-touch-icon(-precomposed).png` there too, cached for a day. After
+editing the SVG, regenerate them with
+`rsvg-convert -w 180 -h 180 internal/app/static/favicon.svg -o internal/app/static/apple-touch-icon.png`
+and
+`rsvg-convert -w 256 -h 256 internal/app/static/favicon.svg | magick - -define icon:auto-resize=48,32,16 internal/app/static/favicon.ico`.
 Page links to static files carry a content hash (`?v=`). A request with the
 current hash is cached for a year as `immutable`; any other static request
 revalidates against that hash as its ETag.
