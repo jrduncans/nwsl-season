@@ -10,7 +10,7 @@ import (
 func TestExploreSeasonBalanceTilesAndRolling(t *testing.T) {
 	t.Parallel()
 	archive := testArchive(t, map[string]archiveState{"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19}})
-	path := "/explore?view=season-trend&team=alpha&season=2025&trend-view=balance"
+	path := "/explore/match-by-match?team=alpha&season=2025&trend-view=balance"
 	code, body := getPage(t, archive, path+"&smoothing=none")
 	if code != http.StatusOK {
 		t.Fatal(code)

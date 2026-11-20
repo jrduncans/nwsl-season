@@ -11,6 +11,8 @@ import (
 
 type explorePage struct {
 	pageHead
+	// path is the request path, which view links are relative to.
+	path string
 	exploreScoringPage
 	exploreDistributionView
 	exploreHomeAdvantageView
@@ -195,7 +197,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if data.Part != "" {
 		skipsForecast = data.SkipForecast
 	}
-	page := explorePage{exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreGroupOf(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query()), Views: exploreViewGroups, query: r.URL.Query()}
+	page := explorePage{path: r.URL.Path, exploreScoringPage: exploreScoringPageFor(r.URL.Path, summaries, basis), exploreTeamsView: teams, View: view, ViewGroup: exploreGroupOf(view), PointsOnly: pointsOnlyExploreSelection(r.URL.Query()), Views: exploreViewGroups, query: r.URL.Query()}
 	// The Explore workspace keeps its own selection in the query, so the
 	// penalties forms change only the penalties parameter.
 	page.PenaltiesFormFields = exploreFormFields(withPenalties(r.URL.Query(), history.AllShots))
@@ -287,7 +289,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		query := r.URL.Query()
 		query.Del("trend-sort")
 		query.Del("trend-order")
-		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+		redirectRelative(w, exploreSelectionURL(query), http.StatusFound)
 		return
 	}
 	if view == "season-trend" && page.TrendLegacySmoothing {
@@ -295,7 +297,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		query.Del("trend-mode")
 		query.Del("window")
 		query.Set("smoothing", page.TrendSmoothing)
-		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+		redirectRelative(w, exploreSelectionURL(query), http.StatusFound)
 		return
 	}
 	// parseHeadToHeadSeries already normalized rendering and generated links.
@@ -304,7 +306,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	if view == "head-to-head" && r.URL.Query().Get("h2h-series") != "" && page.H2HSeries == "actual" {
 		query := r.URL.Query()
 		query.Del("h2h-series")
-		redirectRelative(w, "?"+query.Encode(), http.StatusFound)
+		redirectRelative(w, exploreSelectionURL(query), http.StatusFound)
 		return
 	}
 	// Validate selections before spending forecast capacity. Populate every
@@ -377,18 +379,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	page.exploreTeamsView = teams
 	page.exploreSeasonTrendView, _ = exploreSeasonTrend(r.URL.Query(), teams, page.HistoryTeam)
 	page.exploreTeamRankingsView = exploreTeamRankings(teams, page.HistoryTeam)
-	label := descriptor.Label
-	if len(descriptor.Displays) > 0 {
-		label = descriptor.displayLabel(page.TeamDisplay)
-	}
-	page.Title = label + " · Explore"
-	firstSeason := ""
-	for _, summary := range summaries {
-		if firstSeason == "" || summary.Season < firstSeason {
-			firstSeason = summary.Season
-		}
-	}
-	page.Description = exploreDescription(firstSeason)
+	page.Title, page.Description = descriptor.Title, descriptor.Description
 	page.ScriptPath = staticURL(r.URL.Path, "explore.js")
 	page.GeometryPath = staticURL(r.URL.Path, "explore-geometry.js")
 	page.MarginsPath = staticURL(r.URL.Path, "explore-margins.js")
@@ -514,4 +505,16 @@ func (p explorePage) HomeNotes() []basisPair {
 		}),
 		p.otherPair(func(_ history.ScoringBasis, other bool) string { return view(other).HomeAdvantageActiveStatus }),
 	}
+}
+
+// ViewHref links a view's page from this one, keeping the penalties basis.
+// The tabs link views without other selections, so search engines can follow
+// them to each view's page.
+func (p explorePage) ViewHref(key string) string {
+	view, _ := exploreViewFor(key)
+	href := relativeURL(p.path, exploreViewPath(view))
+	if p.NonPenalty {
+		href += "?" + penaltiesParam + "=" + penaltiesExclude
+	}
+	return href
 }

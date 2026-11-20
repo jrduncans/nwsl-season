@@ -206,16 +206,16 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	for _, path := range []string{
-		"/nwsl-season/explore?view=season-trend&season=2026&team=alpha&trend-view=balance&series=xg&smoothing=10",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=difference&series=goals&smoothing=none",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=compare&series=goals&smoothing=none",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=goals&smoothing=none",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=xg&smoothing=10",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=both&smoothing=none",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=both&average-series=xg&smoothing=none",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&series=xg&average-series=goals&smoothing=none",
-		"/explore?view=season-trend&season=2025&team=alpha&trend-view=relative&average-reference=league&average-series=xg",
-		"/explore?view=season-trend&season=2024&team=alpha",
+		"/nwsl-season/explore/match-by-match?season=2026&team=alpha&trend-view=balance&series=xg&smoothing=10",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=difference&series=goals&smoothing=none",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=compare&series=goals&smoothing=none",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=goals&smoothing=none",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=xg&smoothing=10",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=both&smoothing=none",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=both&average-series=xg&smoothing=none",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=xg&average-series=goals&smoothing=none",
+		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&average-reference=league&average-series=xg",
+		"/explore/match-by-match?season=2024&team=alpha",
 	} {
 		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()
@@ -306,20 +306,20 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"team=", "team=unknown", "team=alpha&team=bravo", "season=2000",
 	} {
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&"+query, nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/match-by-match?"+query, nil))
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("invalid %s returned %d", query, response.Code)
 		}
 	}
 	for _, query := range []string{"series=", "series=invalid", "series=xg&series=goals"} {
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend&"+query, nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/match-by-match?"+query, nil))
 		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `data-trend-carried-series value="both"`) {
 			t.Errorf("malformed carried %s should be ignored and default to both: status %d", query, response.Code)
 		}
 	}
 	response := httptest.NewRecorder()
-	NewHandler(&archiveHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore?view=season-trend", nil))
+	NewHandler(&archiveHTTPStore{}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/match-by-match", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `data-season-trend-empty>No eligible`) {
 		t.Fatal("empty archive should have an explicit empty state")
 	}
@@ -504,7 +504,7 @@ func TestExploreSeasonTrendLegacySmoothingRedirects(t *testing.T) {
 		"trend-mode=rolling&smoothing=none": "none",
 	} {
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?view=season-trend&season=2025&team=alpha&trend-view=points&"+legacy, nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/match-by-match?season=2025&team=alpha&trend-view=points&"+legacy, nil))
 		if response.Code != http.StatusFound {
 			t.Fatalf("%s: status %d", legacy, response.Code)
 		}
@@ -513,7 +513,7 @@ func TestExploreSeasonTrendLegacySmoothingRedirects(t *testing.T) {
 			t.Fatalf("%s: redirect %s, %v", legacy, target, err)
 		}
 	}
-	code, body := getPage(t, archive, "/explore?view=season-trend&season=2025&team=alpha&smoothing=10")
+	code, body := getPage(t, archive, "/explore/match-by-match?season=2025&team=alpha&smoothing=10")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
@@ -525,7 +525,7 @@ func TestExploreSeasonTrendLegacySmoothingRedirects(t *testing.T) {
 // and the status line names each active switch.
 func TestExploreSeasonTrendChartCard(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&team=" + opponentsTeam
+	path := "/explore/match-by-match?season=2025&team=" + opponentsTeam
 	_, plain := getPage(t, archive, path)
 	requireExact(t, plain, "[data-trend-view] legend", "Chart")
 	requireExact(t, plain, "[data-trend-view] label span", "Scoring balance", "Goals vs xG", "Margins", "Points vs xPoints", "Benchmarks")

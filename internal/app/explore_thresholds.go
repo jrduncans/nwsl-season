@@ -82,7 +82,7 @@ func exploreThresholds(query url.Values, summaries []history.SeasonScoring, arch
 		}
 		page.ThresholdRows = append(page.ThresholdRows, exploreThresholdRow{
 			SeasonThresholds: season, Selected: season.Season == page.ThresholdSelected, RecordNotes: notes,
-			URL: "?view=thresholds&threshold-season=" + season.Season + penalties,
+			URL: "?threshold-season=" + season.Season + penalties,
 		})
 		page.ThresholdData = append(page.ThresholdData, exploreThresholdRecord{
 			Season: season.Season, Playoffs: season.Playoffs, Home: season.Home, Bye: season.Bye, Round: season.Round, Values: season.Values,
@@ -128,7 +128,7 @@ func exploreThresholds(query url.Values, summaries []history.SeasonScoring, arch
 		}
 		page.ThresholdHeaders = append(page.ThresholdHeaders, exploreThresholdHeader{
 			Key: key, Label: labels[i], Sort: aria,
-			URL: "?view=thresholds&threshold-season=" + page.ThresholdSelected + penalties + "&threshold-outcome=" + page.ThresholdOutcome + "&threshold-sort=" + key + "&threshold-order=" + nextOrder,
+			URL: "?threshold-season=" + page.ThresholdSelected + penalties + "&threshold-outcome=" + page.ThresholdOutcome + "&threshold-sort=" + key + "&threshold-order=" + nextOrder,
 		})
 	}
 	for _, row := range page.ThresholdRows {

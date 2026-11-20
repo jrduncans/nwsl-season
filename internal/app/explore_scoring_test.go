@@ -48,9 +48,9 @@ func testArchive(t *testing.T, states map[string]archiveState) []cache.Historica
 func TestLegacyHistoryRedirectsToScoringTrend(t *testing.T) {
 	handler := NewHandler(&archiveHTTPStore{})
 	tests := []struct{ path, want string }{
-		{"/history", "explore?view=trend"},
-		{"/history/scoring", "../explore?view=trend"},
-		{"/history/scoring?season=2025&metric=xg&penalties=exclude", "../explore?metric=xg&penalties=exclude&view=trend"},
+		{"/history", "explore/scoring-trend"},
+		{"/history/scoring", "../explore/scoring-trend"},
+		{"/history/scoring?season=2025&metric=xg&penalties=exclude", "../explore/scoring-trend?metric=xg&penalties=exclude"},
 	}
 	for _, test := range tests {
 		response := httptest.NewRecorder()

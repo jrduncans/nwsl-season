@@ -62,7 +62,7 @@ func TestUpcomingMatchPageExplainsTheResultsOutlook(t *testing.T) {
 
 	_, body = matchResponse(t, data, "/seasons/2026/regular-season/matches/future-2")
 	requireText(t, body, ".match-meta", "on 1 day's rest")
-	requireAttr(t, body, ".match-links a", "href", "../../../../explore?opponent=bravo&team=alpha&view=head-to-head")
+	requireAttr(t, body, ".match-links a", "href", "../../../../explore/head-to-head?opponent=bravo&team=alpha")
 }
 
 func TestCompletedMatchPageUsesOnlyMatchesBeforeKickoff(t *testing.T) {

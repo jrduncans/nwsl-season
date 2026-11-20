@@ -28,17 +28,84 @@ type historicalStore interface {
 // legacyHistory redirects the retired History scoring page to Explore's
 // Scoring trend, keeping the chart metric and scoring basis.
 func (a *application) legacyHistory(w http.ResponseWriter, r *http.Request) {
-	query := url.Values{"view": {"trend"}}
+	query := url.Values{}
 	legacy := r.URL.Query()
 	for _, key := range []string{"metric", "penalties"} {
 		if values, ok := legacy[key]; ok {
 			query[key] = values
 		}
 	}
-	redirectRelative(w, relativeURL(r.URL.Path, "/explore")+"?"+query.Encode(), http.StatusMovedPermanently)
+	trend, _ := exploreViewFor("trend")
+	target := relativeURL(r.URL.Path, exploreViewPath(trend))
+	if len(query) > 0 {
+		target += "?" + query.Encode()
+	}
+	redirectRelative(w, target, http.StatusMovedPermanently)
+}
+
+// exploreViewFromPath resolves the view a request names. Each view has its own
+// path, with the default view at bare /explore. A view named in the query, as
+// links did before views had paths, redirects to its path with the rest of the
+// selections, as does the legacy Scoring trend link that names only its metric.
+// The rest of Explore reads the view from the query, so this returns the query
+// with the path's view added.
+func (a *application) exploreViewFromPath(w http.ResponseWriter, r *http.Request) (rawQuery string, ok bool) {
+	query := r.URL.Query()
+	slug := r.PathValue("slug")
+	if _, named := query["view"]; named || (slug == "" && legacyTrendQuery(query)) {
+		view, known := exploreViewFor(exploreRequestedView(query))
+		if !known {
+			a.renderExploreBadRequest(w, r, unknownExploreViewError())
+			return "", false
+		}
+		target := relativeURL(r.URL.Path, exploreViewPath(view))
+		rest := withoutQueryParameter(r.URL.RawQuery, "view")
+		if remaining, _ := url.ParseQuery(rest); view.Slug == "" && legacyTrendQuery(remaining) {
+			// At bare /explore a lone metric would read as the legacy Scoring
+			// trend link, and it means nothing to the default view.
+			rest = withoutQueryParameter(rest, "metric")
+		}
+		if rest != "" {
+			target += "?" + rest
+		}
+		redirectRelative(w, target, http.StatusPermanentRedirect)
+		return "", false
+	}
+	view := exploreViewGroups[0].Views[0]
+	if slug != "" {
+		var known bool
+		if view, known = exploreViewForSlug(slug); !known {
+			http.NotFound(w, r)
+			return "", false
+		}
+	}
+	if r.URL.RawQuery == "" {
+		return "view=" + url.QueryEscape(view.Key), true
+	}
+	return "view=" + url.QueryEscape(view.Key) + "&" + r.URL.RawQuery, true
+}
+
+// legacyTrendQuery reports a link from when Scoring trend was the default
+// view: it names the chart metric and at most the scoring basis. Elsewhere a
+// metric is just Scoring trend's selection carried to another view.
+func legacyTrendQuery(query url.Values) bool {
+	if !query.Has("metric") {
+		return false
+	}
+	for name := range query {
+		if name != "metric" && name != penaltiesParam {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *application) explore(w http.ResponseWriter, r *http.Request) {
+	rawQuery, ok := a.exploreViewFromPath(w, r)
+	if !ok {
+		return
+	}
+	r.URL.RawQuery = rawQuery
 	basis, err := penaltiesBasisRaw(r.URL.RawQuery)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
@@ -166,9 +233,13 @@ type exploreFormField struct {
 }
 
 // exploreFormFields lists a query as hidden form fields in a stable order.
+// The form submits to the view's own path, so the view itself is left out.
 func exploreFormFields(values url.Values) []exploreFormField {
 	fields := []exploreFormField{}
 	for _, name := range slices.Sorted(maps.Keys(values)) {
+		if name == "view" {
+			continue
+		}
 		for _, value := range values[name] {
 			fields = append(fields, exploreFormField{Name: name, Value: value})
 		}

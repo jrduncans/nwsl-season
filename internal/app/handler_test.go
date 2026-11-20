@@ -72,8 +72,10 @@ func TestRobotsTxtDisallowsExploreQueryStrings(t *testing.T) {
 		groups[name] = strings.Split(rules, "\n")
 	}
 	for _, agent := range []string{"*", "Amzn-SearchBot", "KeenableBot", "meta-webindexer"} {
-		if rules := groups[agent]; !slices.Equal(rules, []string{"Disallow: /explore?"}) {
-			t.Errorf("group %q rules = %q, want only Disallow: /explore?", agent, rules)
+		// "/explore*?" covers bare /explore and every view path; the payloads
+		// under /explore/data/ stay fetchable for crawlers that render pages.
+		if rules := groups[agent]; !slices.Equal(rules, []string{"Disallow: /explore*?", "Allow: /explore/data/"}) {
+			t.Errorf("group %q rules = %q, want Disallow: /explore*? and Allow: /explore/data/", agent, rules)
 		}
 	}
 }

@@ -29,8 +29,8 @@ type sitemapURL struct {
 	LastMod string `xml:"lastmod,omitempty"`
 }
 
-// sitemap lists every page navigation links to, every match page and
-// /explore, by canonical URL. It needs absolute URLs, so it is a 404
+// sitemap lists every page navigation links to, every match page and each
+// Explore view's page, by canonical URL. It needs absolute URLs, so it is a 404
 // without a public URL.
 func (a *application) sitemap(w http.ResponseWriter, r *http.Request) {
 	if a.options.PublicURL == "" {
@@ -99,7 +99,11 @@ func (a *application) sitemapURLs(ctx context.Context) ([]sitemapURL, error) {
 			}
 		}
 	}
-	add("/explore", sitemapDate(latest, false))
+	for _, group := range exploreViewGroups {
+		for _, view := range group.Views {
+			add(exploreViewPath(view), sitemapDate(latest, false))
+		}
+	}
 	return urls, nil
 }
 

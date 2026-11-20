@@ -10,7 +10,6 @@
 <section data-panel="team-seasons"{{if ne .View "team-seasons"}} hidden{{end}} aria-labelledby="explore-team-seasons-title">
 <div class="explore-heading"><h2 id="explore-team-seasons-title" data-team-seasons-title>{{.TeamSeasonsHeading}}</h2></div>
 <form method="get" id="team-seasons-controls" class="explore-team-controls" data-team-seasons-controls>
-<input type="hidden" name="view" value="team-seasons">
 <input type="hidden" name="team-seasons-sort" value="{{.TeamSeasonsSort}}"{{if not .TeamSeasonsExpanded}} disabled{{end}}><input type="hidden" name="team-seasons-order" value="{{.TeamSeasonsOrder}}"{{if not .TeamSeasonsExpanded}} disabled{{end}}>
 <noscript><button class="button" type="submit" data-team-seasons-submit>{{if eq .TeamSeasonsDisplay "scatter"}}Show scatter{{else}}Show rankings{{end}}</button></noscript>
 </form>

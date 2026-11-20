@@ -133,9 +133,10 @@ Useful endpoints:
 - `/seasons/:season/:stage/forecast` — interactive forecast simulation.
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
 - `/explore` — league scoring charts, sortable season table, team performance
-  vs xG or xPoints, and team history.
+  vs xG or xPoints, and team history; each view has its own page,
+  `/explore/<view>` (see [How Explore works](docs/explore-guide.md)).
 - `/history` and `/history/scoring` — redirect to Explore's Scoring trend.
-- `/sitemap.xml` — every stage page, match page and `/explore`; requires
+- `/sitemap.xml` — every stage page, match page and Explore view; requires
   `NWSL_PUBLIC_URL` (see "Runtime and deployment").
 
 ## Pitchfork development server
@@ -710,9 +711,12 @@ same SQLite data directory so it can share the sync lease safely. A reverse
 proxy should monitor `/healthz` and `/cache/status`.
 
 `/robots.txt` asks crawlers not to follow Explore's query strings
-(`Disallow: /explore?`). Each combination of view, team, season and display is
-a separate URL, and in November 2026 one search crawler made about 21,000 such
-requests in two days. `/explore` itself stays crawlable. In production
+(`Disallow: /explore*?`, which covers bare `/explore` and each view's path).
+Each combination of team, season and display is a separate URL, and in
+November 2026 one search crawler made about 21,000 such requests in two days.
+Each view's page itself stays crawlable, and so do Explore's payloads under
+`/explore/data/` (`Allow: /explore/data/`), so a crawler that renders the page
+can draw its charts. In production
 Cloudflare prepends its managed AI-crawler rules to this file, including a
 `User-agent: *` group with `Allow: /`. Some crawlers read only the most
 specific group that names them, so the file also repeats the rule in named
@@ -724,7 +728,7 @@ When `NWSL_PUBLIC_URL` is set, `/robots.txt` ends with a `Sitemap:` line for
 `/sitemap.xml`, so crawlers reach deep archive pages without following links
 there. The sitemap lists, by canonical URL, the pages each public stage's
 navigation links to, its model evaluation where the forecast is available,
-every match page, and `/explore` (see
+every match page, and each Explore view's page (see
 [`internal/app/sitemap.go`](internal/app/sitemap.go)). A stage with no fixtures,
 such as playoffs not yet scheduled, is left out until a sync adds its matches.
 Each URL's `<lastmod>` is the stage's last successful sync in the current

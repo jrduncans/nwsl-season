@@ -296,6 +296,16 @@ func exploreTeamURL(selection url.Values, changes map[string]string) string {
 	if values.Get("team-seasons-display") == "ranking" {
 		values.Del("team-seasons-display")
 	}
+	return exploreSelectionURL(values)
+}
+
+// exploreSelectionURL links another selection in the same view. The view is
+// the page's path, so the link is only a query string and the view is left
+// out of it. With JavaScript, a view switched in place has already changed
+// the path these links resolve against.
+func exploreSelectionURL(values url.Values) string {
+	values = cloneQuery(values)
+	values.Del("view")
 	return "?" + values.Encode()
 }
 

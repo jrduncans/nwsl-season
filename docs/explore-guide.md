@@ -6,30 +6,31 @@ archive. Every view is calculated from one coherent SQLite snapshot read by
 reads individual season pages.
 
 Naming: the archive calculations live in the `internal/history` package
-("history" as in past seasons), and Season by season keeps its original
-`view=team-history` key. `/history` and `/history/scoring`, a retired scoring
-page, redirect to the Scoring trend.
+("history" as in past seasons). Each view has an internal key, which the code,
+the payloads and `explore.js` use, and a readable path (see "View paths"
+below); Season by season keeps its original `team-history` key. `/history` and
+`/history/scoring`, a retired scoring page, redirect to the Scoring trend.
 
 ## Views
 
 | Group | Scope | Tab | URL |
 |---|---|---|---|
-| Compare teams | Every team, one season | Actual vs expected (paired dots) | `view=teams&display=chart` |
-| | | Gap to expected | `view=teams&display=gap` |
-| | | Outlier plot | `view=teams&display=scatter` |
-| | | Scored vs allowed | `view=teams&display=quadrant` |
-| | | Table | `view=teams&display=table` |
-| Team profile | One team | Rankings | `view=team-rankings` |
-| | | Match by match | `view=season-trend` |
-| | | Season by season | `view=team-history` |
-| | | Head to head | `view=head-to-head` |
-| League trends | League, across seasons | Scoring trend | `view=trend` |
-| | | Goal distribution | `view=distribution` |
-| | | Home advantage | `view=home-advantage` |
-| | | Parity | `view=parity` |
-| | | Shield and playoff thresholds | `view=thresholds` |
-| | | Team-seasons (ranking or actual-vs-expected scatter) | `view=team-seasons` |
-| | | Scoring table | `view=table` |
+| Compare teams | Every team, one season | Actual vs expected (paired dots) | `/explore` (`display=chart`) |
+| | | Gap to expected | `/explore?display=gap` |
+| | | Outlier plot | `/explore?display=scatter` |
+| | | Scored vs allowed | `/explore?display=quadrant` |
+| | | Table | `/explore?display=table` |
+| Team profile | One team | Rankings | `/explore/rankings` |
+| | | Match by match | `/explore/match-by-match` |
+| | | Season by season | `/explore/season-by-season` |
+| | | Head to head | `/explore/head-to-head` |
+| League trends | League, across seasons | Scoring trend | `/explore/scoring-trend` |
+| | | Goal distribution | `/explore/goal-distribution` |
+| | | Home advantage | `/explore/home-advantage` |
+| | | Parity | `/explore/parity` |
+| | | Shield and playoff thresholds | `/explore/playoff-thresholds` |
+| | | Team-seasons (ranking or actual-vs-expected scatter) | `/explore/team-seasons` |
+| | | Scoring table | `/explore/scoring-table` |
 
 An omitted view opens Actual vs expected; a view-less link that carries
 `metric` (from when Scoring trend was the default) opens Scoring trend.
@@ -95,13 +96,45 @@ Validated view-specific parameters return a 400 "Invalid Explore selection"
 page for blank, repeated or unsupported values. Chart.js and its datalabels plugin are vendored under
 `internal/app/static/vendor`.
 
-Search engines should index only bare `/explore`. Every combination of view,
-team, season, display and sort is its own URL. Like every page, Explore names
-its own path as `<link rel="canonical">` with the query string dropped, so each
-variant points at `/explore` (see README "Runtime and deployment"), and every tab, display, sort and selection link that
-only changes the query string, including those `explore.js` builds, carries
-`rel="nofollow"`. Links to bare `/explore` stay followable. `robots.txt` also
-disallows `/explore?` (see README "Runtime and deployment").
+### View paths
+
+Each view has its own page, so search engines can index it under its own title
+and description (`Title` and `Description` in the view registry,
+[`explore_views.go`](../internal/app/explore_views.go)). The path names the
+view, `/explore/<slug>`, with the default view, Compare teams, at bare
+`/explore`; the query string holds the selections (team, season, display,
+sort). Compare teams' five displays share `/explore`, and the team-profile
+views keep the team as `?team=`.
+
+- A view named in the query, `?view=<key>`, as links did before views had
+  paths, gets a 308 redirect to its path with the rest of the query. So does
+  Scoring trend's legacy link that names only `metric` (and `penalties`); a
+  metric carried to another view is just a selection, and a default-view URL
+  drops a lone metric so it can't read as that legacy link. An unknown slug is
+  a 404.
+- The rest of the server reads the view from the query: the handler adds
+  `view=<key>` for the path's view. Links that change only selections are
+  query strings without the view, so they resolve against the current view's
+  path; the tabs link each view's path.
+- `explore.js` keeps the view among its parameters as `view` and converts only
+  at the URL boundary: `paramsOf` reads a URL (view from the path), `hrefFor`
+  writes one, and switching views in place pushes the new path. Moving between
+  `/explore` and `/explore/<slug>` changes what a page-relative URL means, so
+  the script first pins every page-relative URL the server rendered (links,
+  icons, payload URLs) to the URL it meant at load. Query-only and fragment
+  links stay relative and mean the view shown when followed.
+- Forms carry no `view` and no `action`, so they submit to the page they're
+  on.
+
+Search engines should index each view's page, not every combination of
+selections. Like every page, a view's page names its own path as
+`<link rel="canonical">` with the query string dropped, so
+`/explore/parity?season=2019` points at `/explore/parity` (see README "Runtime
+and deployment"). Every link that carries selections, including those
+`explore.js` builds, has `rel="nofollow"`; the tabs, which link each view's
+page without selections, stay followable. `robots.txt` disallows
+`/explore*?` and the sitemap lists every view's page (see README "Runtime and
+deployment").
 
 ### Principles for every view
 
@@ -392,7 +425,7 @@ calculation is `history.SummarizeParity`.
 
 ### Shield and playoff thresholds
 
-`view=thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
+`/explore/playoff-thresholds` leads with four series on a shared 0–3 PPG axis, since 2016:
 Shield, Home playoff game, Playoff bye and Playoffs, in a chart card with the
 intro and legend; the season cards follow it, chosen by a **Season** select in
 the heading row, like Parity's. The series use distinct
@@ -494,7 +527,7 @@ matches played, not opponents or era.
 
 ### Team-seasons
 
-`view=team-seasons` ranks every eligible ASA team-season since 2016 on Points,
+`/explore/team-seasons` ranks every eligible ASA team-season since 2016 on Points,
 Goals scored, Goals allowed or Goal differential, by Actual, Expected or Gap.
 The default display is Ranking on actual points per match. Ranking bars and table rows are plain content:
 there is no selection, highlighting, detail panel, Team select or Season select.
@@ -610,7 +643,7 @@ and goals − xG/match, sorted from unrounded values.
 
 ## Compare teams
 
-`view=teams` compares every team's actual and expected values in one season.
+`/explore` (Compare teams) compares every team's actual and expected values in one season.
 
 | Parameter | Values | Default |
 |---|---|---|
@@ -668,7 +701,7 @@ season stays selected with an empty state.
 
 ### Rankings
 
-`view=team-rankings` ranks one team's goals scored, goals allowed, goal
+`/explore/rankings` ranks one team's goals scored, goals allowed, goal
 differential, xG, xG allowed and xG differential among every eligible team in
 the season, using `season` and `units`. Lower is better for the two allowed
 stats. Ties share competition rank (1 + the number of strictly better values),
@@ -685,7 +718,7 @@ Match pages compare both teams with the same ranking rules, as of kickoff; see
 
 ### Match by match
 
-`view=season-trend` follows one team's played matches in a season.
+`/explore/match-by-match` follows one team's played matches in a season.
 
 | Parameter | Values | Default |
 |---|---|---|
@@ -1052,7 +1085,7 @@ verified location evidence.
 
 ### Season by season
 
-`view=team-history` shows one team's per-match goals, xG, points and xPoints for
+`/explore/season-by-season` shows one team's per-match goals, xG, points and xPoints for
 every eligible season, reusing Compare teams' rates and coverage.
 
 | Parameter | Values | Default |
@@ -1092,7 +1125,7 @@ start rather than claimed as all-time. Tied holders are all listed in the
 
 ### Head to head
 
-`view=head-to-head` follows two ASA team IDs across eligible regular seasons.
+`/explore/head-to-head` follows two ASA team IDs across eligible regular seasons.
 Team and Opponent are selects above the heading. Below the scope line a chart
 card, as on Match by match, is headed by a **Chart** picker (Margins by
 default, Goals vs xG, Points vs xPoints) with an Exclude penalties switch
@@ -1307,7 +1340,7 @@ and the current year is active.
 
 For a Team-seasons chart with twenty or fewer rows, run
 `NWSL_CONFIG_FILE=/dev/null go run ./cmd/preview -scenario teams` and open
-`/nwsl-season/explore?view=team-seasons` on its printed loopback address. Its
+`/nwsl-season/explore/team-seasons` on its printed loopback address. Its
 completed 2025 season supplies fourteen ranked rows; 2026 has only eight played
 matches per team and stays below the active-season gate. Both end labels appear,
 with no break and no duplicated team-season. Use `-no-script` to inspect the

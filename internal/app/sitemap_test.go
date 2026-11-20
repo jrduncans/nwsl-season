@@ -101,9 +101,16 @@ func TestSitemapListsEveryStagePageAndMatch(t *testing.T) {
 	}
 
 	// Every listed page renders. Explore needs an archive this store lacks
-	// and has tests of its own.
+	// and has tests of its own, but every view's page is listed.
+	for _, group := range exploreViewGroups {
+		for _, view := range group.Views {
+			if _, ok := lastMod[exploreViewPath(view)]; !ok {
+				t.Errorf("%s is missing", exploreViewPath(view))
+			}
+		}
+	}
 	for path := range lastMod {
-		if path == "/explore" {
+		if strings.HasPrefix(path, "/explore") {
 			continue
 		}
 		if code := get(t, handler, path).Code; code != http.StatusOK {

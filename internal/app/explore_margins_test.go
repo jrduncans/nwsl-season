@@ -97,7 +97,7 @@ func TestExploreMarginCoverageFromArchive(t *testing.T) {
 		if h2h.AllExpected.GoalsCovered != tc.covered {
 			t.Fatalf("h2h coverage: %+v", h2h.AllExpected)
 		}
-		path := "/explore?view=head-to-head&team=alpha&opponent=bravo"
+		path := "/explore/head-to-head?team=alpha&opponent=bravo"
 		if tc.basis.ExcludesPenalties() {
 			path += "&penalties=exclude"
 		}
@@ -121,7 +121,7 @@ func TestExploreMarginCoverageFromArchive(t *testing.T) {
 func TestExploreSeasonMarginsTilesAndRolling(t *testing.T) {
 	t.Parallel()
 	archive := testArchive(t, map[string]archiveState{"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19}})
-	path := "/explore?view=season-trend&team=alpha&season=2025&trend-view=difference"
+	path := "/explore/match-by-match?team=alpha&season=2025&trend-view=difference"
 	code, body := getPage(t, archive, path+"&smoothing=none")
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -141,9 +141,9 @@ func TestExploreHeadToHeadSeriesCanonicalRedirect(t *testing.T) {
 	t.Parallel()
 	archive := testArchive(t, map[string]archiveState{"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19}})
 	for _, series := range []string{"expected", "actual", "both", "points"} {
-		query := url.Values{"view": {"head-to-head"}, "team": {"alpha"}, "opponent": {"bravo"}, "h2h-series": {series}, "h2h-sort": {"margin"}, "h2h-order": {"asc"}}
+		query := url.Values{"team": {"alpha"}, "opponent": {"bravo"}, "h2h-series": {series}, "h2h-sort": {"margin"}, "h2h-order": {"asc"}}
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore?"+query.Encode(), nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/head-to-head?"+query.Encode(), nil))
 		if series == "expected" || series == "actual" {
 			if response.Code != http.StatusFound {
 				t.Fatalf("%s: status %d", series, response.Code)

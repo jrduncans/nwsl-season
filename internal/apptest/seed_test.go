@@ -24,14 +24,14 @@ type pageExpectation struct {
 
 func scenarioPages() map[string][]pageExpectation {
 	return map[string][]pageExpectation{
-		apptest.ScenarioDefault:     {{"/explore?view=table", `<th scope="row" data-value="2018">`}, {"/explore?view=table", `<th scope="row" data-value="2021">`}},
-		apptest.ScenarioOverview:    {{"/explore?view=table", `<th scope="row" data-value="2016">`}},
-		apptest.ScenarioSingle:      {{"/explore?view=table", `<th scope="row" data-value="2024">`}, {"/explore?view=trend", "Some seasons have no complete xG average"}},
-		apptest.ScenarioEmpty:       {{"/explore?view=teams&season=2024&display=table", "No team comparison is available for this season yet."}},
+		apptest.ScenarioDefault:     {{"/explore/scoring-table", `<th scope="row" data-value="2018">`}, {"/explore/scoring-table", `<th scope="row" data-value="2021">`}},
+		apptest.ScenarioOverview:    {{"/explore/scoring-table", `<th scope="row" data-value="2016">`}},
+		apptest.ScenarioSingle:      {{"/explore/scoring-table", `<th scope="row" data-value="2024">`}, {"/explore/scoring-trend", "Some seasons have no complete xG average"}},
+		apptest.ScenarioEmpty:       {{"/explore?season=2024&display=table", "No team comparison is available for this season yet."}},
 		apptest.ScenarioTeams:       {{"/explore", "Angel City FC"}},
 		apptest.ScenarioNoXG:        {{"/explore", "Angel City FC"}},
-		apptest.ScenarioTeamHistory: {{"/explore?view=team-history", "Angel City FC"}},
-		apptest.ScenarioSeasonTrend: {{"/explore?view=season-trend", "Angel City FC"}},
+		apptest.ScenarioTeamHistory: {{"/explore/season-by-season", "Angel City FC"}},
+		apptest.ScenarioSeasonTrend: {{"/explore/match-by-match", "Angel City FC"}},
 	}
 }
 

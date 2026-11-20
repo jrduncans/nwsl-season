@@ -59,7 +59,7 @@ func textOf(t *testing.T, page playwright.Page, selector string) string {
 func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := explorePage(t, base, Desktop, "explore?view=teams&display=table&season=2025")
+	page := explorePage(t, base, Desktop, "explore?display=table&season=2025")
 	expect := playwright.NewPlaywrightAssertions()
 
 	if got := textOf(t, page, "label.penalties-select:visible"); got != "Exclude penalties" {
@@ -158,15 +158,15 @@ func TestExplorePenaltiesToggleSwitchesBasisAndSurvivesNavigation(t *testing.T) 
 	}
 
 	// The league views name the basis too.
-	gotoInPage(t, page, "explore?view=trend&penalties=exclude")
+	gotoInPage(t, page, "explore/scoring-trend?penalties=exclude")
 	if got := textOf(t, page, "#explore-trend-title"); got != "Non-penalty goals and chances per match" {
 		t.Errorf("trend title = %q", got)
 	}
-	gotoInPage(t, page, "explore?view=distribution&penalties=exclude")
+	gotoInPage(t, page, "explore/goal-distribution?penalties=exclude")
 	if got := textOf(t, page, "#explore-distribution-title"); !strings.Contains(got, "non-penalty goals") {
 		t.Errorf("distribution title = %q", got)
 	}
-	gotoInPage(t, page, "explore?view=team-history&penalties=exclude&measure=for")
+	gotoInPage(t, page, "explore/season-by-season?penalties=exclude&measure=for")
 	// Option text is basis-independent: the Penalties select states the basis.
 	if got := textOf(t, page, "[data-panel=team-history] [data-segmented=series] .segmented-options"); got != "Goals and xG\nGoals\nxG" {
 		t.Errorf("history series choices = %q", got)
@@ -190,6 +190,46 @@ func hrefs(t *testing.T, page playwright.Page, selector string) []string {
 	var links []string
 	evalJSON(t, page, `(selector) => [...document.querySelectorAll(selector)].map((a) => a.getAttribute('href'))`, selector, &links)
 	return links
+}
+
+// TestExplorePenaltiesKeepsHiddenPanelLinksRelative switches the basis in
+// place on one view's page. A query-only link in another view's hidden panel
+// belongs to that panel's view, so it must take the new basis but stay a
+// query string rather than become a link to the view shown now.
+func TestExplorePenaltiesKeepsHiddenPanelLinksRelative(t *testing.T) {
+	t.Parallel()
+	page := explorePage(t, exploreBase(t, apptest.ScenarioTeamHistory), Desktop, "explore/scoring-table")
+	if err := page.Locator(penaltiesSelect).First().Click(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := page.WaitForFunction(`() => new URLSearchParams(location.search).get('penalties') === 'exclude'`, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := settle(page); err != nil {
+		t.Fatal(err)
+	}
+	// Team-seasons sort links stay as the server rendered them until their
+	// view is shown; Home advantage's sort links are rebuilt with their view.
+	var links []struct{ Href, Path string }
+	evalJSON(t, page, `() => [...document.querySelectorAll('[data-panel="team-seasons"] a[data-team-seasons-sort], [data-panel="home-advantage"] a[data-home-sort]')]
+		.map((link) => ({href: link.getAttribute('href'), path: new URL(link.href).pathname}))`, nil, &links)
+	if len(links) == 0 {
+		t.Fatal("no hidden-panel links rendered")
+	}
+	queryOnly := 0
+	for _, link := range links {
+		if strings.HasPrefix(link.Href, "?") {
+			queryOnly++
+		} else if strings.HasSuffix(link.Path, "/explore/scoring-table") {
+			t.Errorf("hidden panel link %q points at the view shown now", link.Href)
+		}
+		if !strings.Contains(link.Href, "penalties=exclude") {
+			t.Errorf("hidden panel link %q lost the basis", link.Href)
+		}
+	}
+	if queryOnly == 0 {
+		t.Errorf("no query-only hidden-panel link stayed a query string: %v", links)
+	}
 }
 
 func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
@@ -261,10 +301,10 @@ func TestFixtureResultsShowNPxGOnlyForPenaltyMatches(t *testing.T) {
 func TestExplorePenaltiesControlFitsAPhone(t *testing.T) {
 	t.Parallel()
 	base := exploreBase(t, apptest.ScenarioSeasonTrend)
-	page := explorePage(t, base, Mobile, "explore?view=teams&display=table&penalties=exclude")
+	page := explorePage(t, base, Mobile, "explore?display=table&penalties=exclude")
 	assertNoHorizontalOverflow(t, page)
 	for _, tab := range exploreTabs {
-		gotoInPage(t, page, "explore?"+tab.query+"&penalties=exclude")
+		gotoInPage(t, page, explorePath(tab.query+"&penalties=exclude"))
 		assertNoHorizontalOverflow(t, page)
 	}
 }
@@ -406,7 +446,7 @@ func TestExplorePenaltiesSwitchInHeadToHeadCarriesToOtherViews(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, exclude := range []bool{true, false} {
-		path := "explore?view=head-to-head&opponent=" + seattleH2H
+		path := "explore/head-to-head?opponent=" + seattleH2H
 		if !exclude {
 			path += "&penalties=exclude"
 		}
@@ -478,30 +518,30 @@ func TestExplorePenaltiesSwitchMatchesServerRender(t *testing.T) {
 		scenario, path string
 		inPlace        bool
 	}{
-		{apptest.ScenarioSeasonTrend, "explore?view=teams", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=gap", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=scatter", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=quadrant", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=quadrant&quadrant-data=both", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=table", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=teams&display=table&units=total&team-sort=for-expected", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=team-rankings", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=season-trend", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=compare&smoothing=none", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=difference&smoothing=none", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=relative", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=season-trend&trend-view=balance&smoothing=none&opponents=adjusted", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=team-history", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=team-history&context=on&measure=for", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=trend", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=distribution", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=distribution&distribution-bin=2", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=home-advantage", true},
-		{apptest.ScenarioSeasonTrend, "explore?view=table", true},
-		{apptest.ScenarioTeams, "explore?view=teams&display=table", false},
+		{apptest.ScenarioSeasonTrend, "explore", true},
+		{apptest.ScenarioSeasonTrend, "explore?display=gap", true},
+		{apptest.ScenarioSeasonTrend, "explore?display=scatter", true},
+		{apptest.ScenarioSeasonTrend, "explore?display=quadrant", true},
+		{apptest.ScenarioSeasonTrend, "explore?display=quadrant&quadrant-data=both", true},
+		{apptest.ScenarioSeasonTrend, "explore?display=table", true},
+		{apptest.ScenarioSeasonTrend, "explore?display=table&units=total&team-sort=for-expected", true},
+		{apptest.ScenarioSeasonTrend, "explore/rankings", true},
+		{apptest.ScenarioSeasonTrend, "explore/match-by-match", true},
+		{apptest.ScenarioSeasonTrend, "explore/match-by-match?trend-view=compare&smoothing=none", true},
+		{apptest.ScenarioSeasonTrend, "explore/match-by-match?trend-view=difference&smoothing=none", true},
+		{apptest.ScenarioSeasonTrend, "explore/match-by-match?trend-view=relative", true},
+		{apptest.ScenarioSeasonTrend, "explore/match-by-match?trend-view=balance&smoothing=none&opponents=adjusted", true},
+		{apptest.ScenarioSeasonTrend, "explore/season-by-season", true},
+		{apptest.ScenarioSeasonTrend, "explore/season-by-season?context=on&measure=for", true},
+		{apptest.ScenarioSeasonTrend, "explore/scoring-trend", true},
+		{apptest.ScenarioSeasonTrend, "explore/goal-distribution", true},
+		{apptest.ScenarioSeasonTrend, "explore/goal-distribution?distribution-bin=2", true},
+		{apptest.ScenarioSeasonTrend, "explore/home-advantage", true},
+		{apptest.ScenarioSeasonTrend, "explore/scoring-table", true},
+		{apptest.ScenarioTeams, "explore?display=table", false},
 	} {
 		for _, exclude := range []bool{true, false} {
-			from, to := tc.path, tc.path+"&penalties=exclude"
+			from, to := tc.path, withQuery(tc.path, "penalties=exclude")
 			if !exclude {
 				from, to = to, from
 			}
@@ -549,8 +589,8 @@ func TestExplorePenaltiesNativeSubmission(t *testing.T) {
 	expect := playwright.NewPlaywrightAssertions()
 	base := exploreBase(t, apptest.ScenarioTeamHistory)
 	for _, tc := range []struct{ path, panel, kept string }{
-		{"explore?view=teams&display=table&season=2025", "teams", "season"},
-		{"explore?view=trend&metric=gap", "trend", "metric"},
+		{"explore?display=table&season=2025", "teams", "season"},
+		{"explore/scoring-trend?metric=gap", "trend", "metric"},
 	} {
 		page := newPageWith(t, pageOptions{Viewport: Desktop, NoScript: true})
 		visitStatic(t, page, base+tc.path)

@@ -14,7 +14,7 @@ import (
 func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioSeasonTrend)
-	path := "/explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=none"
+	path := "/explore/match-by-match?season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=none"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -57,7 +57,7 @@ func TestExploreGoalGapTilesAndCoverage(t *testing.T) {
 			}
 		}
 	}
-	_, rolling := getPage(t, archive, "/explore?view=season-trend&season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=5")
+	_, rolling := getPage(t, archive, "/explore/match-by-match?season=2025&team=odMX2OJqYL&trend-view=compare&smoothing=5")
 	requireElements(t, rolling, "[data-trend-goal-gap-tiles][hidden]")
 }
 

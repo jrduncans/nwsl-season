@@ -23,7 +23,7 @@ func TestExploreHeadToHeadOfficialAndTable(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
 	store := &archiveHTTPStore{archive: archive}
 	response := httptest.NewRecorder()
-	path := "/explore?view=head-to-head&opponent=" + h2hSeattleID
+	path := "/explore/head-to-head?opponent=" + h2hSeattleID
 	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", response.Code, response.Body.String())
@@ -178,7 +178,7 @@ func TestExploreHeadToHeadDefaultsEmptyAndBadState(t *testing.T) {
 			t.Fatal("name order")
 		}
 	}
-	code, empty := getPage(t, archive, "/explore?view=head-to-head&opponent=315VnJ759x")
+	code, empty := getPage(t, archive, "/explore/head-to-head?opponent=315VnJ759x")
 	if code != http.StatusOK {
 		t.Fatal("valid never-met pair")
 	}
@@ -188,20 +188,20 @@ func TestExploreHeadToHeadDefaultsEmptyAndBadState(t *testing.T) {
 	for key, good := range map[string]string{"opponent": h2hSeattleID, "h2h-sort": "margin", "h2h-order": "asc", "h2h-series": "both"} {
 		for _, values := range [][]string{{""}, {"unknown"}, {good, good}} {
 			q := url.Values{"view": {"head-to-head"}, key: values}
-			code, body := getPage(t, archive, "/explore?"+q.Encode())
+			code, body := getPage(t, archive, exploreTarget(q.Encode()))
 			if code != http.StatusBadRequest {
 				t.Fatalf("%s: %d", q, code)
 			}
 			requireText(t, body, "h1", "Invalid Explore selection")
 		}
 	}
-	code, _ = getPage(t, archive, "/explore?view=head-to-head&opponent="+portlandThornsTeamID)
+	code, _ = getPage(t, archive, "/explore/head-to-head?opponent="+portlandThornsTeamID)
 	if code != http.StatusBadRequest {
 		t.Fatal("same team")
 	}
 	// Preserve Explore's existing Get-based view validation, including repeats.
 	for _, view := range []string{"view=", "view=head-to-head&view=unknown"} {
-		code, _ = getPage(t, archive, "/explore?"+view)
+		code, _ = getPage(t, archive, exploreTarget(view))
 		if code != http.StatusOK {
 			t.Fatal("existing view validation changed")
 		}
@@ -220,7 +220,7 @@ func TestExploreHeadToHeadSortAndNewestNames(t *testing.T) {
 			}
 		}
 	}
-	code, body := getPage(t, archive, "/explore?view=head-to-head&opponent="+h2hSeattleID)
+	code, body := getPage(t, archive, "/explore/head-to-head?opponent="+h2hSeattleID)
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
@@ -228,7 +228,7 @@ func TestExploreHeadToHeadSortAndNewestNames(t *testing.T) {
 	requireText(t, body, "[data-h2h-opponent]", "Newest Seattle (26)")
 	requireText(t, body, "[data-h2h-rows]", "Seattle Reign FC")
 	var payload exploreHeadToHeadPayload
-	if err := json.Unmarshal([]byte(archivePayload(t, archive, "/explore", body, "explore-h2h-data")), &payload); err != nil {
+	if err := json.Unmarshal([]byte(archivePayload(t, archive, "/explore/head-to-head", body, "explore-h2h-data")), &payload); err != nil {
 		t.Fatal(err)
 	}
 	for _, season := range payload.Seasons {
@@ -288,7 +288,7 @@ func TestExploreHeadToHeadSortAndNewestNames(t *testing.T) {
 func TestExploreHeadToHeadTeamSurvivesMissingPenaltySplits(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioNoXG)
-	path := "/explore?view=head-to-head&team=" + portlandThornsTeamID + "&opponent=" + h2hSeattleID
+	path := "/explore/head-to-head?team=" + portlandThornsTeamID + "&opponent=" + h2hSeattleID
 	for _, penalties := range []string{"include", "exclude"} {
 		code, body := getPage(t, archive, path+"&penalties="+penalties)
 		if code != http.StatusOK {
@@ -302,7 +302,7 @@ func TestExploreHeadToHeadTeamSurvivesMissingPenaltySplits(t *testing.T) {
 func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
-	path := "/explore?view=head-to-head&opponent=" + h2hSeattleID + "&h2h-series=both"
+	path := "/explore/head-to-head?opponent=" + h2hSeattleID + "&h2h-series=both"
 	for _, basis := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {
 		target := path
 		if basis.ExcludesPenalties() {
@@ -349,7 +349,7 @@ func TestExploreHeadToHeadExpectedTotalsAndBasis(t *testing.T) {
 func TestExploreHeadToHeadIncompleteTotalsAndPerMeeting(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioTeams)
-	path := "/explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both"
+	path := "/explore/head-to-head?team=315VnJ759x&opponent=4JMAk47qKg&h2h-series=both"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -369,7 +369,7 @@ func TestExploreHeadToHeadIncompleteTotalsAndPerMeeting(t *testing.T) {
 	requireText(t, body, "[data-h2h-coverage]", "6 of 8 meetings")
 	requireText(t, body, "[data-h2h-comparison]", "Non-penalty goals")
 	noXG := apptest.Scenario(t, apptest.ScenarioNoXG)
-	code, body = getPage(t, noXG, "/explore?view=head-to-head&opponent="+h2hSeattleID+"&h2h-series=both&penalties=exclude")
+	code, body = getPage(t, noXG, "/explore/head-to-head?opponent="+h2hSeattleID+"&h2h-series=both&penalties=exclude")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
@@ -380,7 +380,7 @@ func TestExploreHeadToHeadIncompleteTotalsAndPerMeeting(t *testing.T) {
 func TestExploreHeadToHeadActualUsesPenaltyBasis(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
-	path := "/explore?view=head-to-head&opponent=" + h2hSeattleID + "&penalties=exclude"
+	path := "/explore/head-to-head?opponent=" + h2hSeattleID + "&penalties=exclude"
 	code, body := getPage(t, archive, path)
 	if code != http.StatusOK {
 		t.Fatal(code)
@@ -414,7 +414,7 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 	t.Parallel()
 	archive := apptest.Scenario(t, apptest.ScenarioTeamHistory)
 	for _, basis := range []history.ScoringBasis{history.AllShots, history.NonPenalty} {
-		path := "/explore?view=head-to-head&opponent=" + h2hSeattleID + "&h2h-series=expected"
+		path := "/explore/head-to-head?opponent=" + h2hSeattleID + "&h2h-series=expected"
 		if basis.ExcludesPenalties() {
 			path += "&penalties=exclude"
 		}
@@ -423,7 +423,7 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 		if response.Code != http.StatusFound {
 			t.Fatal(response.Code)
 		}
-		code, body := getPage(t, archive, "/explore"+response.Header().Get("Location"))
+		code, body := getPage(t, archive, "/explore/head-to-head"+response.Header().Get("Location"))
 		if code != http.StatusOK {
 			t.Fatal(code)
 		}
@@ -449,7 +449,7 @@ func TestExploreHeadToHeadExpectedAlias(t *testing.T) {
 			}
 		}
 	}
-	code, body := getPage(t, apptest.Scenario(t, apptest.ScenarioTeams), "/explore?view=head-to-head&team=315VnJ759x&opponent=4JMAk47qKg")
+	code, body := getPage(t, apptest.Scenario(t, apptest.ScenarioTeams), "/explore/head-to-head?team=315VnJ759x&opponent=4JMAk47qKg")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
