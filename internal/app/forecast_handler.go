@@ -292,6 +292,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
+	page.Title, page.Description = forecastMeta(scope)
 	a.render(w, r, "forecast", &page)
 }
 

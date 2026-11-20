@@ -164,6 +164,7 @@ func (a *application) playoffsForecast(w http.ResponseWriter, r *http.Request, s
 		}
 		page.ScenarioMatches = append(page.ScenarioMatches, choice)
 	}
+	page.Title, page.Description = playoffsForecastMeta(scope)
 	a.render(w, r, "playoffs-forecast", &page)
 }
 

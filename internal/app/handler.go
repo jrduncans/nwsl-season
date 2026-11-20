@@ -98,7 +98,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "preloads": preloads, "staticSibling": staticSibling}).ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "preloads": preloads, "staticSibling": staticSibling, "documentTitle": documentTitle, "pageDescription": pageDescription}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -165,7 +165,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rules, _ = a.rulesForSeason(page.Season, page.Stage)
-	page.Title = page.Season + " clinching scenarios"
+	page.Title, page.Description = clinchingMeta(scope)
 	view := clinchingPage{seasonPage: page, StatusScriptPath: staticURL(r.URL.Path, "clinching-status.js"), Actionable: []clinchingRowView{}, NoHelp: []clinchingRowView{}, Elimination: []clinchingRowView{}, Eliminated: []clinchingStatusGroupView{}, AlreadyClinched: []clinchingStatusGroupView{}, SlateGroups: []fixtureGroupView{}}
 	store, ok := a.store.(interface {
 		ScenarioForSnapshot(context.Context, string, string, string) (cache.ScenarioSnapshot, bool, error)
@@ -852,6 +852,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 				}
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 				result.applyMatchPaths()
+				result.Title, result.Description = bracketMeta(scope)
 				a.render(w, r, "bracket", &result)
 				return
 			}
@@ -868,14 +869,17 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 			}
 			result.applyMatchPaths()
+			result.Title, result.Description = bracketMeta(scope)
 			a.render(w, r, "bracket", &result)
 			return
 		}
 	}
 	if scope.Entry.Kind != competition.StageKindLeagueTable {
+		page.Title, page.Description = fixturesMeta(scope, page)
 		a.render(w, r, "fixtures", &page)
 		return
 	}
+	page.Title, page.Description = standingsMeta(scope, page)
 	a.render(w, r, "season", &page)
 }
 
@@ -934,6 +938,7 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 		redirectRelative(w, target, http.StatusSeeOther)
 		return
 	}
+	page.Title, page.Description = fixturesMeta(scope, page)
 	a.render(w, r, "fixtures", &page)
 }
 
@@ -971,6 +976,7 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 			page.Strength = shown
 		}
 	}
+	page.Title, page.Description = scheduleDifficultyMeta(scope)
 	a.render(w, r, "schedule-difficulty", &page)
 }
 
@@ -1005,7 +1011,7 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view.seasonPage = page
-	view.Title = "Model evaluation"
+	view.Title, view.Description = modelEvaluationMeta()
 	view.ChartLibraryPath = staticURL(r.URL.Path, "vendor/chart.js-4.5.1/chart.umd.min.js")
 	view.EvaluationScriptPath = staticURL(r.URL.Path, "model-evaluation.js")
 	a.render(w, r, "model-evaluation", &view)
