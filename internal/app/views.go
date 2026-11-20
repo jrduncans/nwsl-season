@@ -244,11 +244,24 @@ func seasonNavigation(from string, scope requestCompetition, current string, rul
 }
 
 func seasonNavigationForPresentation(from string, scope requestCompetition, current string, rules competition.Rules, verified bool, presentation seasonPresentation) []navigationItem {
+	items := stageLinks(scope, rules, verified, presentation)
+	navigation := make([]navigationItem, 0, len(items)+1)
+	for _, item := range items {
+		navigation = append(navigation, navigationItem{
+			Label: item.label, Path: relativeURL(from, item.path), Current: current == item.path,
+		})
+	}
+	return append(navigation, navigationItem{Label: "Explore", Path: relativeURL(from, "/explore"), Current: current == "/explore"})
+}
+
+// stageLink is one of a stage's pages, by its path from the site root.
+type stageLink struct{ label, path string }
+
+// stageLinks are the stage's pages that its navigation links to, in order.
+// The sitemap lists the same pages.
+func stageLinks(scope requestCompetition, rules competition.Rules, verified bool, presentation seasonPresentation) []stageLink {
 	base := stageURL(scope.Season, scope.Entry.Slug)
-	items := []struct {
-		label string
-		path  string
-	}{}
+	items := []stageLink{}
 	if scope.standingsAvailable() {
 		label := "Standings"
 		if presentation.Phase == seasonPhaseUpcoming {
@@ -256,10 +269,10 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 		} else if presentation.Phase == seasonPhaseComplete && presentation.FinalStandingsSafe {
 			label = "Final standings"
 		}
-		items = append(items, struct{ label, path string }{label, base})
+		items = append(items, stageLink{label, base})
 	}
 	if scope.Stage != "Regular Season" && scope.Entry.MenuLabel != "" {
-		items = append(items, struct{ label, path string }{scope.Entry.MenuLabel, base})
+		items = append(items, stageLink{scope.Entry.MenuLabel, base})
 	}
 	if scope.fixturesAvailable() && !presentation.MainPageMatches {
 		label := "Matches"
@@ -268,24 +281,18 @@ func seasonNavigationForPresentation(from string, scope requestCompetition, curr
 		} else if presentation.Phase == seasonPhaseComplete || (presentation.Historical && !presentation.HasUpcoming) {
 			label = "Results"
 		}
-		items = append(items, struct{ label, path string }{label, base + "/fixtures"})
+		items = append(items, stageLink{label, base + "/fixtures"})
 	}
 	if scope.scheduleDifficultyAvailable() && phaseSupportsRemainingFeatures(presentation.Phase) {
-		items = append(items, struct{ label, path string }{"Schedule difficulty", base + "/schedule-difficulty"})
+		items = append(items, stageLink{"Schedule difficulty", base + "/schedule-difficulty"})
 	}
 	if scope.clinchingAvailable(rules, verified) && presentation.Phase != seasonPhaseUpcoming && presentation.Phase != seasonPhaseComplete {
-		items = append(items, struct{ label, path string }{"Clinching scenarios", base + "/clinching"})
+		items = append(items, stageLink{"Clinching scenarios", base + "/clinching"})
 	}
 	if (scope.forecastAvailable(rules, verified) && !presentation.PlayoffsForecast) || (scope.Stage == "Playoffs" && presentation.PlayoffsForecast) {
-		items = append(items, struct{ label, path string }{"Forecast lab", base + "/forecast"})
+		items = append(items, stageLink{"Forecast lab", base + "/forecast"})
 	}
-	navigation := make([]navigationItem, 0, len(items))
-	for _, item := range items {
-		navigation = append(navigation, navigationItem{
-			Label: item.label, Path: relativeURL(from, item.path), Current: current == item.path,
-		})
-	}
-	return append(navigation, navigationItem{Label: "Explore", Path: relativeURL(from, "/explore"), Current: current == "/explore"})
+	return items
 }
 
 func phaseSupportsRemainingFeatures(phase seasonPhase) bool {

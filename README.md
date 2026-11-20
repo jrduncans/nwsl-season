@@ -135,6 +135,8 @@ Useful endpoints:
 - `/explore` — league scoring charts, sortable season table, team performance
   vs xG or xPoints, and team history.
 - `/history` and `/history/scoring` — redirect to Explore's Scoring trend.
+- `/sitemap.xml` — every stage page, match page and `/explore`; requires
+  `NWSL_PUBLIC_URL` (see "Runtime and deployment").
 
 ## Pitchfork development server
 
@@ -260,7 +262,7 @@ from the copied fixtures when requested.
 | `PORT` | `8080` | Port used when `NWSL_HTTP_ADDR` is unset. |
 | `NWSL_DATA_DIR` | `data` | Directory containing the SQLite cache. |
 | `NWSL_ASA_BASE_URL` | `https://app.americansocceranalysis.com/api/v1` | ASA API root used by the server's scheduler and as the `sync -base-url` default. Must be an absolute `http` or `https` URL with a host name and no user information, query string, or fragment; override it only to point at a local fake ASA in tests. |
-| `NWSL_PUBLIC_URL` | `https://nwsl.jrduncans.com` | Absolute site root, including any proxy mount path, used for the share image URL in social sharing tags and for canonical links. Same validation as `NWSL_ASA_BASE_URL`. |
+| `NWSL_PUBLIC_URL` | `https://nwsl.jrduncans.com` | Absolute site root, including any proxy mount path, used for the share image URL in social sharing tags, canonical links, and the sitemap. Same validation as `NWSL_ASA_BASE_URL`. |
 | `NWSL_SYNC_SCHEDULER` | `true` | Set to `false` to serve the existing cache without starting the scheduler, which is the server's only ASA caller. Development worktrees do this automatically. |
 | `NWSL_SYNC_SEASON` | `2026` | Season refreshed automatically by the server. |
 | `NWSL_SYNC_STAGE` | `Regular Season` | Competition stage refreshed automatically. |
@@ -679,9 +681,9 @@ Pages tell shared caches how long to keep them
 (`internal/app/cache_headers.go`); production's Cloudflare cache rule honors
 `s-maxage` and stores nothing without it:
 
-- Current and future seasons, and pages outside a season such as Explore:
-  15 minutes at the edge, plus one stale copy while it refetches, since a sync
-  can change them.
+- Current and future seasons, and pages outside a season such as Explore,
+  plus `/sitemap.xml`: 15 minutes at the edge, plus one stale copy while it
+  refetches, since a sync can change them.
 - Earlier seasons, whose data no longer changes: one day.
 - Errors, redirects, `/healthz`, `/cache/status`, `/robots.txt` and other
   non-page responses: `no-store`.
@@ -717,6 +719,18 @@ specific group that names them, so the file also repeats the rule in named
 groups for the crawlers that followed Explore's query strings
 (`Amzn-SearchBot`, `KeenableBot`, `meta-webindexer`). Explore also marks its
 query-only links `nofollow` (see [How Explore works](docs/explore-guide.md)).
+
+When `NWSL_PUBLIC_URL` is set, `/robots.txt` ends with a `Sitemap:` line for
+`/sitemap.xml`, so crawlers reach deep archive pages without following links
+there. The sitemap lists, by canonical URL, the pages each public stage's
+navigation links to, its model evaluation where the forecast is available,
+every match page, and `/explore` (see
+[`internal/app/sitemap.go`](internal/app/sitemap.go)). A stage with no fixtures,
+such as playoffs not yet scheduled, is left out until a sync adds its matches.
+Each URL's `<lastmod>` is the stage's last successful sync in the current
+season and the date of its last match in earlier seasons, so crawlers can tell
+that old seasons haven't changed. It omits `<priority>`, which Google ignores.
+Without `NWSL_PUBLIC_URL` it can't name absolute URLs and returns 404.
 
 Every page names its own path, with the query string dropped, as
 `<link rel="canonical">`, so shared Forecast Lab scenarios, clinching
