@@ -158,7 +158,7 @@ func (a *application) match(w http.ResponseWriter, r *http.Request) {
 	view.SeasonSelector, view.StageSelector = nil, nil
 	view.Title = view.Match.HomeTeam.Name + " vs " + view.Match.AwayTeam.Name
 	view.HeadToHeadPath = relativeURL(r.URL.Path, "/explore") + "?" + url.Values{"view": {"head-to-head"}, "team": {game.HomeTeamID}, "opponent": {game.AwayTeamID}}.Encode()
-	a.render(w, "match", view)
+	a.render(w, r, "match", &view)
 }
 
 // matchView builds the page. For the Championship, venue chooses the venue

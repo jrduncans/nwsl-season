@@ -292,7 +292,7 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, err)
 		return
 	}
-	a.render(w, "forecast", page)
+	a.render(w, r, "forecast", &page)
 }
 
 // forecastResultKey identifies a deterministic simulation result. Fixture
@@ -611,7 +611,7 @@ func forecastURL(fromPath, season, stageSlug string, state forecaststate.State, 
 func (a *application) renderScenarioBadRequest(w http.ResponseWriter, r *http.Request, title string, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
+	a.renderErrorPage(w, errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
 }
 
 // forecastTasks is shared by regular-season and playoff pages and baseline

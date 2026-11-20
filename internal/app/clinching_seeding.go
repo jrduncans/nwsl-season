@@ -243,7 +243,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 	}
 	if cached == nil {
 		view.State = "Recalculation pending."
-		a.render(w, "clinching", view)
+		a.render(w, r, "clinching", &view)
 		return
 	}
 	fixed := map[string]clinching.Outcome{}
@@ -291,7 +291,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 		if !seed.Inevitable {
 			details.Team = *teamPart(teamID, labels).Team
 			seed.Details = details
-			a.render(w, "seedingAlternatives", view)
+			a.render(w, r, "seedingAlternatives", &view)
 			return
 		}
 	}
@@ -364,7 +364,7 @@ func (a *application) renderSeeding(w http.ResponseWriter, r *http.Request, view
 			}
 		}
 	}
-	a.render(w, "clinching", view)
+	a.render(w, r, "clinching", &view)
 }
 
 // seedingLikelihoods runs the default Forecast Lab model with the bracket's

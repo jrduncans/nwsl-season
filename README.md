@@ -715,9 +715,16 @@ Cloudflare prepends its managed AI-crawler rules to this file, including a
 `User-agent: *` group with `Allow: /`. Some crawlers read only the most
 specific group that names them, so the file also repeats the rule in named
 groups for the crawlers that followed Explore's query strings
-(`Amzn-SearchBot`, `KeenableBot`, `meta-webindexer`). Explore's query-string
-pages also name `/explore` as canonical and mark their query-only links
-`nofollow` (see [How Explore works](docs/explore-guide.md)).
+(`Amzn-SearchBot`, `KeenableBot`, `meta-webindexer`). Explore also marks its
+query-only links `nofollow` (see [How Explore works](docs/explore-guide.md)).
+
+Every page names its own path, with the query string dropped, as
+`<link rel="canonical">`, so shared Forecast Lab scenarios, clinching
+selections and fixture choices don't become separate indexable pages. The
+link is absolute when `NWSL_PUBLIC_URL` is set and relative otherwise. Error
+pages name none. `render` fills it in from the request through the
+`pageHead` every page type embeds (see
+[`internal/app/canonical.go`](internal/app/canonical.go)).
 
 The server sets a strict Content Security Policy and related browser hardening
 headers on every response (see

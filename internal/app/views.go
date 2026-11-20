@@ -27,6 +27,7 @@ const (
 )
 
 type seasonPage struct {
+	pageHead
 	Title                  string
 	Season                 string
 	Stage                  string
@@ -633,6 +634,7 @@ type teamNameView struct {
 }
 
 type errorPage struct {
+	pageHead
 	RecoveryPath      string
 	Title             string
 	Message           string

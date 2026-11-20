@@ -210,7 +210,7 @@ func (a *application) renderStaleForecast(w http.ResponseWriter, r *http.Request
 	state.PlayoffWinners = nil
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.render(w, "error", errorPage{
+	a.renderErrorPage(w, errorPage{
 		Title:        "This forecast scenario is out of date",
 		Message:      "A fixed result no longer matches the available fixtures. Shared links use the latest cache; completed, removed, or changed matchups cannot stay fixed. Open the latest forecast to keep your model choices and clear those assumptions.",
 		RecoveryPath: forecastURL(r.URL.Path, scope.Season, scope.Entry.Slug, state, ""),
