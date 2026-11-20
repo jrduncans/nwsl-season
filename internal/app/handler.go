@@ -134,7 +134,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /robots.txt", robotsTxt)
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler(staticFS)))
-	return &Application{handler: withSecurityHeaders(withBasePath(mux)), app: application}
+	return &Application{handler: withSecurityHeaders(withCacheHeaders(options.CurrentSeason, withBasePath(mux))), app: application}
 }
 
 func (a *application) clinching(w http.ResponseWriter, r *http.Request) {

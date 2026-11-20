@@ -664,8 +664,24 @@ served with `Cross-Origin-Resource-Policy: cross-origin` so other sites can
 show it.
 Page links to static files carry a content hash (`?v=`). A request with the
 current hash is cached for a year as `immutable`; any other static request
-revalidates against that hash as its ETag. Pages themselves send no caching
-headers.
+revalidates against that hash as its ETag.
+
+Pages tell shared caches how long to keep them
+(`internal/app/cache_headers.go`); production's Cloudflare cache rule honors
+`s-maxage` and stores nothing without it:
+
+- Current and future seasons, and pages outside a season such as Explore:
+  15 minutes at the edge, plus one stale copy while it refetches, since a sync
+  can change them.
+- Earlier seasons, whose data no longer changes: one day.
+- Errors, redirects, `/healthz`, `/cache/status`, `/robots.txt` and other
+  non-page responses: `no-store`.
+
+Every page sends `max-age=0`, so browsers always revalidate and an edge hit
+answers without reaching the server. The deployment purges the edge cache for
+the hostname after each deploy, so a new version shows at once; a sync does
+not, so new data can take up to 15 minutes to appear. A handler that sets its
+own `Cache-Control` keeps it, as the static and Explore data handlers do.
 
 The runtime requires:
 
