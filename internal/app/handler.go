@@ -131,7 +131,8 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /seasons/{season}/{stage}/clinching", application.clinching)
 	mux.HandleFunc("GET /seasons/{season}/{stage}/matches/{id}", application.match)
 	mux.HandleFunc("GET /healthz", health)
-	mux.HandleFunc("GET /robots.txt", robotsTxt)
+	mux.HandleFunc("GET /robots.txt", robotsTxt(options.PublicURL))
+	mux.HandleFunc("GET "+sitemapPath, application.sitemap)
 	for iconPath := range rootIcons {
 		mux.HandleFunc("GET "+iconPath, rootIcon)
 	}
@@ -1035,6 +1036,36 @@ func mainPageRendersMatches(scope requestCompetition, games []cache.Game, certif
 	return true
 }
 
+// stagePresentation is how a stage's pages present it, which decides the
+// pages its navigation links to. It also returns the season's regular-season
+// data, which the playoffs read for seeds; for other stages that is data.
+func (a *application) stagePresentation(ctx context.Context, scope requestCompetition, data cache.SeasonData) (seasonPresentation, cache.SeasonData, error) {
+	certified := false
+	if scope.Stage == "Playoffs" && !knockoutMatchupAvailable(data.Games) {
+		seeds, err := a.finalPlayoffSeeds(ctx, scope.Season)
+		if err != nil {
+			return seasonPresentation{}, cache.SeasonData{}, err
+		}
+		certified = seeds.Certified
+	}
+	presentation := competitionPresentation(scope, data)
+	presentation.Historical = historicalCatalogScope(scope)
+	presentation.MainPageMatches = mainPageRendersMatches(scope, data.Games, certified)
+	regularData := data
+	if scope.Stage == "Playoffs" {
+		var err error
+		regularData, err = a.loadSeasonData(ctx, scope.Season, "Regular Season")
+		if err != nil {
+			return seasonPresentation{}, cache.SeasonData{}, err
+		}
+	}
+	if scope.Stage == "Regular Season" || scope.Stage == "Playoffs" {
+		regularRules, verified := a.rulesForSeason(scope.Season, "Regular Season")
+		presentation.PlayoffsForecast = playoffsForecastAvailable(scope.Season, regularData, regularRules, verified)
+	}
+	return presentation, regularData, nil
+}
+
 func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.SeasonData) map[string]fixtureOutlookView) (page seasonPage, err error) {
 	if a.store == nil {
 		return seasonPage{}, fmt.Errorf("season cache unavailable")
@@ -1053,29 +1084,14 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		if err != nil {
 			return
 		}
-		certified := false
-		if scope.Stage == "Playoffs" && !knockoutMatchupAvailable(data.Games) {
-			var seeds playoffSeeds
-			seeds, err = a.finalPlayoffSeeds(r.Context(), scope.Season)
-			if err != nil {
-				return
-			}
-			certified = seeds.Certified
+		var presentation seasonPresentation
+		var regularData cache.SeasonData
+		presentation, regularData, err = a.stagePresentation(r.Context(), scope, data)
+		if err != nil {
+			return
 		}
-		presentation := competitionPresentation(scope, data)
-		presentation.Historical = historicalCatalogScope(scope)
-		presentation.MainPageMatches = mainPageRendersMatches(scope, data.Games, certified)
-		regularData := data
 		if scope.Stage == "Playoffs" {
-			regularData, err = a.loadSeasonData(r.Context(), scope.Season, "Regular Season")
-			if err != nil {
-				return
-			}
 			page.applySeeds(playoffSeedsFrom(scope.Season, regularData).Seeds)
-		}
-		if scope.Stage == "Regular Season" || scope.Stage == "Playoffs" {
-			regularRules, verified := a.rulesForSeason(scope.Season, "Regular Season")
-			presentation.PlayoffsForecast = playoffsForecastAvailable(scope.Season, regularData, regularRules, verified)
 		}
 		if scope.Stage == "Regular Season" && presentation.PlayoffsForecast {
 			page.HasForecast = false
@@ -1830,10 +1846,19 @@ User-agent: meta-webindexer
 Disallow: /explore?
 `
 
-func robotsTxt(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, robotsBody)
+// robotsTxt serves robotsBody and, when a public URL makes the sitemap
+// available, a Sitemap line naming it. That line belongs to no user-agent
+// group, so every crawler reads it.
+func robotsTxt(publicURL string) http.HandlerFunc {
+	body := robotsBody
+	if publicURL != "" {
+		body += "\nSitemap: " + strings.TrimRight(publicURL, "/") + sitemapPath + "\n"
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, body)
+	}
 }
 
 func cacheStatus(reader Store, season, stage, rulesVersion string) http.HandlerFunc {
