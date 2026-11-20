@@ -853,8 +853,8 @@ func TestExploreThresholdsLeaveGapsForTiesWhileSourceScopeIsActive(t *testing.T)
 	}
 }
 
-// Explore's query-string variants all point search engines at bare /explore,
-// and every link that only changes the query string is nofollow, so crawlers
+// Explore and its query-string variants all point search engines at bare
+// /explore, and every link that only changes the query string is nofollow, so crawlers
 // aren't drawn into every combination of view, team, season and display.
 func TestExploreQueryVariantsAreCanonicalAndNofollow(t *testing.T) {
 	store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
@@ -872,10 +872,7 @@ func TestExploreQueryVariantsAreCanonicalAndNofollow(t *testing.T) {
 	}
 	canonical := regexp.MustCompile(`<link rel="canonical" href="([^"]*)">`)
 
-	if match := canonical.FindStringSubmatch(render(t, NewHandler(store), "/explore")); match != nil {
-		t.Errorf("bare /explore names a canonical link: %q", match[0])
-	}
-	for _, query := range []string{"view=teams&display=table&team-sort=name", "view=head-to-head", "view=thresholds&threshold-season=2025", "view=parity", "view=team-seasons", "view=season-trend"} {
+	for _, query := range []string{"", "view=teams&display=table&team-sort=name", "view=head-to-head", "view=thresholds&threshold-season=2025", "view=parity", "view=team-seasons", "view=season-trend"} {
 		body := render(t, NewHandler(store), "/explore?"+query)
 		if match := canonical.FindStringSubmatch(body); match == nil || match[1] != "explore" {
 			t.Errorf("%s: canonical = %v, want href \"explore\"", query, match)

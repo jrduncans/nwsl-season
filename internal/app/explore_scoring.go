@@ -90,7 +90,7 @@ func (a *application) renderExploreBadRequest(w http.ResponseWriter, r *http.Req
 func (a *application) renderExploreError(w http.ResponseWriter, r *http.Request, status int, title, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	a.render(w, "error", errorPage{
+	a.renderErrorPage(w, errorPage{
 		Title: title, Message: message,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation: []navigationItem{

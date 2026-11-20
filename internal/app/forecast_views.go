@@ -15,6 +15,7 @@ import (
 )
 
 type forecastPage struct {
+	pageHead
 	SeedingTeam         string
 	AtFixedLimit        bool
 	Title               string

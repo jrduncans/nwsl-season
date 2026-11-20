@@ -2,28 +2,28 @@ package app
 
 import "strings"
 
-// canonicalLink names the page search engines should index in place of a
-// query-string variant: Path from the site root, and Relative from the
-// request for when no public URL is configured.
-type canonicalLink struct{ Path, Relative string }
+// pageHead holds the <head> values render derives from the request. Every
+// page embeds it, so render can fill it in through the page interface.
+type pageHead struct {
+	// CanonicalURL is the href for <link rel="canonical">. render sets it to
+	// the page's own path with the query string dropped, so search engines
+	// index one URL instead of every query-string variant. Error pages
+	// leave it empty and name none.
+	CanonicalURL string
+}
 
-// canonicalPage is a page that may name a canonical link; pages without
-// query-string variants don't implement it.
-type canonicalPage interface{ canonicalLink() canonicalLink }
+func (h *pageHead) head() *pageHead { return h }
 
-// canonicalURL is the href for the page's <link rel="canonical">, or empty
-// when the page names none. It is absolute when a public URL is configured.
-func canonicalURL(publicURL string, page any) string {
-	linker, ok := page.(canonicalPage)
-	if !ok {
-		return ""
-	}
-	link := linker.canonicalLink()
-	if link.Path == "" {
-		return ""
-	}
+// page is a template value render can fill request-derived <head> values
+// into: a pointer to a struct that embeds pageHead.
+type page interface{ head() *pageHead }
+
+// canonicalURL is the href naming requestPath, a path from the site root, as
+// the canonical page. It is absolute when a public URL is configured and
+// relative to the request otherwise.
+func canonicalURL(publicURL, requestPath string) string {
 	if publicURL != "" {
-		return strings.TrimRight(publicURL, "/") + link.Path
+		return strings.TrimRight(publicURL, "/") + requestPath
 	}
-	return link.Relative
+	return relativeURL(requestPath, requestPath)
 }

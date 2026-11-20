@@ -98,7 +98,7 @@ func newHandlerWithForecastExecutor(store Store, options Options, forecasts *for
 
 func newApplicationWithForecastExecutor(store Store, options Options, forecasts *forecastExecutor) *Application {
 	options = defaultOptions(options)
-	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "canonicalURL": func(page any) string { return canonicalURL(options.PublicURL, page) }, "preloads": preloads, "staticSibling": staticSibling}).ParseFS(pageFiles, "templates/*.html"))
+	pages := template.Must(template.New("").Funcs(template.FuncMap{"payload": payload, "shareImageURL": func() string { return shareImageURL(options.PublicURL) }, "preloads": preloads, "staticSibling": staticSibling}).ParseFS(pageFiles, "templates/*.html"))
 	staticFS, err := fs.Sub(pageFiles, "static")
 	if err != nil {
 		panic(err)
@@ -172,7 +172,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	})
 	if !ok || page.Season == "" {
 		view.State = "Scenario calculations are unavailable."
-		a.render(w, "clinching", view)
+		a.render(w, r, "clinching", &view)
 		return
 	}
 	data, err := a.loadSeasonData(r.Context(), page.Season, page.Stage)
@@ -223,7 +223,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	}
 	if !found {
 		view.State = "Recalculation pending."
-		a.render(w, "clinching", view)
+		a.render(w, r, "clinching", &view)
 		return
 	}
 	// Rest-of-season scenarios exist once two or fewer matchdays are left. On
@@ -260,7 +260,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			view.State = "Recalculation pending."
-			a.render(w, "clinching", view)
+			a.render(w, r, "clinching", &view)
 			return
 		}
 		snapshot = season
@@ -372,7 +372,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 					details.Limitation = "Some multiway tiebreak scenarios are not listed."
 				}
 				view.ClinchingDetails = details
-				a.render(w, "clinchingAlternatives", view)
+				a.render(w, r, "clinchingAlternatives", &view)
 				return
 			}
 		}
@@ -438,7 +438,7 @@ func (a *application) clinching(w http.ResponseWriter, r *http.Request) {
 	view.NoHelpTeams = groupClinchingRowsByTeam(view.NoHelp)
 	view.ActionableTeams = groupClinchingRowsByTeam(view.Actionable)
 	view.EliminationTeams = groupClinchingRowsByTeam(view.Elimination)
-	a.render(w, "clinching", view)
+	a.render(w, r, "clinching", &view)
 }
 
 // The clinching page's view query values.
@@ -852,7 +852,7 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 				}
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 				result.applyMatchPaths()
-				a.render(w, "bracket", result)
+				a.render(w, r, "bracket", &result)
 				return
 			}
 		}
@@ -868,15 +868,15 @@ func (a *application) season(w http.ResponseWriter, r *http.Request) {
 				result.applyOutlooks(a.playoffOutlooks(r.Context(), scope.Season, data))
 			}
 			result.applyMatchPaths()
-			a.render(w, "bracket", result)
+			a.render(w, r, "bracket", &result)
 			return
 		}
 	}
 	if scope.Entry.Kind != competition.StageKindLeagueTable {
-		a.render(w, "fixtures", page)
+		a.render(w, r, "fixtures", &page)
 		return
 	}
-	a.render(w, "season", page)
+	a.render(w, r, "season", &page)
 }
 
 func (a *application) redirectPrimaryStage(w http.ResponseWriter, r *http.Request) {
@@ -934,7 +934,7 @@ func (a *application) fixtures(w http.ResponseWriter, r *http.Request) {
 		redirectRelative(w, target, http.StatusSeeOther)
 		return
 	}
-	a.render(w, "fixtures", page)
+	a.render(w, r, "fixtures", &page)
 }
 
 func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request) {
@@ -971,7 +971,7 @@ func (a *application) scheduleDifficulty(w http.ResponseWriter, r *http.Request)
 			page.Strength = shown
 		}
 	}
-	a.render(w, "schedule-difficulty", page)
+	a.render(w, r, "schedule-difficulty", &page)
 }
 
 func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
@@ -1008,7 +1008,7 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 	view.Title = "Model evaluation"
 	view.ChartLibraryPath = staticURL(r.URL.Path, "vendor/chart.js-4.5.1/chart.umd.min.js")
 	view.EvaluationScriptPath = staticURL(r.URL.Path, "model-evaluation.js")
-	a.render(w, "model-evaluation", view)
+	a.render(w, r, "model-evaluation", &view)
 }
 
 func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
@@ -1626,7 +1626,18 @@ func standingsGames(games []cache.Game) []standings.Game {
 	return values
 }
 
-func (a *application) render(w http.ResponseWriter, name string, data any) {
+// render writes page p with the request-derived <head> values filled in.
+func (a *application) render(w http.ResponseWriter, r *http.Request, name string, p page) {
+	p.head().CanonicalURL = canonicalURL(a.options.PublicURL, r.URL.Path)
+	a.execute(w, name, p)
+}
+
+// renderErrorPage writes an error page, which names no canonical link.
+func (a *application) renderErrorPage(w http.ResponseWriter, data errorPage) {
+	a.execute(w, "error", data)
+}
+
+func (a *application) execute(w http.ResponseWriter, name string, data any) {
 	var body bytes.Buffer
 	if err := a.pages.ExecuteTemplate(&body, name, data); err != nil {
 		http.Error(w, "render page", http.StatusInternalServerError)
@@ -1639,7 +1650,7 @@ func (a *application) render(w http.ResponseWriter, name string, data any) {
 func (a *application) renderError(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusInternalServerError)
-	a.render(w, "error", errorPage{
+	a.renderErrorPage(w, errorPage{
 		Title: "Season unavailable", Message: err.Error(),
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season),
@@ -1655,7 +1666,7 @@ func (a *application) renderUnavailableFeature(w http.ResponseWriter, r *http.Re
 func (a *application) renderUnavailableFeatureWithNavigation(w http.ResponseWriter, r *http.Request, scope requestCompetition, feature string, navigation []navigationItem) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	a.render(w, "error", errorPage{
+	a.renderErrorPage(w, errorPage{
 		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
 		HomePath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation:     navigation,

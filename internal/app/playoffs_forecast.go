@@ -164,7 +164,7 @@ func (a *application) playoffsForecast(w http.ResponseWriter, r *http.Request, s
 		}
 		page.ScenarioMatches = append(page.ScenarioMatches, choice)
 	}
-	a.render(w, "playoffs-forecast", page)
+	a.render(w, r, "playoffs-forecast", &page)
 }
 
 // Eligible slots use recorded advancement only; one assumption cannot make
