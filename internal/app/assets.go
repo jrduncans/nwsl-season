@@ -77,3 +77,52 @@ func staticHandler(files fs.FS) http.Handler {
 		fileServer.ServeHTTP(w, r)
 	})
 }
+
+// Browsers and crawlers request these icons from the site root whether or not
+// a page links them, so they are served there as well as under /static/.
+var rootIcons = map[string]struct {
+	file        string
+	contentType string
+}{
+	"/favicon.ico":                      {"favicon.ico", "image/x-icon"},
+	"/apple-touch-icon.png":             {"apple-touch-icon.png", "image/png"},
+	"/apple-touch-icon-precomposed.png": {"apple-touch-icon.png", "image/png"},
+}
+
+// rootIcon serves one of rootIcons. Its URL carries no version, so it is
+// cached for a day rather than for good.
+func rootIcon(w http.ResponseWriter, r *http.Request) {
+	icon, ok := rootIcons[r.URL.Path]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := pageFiles.ReadFile("static/" + icon.file)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", icon.contentType)
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("ETag", `"`+staticVersions[icon.file]+`"`)
+	if r.Header.Get("If-None-Match") == `"`+staticVersions[icon.file]+`"` {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	_, _ = w.Write(body)
+}
+
+// staticSibling returns the URL of another static file next to the page's
+// stylesheet, keeping the stylesheet's relative prefix so it works under any
+// base path. Templates use it for the icon links.
+func staticSibling(stylesheetPath, name string) string {
+	i := strings.LastIndex(stylesheetPath, "static/")
+	if i < 0 {
+		return ""
+	}
+	target := stylesheetPath[:i] + "static/" + name
+	if version := staticVersions[name]; version != "" {
+		target += "?v=" + version
+	}
+	return target
+}

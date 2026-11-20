@@ -22,6 +22,8 @@
   <meta name="twitter:card" content="summary">
   {{- end}}
   <link rel="me" href="https://hachyderm.io/@jrduncans">
+  <link rel="icon" href="{{staticSibling .StylesheetPath "favicon.svg"}}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{staticSibling .StylesheetPath "apple-touch-icon.png"}}">
   <link rel="stylesheet" href="{{.StylesheetPath}}">
   {{- range preloads .}}
   <link rel="preload" href="{{.}}" as="fetch" crossorigin>

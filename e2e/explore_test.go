@@ -414,8 +414,10 @@ func TestExploreSwitchingAnalysesMakesNoRequests(t *testing.T) {
 	requests.assertNone(t, "switching analyses")
 }
 
-// requestLog records a page's requests other than images. Playwright delivers
-// events on its own goroutine, so reads and writes take the lock.
+// requestLog records a page's requests other than images and the site icon.
+// Chromium refetches the linked icon (resource type "other") after each
+// history.pushState, which is the browser's tab chrome, not the page. Playwright
+// delivers events on its own goroutine, so reads and writes take the lock.
 type requestLog struct {
 	mu      sync.Mutex
 	entries []string
@@ -425,7 +427,7 @@ type requestLog struct {
 func watchRequests(page playwright.Page) *requestLog {
 	log := &requestLog{}
 	page.On("request", func(request playwright.Request) {
-		if request.ResourceType() == "image" {
+		if request.ResourceType() == "image" || isSiteIcon(request.URL()) {
 			return
 		}
 		log.mu.Lock()
@@ -433,6 +435,12 @@ func watchRequests(page playwright.Page) *requestLog {
 		log.entries = append(log.entries, request.ResourceType()+" "+request.URL())
 	})
 	return log
+}
+
+// isSiteIcon reports whether rawURL is one of the icons every page links.
+func isSiteIcon(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	return err == nil && (strings.HasSuffix(parsed.Path, "/static/favicon.svg") || strings.HasSuffix(parsed.Path, "/static/apple-touch-icon.png") || parsed.Path == "/favicon.ico")
 }
 
 // assertNone fails if any request was recorded. Team logos are images and are
