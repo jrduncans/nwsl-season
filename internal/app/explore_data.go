@@ -27,6 +27,13 @@ type exploreSharedData struct {
 	Parity      []exploreParityRecord     `json:"parity"`
 	// Views is the view registry (explore_views.go).
 	Views []exploreViewGroup `json:"views"`
+	// Teams maps each team ID to its slug in team views' paths
+	// (explore_team_paths.go).
+	Teams map[string]string `json:"teams"`
+	// TitleSuffix and MaxTitleLength let explore.js build a team page's
+	// <title> as documentTitle does.
+	TitleSuffix    string `json:"titleSuffix"`
+	MaxTitleLength int    `json:"maxTitleLength"`
 }
 
 // exploreDataRequest selects a payload instead of the page. Part is "" for

@@ -141,9 +141,9 @@ func TestExploreHeadToHeadSeriesCanonicalRedirect(t *testing.T) {
 	t.Parallel()
 	archive := testArchive(t, map[string]archiveState{"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19}})
 	for _, series := range []string{"expected", "actual", "both", "points"} {
-		query := url.Values{"team": {"alpha"}, "opponent": {"bravo"}, "h2h-series": {series}, "h2h-sort": {"margin"}, "h2h-order": {"asc"}}
+		query := url.Values{"h2h-series": {series}, "h2h-sort": {"margin"}, "h2h-order": {"asc"}}
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/head-to-head?"+query.Encode(), nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/head-to-head/alpha/bravo?"+query.Encode(), nil))
 		if series == "expected" || series == "actual" {
 			if response.Code != http.StatusFound {
 				t.Fatalf("%s: status %d", series, response.Code)

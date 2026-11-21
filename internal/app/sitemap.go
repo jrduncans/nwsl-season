@@ -29,8 +29,8 @@ type sitemapURL struct {
 	LastMod string `xml:"lastmod,omitempty"`
 }
 
-// sitemap lists every page navigation links to, every match page and each
-// Explore view's page, by canonical URL. It needs absolute URLs, so it is a 404
+// sitemap lists every page navigation links to, every match page, each
+// Explore view's page and its team pages, by canonical URL. It needs absolute URLs, so it is a 404
 // without a public URL.
 func (a *application) sitemap(w http.ResponseWriter, r *http.Request) {
 	if a.options.PublicURL == "" {
@@ -102,6 +102,19 @@ func (a *application) sitemapURLs(ctx context.Context) ([]sitemapURL, error) {
 	for _, group := range exploreViewGroups {
 		for _, view := range group.Views {
 			add(exploreViewPath(view), sitemapDate(latest, false))
+		}
+	}
+	if store, ok := a.store.(historicalStore); ok {
+		archive, err := store.HistoricalRegularSeasons(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load the Explore archive: %w", err)
+		}
+		pages, err := exploreTeamPages(archive)
+		if err != nil {
+			return nil, fmt.Errorf("list Explore team pages: %w", err)
+		}
+		for _, page := range pages {
+			add(page, sitemapDate(latest, false))
 		}
 	}
 	return urls, nil

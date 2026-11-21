@@ -43,6 +43,17 @@ type exploreView struct {
 	// Slug names the view's path, /explore/<slug>; the default view has none
 	// and lives at /explore. See exploreViewPath.
 	Slug string `json:"slug,omitempty"`
+	// TeamSegments counts the teams the view's page can name after its slug:
+	// one for a single-team view, two for Head to head's team and opponent.
+	// See exploreSelectionHref.
+	TeamSegments int `json:"teamSegments,omitempty"`
+	// TeamTitle and PairTitle are Title for a page that names its team, and
+	// for Head to head its opponent too, with %[1]s for the team's name and
+	// %[2]s for the opponent's; TeamDescription and PairDescription likewise.
+	TeamTitle       string `json:"teamTitle,omitempty"`
+	TeamDescription string `json:"-"`
+	PairTitle       string `json:"pairTitle,omitempty"`
+	PairDescription string `json:"-"`
 	// Title and Description are the view page's <title> and meta
 	// description. DocumentTitle is Title as the <title> shows it, which
 	// explore.js sets when it switches views in place.
@@ -95,10 +106,12 @@ var exploreViewGroups = []exploreViewGroup{
 		{
 			Key: "team-rankings", Label: "Rankings", Slug: "rankings",
 			Title: "NWSL team rankings", Description: "Where an NWSL team ranked in the league each season, measure by measure.",
+			TeamSegments: 1, TeamTitle: "%[1]s rankings by season", TeamDescription: "Where %[1]s ranked in the NWSL each season, measure by measure.",
 		},
 		{
 			Key: "season-trend", Label: "Match by match", Slug: "match-by-match",
 			Title: "NWSL team form match by match", Description: "An NWSL team's results, goals and xG match by match through a season, with rolling averages.",
+			TeamSegments: 1, TeamTitle: "%[1]s match by match", TeamDescription: "%[1]s results, goals and xG match by match through an NWSL season, with rolling averages.",
 			Defaults:           map[string]string{"trend-view": "balance", "average-series": "goals"},
 			PointsOnly:         exploreRule{{"trend-view": {"points"}}, {"trend-view": {"relative"}, "average-series": {"points", "xpoints"}}},
 			OpponentAdjustment: exploreRule{{"trend-view": {"balance", "difference", "points"}}},
@@ -107,11 +120,14 @@ var exploreViewGroups = []exploreViewGroup{
 		{
 			Key: "team-history", Label: "Season by season", Slug: "season-by-season",
 			Title: "NWSL team history season by season", Description: "An NWSL team's goals, xG, points and xPoints season by season.",
+			TeamSegments: 1, TeamTitle: "%[1]s season by season", TeamDescription: "%[1]s goals, xG, points and xPoints in every NWSL season.",
 			PointsOnly: exploreRule{{"measure": {"points"}}}, PointsNote: exploreRule{{}},
 		},
 		{
 			Key: "head-to-head", Label: "Head to head", Slug: "head-to-head",
 			Title: "NWSL head-to-head records", Description: "Every NWSL meeting between two teams, with results, goals and xG.",
+			TeamSegments: 2, TeamTitle: "%[1]s head-to-head records", TeamDescription: "Every NWSL meeting between %[1]s and each opponent, with results, goals and xG.",
+			PairTitle: "%[1]s vs %[2]s head to head", PairDescription: "Every NWSL meeting between %[1]s and %[2]s, with results, goals and xG.",
 			PointsOnly: exploreRule{{"h2h-series": {"points"}}}, BothBases: true,
 		},
 	}},

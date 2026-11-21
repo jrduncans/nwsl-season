@@ -102,23 +102,56 @@ Each view has its own page, so search engines can index it under its own title
 and description (`Title` and `Description` in the view registry,
 [`explore_views.go`](../internal/app/explore_views.go)). The path names the
 view, `/explore/<slug>`, with the default view, Compare teams, at bare
-`/explore`; the query string holds the selections (team, season, display,
-sort). Compare teams' five displays share `/explore`, and the team-profile
-views keep the team as `?team=`.
+`/explore`; the query string holds the selections (season, display, sort).
+Compare teams' five displays share `/explore`.
+
+The team views (Rankings, Match by match, Season by season and Head to head)
+also give each team a page: `/explore/season-by-season/portland-thorns`, and
+for Head to head `/explore/head-to-head/portland-thorns/seattle-reign`, team
+first and opponent second. Each order is its own page, since the view shows
+the first team's side. A team view without a team in its path shows its
+default team, and Head to head with only a team shows that team's most-met
+opponent. A team page's title and description name its teams (`TeamTitle`,
+`PairTitle` and their descriptions in the view registry).
+
+- Team slugs live in
+  [`explore_team_paths.go`](../internal/app/explore_team_paths.go). Each
+  belongs to one ASA team ID, never to a club across IDs, so the Boston
+  Breakers and Boston Legacy, or the Western New York Flash and North Carolina
+  Courage, have separate pages. `exploreTeamSlugs` fixes each known team's
+  slug; a team missing there, such as a new expansion club, takes one derived
+  from its newest name (lowercase words joined by hyphens, without a trailing
+  "FC"). When a team is renamed and should get a new slug, change `Slug` and
+  move the old one to `Former`: a former slug 308-redirects to the current
+  one, so old links and indexed pages keep working.
+- A team view's `?team=`, and Head to head's `?opponent=`, 308-redirect to the
+  team's page with the rest of the query, as the team forms submit them. A
+  team or opponent in the query wins over the path's, and a team in the
+  query drops the path's opponent, which belongs to the old team. An ID without a slug,
+  or a repeated parameter, stays in the query and is validated as before.
+  Other views carry the team as an ordinary selection in the query.
+- An unknown team slug, a team on a view without team pages, or more teams
+  than the view takes is a 404.
 
 - A view named in the query, `?view=<key>`, as links did before views had
-  paths, gets a 308 redirect to its path with the rest of the query. So does
+  paths, gets a 308 redirect to its path, and its team's page where it names
+  one, with the rest of the query. So does
   Scoring trend's legacy link that names only `metric` (and `penalties`); a
   metric carried to another view is just a selection, and a default-view URL
   drops a lone metric so it can't read as that legacy link. An unknown slug is
   a 404.
-- The rest of the server reads the view from the query: the handler adds
-  `view=<key>` for the path's view. Links that change only selections are
+- The rest of the server reads the view, team and opponent from the query:
+  the handler adds `view=<key>`, `team=<id>` and `opponent=<id>` for the
+  path's selections (`exploreViewFromPath`), and `exploreSelectionHref` writes
+  a selection's canonical URL back. Links that change only selections are
   query strings without the view, so they resolve against the current view's
-  path; the tabs link each view's path.
-- `explore.js` keeps the view among its parameters as `view` and converts only
-  at the URL boundary: `paramsOf` reads a URL (view from the path), `hrefFor`
-  writes one, and switching views in place pushes the new path. Moving between
+  path; the tabs link each view's path, and from a team's page the other team
+  views link that team's page.
+- `explore.js` keeps the view, team and opponent among its parameters and
+  converts only at the URL boundary: `paramsOf` reads a URL (selections from
+  the path), `hrefFor` writes one, and switching views or teams in place
+  pushes the new path and sets the page's title. The shared payload carries
+  each team's slug (`teams`). Moving between
   `/explore` and `/explore/<slug>` changes what a page-relative URL means, so
   the script first pins every page-relative URL the server rendered (links,
   icons, payload URLs) to the URL it meant at load. Query-only and fragment
@@ -133,8 +166,12 @@ selections. Like every page, a view's page names its own path as
 and deployment"). Every link that carries selections, including those
 `explore.js` builds, has `rel="nofollow"`; the tabs, which link each view's
 page without selections, stay followable. `robots.txt` disallows
-`/explore*?` and the sitemap lists every view's page (see README "Runtime and
-deployment").
+`/explore*?` and the sitemap lists every view's page, each single-team view's
+page for every team in an official team-comparison season, and Head to head
+for every pair that has met, in both orders (`exploreTeamPages`; see README
+"Runtime and deployment"). Match pages link their pair's Head to head page;
+they don't load the archive, so a team without a fixed slug gets a query link
+that redirects there.
 
 ### Principles for every view
 

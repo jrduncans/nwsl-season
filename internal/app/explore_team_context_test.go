@@ -110,12 +110,12 @@ func TestExploreContextHTTPUsesSnapshotAndPreservesControls(t *testing.T) {
 	})}
 	handler := NewHandler(store)
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/season-by-season?team=alpha&measure=against&series=xg&context=on&history-sort=played", nil))
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/season-by-season/alpha?measure=against&series=xg&context=on&history-sort=played", nil))
 	body := response.Body.String()
 	if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 		t.Fatalf("status=%d reads=%d/%d", response.Code, store.archiveCalls, store.seasonCalls)
 	}
-	payload := explorePayload(t, handler, "/nwsl-season/explore/season-by-season", body, "explore-context-data")
+	payload := explorePayload(t, handler, "/nwsl-season/explore/season-by-season/alpha", body, "explore-context-data")
 	var metrics [4]exploreMetricContext
 	if err := json.Unmarshal([]byte(payload), &metrics); err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func TestExploreContextFloatingBarsDirectURLAndSortLinks(t *testing.T) {
 	})}
 	handler := NewHandler(store)
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/season-by-season?team=alpha&measure=for&series=both&context=on&history-sort=played", nil))
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/explore/season-by-season/alpha?measure=for&series=both&context=on&history-sort=played", nil))
 	if response.Code != http.StatusOK || store.archiveCalls != 1 || store.seasonCalls != 0 {
 		t.Fatalf("status=%d reads=%d/%d", response.Code, store.archiveCalls, store.seasonCalls)
 	}
@@ -162,7 +162,7 @@ func TestExploreContextFloatingBarsDirectURLAndSortLinks(t *testing.T) {
 		t.Fatalf("floating-bars URL did not enable league context: %q, %v", page.HistoryContext, err)
 	}
 	off := httptest.NewRecorder()
-	handler.ServeHTTP(off, httptest.NewRequest(http.MethodGet, "/explore/season-by-season?team=alpha&context=off", nil))
+	handler.ServeHTTP(off, httptest.NewRequest(http.MethodGet, "/explore/season-by-season/alpha?context=off", nil))
 	if off.Code != http.StatusOK || !strings.Contains(off.Body.String(), `type="checkbox" role="switch" name="context" value="on" form="team-history-controls" data-history-context>`) || !strings.Contains(off.Body.String(), `data-history-context-details hidden`) {
 		t.Fatalf("context=off did not leave league context unchecked and hidden: status=%d", off.Code)
 	}

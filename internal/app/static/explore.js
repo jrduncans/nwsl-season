@@ -66,27 +66,64 @@
   // Scoring trend was once the default view, so its metric links omitted it.
   const requestedView = params => params.get('view') || (params.has('metric') ? 'trend' : viewGroups[0].views[0].key);
   // Each view has its own page, /explore/<slug>, with the default view at
-  // bare /explore, and the query string holds its selections. The script
-  // keeps the view among its parameters as `view` and converts only at the
-  // URL boundary: paramsOf reads a URL, hrefFor writes one.
-  const exploreRoot = location.pathname.replace(/\/explore(?:\/[^/]+)?\/?$/, '/explore');
+  // bare /explore, and the query string holds its selections. A team view's
+  // page names its team after the slug, and Head to head's its opponent after
+  // that (exploreSelectionHref). The script keeps the view, team and opponent
+  // among its parameters as `view`, `team` and `opponent` and converts only at
+  // the URL boundary: paramsOf reads a URL, hrefFor writes one.
+  const exploreRoot = location.pathname.replace(/\/explore(?:\/[^/]+){0,3}\/?$/, '/explore');
   const slugViews = new Map([...views.values()].filter(view => view.slug).map(view => [view.slug, view.key]));
+  const teamSlugs = shared.teams || {};
+  const slugTeams = new Map(Object.entries(teamSlugs).map(([id, slug]) => [slug, id]));
+  const teamParams = ['team', 'opponent'];
   const paramsOf = url => {
     const params = new URLSearchParams(url.search);
-    const view = url.pathname === exploreRoot ? viewGroups[0].views[0].key : slugViews.get(url.pathname.slice(exploreRoot.length + 1));
+    const [slug, ...teams] = url.pathname === exploreRoot ? [''] : url.pathname.slice(exploreRoot.length + 1).split('/');
+    const view = slug ? slugViews.get(slug) : viewGroups[0].views[0].key;
     if (view && !params.has('view')) params.set('view', view);
+    // A selection in the query wins over the path's, and a team in the query
+    // drops the path's opponent, as on the server.
+    const queryTeam = params.has('team');
+    teams.forEach((team, index) => {
+      const id = slugTeams.get(decodeURIComponent(team));
+      if (id && !params.has(teamParams[index]) && !(index > 0 && queryTeam)) params.set(teamParams[index], id);
+    });
     return params;
   };
   const currentParams = () => paramsOf(location);
+  // The teams a selection's page names in its path: each in turn while it is
+  // one team with a slug.
+  const pathTeams = params => {
+    const ids = [];
+    for (const name of teamParams.slice(0, views.get(requestedView(params))?.teamSegments || 0)) {
+      const values = params.getAll(name);
+      if (values.length !== 1 || !teamSlugs[values[0]]) break;
+      ids.push(values[0]);
+    }
+    return ids;
+  };
   const hrefFor = selection => {
     const params = new URLSearchParams(selection);
     const slug = views.get(requestedView(params))?.slug;
+    const teams = pathTeams(params);
     params.delete('view');
+    teams.forEach((_, index) => params.delete(teamParams[index]));
     // At bare /explore a lone metric would read as the legacy Scoring trend
     // link (see legacyTrendQuery), and it means nothing to the default view.
     if (!slug && params.has('metric') && [...params.keys()].every(key => key === 'metric' || key === 'penalties')) params.delete('metric');
     const query = params.toString();
-    return `${exploreRoot}${slug ? `/${slug}` : ''}${query ? `?${query}` : ''}`;
+    const path = [slug, ...teams.map(id => encodeURIComponent(teamSlugs[id]))].filter(Boolean).map(part => `/${part}`).join('');
+    return `${exploreRoot}${path}${query ? `?${query}` : ''}`;
+  };
+  // A page's <title>: a team's page names its team, and a Head to head pair's
+  // both teams, as exploreViewMeta and documentTitle do on the server.
+  const documentTitleFor = params => {
+    const view = views.get(requestedView(params));
+    const names = pathTeams(params).map(id => h2hData.teams?.find(team => team.ID === id)?.Name);
+    const template = names.length > 1 && names[1] ? view.pairTitle : names[0] ? view.teamTitle : '';
+    if (!template) return view.title;
+    const title = template.replace('%[1]s', names[0]).replace('%[2]s', names[1]);
+    return [...title + shared.titleSuffix].length <= shared.maxTitleLength ? title + shared.titleSuffix : title;
   };
   // A link that carries selections is nofollow; a view's own page isn't.
   const linkTo = (link, selection) => {
@@ -3354,7 +3391,7 @@
       if (link.dataset.viewChoice === view) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
-    document.title = views.get(view).title;
+    document.title = documentTitleFor(params);
     metric.value = ['goals', 'xg', 'compare', 'gap'].includes(params.get('metric')) ? params.get('metric') : 'compare';
     root.querySelector('#explore-trend-title').textContent = metric.value === 'gap'
       ? T('Goals − xG per match') : T('Goals and chances per match');

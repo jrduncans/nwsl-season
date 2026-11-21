@@ -44,33 +44,21 @@ func (a *application) legacyHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // exploreViewFromPath resolves the view a request names. Each view has its own
-// path, with the default view at bare /explore. A view named in the query, as
-// links did before views had paths, redirects to its path with the rest of the
-// selections, as does the legacy Scoring trend link that names only its metric.
-// The rest of Explore reads the view from the query, so this returns the query
-// with the path's view added.
-func (a *application) exploreViewFromPath(w http.ResponseWriter, r *http.Request) (rawQuery string, ok bool) {
+// path, with the default view at bare /explore, and a team view's page may
+// name its team after the slug, as Head to head's may its opponent after that
+// (exploreSelectionHref). The rest of Explore reads the view, team and
+// opponent from the query, so this returns the query with the path's
+// selections added; a selection in the query wins over the path's, and a team
+// in the query drops the path's opponent.
+//
+// A request whose selection has another canonical URL redirects there with
+// the rest of its query: a view named in the query, as links did before views
+// had paths; the legacy Scoring trend link that names only its metric; a team
+// view's ?team= or ?opponent=, which forms submit; and a renamed team's former
+// slug. Unknown view and team slugs are 404s.
+func (a *application) exploreViewFromPath(w http.ResponseWriter, r *http.Request, paths exploreTeamPaths) (rawQuery string, ok bool) {
 	query := r.URL.Query()
 	slug := r.PathValue("slug")
-	if _, named := query["view"]; named || (slug == "" && legacyTrendQuery(query)) {
-		view, known := exploreViewFor(exploreRequestedView(query))
-		if !known {
-			a.renderExploreBadRequest(w, r, unknownExploreViewError())
-			return "", false
-		}
-		target := relativeURL(r.URL.Path, exploreViewPath(view))
-		rest := withoutQueryParameter(r.URL.RawQuery, "view")
-		if remaining, _ := url.ParseQuery(rest); view.Slug == "" && legacyTrendQuery(remaining) {
-			// At bare /explore a lone metric would read as the legacy Scoring
-			// trend link, and it means nothing to the default view.
-			rest = withoutQueryParameter(rest, "metric")
-		}
-		if rest != "" {
-			target += "?" + rest
-		}
-		redirectRelative(w, target, http.StatusPermanentRedirect)
-		return "", false
-	}
 	view := exploreViewGroups[0].Views[0]
 	if slug != "" {
 		var known bool
@@ -79,10 +67,54 @@ func (a *application) exploreViewFromPath(w http.ResponseWriter, r *http.Request
 			return "", false
 		}
 	}
-	if r.URL.RawQuery == "" {
-		return "view=" + url.QueryEscape(view.Key), true
+	var segments []string
+	for _, name := range exploreTeamParams {
+		if segment := r.PathValue(name); segment != "" {
+			segments = append(segments, segment)
+		}
 	}
-	return "view=" + url.QueryEscape(view.Key) + "&" + r.URL.RawQuery, true
+	if len(segments) > view.TeamSegments {
+		http.NotFound(w, r)
+		return "", false
+	}
+	var selections []string
+	if _, named := query["view"]; !named {
+		key := view.Key
+		if slug == "" && legacyTrendQuery(query) {
+			key = "trend"
+		}
+		selections = append(selections, "view="+url.QueryEscape(key))
+	}
+	for i, segment := range segments {
+		id, _, known := paths.resolve(segment)
+		if !known {
+			http.NotFound(w, r)
+			return "", false
+		}
+		// The opponent belongs to the team, so a team chosen in the query, as
+		// the Head to head team form submits it, drops the path's opponent.
+		if name := exploreTeamParams[i]; !query.Has(name) && (i == 0 || !query.Has("team")) {
+			selections = append(selections, name+"="+url.QueryEscape(id))
+		}
+	}
+	if r.URL.RawQuery != "" {
+		selections = append(selections, r.URL.RawQuery)
+	}
+	rawQuery = strings.Join(selections, "&")
+	selected, _ := url.ParseQuery(rawQuery)
+	if _, known := exploreViewFor(exploreRequestedView(selected)); !known {
+		a.renderExploreBadRequest(w, r, unknownExploreViewError())
+		return "", false
+	}
+	request := r.URL.Path
+	if r.URL.RawQuery != "" {
+		request += "?" + r.URL.RawQuery
+	}
+	if exploreSelectionHref(rawQuery, paths) != request {
+		redirectRelative(w, exploreRedirectTarget(r.URL.Path, rawQuery, paths), http.StatusPermanentRedirect)
+		return "", false
+	}
+	return rawQuery, true
 }
 
 // legacyTrendQuery reports a link from when Scoring trend was the default
@@ -101,7 +133,19 @@ func legacyTrendQuery(query url.Values) bool {
 }
 
 func (a *application) explore(w http.ResponseWriter, r *http.Request) {
-	rawQuery, ok := a.exploreViewFromPath(w, r)
+	store, ok := a.store.(historicalStore)
+	if !ok {
+		a.renderExploreError(w, r, http.StatusServiceUnavailable, "Explore unavailable", "The local archive cannot provide historical scoring data.")
+		return
+	}
+	inputs, err := store.HistoricalRegularSeasons(r.Context())
+	if err != nil {
+		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be loaded.")
+		return
+	}
+	// Team slugs come from the archive's teams, so the path is resolved
+	// once it has loaded.
+	rawQuery, ok := a.exploreViewFromPath(w, r, newExploreTeamPaths(inputs))
 	if !ok {
 		return
 	}
@@ -115,16 +159,6 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 	if pointsOnlyExploreSelection(query) {
 		basis = history.AllShots
 		r.URL.RawQuery = withoutQueryParameter(r.URL.RawQuery, "penalties")
-	}
-	store, ok := a.store.(historicalStore)
-	if !ok {
-		a.renderExploreError(w, r, http.StatusServiceUnavailable, "Explore unavailable", "The local archive cannot provide historical scoring data.")
-		return
-	}
-	inputs, err := store.HistoricalRegularSeasons(r.Context())
-	if err != nil {
-		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be loaded.")
-		return
 	}
 	summaries, err := history.SummarizeScoringBasis(inputs, basis)
 	if err != nil {

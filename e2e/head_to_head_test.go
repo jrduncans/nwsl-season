@@ -119,8 +119,12 @@ func TestExploreHeadToHeadInPlace(t *testing.T) {
 	}
 	assertNoHorizontalOverflow(t, page)
 	chooseOption(t, page, "[data-h2h-opponent]", "raMyrr25d2")
-	if queryOf(t, page).Get("opponent") != "raMyrr25d2" {
-		t.Fatal("opponent URL")
+	if !strings.HasSuffix(strings.Split(page.URL(), "?")[0], "/explore/head-to-head/portland-thorns/gotham-fc") {
+		t.Fatalf("opponent URL %s", page.URL())
+	}
+	// The pair's page names both teams in its title.
+	if title, err := page.Title(); err != nil || !strings.HasPrefix(title, "Portland Thorns FC vs ") || !strings.Contains(title, "Gotham") {
+		t.Fatalf("pair title %q, %v", title, err)
 	}
 	if err := expect.Locator(page.Locator("[data-h2h-title]")).ToContainText("Gotham FC"); err != nil {
 		t.Fatal(err)

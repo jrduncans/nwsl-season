@@ -50,7 +50,7 @@ func TestExploreTeamHistoryKeepsRatesCoverageAndEligibility(t *testing.T) {
 	// The HTML fallback contains every measure, even when the chart shows one.
 	store := &archiveHTTPStore{archive: archive}
 	response := httptest.NewRecorder()
-	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/season-by-season?team=alpha&measure=against", nil))
+	NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/season-by-season/alpha?measure=against", nil))
 	body := response.Body.String()
 	for _, fragment := range []string{`data-panel="team-history" aria-labelledby=`, `value="alpha" selected`, `<th scope="row">2026</th>`, `<th scope="colgroup" colspan="2"><span data-basis-only="all">Goals allowed</span><span data-basis-only="non-penalty">Non-penalty goals allowed</span></th>`, `<td>-1.00</td><td>1.00</td>`, `Some seasons have incomplete xG and xPoints for this team`, `Show team history`} {
 		if !strings.Contains(body, fragment) {
@@ -229,7 +229,7 @@ func TestExploreTeamHistorySortURLsAndFallback(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	handler := NewHandler(&archiveHTTPStore{archive: archive})
-	path := "/nwsl-season/explore/season-by-season?team=alpha&measure=against&history-sort=for-actual&history-order=desc"
+	path := "/nwsl-season/explore/season-by-season/alpha?measure=against&history-sort=for-actual&history-order=desc"
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 	body := response.Body.String()

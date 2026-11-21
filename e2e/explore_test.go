@@ -156,8 +156,21 @@ func explorePath(query string) string {
 	return path + "?" + values.Encode()
 }
 
+// exploreTeamSlugs mirrors the fixed team slugs in
+// internal/app/explore_team_paths.go, by slug.
+var exploreTeamSlugs = map[string]string{
+	"angel-city": "kRQa8JOqKZ", "bay-fc": "315VnJ759x", "boston-breakers": "4wM4Ezg5jB",
+	"boston-legacy": "odMX2OJqYL", "chicago-stars": "KPqjw8PQ6v", "denver-summit": "2lqRn34qr0",
+	"fc-kansas-city": "kRQaWa15KZ", "houston-dash": "4JMAk47qKg", "kansas-city-current": "4wM4rZdqjB",
+	"gotham-fc": "raMyrr25d2", "north-carolina-courage": "zeQZeazqKw", "orlando-pride": "XVqKeVKM01",
+	"portland-thorns": "Pk5LeeNqOW", "racing-louisville": "eV5DR6YQKn", "san-diego-wave": "7VqG1lYMvW",
+	"seattle-reign": "7vQ7BBzqD1", "utah-royals": "eV5D2w9QKn", "washington-spirit": "aDQ0lzvQEv",
+	"western-new-york-flash": "xW5pwDBMg1",
+}
+
 // queryOf returns the page's current selection: its query parameters plus
-// the view its path names, as view, the way explore.js reads it.
+// the view its path names, as view, and the team and opponent a team view's
+// path names, as team and opponent, the way explore.js reads them.
 func queryOf(t *testing.T, page playwright.Page) url.Values {
 	t.Helper()
 	parsed, err := url.Parse(page.URL())
@@ -165,13 +178,22 @@ func queryOf(t *testing.T, page playwright.Page) url.Values {
 		t.Fatalf("parse %s: %v", page.URL(), err)
 	}
 	query := parsed.Query()
+	segments := strings.Split(strings.TrimSuffix(parsed.Path, "/"), "/")
+	root := slices.Index(segments, "explore")
+	if root < 0 {
+		return query
+	}
+	after := segments[root+1:]
 	if !query.Has("view") {
-		segments := strings.Split(strings.TrimSuffix(parsed.Path, "/"), "/")
 		for key, slug := range exploreSlugs {
-			last := segments[len(segments)-1]
-			if (slug == "" && last == "explore") || (slug != "" && last == slug && len(segments) > 1 && segments[len(segments)-2] == "explore") {
+			if (slug == "" && len(after) == 0) || (len(after) > 0 && slug == after[0]) {
 				query.Set("view", key)
 			}
+		}
+	}
+	for index, name := range []string{"team", "opponent"} {
+		if len(after) > index+1 && !query.Has(name) {
+			query.Set(name, exploreTeamSlugs[after[index+1]])
 		}
 	}
 	return query
