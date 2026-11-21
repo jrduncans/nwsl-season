@@ -45,7 +45,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 				archive[0].Data.Games[0].Status = fixtures.PreMatchStatus
 				teamPlayed--
 			}
-			code, body := getPage(t, archive, "/explore/match-by-match?season=2026&team=alpha")
+			code, body := getPage(t, archive, "/explore/match-by-match/alpha-co-script-alert-1-script?season=2026")
 			if code != http.StatusOK {
 				t.Fatalf("status = %d", code)
 			}
@@ -60,7 +60,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 					Season string
 					Active bool
 				}
-				payload := archivePayload(t, archive, "/explore/match-by-match", body, id)
+				payload := archivePayload(t, archive, "/explore/match-by-match/alpha-co-script-alert-1-script", body, id)
 				if err := json.Unmarshal([]byte(payload), &records); err != nil {
 					t.Fatalf("%s: %v", id, err)
 				}
@@ -69,7 +69,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 				}
 			}
 			if tc.active {
-				if payload := archivePayload(t, archive, "/explore/match-by-match", body, "explore-threshold-data"); strings.Contains(payload, `"2026"`) {
+				if payload := archivePayload(t, archive, "/explore/match-by-match/alpha-co-script-alert-1-script", body, "explore-threshold-data"); strings.Contains(payload, `"2026"`) {
 					t.Error("2026 thresholds are available before the regular season is verified complete")
 				}
 				return
@@ -91,7 +91,7 @@ func TestExploreRegularSeasonFinalityWhileSourceScopeIsActive(t *testing.T) {
 }
 
 func TestExploreUsesOneSnapshotAndPreservesMissingXG(t *testing.T) {
-	for _, path := range []string{"/explore", "/nwsl-season/explore/scoring-trend?metric=gap", "/nwsl-season/explore/goal-distribution", "/explore/scoring-table", "/nwsl-season/explore/rankings?team=alpha", "/nwsl-season/explore", "/nwsl-season/explore?display=gap", "/nwsl-season/explore?display=scatter", "/nwsl-season/explore/season-by-season?team=alpha"} {
+	for _, path := range []string{"/explore", "/nwsl-season/explore/scoring-trend?metric=gap", "/nwsl-season/explore/goal-distribution", "/explore/scoring-table", "/nwsl-season/explore/rankings/alpha", "/nwsl-season/explore", "/nwsl-season/explore?display=gap", "/nwsl-season/explore?display=scatter", "/nwsl-season/explore/season-by-season/alpha"} {
 		t.Run(path, func(t *testing.T) {
 			store := &archiveHTTPStore{archive: testArchive(t, map[string]archiveState{
 				"2025": {Lifecycle: cache.SourceScopeCompleted, Goals: 3, XGCovered: 19},
@@ -518,7 +518,7 @@ func TestExplorePointsUseIndependentCoverageAndSelectedUnits(t *testing.T) {
 		want []string
 	}{
 		{"/explore?display=table&measure=points&units=total&team-sort=points-expected&team-order=desc", []string{`name="measure" value="points" form="team-controls" checked><span>Points</span>`, `name="units" value="total" form="team-controls" checked><span>Totals</span>`, `data-team-sort="points-expected"`, `<td>60</td><td>32.00</td><td><strong>`}},
-		{"/explore/season-by-season?team=alpha&measure=points&series=xg&context=on&history-sort=points-expected", []string{`name="measure" value="points" form="team-history-controls" checked><span>Points</span>`, `name="series" value="xg" form="team-history-controls" checked><span>xPoints</span>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
+		{"/explore/season-by-season/alpha?measure=points&series=xg&context=on&history-sort=points-expected", []string{`name="measure" value="points" form="team-history-controls" checked><span>Points</span>`, `name="series" value="xg" form="team-history-controls" checked><span>xPoints</span>`, `data-history-sort="points-expected"`, `<h4>xPoints</h4>`}},
 	} {
 		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()

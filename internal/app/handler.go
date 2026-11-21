@@ -115,6 +115,8 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	mux.HandleFunc("GET /history/scoring", application.legacyHistory)
 	mux.HandleFunc("GET /explore", application.explore)
 	mux.HandleFunc("GET /explore/{slug}", application.explore)
+	mux.HandleFunc("GET /explore/{slug}/{team}", application.explore)
+	mux.HandleFunc("GET /explore/{slug}/{team}/{opponent}", application.explore)
 	mux.HandleFunc("GET "+exploreDataPath+"{part}", application.exploreData)
 	// Compatibility routes redirect to the primary public stage; rendered pages
 	// always carry an explicit stage slug.
@@ -1746,18 +1748,24 @@ func trimRouteTrailingSlash(requestPath string) (string, bool) {
 	if len(parts) == 2 && parts[0] == "history" && parts[1] == "scoring" {
 		return "/history/scoring", true
 	}
-	if len(parts) == 2 && parts[0] == "explore" {
-		if _, ok := exploreViewForSlug(parts[1]); ok {
-			return "/" + strings.Join(parts, "/"), true
-		}
+	if len(parts) >= 2 && parts[0] == "explore" && exploreViewPathParts(parts[1:]) {
+		return "/" + strings.Join(parts, "/"), true
 	}
 	return requestPath, false
 }
 
+// exploreViewPathParts reports whether parts, after /explore/, could name a
+// view's page: its slug and at most as many teams as the view takes. Team
+// slugs are checked against the archive only when the page is served.
+func exploreViewPathParts(parts []string) bool {
+	view, ok := exploreViewForSlug(parts[0])
+	return ok && len(parts)-1 <= view.TeamSegments && !slices.Contains(parts, "")
+}
+
 func stripBasePath(requestPath string) (string, bool) {
-	// An Explore view's own page, /explore/<slug>.
+	// An Explore view's own page, /explore/<slug>, or a team's page under it.
 	if index := strings.LastIndex(requestPath, "/explore/"); index >= 0 {
-		if _, ok := exploreViewForSlug(strings.TrimSuffix(requestPath[index+len("/explore/"):], "/")); ok {
+		if exploreViewPathParts(strings.Split(strings.TrimSuffix(requestPath[index+len("/explore/"):], "/"), "/")) {
 			return requestPath[index:], true
 		}
 	}

@@ -134,10 +134,12 @@ Useful endpoints:
 - `/seasons/:season/:stage/model-evaluation` — interactive historical forecast evaluation.
 - `/explore` — league scoring charts, sortable season table, team performance
   vs xG or xPoints, and team history; each view has its own page,
-  `/explore/<view>` (see [How Explore works](docs/explore-guide.md)).
+  `/explore/<view>`, and the team views a page per team, such as
+  `/explore/season-by-season/portland-thorns` (see
+  [How Explore works](docs/explore-guide.md)).
 - `/history` and `/history/scoring` — redirect to Explore's Scoring trend.
-- `/sitemap.xml` — every stage page, match page and Explore view; requires
-  `NWSL_PUBLIC_URL` (see "Runtime and deployment").
+- `/sitemap.xml` — every stage page, match page, Explore view and Explore
+  team page; requires `NWSL_PUBLIC_URL` (see "Runtime and deployment").
 
 ## Pitchfork development server
 
@@ -728,7 +730,7 @@ When `NWSL_PUBLIC_URL` is set, `/robots.txt` ends with a `Sitemap:` line for
 `/sitemap.xml`, so crawlers reach deep archive pages without following links
 there. The sitemap lists, by canonical URL, the pages each public stage's
 navigation links to, its model evaluation where the forecast is available,
-every match page, and each Explore view's page (see
+every match page, each Explore view's page and the team views' team pages (see
 [`internal/app/sitemap.go`](internal/app/sitemap.go)). A stage with no fixtures,
 such as playoffs not yet scheduled, is left out until a sync adds its matches.
 Each URL's `<lastmod>` is the stage's last successful sync in the current

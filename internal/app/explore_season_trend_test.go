@@ -206,16 +206,16 @@ func TestExploreSeasonTrendURLsFallbackAndEligibility(t *testing.T) {
 		"2026": {Lifecycle: cache.SourceScopeActive, Goals: 2, XGCovered: 19},
 	})
 	for _, path := range []string{
-		"/nwsl-season/explore/match-by-match?season=2026&team=alpha&trend-view=balance&series=xg&smoothing=10",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=difference&series=goals&smoothing=none",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=compare&series=goals&smoothing=none",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=goals&smoothing=none",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=xg&smoothing=10",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=both&smoothing=none",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=both&average-series=xg&smoothing=none",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&series=xg&average-series=goals&smoothing=none",
-		"/explore/match-by-match?season=2025&team=alpha&trend-view=relative&average-reference=league&average-series=xg",
-		"/explore/match-by-match?season=2024&team=alpha",
+		"/nwsl-season/explore/match-by-match/alpha?season=2026&trend-view=balance&series=xg&smoothing=10",
+		"/explore/match-by-match/alpha?season=2025&trend-view=difference&series=goals&smoothing=none",
+		"/explore/match-by-match/alpha?season=2025&trend-view=compare&series=goals&smoothing=none",
+		"/explore/match-by-match/alpha?season=2025&trend-view=relative&series=goals&smoothing=none",
+		"/explore/match-by-match/alpha?season=2025&trend-view=relative&series=xg&smoothing=10",
+		"/explore/match-by-match/alpha?season=2025&trend-view=relative&series=both&smoothing=none",
+		"/explore/match-by-match/alpha?season=2025&trend-view=relative&series=both&average-series=xg&smoothing=none",
+		"/explore/match-by-match/alpha?season=2025&trend-view=relative&series=xg&average-series=goals&smoothing=none",
+		"/explore/match-by-match/alpha?season=2025&trend-view=relative&average-reference=league&average-series=xg",
+		"/explore/match-by-match/alpha?season=2024",
 	} {
 		store := &archiveHTTPStore{archive: archive}
 		response := httptest.NewRecorder()
@@ -504,16 +504,16 @@ func TestExploreSeasonTrendLegacySmoothingRedirects(t *testing.T) {
 		"trend-mode=rolling&smoothing=none": "none",
 	} {
 		response := httptest.NewRecorder()
-		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/match-by-match?season=2025&team=alpha&trend-view=points&"+legacy, nil))
+		NewHandler(&archiveHTTPStore{archive: archive}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/nwsl-season/explore/match-by-match/alpha?season=2025&trend-view=points&"+legacy, nil))
 		if response.Code != http.StatusFound {
 			t.Fatalf("%s: status %d", legacy, response.Code)
 		}
 		target, err := url.Parse(response.Header().Get("Location"))
-		if err != nil || target.Path != "" || target.Query().Has("trend-mode") || target.Query().Has("window") || target.Query().Get("smoothing") != want || target.Query().Get("trend-view") != "points" || target.Query().Get("team") != "alpha" {
+		if err != nil || target.Path != "" || target.Query().Has("trend-mode") || target.Query().Has("window") || target.Query().Get("smoothing") != want || target.Query().Get("trend-view") != "points" || target.Query().Has("team") {
 			t.Fatalf("%s: redirect %s, %v", legacy, target, err)
 		}
 	}
-	code, body := getPage(t, archive, "/explore/match-by-match?season=2025&team=alpha&smoothing=10")
+	code, body := getPage(t, archive, "/explore/match-by-match/alpha?season=2025&smoothing=10")
 	if code != http.StatusOK {
 		t.Fatal(code)
 	}
