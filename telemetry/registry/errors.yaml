@@ -29,6 +29,7 @@ groups:
             - {id: qualification_status_proof, value: qualification.status_proof, stability: development, brief: An individual qualification status proof failed.}
             - {id: scenario_generate_team, value: scenario.generate_team, stability: development, brief: Scenario generation for one team failed.}
             - {id: scenario_refresh, value: scenario.refresh, stability: development, brief: Scenario refresh or calculation failed.}
+            - {id: scheduler_edge_cache_purge, value: scheduler.edge_cache_purge, stability: development, brief: Purging Cloudflare's edge cache after changed data failed.}
             - {id: scheduler_planning_snapshot, value: scheduler.planning_snapshot, stability: development, brief: Reading the scheduler planning snapshot failed.}
             - {id: sync_penalty_xg, value: sync.penalty_xg, stability: development, brief: Fetching or validating ASA penalty-pattern xG failed and was absorbed.}
             - {id: sync_recalculate, value: sync.recalculate, stability: development, brief: Cache-only derived-data recalculation failed.}
@@ -176,6 +177,21 @@ groups:
     name: nwsl.scenario.refresh.exception
     stability: development
     brief: A correlated exception log for failed scenario refresh or calculation.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.scheduler.edge_cache_purge.exception
+    type: event
+    name: nwsl.scheduler.edge_cache_purge.exception
+    stability: development
+    brief: A correlated exception log for a failed Cloudflare edge cache purge.
     attributes:
       - ref: exception.type
         requirement_level: required

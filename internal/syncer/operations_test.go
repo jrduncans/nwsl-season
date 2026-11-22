@@ -643,3 +643,26 @@ func TestSourceFetchFailuresAreMarkedUnavailable(t *testing.T) {
 		t.Fatalf("rejected response error = %v", err)
 	}
 }
+
+func TestOperationResultStoredRowsChanged(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result OperationResult
+		want   bool
+	}{
+		{"nothing returned", OperationResult{}, false},
+		{"unchanged games", OperationResult{Games: &cache.GameRefreshResult{Audit: cache.SourceRefreshAudit{RowsUnchanged: 3}}}, false},
+		{"updated game without input change", OperationResult{Games: &cache.GameRefreshResult{Audit: cache.SourceRefreshAudit{RowsUpdated: 1}}}, true},
+		{"deleted game", OperationResult{Games: &cache.GameRefreshResult{Audit: cache.SourceRefreshAudit{RowsDeleted: 1}}}, true},
+		{"inserted xG", OperationResult{XG: &cache.XGRefreshResult{Audit: cache.SourceRefreshAudit{RowsInserted: 1}}}, true},
+		{"renamed team", OperationResult{TeamAudit: &cache.SourceRefreshAudit{RowsUpdated: 1}}, true},
+		{"fixture inputs changed", OperationResult{FixtureInputsChanged: true}, true},
+		{"xG inputs changed", OperationResult{XGInputsChanged: true}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.result.StoredRowsChanged(); got != tc.want {
+				t.Errorf("StoredRowsChanged() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}

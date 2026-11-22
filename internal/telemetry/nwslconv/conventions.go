@@ -19,6 +19,7 @@ const (
 	EventQualificationStatusProofException  = "nwsl.qualification.status_proof.exception"
 	EventScenarioGenerateTeamException      = "nwsl.scenario.generate_team.exception"
 	EventScenarioRefreshException           = "nwsl.scenario.refresh.exception"
+	EventSchedulerEdgeCachePurgeException   = "nwsl.scheduler.edge_cache_purge.exception"
 	EventSchedulerPlanningSnapshotException = "nwsl.scheduler.planning_snapshot.exception"
 	EventSyncPenaltyXGException             = "nwsl.sync.penalty_xg.exception"
 	EventSyncRecalculateException           = "nwsl.sync.recalculate.exception"
@@ -30,6 +31,7 @@ const (
 	SpanScenarioGenerateTeam                = "scenario.generate_team"
 	SpanScenarioRefresh                     = "scenario.refresh"
 	EventSchedulerDecision                  = "scheduler.decision"
+	SpanSchedulerEdgeCachePurge             = "scheduler.edge_cache_purge"
 	SpanSchedulerJob                        = "scheduler.job"
 	SpanSchedulerTick                       = "scheduler.tick"
 	EventSyncASAResponse                    = "sync.asa_response"
@@ -73,6 +75,8 @@ func ExceptionEventName(code string) string {
 		return EventScenarioGenerateTeamException
 	case ErrorCodeScenarioRefresh:
 		return EventScenarioRefreshException
+	case ErrorCodeSchedulerEdgeCachePurge:
+		return EventSchedulerEdgeCachePurgeException
 	case ErrorCodeSchedulerPlanningSnapshot:
 		return EventSchedulerPlanningSnapshotException
 	case ErrorCodeSyncPenaltyXG:
@@ -233,6 +237,8 @@ const (
 	SchedulerClinchingPreflightOutcomeKey                    = attribute.Key("nwsl.scheduler.clinching_preflight_outcome")
 	SchedulerDecisionKey                                     = attribute.Key("nwsl.scheduler.decision")
 	SchedulerDeferredJobCountKey                             = attribute.Key("nwsl.scheduler.deferred_job_count")
+	SchedulerEdgeCachePurgeOutcomeKey                        = attribute.Key("nwsl.scheduler.edge_cache_purge.outcome")
+	SchedulerEdgeCachePurgeScopeKey                          = attribute.Key("nwsl.scheduler.edge_cache_purge.scope")
 	SchedulerEligibleCountKey                                = attribute.Key("nwsl.scheduler.eligible_count")
 	SchedulerEvaluationEvidenceDirtyKey                      = attribute.Key("nwsl.scheduler.evaluation_evidence_dirty")
 	SchedulerExpiredCountKey                                 = attribute.Key("nwsl.scheduler.expired_count")
@@ -466,6 +472,7 @@ const (
 	ErrorCodeQualificationStatusProof  = "qualification.status_proof"
 	ErrorCodeScenarioGenerateTeam      = "scenario.generate_team"
 	ErrorCodeScenarioRefresh           = "scenario.refresh"
+	ErrorCodeSchedulerEdgeCachePurge   = "scheduler.edge_cache_purge"
 	ErrorCodeSchedulerPlanningSnapshot = "scheduler.planning_snapshot"
 	ErrorCodeSyncPenaltyXG             = "sync.penalty_xg"
 	ErrorCodeSyncRecalculate           = "sync.recalculate"
@@ -1202,6 +1209,29 @@ const (
 func SchedulerDeferredJobCount(value int) attribute.KeyValue {
 	return SchedulerDeferredJobCountKey.Int(value)
 }
+
+// SchedulerEdgeCachePurgeOutcome returns an attribute value for nwsl.scheduler.edge_cache_purge.outcome.
+func SchedulerEdgeCachePurgeOutcome(value string) attribute.KeyValue {
+	return SchedulerEdgeCachePurgeOutcomeKey.String(value)
+}
+
+const (
+	SchedulerEdgeCachePurgeOutcomeComplete      = "complete"
+	SchedulerEdgeCachePurgeOutcomeFailed        = "failed"
+	SchedulerEdgeCachePurgeOutcomeDeferred      = "deferred"
+	SchedulerEdgeCachePurgeOutcomeNotNeeded     = "not_needed"
+	SchedulerEdgeCachePurgeOutcomeNotConfigured = "not_configured"
+)
+
+// SchedulerEdgeCachePurgeScope returns an attribute value for nwsl.scheduler.edge_cache_purge.scope.
+func SchedulerEdgeCachePurgeScope(value string) attribute.KeyValue {
+	return SchedulerEdgeCachePurgeScopeKey.String(value)
+}
+
+const (
+	SchedulerEdgeCachePurgeScopeLive = "live"
+	SchedulerEdgeCachePurgeScopeAll  = "all"
+)
 
 // SchedulerEligibleCount returns an attribute value for nwsl.scheduler.eligible_count.
 func SchedulerEligibleCount(value int) attribute.KeyValue {

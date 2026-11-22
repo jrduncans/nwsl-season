@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -237,6 +238,43 @@ func TestFromEnvironmentRejectsInvalidASABaseURL(t *testing.T) {
 			t.Setenv("NWSL_ASA_BASE_URL", value)
 			if got, err := FromEnvironment(); err == nil {
 				t.Fatalf("FromEnvironment() with NWSL_ASA_BASE_URL=%q = %q, want validation error", value, got.ASABaseURL)
+			}
+		})
+	}
+}
+
+func TestFromEnvironmentReadsEdgeCachePurge(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		zoneID  string
+		token   string
+		want    *EdgeCacheConfig
+		wantErr bool
+	}{
+		{name: "unset leaves purging off"},
+		{name: "both set", zoneID: "30c8d5ec70ea2aec7d9c223a83a9ec7c", token: "test-token", want: &EdgeCacheConfig{ZoneID: "30c8d5ec70ea2aec7d9c223a83a9ec7c", Token: "test-token"}},
+		{name: "zone without token", zoneID: "30c8d5ec70ea2aec7d9c223a83a9ec7c", wantErr: true},
+		{name: "token without zone", token: "test-token", wantErr: true},
+		{name: "zone that is not an ID", zoneID: "jrduncans.com", token: "test-token", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NWSL_CLOUDFLARE_ZONE_ID", tc.zoneID)
+			t.Setenv("NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN", tc.token)
+			cfg, err := FromEnvironment()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("FromEnvironment() succeeded, want an error")
+				}
+				if strings.Contains(err.Error(), "test-token") {
+					t.Errorf("error %q must not contain the token", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("FromEnvironment() error = %v", err)
+			}
+			if (cfg.EdgeCache == nil) != (tc.want == nil) || (cfg.EdgeCache != nil && *cfg.EdgeCache != *tc.want) {
+				t.Errorf("EdgeCache = %+v, want %+v", cfg.EdgeCache, tc.want)
 			}
 		})
 	}

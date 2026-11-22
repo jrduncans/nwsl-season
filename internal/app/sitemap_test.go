@@ -51,6 +51,9 @@ func TestSitemapListsEveryStagePageAndMatch(t *testing.T) {
 	if got := response.Header().Get("Cache-Control"); got != cacheControlCurrentPage {
 		t.Errorf("Cache-Control = %q, want %q", got, cacheControlCurrentPage)
 	}
+	if got, want := response.Header().Get("Cache-Tag"), "nwsl-page,nwsl-live"; got != want {
+		t.Errorf("Cache-Tag = %q, want %q", got, want)
+	}
 	var set sitemapURLSet
 	if err := xml.Unmarshal(response.Body.Bytes(), &set); err != nil {
 		t.Fatalf("parse sitemap: %v", err)

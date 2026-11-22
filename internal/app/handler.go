@@ -62,6 +62,10 @@ type Options struct {
 	// PublicURL is the absolute site root for social sharing tags. Empty
 	// leaves out the tags that need an absolute URL, such as the share image.
 	PublicURL string
+	// EdgeCachePurge reports that the server purges Cloudflare's edge cache by
+	// tag after a sync changes data, so pages may stay at the edge much longer.
+	// See cache_headers.go.
+	EdgeCachePurge bool
 }
 
 // NewHandler wires the application routes using the current-season defaults.
@@ -141,7 +145,11 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	}
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler(staticFS)))
-	return &Application{handler: withSecurityHeaders(withCacheHeaders(options.CurrentSeason, withBasePath(mux))), app: application}
+	return &Application{handler: withSecurityHeaders(withCacheHeaders(application.cachePolicy(), withBasePath(mux))), app: application}
+}
+
+func (a *application) cachePolicy() cachePolicy {
+	return cachePolicy{currentSeason: a.options.CurrentSeason, purged: a.options.EdgeCachePurge}
 }
 
 func (a *application) clinching(w http.ResponseWriter, r *http.Request) {

@@ -138,6 +138,23 @@ groups:
             - {id: not_needed, value: not_needed, stability: development, brief: Source inputs did not change.}
         stability: development
         brief: The low-cardinality result of warming forecasts after material source work.
+      - id: nwsl.scheduler.edge_cache_purge.outcome
+        type:
+          members:
+            - {id: complete, value: complete, stability: development, brief: Cloudflare confirmed the edge cache purge.}
+            - {id: failed, value: failed, stability: development, brief: The purge failed and stays pending for the next tick.}
+            - {id: deferred, value: deferred, stability: development, brief: "A purge ran too recently, so this one stays pending for the next tick."}
+            - {id: not_needed, value: not_needed, stability: development, brief: No data changed and no purge was pending.}
+            - {id: not_configured, value: not_configured, stability: development, brief: "Data changed, but edge cache purging is not configured."}
+        stability: development
+        brief: The low-cardinality result of purging Cloudflare's edge cache after a scheduler tick.
+      - id: nwsl.scheduler.edge_cache_purge.scope
+        type:
+          members:
+            - {id: live, value: live, stability: development, brief: "Only current-season data changed, so pages tagged nwsl-live were purged."}
+            - {id: all, value: all, stability: development, brief: "Another season's data changed, so every page tagged nwsl-page was purged."}
+        stability: development
+        brief: Which cached pages an edge cache purge removed.
       - id: nwsl.scheduler.selection_policy
         type: string
         stability: development
@@ -230,9 +247,26 @@ groups:
       - ref: nwsl.scheduler.request_count
       - ref: nwsl.scheduler.deferred_job_count
       - ref: nwsl.scheduler.evaluation_evidence_dirty
+      - ref: nwsl.scheduler.edge_cache_purge.outcome
+      - ref: nwsl.scheduler.edge_cache_purge.scope
       - ref: error.type
         requirement_level:
           conditionally_required: Present when the scheduler tick failed.
+
+  - id: span.nwsl.scheduler.edge_cache_purge
+    type: span
+    name: scheduler.edge_cache_purge
+    span_kind: internal
+    stability: development
+    brief: One purge of Cloudflare's edge cache by tag after scheduler work changed data.
+    attributes:
+      - ref: nwsl.scheduler.edge_cache_purge.scope
+        requirement_level: required
+      - ref: nwsl.scheduler.edge_cache_purge.outcome
+        requirement_level: required
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the purge failed.
 
   - id: span.nwsl.scheduler.job
     type: span

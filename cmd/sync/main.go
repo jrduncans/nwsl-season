@@ -16,6 +16,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/clinching"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/edgecache"
 	"github.com/jrduncans/nwsl-season/internal/operations"
 	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
@@ -108,6 +109,8 @@ func run() (exitCode int) {
 		fmt.Printf("Pruned history before %s: %d sync runs, %d xG sync runs, %d qualification runs (%d statuses), %d scenario runs (%d results), and %d expired sync leases.\n", cutoff.UTC().Format(time.RFC3339), result.SyncRuns, result.XGSyncRuns, result.QualificationRuns, result.QualificationStatuses, result.ScenarioRuns, result.ScenarioResults, result.ExpiredSyncLeases)
 		return 0
 	}
+	// Every mode below can write cached data.
+	defer purgeEdgeCacheAfterSync(cfg, logger, os.Stdout)()
 	service := syncer.Service{
 		ASA:                  client,
 		Store:                db,
@@ -232,6 +235,33 @@ func run() (exitCode int) {
 		printCalculationBudgetSummary(logger, db, run)
 	}
 	return 0
+}
+
+// newEdgeCachePurger is a variable so tests can observe purges.
+var newEdgeCachePurger = func(cfg config.EdgeCacheConfig) edgecache.Purger {
+	return edgecache.Cloudflare{ZoneID: cfg.ZoneID, Token: cfg.Token}
+}
+
+// purgeEdgeCacheAfterSync returns a function that purges every cached page
+// from Cloudflare's edge cache, for when a data-writing mode finishes. It runs
+// whether or not the mode succeeded, since a failure can follow writes, and
+// it purges everything because a manual sync can change any season. Without
+// edge cache configuration it does nothing. A failed purge only warns: the
+// sync itself is done, and pages refresh when they expire.
+func purgeEdgeCacheAfterSync(cfg config.Config, logger *slog.Logger, output io.Writer) func() {
+	if cfg.EdgeCache == nil {
+		return func() {}
+	}
+	purger := newEdgeCachePurger(*cfg.EdgeCache)
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := purger.PurgeTags(ctx, []string{edgecache.TagPage}); err != nil {
+			logger.Warn("purge edge cache after sync; cached pages refresh when they expire", "error", err)
+			return
+		}
+		_, _ = fmt.Fprintln(output, "Purged cached pages from the edge cache.")
+	}
 }
 
 func incompatibleMaintenanceModes(modes ...bool) bool {

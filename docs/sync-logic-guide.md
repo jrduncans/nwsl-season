@@ -125,6 +125,19 @@ work runs again after restart. Lease releases still complete during shutdown.
 The scheduler's lifetime is attached with
 [`internal/lifetime`](../internal/lifetime/lifetime.go).
 
+When edge cache purging is configured, every tick ends by purging
+Cloudflare's edge cache for the data it changed: a source job that inserted,
+updated or deleted any cached row (`OperationResult.StoredRowsChanged`, which
+is broader than the forecast and clinching input flags), or a clinching
+calculation that published. A change in the configured season purges the
+`nwsl-live` tag; a change in any other season purges `nwsl-page`. A purge
+that fails, or that comes within a minute of the previous one (startup
+catalog batches run every five seconds), stays pending and widens with later
+changes until a tick sends it. The purge outlives shutdown by up to ten
+seconds so data committed just before a stop still reaches visitors. Its
+result is on the tick span as `nwsl.scheduler.edge_cache_purge.outcome`. See
+README "Runtime and deployment".
+
 ### Independent result and xG cadence
 
 Games and xG are independent resources with independent full and per-match

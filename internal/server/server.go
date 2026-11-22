@@ -17,6 +17,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/edgecache"
 	"github.com/jrduncans/nwsl-season/internal/operations"
 	"github.com/jrduncans/nwsl-season/internal/qualification"
 	"github.com/jrduncans/nwsl-season/internal/scenariorefresh"
@@ -44,6 +45,21 @@ type Options struct {
 	// forecast. Zero uses the application default. Tests lower it because the
 	// server warms every forecast model after each sync that changes inputs.
 	ForecastIterations int
+	// EdgeCache overrides the Cloudflare purger built from cfg.EdgeCache, so
+	// tests can observe purges. Nil uses cfg.EdgeCache, if set.
+	EdgeCache edgecache.Purger
+}
+
+// edgeCachePurger is the purger the scheduler uses, or nil when purging is
+// off.
+func edgeCachePurger(cfg config.Config, opts Options) edgecache.Purger {
+	if opts.EdgeCache != nil {
+		return opts.EdgeCache
+	}
+	if cfg.EdgeCache == nil {
+		return nil
+	}
+	return edgecache.Cloudflare{ZoneID: cfg.EdgeCache.ZoneID, Token: cfg.EdgeCache.Token}
 }
 
 // Server is a built, not yet serving, composition of the application. The
@@ -115,6 +131,7 @@ func build(ctx context.Context, db *cache.DB, cfg config.Config, opts Options, l
 	} else {
 		logger.Warn("qualification unavailable: no configured season rules", "season", cfg.SyncSeason, "stage", cfg.SyncStage)
 	}
+	purger := edgeCachePurger(cfg, opts)
 	application := app.NewApplication(db, app.Options{
 		CurrentSeason: cfg.SyncSeason,
 		Stage:         cfg.SyncStage, Rules: rules,
@@ -122,10 +139,11 @@ func build(ctx context.Context, db *cache.DB, cfg config.Config, opts Options, l
 		ForecastTimeout:     cfg.ForecastTimeout,
 		ForecastIterations:  opts.ForecastIterations,
 		PublicURL:           cfg.PublicURL,
+		EdgeCachePurge:      purger != nil,
 	})
 	refreshScheduler, err := scheduler.New(db, forecastWarmingRunner{service: service, application: application, logger: logger, currentSeason: cfg.SyncSeason, currentStage: cfg.SyncStage}, scheduler.Config{
 		Season: cfg.SyncSeason, Stage: cfg.SyncStage, ExpectedTeams: rules.ExpectedTeams, GamesPerTeam: rules.GamesPerTeam, CheckInterval: cfg.SyncCheckInterval,
-		CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout, Now: opts.Now,
+		CompletionGrace: cfg.SyncCompletionGrace, Timeout: cfg.SyncTimeout, Now: opts.Now, EdgeCache: purger,
 	}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create refresh scheduler: %w", err)
