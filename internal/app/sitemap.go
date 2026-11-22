@@ -49,7 +49,7 @@ func (a *application) sitemap(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	// Like a current-season page, it changes when a sync adds matches.
-	w.Header().Set("Cache-Control", cacheControlCurrentPage)
+	a.cachePolicy().setHeaders(w.Header(), pageLive)
 	_, _ = w.Write([]byte(xml.Header))
 	_, _ = w.Write(body)
 }

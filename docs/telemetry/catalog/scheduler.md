@@ -31,6 +31,8 @@ Job kinds, classes, decisions, outcomes, reasons, and selection policies are bou
 | `nwsl.scheduler.clinching_preflight_outcome` | enum | Recommended | development | `["not_needed","current","complete","partial_failure","failure"]` | The low-cardinality outcome of the cache-only clinching preflight. |
 | `nwsl.scheduler.decision` | enum | Recommended | development | `["check","not_check"]` | The low-cardinality check or no-check decision recorded by a scheduler decision event. |
 | `nwsl.scheduler.deferred_job_count` | int | Recommended | development | — | Number of due source jobs deferred after the request budget was exhausted. |
+| `nwsl.scheduler.edge_cache_purge.outcome` | enum | Recommended | development | `["complete","failed","deferred","not_needed","not_configured"]` | The low-cardinality result of purging Cloudflare's edge cache after a scheduler tick. |
+| `nwsl.scheduler.edge_cache_purge.scope` | enum | Recommended | development | `["live","all"]` | Which cached pages an edge cache purge removed. |
 | `nwsl.scheduler.eligible_count` | int | Recommended | development | — | Number of targeted identities eligible at the observation time. |
 | `nwsl.scheduler.evaluation_evidence_dirty` | boolean | Recommended | development | — | Whether cold source changes require regeneration of checked-in model evaluation evidence. |
 | `nwsl.scheduler.expired_count` | int | Recommended | development | — | Number of targeted identities outside their polling watch window. |
@@ -93,6 +95,23 @@ A point-in-time explanation of why the scheduler selected or skipped source work
 | `nwsl.scheduler.requested_rows` | int | Recommended | development | Number of source identities selected in a scheduler decision event. |
 
 
+### `nwsl.scheduler.edge_cache_purge.exception`
+
+- Convention: `event.nwsl.scheduler.edge_cache_purge.exception`
+- Signal type: event
+- Stability: development
+
+A correlated exception log for a failed Cloudflare edge cache purge.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `exception.message` | string | Required | stable | The exception message. |
+| `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
+| `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
+| `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
 ### `nwsl.scheduler.planning_snapshot.exception`
 
 - Convention: `event.nwsl.scheduler.planning_snapshot.exception`
@@ -108,6 +127,22 @@ A correlated exception log for a failed scheduler planning-snapshot read.
 | `exception.stacktrace` | string | Required | stable | A stacktrace as a string in the natural representation for the language runtime. The representation is to be determined and documented by each language SIG. |
 | `exception.type` | string | Required | stable | The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the exception should be preferred over the static type in languages that support it. |
 | `nwsl.error.code` | enum | Required | development | The bounded stable identifier for the operation that detected an error. |
+
+
+### `scheduler.edge_cache_purge`
+
+- Convention: `span.nwsl.scheduler.edge_cache_purge`
+- Signal type: span, internal kind
+- Stability: development
+
+One purge of Cloudflare's edge cache by tag after scheduler work changed data.
+
+
+| Attribute | Type | Requirement | Stability | Description |
+| --- | --- | --- | --- | --- |
+| `error.type` | enum | Conditional: Present when the purge failed. | stable | Describes a class of error the operation ended with. |
+| `nwsl.scheduler.edge_cache_purge.outcome` | enum | Required | development | The low-cardinality result of purging Cloudflare's edge cache after a scheduler tick. |
+| `nwsl.scheduler.edge_cache_purge.scope` | enum | Required | development | Which cached pages an edge cache purge removed. |
 
 
 ### `scheduler.job`
@@ -159,6 +194,8 @@ One scheduler planning and execution cycle.
 | `nwsl.scheduler.action` | string | Recommended | development | The low-cardinality top-level action selected for a scheduler tick. |
 | `nwsl.scheduler.clinching_preflight_outcome` | enum | Recommended | development | The low-cardinality outcome of the cache-only clinching preflight. |
 | `nwsl.scheduler.deferred_job_count` | int | Recommended | development | Number of due source jobs deferred after the request budget was exhausted. |
+| `nwsl.scheduler.edge_cache_purge.outcome` | enum | Recommended | development | The low-cardinality result of purging Cloudflare's edge cache after a scheduler tick. |
+| `nwsl.scheduler.edge_cache_purge.scope` | enum | Recommended | development | Which cached pages an edge cache purge removed. |
 | `nwsl.scheduler.evaluation_evidence_dirty` | boolean | Recommended | development | Whether cold source changes require regeneration of checked-in model evaluation evidence. |
 | `nwsl.scheduler.job_count` | int | Recommended | development | Number of source jobs selected for the scheduler tick. |
 | `nwsl.scheduler.outcome` | enum | Required | development | The low-cardinality terminal outcome of a scheduler tick. |

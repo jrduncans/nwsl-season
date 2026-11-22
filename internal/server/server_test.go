@@ -18,6 +18,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/config"
+	"github.com/jrduncans/nwsl-season/internal/edgecache"
 	"github.com/jrduncans/nwsl-season/internal/scheduler"
 )
 
@@ -272,5 +273,52 @@ func TestBuildReportsCacheOpenFailure(t *testing.T) {
 	}, Options{Logger: quietLogger()})
 	if err == nil || !strings.Contains(err.Error(), "open cache database") {
 		t.Fatalf("Build error = %v, want cache open failure", err)
+	}
+}
+
+type recordingPurger struct{}
+
+func (recordingPurger) PurgeTags(context.Context, []string) error { return nil }
+
+// Purging lets pages stay at the edge longer; without it they keep the short
+// lifetime that expiry alone can make safe.
+func TestBuildLengthensEdgeCachingOnlyWhenPurging(t *testing.T) {
+	fake := newCountingASA(t, false, 0)
+	for _, tc := range []struct {
+		name      string
+		purger    edgecache.Purger
+		wantCache string
+	}{
+		{"without purging", nil, "public, max-age=0, s-maxage=900, stale-while-revalidate=3600"},
+		{"with purging", recordingPurger{}, "public, max-age=0, s-maxage=86400, stale-while-revalidate=3600"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := buildTestServer(t, testConfig(t, fake.server.URL), Options{EdgeCache: tc.purger})
+			recorder := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("GET /sitemap.xml = %d", recorder.Code)
+			}
+			if got := recorder.Header().Get("Cache-Control"); got != tc.wantCache {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.wantCache)
+			}
+			if got := recorder.Header().Get("Cache-Tag"); got != "nwsl-page,nwsl-live" {
+				t.Errorf("Cache-Tag = %q, want nwsl-page,nwsl-live", got)
+			}
+		})
+	}
+}
+
+func TestEdgeCachePurgerFromConfig(t *testing.T) {
+	if got := edgeCachePurger(config.Config{}, Options{}); got != nil {
+		t.Errorf("purger without configuration = %#v, want nil", got)
+	}
+	cfg := config.Config{EdgeCache: &config.EdgeCacheConfig{ZoneID: "zone", Token: "token"}}
+	got, ok := edgeCachePurger(cfg, Options{}).(edgecache.Cloudflare)
+	if !ok || got.ZoneID != "zone" || got.Token != "token" {
+		t.Errorf("purger = %#v, want Cloudflare for the configured zone", got)
+	}
+	if _, ok := edgeCachePurger(cfg, Options{EdgeCache: recordingPurger{}}).(recordingPurger); !ok {
+		t.Error("Options.EdgeCache did not override the configured purger")
 	}
 }

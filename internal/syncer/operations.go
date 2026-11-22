@@ -85,6 +85,30 @@ type OperationResult struct {
 	penalties penaltyOutcome
 }
 
+// StoredRowsChanged reports whether the operation inserted, updated or
+// deleted any cached team, game or xG row. It is broader than the
+// *InputsChanged flags, which cover only forecast and clinching inputs: a
+// page can show a stored value, such as a venue or attendance, that no
+// calculation reads. The edge cache purge uses it.
+func (r OperationResult) StoredRowsChanged() bool {
+	if r.FixtureInputsChanged || r.XGInputsChanged {
+		return true
+	}
+	audits := []*cache.SourceRefreshAudit{r.TeamAudit}
+	if r.Games != nil {
+		audits = append(audits, &r.Games.Audit)
+	}
+	if r.XG != nil {
+		audits = append(audits, &r.XG.Audit)
+	}
+	for _, audit := range audits {
+		if audit != nil && audit.RowsInserted+audit.RowsUpdated+audit.RowsDeleted > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // ErrSourceUnavailable marks a failure to get any ASA response: a transport
 // or HTTP error, or the request deadline. A failure after ASA answered (a
 // rejected response or a cache write error) is not wrapped with it.

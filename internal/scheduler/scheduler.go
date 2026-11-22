@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
+	"github.com/jrduncans/nwsl-season/internal/edgecache"
 	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
 	"github.com/jrduncans/nwsl-season/internal/telemetry"
@@ -55,6 +57,10 @@ type Config struct {
 	// Now overrides the scheduler's planning clock. Nil uses time.Now. Tests
 	// use it to make due work deterministic without changing planning rules.
 	Now func() time.Time
+	// EdgeCache purges Cloudflare's edge cache by tag after a tick changes
+	// cached data, so visitors see the new data at once. Nil leaves pages to
+	// expire on their own.
+	EdgeCache edgecache.Purger
 }
 
 type Scheduler struct {
@@ -68,6 +74,12 @@ type Scheduler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
+
+	// purgeMu guards the edge cache purge state shared by scheduled ticks
+	// and CheckNow.
+	purgeMu      sync.Mutex
+	pendingPurge purgeScope
+	lastPurgeAt  time.Time
 }
 
 const coldSweepLeaseKey = "cold-sweep"
@@ -234,6 +246,10 @@ func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefresh
 	stopped := func() bool { return parent.Err() != nil }
 	ctx, span := telemetry.Tracer().Start(parent, nwslconv.SpanSchedulerTick, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(nwslconv.SeasonName(s.config.Season), nwslconv.Stage(s.config.Stage)))
 	defer span.End()
+	// Every return path purges the edge cache for whatever this tick changed,
+	// and retries a purge an earlier tick left pending.
+	var changed purgeScope
+	defer func() { s.purgeEdgeCache(ctx, span, changed) }()
 	planningCtx, planningCancel := context.WithTimeout(ctx, s.config.Timeout)
 	snapshot, err := s.store.PlanningSnapshot(planningCtx)
 	planningCancel()
@@ -253,6 +269,9 @@ func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefresh
 	preflightCalculation := nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded
 	if runPreflight && currentInventoryAvailable(snapshot, s.config.Season, s.config.Stage) {
 		preflightCalculation = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "preflight")
+		if derivedDataChanged(preflightCalculation) {
+			changed = max(changed, s.purgeScopeFor(s.config.Season))
+		}
 	}
 	span.SetAttributes(nwslconv.SchedulerClinchingPreflightOutcome(preflightCalculation))
 	if stopped() {
@@ -268,6 +287,9 @@ func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefresh
 		outcome := preflightCalculation
 		if outcome == nwslconv.SchedulerClinchingPreflightOutcomeNotNeeded {
 			outcome = s.recalculateCachedClinching(ctx, span, s.config.Season, s.config.Stage, "no_source_request_due")
+			if derivedDataChanged(outcome) {
+				changed = max(changed, s.purgeScopeFor(s.config.Season))
+			}
 		}
 		if stopped() {
 			outcome = nwslconv.SchedulerOutcomeStopped
@@ -299,6 +321,9 @@ func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefresh
 		outcome, result, attempted, jobErr := s.executeJob(jobCtx, job)
 		if attempted {
 			requests++
+		}
+		if result.StoredRowsChanged() {
+			changed = max(changed, s.purgeScopeFor(job.Operation.Season))
 		}
 		jobSpan.SetAttributes(jobAttributes(job, result, outcome, requests)...)
 		if strings.HasPrefix(outcome, "deferred") {

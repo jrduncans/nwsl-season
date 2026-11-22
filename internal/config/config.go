@@ -67,6 +67,18 @@ type Config struct {
 	HistoryRetention    time.Duration
 	ForecastConcurrency int
 	ForecastTimeout     time.Duration
+
+	// EdgeCache, when set, lets the scheduler purge Cloudflare's edge cache
+	// by tag after a sync changes data. Nil leaves pages to expire on their
+	// own, as in local development.
+	EdgeCache *EdgeCacheConfig
+}
+
+// EdgeCacheConfig identifies the Cloudflare zone whose cache is purged and a
+// token with only the Zone > Cache Purge > Purge permission on it.
+type EdgeCacheConfig struct {
+	ZoneID string
+	Token  string
 }
 
 // FromEnvironment reads configuration, applying local-development defaults.
@@ -116,6 +128,10 @@ func FromEnvironment() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	edgeCache, err := edgeCacheFromEnvironment()
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		HTTPAddr: httpAddrFromEnvironment(),
@@ -137,7 +153,29 @@ func FromEnvironment() (Config, error) {
 		HistoryRetention:    historyRetention,
 		ForecastConcurrency: forecastConcurrency,
 		ForecastTimeout:     forecastTimeout,
+
+		EdgeCache: edgeCache,
 	}, nil
+}
+
+// edgeCacheFromEnvironment reads NWSL_CLOUDFLARE_ZONE_ID and
+// NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN, which must be set together. Neither
+// leaves purging off.
+func edgeCacheFromEnvironment() (*EdgeCacheConfig, error) {
+	zoneID := strings.TrimSpace(os.Getenv("NWSL_CLOUDFLARE_ZONE_ID"))
+	token := strings.TrimSpace(os.Getenv("NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN"))
+	switch {
+	case zoneID == "" && token == "":
+		return nil, nil
+	case zoneID == "" || token == "":
+		return nil, fmt.Errorf("NWSL_CLOUDFLARE_ZONE_ID and NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN must be set together")
+	}
+	for _, r := range zoneID {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return nil, fmt.Errorf("NWSL_CLOUDFLARE_ZONE_ID must be a Cloudflare zone ID (lowercase hexadecimal), got %q", zoneID)
+		}
+	}
+	return &EdgeCacheConfig{ZoneID: zoneID, Token: token}, nil
 }
 
 // absoluteHTTPURLFromEnvironment accepts only absolute http or https URLs

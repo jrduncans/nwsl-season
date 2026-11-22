@@ -277,6 +277,8 @@ from the copied fixtures when requested.
 | `NWSL_HISTORY_RETENTION` | `2160h` (90 days) | Retention period for superseded operational history. |
 | `NWSL_FORECAST_CONCURRENCY` | `4` | Maximum concurrent uncached Forecast Lab requests. |
 | `NWSL_FORECAST_TIMEOUT` | `15s` | Maximum computation time for one uncached forecast request. |
+| `NWSL_CLOUDFLARE_ZONE_ID` | unset | Cloudflare zone whose edge cache the scheduler and `cmd/sync` purge after a sync changes data (see "Runtime and deployment"). Set it together with `NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN`, or neither. |
+| `NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN` | unset | Cloudflare API token with only the Zone > Cache Purge > Purge permission on that zone. Keep this secret out of the repository. |
 | `HONEYCOMB_API_KEY` | unset | Enables OpenTelemetry trace and exception-log export directly to Honeycomb. Keep this secret out of the repository. |
 | `HONEYCOMB_API_ENDPOINT` | `https://api.honeycomb.io` | Honeycomb ingest endpoint; use `https://api.eu1.honeycomb.io` for the EU instance. |
 | `OTEL_SERVICE_NAME` | `nwsl-season-server` | Service name shown in Honeycomb. |
@@ -682,20 +684,35 @@ revalidates against that hash as its ETag.
 
 Pages tell shared caches how long to keep them
 (`internal/app/cache_headers.go`); production's Cloudflare cache rule honors
-`s-maxage` and stores nothing without it:
+`s-maxage` and stores nothing without it. How long depends on whether the
+server purges the edge cache when data changes (below):
 
-- Current and future seasons, and pages outside a season such as Explore,
-  plus `/sitemap.xml`: 15 minutes at the edge, plus one stale copy while it
-  refetches, since a sync can change them.
-- Earlier seasons, whose data no longer changes: one day.
-- Errors, redirects, `/healthz`, `/cache/status`, `/robots.txt` and other
-  non-page responses: `no-store`.
+| Pages | Cache-Tag | Edge lifetime with purging | Without purging |
+| --- | --- | --- | --- |
+| Current and future seasons, pages outside a season such as Explore, and `/sitemap.xml` | `nwsl-page,nwsl-live` | one day | 15 minutes |
+| Earlier seasons | `nwsl-page` | one week | one day |
+
+Errors, redirects, `/healthz`, `/cache/status`, `/robots.txt` and other
+non-page responses are `no-store` and carry no tag. Every cached page also
+allows one stale copy while the edge refetches it. Cloudflare strips
+`Cache-Tag` before responses reach visitors.
 
 Every page sends `max-age=0`, so browsers always revalidate and an edge hit
 answers without reaching the server. The deployment purges the edge cache for
-the hostname after each deploy, so a new version shows at once; a sync does
-not, so new data can take up to 15 minutes to appear. A handler that sets its
-own `Cache-Control` keeps it, as the static and Explore data handlers do.
+the hostname after each deploy, so a new version shows at once. When
+`NWSL_CLOUDFLARE_ZONE_ID` and `NWSL_CLOUDFLARE_CACHE_PURGE_TOKEN` are set, the
+scheduler also purges by tag after a tick that changes cached data (any
+inserted, updated or deleted team, game or xG row, or new clinching data): a
+change in the configured season purges `nwsl-live`, and a change in any other
+season purges `nwsl-page`, since pages read other seasons' data (forecasts
+read earlier regular seasons). New data then appears within one tick. A purge
+that fails is retried on the next tick, and purges are at least a minute apart
+to stay inside Cloudflare's purge rate limit; edge expiry bounds staleness if
+purging stops working. `cmd/sync` purges `nwsl-page` after any mode that can
+write data. Without the two variables, as in local development, nothing is
+purged and the shorter lifetimes apply, so new data can take up to 15 minutes
+to appear. A handler that sets its own `Cache-Control` keeps it, as the static
+and Explore data handlers do; their versioned URLs need no purge.
 
 The runtime requires:
 

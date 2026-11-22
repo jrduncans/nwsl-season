@@ -116,6 +116,22 @@ per-fixture drill-down. Group those by bounded `nwsl.sync.update_kind`,
 `nwsl.sync.decision`, or `nwsl.sync.rejection_kind`, then inspect
 `nwsl.asa.game.id` on representative events.
 
+## Edge cache purges
+
+| Query Builder clause | Value |
+| --- | --- |
+| `VISUALIZE` | `COUNT` |
+| `WHERE` | `name = scheduler.tick` and `nwsl.scheduler.edge_cache_purge.outcome exists` |
+| `GROUP BY` | `nwsl.scheduler.edge_cache_purge.outcome`, `nwsl.scheduler.edge_cache_purge.scope` |
+
+`not_needed` is the normal quiet tick. `complete` follows changed data.
+`deferred` means a purge waited for the next tick to stay a minute apart.
+Repeated `failed` means visitors see changes only when pages expire (one day
+for current pages): open a `scheduler.edge_cache_purge` span and its
+`nwsl.scheduler.edge_cache_purge.exception` log for Cloudflare's error, such
+as a revoked token. `not_configured` in production means the zone ID and
+token are missing from the service environment.
+
 ## Qualification and scenario budgets
 
 Budget exhaustion can produce a valid but unresolved result, so do not limit
