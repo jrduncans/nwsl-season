@@ -1713,9 +1713,15 @@ func (a *application) renderUnavailableFeatureWithNavigation(w http.ResponseWrit
 // relative so the browser retains that mount path.
 func withBasePath(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		internalPath, ok := stripBasePath(r.URL.Path)
+		internalPath, ok := splitBasePath(r.URL.Path)
 		if !ok {
 			next.ServeHTTP(w, r)
+			return
+		}
+		// Answer before any handler loads the archive: crawlers request these
+		// by the thousand.
+		if mountPathNamesRoute(r.URL.Path, internalPath) {
+			http.NotFound(w, r)
 			return
 		}
 		if canonicalPath, ok := trimRouteTrailingSlash(internalPath); ok {
@@ -1770,7 +1776,36 @@ func exploreViewPathParts(parts []string) bool {
 	return ok && len(parts)-1 <= view.TeamSegments && !slices.Contains(parts, "")
 }
 
+// stripBasePath returns the rooted route under a reverse proxy's mount path.
+// A mount path never names one of the app's own top-level routes, so a
+// prefix that does (/explore/seasons/..., /explore/explore/parity) is a
+// relative link resolved against the wrong page. Serving it would render
+// more relative links under the same prefix, an endless set of duplicate
+// pages for crawlers, so it matches no route.
 func stripBasePath(requestPath string) (string, bool) {
+	internalPath, ok := splitBasePath(requestPath)
+	if !ok || mountPathNamesRoute(requestPath, internalPath) {
+		return requestPath, false
+	}
+	return internalPath, true
+}
+
+var topLevelRouteSegments = []string{"explore", "seasons", "history", "static"}
+
+// mountPathNamesRoute reports whether the mount path in front of internalPath
+// contains one of the app's top-level route segments.
+func mountPathNamesRoute(requestPath, internalPath string) bool {
+	for segment := range strings.SplitSeq(strings.TrimSuffix(requestPath, internalPath), "/") {
+		if slices.Contains(topLevelRouteSegments, segment) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitBasePath finds the route at the end of requestPath, allowing any
+// mount path before it.
+func splitBasePath(requestPath string) (string, bool) {
 	// An Explore view's own page, /explore/<slug>, or a team's page under it.
 	if index := strings.LastIndex(requestPath, "/explore/"); index >= 0 {
 		if exploreViewPathParts(strings.Split(strings.TrimSuffix(requestPath[index+len("/explore/"):], "/"), "/")) {

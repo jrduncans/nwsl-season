@@ -35,6 +35,8 @@ type Threshold struct {
 	Tied       bool            `json:"tied"`
 }
 
+// SeasonThresholds' OrderSource and FormatSource are rooted site paths of the
+// season's ASA results; pages make them relative to themselves.
 type SeasonThresholds struct {
 	Season                    string
 	Playoffs, Home, Bye       int
@@ -87,7 +89,7 @@ func Thresholds(summaries []SeasonScoring, archive []cache.HistoricalSeason) []S
 
 func deriveThresholdSeason(entry competition.Entry, summary SeasonScoring, snapshot cache.HistoricalSeason, format competition.BracketFormat, override competition.OutcomeOverrides) SeasonThresholds {
 	row := SeasonThresholds{Season: entry.Season, Playoffs: entry.PlayoffPlaces,
-		OrderSource: "seasons/" + entry.Season + "/regular-season", FormatSource: "seasons/" + entry.Season + "/playoffs"}
+		OrderSource: "/seasons/" + entry.Season + "/regular-season", FormatSource: "/seasons/" + entry.Season + "/playoffs"}
 	openingSeeds := []int{}
 	for _, slot := range format.Slots {
 		if slot.RoundID == format.Rounds[0].ID && slot.SeedPair != nil {

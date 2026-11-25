@@ -598,6 +598,45 @@ func TestHandlerSupportsPreservedReverseProxyBasePath(t *testing.T) {
 	}
 }
 
+// A reverse proxy's mount path never names one of the app's own routes, so a
+// prefix that does is a relative link resolved against the wrong page.
+// Serving it would render more relative links under the same bad prefix,
+// giving crawlers endless duplicate URLs.
+func TestBasePathRejectsPrefixesNamingAppRoutes(t *testing.T) {
+	handler := NewHandler(fakeStore{season: testSeasonData()})
+	for _, path := range []string{
+		"/explore/seasons/2026/regular-season",
+		"/explore/parity/seasons/2026/regular-season",
+		"/explore/head-to-head/alpha/seasons/2026/regular-season/fixtures",
+		"/explore/explore",
+		"/explore/explore/parity",
+		"/explore/head-to-head/alpha/explore/head-to-head/bravo",
+		"/seasons/2026/explore/parity",
+		"/history/seasons/2026/regular-season",
+		"/static/seasons/2026/regular-season",
+		"/explore/parity/static/site.css",
+		"/explore/parity/healthz",
+		"/explore/seasons/2026/",
+		"/explore/nope/",
+		"/seasons/2026/regular-season/nope/",
+	} {
+		t.Run(path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, location = %q; want 404", response.Code, response.Header().Get("Location"))
+			}
+		})
+	}
+	for _, path := range []string{"/explorer/seasons/2026/regular-season", "/nwsl-season/static/site.css", "/a/b/seasons/2026/regular-season"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", path, response.Code)
+		}
+	}
+}
+
 func TestTrailingSlashSeasonPathRedirectsToCanonicalRelativePath(t *testing.T) {
 	handler := NewHandler(fakeStore{season: testSeasonData()})
 	request := httptest.NewRequest(http.MethodGet, "/explorer/seasons/2026/?v=1", nil)
