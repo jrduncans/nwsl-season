@@ -38,13 +38,39 @@ func TestExploreThresholdsUsesOneArchiveAndNativeDetails(t *testing.T) {
 	}
 }
 
+// Every Explore page renders the thresholds section, and views live one or
+// more directories below the root, so the ASA results links must be relative
+// to the page they're on. A root-relative "seasons/..." resolved under
+// /explore/ and seeded endless junk URLs for crawlers in November 2026.
+func TestExploreThresholdSourceLinksResolveFromEachViewPage(t *testing.T) {
+	store := &archiveHTTPStore{archive: apptest.Scenario(t, apptest.ScenarioOverview)}
+	for _, tc := range []struct{ path, prefix string }{
+		{"/explore", ""},
+		{"/explore/playoff-thresholds", "../"},
+		{"/explore/head-to-head", "../"},
+		{"/nwsl-season/explore/playoff-thresholds", "../"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			NewHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status %d", response.Code)
+			}
+			body := response.Body.String()
+			requireElements(t, body,
+				`[data-panel=thresholds] a[href="`+tc.prefix+`seasons/2025/regular-season"]`,
+				`[data-panel=thresholds] a[href="`+tc.prefix+`seasons/2025/playoffs"]`)
+		})
+	}
+}
+
 func TestExploreThresholdChartUsesUnroundedValuesAndGaps(t *testing.T) {
 	archive := apptest.Scenario(t, apptest.ScenarioThresholds)
 	summaries, err := history.SummarizeScoring(archive)
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := exploreThresholds(url.Values{}, summaries, archive)
+	page, err := exploreThresholds("/explore/playoff-thresholds", url.Values{}, summaries, archive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +96,7 @@ func TestExploreThresholdsRecordedArchiveReconcilesAllCutoffs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := exploreThresholds(url.Values{}, summary, archive)
+	page, err := exploreThresholds("/explore/playoff-thresholds", url.Values{}, summary, archive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +129,7 @@ func TestExploreThresholdTableFiltersAndSortsOneOutcome(t *testing.T) {
 	for _, outcome := range []string{"shield", "home", "bye", "playoffs"} {
 		for _, order := range []string{"asc", "desc"} {
 			query := url.Values{"threshold-outcome": {outcome}, "threshold-sort": {"ppg"}, "threshold-order": {order}}
-			page, err := exploreThresholds(query, summary, archive)
+			page, err := exploreThresholds("/explore/playoff-thresholds", query, summary, archive)
 			if err != nil {
 				t.Fatal(err)
 			}

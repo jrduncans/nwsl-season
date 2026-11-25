@@ -51,7 +51,7 @@ type exploreThresholdRecord struct {
 	Values   []history.Threshold `json:"values"`
 }
 
-func exploreThresholds(query url.Values, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) (exploreThresholdView, error) {
+func exploreThresholds(requestPath string, query url.Values, summaries []history.SeasonScoring, archive []cache.HistoricalSeason) (exploreThresholdView, error) {
 	page := exploreThresholdView{}
 	outcomes := history.Thresholds(summaries, archive)
 	if len(outcomes) > 0 {
@@ -69,6 +69,8 @@ func exploreThresholds(query url.Values, summaries []history.SeasonScoring, arch
 		penalties = "&penalties=exclude"
 	}
 	for _, season := range outcomes {
+		season.OrderSource = relativeURL(requestPath, season.OrderSource)
+		season.FormatSource = relativeURL(requestPath, season.FormatSource)
 		var notes []history.ThresholdFinish
 		for _, value := range season.Values {
 			if value.PPG == nil {

@@ -656,6 +656,16 @@ This repository builds the application binaries. A separate deployment
 environment is responsible for machine provisioning, process management,
 proxy/TLS configuration, configuration delivery, and backups.
 
+A reverse proxy may forward a mount path unchanged (`/nwsl-season/seasons/...`):
+the server routes the path's last route and keeps every link and redirect
+page-relative, so the browser stays under the mount. A mount path can't
+contain one of the app's own top-level segments (`explore`, `seasons`,
+`history`, `static`). Such a path is a relative link resolved against the
+wrong page, and it gets a 404 before any handler runs; serving it would give
+crawlers endless duplicate pages, as `/explore/seasons/...` did in November
+2026. Build each page link with `relativeURL` from the page's own path, never
+as a bare `seasons/...`.
+
 The server does not compress responses; the TLS-terminating proxy does. In
 production that is Caddy, which serves pages and static files with zstd or
 gzip (checked October 2026; it adds no caching headers). Judge page weight by

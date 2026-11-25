@@ -240,7 +240,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.renderExploreBadRequest(w, r, err)
 		return
 	}
-	page.exploreThresholdView, err = exploreThresholds(r.URL.Query(), allSummaries, archive)
+	page.exploreThresholdView, err = exploreThresholds(r.URL.Path, r.URL.Query(), allSummaries, archive)
 	if err != nil {
 		a.renderExploreBadRequest(w, r, err)
 		return
