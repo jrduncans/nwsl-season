@@ -69,6 +69,17 @@ shows execution shape. Drill into selection fields such as candidate, eligible,
 expired, and invalid-kickoff counts only after identifying an unexpected
 planner reason.
 
+## Why did a page return a server error?
+
+Filter server spans with `http.response.status_code >= 500` and group by
+`http.route`, `nwsl.error.code`, and `error.type`. `http.page_load` means
+loading or computing the response's data failed, `http.page_render` means a
+template failed, and `http.unrecorded_server_error` means a handler returned a
+5xx or panicked without recording a cause: treat that code as a gap to fix in
+the handler. otelhttp clears the server span's status description, so open the
+correlated `nwsl.http.*.exception` log in the trace for the message and stack
+trace. A malformed or unknown URL returns a `404`, which is not a span error.
+
 ## ASA requests and source-operation outcomes
 
 Each physical ASA attempt, including a retry, is an HTTP client span named

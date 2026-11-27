@@ -14,6 +14,9 @@ const (
 	EventCacheSeasonLoadException           = "nwsl.cache.season.load.exception"
 	EventForecastPrecacheException          = "nwsl.forecast.precache.exception"
 	EventForecastRunException               = "nwsl.forecast.run.exception"
+	EventHTTPPageLoadException              = "nwsl.http.page_load.exception"
+	EventHTTPPageRenderException            = "nwsl.http.page_render.exception"
+	EventHTTPUnrecordedServerErrorException = "nwsl.http.unrecorded_server_error.exception"
 	EventQualificationNoHelpBatchException  = "nwsl.qualification.no_help_batch.exception"
 	EventQualificationRefreshException      = "nwsl.qualification.refresh.exception"
 	EventQualificationStatusProofException  = "nwsl.qualification.status_proof.exception"
@@ -65,6 +68,12 @@ func ExceptionEventName(code string) string {
 		return EventForecastPrecacheException
 	case ErrorCodeForecastRun:
 		return EventForecastRunException
+	case ErrorCodeHTTPPageLoad:
+		return EventHTTPPageLoadException
+	case ErrorCodeHTTPPageRender:
+		return EventHTTPPageRenderException
+	case ErrorCodeHTTPUnrecordedServerError:
+		return EventHTTPUnrecordedServerErrorException
 	case ErrorCodeQualificationNoHelpBatch:
 		return EventQualificationNoHelpBatchException
 	case ErrorCodeQualificationRefresh:
@@ -467,6 +476,9 @@ const (
 	ErrorCodeCacheSeasonLoad           = "cache.season.load"
 	ErrorCodeForecastPrecache          = "forecast.precache"
 	ErrorCodeForecastRun               = "forecast.run"
+	ErrorCodeHTTPPageLoad              = "http.page_load"
+	ErrorCodeHTTPPageRender            = "http.page_render"
+	ErrorCodeHTTPUnrecordedServerError = "http.unrecorded_server_error"
 	ErrorCodeQualificationNoHelpBatch  = "qualification.no_help_batch"
 	ErrorCodeQualificationRefresh      = "qualification.refresh"
 	ErrorCodeQualificationStatusProof  = "qualification.status_proof"

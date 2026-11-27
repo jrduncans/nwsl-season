@@ -24,6 +24,9 @@ groups:
             - {id: cache_season_load, value: cache.season.load, stability: development, brief: Loading a season snapshot from the local cache failed.}
             - {id: forecast_precache, value: forecast.precache, stability: development, brief: Proactive forecast cache warming failed.}
             - {id: forecast_run, value: forecast.run, stability: development, brief: A Forecast Lab calculation failed.}
+            - {id: http_page_load, value: http.page_load, stability: development, brief: Loading or computing the data for an HTTP response failed and the request returned a server error.}
+            - {id: http_page_render, value: http.page_render, stability: development, brief: Executing an HTML page template failed and the request returned a server error.}
+            - {id: http_unrecorded_server_error, value: http.unrecorded_server_error, stability: development, brief: An HTTP handler returned a server error without recording its cause; the safety net recorded it instead.}
             - {id: qualification_no_help_batch, value: qualification.no_help_batch, stability: development, brief: A no-help qualification proof batch failed.}
             - {id: qualification_refresh, value: qualification.refresh, stability: development, brief: Qualification refresh or calculation failed.}
             - {id: qualification_status_proof, value: qualification.status_proof, stability: development, brief: An individual qualification status proof failed.}
@@ -102,6 +105,51 @@ groups:
     name: nwsl.forecast.run.exception
     stability: development
     brief: A correlated exception log for a failed Forecast Lab calculation.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.http.page_load.exception
+    type: event
+    name: nwsl.http.page_load.exception
+    stability: development
+    brief: A correlated exception log for an HTTP response whose data failed to load or compute.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.http.page_render.exception
+    type: event
+    name: nwsl.http.page_render.exception
+    stability: development
+    brief: A correlated exception log for a failed HTML page template execution.
+    attributes:
+      - ref: exception.type
+        requirement_level: required
+      - ref: exception.message
+        requirement_level: required
+      - ref: exception.stacktrace
+        requirement_level: required
+      - ref: nwsl.error.code
+        requirement_level: required
+
+  - id: event.nwsl.http.unrecorded_server_error.exception
+    type: event
+    name: nwsl.http.unrecorded_server_error.exception
+    stability: development
+    brief: A correlated exception log for a server-error response whose handler recorded no cause.
     attributes:
       - ref: exception.type
         requirement_level: required

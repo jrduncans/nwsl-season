@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
 	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
 	"go.opentelemetry.io/otel/trace"
 
@@ -115,6 +116,8 @@ func (a *application) playoffsForecast(w http.ResponseWriter, r *http.Request, s
 			return
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
+			// The forecast.run span already logged the exception.
+			markServerError(r, err, telemetry.ErrorTypeTimeout)
 			http.Error(w, "Forecast lab took too long; please try again shortly.", http.StatusServiceUnavailable)
 			return
 		}

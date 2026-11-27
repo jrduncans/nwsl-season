@@ -318,7 +318,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 		a.populateExploreForecastBenchmarks(r.Context(), &teams, archive)
 	}
 	if err := linkExploreTeamMatches(teams.TeamSeasons, &page.H2HData); err != nil {
-		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error())
+		a.renderExploreErrorWithCause(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error(), err)
 		return
 	}
 	otherBasis, otherSummaries, otherTeams := history.NonPenalty, npSummaries, exploreTeamsView{}
@@ -363,7 +363,7 @@ func (a *application) renderExplore(w http.ResponseWriter, r *http.Request, summ
 	parts := make(map[string]exploreDataPart, len(values))
 	for key, value := range values {
 		if parts[key], err = encodeExploreData(value); err != nil {
-			a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error())
+			a.renderExploreErrorWithCause(w, r, http.StatusInternalServerError, "Explore unavailable", err.Error(), err)
 			return
 		}
 	}
