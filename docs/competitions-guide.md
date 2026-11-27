@@ -72,7 +72,10 @@ Where a fact is not verified, the page omits it rather than guessing: no
 playoff line without a verified place threshold, no expected-count claims without inventory,
 and no rule-dependent calculation without rules. An uncataloged season with
 cached matches is factual-only: results and matches with xG, plus a notice that
-the competition format is not verified.
+the competition format is not verified. An uncataloged season with no cached
+matches, such as a crawler's malformed `/seasons/2026../regular-season`, is a
+rendered `404`; a cataloged league table with an empty cache stays a `500`
+because that signals a sync or cache failure.
 
 A direct request for an unsupported feature returns a rendered `404` that names
 the feature, keeps the stage's factual navigation, and links back to the

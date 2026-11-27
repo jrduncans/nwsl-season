@@ -1029,6 +1029,11 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, "model-evaluation", &view)
 }
 
+// errUncatalogedSeasonNotFound marks a request for a season outside the
+// catalog with no cached games: nothing exists to show, so the page is a 404
+// rather than a server error.
+var errUncatalogedSeasonNotFound = errors.New("season not found")
+
 func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	return a.loadSeasonPageFor(r, nil)
 }
@@ -1116,6 +1121,9 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		}
 		if scope.Cataloged && scope.Entry.Kind != competition.StageKindLeagueTable {
 			return a.factualLoadPage(r, scope)
+		}
+		if !scope.Cataloged {
+			return seasonPage{}, fmt.Errorf("no cached games found for %s %s: %w", season, scope.Stage, errUncatalogedSeasonNotFound)
 		}
 		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
 	}
@@ -1681,10 +1689,14 @@ func (a *application) execute(w http.ResponseWriter, name string, data any) {
 }
 
 func (a *application) renderError(w http.ResponseWriter, r *http.Request, err error) {
+	status, message := http.StatusInternalServerError, err.Error()
+	if errors.Is(err, errUncatalogedSeasonNotFound) {
+		status, message = http.StatusNotFound, "No season data is available for this page."
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusInternalServerError)
+	w.WriteHeader(status)
 	a.renderErrorPage(w, errorPage{
-		Title: "Season unavailable", Message: err.Error(),
+		Title: "Season unavailable", Message: message,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season),
 		StageSelector:  stageSelector(r.URL.Path, a.requestScope(r).Season, a.requestScope(r).Stage),

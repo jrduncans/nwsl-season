@@ -524,6 +524,26 @@ func TestSeasonSelectorPreservesStandingsOrResults(t *testing.T) {
 	}
 }
 
+func TestUncatalogedSeasonWithoutCachedGamesIsNotFound(t *testing.T) {
+	application := NewHandlerWithOptions(fakeStore{}, Options{CurrentSeason: "2026", Location: time.UTC})
+	for _, path := range []string{"/seasons/2026../regular-season", "/seasons/1999/regular-season", "/seasons/abc/regular-season/fixtures"} {
+		response := httptest.NewRecorder()
+		application.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Errorf("%s status = %d, want 404", path, response.Code)
+		}
+	}
+}
+
+func TestCatalogedSeasonWithoutCachedGamesIsServerError(t *testing.T) {
+	application := NewHandlerWithOptions(fakeStore{}, Options{CurrentSeason: "2026", Location: time.UTC})
+	response := httptest.NewRecorder()
+	application.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/seasons/2026/regular-season", nil))
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", response.Code)
+	}
+}
+
 func TestUnavailableFeaturesDoNotReadUnknownScope(t *testing.T) {
 	store := &recordingStore{season: testSeasonData()}
 	application := NewHandler(store)
