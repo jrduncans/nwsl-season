@@ -145,7 +145,7 @@ func newApplicationWithForecastExecutor(store Store, options Options, forecasts 
 	}
 	mux.HandleFunc("GET /cache/status", cacheStatus(store, options.CurrentSeason, options.Stage, options.Rules.Version))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler(staticFS)))
-	return &Application{handler: withSecurityHeaders(withCacheHeaders(application.cachePolicy(), withBasePath(mux))), app: application}
+	return &Application{handler: withSecurityHeaders(withServerErrorTelemetry(withCacheHeaders(application.cachePolicy(), withBasePath(mux)))), app: application}
 }
 
 func (a *application) cachePolicy() cachePolicy {
@@ -1029,6 +1029,11 @@ func (a *application) modelEvaluation(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, "model-evaluation", &view)
 }
 
+// errUncatalogedSeasonNotFound marks a request for a season outside the
+// catalog with no cached games: nothing exists to show, so the page is a 404
+// rather than a server error.
+var errUncatalogedSeasonNotFound = errors.New("season not found")
+
 func (a *application) loadSeasonPage(r *http.Request) (seasonPage, error) {
 	return a.loadSeasonPageFor(r, nil)
 }
@@ -1117,7 +1122,10 @@ func (a *application) loadSeasonPageFor(r *http.Request, outlooksFor func(cache.
 		if scope.Cataloged && scope.Entry.Kind != competition.StageKindLeagueTable {
 			return a.factualLoadPage(r, scope)
 		}
-		return seasonPage{}, fmt.Errorf("no cached games found for %s %s", season, scope.Stage)
+		if !scope.Cataloged {
+			return seasonPage{}, fmt.Errorf("no cached games found for %s %s: %w", season, scope.Stage, errUncatalogedSeasonNotFound)
+		}
+		return seasonPage{}, telemetry.ClassifyError(fmt.Errorf("no cached games found for %s %s", season, scope.Stage), telemetry.ErrorTypeInvalidData)
 	}
 	presentation := competitionPresentation(scope, data)
 	presentation.Historical = historicalCatalogScope(scope)
@@ -1662,17 +1670,18 @@ func standingsGames(games []cache.Game) []standings.Game {
 // render writes page p with the request-derived <head> values filled in.
 func (a *application) render(w http.ResponseWriter, r *http.Request, name string, p page) {
 	p.head().CanonicalURL = canonicalURL(a.options.PublicURL, r.URL.Path)
-	a.execute(w, name, p)
+	a.execute(w, r, name, p)
 }
 
 // renderErrorPage writes an error page, which names no canonical link.
-func (a *application) renderErrorPage(w http.ResponseWriter, data errorPage) {
-	a.execute(w, "error", data)
+func (a *application) renderErrorPage(w http.ResponseWriter, r *http.Request, data errorPage) {
+	a.execute(w, r, "error", data)
 }
 
-func (a *application) execute(w http.ResponseWriter, name string, data any) {
+func (a *application) execute(w http.ResponseWriter, r *http.Request, name string, data any) {
 	var body bytes.Buffer
 	if err := a.pages.ExecuteTemplate(&body, name, data); err != nil {
+		recordPageRenderError(r, fmt.Errorf("execute %s template: %w", name, err))
 		http.Error(w, "render page", http.StatusInternalServerError)
 		return
 	}
@@ -1681,10 +1690,16 @@ func (a *application) execute(w http.ResponseWriter, name string, data any) {
 }
 
 func (a *application) renderError(w http.ResponseWriter, r *http.Request, err error) {
+	status, message := http.StatusInternalServerError, err.Error()
+	if errors.Is(err, errUncatalogedSeasonNotFound) {
+		status, message = http.StatusNotFound, "No season data is available for this page."
+	} else {
+		recordPageLoadError(r, err, telemetry.ErrorTypeOther)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusInternalServerError)
-	a.renderErrorPage(w, errorPage{
-		Title: "Season unavailable", Message: err.Error(),
+	w.WriteHeader(status)
+	a.renderErrorPage(w, r, errorPage{
+		Title: "Season unavailable", Message: message,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season),
 		StageSelector:  stageSelector(r.URL.Path, a.requestScope(r).Season, a.requestScope(r).Stage),
@@ -1699,7 +1714,7 @@ func (a *application) renderUnavailableFeature(w http.ResponseWriter, r *http.Re
 func (a *application) renderUnavailableFeatureWithNavigation(w http.ResponseWriter, r *http.Request, scope requestCompetition, feature string, navigation []navigationItem) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	a.renderErrorPage(w, errorPage{
+	a.renderErrorPage(w, r, errorPage{
 		Title: feature + " unavailable", Message: fmt.Sprintf("%s is unavailable for %s %s.", feature, scope.Season, scope.Stage),
 		HomePath: relativeURL(r.URL.Path, stageURL(scope.Season, scope.Entry.Slug)), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation:     navigation,
@@ -1935,12 +1950,14 @@ func cacheStatus(reader Store, season, stage, rulesVersion string) http.HandlerF
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if reader == nil {
+			recordPageLoadError(r, errors.New("cache status unavailable"), telemetry.ErrorTypeInvalidArgument)
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: "cache status unavailable"})
 			return
 		}
 		status, err := reader.Status(r.Context(), season, stage)
 		if err != nil {
+			recordPageLoadError(r, err, telemetry.ErrorTypeStorageFailure)
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: err.Error()})
 			return
@@ -1957,6 +1974,7 @@ func cacheStatus(reader Store, season, stage, rulesVersion string) http.HandlerF
 		}); ok && status.LastSuccess != nil && status.LastSuccess.FixtureSnapshotID != "" && rulesVersion != "" {
 			qualification, found, err := qualificationStore.QualificationForSnapshot(r.Context(), status.LastSuccess.FixtureSnapshotID, rulesVersion)
 			if err != nil {
+				recordPageLoadError(r, err, telemetry.ErrorTypeStorageFailure)
 				w.WriteHeader(http.StatusInternalServerError)
 				_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: err.Error()})
 				return
@@ -1973,6 +1991,7 @@ func cacheStatus(reader Store, season, stage, rulesVersion string) http.HandlerF
 		}); ok {
 			xg, err := xgReader.XGStatus(r.Context(), season, stage)
 			if err != nil {
+				recordPageLoadError(r, err, telemetry.ErrorTypeStorageFailure)
 				w.WriteHeader(http.StatusInternalServerError)
 				_ = json.NewEncoder(w).Encode(cacheStatusResponse{OK: false, Error: err.Error()})
 				return

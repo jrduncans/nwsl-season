@@ -3,11 +3,14 @@ package app
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/jrduncans/nwsl-season/internal/history"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
 
 // Explore's browser payloads are the same whatever the query string selects,
@@ -113,16 +116,19 @@ func (a *application) exploreData(w http.ResponseWriter, r *http.Request) {
 	request := exploreDataRequest{Part: strings.TrimSuffix(part, ".json"), Version: r.URL.Query().Get("v"), SkipForecast: r.URL.Query().Get("benchmarks") == "off"}
 	store, ok := a.store.(historicalStore)
 	if !ok {
+		recordPageLoadError(r, errors.New("store does not provide historical regular seasons"), telemetry.ErrorTypeInvalidArgument)
 		http.Error(w, "The local archive cannot provide historical scoring data.", http.StatusServiceUnavailable)
 		return
 	}
 	inputs, err := store.HistoricalRegularSeasons(r.Context())
 	if err != nil {
+		recordPageLoadError(r, fmt.Errorf("load historical regular seasons: %w", err), telemetry.ErrorTypeStorageFailure)
 		http.Error(w, "Historical scoring data could not be loaded.", http.StatusInternalServerError)
 		return
 	}
 	summaries, err := history.SummarizeScoringBasis(inputs, basis)
 	if err != nil {
+		recordPageLoadError(r, fmt.Errorf("summarize historical scoring: %w", err), telemetry.ErrorTypeCalculationFailure)
 		http.Error(w, "Historical scoring data could not be summarized.", http.StatusInternalServerError)
 		return
 	}

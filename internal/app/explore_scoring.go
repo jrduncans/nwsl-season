@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/history"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
 
 var seasonYearPattern = regexp.MustCompile(`^[0-9]{4}$`)
@@ -135,12 +137,12 @@ func legacyTrendQuery(query url.Values) bool {
 func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 	store, ok := a.store.(historicalStore)
 	if !ok {
-		a.renderExploreError(w, r, http.StatusServiceUnavailable, "Explore unavailable", "The local archive cannot provide historical scoring data.")
+		a.renderExploreErrorWithCause(w, r, http.StatusServiceUnavailable, "Explore unavailable", "The local archive cannot provide historical scoring data.", telemetry.ClassifyError(errors.New("store does not provide historical regular seasons"), telemetry.ErrorTypeInvalidArgument))
 		return
 	}
 	inputs, err := store.HistoricalRegularSeasons(r.Context())
 	if err != nil {
-		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be loaded.")
+		a.renderExploreErrorWithCause(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be loaded.", telemetry.ClassifyError(fmt.Errorf("load historical regular seasons: %w", err), telemetry.ErrorTypeStorageFailure))
 		return
 	}
 	// Team slugs come from the archive's teams, so the path is resolved
@@ -162,7 +164,7 @@ func (a *application) explore(w http.ResponseWriter, r *http.Request) {
 	}
 	summaries, err := history.SummarizeScoringBasis(inputs, basis)
 	if err != nil {
-		a.renderExploreError(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be summarized.")
+		a.renderExploreErrorWithCause(w, r, http.StatusInternalServerError, "Explore unavailable", "Historical scoring data could not be summarized.", telemetry.ClassifyError(fmt.Errorf("summarize historical scoring: %w", err), telemetry.ErrorTypeCalculationFailure))
 		return
 	}
 	a.renderExplore(w, r, summaries, inputs, basis, exploreDataRequest{})
@@ -189,9 +191,18 @@ func (a *application) renderExploreBadRequest(w http.ResponseWriter, r *http.Req
 }
 
 func (a *application) renderExploreError(w http.ResponseWriter, r *http.Request, status int, title, message string) {
+	a.renderExploreErrorWithCause(w, r, status, title, message, nil)
+}
+
+// renderExploreErrorWithCause records cause on the request span when status
+// is a server error, then renders the Explore error page.
+func (a *application) renderExploreErrorWithCause(w http.ResponseWriter, r *http.Request, status int, title, message string, cause error) {
+	if status >= http.StatusInternalServerError && cause != nil {
+		recordPageLoadError(r, cause, telemetry.ErrorTypeOther)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	a.renderErrorPage(w, errorPage{
+	a.renderErrorPage(w, r, errorPage{
 		Title: title, Message: message,
 		HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"),
 		Navigation: []navigationItem{

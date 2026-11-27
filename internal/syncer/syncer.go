@@ -126,7 +126,7 @@ func (s Service) Run(ctx context.Context, options RunOptions) (run cache.SyncRun
 			if errors.Is(err, cache.ErrSyncInProgress) {
 				span.SetAttributes(nwslconv.ErrorExpected(true), nwslconv.SyncSkipped(true))
 			} else {
-				telemetry.MarkError(span, err)
+				err = telemetry.MarkError(span, err)
 			}
 		}
 		span.End()
@@ -232,7 +232,7 @@ func (s Service) Recalculate(ctx context.Context, options RecalculateOptions) (r
 	defer func() {
 		span.SetAttributes(recalculateRunAttributes(run, err)...)
 		if err != nil {
-			telemetry.MarkError(span, err)
+			err = telemetry.MarkError(span, err)
 		}
 		span.End()
 	}()

@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/mxschmitt/playwright-go v0.6401.0
+	go.opentelemetry.io/contrib/bridges/otelslog v0.21.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0

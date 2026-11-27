@@ -14,12 +14,16 @@ const (
 	EventCacheSeasonLoadException           = "nwsl.cache.season.load.exception"
 	EventForecastPrecacheException          = "nwsl.forecast.precache.exception"
 	EventForecastRunException               = "nwsl.forecast.run.exception"
+	EventHTTPPageLoadException              = "nwsl.http.page_load.exception"
+	EventHTTPPageRenderException            = "nwsl.http.page_render.exception"
+	EventHTTPUnrecordedServerErrorException = "nwsl.http.unrecorded_server_error.exception"
 	EventQualificationNoHelpBatchException  = "nwsl.qualification.no_help_batch.exception"
 	EventQualificationRefreshException      = "nwsl.qualification.refresh.exception"
 	EventQualificationStatusProofException  = "nwsl.qualification.status_proof.exception"
 	EventScenarioGenerateTeamException      = "nwsl.scenario.generate_team.exception"
 	EventScenarioRefreshException           = "nwsl.scenario.refresh.exception"
 	EventSchedulerEdgeCachePurgeException   = "nwsl.scheduler.edge_cache_purge.exception"
+	EventSchedulerJobException              = "nwsl.scheduler.job.exception"
 	EventSchedulerPlanningSnapshotException = "nwsl.scheduler.planning_snapshot.exception"
 	EventSyncPenaltyXGException             = "nwsl.sync.penalty_xg.exception"
 	EventSyncRecalculateException           = "nwsl.sync.recalculate.exception"
@@ -65,6 +69,12 @@ func ExceptionEventName(code string) string {
 		return EventForecastPrecacheException
 	case ErrorCodeForecastRun:
 		return EventForecastRunException
+	case ErrorCodeHTTPPageLoad:
+		return EventHTTPPageLoadException
+	case ErrorCodeHTTPPageRender:
+		return EventHTTPPageRenderException
+	case ErrorCodeHTTPUnrecordedServerError:
+		return EventHTTPUnrecordedServerErrorException
 	case ErrorCodeQualificationNoHelpBatch:
 		return EventQualificationNoHelpBatchException
 	case ErrorCodeQualificationRefresh:
@@ -77,6 +87,8 @@ func ExceptionEventName(code string) string {
 		return EventScenarioRefreshException
 	case ErrorCodeSchedulerEdgeCachePurge:
 		return EventSchedulerEdgeCachePurgeException
+	case ErrorCodeSchedulerJob:
+		return EventSchedulerJobException
 	case ErrorCodeSchedulerPlanningSnapshot:
 		return EventSchedulerPlanningSnapshotException
 	case ErrorCodeSyncPenaltyXG:
@@ -467,12 +479,16 @@ const (
 	ErrorCodeCacheSeasonLoad           = "cache.season.load"
 	ErrorCodeForecastPrecache          = "forecast.precache"
 	ErrorCodeForecastRun               = "forecast.run"
+	ErrorCodeHTTPPageLoad              = "http.page_load"
+	ErrorCodeHTTPPageRender            = "http.page_render"
+	ErrorCodeHTTPUnrecordedServerError = "http.unrecorded_server_error"
 	ErrorCodeQualificationNoHelpBatch  = "qualification.no_help_batch"
 	ErrorCodeQualificationRefresh      = "qualification.refresh"
 	ErrorCodeQualificationStatusProof  = "qualification.status_proof"
 	ErrorCodeScenarioGenerateTeam      = "scenario.generate_team"
 	ErrorCodeScenarioRefresh           = "scenario.refresh"
 	ErrorCodeSchedulerEdgeCachePurge   = "scheduler.edge_cache_purge"
+	ErrorCodeSchedulerJob              = "scheduler.job"
 	ErrorCodeSchedulerPlanningSnapshot = "scheduler.planning_snapshot"
 	ErrorCodeSyncPenaltyXG             = "sync.penalty_xg"
 	ErrorCodeSyncRecalculate           = "sync.recalculate"

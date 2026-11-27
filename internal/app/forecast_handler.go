@@ -82,7 +82,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 		outcome := nwslconv.ForecastPrecacheOutcomeComplete
 		if err != nil {
 			outcome = nwslconv.ForecastPrecacheOutcomeFailure
-			telemetry.MarkError(span, err)
+			err = telemetry.MarkWarning(span, err)
 		}
 		span.SetAttributes(nwslconv.ForecastModelCount(modelCount), nwslconv.ForecastFailedModelCount(failedModels), nwslconv.ForecastPrecacheWorkerCount(workerCount), nwslconv.ForecastPrecacheOutcome(outcome))
 		span.End()
@@ -276,6 +276,8 @@ func (a *application) forecast(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
+			// The forecast.run span already logged the exception.
+			markServerError(r, err, telemetry.ErrorTypeTimeout)
 			http.Error(w, "Forecast lab took too long; please try again shortly.", http.StatusServiceUnavailable)
 			return
 		}
@@ -612,7 +614,7 @@ func forecastURL(fromPath, season, stageSlug string, state forecaststate.State, 
 func (a *application) renderScenarioBadRequest(w http.ResponseWriter, r *http.Request, title string, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	a.renderErrorPage(w, errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
+	a.renderErrorPage(w, r, errorPage{Title: title, Message: err.Error(), HomePath: relativeURL(r.URL.Path, "/"), StylesheetPath: staticURL(r.URL.Path, "site.css"), ScriptPath: staticURL(r.URL.Path, "standings.js"), SeasonSelector: seasonSelector(r.URL.Path, a.requestScope(r).Season)})
 }
 
 // forecastTasks is shared by regular-season and playoff pages and baseline

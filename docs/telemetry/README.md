@@ -88,6 +88,24 @@ low-cardinality `nwsl.error.code` for the detection site. Severity follows the
 outcome: terminal failures are `ERROR`, absorbed, retryable or partial failures
 are `WARN`, and expected cancellation is `DEBUG`.
 
+Every failure gets exactly one correlated exception log, written at the deepest
+span that handles it; the spans it propagates through are marked failed
+without logging it again. Record a failure with `RecordErrorWithType` or
+`RecordWarningWithType` where you know its code. Elsewhere, end a failed span
+with `MarkError` or `MarkWarning` and return the error they hand back: they
+emit a generic `exception` log only when nothing below has logged the error,
+and the returned error tells ancestors that it has been logged. Use
+`MarkErrorLoggedByCaller` only where every caller records the error itself,
+as `syncer.Execute` does because its callers know whether a failure is
+terminal or retried.
+
+The server and `sync` command also send their `slog` records through the
+OpenTelemetry log pipeline (`telemetry.WithOpenTelemetryLogs`), so operational
+messages logged with a request or job context appear in that trace. The bridge
+folds each record's key=value pairs into the log body and attaches no
+attributes, because `slog` keys are free-form and the registry admits only
+generated attribute names; put queryable dimensions on spans instead.
+
 ## Schema review
 
 Pull requests that change `telemetry/registry/**` run Weaver's registry diff

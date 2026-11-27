@@ -68,6 +68,7 @@ func run() (exitCode int) {
 		logger.Error("configure OpenTelemetry", "error", err)
 		return 1
 	}
+	logger = telemetry.WithOpenTelemetryLogs(logger)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

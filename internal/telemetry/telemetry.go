@@ -9,10 +9,12 @@ import (
 	"net/url"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -178,6 +180,83 @@ func Tracer() oteltrace.Tracer { return otel.Tracer(instrumentationName) }
 // Meter returns the common application meter for manually instrumented work.
 func Meter() otelmetric.Meter { return otel.Meter(instrumentationName) }
 
+// WithOpenTelemetryLogs returns a logger that writes each record to logger's
+// handler and to the OpenTelemetry log pipeline. Records logged with a
+// context carry that context's trace and span IDs, so they appear in the
+// trace they belong to. Call it after Configure so records reach the
+// configured exporter; before that, the global provider drops them.
+func WithOpenTelemetryLogs(logger *slog.Logger) *slog.Logger {
+	return slog.New(slog.NewMultiHandler(logger.Handler(), textBodyHandler{next: otelslog.NewHandler(instrumentationName)}))
+}
+
+// textBodyHandler folds a record's attributes into its message, so the
+// OpenTelemetry record carries "message key=value ..." as its body and no
+// attributes. slog keys are free-form and the telemetry registry only admits
+// generated attribute names; queryable dimensions belong on spans.
+type textBodyHandler struct {
+	next   slog.Handler
+	prefix string
+	attrs  []slog.Attr
+}
+
+func (h textBodyHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.next.Enabled(ctx, level)
+}
+
+func (h textBodyHandler) Handle(ctx context.Context, record slog.Record) error {
+	var body strings.Builder
+	body.WriteString(record.Message)
+	for _, attr := range h.attrs {
+		writeTextAttr(&body, "", attr)
+	}
+	record.Attrs(func(attr slog.Attr) bool {
+		writeTextAttr(&body, h.prefix, attr)
+		return true
+	})
+	return h.next.Handle(ctx, slog.NewRecord(record.Time, record.Level, body.String(), record.PC))
+}
+
+func (h textBodyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	qualified := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
+	qualified = append(qualified, h.attrs...)
+	for _, attr := range attrs {
+		qualified = append(qualified, slog.Attr{Key: h.prefix + attr.Key, Value: attr.Value})
+	}
+	return textBodyHandler{next: h.next, prefix: h.prefix, attrs: qualified}
+}
+
+func (h textBodyHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+	return textBodyHandler{next: h.next, prefix: h.prefix + name + ".", attrs: h.attrs}
+}
+
+func writeTextAttr(body *strings.Builder, prefix string, attr slog.Attr) {
+	attr.Value = attr.Value.Resolve()
+	if attr.Equal(slog.Attr{}) {
+		return
+	}
+	if attr.Value.Kind() == slog.KindGroup {
+		groupPrefix := prefix
+		if attr.Key != "" {
+			groupPrefix += attr.Key + "."
+		}
+		for _, member := range attr.Value.Group() {
+			writeTextAttr(body, groupPrefix, member)
+		}
+		return
+	}
+	body.WriteString(" ")
+	body.WriteString(prefix + attr.Key)
+	body.WriteString("=")
+	value := attr.Value.String()
+	if value == "" || strings.ContainsAny(value, " \t\r\n\"=") {
+		value = strconv.Quote(value)
+	}
+	body.WriteString(value)
+}
+
 // Logger returns the common application logger for manually emitted log records.
 func Logger() otellog.Logger { return otel.GetLoggerProvider().Logger(instrumentationName) }
 
@@ -187,12 +266,42 @@ func RecordError(ctx context.Context, span oteltrace.Span, err error) {
 	RecordErrorWithCode(ctx, span, err, "")
 }
 
-// MarkError marks a span as failed without emitting an exception log record.
-// Use it when an error has propagated from a child operation that already
-// recorded the exception. This keeps every failed span queryable without
-// duplicating the exception detail in the trace.
-func MarkError(span oteltrace.Span, err error) {
+// MarkError marks span as failed and returns err tagged as logged. Each
+// failure gets exactly one correlated exception log: if no span below this
+// one has logged err yet, MarkError emits a generic ERROR exception log
+// correlated to span before marking it. Callers that propagate err should
+// return the result so ancestors do not log it again.
+func MarkError(span oteltrace.Span, err error) error {
+	return recordExceptionWithCode(oteltrace.ContextWithSpan(context.Background(), span), span, err, "", time.Time{}, otellog.SeverityError)
+}
+
+// MarkWarning is MarkError for a failure the caller absorbs, retries or
+// reports as partial: a fallback exception log uses WARN severity.
+func MarkWarning(span oteltrace.Span, err error) error {
+	return recordExceptionWithCode(oteltrace.ContextWithSpan(context.Background(), span), span, err, "", time.Time{}, otellog.SeverityWarn)
+}
+
+// MarkErrorLoggedByCaller marks span as failed without an exception log.
+// Use it only where every caller records the returned error itself, because
+// only the caller knows whether the failure is terminal or retried.
+func MarkErrorLoggedByCaller(span oteltrace.Span, err error) {
 	markError(span, err, "")
+}
+
+// loggedError tags an error whose exception log has been emitted, so the
+// spans it propagates through mark themselves failed without logging it again.
+// It survives %w wrapping and errors.Join.
+type loggedError struct{ error }
+
+func (e loggedError) Unwrap() error { return e.error }
+
+// ErrorType keeps the classification the error was logged with as it
+// propagates, rather than the tag's Go type name.
+func (e loggedError) ErrorType() string { return resolveErrorType(e.error, "") }
+
+func exceptionLogged(err error) bool {
+	var logged loggedError
+	return errors.As(err, &logged)
 }
 
 // ClassifyError attaches a stable error.type to err while preserving its
@@ -232,18 +341,23 @@ func RecordWarningWithType(ctx context.Context, span oteltrace.Span, err error, 
 }
 
 func recordExceptionWithType(ctx context.Context, span oteltrace.Span, err error, code, errorType string, severity otellog.Severity) error {
-	err = ClassifyError(err, errorType)
-	recordExceptionWithCode(ctx, span, err, code, time.Time{}, severity)
-	return err
+	return recordExceptionWithCode(ctx, span, ClassifyError(err, errorType), code, time.Time{}, severity)
 }
 
 func recordErrorWithCode(ctx context.Context, span oteltrace.Span, err error, code string, timestamp time.Time) {
-	recordExceptionWithCode(ctx, span, err, code, timestamp, otellog.SeverityError)
+	_ = recordExceptionWithCode(ctx, span, err, code, timestamp, otellog.SeverityError)
 }
 
-func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error, code string, timestamp time.Time, severity otellog.Severity) {
+// recordExceptionWithCode emits err's correlated exception log unless a span
+// below already logged it, marks span failed with code, and returns err
+// tagged as logged.
+func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error, code string, timestamp time.Time, severity otellog.Severity) error {
 	if err == nil {
-		return
+		return nil
+	}
+	if exceptionLogged(err) {
+		markError(span, err, code)
+		return err
 	}
 	eventName := exceptionEventName(code)
 	if eventName == nwslconv.EventException {
@@ -268,6 +382,7 @@ func recordExceptionWithCode(ctx context.Context, span oteltrace.Span, err error
 	Logger().Emit(ctx, record)
 
 	markError(span, err, code)
+	return loggedError{err}
 }
 
 func exceptionEventName(code string) string {
@@ -357,7 +472,7 @@ func recordCompletedSpan(ctx context.Context, name string, started, finished tim
 		oteltrace.WithAttributes(attributes...),
 	)
 	if err != nil {
-		recordExceptionWithCode(ctx, span, err, code, finished, severity)
+		_ = recordExceptionWithCode(ctx, span, err, code, finished, severity)
 	}
 	span.End(oteltrace.WithTimestamp(finished))
 }

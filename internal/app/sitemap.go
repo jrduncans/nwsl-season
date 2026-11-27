@@ -12,6 +12,7 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/cache"
 	"github.com/jrduncans/nwsl-season/internal/competition"
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
+	"github.com/jrduncans/nwsl-season/internal/telemetry"
 )
 
 // sitemapPath is where /robots.txt points crawlers for every season, stage
@@ -39,11 +40,13 @@ func (a *application) sitemap(w http.ResponseWriter, r *http.Request) {
 	}
 	urls, err := a.sitemapURLs(r.Context())
 	if err != nil {
+		recordPageLoadError(r, fmt.Errorf("list sitemap URLs: %w", err), telemetry.ErrorTypeOther)
 		http.Error(w, "sitemap unavailable", http.StatusInternalServerError)
 		return
 	}
 	body, err := xml.Marshal(sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9", URLs: urls})
 	if err != nil {
+		recordPageLoadError(r, fmt.Errorf("encode sitemap: %w", err), telemetry.ErrorTypeOther)
 		http.Error(w, "sitemap unavailable", http.StatusInternalServerError)
 		return
 	}

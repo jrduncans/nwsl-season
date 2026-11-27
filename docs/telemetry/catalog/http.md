@@ -191,13 +191,20 @@ An inbound request handled by the NWSL Season HTTP server.
 The server uses the matched Go `http.ServeMux` pattern as the span name, for
 example `GET /seasons/{season}/{stage}`. Unmatched requests use
 `{method} unknown_route`.
+A server-error response marks the span failed with `error.type` and the
+`nwsl.error.code` of the site that detected the failure, and emits the
+matching correlated exception log. A handler that returns a server error
+without recording a cause is caught by a safety net that records
+`http.unrecorded_server_error`. otelhttp sets the span status again after
+the handler returns, which clears the status description, so the error
+message is on the correlated exception log rather than the span.
 
 
 | Attribute | Type | Requirement | Stability | Description |
 | --- | --- | --- | --- | --- |
 | `client.address` | string | Recommended | stable | Client address - domain name if available without reverse DNS lookup; otherwise, IP address or Unix domain socket name. |
 | `client.port` | int | Opt In | stable | The port of whichever client was captured in `client.address`. |
-| `error.type` | enum | Conditional: If request has ended with an error. | stable | Describes a class of error the operation ended with. |
+| `error.type` | enum | Conditional: Present when the request returned a server error. | stable | Describes a class of error the operation ended with. |
 | `http.request.body.size` | int | Opt In | development | The size of the request payload body in bytes. This is the number of bytes transferred excluding headers and is often, but not always, present as the [Content-Length](https://www.rfc-editor.org/rfc/rfc9110.html#field.content-length) header. For requests using transport encoding, this should be the compressed size. |
 | `http.request.header` | string[] template | Opt In | stable | HTTP request headers, `<key>` being the normalized HTTP Header name (lowercase), the value being the header values. |
 | `http.request.method` | enum | Required | stable | HTTP request method. |
@@ -215,6 +222,7 @@ example `GET /seasons/{season}/{stage}`. Unmatched requests use
 | `network.protocol.name` | string | Conditional: If not `http` and `network.protocol.version` is set. | stable | [OSI application layer](https://wikipedia.org/wiki/Application_layer) or non-OSI equivalent. |
 | `network.protocol.version` | string | Recommended | stable | The actual version of the protocol used for network communication. |
 | `network.transport` | enum | Opt In | stable | [OSI transport layer](https://wikipedia.org/wiki/Transport_layer) or [inter-process communication method](https://wikipedia.org/wiki/Inter-process_communication). |
+| `nwsl.error.code` | enum | Conditional: Present when the request returned a server error. | development | The bounded stable identifier for the operation that detected an error. |
 | `server.address` | string | Recommended | stable | Name of the local HTTP server that received the request. |
 | `server.port` | int | Conditional: If available and `server.address` is set. | stable | Port of the local HTTP server that received the request. |
 | `url.path` | string | Required | stable | The [URI path](https://www.rfc-editor.org/rfc/rfc3986#section-3.3) component |

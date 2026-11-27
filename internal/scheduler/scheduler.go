@@ -330,7 +330,8 @@ func (s *Scheduler) runCheck(parent context.Context, trigger cache.SourceRefresh
 			jobSpan.AddEvent(nwslconv.EventSchedulerDecision, trace.WithAttributes(nwslconv.SchedulerDecision(nwslconv.SchedulerDecisionNotCheck), nwslconv.SchedulerReason(outcome)))
 		}
 		if jobErr != nil {
-			telemetry.MarkError(jobSpan, jobErr)
+			// The next tick retries the job, so the failure is a warning.
+			_ = telemetry.RecordWarningWithType(jobCtx, jobSpan, jobErr, nwslconv.ErrorCodeSchedulerJob, telemetry.ErrorTypeOther)
 		}
 		jobSpan.End()
 		requestCancel()
@@ -432,7 +433,6 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	if job.Class == JobCold {
 		acquired, err := s.store.TryAcquireSyncLease(parent, coldSweepLeaseKey, holder, now.Add(s.config.Timeout))
 		if err != nil {
-			s.logger.Error("acquire cold sweep lease", "job", job.Kind, "error", err)
 			return nwslconv.SchedulerJobOutcomeFailure, syncer.OperationResult{}, false, err
 		}
 		if !acquired {
@@ -447,7 +447,6 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	key := jobLeaseKey(job)
 	acquired, err := s.store.TryAcquireSyncLease(parent, key, holder, now.Add(s.config.Timeout))
 	if err != nil {
-		s.logger.Error("acquire source job lease", "job", job.Kind, "error", err)
 		return nwslconv.SchedulerJobOutcomeFailure, syncer.OperationResult{}, false, err
 	}
 	if !acquired {
@@ -461,13 +460,7 @@ func (s *Scheduler) executeJob(parent context.Context, job Job) (string, syncer.
 	job.Operation.StartedAt = now
 	result, err := s.runner.Execute(parent, job.Operation)
 	if err != nil {
-		level := slog.LevelError
-		// Cancellation by Stop or by a CheckNow caller is expected; a request
-		// deadline (context.DeadlineExceeded) remains an error.
-		if (s.stopped() || parent.Err() != nil) && errors.Is(err, context.Canceled) {
-			level = slog.LevelDebug
-		}
-		s.logger.Log(parent, level, "source job failed", "job", job.Kind, "season", job.Operation.Season, "stage", job.Operation.Stage, "error", err)
+		// The job span records the failure; cancellation logs at DEBUG.
 		return nwslconv.SchedulerJobOutcomeFailure, result, true, err
 	}
 	return nwslconv.SchedulerJobOutcomeComplete, result, true, nil
@@ -535,7 +528,7 @@ func (s *Scheduler) recalculateCachedClinching(parent context.Context, span trac
 	run, err := runner.Recalculate(ctx, syncer.RecalculateOptions{Season: season, Stage: stage, Trigger: "scheduler", Reason: reason})
 	cancel()
 	if err != nil {
-		telemetry.MarkError(span, err)
+		_ = telemetry.MarkError(span, err)
 		return nwslconv.SchedulerClinchingPreflightOutcomeFailure
 	}
 	if run.QualificationError != "" || run.ScenarioError != "" {

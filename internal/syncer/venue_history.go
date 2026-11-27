@@ -32,7 +32,7 @@ func (s Service) EnsureVenueHistory(ctx context.Context, currentSeason, stage st
 		outcome := nwslconv.SyncVenueHistoryOutcomeComplete
 		if err != nil {
 			outcome = nwslconv.SyncVenueHistoryOutcomeFailure
-			telemetry.MarkError(span, err)
+			err = telemetry.MarkWarning(span, err)
 		}
 		span.SetAttributes(nwslconv.SyncVenueHistoryRefreshedSeasonCount(refreshed), nwslconv.SyncVenueHistoryOutcome(outcome))
 		span.End()

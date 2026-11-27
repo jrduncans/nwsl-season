@@ -20,6 +20,12 @@ import (
 	"github.com/jrduncans/nwsl-season/internal/fixtures"
 	"github.com/jrduncans/nwsl-season/internal/lifetime"
 	"github.com/jrduncans/nwsl-season/internal/syncer"
+	"github.com/jrduncans/nwsl-season/internal/telemetry/nwslconv"
+	"go.opentelemetry.io/otel"
+	otellog "go.opentelemetry.io/otel/log"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 // discoverySource is a fake ASA games source. A targeted request returns only
@@ -1241,7 +1247,7 @@ func TestCheckNowCallerCancellationInterruptsDetachedWork(t *testing.T) {
 	}
 }
 
-func TestSourceJobFailureLogLevel(t *testing.T) {
+func TestSourceJobFailureIsOneCorrelatedExceptionLog(t *testing.T) {
 	now := time.Date(2033, 9, 1, 0, 0, 0, 0, time.UTC)
 	scope := planningScope("2033", "Regular Season", cache.SourceReadinessNotPublished, nil)
 	snapshot := cache.PlanningSnapshot{Scopes: []cache.PlanningScopeSnapshot{scope}}
@@ -1250,9 +1256,9 @@ func TestSourceJobFailureLogLevel(t *testing.T) {
 	config.Now = func() time.Time { return now }
 
 	t.Run("caller cancellation is debug", func(t *testing.T) {
-		logs := &levelRecorder{}
+		_, logs := captureSchedulerTelemetry(t)
 		runner := &blockingRunner{started: make(chan struct{}, 1)}
-		s, err := New(&planningStore{snapshot: snapshot}, runner, config, slog.New(logs))
+		s, err := New(&planningStore{snapshot: snapshot}, runner, config, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1263,49 +1269,83 @@ func TestSourceJobFailureLogLevel(t *testing.T) {
 		<-runner.started
 		cancel()
 		<-done
-		if got := logs.levels("source job failed"); !reflect.DeepEqual(got, []slog.Level{slog.LevelDebug}) {
-			t.Fatalf("source job failure levels = %v, want [DEBUG]", got)
-		}
+		requireJobException(t, logs, otellog.SeverityDebug)
 	})
-	t.Run("source failure is error", func(t *testing.T) {
-		logs := &levelRecorder{}
+	t.Run("source failure is a warning", func(t *testing.T) {
+		spans, logs := captureSchedulerTelemetry(t)
 		runner := &startupDrainRunner{err: errors.New("source unavailable")}
-		s, err := New(&planningStore{snapshot: snapshot}, runner, config, slog.New(logs))
+		s, err := New(&planningStore{snapshot: snapshot}, runner, config, slog.New(slog.DiscardHandler))
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = s.CheckNow(context.Background())
-		if got := logs.levels("source job failed"); !reflect.DeepEqual(got, []slog.Level{slog.LevelError}) {
-			t.Fatalf("source job failure levels = %v, want [ERROR]", got)
+		record := requireJobException(t, logs, otellog.SeverityWarn)
+		for _, span := range spans.GetSpans() {
+			if span.Name == nwslconv.SpanSchedulerJob && span.SpanContext.SpanID() != record.SpanID() {
+				t.Error("job exception log is not correlated to the scheduler.job span")
+			}
 		}
 	})
 }
 
-// levelRecorder is a slog handler that records the level of each message.
-type levelRecorder struct {
-	mu      sync.Mutex
-	records []slog.Record
+func captureSchedulerTelemetry(t *testing.T) (*tracetest.InMemoryExporter, *schedulerLogExporter) {
+	t.Helper()
+	spans := tracetest.NewInMemoryExporter()
+	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(spans))
+	logs := &schedulerLogExporter{}
+	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logs)))
+	previousTraces, previousLogs := otel.GetTracerProvider(), otel.GetLoggerProvider()
+	otel.SetTracerProvider(traceProvider)
+	otel.SetLoggerProvider(logProvider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousTraces)
+		otel.SetLoggerProvider(previousLogs)
+		_ = traceProvider.Shutdown(context.Background())
+		_ = logProvider.Shutdown(context.Background())
+	})
+	return spans, logs
 }
 
-func (h *levelRecorder) Enabled(context.Context, slog.Level) bool { return true }
-func (h *levelRecorder) Handle(_ context.Context, record slog.Record) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.records = append(h.records, record)
+func requireJobException(t *testing.T, logs *schedulerLogExporter, severity otellog.Severity) sdklog.Record {
+	t.Helper()
+	records := logs.named(nwslconv.EventSchedulerJobException)
+	if len(records) != 1 {
+		t.Fatalf("job exception logs = %d, want 1 (all logs: %d)", len(records), len(logs.all()))
+	}
+	if got := records[0].Severity(); got != severity {
+		t.Errorf("job exception severity = %v, want %v", got, severity)
+	}
+	return records[0]
+}
+
+type schedulerLogExporter struct {
+	mu      sync.Mutex
+	records []sdklog.Record
+}
+
+func (e *schedulerLogExporter) Export(_ context.Context, records []sdklog.Record) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, record := range records {
+		e.records = append(e.records, record.Clone())
+	}
 	return nil
 }
-func (h *levelRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *levelRecorder) WithGroup(string) slog.Handler      { return h }
-func (h *levelRecorder) levels(message string) []slog.Level {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	var levels []slog.Level
-	for _, record := range h.records {
-		if record.Message == message {
-			levels = append(levels, record.Level)
+func (*schedulerLogExporter) Shutdown(context.Context) error   { return nil }
+func (*schedulerLogExporter) ForceFlush(context.Context) error { return nil }
+func (e *schedulerLogExporter) all() []sdklog.Record {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]sdklog.Record(nil), e.records...)
+}
+func (e *schedulerLogExporter) named(name string) []sdklog.Record {
+	var named []sdklog.Record
+	for _, record := range e.all() {
+		if record.EventName() == name {
+			named = append(named, record)
 		}
 	}
-	return levels
+	return named
 }
 
 func TestCheckNowAfterStopReturnsErrStopped(t *testing.T) {

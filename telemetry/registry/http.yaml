@@ -20,6 +20,20 @@ groups:
       The server uses the matched Go `http.ServeMux` pattern as the span name, for
       example `GET /seasons/{season}/{stage}`. Unmatched requests use
       `{method} unknown_route`.
+      A server-error response marks the span failed with `error.type` and the
+      `nwsl.error.code` of the site that detected the failure, and emits the
+      matching correlated exception log. A handler that returns a server error
+      without recording a cause is caught by a safety net that records
+      `http.unrecorded_server_error`. otelhttp sets the span status again after
+      the handler returns, which clears the status description, so the error
+      message is on the correlated exception log rather than the span.
+    attributes:
+      - ref: error.type
+        requirement_level:
+          conditionally_required: Present when the request returned a server error.
+      - ref: nwsl.error.code
+        requirement_level:
+          conditionally_required: Present when the request returned a server error.
 
 imports:
   metrics:
