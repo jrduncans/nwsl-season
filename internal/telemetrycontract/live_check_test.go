@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -148,6 +149,21 @@ func TestRuntimeTelemetryMatchesRegistry(t *testing.T) {
 	)
 	_ = telemetry.RecordWarningWithType(errorCtx, errorSpan, errors.New("synthetic live-check cache failure"), nwslconv.ErrorCodeCacheSeasonLoad, telemetry.ErrorTypeStorageFailure)
 	errorSpan.End()
+
+	// MarkError's fallback emits the generic exception event when nothing
+	// below the span logged the failure, and application slog records reach
+	// the log pipeline through the bridge; both must satisfy the contract.
+	_, uncodedSpan := telemetry.Tracer().Start(context.Background(), nwslconv.SpanCacheSeasonLoad,
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			nwslconv.CacheName("season"),
+			nwslconv.SeasonName("2024"),
+			nwslconv.Stage("Regular Season"),
+		),
+	)
+	_ = telemetry.MarkError(uncodedSpan, errors.New("synthetic live-check uncoded failure"))
+	uncodedSpan.End()
+	telemetry.WithOpenTelemetryLogs(slog.New(slog.DiscardHandler)).InfoContext(errorCtx, "synthetic live-check application log", "season", "2024")
 }
 
 func newFakeASAServer(t *testing.T) *httptest.Server {

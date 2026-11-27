@@ -182,9 +182,9 @@ func (s Service) Execute(ctx context.Context, operation Operation) (OperationRes
 	result, err := s.execute(ctx, store, operation, true)
 	span.SetAttributes(operationResultAttributes(result, err)...)
 	if err != nil {
-		// The caller owns exception emission so Run can report one failure at
-		// its compatibility boundary without duplicate Honeycomb exception logs.
-		telemetry.MarkError(span, err)
+		// Run and the scheduler both record the returned error: only they know
+		// whether the failure is terminal or will be retried.
+		telemetry.MarkErrorLoggedByCaller(span, err)
 	}
 	span.End()
 	return result, err

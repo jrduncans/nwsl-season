@@ -27,13 +27,13 @@ for drill-down. The names below are emitted signal names such as
 | `GROUP BY` | `error.type`, `nwsl.error.code`, `name` |
 
 `error.type` answers what kind of failure occurred; `nwsl.error.code` names the
-recording boundary that detected it. Do not require the code to exist: parent
-spans such as `scheduler.job` and `sync.source_operation` can carry a propagated
-`error.type` while the coded child or exception log identifies the original
-site. Open a representative trace and follow the failed branch toward the first
-coded span. Switch to the correlated log dataset and query by `exception.type`
-and `nwsl.error.code` when the stack trace or message is needed; never group by
-the message or stack trace.
+recording boundary that detected it. A span without a code, such as
+`sync.source_operation`, carries a propagated `error.type`; its caller
+(`scheduler.job` or `sync.run`) holds the code. Each failure has exactly one
+correlated exception log, on the deepest span that handled it, so open a
+representative trace and follow the failed branch to that log for the message
+and stack trace. Query exception logs by `exception.type` and
+`nwsl.error.code`; never group by the message or stack trace.
 
 Expected overload and cancellation need different operator responses. Check
 `nwsl.error.expected`; ordinary cancellation is debug-level, while terminal

@@ -1,12 +1,15 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -386,7 +389,7 @@ func TestRecordErrorWithTypeAlignsWrappedJoinedErrorAcrossSignals(t *testing.T) 
 	recorded := RecordErrorWithType(childCtx, child, cause, "sync.fetch_asa", ErrorTypeUpstreamFailure)
 	child.End()
 	parentErr := fmt.Errorf("sync failed: %w", recorded)
-	MarkError(parent, parentErr)
+	_ = MarkError(parent, parentErr)
 	parent.End()
 
 	if !errors.Is(recorded, context.DeadlineExceeded) {
@@ -439,10 +442,11 @@ func TestResolveErrorTypeFindsMeaningfulJoinedChild(t *testing.T) {
 	}
 }
 
-func TestMarkErrorDoesNotEmitExceptionLog(t *testing.T) {
+// captureTelemetry installs in-memory trace and log exporters for one test.
+func captureTelemetry(t *testing.T) (*sdktrace.TracerProvider, *tracetest.InMemoryExporter, *inMemoryLogExporter) {
+	t.Helper()
 	traceExporter := tracetest.NewInMemoryExporter()
 	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(traceExporter))
-	defer func() { _ = traceProvider.Shutdown(context.Background()) }()
 	logExporter := &inMemoryLogExporter{}
 	logProvider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(logExporter)))
 	previousLogProvider := otel.GetLoggerProvider()
@@ -450,31 +454,100 @@ func TestMarkErrorDoesNotEmitExceptionLog(t *testing.T) {
 	t.Cleanup(func() {
 		otel.SetLoggerProvider(previousLogProvider)
 		_ = logProvider.Shutdown(context.Background())
+		_ = traceProvider.Shutdown(context.Background())
 	})
+	return traceProvider, traceExporter, logExporter
+}
 
-	_, span := traceProvider.Tracer("test").Start(context.Background(), "parent.operation")
-	MarkError(span, errors.New("child operation failed"))
+func TestMarkErrorLogsAnUnloggedFailureCorrelatedToItsSpan(t *testing.T) {
+	traceProvider, traceExporter, logExporter := captureTelemetry(t)
+	_, span := traceProvider.Tracer("test").Start(context.Background(), "operation")
+	err := MarkError(span, errors.New("operation failed"))
 	span.End()
 
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
+	}
+	record := logExporter.records[0]
+	if record.EventName() != nwslconv.EventException || record.Severity() != otellog.SeverityError {
+		t.Errorf("log = %q %v, want generic exception at ERROR", record.EventName(), record.Severity())
+	}
 	spans := traceExporter.GetSpans()
-	if len(spans) != 1 {
-		t.Fatalf("exported spans = %d, want 1", len(spans))
+	if record.SpanID() != spans[0].SpanContext.SpanID() || record.TraceID() != spans[0].SpanContext.TraceID() {
+		t.Error("exception log is not correlated to the failed span")
 	}
 	attributes := map[attribute.Key]attribute.Value{}
 	for _, value := range spans[0].Attributes {
 		attributes[value.Key] = value.Value
 	}
-	if got := attributes["error.type"].AsString(); got == "" {
-		t.Error("error.type is empty")
+	if got := attributes["error.type"].AsString(); got != ErrorTypeOther {
+		t.Errorf("error.type = %q, want %q", got, ErrorTypeOther)
 	}
-	if _, found := attributes["nwsl.error.code"]; found {
-		t.Error("mark-only span has nwsl.error.code")
+	if spans[0].Status.Code != codes.Error || err.Error() != "operation failed" {
+		t.Errorf("span status = %v, err = %q", spans[0].Status.Code, err)
 	}
-	if spans[0].Status.Code != codes.Error {
-		t.Errorf("span status = %v, want error", spans[0].Status.Code)
+}
+
+func TestEachFailureIsLoggedOnceAsItPropagates(t *testing.T) {
+	traceProvider, traceExporter, logExporter := captureTelemetry(t)
+	tracer := traceProvider.Tracer("test")
+	ctx, parent := tracer.Start(context.Background(), "parent")
+	childCtx, child := tracer.Start(ctx, "child")
+	err := RecordErrorWithType(childCtx, child, errors.New("source failed"), nwslconv.ErrorCodeSyncRun, ErrorTypeUpstreamFailure)
+	child.End()
+	wrapped := fmt.Errorf("parent work: %w", err)
+	wrapped = RecordWarningWithType(ctx, parent, wrapped, nwslconv.ErrorCodeSchedulerJob, ErrorTypeOther)
+	_ = MarkError(parent, wrapped)
+	parent.End()
+
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exported log records = %d, want 1 for one failure", len(logExporter.records))
 	}
+	for _, span := range traceExporter.GetSpans() {
+		attributes := map[attribute.Key]attribute.Value{}
+		for _, value := range span.Attributes {
+			attributes[value.Key] = value.Value
+		}
+		if span.Status.Code != codes.Error {
+			t.Errorf("%s status = %v, want error", span.Name, span.Status.Code)
+		}
+		if got := attributes["error.type"].AsString(); got != ErrorTypeUpstreamFailure {
+			t.Errorf("%s error.type = %q, want %q", span.Name, got, ErrorTypeUpstreamFailure)
+		}
+		want := map[string]string{"child": nwslconv.ErrorCodeSyncRun, "parent": nwslconv.ErrorCodeSchedulerJob}[span.Name]
+		if got := attributes["nwsl.error.code"].AsString(); got != want {
+			t.Errorf("%s nwsl.error.code = %q, want %q", span.Name, got, want)
+		}
+	}
+}
+
+func TestMarkErrorLoggedByCallerDoesNotLog(t *testing.T) {
+	traceProvider, traceExporter, logExporter := captureTelemetry(t)
+	_, span := traceProvider.Tracer("test").Start(context.Background(), "operation")
+	MarkErrorLoggedByCaller(span, errors.New("caller logs this"))
+	span.End()
 	if len(logExporter.records) != 0 {
 		t.Errorf("exported log records = %d, want 0", len(logExporter.records))
+	}
+	if traceExporter.GetSpans()[0].Status.Code != codes.Error {
+		t.Error("span is not marked failed")
+	}
+}
+
+func TestMarkWarningAndCancellationSeverity(t *testing.T) {
+	traceProvider, _, logExporter := captureTelemetry(t)
+	_, span := traceProvider.Tracer("test").Start(context.Background(), "operation")
+	_ = MarkWarning(span, errors.New("absorbed"))
+	_ = MarkError(span, context.Canceled)
+	span.End()
+	if len(logExporter.records) != 2 {
+		t.Fatalf("exported log records = %d, want 2", len(logExporter.records))
+	}
+	if got := logExporter.records[0].Severity(); got != otellog.SeverityWarn {
+		t.Errorf("warning severity = %v, want WARN", got)
+	}
+	if got := logExporter.records[1].Severity(); got != otellog.SeverityDebug {
+		t.Errorf("cancellation severity = %v, want DEBUG", got)
 	}
 }
 
@@ -511,4 +584,33 @@ func TestRecordCompletedSpanPreservesOperationTiming(t *testing.T) {
 		return
 	}
 	t.Fatal("completed span was not exported")
+}
+
+func TestWithOpenTelemetryLogsWritesBothAndCorrelates(t *testing.T) {
+	traceProvider, _, logExporter := captureTelemetry(t)
+	var local bytes.Buffer
+	logger := WithOpenTelemetryLogs(slog.New(slog.NewTextHandler(&local, nil)))
+	ctx, span := traceProvider.Tracer("test").Start(context.Background(), "operation")
+	logger.With("job", "games").WithGroup("scope").InfoContext(ctx, "purged edge cache", "tags", 3, "error", errors.New("one tag failed"))
+	span.End()
+
+	if !strings.Contains(local.String(), "purged edge cache") {
+		t.Errorf("local output = %q, want the record", local.String())
+	}
+	if len(logExporter.records) != 1 {
+		t.Fatalf("exported log records = %d, want 1", len(logExporter.records))
+	}
+	record := logExporter.records[0]
+	// The registry admits only generated attribute names, so slog's free-form
+	// keys travel in the body as text.
+	wantBody := `purged edge cache job=games scope.tags=3 scope.error="one tag failed"`
+	if record.Body().AsString() != wantBody || record.Severity() != otellog.SeverityInfo {
+		t.Errorf("record = %q %v, want %q at INFO", record.Body().AsString(), record.Severity(), wantBody)
+	}
+	if record.AttributesLen() != 0 {
+		t.Errorf("record attributes = %d, want 0", record.AttributesLen())
+	}
+	if record.SpanID() != span.SpanContext().SpanID() || record.TraceID() != span.SpanContext().TraceID() {
+		t.Error("slog record is not correlated to the span in its context")
+	}
 }

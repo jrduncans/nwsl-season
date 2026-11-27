@@ -41,11 +41,11 @@ func recordPageRenderError(r *http.Request, err error) {
 	markServerErrorRecorded(ctx)
 }
 
-// markServerError marks the request span failed without another exception
-// log, for a cause a child span has already recorded.
+// markServerError marks the request span failed for a cause a child span
+// normally records already; telemetry logs it here only if none did.
 func markServerError(r *http.Request, err error, errorType string) {
 	ctx := r.Context()
-	telemetry.MarkError(trace.SpanFromContext(ctx), telemetry.ClassifyError(err, errorType))
+	_ = telemetry.MarkError(trace.SpanFromContext(ctx), telemetry.ClassifyError(err, errorType))
 	markServerErrorRecorded(ctx)
 }
 

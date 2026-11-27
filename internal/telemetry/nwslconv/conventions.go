@@ -23,6 +23,7 @@ const (
 	EventScenarioGenerateTeamException      = "nwsl.scenario.generate_team.exception"
 	EventScenarioRefreshException           = "nwsl.scenario.refresh.exception"
 	EventSchedulerEdgeCachePurgeException   = "nwsl.scheduler.edge_cache_purge.exception"
+	EventSchedulerJobException              = "nwsl.scheduler.job.exception"
 	EventSchedulerPlanningSnapshotException = "nwsl.scheduler.planning_snapshot.exception"
 	EventSyncPenaltyXGException             = "nwsl.sync.penalty_xg.exception"
 	EventSyncRecalculateException           = "nwsl.sync.recalculate.exception"
@@ -86,6 +87,8 @@ func ExceptionEventName(code string) string {
 		return EventScenarioRefreshException
 	case ErrorCodeSchedulerEdgeCachePurge:
 		return EventSchedulerEdgeCachePurgeException
+	case ErrorCodeSchedulerJob:
+		return EventSchedulerJobException
 	case ErrorCodeSchedulerPlanningSnapshot:
 		return EventSchedulerPlanningSnapshotException
 	case ErrorCodeSyncPenaltyXG:
@@ -485,6 +488,7 @@ const (
 	ErrorCodeScenarioGenerateTeam      = "scenario.generate_team"
 	ErrorCodeScenarioRefresh           = "scenario.refresh"
 	ErrorCodeSchedulerEdgeCachePurge   = "scheduler.edge_cache_purge"
+	ErrorCodeSchedulerJob              = "scheduler.job"
 	ErrorCodeSchedulerPlanningSnapshot = "scheduler.planning_snapshot"
 	ErrorCodeSyncPenaltyXG             = "sync.penalty_xg"
 	ErrorCodeSyncRecalculate           = "sync.recalculate"

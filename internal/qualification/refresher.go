@@ -257,7 +257,7 @@ func (r Refresher) Refresh(ctx context.Context, syncRun cache.SyncRun, teams []c
 	defer func() {
 		span.SetAttributes(nwslconv.QualificationRecalculated(result.Recalculated), nwslconv.QualificationOutcome(calculationOutcome(result.Recalculated, err)))
 		if err != nil {
-			telemetry.MarkError(span, err)
+			err = telemetry.MarkWarning(span, err)
 		}
 		span.End()
 	}()

@@ -44,6 +44,7 @@ func main() {
 		logger.Error("configure OpenTelemetry", "error", err)
 		os.Exit(1)
 	}
+	logger = telemetry.WithOpenTelemetryLogs(logger)
 	runErr := run(ctx, cfg, logger)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), telemetryShutdownTimeout)
 	shutdownErr := providers.Shutdown(shutdownCtx)

@@ -151,7 +151,7 @@ func (r Refresher) refresh(ctx context.Context, sync cache.SyncRun, teams []cach
 	defer func() {
 		span.SetAttributes(nwslconv.ScenarioRecalculated(result.Recalculated), nwslconv.ScenarioOutcome(scenarioCalculationOutcome(result.Recalculated, err)))
 		if err != nil {
-			telemetry.MarkError(span, err)
+			err = telemetry.MarkWarning(span, err)
 		}
 		span.End()
 	}()

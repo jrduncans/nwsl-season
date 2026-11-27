@@ -303,9 +303,11 @@ The server and `sync` command create OpenTelemetry traces for HTTP routes, ASA
 API calls, scheduled cache checks and refreshes, cache reads and writes,
 qualification and scenario calculations, and Forecast Lab simulations. Every
 ASA request is a downstream HTTP child span regardless of whether it was
-started by the server or the maintenance command. Failures are emitted as
-correlated OpenTelemetry exception log records, with the error message and
-stack trace retained off the span itself.
+started by the server or the maintenance command. Each failure is emitted as
+exactly one correlated OpenTelemetry exception log record, with the error
+message and stack trace retained off the span itself. Application `slog`
+output goes to stdout or stderr and to the OpenTelemetry log pipeline,
+correlated to the active trace.
 
 Error spans and exception logs use the same low-cardinality `error.type`
 classification: `canceled`, `timeout`, `invalid_argument`, `invalid_data`,

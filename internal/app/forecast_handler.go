@@ -82,7 +82,7 @@ func (a *application) precacheForecasts(ctx context.Context, trigger string) (er
 		outcome := nwslconv.ForecastPrecacheOutcomeComplete
 		if err != nil {
 			outcome = nwslconv.ForecastPrecacheOutcomeFailure
-			telemetry.MarkError(span, err)
+			err = telemetry.MarkWarning(span, err)
 		}
 		span.SetAttributes(nwslconv.ForecastModelCount(modelCount), nwslconv.ForecastFailedModelCount(failedModels), nwslconv.ForecastPrecacheWorkerCount(workerCount), nwslconv.ForecastPrecacheOutcome(outcome))
 		span.End()
